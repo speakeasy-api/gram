@@ -38,6 +38,9 @@ type Vendor struct {
 	DocumentationURL string
 	// IconURL is a PNG the vendor hosts for its own product.
 	IconURL string
+	// SupportsDCR records that the vendor's authorization server metadata
+	// publishes a registration endpoint.
+	SupportsDCR bool
 	// Remotes are the endpoints in preference order; immutable once created.
 	Remotes []Remote
 	// Mapping is the Okta namespace written to the entry.
@@ -57,6 +60,7 @@ var Vendors = []Vendor{
 		WebsiteURL:       "https://www.granola.ai",
 		DocumentationURL: "https://www.granola.ai/docs/mcp",
 		IconURL:          "https://www.granola.ai/favicon/apple-touch-icon.png",
+		SupportsDCR:      true,
 		Remotes: []Remote{
 			{Type: "streamable-http", URL: "https://mcp.granola.ai/mcp"},
 		},
@@ -74,6 +78,7 @@ var Vendors = []Vendor{
 		WebsiteURL:       "https://linear.app",
 		DocumentationURL: "https://linear.app/docs/mcp",
 		IconURL:          "https://linear.app/static/apple-touch-icon.png",
+		SupportsDCR:      true,
 		Remotes: []Remote{
 			{Type: "streamable-http", URL: "https://mcp.linear.app/mcp"},
 			{Type: "sse", URL: "https://mcp.linear.app/sse"},
@@ -92,6 +97,7 @@ var Vendors = []Vendor{
 		WebsiteURL:       "https://www.atlassian.com",
 		DocumentationURL: "https://support.atlassian.com/atlassian-rovo-mcp-server/",
 		IconURL:          "https://wac-cdn.atlassian.com/assets/img/favicons/atlassian/favicon.png",
+		SupportsDCR:      true,
 		Remotes: []Remote{
 			{Type: "streamable-http", URL: "https://mcp.atlassian.com/v1/mcp"},
 			{Type: "sse", URL: "https://mcp.atlassian.com/v1/sse"},
@@ -110,6 +116,7 @@ var Vendors = []Vendor{
 		WebsiteURL:       "https://www.canva.com",
 		DocumentationURL: "https://www.canva.dev/docs/apps/mcp-server/",
 		IconURL:          "https://static.canva.com/domain-assets/canva/static/images/apple-touch-180x180-1.png",
+		SupportsDCR:      true,
 		Remotes: []Remote{
 			{Type: "streamable-http", URL: "https://mcp.canva.com/mcp"},
 		},
@@ -127,6 +134,7 @@ var Vendors = []Vendor{
 		WebsiteURL:       "https://www.datadoghq.com",
 		DocumentationURL: "https://docs.datadoghq.com/bits_ai/mcp_server/",
 		IconURL:          "https://corp.dd-static.net/img/favicons/apple-touch-icon.png",
+		SupportsDCR:      true,
 		Remotes: []Remote{
 			{Type: "streamable-http", URL: "https://mcp.datadoghq.com/v1/mcp"},
 		},
@@ -144,6 +152,7 @@ var Vendors = []Vendor{
 		WebsiteURL:       "https://github.com",
 		DocumentationURL: "https://docs.github.com/en/copilot/how-tos/context/model-context-protocol/using-the-github-mcp-server",
 		IconURL:          "https://github.com/fluidicon.png",
+		SupportsDCR:      false,
 		Remotes: []Remote{
 			{Type: "streamable-http", URL: "https://api.githubcopilot.com/mcp/"},
 		},
@@ -161,6 +170,7 @@ var Vendors = []Vendor{
 		WebsiteURL:       "https://www.notion.com",
 		DocumentationURL: "https://developers.notion.com/docs/mcp",
 		IconURL:          "https://www.notion.com/front-static/logo-ios.png",
+		SupportsDCR:      true,
 		Remotes: []Remote{
 			{Type: "streamable-http", URL: "https://mcp.notion.com/mcp"},
 		},
@@ -178,6 +188,7 @@ var Vendors = []Vendor{
 		WebsiteURL:       "https://slack.com",
 		DocumentationURL: "https://docs.slack.dev/ai/mcp-server/",
 		IconURL:          "https://a.slack-edge.com/80588/marketing/img/meta/slack_hash_256.png",
+		SupportsDCR:      false,
 		Remotes: []Remote{
 			{Type: "streamable-http", URL: "https://mcp.slack.com/mcp"},
 		},
@@ -195,6 +206,7 @@ var Vendors = []Vendor{
 		WebsiteURL:       "https://supabase.com",
 		DocumentationURL: "https://supabase.com/docs/guides/getting-started/mcp",
 		IconURL:          "https://supabase.com/favicon/favicon-196x196.png",
+		SupportsDCR:      true,
 		Remotes: []Remote{
 			{Type: "streamable-http", URL: "https://mcp.supabase.com/mcp"},
 		},
@@ -261,7 +273,11 @@ func apply(ctx context.Context, svc *mcpregistry.Service, v Vendor, dryRun bool)
 	if iconErr != nil {
 		return "", iconErr
 	}
-	if err == nil && equalMapping(current, v.Mapping) && !iconAdded {
+	iconed, dcrAdded, dcrErr := withSupportsDCR(iconed, v.SupportsDCR)
+	if dcrErr != nil {
+		return "", dcrErr
+	}
+	if err == nil && equalMapping(current, v.Mapping) && !iconAdded && !dcrAdded {
 		// Nothing to write, but a stored record that no longer meets the
 		// contract is reported rather than silently left alone.
 		if issues := svc.ValidateStored(existing.Data); len(issues) > 0 {
@@ -314,8 +330,15 @@ func (v Vendor) record() (json.RawMessage, error) {
 		server["icons"] = []map[string]any{iconEntry(v.IconURL)}
 	}
 	meta := map[string]any{mcpregistry.OktaNamespace: v.Mapping}
+	catalog := map[string]any{}
 	if v.DocumentationURL != "" {
-		meta["com.speakeasy.ai/catalog"] = map[string]any{"documentationUrl": v.DocumentationURL}
+		catalog["documentationUrl"] = v.DocumentationURL
+	}
+	if v.SupportsDCR {
+		catalog["supportsDcr"] = true
+	}
+	if len(catalog) > 0 {
+		meta[catalogNamespace] = catalog
 	}
 	data, err := json.Marshal(map[string]any{"server": server, "_meta": meta})
 	if err != nil {
@@ -358,6 +381,8 @@ func withMapping(data json.RawMessage, mapping mcpregistry.OktaMapping) (json.Ra
 	return out, nil
 }
 
+const catalogNamespace = "com.speakeasy.ai/catalog"
+
 func iconEntry(src string) map[string]any {
 	return map[string]any{"src": src, "mimeType": "image/png"}
 }
@@ -389,6 +414,46 @@ func withIcon(data json.RawMessage, iconURL string) (json.RawMessage, bool, erro
 	server["icons"] = encoded
 	if root["server"], err = json.Marshal(server); err != nil {
 		return nil, false, fmt.Errorf("encode server: %w", err)
+	}
+	out, err := json.Marshal(root)
+	if err != nil {
+		return nil, false, fmt.Errorf("encode record: %w", err)
+	}
+	return out, true, nil
+}
+
+// withSupportsDCR records registration support only when the stored record
+// says nothing either way, so a value staff set is never replaced.
+func withSupportsDCR(data json.RawMessage, supported bool) (json.RawMessage, bool, error) {
+	if !supported {
+		return data, false, nil
+	}
+	var root, meta, catalog map[string]json.RawMessage
+	if err := json.Unmarshal(data, &root); err != nil {
+		return nil, false, fmt.Errorf("decode record: %w", err)
+	}
+	if raw, ok := root["_meta"]; ok {
+		_ = json.Unmarshal(raw, &meta)
+	}
+	if meta == nil {
+		meta = map[string]json.RawMessage{}
+	}
+	if raw, ok := meta[catalogNamespace]; ok {
+		_ = json.Unmarshal(raw, &catalog)
+	}
+	if catalog == nil {
+		catalog = map[string]json.RawMessage{}
+	}
+	if _, ok := catalog["supportsDcr"]; ok {
+		return data, false, nil
+	}
+	catalog["supportsDcr"] = json.RawMessage("true")
+	var err error
+	if meta[catalogNamespace], err = json.Marshal(catalog); err != nil {
+		return nil, false, fmt.Errorf("encode catalog metadata: %w", err)
+	}
+	if root["_meta"], err = json.Marshal(meta); err != nil {
+		return nil, false, fmt.Errorf("encode metadata: %w", err)
 	}
 	out, err := json.Marshal(root)
 	if err != nil {
