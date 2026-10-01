@@ -60,3 +60,19 @@ func PublishAll(ctx context.Context, tx pgx.Tx, data []byte) error {
 	}
 	return nil
 }
+
+// LockOrganization serializes attempts and bounded expansion with staff toggles,
+// including an enable when no feature row exists yet. Take this before row locks.
+func LockOrganization(ctx context.Context, tx pgx.Tx, organizationID string) error {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('role-distribution-setup:' || $1, 0))`, organizationID); err != nil {
+		return fmt.Errorf("lock organization role distribution: %w", err)
+	}
+	return nil
+}
+
+// ResumeOrganization starts one explicit enumeration pass, not a retry loop.
+// The caller holds LockOrganization and commits the feature change together with
+// the outbox event. Setup reuses plugins and assignments without a completion ledger.
+func ResumeOrganization(ctx context.Context, tx pgx.Tx, organizationID string) error {
+	return Publish(ctx, tx, Request{OrganizationID: "", RoleURN: "", GlobalRoleID: "", BootstrapOrganizationID: organizationID, Cursor: ""})
+}

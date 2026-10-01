@@ -79,7 +79,11 @@ func (h *Handler) HandleRoleDistributionSetupRequested(ctx context.Context, even
 		if h.processors.Setup == nil {
 			err = fmt.Errorf("setup processor is not configured")
 		} else {
-			_, err = h.processors.Setup(ctx, setup, event.GetOrganizationId())
+			var processed bool
+			processed, err = h.processors.Setup(ctx, setup, event.GetOrganizationId())
+			if err == nil && !processed {
+				logger.LogAttrs(ctx, slog.LevelInfo, "role distribution setup skipped or already completed")
+			}
 		}
 	case global != "":
 		id, parseErr := uuid.Parse(global)

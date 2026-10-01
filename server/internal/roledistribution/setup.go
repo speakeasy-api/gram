@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/roledistribution/requests"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -42,7 +43,7 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 	// Serialize role setups in an organization. Wait rather than
 	// acknowledging a busy setup without processing it.
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('role-distribution-setup:' || $1, 0))`, organizationID); err != nil {
+	if err := requests.LockOrganization(ctx, tx, organizationID); err != nil {
 		return false, fmt.Errorf("lock organization role setup: %w", err)
 	}
 	skip := func() (bool, error) {

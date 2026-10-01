@@ -2,6 +2,7 @@ package productfeatures_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -306,6 +307,7 @@ func TestFeature_RequiresPlatformAdmin(t *testing.T) {
 	}
 
 	staffOnly := []productfeatures.Feature{
+		productfeatures.FeatureAutomaticRoleDistribution,
 		productfeatures.FeatureSSO,
 		productfeatures.FeatureSCIM,
 		productfeatures.FeatureSkills,
@@ -594,4 +596,25 @@ func TestProductFeaturesClient_SkillsAlwaysEnabled(t *testing.T) {
 	enabled, err := client.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureSkills)
 	require.NoError(t, err)
 	require.True(t, enabled)
+}
+
+func TestProductFeaturesService_RoleDistributionRequiresStaffSurface(t *testing.T) {
+	t.Parallel()
+	for _, staff := range []bool{false, true} {
+		t.Run(fmt.Sprintf("staff=%v", staff), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestProductFeaturesService(t)
+			if staff {
+				ctx = withPlatformAdmin(t, ctx)
+			}
+			err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+				OrganizationID: requestedOrganizationID(ctx),
+				FeatureName:    gen.ProductFeatureName(productfeatures.FeatureAutomaticRoleDistribution), Enabled: true,
+			})
+			requireOopsCode(t, err, oops.CodeForbidden)
+			enabled, err := repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{OrganizationID: activeOrganizationID(t, ctx), FeatureName: string(productfeatures.FeatureAutomaticRoleDistribution)})
+			require.NoError(t, err)
+			require.False(t, enabled)
+		})
+	}
 }

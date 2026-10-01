@@ -46,3 +46,31 @@ BEGIN
         FOR EACH ROW EXECUTE FUNCTION reject_pipeline_publication();
 END
 $install$;
+
+-- name: RolloutInsertGlobalRoles :exec
+-- Include more than one page, and deleted roles that must not receive setup requests.
+INSERT INTO global_roles (workos_slug, workos_name, workos_created_at, workos_updated_at, deleted_at)
+SELECT 'rollout-global-' || n, 'Rollout Global ' || n, clock_timestamp(), clock_timestamp(),
+CASE WHEN n > 103 THEN clock_timestamp() ELSE NULL END
+FROM generate_series(1, 105) n;
+
+-- name: RolloutInsertLocalRoles :exec
+-- Simulate pre-rollout roles created while distribution was disabled; pagination must discover them.
+INSERT INTO organization_roles (organization_id, workos_slug, workos_name, workos_created_at, workos_updated_at, deleted_at)
+SELECT @organization_id, 'rollout-local-' || n, 'Rollout Local ' || n, clock_timestamp(), clock_timestamp(),
+CASE WHEN n > 103 THEN clock_timestamp() ELSE NULL END
+FROM generate_series(1, 105) n;
+
+-- name: RolloutRejectOutbox :exec
+-- Prove rollout flag rolls back if enqueue fails.
+ALTER TABLE publish_outbox ADD CONSTRAINT reject_rollout_outbox CHECK (topic != 'gram.role_distribution.v1.RoleDistributionSetupRequestedV1') NOT VALID;
+
+-- name: RolloutBlockedBackends :many
+-- Observe real lock dependencies without relying on production query text.
+SELECT pid FROM pg_catalog.pg_stat_activity
+WHERE datname = current_database() AND @blocker_pid::integer = ANY(pg_catalog.pg_blocking_pids(pid));
+
+-- name: RolloutActiveRoles :many
+SELECT ('role:global:' || id)::text AS role_urn FROM global_roles WHERE deleted IS FALSE AND workos_deleted IS FALSE
+UNION ALL
+SELECT ('role:organization:' || id)::text AS role_urn FROM organization_roles WHERE organization_id = @organization_id AND deleted IS FALSE AND workos_deleted IS FALSE;
