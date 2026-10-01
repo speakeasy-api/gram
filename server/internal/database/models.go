@@ -1968,6 +1968,7 @@ type OrganizationOnboardingVendor struct {
 	OrganizationID string
 	Vendor         string
 	PlanID         uuid.NullUUID
+	PlanSlug       pgtype.Text
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 }

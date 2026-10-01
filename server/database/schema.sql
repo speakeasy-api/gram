@@ -10110,7 +10110,11 @@ CREATE INDEX IF NOT EXISTS organization_onboarding_playbook_id_idx ON organizati
 CREATE TABLE IF NOT EXISTS organization_onboarding_vendors (
   organization_id TEXT NOT NULL,
   vendor TEXT NOT NULL,
+  -- plan_id references support_matrix_plans, which the support matrix in code
+  -- retires. plan_slug names the plan in that matrix and replaces it; plan_id
+  -- stays nullable until a later contract migration drops it.
   plan_id uuid,
+  plan_slug TEXT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT organization_onboarding_vendors_pkey PRIMARY KEY (organization_id, vendor),
