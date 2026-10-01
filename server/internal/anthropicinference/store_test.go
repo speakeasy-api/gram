@@ -372,9 +372,18 @@ func TestExternalContentPartsCommitWithParent(t *testing.T) {
 // saveFrame stores a frame and returns the index of its first new message.
 func saveFrame(t *testing.T, store *postgresStore, config Config, frame Frame, userID string) int {
 	t.Helper()
-	start, err := store.Save(t.Context(), config, frame, userID)
+	_, start, err := store.Save(t.Context(), config, frame, userID)
 	require.NoError(t, err)
 	return start
+}
+
+// beginFrame opens a checkpoint session against the conversation a frame
+// resolves to, the way Process does after archiving.
+func beginFrame(t *testing.T, store *postgresStore, config Config, frame Frame, userID string) (checkpointSession, error) {
+	t.Helper()
+	binding, err := store.resolveConversation(t.Context(), config, frame, userID)
+	require.NoError(t, err)
+	return store.Begin(t.Context(), config, binding, userID)
 }
 
 func TestStoreAppendsAfterRollingCompaction(t *testing.T) {
