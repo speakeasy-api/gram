@@ -293,14 +293,14 @@ func (q *Queries) ListDismissals(ctx context.Context, organizationID string) ([]
 }
 
 const listInstalledRemoteURLs = `-- name: ListInstalledRemoteURLs :many
-SELECT DISTINCT rtrim(r.url, '/')::text AS url
+SELECT DISTINCT rtrim(regexp_replace(r.url, '[?#].*$', ''), '/')::text AS url
 FROM remote_mcp_servers AS r
 JOIN projects AS p ON p.id = r.project_id
 JOIN mcp_servers AS ms ON ms.remote_mcp_server_id = r.id AND ms.project_id = r.project_id AND ms.deleted IS FALSE
 WHERE p.organization_id = $1
   AND p.deleted IS FALSE
   AND r.deleted IS FALSE
-  AND rtrim(r.url, '/') = ANY($2::text[])
+  AND rtrim(regexp_replace(r.url, '[?#].*$', ''), '/') = ANY($2::text[])
 `
 
 type ListInstalledRemoteURLsParams struct {
@@ -310,8 +310,9 @@ type ListInstalledRemoteURLsParams struct {
 
 // Backends a live MCP server in one of the organization's projects fronts.
 // Tenancy through projects, since neither table has an organization column.
-// URLs compare without a trailing slash, as the resource connection readiness
-// does; the catalog and the admin may differ on it.
+// URLs compare without a query string, fragment, or trailing slash: admins
+// append options to the vendor endpoint, and the catalog and the admin may
+// differ on the slash.
 func (q *Queries) ListInstalledRemoteURLs(ctx context.Context, arg ListInstalledRemoteURLsParams) ([]string, error) {
 	rows, err := q.db.Query(ctx, listInstalledRemoteURLs, arg.OrganizationID, arg.Urls)
 	if err != nil {
