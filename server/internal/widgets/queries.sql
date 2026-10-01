@@ -1,0 +1,54 @@
+-- name: ListWidgets :many
+SELECT *
+FROM widgets
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY updated_at DESC, id DESC;
+
+-- name: GetWidget :one
+SELECT *
+FROM widgets
+WHERE project_id = @project_id
+  AND id = @id
+  AND deleted IS FALSE;
+
+-- name: GetWidgetForUpdate :one
+-- Locks the row for the rest of the transaction, so a concurrent update or
+-- delete waits and then sees the committed state: no lost update, no stale
+-- audit snapshot, and a row deleted meanwhile reads as gone.
+SELECT *
+FROM widgets
+WHERE project_id = @project_id
+  AND id = @id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: CreateWidget :one
+INSERT INTO widgets (
+  project_id, organization_id, created_by_user_id, name, description, dataset, query, visualization
+) VALUES (
+  @project_id, @organization_id, sqlc.narg('created_by_user_id'), @name, sqlc.narg('description'), @dataset, @query::jsonb, @visualization::jsonb
+)
+RETURNING *;
+
+-- name: UpdateWidget :one
+UPDATE widgets
+SET name = @name,
+    description = sqlc.narg('description'),
+    dataset = @dataset,
+    query = @query::jsonb,
+    visualization = @visualization::jsonb,
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND id = @id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeleteWidget :one
+UPDATE widgets
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND id = @id
+  AND deleted IS FALSE
+RETURNING *;
