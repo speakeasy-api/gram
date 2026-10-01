@@ -216,7 +216,7 @@ type GenerateWorkOSAdminPortalLinkResponseBody struct {
 // ListSetupTasksResponseBody is the type of the "organizations" service
 // "listSetupTasks" endpoint HTTP response body.
 type ListSetupTasksResponseBody struct {
-	// Setup tasks in catalog order.
+	// Setup tasks in catalog order. A group precedes the cards under it.
 	Tasks []*SetupTaskResponseBody `form:"tasks" json:"tasks" xml:"tasks"`
 }
 
@@ -240,12 +240,19 @@ type UpdateSetupTaskResponseBody struct {
 	BlockedBy []string `form:"blocked_by" json:"blocked_by" xml:"blocked_by"`
 	// Whether a platform administrator hid the task.
 	Hidden bool `form:"hidden" json:"hidden" xml:"hidden"`
+	// Key of the group this card sits under. Absent for a top-level card or a
+	// group.
+	ParentKey *string `form:"parent_key,omitempty" json:"parent_key,omitempty" xml:"parent_key,omitempty"`
+	// True for a group that nests cards. A group has no card of its own: it is
+	// hidden when every card under it is, done when every visible card is, and
+	// cannot be assigned or marked by hand.
+	Group bool `form:"group" json:"group" xml:"group"`
 }
 
 // SubmitOnboardingSurveyResponseBody is the type of the "organizations"
 // service "submitOnboardingSurvey" endpoint HTTP response body.
 type SubmitOnboardingSurveyResponseBody struct {
-	// Setup tasks in catalog order.
+	// Setup tasks in catalog order. A group precedes the cards under it.
 	Tasks []*SetupTaskResponseBody `form:"tasks" json:"tasks" xml:"tasks"`
 }
 
@@ -3524,6 +3531,13 @@ type SetupTaskResponseBody struct {
 	BlockedBy []string `form:"blocked_by" json:"blocked_by" xml:"blocked_by"`
 	// Whether a platform administrator hid the task.
 	Hidden bool `form:"hidden" json:"hidden" xml:"hidden"`
+	// Key of the group this card sits under. Absent for a top-level card or a
+	// group.
+	ParentKey *string `form:"parent_key,omitempty" json:"parent_key,omitempty" xml:"parent_key,omitempty"`
+	// True for a group that nests cards. A group has no card of its own: it is
+	// hidden when every card under it is, done when every visible card is, and
+	// cannot be assigned or marked by hand.
+	Group bool `form:"group" json:"group" xml:"group"`
 }
 
 // SetupTaskAssigneeResponseBody is used to define fields on response body
@@ -3767,6 +3781,8 @@ func NewUpdateSetupTaskResponseBody(res *organizations.SetupTask) *UpdateSetupTa
 		Status:          res.Status,
 		CompletedByFact: res.CompletedByFact,
 		Hidden:          res.Hidden,
+		ParentKey:       res.ParentKey,
+		Group:           res.Group,
 	}
 	if res.Assignee != nil {
 		body.Assignee = marshalOrganizationsSetupTaskAssigneeToSetupTaskAssigneeResponseBody(res.Assignee)

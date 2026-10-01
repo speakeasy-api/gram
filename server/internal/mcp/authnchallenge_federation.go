@@ -76,6 +76,9 @@ func (s *Service) federatedProvider(ctx context.Context, endpoint *ResolvedMcpEn
 	if err != nil {
 		return nil, uuid.Nil, uuid.Nil, "", fmt.Errorf("resolve federated login provider: %w", err)
 	}
+	if err := provider.RequireLoginRedirect(); err != nil {
+		return nil, uuid.Nil, uuid.Nil, "", fmt.Errorf("resolve federated login provider: %w", err)
+	}
 	version := provider.Fingerprint() + ":" + row.UpdatedAt.Time.UTC().Format(time.RFC3339Nano)
 	return provider, row.TrustedRemoteSessionIssuerID.UUID, row.TrustedRemoteSessionClientID.UUID, version, nil
 }

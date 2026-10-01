@@ -277,17 +277,20 @@ func (s *Service) metaValidationTarget(
 		projectID:    endpoint.ProjectID,
 		metaServerID: endpoint.MetaMcpServerID.UUID,
 		// Consent probes a stored gateway; agent keys reach no consent page.
-		agentID:         uuid.Nil,
-		organizationID:  endpoint.OrganizationID,
-		tokens:          selectedTokens,
-		toolSelection:   nil,
-		authenticated:   subject.Kind != urn.SessionSubjectKindAnonymous,
-		sessionID:       sessionID,
-		chatID:          "",
-		userID:          "",
-		externalUserID:  "",
-		apiKeyID:        "",
-		protocolVersion: mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
+		agentID:        uuid.Nil,
+		organizationID: endpoint.OrganizationID,
+		tokens:         selectedTokens,
+		// Consent probes never acquire credentials by identity chaining.
+		userSessionIssuerID: uuid.Nil,
+		chainUpstream:       nil,
+		toolSelection:       nil,
+		authenticated:       subject.Kind != urn.SessionSubjectKindAnonymous,
+		sessionID:           sessionID,
+		chatID:              "",
+		userID:              "",
+		externalUserID:      "",
+		apiKeyID:            "",
+		protocolVersion:     mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
 	}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
@@ -344,7 +347,7 @@ func (s *Service) standaloneValidationTarget(
 
 	selected := tokens[client.RemoteSessionIssuerID]
 	selectedTokens := map[uuid.UUID]remotesessions.UpstreamToken{client.RemoteSessionIssuerID: selected}
-	selectedToken, err := routeUpstreamToken(ctx, logger, selectedTokens, endpoint.UpstreamResource, tunneledBackendIssuer(&server))
+	selectedToken, err := routeUpstreamToken(ctx, logger, selectedTokens, endpoint.UpstreamResource, server.TunneledMcpServerID.Valid, tunneledBackendIssuer(&server))
 	var routeErr *upstreamRoutingError
 	switch {
 	case errors.As(err, &routeErr), selectedToken == "":
@@ -353,7 +356,7 @@ func (s *Service) standaloneValidationTarget(
 		return ctx, none, fmt.Errorf("route selected upstream token for validation: %w", err)
 	}
 
-	token, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, tunneledBackendIssuer(&server))
+	token, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, server.TunneledMcpServerID.Valid, tunneledBackendIssuer(&server))
 	switch {
 	case errors.As(err, &routeErr):
 		return ctx, none, errRemoteSessionUnroutable

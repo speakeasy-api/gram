@@ -265,7 +265,7 @@ func TestServePlatformToolset_RiskScanUsesStableToolsetIdentityAndAnnotations(t 
 	w, err := servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, body, token)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Len(t, scanner.events, 1)
+	require.Len(t, scanner.events, 2)
 
 	event := scanner.events[0]
 	require.Equal(t, mcpriskscan.SurfacePlatformMCP, event.Surface)
@@ -275,6 +275,9 @@ func TestServePlatformToolset_RiskScanUsesStableToolsetIdentityAndAnnotations(t 
 	require.NotNil(t, event.ToolAnnotations)
 	require.NotNil(t, event.ToolAnnotations.ReadOnlyHint)
 	require.True(t, *event.ToolAnnotations.ReadOnlyHint)
+	require.Equal(t, mcpriskscan.PhaseRequest, event.Phase())
+	require.Equal(t, mcpriskscan.PhaseResponse, scanner.events[1].Phase())
+	require.Equal(t, event.ExecutionID(), scanner.events[1].ExecutionID())
 }
 
 func createAssistant(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, name string) uuid.UUID {
@@ -517,7 +520,7 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 	require.Contains(t, w.Body.String(), authCtx.ProjectID.String(), "the caller's readable project must appear in the listing")
 
 	events := scanAttributes(recorder, mcpriskscan.SurfacePlatformMCP)
-	require.Len(t, events, 2)
+	require.Len(t, events, 4)
 	for _, event := range events {
 		require.Equal(t, authCtx.ActiveOrganizationID, event[attr.OrganizationIDKey])
 		require.Equal(t, authCtx.ProjectID.String(), event[attr.ProjectIDKey])
@@ -525,8 +528,12 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 		require.Equal(t, platformtools.PlatformToolsetID(platformtools.PlatformMCPReadToolsetSlug).String(), event[attr.McpServerIDKey])
 		require.Empty(t, event[attr.ToolsetIDKey])
 		require.Equal(t, mcpriskscan.MethodToolsCall, event["gram.mcp.risk.scan.method"])
-		require.Equal(t, mcpriskscan.PhaseRequest, event["gram.mcp.risk.scan.phase"])
 		require.Equal(t, "false", event["gram.mcp.risk.scan.identity_stamped"], "platform auth does not fabricate MCP principal provenance from AuthContext.UserID")
+	}
+	for i := 0; i < len(events); i += 2 {
+		require.Equal(t, mcpriskscan.PhaseRequest, events[i]["gram.mcp.risk.scan.phase"])
+		require.Equal(t, mcpriskscan.PhaseResponse, events[i+1]["gram.mcp.risk.scan.phase"])
+		require.Equal(t, events[i]["gram.mcp.risk.scan.execution_id"], events[i+1]["gram.mcp.risk.scan.execution_id"])
 	}
 }
 

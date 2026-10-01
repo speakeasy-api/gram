@@ -2,6 +2,8 @@ package risk
 
 import (
 	"context"
+	"errors"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -15,11 +17,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// unmaskRiskResultFromClickHouse serves risk.unmaskResult from ClickHouse, the
-// store the listing serves ids from, which never stores the raw match. The
-// plaintext is reconstructed from the original chat data per the row's
-// surface metadata (see RevealMatcher); a reconstruction that does not line
-// up with the recorded match length is refused rather than served.
+const (
+	riskUnmaskRevealStateAvailable         = "available"
+	riskUnmaskRevealStateEvidenceNotStored = "evidence_not_stored"
+)
+
+// unmaskRiskResultFromClickHouse serves the finding IDs used by dashboard
+// listings. MCP rows read encrypted Postgres evidence. Chat-backed rows
+// reconstruct plaintext from original chat data and reject mismatched bounds.
 func (s *Service) unmaskRiskResultFromClickHouse(ctx context.Context, authCtx *contextvalues.AuthContext, id uuid.UUID) (*gen.RiskUnmaskResultResult, error) {
 	projectID := *authCtx.ProjectID
 
@@ -47,6 +52,30 @@ func (s *Service) unmaskRiskResultFromClickHouse(ctx context.Context, authCtx *c
 	}
 	if len(visible) == 0 {
 		return nil, oops.E(oops.CodeNotFound, nil, "risk result not found")
+	}
+
+	if row.MediationSurface != "" {
+		chatID, err := uuid.Parse(row.ChatID)
+		if err != nil {
+			chatID = uuid.Nil
+		}
+		if err := s.authz.Require(ctx, authz.ChatReadCheck(chatID.String())); err != nil {
+			return nil, err
+		}
+		if row.MatchLen == 0 {
+			return nil, oops.E(oops.CodeNotFound, nil, "risk result has no revealable match content")
+		}
+		if s.findingEvidence == nil {
+			return evidenceNotStoredResult(row.ID), nil
+		}
+		match, err := s.findingEvidence.Reveal(ctx, authCtx.ActiveOrganizationID, projectID, row.ID, time.Now().UTC())
+		if errors.Is(err, ErrMCPFindingEvidenceNotStored) {
+			return evidenceNotStoredResult(row.ID), nil
+		}
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load MCP finding evidence").LogError(ctx, s.logger)
+		}
+		return s.finishRiskResultUnmask(ctx, authCtx, row.ID, chatID, match)
 	}
 
 	reveal := NewRevealMatcher(s.logger, s.repo, s.assetStorage)
@@ -84,20 +113,40 @@ func (s *Service) unmaskRiskResultFromClickHouse(ctx context.Context, authCtx *c
 		return nil, oops.E(oops.CodeNotFound, nil, "risk result content is no longer available")
 	}
 
+	return s.finishRiskResultUnmask(ctx, authCtx, row.ID, chatID, match)
+}
+
+func evidenceNotStoredResult(id uuid.UUID) *gen.RiskUnmaskResultResult {
+	return &gen.RiskUnmaskResultResult{
+		ID:          id.String(),
+		Match:       "",
+		RevealState: riskUnmaskRevealStateEvidenceNotStored,
+	}
+}
+
+func (s *Service) finishRiskResultUnmask(
+	ctx context.Context,
+	authCtx *contextvalues.AuthContext,
+	id uuid.UUID,
+	chatID uuid.UUID,
+	match string,
+) (*gen.RiskUnmaskResultResult, error) {
+	projectID := *authCtx.ProjectID
 	if err := s.audit.LogRiskResultUnmask(ctx, s.db, audit.LogRiskResultUnmaskEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        projectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
-		RiskResultID:     row.ID,
+		RiskResultID:     id,
 		ChatID:           chatID,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "record risk result unmask audit log").LogError(ctx, s.logger)
 	}
 
 	return &gen.RiskUnmaskResultResult{
-		ID:    row.ID.String(),
-		Match: match,
+		ID:          id.String(),
+		Match:       match,
+		RevealState: riskUnmaskRevealStateAvailable,
 	}, nil
 }

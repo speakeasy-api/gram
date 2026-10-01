@@ -8,8 +8,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -23,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
@@ -71,6 +74,39 @@ func (hostedPolicyDetector) ScanMCPPolicy(context.Context, policycore.Policy, ri
 	return []scanners.Finding{{RuleID: "hosted.block", Description: "Blocked hosted input", Tags: []string{}, Source: "gitleaks", Confidence: 1}}, nil
 }
 
+type hostedPolicyListLookup struct {
+	policies       []policycore.Policy
+	scopedServerID uuid.UUID
+}
+
+func (l hostedPolicyListLookup) ListEnabledForMCP(_ context.Context, _ string, _ uuid.UUID, target policycore.MCPTarget) ([]policycore.Policy, error) {
+	if target.ServerID != l.scopedServerID {
+		return nil, nil
+	}
+	return l.policies, nil
+}
+
+type hostedResponsePolicyDetector struct{}
+
+func (hostedResponsePolicyDetector) ScanMCPPolicy(_ context.Context, _ policycore.Policy, request risk.MCPScanRequest) ([]scanners.Finding, error) {
+	if request.MessageType != message.ToolResponse || !strings.Contains(request.Text, "person@example.com") {
+		return nil, nil
+	}
+	return []scanners.Finding{{
+		RuleID: "pii.email", Description: "Email detected", Match: "person@example.com",
+		StartPos: 0, EndPos: 18, Tags: []string{}, Source: "presidio", Confidence: 1,
+	}}, nil
+}
+
+type hostedFindingChannel chan *riskv1.Finding
+
+func (p hostedFindingChannel) Publish(_ context.Context, finding *riskv1.Finding, _ ...gcp.PublishOption) gcp.PublishResult {
+	p <- finding
+	return gcp.NewSuccessPublishResult()
+}
+
+func (hostedFindingChannel) Stop(context.Context) error { return nil }
+
 func TestRiskScan_ProxiedMetaMember(t *testing.T) {
 	t.Parallel()
 	ctx, ti, recorder := newTestMCPServiceWithScanSpans(t)
@@ -97,13 +133,15 @@ func TestRiskScan_ProxiedMetaMember(t *testing.T) {
 			scanCount++
 		}
 	}
-	require.Equal(t, 1, scanCount, "proxied members must be evaluated only at the remote seam")
+	require.Equal(t, 2, scanCount, "proxied members must evaluate request and response at the remote seam")
 	remoteEvents := scanAttributes(recorder, mcpriskscan.SurfaceRemoteMCP)
-	require.Len(t, remoteEvents, 1)
+	require.Len(t, remoteEvents, 2)
 	require.Equal(t, memberID.String(), remoteEvents[0][attr.McpServerIDKey])
 	require.Equal(t, "ping", remoteEvents[0][attr.ToolNameKey])
 	require.Equal(t, mcpriskscan.MethodToolsCall, remoteEvents[0]["gram.mcp.risk.scan.method"])
 	require.Equal(t, meta.ID.String(), remoteEvents[0]["gram.mcp.risk.scan.meta_mcp_server_id"])
+	require.Equal(t, mcpriskscan.PhaseResponse, remoteEvents[1]["gram.mcp.risk.scan.phase"])
+	require.Equal(t, remoteEvents[0]["gram.mcp.risk.scan.execution_id"], remoteEvents[1]["gram.mcp.risk.scan.execution_id"])
 }
 
 func TestRiskScan_PromptRetrieval(t *testing.T) {
@@ -215,11 +253,14 @@ func TestRiskScan_HostedHTTPPreservesPayloadAndErrorResult(t *testing.T) {
 	require.True(t, isError)
 	require.JSONEq(t, `{"error":"rejected","detail":"preserve this body"}`, text)
 	require.JSONEq(t, `{"message":"payload survives observation","number":9007199254740993}`, <-upstreamBodies)
-	require.Len(t, scanner.payloads, 1)
+	require.Len(t, scanner.payloads, 2)
 	require.Equal(t, string(arguments), string(scanner.payloads[0]))
-
+	responseParts := bytes.Split(scanner.payloads[1], []byte{'\n'})
+	require.Len(t, responseParts, 2)
+	require.JSONEq(t, `{"error":"rejected","detail":"preserve this body"}`, string(responseParts[0]))
+	require.JSONEq(t, `{"error":"rejected","detail":"preserve this body"}`, string(responseParts[1]))
 	events := scanAttributes(recorder, mcpriskscan.SurfaceHostedMCP)
-	require.Len(t, events, 1)
+	require.Len(t, events, 2)
 	require.Equal(t, authCtx.ActiveOrganizationID, events[0][attr.OrganizationIDKey])
 	require.Equal(t, authCtx.ProjectID.String(), events[0][attr.ProjectIDKey])
 	require.Equal(t, server.ID.String(), events[0][attr.McpServerIDKey])
@@ -227,6 +268,8 @@ func TestRiskScan_HostedHTTPPreservesPayloadAndErrorResult(t *testing.T) {
 	require.Equal(t, "scan_http", events[0][attr.ToolNameKey])
 	require.Equal(t, mcpriskscan.MethodToolsCall, events[0]["gram.mcp.risk.scan.method"])
 	require.Equal(t, mcpriskscan.PhaseRequest, events[0]["gram.mcp.risk.scan.phase"])
+	require.Equal(t, mcpriskscan.PhaseResponse, events[1]["gram.mcp.risk.scan.phase"])
+	require.Equal(t, events[0]["gram.mcp.risk.scan.execution_id"], events[1]["gram.mcp.risk.scan.execution_id"])
 }
 
 func TestRiskScan_LegacyToolsetRouteResolvesWrapperServer(t *testing.T) {
@@ -256,7 +299,7 @@ func TestRiskScan_LegacyToolsetRouteResolvesWrapperServer(t *testing.T) {
 	require.NoError(t, err)
 
 	events := scanAttributes(recorder, mcpriskscan.SurfaceHostedMCP)
-	require.Len(t, events, 1)
+	require.Len(t, events, 2)
 	require.Equal(t, server.ID.String(), events[0][attr.McpServerIDKey])
 	require.Equal(t, toolset.ID.String(), events[0][attr.ToolsetIDKey])
 }
@@ -288,7 +331,7 @@ func TestRiskScan_LegacyToolsetRouteSkipsDisabledWrapperServer(t *testing.T) {
 	require.NoError(t, err)
 
 	events := scanAttributes(recorder, mcpriskscan.SurfaceHostedMCP)
-	require.Len(t, events, 1)
+	require.Len(t, events, 2)
 	require.Empty(t, events[0][attr.McpServerIDKey])
 	require.Equal(t, toolset.ID.String(), events[0][attr.ToolsetIDKey])
 }
@@ -321,7 +364,7 @@ func TestRiskScan_LegacyToolsetRouteLeavesAmbiguousWrapperUnattributed(t *testin
 	require.NoError(t, err, "an ambiguous wrapper must not fail the call")
 
 	events := scanAttributes(recorder, mcpriskscan.SurfaceHostedMCP)
-	require.Len(t, events, 1)
+	require.Len(t, events, 2)
 	require.Empty(t, events[0][attr.McpServerIDKey])
 }
 
@@ -387,6 +430,90 @@ func TestRiskScan_HostedScopedBlockPolicyOnlyStopsMatchingServer(t *testing.T) {
 	rpc = decodeRPCResponse(t, response)
 	require.Empty(t, rpc["error"])
 	require.Equal(t, int32(1), upstreamCalls.Load())
+}
+
+func TestRiskScan_HostedHTTPResponsePolicies(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	slug := "scan-response-" + uuid.NewString()[:8]
+	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, slug)
+	server := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, "public", uuid.NullUUID{}, uuid.Nil)
+	addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "scan_response")
+
+	var upstreamCalls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamCalls.Add(1)
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = io.WriteString(w, "person@example.com")
+	}))
+	t.Cleanup(upstream.Close)
+	body := makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name": "scan_response", "arguments": map[string]any{"body": map[string]any{"message": "allowed"}},
+	})
+	invoke := func() map[string]json.RawMessage {
+		response, err := servePublicHTTP(t, t.Context(), ti, slug, body, "", map[string]string{"Mcp-Test-Server-Url": upstream.URL})
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, response.Code)
+		return decodeRPCResponse(t, response)
+	}
+	newEvaluator := func(policies []policycore.Policy, publisher gcp.Publisher[*riskv1.Finding]) *mcpriskscan.Evaluator {
+		return mcpriskscan.NewPolicyEvaluator(
+			ti.logger,
+			ti.tracerProvider,
+			testenv.NewMeterProvider(t),
+			hostedPolicyListLookup{policies: policies, scopedServerID: server.ID},
+			hostedResponsePolicyDetector{},
+			publisher,
+			mcpriskscan.DefaultPolicyConfig,
+		)
+	}
+
+	ti.service.SetRiskScanEvaluator(newEvaluator(nil, gcp.NewNoopPublisher[*riskv1.Finding]()))
+	text, isError := metaToolResultText(t, invoke())
+	require.False(t, isError)
+	require.Equal(t, "person@example.com", text)
+
+	flagFindings := make(hostedFindingChannel, 1)
+	ti.service.SetRiskScanEvaluator(newEvaluator([]policycore.Policy{{
+		ID: uuid.New(), ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
+		Name: "Response PII", Action: "flag",
+	}}, flagFindings))
+	text, isError = metaToolResultText(t, invoke())
+	require.False(t, isError)
+	require.Equal(t, "person@example.com", text)
+	select {
+	case finding := <-flagFindings:
+		require.Equal(t, riskv1.Finding_ENFORCEMENT_OUTCOME_LOGGED, finding.GetEnforcementOutcome())
+		require.Equal(t, mcpriskscan.PhaseResponse, finding.GetExecution().GetPhase())
+	case <-time.After(time.Second):
+		t.Fatal("response flag finding was not published")
+	}
+
+	userMessage := "Remove personal data before continuing."
+	blockFindings := make(hostedFindingChannel, 1)
+	ti.service.SetRiskScanEvaluator(newEvaluator([]policycore.Policy{{
+		ID: uuid.New(), ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
+		Name: "Response PII", Action: "block", UserMessage: &userMessage,
+	}}, blockFindings))
+	rpc := invoke()
+	var rejected struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(rpc["error"], &rejected))
+	require.Equal(t, int(oops.MCPCodeForbidden), rejected.Code)
+	require.Equal(t, userMessage, rejected.Message)
+	require.NotContains(t, string(rpc["error"]), "person@example.com")
+	select {
+	case finding := <-blockFindings:
+		require.Equal(t, riskv1.Finding_ENFORCEMENT_OUTCOME_WITHHELD, finding.GetEnforcementOutcome())
+		require.Equal(t, mcpriskscan.PhaseResponse, finding.GetExecution().GetPhase())
+	case <-time.After(time.Second):
+		t.Fatal("withheld response finding was not published")
+	}
+	require.Equal(t, int32(3), upstreamCalls.Load())
 }
 
 func TestRiskScan_PromptAsToolPreservesRendering(t *testing.T) {
@@ -532,11 +659,12 @@ func TestRiskScan_ResourceReadKeepsIdentityAndSyntheticBody(t *testing.T) {
 	require.Equal(t, "resource contents", result.Contents[0].Text)
 	require.Equal(t, "text/plain", result.Contents[0].MimeType)
 	require.Equal(t, "{}", <-upstreamBodies)
-	require.Len(t, scanner.payloads, 1)
+	require.Len(t, scanner.payloads, 2)
 	require.Nil(t, scanner.payloads[0], "the synthetic execution body is not caller input")
+	require.Equal(t, "resource contents", string(scanner.payloads[1]))
 
 	events := scanAttributes(recorder, mcpriskscan.SurfaceHostedMCP)
-	require.Len(t, events, 1)
+	require.Len(t, events, 2)
 	require.Equal(t, authCtx.ActiveOrganizationID, events[0][attr.OrganizationIDKey])
 	require.Equal(t, projectID.String(), events[0][attr.ProjectIDKey])
 	require.Equal(t, server.ID.String(), events[0][attr.McpServerIDKey])
@@ -546,4 +674,5 @@ func TestRiskScan_ResourceReadKeepsIdentityAndSyntheticBody(t *testing.T) {
 	require.Empty(t, events[0]["gram.mcp.risk.scan.prompt_name"])
 	require.Equal(t, mcpriskscan.MethodResourcesRead, events[0]["gram.mcp.risk.scan.method"])
 	require.Equal(t, mcpriskscan.PhaseRequest, events[0]["gram.mcp.risk.scan.phase"])
+	require.Equal(t, mcpriskscan.PhaseResponse, events[1]["gram.mcp.risk.scan.phase"])
 }

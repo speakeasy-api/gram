@@ -42,8 +42,8 @@ vi.mock("./identity-provider/DirectoryRoleMappings", () => ({
     </div>
   ),
 }));
-vi.mock("./identity-provider/EnterpriseManagedAuth", () => ({
-  EnterpriseManagedAuth: () => {
+vi.mock("./identity-provider/IdentityProviders", () => ({
+  IdentityProviders: () => {
     mocks.ema();
     return <div>EMA workspace</div>;
   },
@@ -170,15 +170,15 @@ describe("identity top-level tabs", () => {
     expect(
       screen.getByRole("link", { name: "Single sign-on" }).getAttribute("href"),
     ).toBe("?tab=sso");
-    const ema = screen.getByRole("link", { name: "Enterprise Managed Auth" });
-    expect(ema.getAttribute("href")).toBe("?tab=enterprise-managed-auth");
+    const ema = screen.getByRole("link", { name: "Identity providers" });
+    expect(ema.getAttribute("href")).toBe("?tab=identity-providers");
     expect(ema.getAttribute("data-stage")).toBe("preview");
     expect(mocks.ema).not.toHaveBeenCalled();
     expect(mocks.features).toHaveBeenCalled();
   });
 
   it("mounts EMA without fetching employee SSO features", () => {
-    show("?tab=enterprise-managed-auth");
+    show("?tab=identity-providers");
     expect(screen.getByText("EMA workspace")).toBeTruthy();
     expect(mocks.features).not.toHaveBeenCalled();
   });
@@ -187,9 +187,9 @@ describe("identity top-level tabs", () => {
     "requires %s before mounting EMA",
     (gate) => {
       mocks[gate] = false;
-      show("?tab=enterprise-managed-auth&provider=okta&view=setup");
+      show("?tab=identity-providers&provider=okta&view=setup");
       expect(
-        screen.queryByRole("link", { name: "Enterprise Managed Auth" }),
+        screen.queryByRole("link", { name: "Identity providers" }),
       ).toBeNull();
       expect(mocks.ema).not.toHaveBeenCalled();
       expect(mocks.features).toHaveBeenCalled();

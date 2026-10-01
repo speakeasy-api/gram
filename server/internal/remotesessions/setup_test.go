@@ -104,6 +104,7 @@ type testInstance struct {
 type testServiceConfig struct {
 	tunnelRouting bool
 	maxDBConns    int32
+	lockTimeout   time.Duration
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -130,6 +131,10 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 		conn, err = pgxpool.NewWithConfig(ctx, poolConfig)
 		require.NoError(t, err)
 		t.Cleanup(conn.Close)
+	}
+
+	if cfg.lockTimeout > 0 {
+		conn = testenv.NewLockTimeoutPool(t, conn, cfg.lockTimeout)
 	}
 
 	redisClient, err := infra.NewRedisClient(t, 0)

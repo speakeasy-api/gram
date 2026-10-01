@@ -23,9 +23,9 @@ import { ExternalLink, FolderSync, Globe, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 
 import { DirectoryRoleMappings } from "./identity-provider/DirectoryRoleMappings";
-import { EnterpriseManagedAuth } from "./identity-provider/EnterpriseManagedAuth";
+import { IdentityProviders } from "./identity-provider/IdentityProviders";
 import {
-  enterpriseManagedAuthHref,
+  identityProvidersHref,
   IDENTITY_TABS,
   type IdentityPageTab,
 } from "./identity-provider/tabs";
@@ -314,12 +314,12 @@ export default function OrgIdentity(): JSX.Element {
   // The only read of the rollout flag: without it (or org:admin) the tab does not exist.
   const providerFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
   const { hasScope } = useRBAC();
-  const showEnterpriseManagedAuth =
+  const showIdentityProviders =
     providerFlag.status === "enabled" && hasScope("org:admin");
 
   const showSlack = hasScope("org:admin");
   let activeTab: IdentityPageTab = requestedTab;
-  if (requestedTab === "enterprise-managed-auth" && !showEnterpriseManagedAuth)
+  if (requestedTab === "identity-providers" && !showIdentityProviders)
     activeTab = "sso";
   if (requestedTab === "slack-workspaces" && !showSlack) activeTab = "sso";
 
@@ -335,12 +335,12 @@ export default function OrgIdentity(): JSX.Element {
           },
         ]
       : []),
-    ...(showEnterpriseManagedAuth
+    ...(showIdentityProviders
       ? [
           {
-            value: "enterprise-managed-auth",
-            label: "Enterprise Managed Auth",
-            href: enterpriseManagedAuthHref(),
+            value: "identity-providers",
+            label: "Identity providers",
+            href: identityProvidersHref(),
             stage: "preview" as const,
           },
         ]
@@ -356,7 +356,7 @@ export default function OrgIdentity(): JSX.Element {
       tabs={tabs}
     >
       {activeTab === "sso" && <SingleSignOnTab />}
-      {activeTab === "enterprise-managed-auth" && <EnterpriseManagedAuth />}
+      {activeTab === "identity-providers" && <IdentityProviders />}
       {activeTab === "slack-workspaces" && <SlackWorkspaces />}
     </TabbedPage>
   );

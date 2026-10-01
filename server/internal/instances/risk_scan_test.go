@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	templatesrepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -44,9 +45,10 @@ func TestExecuteInstanceTool_ScanCannotConsumeExecutionPayload(t *testing.T) {
 	const body = `{"arguments":{"topic":"independent readers"}}`
 	recorder := httptest.NewRecorder()
 	var events []mcpriskscan.Event
+	var payloads [][]byte
 	svc.scanEvaluator = mcpriskscan.NewEvaluator(scanObserverFunc(func(_ context.Context, subject mcpriskscan.Subject) {
-		require.JSONEq(t, body, string(subject.Payload.Bytes()))
-		require.Empty(t, recorder.Body.String(), "scan must precede execution")
+		require.Empty(t, recorder.Body.String(), "scan must precede response delivery")
+		payloads = append(payloads, append([]byte(nil), subject.Payload.Bytes()...))
 		events = append(events, subject.Event)
 	}))
 	request := httptest.NewRequestWithContext(ctx, http.MethodPost, "/rpc/instances.invoke/tool?tool_urn="+url.QueryEscape(toolURN.String()), iotest.OneByteReader(strings.NewReader(body)))
@@ -55,6 +57,7 @@ func TestExecuteInstanceTool_ScanCannotConsumeExecutionPayload(t *testing.T) {
 	require.NoError(t, svc.ExecuteInstanceTool(recorder, request))
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, "Summarize independent readers", recorder.Body.String())
+	require.Equal(t, [][]byte{[]byte(body)}, payloads, "prompt results remain outside response scan scope")
 	require.Len(t, events, 1)
 	event := events[0]
 	require.Equal(t, mcpriskscan.SurfaceInstances, event.Surface)
@@ -69,4 +72,32 @@ func TestExecuteInstanceTool_ScanCannotConsumeExecutionPayload(t *testing.T) {
 	require.Equal(t, mcpriskscan.PhaseRequest, event.Phase())
 	require.NotEmpty(t, event.ExecutionID())
 	require.False(t, event.IdentityStamped(), "instances authentication does not stamp MCP principal provenance")
+}
+
+func TestInstanceResponsePayloadScansUTF8DespiteBinaryContentType(t *testing.T) {
+	t.Parallel()
+
+	payload := instanceResponsePayload(gateway.ToolKindHTTP, "image/png", []byte("person@example.com"))
+
+	require.Equal(t, mcpriskscan.PayloadAvailable, payload.Availability())
+	require.Equal(t, "person@example.com", string(payload.Bytes()))
+}
+
+func TestInstanceResponsePayloadScansTextAroundInvalidUTF8(t *testing.T) {
+	t.Parallel()
+
+	body := append([]byte("person@example.com"), 0xff)
+	payload := instanceResponsePayload(gateway.ToolKindHTTP, "application/octet-stream", body)
+
+	require.Equal(t, mcpriskscan.PayloadAvailable, payload.Availability())
+	require.Equal(t, "person@example.com\uFFFD", string(payload.Bytes()))
+}
+
+func TestInstanceResponsePayloadRejectsEventStream(t *testing.T) {
+	t.Parallel()
+
+	payload := instanceResponsePayload(gateway.ToolKindHTTP, "text/event-stream; charset=utf-8", []byte("data: partial\n\n"))
+
+	require.Equal(t, mcpriskscan.PayloadUnavailable, payload.Availability())
+	require.Nil(t, payload.Bytes())
 }

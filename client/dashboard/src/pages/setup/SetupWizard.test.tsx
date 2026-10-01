@@ -106,6 +106,7 @@ function task(
   key: string,
   title: string,
   status: SetupTask["status"] = "todo",
+  extra: Partial<SetupTask> = {},
 ): SetupTask {
   return {
     key,
@@ -115,13 +116,22 @@ function task(
     completedByFact: false,
     blockedBy: [],
     hidden: false,
+    group: false,
+    ...extra,
   };
 }
 
+// The agent observability group precedes its card, as the server lists them.
+// The wizard walks the cards and shows the group as a section label.
 const tasks: SetupTask[] = [
   task("identity-provider", "Set up identity provider", "done"),
   task("anthropic-observability", "Set up Anthropic observability"),
-  task("instrument-agents", "Set up observability in other platforms"),
+  task("agent-observability", "Set up agent observability", "todo", {
+    group: true,
+  }),
+  task("instrument-agents", "Set up observability in other platforms", "todo", {
+    parentKey: "agent-observability",
+  }),
 ];
 
 function loaded(list: SetupTask[] = tasks) {
@@ -266,12 +276,13 @@ describe("SetupWizard", () => {
   it("moves between cards from the rail, dropping the outgoing card's step", () => {
     render(<SetupWizard />);
 
+    // A group's row opens its first open card.
     fireEvent.click(
-      screen.getByRole("button", { name: /Set up identity provider/ }),
+      screen.getByRole("button", { name: /Set up agent observability/ }),
     );
 
     const params = lastParams();
-    expect(params.get("task")).toBe("idp");
+    expect(params.get("task")).toBe("other-platforms");
     expect(params.get("step")).toBeNull();
     const [, options] = mocks.setSearchParams.mock.calls.at(-1)!;
     expect(options).toEqual({ replace: true });

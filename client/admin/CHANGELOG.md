@@ -1,5 +1,11 @@
 # admin
 
+## 0.6.2
+
+### Patch Changes
+
+- 27e22f1: Staff can record a Stripe subscription ID for a PAYG organization that does not have one yet. The admin API checks that the subscription belongs to the organization's Stripe customer, and stores the billing-cycle anchor Stripe returns, before saving it.
+
 ## 0.6.1
 
 ### Patch Changes

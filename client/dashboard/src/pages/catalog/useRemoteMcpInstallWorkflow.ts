@@ -189,7 +189,7 @@ export interface GuardrailsPhase extends WorkflowBase {
   servers: GuardrailServerSummary[];
   /** Install and create the guardrail, scoped to every server that installs. */
   installWithGuardrail: () => Promise<void>;
-  /** Install without a guardrail. */
+  /** Install without a guardrail (the recommendation switched off). */
   skip: () => Promise<void>;
   /**
    * Install without a guardrail and resolve to the ids of the installed

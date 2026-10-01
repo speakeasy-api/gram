@@ -510,7 +510,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("unmaskRiskResult", func() {
-		Description("Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.")
+		Description("Return the plaintext match for a single risk result on demand. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -1979,7 +1979,10 @@ var RiskUnmaskResultResult = Type("RiskUnmaskResultResult", func() {
 		Format(FormatUUID)
 	})
 	Attribute("match", String, "The plaintext matched secret or sensitive data for this result. Empty string when the finding has no top-level match (e.g. a spans-only finding).")
-	Required("id", "match")
+	Attribute("reveal_state", String, "Whether plaintext was revealed or the MCP finding evidence is unavailable or expired.", func() {
+		Enum("available", "evidence_not_stored")
+	})
+	Required("id", "match", "reveal_state")
 })
 
 var ListRiskResultsForAgentResult = Type("ListRiskResultsForAgentResult", func() {
