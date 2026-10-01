@@ -78,9 +78,15 @@ export interface ExploreSpec {
   measures: MeasureDraft[];
   filters: FilterDraft[];
   dimensions: string[];
-  /** Alias of the measure the summary sorts by; "" keeps the group order. */
+  /**
+   * Alias of the measure a whole-window result sorts by; "" keeps the group
+   * order. A timeseries chart is in time order and ignores it.
+   */
   orderBy: string;
-  /** Row cap for the summary; 0 defers to the server default. */
+  /**
+   * Row cap for a whole-window result; 0 defers to the server default. A
+   * timeseries chart is capped at MAX_LIMIT instead.
+   */
   limit: number;
   window: WindowPreset;
   chartType: ChartType;
@@ -168,6 +174,10 @@ const MEASURE_OP_ORDER: MeasureOp[] = [
   "p99",
 ];
 
+export function isMeasureOp(value: unknown): value is MeasureOp {
+  return MEASURE_OP_ORDER.some((op) => op === value);
+}
+
 /**
  * The aggregations a dataset admits: count (every dataset), then every op
  * at least one measure field declares.
@@ -200,8 +210,18 @@ export const FILTER_OPERATOR_LABELS: Record<FilterOperator, string> = {
   in: "is any of",
 };
 
-function isFilterOperator(operator: string): operator is FilterOperator {
-  return operator in FILTER_OPERATOR_LABELS;
+export function isFilterOperator(value: unknown): value is FilterOperator {
+  return (
+    typeof value === "string" && Object.hasOwn(FILTER_OPERATOR_LABELS, value)
+  );
+}
+
+export function isWindowPreset(value: unknown): value is WindowPreset {
+  return WINDOW_OPTIONS.some((option) => option.value === value);
+}
+
+export function isChartType(value: unknown): value is ChartType {
+  return CHART_TYPE_OPTIONS.some((option) => option.value === value);
 }
 
 /**
@@ -356,7 +376,12 @@ export function specProblem(
     if (!ops.includes(measure.op)) {
       return `${spec.dataset} has no ${measure.op} aggregation`;
     }
-    if (measure.op === "count" || measure.field === "") continue;
+    // Count takes no field, and a query run would drop one silently.
+    if (measure.op === "count") {
+      if (measure.field !== "") return "count takes no field";
+      continue;
+    }
+    if (measure.field === "") continue;
     const fields = fieldsForOp(dataset, measure.op).map((field) => field.name);
     if (!fields.includes(measure.field)) {
       return `field "${measure.field}" cannot be aggregated by ${measure.op} in ${spec.dataset}`;
@@ -425,23 +450,18 @@ export function queryDimensions(spec: ExploreSpec): string[] {
   return spec.dimensions.slice(0, MAX_DIMENSIONS);
 }
 
-/**
- * The two shapes a spec is asked in. A timeseries chart needs bucketed rows;
- * the summary table under it, and every other chart, needs the whole-window
- * figures the caller's order and limit apply to.
- */
-export type QueryShape = "chart" | "summary";
-
-/** Whether the spec draws a bucketed chart, and so needs the chart shape. */
+/** Whether the spec draws a bucketed timeseries over at least one measure. */
 export function hasChartShape(spec: ExploreSpec): boolean {
   return isTimeseries(spec.chartType) && !isRowsMode(spec);
 }
 
-/** Build the query the spec describes, in one of its shapes. */
-export function queryBodyFromSpec(
-  spec: ExploreSpec,
-  shape: QueryShape,
-): AnalyticsQueryPayload {
+/**
+ * Build the one query the spec runs. A timeseries chart asks for bucketed
+ * rows; every other chart asks for whole-window figures, which the order and
+ * limit apply to. Someone who wants the figures behind a timeseries switches
+ * the chart to a table.
+ */
+export function queryBodyFromSpec(spec: ExploreSpec): AnalyticsQueryPayload {
   const { from, to } = windowRange(spec.window);
   const measures = completeMeasures(spec.measures);
   const dimensions = queryDimensions(spec);
@@ -475,9 +495,9 @@ export function queryBodyFromSpec(
     })),
     filters,
   };
-  if (shape === "chart") {
+  if (hasChartShape(spec)) {
     // Buckets multiply rows: a day of hourly buckets over ten users is 240
-    // of them, so the cap is the server's maximum rather than the summary's
+    // of them, so the cap is the server's maximum rather than the builder's
     // limit. Bucketed rows come back in time order, so no order is sent.
     return { ...base, grain: autoGrain(spec.window), limit: MAX_LIMIT };
   }

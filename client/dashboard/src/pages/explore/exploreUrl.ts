@@ -1,17 +1,14 @@
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import {
-  CHART_TYPE_OPTIONS,
-  FILTER_OPERATOR_LABELS,
   MAX_LIMIT,
   specProblem,
-  WINDOW_OPTIONS,
-  type ChartType,
   type ExploreSpec,
   type FilterDraft,
-  type FilterOperator,
   type MeasureDraft,
-  type MeasureOp,
-  type WindowPreset,
+  isChartType,
+  isFilterOperator,
+  isMeasureOp,
+  isWindowPreset,
 } from "./exploreModel";
 
 // The URL carries the whole query, so any query is a link and sharing never
@@ -21,6 +18,12 @@ import {
 
 /** The search parameter holding the query. */
 export const QUERY_PARAM = "q";
+
+/** The search parameter naming the widget the builder has open. */
+export const WIDGET_PARAM = "widget";
+
+/** The search parameter naming the page's tab; absent means Explore. */
+export const TAB_PARAM = "tab";
 
 // Bumped when the encoding changes shape; a link in an older shape then
 // falls back to the default view rather than being misread.
@@ -55,6 +58,16 @@ export function decodeSpec(
   raw: string | null,
   datasets: AnalyticsDataset[],
 ): ExploreSpec | null {
+  const spec = parseSpec(raw);
+  if (!spec || specProblem(datasets, spec) !== "") return null;
+  return spec;
+}
+
+/**
+ * The query a URL parameter carries, whether or not the catalog can still
+ * answer it, or null when the text is not a query at all.
+ */
+export function parseSpec(raw: string | null): ExploreSpec | null {
   if (raw === null || raw === "") return null;
   let value: unknown;
   try {
@@ -62,9 +75,7 @@ export function decodeSpec(
   } catch {
     return null;
   }
-  const spec = specFromValue(value);
-  if (!spec || specProblem(datasets, spec) !== "") return null;
-  return spec;
+  return specFromValue(value);
 }
 
 function specFromValue(value: unknown): ExploreSpec | null {
@@ -82,7 +93,7 @@ function specFromValue(value: unknown): ExploreSpec | null {
   if (typeof dataset !== "string" || dataset === "") return null;
   if (!isStringArray(dimensions)) return null;
   if (typeof orderBy !== "string") return null;
-  if (!isWindow(window) || !isChartType(chartType)) return null;
+  if (!isWindowPreset(window) || !isChartType(chartType)) return null;
   if (
     typeof limit !== "number" ||
     !Number.isInteger(limit) ||
@@ -96,10 +107,10 @@ function specFromValue(value: unknown): ExploreSpec | null {
   const measureDrafts: MeasureDraft[] = [];
   for (const measure of measures) {
     if (!isRecord(measure)) return null;
-    if (typeof measure.op !== "string" || typeof measure.field !== "string") {
+    if (!isMeasureOp(measure.op) || typeof measure.field !== "string") {
       return null;
     }
-    measureDrafts.push({ op: measure.op as MeasureOp, field: measure.field });
+    measureDrafts.push({ op: measure.op, field: measure.field });
   }
 
   const filterDrafts: FilterDraft[] = [];
@@ -130,19 +141,5 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isStringArray(value: unknown): value is string[] {
   return (
     Array.isArray(value) && value.every((item) => typeof item === "string")
-  );
-}
-
-function isWindow(value: unknown): value is WindowPreset {
-  return WINDOW_OPTIONS.some((option) => option.value === value);
-}
-
-function isChartType(value: unknown): value is ChartType {
-  return CHART_TYPE_OPTIONS.some((option) => option.value === value);
-}
-
-function isFilterOperator(value: unknown): value is FilterOperator {
-  return (
-    typeof value === "string" && Object.hasOwn(FILTER_OPERATOR_LABELS, value)
   );
 }

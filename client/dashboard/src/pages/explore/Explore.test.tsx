@@ -9,10 +9,12 @@ import {
   screen,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Explore from "./Explore";
 import { encodeSpec } from "./exploreUrl";
+import { widgetFromSpec } from "./widgetSpec";
 import type { ExploreSpec } from "./exploreModel";
 
 const testState = vi.hoisted(() => ({
@@ -28,8 +30,132 @@ const testState = vi.hoisted(() => ({
   bodies: [] as (AnalyticsQueryPayload | null)[],
   /** Whether a query that runs comes back answered, rather than pending. */
   answers: false,
+  /** The project's widgets, as the list endpoint returns them. */
+  widgets: [] as unknown[],
+  /** Whether the widget list is still loading. */
+  listPending: false,
+  /** Every widget write, in call order. */
+  writes: [] as { kind: string; request: Record<string, unknown> }[],
+  /** Whether the viewer holds project:write on the project. */
+  projectWrite: false,
 }));
 
+type Write = "create" | "update" | "duplicate" | "delete";
+
+// Each write succeeds at once and is applied to the list, as the refetch
+// after it would show.
+function applyWrite(kind: Write, request: Record<string, unknown>): unknown {
+  testState.writes.push({ kind, request });
+  const now = new Date();
+  const created = (body: Record<string, unknown>) => {
+    const widget = {
+      ...body,
+      id: `created-${testState.writes.length}`,
+      projectId: "project",
+      organizationId: "org",
+      createdByUserId: "member-1",
+      createdAt: now,
+      updatedAt: now,
+    };
+    testState.widgets = [widget, ...testState.widgets];
+    return widget;
+  };
+  switch (kind) {
+    case "create":
+      return created(
+        request.createWidgetRequestBody as Record<string, unknown>,
+      );
+    case "duplicate": {
+      const { id } = request.duplicateWidgetRequestBody as { id: string };
+      const source = testState.widgets.find(
+        (widget) => (widget as { id: string }).id === id,
+      ) as Record<string, unknown>;
+      return created({ ...source, name: `${String(source.name)} (copy)` });
+    }
+    case "update": {
+      const body = request.updateWidgetRequestBody as Record<string, unknown>;
+      let result: unknown;
+      testState.widgets = testState.widgets.map((widget) => {
+        const current = widget as Record<string, unknown>;
+        return current.id === body.id
+          ? (result = { ...current, ...body, updatedAt: now })
+          : widget;
+      });
+      return result;
+    }
+    case "delete":
+      testState.widgets = testState.widgets.filter(
+        (widget) => (widget as { id: string }).id !== request.id,
+      );
+      return undefined;
+  }
+}
+
+function mockWrite(kind: Write) {
+  return () => ({
+    isPending: false,
+    mutate: (
+      { request }: { request: Record<string, unknown> },
+      options?: { onSuccess?: (data: unknown) => unknown },
+    ) => {
+      void options?.onSuccess?.(applyWrite(kind, request));
+    },
+  });
+}
+
+vi.mock("@gram/client/react-query/widgets.js", () => ({
+  useWidgets: () => ({
+    isPending: testState.listPending,
+    isFetching: testState.listPending,
+    isError: false,
+    data: testState.listPending ? undefined : { widgets: testState.widgets },
+    refetch: vi.fn(),
+  }),
+  invalidateAllWidgets: () => Promise.resolve(),
+}));
+vi.mock("@gram/client/react-query/widget.js", () => ({
+  invalidateAllWidget: () => Promise.resolve(),
+}));
+vi.mock("@gram/client/react-query/createWidget.js", () => ({
+  useCreateWidgetMutation: mockWrite("create"),
+}));
+vi.mock("@gram/client/react-query/updateWidget.js", () => ({
+  useUpdateWidgetMutation: mockWrite("update"),
+}));
+vi.mock("@gram/client/react-query/duplicateWidget.js", () => ({
+  useDuplicateWidgetMutation: mockWrite("duplicate"),
+}));
+vi.mock("@gram/client/react-query/deleteWidget.js", () => ({
+  useDeleteWidgetMutation: mockWrite("delete"),
+}));
+vi.mock("@/contexts/Auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/contexts/Auth")>()),
+  useUser: () => ({ id: "member-1", email: "member@example.invalid" }),
+  useProject: () => ({ id: "project", slug: "project" }),
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: (scope: string, projectId: string) =>
+      testState.projectWrite &&
+      scope === "project:write" &&
+      projectId === "project",
+  }),
+}));
+vi.mock("@gram/client/react-query/members.js", () => ({
+  useMembers: () => ({
+    data: {
+      members: [
+        {
+          id: "member-1",
+          name: "Test Member",
+          email: "member@example.invalid",
+        },
+      ],
+    },
+  }),
+}));
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
+vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({ status: testState.flagStatus }),
 }));
@@ -193,6 +319,10 @@ describe("Explore", () => {
     testState.refetch.mockClear();
     testState.bodies = [];
     testState.answers = false;
+    testState.widgets = [];
+    testState.listPending = false;
+    testState.writes = [];
+    testState.projectWrite = false;
   });
 
   afterEach(() => {
@@ -220,7 +350,7 @@ describe("Explore", () => {
     expect(screen.getByText("user")).toBeTruthy();
   });
 
-  it("runs nothing until asked, then both shapes of the query", () => {
+  it("runs nothing until asked, then the one query the chart draws", () => {
     renderExplore();
 
     expect(screen.getByText("Nothing has run yet")).toBeTruthy();
@@ -228,29 +358,41 @@ describe("Explore", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Run query" }));
     expect(screen.queryByText("Nothing has run yet")).toBeNull();
-    // The opening spec is a line chart, so a bucketed chart query and a
-    // whole-window summary query both run, over the short default window.
-    const chart = testState.bodies.find((body) => body?.grain === "hour");
-    const summary = testState.bodies.find((body) => body?.grain === "none");
+    // The opening spec is a line chart, so one bucketed query runs over the
+    // short default window, and no whole-window query beside it.
+    const sent = testState.bodies.filter((body) => body !== null);
+    expect(new Set(sent.map((body) => body?.grain))).toEqual(new Set(["hour"]));
+    const chart = sent[0];
     expect(chart?.dataset).toBe("sessions");
     expect(chart?.grain).toBe("hour");
     expect(chart?.dimensions).toEqual(["user"]);
     expect(chart?.measures).toEqual([
       { op: "count", field: undefined, alias: "count" },
     ]);
-    expect(summary?.grain).toBe("none");
+    expect(chart?.limit).toBe(1000);
     expect(chart!.to.getTime() - chart!.from.getTime()).toBe(24 * 3_600_000);
   });
 
-  it("stops asking for a chart once the chart type is a table", () => {
+  it("asks for whole-window figures once the chart type is a table", () => {
     renderExplore();
     fireEvent.click(screen.getByRole("button", { name: "Table" }));
     testState.bodies = [];
 
     fireEvent.click(screen.getByRole("button", { name: "Run query" }));
-    const [chart, summary] = testState.bodies;
-    expect(chart).toBeNull();
-    expect(summary?.grain).toBe("none");
+    const sent = testState.bodies.filter((body) => body !== null);
+    expect(sent.length).toBeGreaterThan(0);
+    expect(sent.every((body) => body?.grain === "none")).toBe(true);
+  });
+
+  it("offers order and limit only on whole-window charts", () => {
+    renderExplore();
+    // The opening line chart is drawn in time order up to the server's cap.
+    expect(screen.queryByRole("combobox", { name: "Order by" })).toBeNull();
+    expect(screen.queryByRole("spinbutton", { name: "Limit" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Table" }));
+    expect(screen.getByRole("combobox", { name: "Order by" })).toBeTruthy();
+    expect(screen.getByRole("spinbutton", { name: "Limit" })).toBeTruthy();
   });
 
   it("keeps the last run's results while the builder moves on", () => {
@@ -487,6 +629,536 @@ describe("Explore", () => {
       ).toBe("sessions");
       expect(screen.getByText("Nothing has run yet")).toBeTruthy();
       expect(testState.bodies.every((body) => body === null)).toBe(true);
+    });
+  });
+
+  describe("widgets", () => {
+    const p95ByTool: ExploreSpec = {
+      dataset: "tool_calls",
+      measures: [{ op: "p95", field: "duration_ms" }],
+      filters: [],
+      dimensions: ["tool_name"],
+      orderBy: "p95_duration_ms",
+      limit: 0,
+      window: "7d",
+      chartType: "table",
+    };
+
+    function storedWidget(
+      id: string,
+      name: string,
+      spec: ExploreSpec,
+      extra: Record<string, unknown> = {},
+    ) {
+      return {
+        id,
+        name,
+        dataset: spec.dataset,
+        ...widgetFromSpec(spec),
+        projectId: "project",
+        organizationId: "org",
+        createdByUserId: "member-1",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ...extra,
+      };
+    }
+
+    function widgetsTab() {
+      return screen.getByRole("tab", { name: /Widgets/ });
+    }
+
+    function showWidgets() {
+      fireEvent.click(widgetsTab());
+    }
+
+    // Opens a widget from the list, as clicking its row does.
+    function openWidget(name: string) {
+      showWidgets();
+      fireEvent.click(screen.getByText(name));
+    }
+
+    function param(name: string) {
+      return new URLSearchParams(nav.search).get(name);
+    }
+
+    it("counts the project's widgets on the tab and lists who saved each", () => {
+      testState.widgets = [
+        storedWidget("w-1", "Slow tools", p95ByTool, {
+          description: "Tools worth a look",
+        }),
+        storedWidget("w-2", "Slow tools", p95ByTool, {
+          createdByUserId: "departed",
+        }),
+      ];
+      renderExplore();
+
+      expect(widgetsTab().textContent).toContain("2");
+      showWidgets();
+      expect(param("tab")).toBe("widgets");
+      // Names repeat freely; the creator tells them apart.
+      expect(screen.getAllByText("Slow tools")).toHaveLength(2);
+      expect(screen.getByText("Tools worth a look")).toBeTruthy();
+      expect(screen.getByText("Test Member")).toBeTruthy();
+      expect(screen.getByText("A former member")).toBeTruthy();
+      expect(screen.getAllByText("Table")).not.toHaveLength(0);
+    });
+
+    it("opens straight onto the list from a link", () => {
+      testState.widgets = [storedWidget("w-1", "Slow tools", p95ByTool)];
+      renderExplore("/explore?tab=widgets");
+
+      expect(screen.getByText("Slow tools")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Run query" })).toBeNull();
+    });
+
+    it("points an empty list back at Explore", () => {
+      renderExplore();
+      showWidgets();
+
+      expect(screen.getByText("No widgets yet")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Go to Explore" }));
+      expect(param("tab")).toBeNull();
+      expect(screen.getByRole("button", { name: "Run query" })).toBeTruthy();
+    });
+
+    it("narrows the list by name", () => {
+      testState.widgets = [
+        storedWidget("w-1", "Slow tools", p95ByTool),
+        storedWidget(
+          "w-2",
+          "Sessions by user",
+          { ...p95ByTool, dataset: "sessions", measures: [], orderBy: "" },
+          { createdByUserId: "someone-else" },
+        ),
+      ];
+      renderExplore();
+      showWidgets();
+
+      fireEvent.change(screen.getByPlaceholderText("Search widgets"), {
+        target: { value: "slow" },
+      });
+      expect(screen.getByText("Slow tools")).toBeTruthy();
+      expect(screen.queryByText("Sessions by user")).toBeNull();
+
+      fireEvent.change(screen.getByPlaceholderText("Search widgets"), {
+        target: { value: "nothing like it" },
+      });
+      expect(screen.getByText("No widgets match these filters.")).toBeTruthy();
+    });
+
+    it("opens a widget from the list in Explore, restored exactly, and runs it", () => {
+      testState.widgets = [storedWidget("w-1", "Slow tools", p95ByTool)];
+      renderExplore();
+      openWidget("Slow tools");
+
+      expect(param("tab")).toBeNull();
+      expect(param("widget")).toBe("w-1");
+      expect(
+        screen.getByRole("combobox", { name: "Dataset" }).textContent,
+      ).toBe("tool_calls");
+      expect(screen.getByRole("combobox", { name: "Window" }).textContent).toBe(
+        "Last 7 days",
+      );
+      expect(urlSpec()).toMatchObject(p95ByTool);
+
+      const summary = testState.bodies.findLast((body) => body !== null);
+      expect(summary?.dataset).toBe("tool_calls");
+      expect(summary?.orderBy).toEqual([
+        { measure: "p95_duration_ms", direction: "desc" },
+      ]);
+      // Open, unedited: nothing to save.
+      expect(screen.getByRole("button", { name: "Save" })).toHaveProperty(
+        "disabled",
+        true,
+      );
+    });
+
+    it("saves the builder as a widget with a description, then has it open", () => {
+      renderExplore();
+      expect(screen.getByRole("img", { name: "Unsaved widget" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Table" }));
+      fireEvent.click(screen.getByRole("button", { name: "Save widget" }));
+      fireEvent.change(screen.getByRole("textbox", { name: "Widget name" }), {
+        target: { value: "  Sessions by user  " },
+      });
+      fireEvent.change(
+        screen.getByRole("textbox", { name: "Widget description" }),
+        { target: { value: "Who runs the most sessions" } },
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      const [write] = testState.writes;
+      expect(write?.kind).toBe("create");
+      expect(write?.request.createWidgetRequestBody).toEqual({
+        name: "Sessions by user",
+        description: "Who runs the most sessions",
+        dataset: "sessions",
+        query: {
+          window: "24h",
+          grain: "none",
+          ungrouped: false,
+          dimensions: ["user"],
+          measures: [{ op: "count", field: "", alias: "count" }],
+          filters: [],
+          order_by: [],
+          limit: 0,
+        },
+        visualization: { type: "table", options: {} },
+      });
+      expect(param("widget")).toBe("created-1");
+      // With the widget open, the dataset row offers Save rather than
+      // Save widget.
+      expect(screen.getByRole("button", { name: "Save" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Save widget" })).toBeNull();
+    });
+
+    it("saves edits to the open widget in place", () => {
+      testState.widgets = [storedWidget("w-1", "Slow tools", p95ByTool)];
+      renderExplore();
+      openWidget("Slow tools");
+      expect(screen.queryByRole("img", { name: "Unsaved changes" })).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Bar" }));
+      expect(screen.getByRole("img", { name: "Unsaved changes" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      const [write] = testState.writes;
+      expect(write?.kind).toBe("update");
+      expect(write?.request.updateWidgetRequestBody).toMatchObject({
+        id: "w-1",
+        name: "Slow tools",
+        dataset: "tool_calls",
+        query: { grain: "day" },
+        visualization: { type: "bar" },
+      });
+    });
+
+    it("renames without saving the builder's edits", async () => {
+      const user = userEvent.setup();
+      const stored = storedWidget("w-1", "Slow tools", p95ByTool);
+      testState.widgets = [stored];
+      renderExplore();
+      openWidget("Slow tools");
+      fireEvent.click(screen.getByRole("button", { name: "Bar" }));
+
+      await user.click(screen.getByRole("button", { name: "Widget actions" }));
+      await user.click(screen.getByRole("menuitem", { name: /Rename/ }));
+      const field = screen.getByRole("textbox", { name: "Widget name" });
+      expect(field).toHaveProperty("value", "Slow tools");
+      await user.clear(field);
+      await user.type(field, "Slowest tools");
+      await user.click(screen.getByRole("button", { name: "Rename" }));
+
+      expect(testState.writes[0]?.request.updateWidgetRequestBody).toEqual({
+        id: "w-1",
+        name: "Slowest tools",
+        description: undefined,
+        dataset: "tool_calls",
+        query: stored.query,
+        visualization: stored.visualization,
+      });
+      expect(screen.getByRole("img", { name: "Unsaved changes" })).toBeTruthy();
+    });
+
+    it("duplicates the open widget and opens the copy", async () => {
+      const user = userEvent.setup();
+      testState.widgets = [
+        storedWidget("w-1", "Slow tools", p95ByTool, {
+          createdByUserId: "someone-else",
+        }),
+      ];
+      renderExplore();
+      openWidget("Slow tools");
+
+      await user.click(screen.getByRole("button", { name: "Widget actions" }));
+      await user.click(screen.getByRole("menuitem", { name: /Duplicate/ }));
+
+      expect(testState.writes[0]).toEqual({
+        kind: "duplicate",
+        request: { duplicateWidgetRequestBody: { id: "w-1" } },
+      });
+      expect(param("widget")).toBe("created-1");
+    });
+
+    it("offers only copying on someone else's widget without project write", async () => {
+      const user = userEvent.setup();
+      testState.widgets = [
+        storedWidget("w-1", "Slow tools", p95ByTool, {
+          createdByUserId: "someone-else",
+        }),
+      ];
+      renderExplore();
+      openWidget("Slow tools");
+
+      expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+      await user.click(screen.getByRole("button", { name: "Widget actions" }));
+      expect(
+        screen.getByRole("menuitem", { name: /Save as new widget/ }),
+      ).toBeTruthy();
+      expect(screen.getByRole("menuitem", { name: /Duplicate/ })).toBeTruthy();
+      expect(screen.queryByRole("menuitem", { name: /Rename/ })).toBeNull();
+      expect(screen.queryByRole("menuitem", { name: /Delete/ })).toBeNull();
+      await user.keyboard("{Escape}");
+
+      showWidgets();
+      await user.click(
+        screen.getByRole("button", { name: "Actions for Slow tools" }),
+      );
+      expect(screen.getByRole("menuitem", { name: /Open/ })).toBeTruthy();
+      expect(screen.getByRole("menuitem", { name: /Duplicate/ })).toBeTruthy();
+      expect(screen.queryByRole("menuitem", { name: /Rename/ })).toBeNull();
+      expect(screen.queryByRole("menuitem", { name: /Delete/ })).toBeNull();
+    });
+
+    it("lets a project writer change someone else's widget", async () => {
+      const user = userEvent.setup();
+      testState.projectWrite = true;
+      testState.widgets = [
+        storedWidget("w-1", "Slow tools", p95ByTool, {
+          createdByUserId: "someone-else",
+        }),
+      ];
+      renderExplore();
+      openWidget("Slow tools");
+
+      expect(screen.getByRole("button", { name: "Save" })).toBeTruthy();
+      await user.click(screen.getByRole("button", { name: "Widget actions" }));
+      expect(screen.getByRole("menuitem", { name: /Rename/ })).toBeTruthy();
+      expect(screen.getByRole("menuitem", { name: /Delete/ })).toBeTruthy();
+    });
+
+    it("duplicates a widget from the list and opens the copy in Explore", async () => {
+      const user = userEvent.setup();
+      testState.widgets = [storedWidget("w-1", "Slow tools", p95ByTool)];
+      renderExplore();
+      showWidgets();
+
+      await user.click(
+        screen.getByRole("button", { name: "Actions for Slow tools" }),
+      );
+      await user.click(screen.getByRole("menuitem", { name: /Duplicate/ }));
+
+      expect(testState.writes[0]?.kind).toBe("duplicate");
+      expect(param("tab")).toBeNull();
+      expect(param("widget")).toBe("created-1");
+    });
+
+    it("deletes the open widget and keeps the builder", async () => {
+      const user = userEvent.setup();
+      testState.widgets = [storedWidget("w-1", "Slow tools", p95ByTool)];
+      renderExplore();
+      openWidget("Slow tools");
+
+      await user.click(screen.getByRole("button", { name: "Widget actions" }));
+      await user.click(screen.getByRole("menuitem", { name: /Delete/ }));
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+
+      expect(testState.writes[0]).toEqual({
+        kind: "delete",
+        request: { id: "w-1" },
+      });
+      expect(param("widget")).toBeNull();
+      expect(screen.getByRole("img", { name: "Unsaved widget" })).toBeTruthy();
+      expect(
+        screen.getByRole("combobox", { name: "Dataset" }).textContent,
+      ).toBe("tool_calls");
+    });
+
+    it("opens a widget the catalog broke for editing, naming what is gone", () => {
+      const reason = 'unknown_field: field "retired_field" does not exist';
+      testState.widgets = [
+        storedWidget(
+          "w-1",
+          "Old breakdown",
+          { ...p95ByTool, dimensions: ["retired_field"] },
+          { invalidReason: reason },
+        ),
+      ];
+      renderExplore();
+      showWidgets();
+      expect(screen.getByLabelText("No longer works")).toBeTruthy();
+      fireEvent.click(screen.getByText("Old breakdown"));
+
+      expect(
+        screen.getByText(/This widget no longer works/).textContent,
+      ).toContain(reason);
+      // The builder holds the saved widget, unrun, ready to be fixed.
+      expect(
+        screen.getByRole("combobox", { name: "Dataset" }).textContent,
+      ).toBe("tool_calls");
+      expect(screen.getByText("Nothing has run yet")).toBeTruthy();
+      expect(testState.bodies.every((body) => body === null)).toBe(true);
+    });
+
+    it("offers no save as new while a linked widget is still loading", () => {
+      testState.listPending = true;
+      renderExplore(`${linkTo(p95ByTool)}&widget=w-1`);
+
+      expect(
+        screen.getByRole("button", { name: "Save widget" }),
+      ).toHaveProperty("disabled", true);
+    });
+
+    it("names the problem when a widget cannot be read at all", () => {
+      testState.widgets = [
+        {
+          ...storedWidget("w-1", "Unreadable", p95ByTool),
+          query: { window: "1y" },
+          invalidReason: 'window "1y" is not one of 1h, 24h, 7d, 30d, 90d',
+        },
+      ];
+      renderExplore();
+      openWidget("Unreadable");
+
+      expect(
+        screen.getByText(/can't be opened in the builder/).textContent,
+      ).toContain('window "1y"');
+      expect(screen.getByRole("combobox", { name: "Dataset" })).toBeTruthy();
+      // The builder is not showing the widget, so saving would overwrite it.
+      expect(screen.getByRole("button", { name: "Save" })).toHaveProperty(
+        "disabled",
+        true,
+      );
+      expect(screen.queryByRole("img", { name: "Unsaved changes" })).toBeNull();
+    });
+
+    it("refuses to save over a widget the builder cannot read though the server can", async () => {
+      const user = userEvent.setup();
+      const stored = storedWidget("w-1", "Ascending", p95ByTool);
+      testState.widgets = [
+        {
+          ...stored,
+          query: {
+            ...stored.query,
+            order_by: [{ measure: "p95_duration_ms", direction: "asc" }],
+          },
+        },
+      ];
+      renderExplore();
+      openWidget("Ascending");
+
+      expect(
+        screen.getByText(/can't be opened in the builder/).textContent,
+      ).toContain("options the builder doesn't offer");
+      expect(screen.queryByText(/This widget no longer works/)).toBeNull();
+      expect(screen.getByRole("button", { name: "Save" })).toHaveProperty(
+        "disabled",
+        true,
+      );
+      expect(screen.queryByRole("img", { name: "Unsaved changes" })).toBeNull();
+
+      // Copying it, or saving the builder as a new one, is still offered.
+      await user.click(screen.getByRole("button", { name: "Widget actions" }));
+      expect(
+        screen.getByRole("menuitem", { name: /Save as new widget/ }),
+      ).toBeTruthy();
+      expect(screen.getByRole("menuitem", { name: /Duplicate/ })).toBeTruthy();
+      expect(screen.getByRole("menuitem", { name: /Delete/ })).toBeTruthy();
+    });
+
+    describe("leaving unsaved edits", () => {
+      const sessionsByUser: ExploreSpec = {
+        ...p95ByTool,
+        dataset: "sessions",
+        measures: [{ op: "count", field: "" }],
+        dimensions: ["user"],
+        orderBy: "",
+      };
+
+      it("asks before opening another widget over them, and Cancel keeps them", () => {
+        testState.widgets = [
+          storedWidget("w-1", "Slow tools", p95ByTool),
+          storedWidget("w-2", "Sessions by user", sessionsByUser),
+        ];
+        renderExplore();
+        openWidget("Slow tools");
+        fireEvent.click(screen.getByRole("button", { name: "Bar" }));
+
+        openWidget("Sessions by user");
+        expect(
+          screen.getByText(/Discard unsaved changes to “Slow tools”\?/),
+        ).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+        expect(param("widget")).toBe("w-1");
+        expect(urlSpec()).toMatchObject({ ...p95ByTool, chartType: "bar" });
+
+        fireEvent.click(screen.getByText("Sessions by user"));
+        fireEvent.click(
+          screen.getByRole("button", { name: "Discard and open" }),
+        );
+        expect(param("widget")).toBe("w-2");
+        expect(urlSpec()).toMatchObject(sessionsByUser);
+      });
+
+      it("asks before duplicating from the list, and Cancel copies nothing", async () => {
+        const user = userEvent.setup();
+        testState.widgets = [
+          storedWidget("w-1", "Slow tools", p95ByTool),
+          storedWidget("w-2", "Sessions by user", sessionsByUser),
+        ];
+        renderExplore();
+        openWidget("Slow tools");
+        fireEvent.click(screen.getByRole("button", { name: "Bar" }));
+        showWidgets();
+
+        await user.click(
+          screen.getByRole("button", { name: "Actions for Sessions by user" }),
+        );
+        await user.click(screen.getByRole("menuitem", { name: /Duplicate/ }));
+        expect(
+          screen.getByText(/Discard unsaved changes to “Slow tools”\?/),
+        ).toBeTruthy();
+        await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+        expect(testState.writes).toHaveLength(0);
+        expect(param("widget")).toBe("w-1");
+      });
+
+      it("opens another widget straight away when nothing is unsaved", () => {
+        testState.widgets = [
+          storedWidget("w-1", "Slow tools", p95ByTool),
+          storedWidget("w-2", "Sessions by user", sessionsByUser),
+        ];
+        renderExplore();
+        openWidget("Slow tools");
+
+        openWidget("Sessions by user");
+        expect(screen.queryByText(/Discard unsaved changes/)).toBeNull();
+        expect(param("widget")).toBe("w-2");
+      });
+
+      it("opens a widget straight away over a builder with no widget open", () => {
+        testState.widgets = [storedWidget("w-1", "Slow tools", p95ByTool)];
+        renderExplore();
+        fireEvent.click(screen.getByRole("button", { name: "Bar" }));
+
+        openWidget("Slow tools");
+        expect(screen.queryByText(/Discard unsaved changes/)).toBeNull();
+        expect(param("widget")).toBe("w-1");
+      });
+
+      it("asks before duplicating from the bar, and Cancel copies nothing", async () => {
+        const user = userEvent.setup();
+        testState.widgets = [storedWidget("w-1", "Slow tools", p95ByTool)];
+        renderExplore();
+        openWidget("Slow tools");
+        fireEvent.click(screen.getByRole("button", { name: "Bar" }));
+
+        await user.click(
+          screen.getByRole("button", { name: "Widget actions" }),
+        );
+        await user.click(screen.getByRole("menuitem", { name: /Duplicate/ }));
+        expect(
+          screen.getByText(/Discard unsaved changes to “Slow tools”\?/),
+        ).toBeTruthy();
+        await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+        expect(testState.writes).toHaveLength(0);
+        expect(param("widget")).toBe("w-1");
+        expect(urlSpec()).toMatchObject({ chartType: "bar" });
+      });
     });
   });
 });

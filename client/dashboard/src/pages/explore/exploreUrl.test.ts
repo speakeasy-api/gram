@@ -1,7 +1,7 @@
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import { describe, expect, it } from "vitest";
 import { specProblem, type ExploreSpec } from "./exploreModel";
-import { decodeSpec, encodeSpec } from "./exploreUrl";
+import { decodeSpec, encodeSpec, parseSpec } from "./exploreUrl";
 
 const sessions: AnalyticsDataset = {
   name: "sessions",
@@ -109,6 +109,21 @@ describe("encodeSpec and decodeSpec", () => {
   });
 });
 
+describe("parseSpec", () => {
+  it("refuses an aggregation the builder does not know", () => {
+    const raw = encodeSpec({
+      ...spec,
+      measures: [
+        {
+          op: "median" as ExploreSpec["measures"][number]["op"],
+          field: "turn_count",
+        },
+      ],
+    });
+    expect(parseSpec(raw)).toBeNull();
+  });
+});
+
 describe("specProblem", () => {
   it("passes a query the catalog can answer", () => {
     expect(specProblem([sessions], spec)).toBe("");
@@ -124,6 +139,11 @@ describe("specProblem", () => {
       "an aggregation nothing declares",
       { measures: [{ op: "p95", field: "turn_count" }], orderBy: "" },
       "sessions has no p95 aggregation",
+    ],
+    [
+      "a count with a field",
+      { measures: [{ op: "count", field: "turn_count" }], orderBy: "" },
+      "count takes no field",
     ],
     [
       "a dropped measure field",

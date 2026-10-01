@@ -2592,6 +2592,46 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
      now() - interval '10 hours');
 
   ------------------------------------------------------------------
+  -- Explore widgets: the questions the team keeps, each with the chart
+  -- that draws it and saved by a demo user, so the Widgets tab shows who
+  -- made each. Names repeat on purpose: two people saving "Sessions by
+  -- surface" is normal. Each row is the shape the dashboard saves
+  -- (widgetSpec.ts), and the widgets service plans it against the
+  -- analytics catalog and checks the chart against it, so the list reads
+  -- them as valid. Rows cascade with the demo project, which the reset at
+  -- the top deletes.
+  ------------------------------------------------------------------
+  INSERT INTO widgets (id, project_id, organization_id, created_by_user_id,
+                       name, description, dataset, query, visualization,
+                       created_at, updated_at)
+  VALUES
+    (demo.det_uuid('gram-demo-explore-widget-1'), proj_a, demo_org, 'user_demo_amara',
+     'Sessions by surface', 'Which agents people reach for, day by day', 'sessions',
+     '{"window":"7d","grain":"day","ungrouped":false,"dimensions":["surface"],"measures":[{"op":"count","field":"","alias":"count"}],"filters":[],"order_by":[],"limit":1000}',
+     '{"type":"bar","options":{}}',
+     now() - interval '9 days', now() - interval '2 hours'),
+    (demo.det_uuid('gram-demo-explore-widget-2'), proj_a, demo_org, 'user_demo_priya',
+     'Slowest MCP tools', 'p95 latency per MCP server and tool, worst first', 'tool_calls',
+     '{"window":"7d","grain":"none","ungrouped":false,"dimensions":["mcp_server","mcp_tool"],"measures":[{"op":"p95","field":"duration_ms","alias":"p95_duration_ms"},{"op":"count","field":"","alias":"count"}],"filters":[],"order_by":[{"measure":"p95_duration_ms","direction":"desc"}],"limit":20}',
+     '{"type":"table","options":{}}',
+     now() - interval '6 days', now() - interval '1 day'),
+    (demo.det_uuid('gram-demo-explore-widget-3'), proj_a, demo_org, 'user_demo_jonas',
+     'Tool calls by status', NULL, 'tool_calls',
+     '{"window":"7d","grain":"day","ungrouped":false,"dimensions":["status"],"measures":[{"op":"count","field":"","alias":"count"}],"filters":[],"order_by":[],"limit":1000}',
+     '{"type":"line","options":{}}',
+     now() - interval '5 days', now() - interval '3 days'),
+    (demo.det_uuid('gram-demo-explore-widget-4'), proj_a, demo_org, 'user_demo_mateo',
+     'Turns per session by model', NULL, 'sessions',
+     '{"window":"30d","grain":"none","ungrouped":false,"dimensions":["model"],"measures":[{"op":"avg","field":"turn_count","alias":"avg_turn_count"}],"filters":[],"order_by":[{"measure":"avg_turn_count","direction":"desc"}],"limit":0}',
+     '{"type":"ranked","options":{}}',
+     now() - interval '8 days', now() - interval '4 days'),
+    (demo.det_uuid('gram-demo-explore-widget-5'), proj_a, demo_org, 'user_demo_hana',
+     'Sessions by surface', NULL, 'sessions',
+     '{"window":"30d","grain":"day","ungrouped":false,"dimensions":["surface"],"measures":[{"op":"count","field":"","alias":"count"}],"filters":[],"order_by":[],"limit":1000}',
+     '{"type":"area","options":{}}',
+     now() - interval '11 days', now() - interval '6 days');
+
+  ------------------------------------------------------------------
   -- Postflight asserts: demo data landed, and nothing leaked outside
   -- the demo org.
   ------------------------------------------------------------------
@@ -3486,6 +3526,11 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   SELECT count(*) INTO stray FROM slack_directory_connections WHERE organization_id = demo_org;
   IF stray <> 2 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 2 Slack workspace connections, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM widgets WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 5 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 5 Explore widgets, found %', stray;
   END IF;
 
   RAISE NOTICE 'demo seed ok: % chats, % findings, % members, % tools',
