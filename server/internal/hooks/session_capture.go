@@ -586,10 +586,9 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 		AccountType:    metadata.AccountType,
 		BillingMode:    metadata.BillingMode,
 	}}
-	prepared, err := s.writer.PreparePublications(ctx, projectID, writes)
-	if err != nil {
-		return false, fmt.Errorf("prepare prompt publication: %w", err)
-	}
+	// The locked native-prompt fallback can suppress this write even when
+	// speculative publication preparation fails.
+	prepared, preparationErr := s.writer.PreparePublications(ctx, projectID, writes)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin prompt correlation transaction: %w", err)
@@ -617,6 +616,9 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 	// Claude and Cursor have no turn ID shared with LiteLLM. If LiteLLM won the
 	// lock, keep both rows rather than guessing from prompt text and losing or
 	// misattributing a legitimate repeated native turn.
+	if preparationErr != nil {
+		return false, fmt.Errorf("prepare prompt publication: %w", preparationErr)
+	}
 
 	if err := s.ensureHookChat(ctx, repo.New(tx), metadata, msgParams.ChatID, projectID, defaultTitle); err != nil {
 		return false, err

@@ -271,8 +271,8 @@ func publicationBody(content string, raw, toolCalls []byte, asset pgtype.Text, a
 	var calls []struct {
 		ID       string `json:"id"`
 		Function struct {
-			Name      string `json:"name"`
-			Arguments string `json:"arguments"`
+			Name      string          `json:"name"`
+			Arguments json.RawMessage `json:"arguments"`
 		} `json:"function"`
 	}
 	if len(toolCalls) > 0 {
@@ -293,7 +293,13 @@ func publicationBody(content string, raw, toolCalls []byte, asset pgtype.Text, a
 		tool := &conversationv1.Message_ToolCall{}
 		tool.SetId(call.ID)
 		tool.SetName(call.Function.Name)
-		tool.SetArgumentsJson(call.Function.Arguments)
+		arguments := string(call.Function.Arguments)
+		if len(call.Function.Arguments) > 0 && call.Function.Arguments[0] == '"' {
+			if err := json.Unmarshal(call.Function.Arguments, &arguments); err != nil {
+				return nil, fmt.Errorf("decode tool arguments for publication: %w", err)
+			}
+		}
+		tool.SetArgumentsJson(arguments)
 		part := &conversationv1.Message_Part{}
 		part.SetToolCall(tool)
 		parts = append(parts, part)
