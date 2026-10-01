@@ -230,7 +230,7 @@ flowchart LR
   s_gram_risk_v1_prompt_policy_analyzer --> c56
   c57[\"📥<br/>server/cmd/gram/streams.go<br/>streams.HandlerFunc[*roledistributionv1.RoleDistributionSetupRequestedV1]"\]:::go
   s_gram_role_distribution_v1_role_distribution_setup_handler --> c57
-  c58[\"📥<br/>server/cmd/gram/streams.go<br/>evaluation.NewConversationHandler<br/>(batch)"\]:::go
+  c58[\"📥<br/>server/cmd/gram/streams.go<br/>handler<br/>(batch)"\]:::go
   s_gram_sigint_v1_evaluator --> c58
   c59[\"📥<br/>server/cmd/gram/streams.go<br/>new"\]:::go
   s_gram_telemetry_v1_noop --> c59

@@ -274,8 +274,13 @@ func newStreamsCommand() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:    "sigint-openrouter-api-key",
-			Usage:   "Platform OpenRouter inference key for sensor evaluation; unset leaves the receiver stopped",
+			Usage:   "Platform OpenRouter inference key for sensor evaluation; unset leaves the receiver stopped unless sigint-ack-only is enabled",
 			EnvVars: []string{"GRAM_SIGINT_OPENROUTER_API_KEY"},
+		},
+		&cli.BoolFlag{
+			Name:    "sigint-ack-only",
+			Usage:   "Temporarily drain the sensor evaluation subscription: acknowledge all messages without evaluation or reading publication",
+			EnvVars: []string{"GRAM_SIGINT_ACK_ONLY"},
 		},
 		&cli.StringFlag{
 			Name:     "assets-backend",
@@ -746,8 +751,16 @@ func newStreamsCommand() *cli.Command {
 
 				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, webhookEventHandler)
 
-				if c.String("sigint-openrouter-api-key") != "" {
-					mustReceiveBatchWithResult(rg, &conversationv1.Message{}, &sigintv1.Evaluator{}, evaluation.NewConversationHandler(sensorEvaluator, assetStorage), gcp.BatchReceiveSettings{MaxMessages: 20, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				if c.Bool("sigint-ack-only") || c.String("sigint-openrouter-api-key") != "" {
+					var handler streams.BatchResultHandler[*conversationv1.Message] = evaluation.NewConversationHandler(sensorEvaluator, assetStorage)
+					if c.Bool("sigint-ack-only") {
+						// A successful batch with no staged failures acknowledges every
+						// message, without entering the evaluation path.
+						handler = streams.BatchResultHandlerFunc[*conversationv1.Message](func(context.Context, []streams.BatchMessage[*conversationv1.Message]) error {
+							return nil
+						})
+					}
+					mustReceiveBatchWithResult(rg, &conversationv1.Message{}, &sigintv1.Evaluator{}, handler, gcp.BatchReceiveSettings{MaxMessages: 20, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				}
 				mustReceiveBatchWithResult(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, meterProvider, chConn), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, db, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
