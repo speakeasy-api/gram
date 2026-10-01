@@ -769,3 +769,38 @@ it("drops an open stop-trusting confirmation when the page moves to another plat
   expect(screen.getByText("Other CI")).toBeTruthy();
   expect(screen.queryByText("Stop trusting this platform?")).toBeNull();
 });
+
+it("drops an open machine edit when the page moves to another platform", () => {
+  admissions = [admission(1), admission(1, [], OTHER_ISSUER_ID)];
+  renderPage();
+
+  chooseMachineAction("Edit");
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Release bot" },
+  });
+
+  goToOtherPlatform();
+
+  expect(screen.getByText("Other CI")).toBeTruthy();
+  expect(screen.queryByText("Edit access")).toBeNull();
+  expect(updateSubject).not.toHaveBeenCalled();
+
+  chooseMachineAction("Edit");
+  expect(
+    (screen.getByLabelText("Label (optional)") as HTMLInputElement).value,
+  ).toBe("machine-01");
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Nightly bot" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(updateSubject).toHaveBeenCalledTimes(1);
+  expect(updateSubject).toHaveBeenCalledWith({
+    request: {
+      updateWorkloadSubjectForm: {
+        id: `admission-${OTHER_ISSUER_ID}-1`,
+        name: "Nightly bot",
+      },
+    },
+  });
+});
