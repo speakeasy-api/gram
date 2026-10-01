@@ -40,6 +40,7 @@ import { XaaReadinessTable } from "./XaaReadinessTable";
 import { XaaReviewPanel } from "./XaaReviewPanel";
 import {
   appInstanceOptions,
+  hasConfirmation,
   isConfirmable,
   type AppInstanceOption,
 } from "./xaaView";
@@ -323,7 +324,11 @@ function ReadinessChecklist({
                 );
             }}
             onReview={() =>
-              openReview({ ...snapshot, state: "needs_connection" })
+              openReview({
+                ...snapshot,
+                state: "needs_connection",
+                confirmedAt: undefined,
+              })
             }
           />
         ))}
@@ -364,7 +369,7 @@ function ReadinessChecklist({
             <XaaReviewPanel
               key={`${reviewTarget.row.mcpServerId}:${reviewTarget.row.state}`}
               serverName={reviewTarget.row.serverName}
-              confirmed={reviewTarget.row.state === "connected"}
+              confirmed={hasConfirmation(reviewTarget.row)}
               connectionsUrl={oktaConnectionsUrl(reviewDeepLink)}
               createUrl={oktaConsoleUrl(reviewDeepLink)}
               applications={appInstances}

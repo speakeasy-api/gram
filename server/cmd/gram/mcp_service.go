@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -109,6 +110,8 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 	if err != nil {
 		return nil, fmt.Errorf("initialize identity chaining key resolver: %w", err)
 	}
-	service.SetIdentityChainer(identitychaining.New(d.Logger, d.DB, d.Encryption, d.Challenges, delegation, assertionKeys, cacheImpl))
+	chainer := identitychaining.New(d.Logger, d.DB, d.Encryption, d.Challenges, delegation, assertionKeys, cacheImpl)
+	chainer.SetObserver(oktaresourceconnections.NewObserver(d.Logger, d.Meter, d.DB, d.Audit))
+	service.SetIdentityChainer(chainer)
 	return service, nil
 }

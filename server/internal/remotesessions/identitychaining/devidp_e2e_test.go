@@ -2,8 +2,11 @@ package identitychaining
 
 import (
 	"bytes"
+	"context"
 	"net/url"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -44,12 +47,32 @@ const (
 // devIDPFixture is a Gram tenant whose trusted identity provider and resource
 // authorization server are both one real dev-idp instance.
 type devIDPFixture struct {
+	observed    *recordingObserver
 	idp         *devidptest.Instance
 	chainer     *Chainer
 	req         Request
 	db          *pgxpool.Pool
 	enc         *encryption.Client
 	idpClientID uuid.UUID
+}
+
+// recordingObserver keeps every observation the chainer reports.
+type recordingObserver struct {
+	mu           sync.Mutex
+	observations []Observation
+}
+
+func (r *recordingObserver) ObserveAttempt(_ context.Context, o Observation) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.observations = append(r.observations, o)
+	return nil
+}
+
+func (r *recordingObserver) all() []Observation {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.observations)
 }
 
 // devIDPOptions varies the dev-idp tenant a fixture builds.
@@ -181,9 +204,13 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 	serverURL, err := url.Parse("https://gram.example.test")
 	require.NoError(t, err)
 	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, db, enc, policy, nil, locks, serverURL, remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(keys)))
+	chainer := New(logger, db, enc, challenges, remotesessions.NewDelegationService(db, enc, challenges), keys, locks)
+	observed := &recordingObserver{}
+	chainer.SetObserver(observed)
 	return devIDPFixture{
+		observed:    observed,
 		idp:         idp,
-		chainer:     New(logger, db, enc, challenges, remotesessions.NewDelegationService(db, enc, challenges), keys, locks),
+		chainer:     chainer,
 		req:         req,
 		db:          db,
 		enc:         enc,
@@ -230,11 +257,23 @@ func TestDevIDP_AcquiresAndReusesDownstreamToken(t *testing.T) {
 	require.Equal(t, devIDPClientID, claims.ClientID)
 	require.Equal(t, "read", claims.Scope)
 
+	observed := f.observed.all()
+	require.Len(t, observed, 1)
+	require.True(t, observed[0].Outcome.Succeeded())
+	require.True(t, observed[0].GrantValidated)
+	require.Equal(t, f.req.OrganizationID, observed[0].OrganizationID)
+	require.Equal(t, devIDPResource, observed[0].Resource)
+	require.Equal(t, f.idp.ResourceASURL(devIDPResourceSlug), observed[0].RemoteIssuer)
+	require.Equal(t, f.idp.ResourceASURL(devIDPResourceSlug), observed[0].Audience)
+	require.NotEqual(t, uuid.Nil, observed[0].TrustedIssuerID)
+	require.NotEqual(t, uuid.Nil, observed[0].RemoteIssuerID)
+
 	requests := f.idp.Requests()
 	again, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
 	require.Equal(t, token.Value(), again.Value(), "a live credential is reused")
 	require.Equal(t, requests, f.idp.Requests(), "reuse contacts neither the identity provider nor the resource authorization server")
+	require.Len(t, f.observed.all(), 1, "a reused credential is not an attempt")
 }
 
 func TestDevIDP_UnassignedHumanIsDeniedAndCached(t *testing.T) {
@@ -243,12 +282,17 @@ func TestDevIDP_UnassignedHumanIsDeniedAndCached(t *testing.T) {
 
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.Equal(t, Outcome{Stage: StageExchange, Reason: ReasonAccessDenied, Confidence: ConfidenceInferred, Retryable: false, Cached: false}, outcome)
+	observed := f.observed.all()
+	require.Len(t, observed, 1)
+	require.Equal(t, outcome, observed[0].Outcome)
+	require.False(t, observed[0].GrantValidated)
 
 	requests := f.idp.Requests()
 	_, outcome = f.chainer.Acquire(t.Context(), f.req)
 	require.True(t, outcome.Cached, "a provider rejection is not repeated immediately")
 	require.Equal(t, ReasonAccessDenied, outcome.Reason)
 	require.Equal(t, requests, f.idp.Requests())
+	require.Len(t, f.observed.all(), 1, "a cached failure is not an attempt")
 }
 
 func TestDevIDP_RegistrationChangeRetiresStoredToken(t *testing.T) {
@@ -287,4 +331,17 @@ func TestDevIDP_ConfirmedAudienceDiffersFromRemoteIssuer(t *testing.T) {
 	token, outcome := confirmed.chainer.Acquire(t.Context(), confirmed.req)
 	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
 	require.NotEmpty(t, token.Value())
+	observed := confirmed.observed.all()
+	require.Len(t, observed, 1)
+	require.True(t, observed[0].GrantValidated)
+	require.True(t, observed[0].Outcome.Succeeded())
+	require.Equal(t, remoteIssuer, observed[0].RemoteIssuer)
+	require.Equal(t, confirmed.idp.ResourceASURL(devIDPResourceSlug), observed[0].Audience)
+	require.NotEqual(t, observed[0].RemoteIssuer, observed[0].Audience)
+
+	failed := unconfirmed.observed.all()
+	require.Len(t, failed, 1)
+	require.False(t, failed[0].GrantValidated)
+	require.Equal(t, remoteIssuer, failed[0].RemoteIssuer)
+	require.Equal(t, remoteIssuer, failed[0].Audience)
 }

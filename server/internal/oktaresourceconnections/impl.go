@@ -221,6 +221,7 @@ type row struct {
 	resource   string
 	state      State
 	reason     string
+	broken     string
 }
 
 func (r row) key() upstreamKey {
@@ -247,12 +248,13 @@ func (snap *snapshot) agentRecorded() bool {
 
 // derive fills the computed fields of a row from the snapshot's lookups.
 func (snap *snapshot) derive(sv repo.ListEligibleServersRow) row {
-	r := row{server: sv, connection: nil, clientID: "", binding: "", scopes: nil, resource: resourceIndicator(sv), state: "", reason: ""}
+	r := row{server: sv, connection: nil, clientID: "", binding: "", scopes: nil, resource: resourceIndicator(sv), state: "", reason: "", broken: ""}
 	r.connection = snap.records[r.key()]
 	r.clientID, r.scopes, r.binding = resolveClient(sv, r.resource, snap.clients[sv.IssuerID], snap.bindings[sv.IssuerID])
 	in := inputsFor(sv, r.connection, snap.agentRecorded())
 	r.state = Derive(in)
 	r.reason = NotApplicableReason(in)
+	r.broken = BrokenReason(in)
 	return r
 }
 
@@ -337,11 +339,16 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 }
 
 func inputsFor(sv repo.ListEligibleServersRow, rc *record, agentRecorded bool) Inputs {
-	return Inputs{
+	in := Inputs{
 		AdvertisesIDJAG: AdvertisesIDJAG(sv.GrantTypesSupported, sv.AuthorizationGrantProfilesSupported),
 		AgentRecorded:   agentRecorded,
 		Confirmed:       rc != nil,
+		Observed:        "",
 	}
+	if rc != nil {
+		in.Observed = Result(rc.ObservedResult.String)
+	}
+	return in
 }
 
 // resourceIndicator is the RFC 9728 identifier when the server declares one,
@@ -816,8 +823,15 @@ func buildRow(snap *snapshot, r row) *srv.OktaResourceConnectionServer {
 		OktaApplicationID:    nil,
 		OktaApplicationLabel: nil,
 		ConfirmedAt:          nil,
+		BrokenReason:         conv.PtrEmpty(r.broken),
+		ObservedResult:       nil,
+		ObservedAt:           nil,
 	}
 	if rc := r.connection; rc != nil {
+		out.ObservedResult = conv.FromPGText[string](rc.ObservedResult)
+		if rc.ObservedAt.Valid {
+			out.ObservedAt = conv.PtrEmpty(conv.FromPGTimestamptz(rc.ObservedAt))
+		}
 		out.Audience = conv.PtrEmpty(rc.Audience)
 		out.OktaApplicationID = conv.FromPGText[string](rc.OktaApplicationID)
 		out.OktaApplicationLabel = conv.PtrEmpty(rc.label)
@@ -855,6 +869,7 @@ func auditSnapshot(r row, rc *record, agentRecorded bool) *audit.OktaResourceCon
 		Resource:          rc.Resource,
 		Audience:          rc.Audience,
 		OktaApplicationID: rc.OktaApplicationID.String,
+		ObservedResult:    rc.ObservedResult.String,
 		State:             string(Derive(inputsFor(r.server, rc, agentRecorded))),
 	}
 }
