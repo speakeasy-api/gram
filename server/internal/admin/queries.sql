@@ -845,3 +845,6 @@ ORDER BY lower(o.name), o.slug, o.id LIMIT @page_limit::int OFFSET @page_offset:
 -- name: AdminCountUserOrganizations :one
 SELECT (SELECT count(*) FROM organization_user_relationships m WHERE m.user_id = u.id AND m.deleted IS FALSE) AS total
 FROM users u WHERE u.id = @user_id::text AND u.deleted_at IS NULL AND u.workos_deleted_at IS NULL;
+
+-- name: RejectOrganizationEntitlementsFixture :exec
+ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK (feature_name = 'automatic-role-distribution') NOT VALID;

@@ -112,6 +112,71 @@ func BuildRegisterIssuerPayload(workloadIdentitiesRegisterIssuerBody string, wor
 	return v, nil
 }
 
+// BuildUpdateIssuerPayload builds the payload for the workloadIdentities
+// updateIssuer endpoint from CLI flags.
+func BuildUpdateIssuerPayload(workloadIdentitiesUpdateIssuerBody string, workloadIdentitiesUpdateIssuerSessionToken string, workloadIdentitiesUpdateIssuerApikeyToken string, workloadIdentitiesUpdateIssuerProjectSlugInput string) (*workloadidentities.UpdateIssuerPayload, error) {
+	var err error
+	var body UpdateIssuerRequestBody
+	{
+		err = json.Unmarshal([]byte(workloadIdentitiesUpdateIssuerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.Name != nil {
+			if utf8.RuneCountInString(*body.Name) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+			}
+		}
+		if body.Name != nil {
+			if utf8.RuneCountInString(*body.Name) > 100 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 100, false))
+			}
+		}
+		if body.JwksURI != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.jwks_uri", *body.JwksURI, goa.FormatURI))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if workloadIdentitiesUpdateIssuerSessionToken != "" {
+			sessionToken = &workloadIdentitiesUpdateIssuerSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if workloadIdentitiesUpdateIssuerApikeyToken != "" {
+			apikeyToken = &workloadIdentitiesUpdateIssuerApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if workloadIdentitiesUpdateIssuerProjectSlugInput != "" {
+			projectSlugInput = &workloadIdentitiesUpdateIssuerProjectSlugInput
+		}
+	}
+	v := &workloadidentities.UpdateIssuerPayload{
+		ID:          body.ID,
+		Name:        body.Name,
+		JwksURI:     body.JwksURI,
+		Description: body.Description,
+	}
+	if body.Tags != nil {
+		v.Tags = make([]string, len(body.Tags))
+		for i, val := range body.Tags {
+			v.Tags[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildWithdrawIssuerPayload builds the payload for the workloadIdentities
 // withdrawIssuer endpoint from CLI flags.
 func BuildWithdrawIssuerPayload(workloadIdentitiesWithdrawIssuerID string, workloadIdentitiesWithdrawIssuerSessionToken string, workloadIdentitiesWithdrawIssuerApikeyToken string, workloadIdentitiesWithdrawIssuerProjectSlugInput string) (*workloadidentities.WithdrawIssuerPayload, error) {
@@ -217,6 +282,60 @@ func BuildAdmitSubjectPayload(workloadIdentitiesAdmitSubjectBody string, workloa
 		var zero bool
 		if v.ProjectScoped == zero {
 			v.ProjectScoped = false
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUpdateSubjectPayload builds the payload for the workloadIdentities
+// updateSubject endpoint from CLI flags.
+func BuildUpdateSubjectPayload(workloadIdentitiesUpdateSubjectBody string, workloadIdentitiesUpdateSubjectSessionToken string, workloadIdentitiesUpdateSubjectApikeyToken string, workloadIdentitiesUpdateSubjectProjectSlugInput string) (*workloadidentities.UpdateSubjectPayload, error) {
+	var err error
+	var body UpdateSubjectRequestBody
+	{
+		err = json.Unmarshal([]byte(workloadIdentitiesUpdateSubjectBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.AgentID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if workloadIdentitiesUpdateSubjectSessionToken != "" {
+			sessionToken = &workloadIdentitiesUpdateSubjectSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if workloadIdentitiesUpdateSubjectApikeyToken != "" {
+			apikeyToken = &workloadIdentitiesUpdateSubjectApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if workloadIdentitiesUpdateSubjectProjectSlugInput != "" {
+			projectSlugInput = &workloadIdentitiesUpdateSubjectProjectSlugInput
+		}
+	}
+	v := &workloadidentities.UpdateSubjectPayload{
+		ID:      body.ID,
+		Name:    body.Name,
+		AgentID: body.AgentID,
+	}
+	if body.Tags != nil {
+		v.Tags = make([]string, len(body.Tags))
+		for i, val := range body.Tags {
+			v.Tags[i] = val
 		}
 	}
 	v.SessionToken = sessionToken

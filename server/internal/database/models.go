@@ -2373,11 +2373,12 @@ type Plugin struct {
 	Slug           string
 	Description    pgtype.Text
 	// Marks the fallback plugin new servers land in when not explicitly routed to a named plugin. At most one true per project (see plugins_project_id_is_default_key).
-	IsDefault pgtype.Bool
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
-	DeletedAt pgtype.Timestamptz
-	Deleted   bool
+	IsDefault   pgtype.Bool
+	AutoCreated bool
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+	Deleted     bool
 }
 
 type PluginAssignment struct {
@@ -2560,20 +2561,6 @@ type PublishOutboxDeadLetter struct {
 	// created_at of the originating publish_outbox row, preserved so the delay before giving up stays visible after the row moves.
 	EnqueuedAt pgtype.Timestamptz
 	CreatedAt  pgtype.Timestamptz
-}
-
-type Query struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	OrganizationID  string
-	CreatedByUserID pgtype.Text
-	Name            string
-	Dataset         string
-	Spec            []byte
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
 }
 
 type RemoteMcpServer struct {

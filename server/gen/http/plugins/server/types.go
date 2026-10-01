@@ -111,7 +111,10 @@ type GetDistributionPluginResponseBody struct {
 	ID          string  `form:"id" json:"id" xml:"id"`
 	Name        string  `form:"name" json:"name" xml:"name"`
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	IsDefault   bool    `form:"is_default" json:"is_default" xml:"is_default"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated bool `form:"auto_created" json:"auto_created" xml:"auto_created"`
+	IsDefault   bool `form:"is_default" json:"is_default" xml:"is_default"`
 }
 
 // ListPluginsResponseBody is the type of the "plugins" service "listPlugins"
@@ -134,6 +137,9 @@ type GetPluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated bool `form:"auto_created" json:"auto_created" xml:"auto_created"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -164,6 +170,9 @@ type CreatePluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated bool `form:"auto_created" json:"auto_created" xml:"auto_created"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -194,6 +203,9 @@ type UpdatePluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated bool `form:"auto_created" json:"auto_created" xml:"auto_created"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -4492,7 +4504,10 @@ type DistributionPluginResponseBody struct {
 	ID          string  `form:"id" json:"id" xml:"id"`
 	Name        string  `form:"name" json:"name" xml:"name"`
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	IsDefault   bool    `form:"is_default" json:"is_default" xml:"is_default"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated bool `form:"auto_created" json:"auto_created" xml:"auto_created"`
+	IsDefault   bool `form:"is_default" json:"is_default" xml:"is_default"`
 }
 
 // PluginResponseBody is used to define fields on response body types.
@@ -4507,6 +4522,9 @@ type PluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated bool `form:"auto_created" json:"auto_created" xml:"auto_created"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -4622,6 +4640,7 @@ func NewGetDistributionPluginResponseBody(res *plugins.DistributionPlugin) *GetD
 		ID:          res.ID,
 		Name:        res.Name,
 		Description: res.Description,
+		AutoCreated: res.AutoCreated,
 		IsDefault:   res.IsDefault,
 	}
 	return body
@@ -4655,6 +4674,7 @@ func NewGetPluginResponseBody(res *plugins.Plugin) *GetPluginResponseBody {
 		Slug:                     res.Slug,
 		Description:              res.Description,
 		IsDefault:                res.IsDefault,
+		AutoCreated:              res.AutoCreated,
 		ServerCount:              res.ServerCount,
 		SkillCount:               res.SkillCount,
 		AssignmentCount:          res.AssignmentCount,
@@ -4694,6 +4714,7 @@ func NewCreatePluginResponseBody(res *plugins.Plugin) *CreatePluginResponseBody 
 		Slug:                     res.Slug,
 		Description:              res.Description,
 		IsDefault:                res.IsDefault,
+		AutoCreated:              res.AutoCreated,
 		ServerCount:              res.ServerCount,
 		SkillCount:               res.SkillCount,
 		AssignmentCount:          res.AssignmentCount,
@@ -4733,6 +4754,7 @@ func NewUpdatePluginResponseBody(res *plugins.Plugin) *UpdatePluginResponseBody 
 		Slug:                     res.Slug,
 		Description:              res.Description,
 		IsDefault:                res.IsDefault,
+		AutoCreated:              res.AutoCreated,
 		ServerCount:              res.ServerCount,
 		SkillCount:               res.SkillCount,
 		AssignmentCount:          res.AssignmentCount,

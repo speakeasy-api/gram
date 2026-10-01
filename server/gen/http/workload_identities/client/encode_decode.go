@@ -500,6 +500,248 @@ func DecodeRegisterIssuerResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
+// BuildUpdateIssuerRequest instantiates a HTTP request object with method and
+// path set to call the "workloadIdentities" service "updateIssuer" endpoint
+func (c *Client) BuildUpdateIssuerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateIssuerWorkloadIdentitiesPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("workloadIdentities", "updateIssuer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateIssuerRequest returns an encoder for requests sent to the
+// workloadIdentities updateIssuer server.
+func EncodeUpdateIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*workloadidentities.UpdateIssuerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("workloadIdentities", "updateIssuer", "*workloadidentities.UpdateIssuerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUpdateIssuerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("workloadIdentities", "updateIssuer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateIssuerResponse returns a decoder for responses returned by the
+// workloadIdentities updateIssuer endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeUpdateIssuerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateIssuerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateIssuerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+			}
+			err = ValidateUpdateIssuerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+			}
+			res := NewUpdateIssuerWorkloadIdentityPolicyOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateIssuerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+			}
+			err = ValidateUpdateIssuerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+			}
+			return nil, NewUpdateIssuerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateIssuerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+			}
+			err = ValidateUpdateIssuerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+			}
+			return nil, NewUpdateIssuerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateIssuerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+			}
+			err = ValidateUpdateIssuerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+			}
+			return nil, NewUpdateIssuerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateIssuerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+			}
+			err = ValidateUpdateIssuerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+			}
+			return nil, NewUpdateIssuerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateIssuerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+			}
+			err = ValidateUpdateIssuerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+			}
+			return nil, NewUpdateIssuerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateIssuerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+			}
+			err = ValidateUpdateIssuerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+			}
+			return nil, NewUpdateIssuerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateIssuerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+			}
+			err = ValidateUpdateIssuerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+			}
+			return nil, NewUpdateIssuerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateIssuerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+				}
+				err = ValidateUpdateIssuerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+				}
+				return nil, NewUpdateIssuerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateIssuerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+				}
+				err = ValidateUpdateIssuerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+				}
+				return nil, NewUpdateIssuerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("workloadIdentities", "updateIssuer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateIssuerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+			}
+			err = ValidateUpdateIssuerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+			}
+			return nil, NewUpdateIssuerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("workloadIdentities", "updateIssuer", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildWithdrawIssuerRequest instantiates a HTTP request object with method
 // and path set to call the "workloadIdentities" service "withdrawIssuer"
 // endpoint
@@ -980,6 +1222,248 @@ func DecodeAdmitSubjectResponse(decoder func(*http.Response) goahttp.Decoder, re
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("workloadIdentities", "admitSubject", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateSubjectRequest instantiates a HTTP request object with method and
+// path set to call the "workloadIdentities" service "updateSubject" endpoint
+func (c *Client) BuildUpdateSubjectRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateSubjectWorkloadIdentitiesPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("workloadIdentities", "updateSubject", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateSubjectRequest returns an encoder for requests sent to the
+// workloadIdentities updateSubject server.
+func EncodeUpdateSubjectRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*workloadidentities.UpdateSubjectPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("workloadIdentities", "updateSubject", "*workloadidentities.UpdateSubjectPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUpdateSubjectRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("workloadIdentities", "updateSubject", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateSubjectResponse returns a decoder for responses returned by the
+// workloadIdentities updateSubject endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeUpdateSubjectResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateSubjectResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateSubjectResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+			}
+			err = ValidateUpdateSubjectResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+			}
+			res := NewUpdateSubjectWorkloadIdentityPolicyOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateSubjectUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+			}
+			err = ValidateUpdateSubjectUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+			}
+			return nil, NewUpdateSubjectUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateSubjectForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+			}
+			err = ValidateUpdateSubjectForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+			}
+			return nil, NewUpdateSubjectForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateSubjectBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+			}
+			err = ValidateUpdateSubjectBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+			}
+			return nil, NewUpdateSubjectBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateSubjectNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+			}
+			err = ValidateUpdateSubjectNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+			}
+			return nil, NewUpdateSubjectNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateSubjectConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+			}
+			err = ValidateUpdateSubjectConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+			}
+			return nil, NewUpdateSubjectConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateSubjectUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+			}
+			err = ValidateUpdateSubjectUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+			}
+			return nil, NewUpdateSubjectUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateSubjectInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+			}
+			err = ValidateUpdateSubjectInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+			}
+			return nil, NewUpdateSubjectInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateSubjectInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+				}
+				err = ValidateUpdateSubjectInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+				}
+				return nil, NewUpdateSubjectInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateSubjectUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+				}
+				err = ValidateUpdateSubjectUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+				}
+				return nil, NewUpdateSubjectUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("workloadIdentities", "updateSubject", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateSubjectGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+			}
+			err = ValidateUpdateSubjectGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+			}
+			return nil, NewUpdateSubjectGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("workloadIdentities", "updateSubject", resp.StatusCode, string(body))
 		}
 	}
 }

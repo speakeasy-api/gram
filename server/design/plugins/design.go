@@ -562,7 +562,7 @@ var PluginAudienceModel = Type("PluginAudience", func() {
 
 // PluginModel is the full plugin representation.
 var PluginModel = Type("Plugin", func() {
-	Required("id", "name", "slug", "agent_plugins_v1_compatible", "created_at", "updated_at")
+	Required("id", "name", "slug", "auto_created", "agent_plugins_v1_compatible", "created_at", "updated_at")
 
 	Attribute("id", String, func() {
 		Description("Unique plugin identifier.")
@@ -572,6 +572,7 @@ var PluginModel = Type("Plugin", func() {
 	Attribute("slug", String, "URL-safe identifier, unique per org.")
 	Attribute("description", String, "Optional description.")
 	Attribute("is_default", Boolean, "Whether this is the project's fallback plugin that new servers attach to.")
+	Attribute("auto_created", Boolean, "Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.")
 	Attribute("server_count", Int64, "Number of active servers in this plugin.")
 	Attribute("skill_count", Int64, "Number of active skills in this plugin.")
 	Attribute("assignment_count", Int64, "Number of role/user assignments.")

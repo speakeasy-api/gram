@@ -8,9 +8,11 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/features"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // GetProductFeatures exposes device_agent as a member-readable signal derived
@@ -87,4 +89,24 @@ func TestProductFeaturesService_SkillCaptureMetadataOnly(t *testing.T) {
 		OrganizationID: requestedOrganizationID(ctx)})
 	require.NoError(t, err)
 	require.True(t, res.SkillCaptureMetadataOnly)
+}
+
+func TestProductFeaturesService_AutomaticRoleDistributionReadback(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	org := activeOrganizationID(t, ctx)
+	mutator := productfeatures.NewMutator(ti.client, audit.NewLogger())
+	actor := productfeatures.MutationActor{Principal: urn.NewPrincipal(urn.PrincipalTypeSystem, "rollout-test")}
+	for _, enabled := range []bool{false, true, false, true} {
+		// Existing organizations have no rollout entitlement. All later transitions
+		// use the same mutator as the staff HTTP and Admin MCP surfaces.
+		require.NoError(t, mutator.SetFeature(ctx, org, productfeatures.FeatureAutomaticRoleDistribution, enabled, actor))
+		require.Equal(t, enabled, ti.client.Snapshot(ctx, org).AutomaticRoleDistribution)
+		strict, err := ti.client.SnapshotStrict(ctx, org)
+		require.NoError(t, err)
+		require.Equal(t, enabled, strict.AutomaticRoleDistribution)
+		result, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{OrganizationID: requestedOrganizationID(ctx)})
+		require.NoError(t, err)
+		require.Equal(t, enabled, result.AutomaticRoleDistribution)
+	}
 }

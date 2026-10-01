@@ -157,9 +157,11 @@ FROM global_roles
 WHERE deleted_at IS NULL
 ORDER BY workos_slug;
 
--- name: UpsertGlobalRole :exec
+-- name: UpsertGlobalRoleWithRequests :one
 -- Upsert an environment-level role. WorkOS sync callers pass an event ID;
 -- local/bootstrap callers pass NULL so an existing WorkOS event cursor is preserved.
+-- Only inserts emit fanout requests; the outbox consumer paginates organizations.
+WITH upserted AS (
 INSERT INTO global_roles (
     workos_slug,
     workos_name,
@@ -182,7 +184,10 @@ ON CONFLICT (workos_slug) DO UPDATE SET
     workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, global_roles.workos_last_event_id),
     deleted_at = NULL,
     workos_deleted_at = NULL,
-    updated_at = clock_timestamp();
+    updated_at = clock_timestamp()
+RETURNING id, (xmax = 0) AS inserted
+)
+SELECT (SELECT COALESCE(jsonb_agg(jsonb_build_object('global_role_id', id)), '[]'::jsonb) FROM upserted WHERE inserted)::jsonb AS requests;
 
 -- name: MarkGlobalRoleDeleted :execrows
 UPDATE global_roles
@@ -206,8 +211,9 @@ WHERE organization_id = @organization_id
   AND deleted_at IS NULL
 ORDER BY workos_slug;
 
--- name: CreateOrganizationRole :one
+-- name: CreateOrganizationRoleWithRequests :one
 -- Creates an org-scoped role, reactivating a soft-deleted row for the same slug.
+WITH created AS (
 INSERT INTO organization_roles (
     organization_id,
     workos_slug,
@@ -234,7 +240,10 @@ ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
     workos_deleted_at = NULL,
     updated_at = clock_timestamp()
 WHERE organization_roles.deleted_at IS NOT NULL
-RETURNING
+RETURNING *
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('organization_id', organization_id, 'role_urn', 'role:organization:' || id::text)), '[]'::jsonb) FROM created)::jsonb AS requests,
     id,
     ('role:organization:' || id::text)::text AS role_urn,
     workos_slug,
@@ -242,11 +251,13 @@ RETURNING
     workos_description,
     workos_created_at,
     workos_updated_at,
-    0::bigint AS member_count;
+    0::bigint AS member_count
+FROM created;
 
--- name: UpsertOrganizationRole :one
+-- name: UpsertOrganizationRoleWithRequests :one
 -- Upsert an org-scoped role. WorkOS sync callers pass an event ID; local role
 -- lifecycle callers pass NULL so an existing WorkOS event cursor is preserved.
+-- Ordinary sync updates do not create distribution setup requests.
 WITH upserted AS (
 INSERT INTO organization_roles (
     organization_id,
@@ -280,9 +291,11 @@ RETURNING
     workos_name,
     workos_description,
     workos_created_at,
-    workos_updated_at
+    workos_updated_at,
+    (xmax = 0) AS inserted
 )
 SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('organization_id', organization_id, 'role_urn', 'role:organization:' || id::text)), '[]'::jsonb) FROM upserted WHERE inserted)::jsonb AS requests,
   upserted.id,
   ('role:organization:' || upserted.id::text)::text AS role_urn,
   upserted.workos_slug,

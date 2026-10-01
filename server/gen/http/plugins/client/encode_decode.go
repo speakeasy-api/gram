@@ -5075,6 +5075,7 @@ func unmarshalDistributionPluginResponseBodyToPluginsDistributionPlugin(v *Distr
 		ID:          *v.ID,
 		Name:        *v.Name,
 		Description: v.Description,
+		AutoCreated: *v.AutoCreated,
 		IsDefault:   *v.IsDefault,
 	}
 
@@ -5090,6 +5091,7 @@ func unmarshalPluginResponseBodyToPluginsPlugin(v *PluginResponseBody) *plugins.
 		Slug:                     *v.Slug,
 		Description:              v.Description,
 		IsDefault:                v.IsDefault,
+		AutoCreated:              *v.AutoCreated,
 		ServerCount:              v.ServerCount,
 		SkillCount:               v.SkillCount,
 		AssignmentCount:          v.AssignmentCount,
