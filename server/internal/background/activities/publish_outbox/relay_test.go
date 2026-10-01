@@ -1,6 +1,7 @@
 package publish_outbox_test
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -390,12 +392,20 @@ func TestDrain_HasMoreProbeDoesNotStrandTheSurplusRow(t *testing.T) {
 // same pending rows and publish each one twice.
 func TestDrain_ConcurrentDrainersClaimDisjointRows(t *testing.T) {
 	t.Parallel()
+	// contentionTimeout makes a missing SKIP LOCKED fail without hanging cleanup.
+	const contentionTimeout = 30 * time.Second
+	ctx, cancel := context.WithTimeout(t.Context(), contentionTimeout)
+	defer cancel()
 
 	inst := newRelayTestInstance(t)
 	orgID := seedOrg(t, inst.conn)
 
 	const rowCount = 40
-	for range rowCount {
+	holder := testenv.BeginTx(t, t.Context(), inst.conn)
+	held := seedRow(t, inst.conn, orgID, seedOptions{})
+	_, err := testrepo.New(holder).LockPublishOutboxRowFixture(t.Context(), testrepo.LockPublishOutboxRowFixtureParams{ID: held.ID, OrganizationID: orgID})
+	require.NoError(t, err)
+	for range rowCount - 1 {
 		seedRow(t, inst.conn, orgID, seedOptions{})
 	}
 
@@ -406,23 +416,32 @@ func TestDrain_ConcurrentDrainersClaimDisjointRows(t *testing.T) {
 	results := make([]int, 2)
 	errs := make([]error, 2)
 
+	start := make(chan struct{})
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		res, err := inst.relay.Drain(t.Context())
+		<-start
+		res, err := inst.relay.Drain(ctx)
 		results[0], errs[0] = res.Published, err
 	}()
 	go func() {
 		defer wg.Done()
-		res, err := other.relay.Drain(t.Context())
+		<-start
+		res, err := other.relay.Drain(ctx)
 		results[1], errs[1] = res.Published, err
 	}()
+	close(start)
 	wg.Wait()
 
 	require.NoError(t, errs[0])
 	require.NoError(t, errs[1])
 
-	require.Equal(t, rowCount, results[0]+results[1], "every row must be published exactly once")
+	require.Equal(t, rowCount-1, results[0]+results[1], "both drainers must skip the held row")
+	require.Equal(t, int64(1), countRows(t, inst.conn))
+	require.NoError(t, holder.Rollback(t.Context()))
+	last, err := inst.relay.Drain(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, last.Published)
 	require.Equal(t, int64(0), countRows(t, inst.conn))
 
 	seen := map[string]int{}

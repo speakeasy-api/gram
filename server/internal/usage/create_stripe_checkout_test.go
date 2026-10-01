@@ -1604,22 +1604,7 @@ func TestCreateStripeCheckoutWaitsForBillingMetadataOrganizationLock(t *testing.
 	// The deadline guards the test; cancellation follows an observed lock wait.
 	probeCtx, cancelProbe := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancelProbe()
-	poll := time.NewTicker(10 * time.Millisecond)
-	defer poll.Stop()
-	for {
-		blocked, err := testrepo.New(ti.db).IsQueryBlockedOnLockFixture(probeCtx, "%LockBillingMetadataOrganization%")
-		require.NoError(t, err)
-		if blocked {
-			break
-		}
-		select {
-		case <-done:
-			require.FailNow(t, "Checkout returned before waiting for the billing metadata organization lock", "%v", checkoutErr)
-		case <-probeCtx.Done():
-			require.FailNow(t, "Checkout did not reach the billing metadata organization lock", "%v", probeCtx.Err())
-		case <-poll.C:
-		}
-	}
+	testenv.WaitForQueryBlockedBy(t, probeCtx, ti.service.db, testenv.BackendPID(holder), "%LockBillingMetadataOrganization%")
 	cancel()
 	select {
 	case <-done:

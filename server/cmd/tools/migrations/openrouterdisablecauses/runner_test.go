@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 type runnerFixture struct {
@@ -354,12 +355,7 @@ func TestRunnerManualOverrideWaitsForBillingAdvisoryLock(t *testing.T) {
 		_, applyErr := newTestRunner(f.pool, 1).ApplyManualOverride(t.Context(), ManualOverride{OrganizationID: orgID, KeyType: "internal", Causes: []string{CauseAdminLock}})
 		done <- applyErr
 	}()
-	select {
-	case applyErr := <-done:
-		require.NoError(t, applyErr)
-		require.FailNow(t, "manual override ignored the billing advisory lock")
-	case <-time.After(150 * time.Millisecond):
-	}
+	testenv.WaitForBackendsBlockedBy(t, t.Context(), f.pool, testenv.BackendPID(blocker), 1)
 	require.NoError(t, blocker.Commit(t.Context()))
 	require.NoError(t, <-done)
 	require.Equal(t, []string{CauseAdminLock}, f.causes(t, orgID, "internal"))
@@ -367,29 +363,53 @@ func TestRunnerManualOverrideWaitsForBillingAdvisoryLock(t *testing.T) {
 
 func TestRunnerConcurrentApplyUsesSkipLocked(t *testing.T) {
 	t.Parallel()
+	// contentionTimeout bounds a missing SKIP LOCKED regression.
+	const contentionTimeout = 30 * time.Second
+	ctx, cancel := context.WithTimeout(t.Context(), contentionTimeout)
+	defer cancel()
 	f := newRunnerFixture(t)
 	for range 20 {
 		f.seedKey(t, "chat", false, "free")
 	}
 
+	// Hold only the row lock: an advisory lock would mask SKIP LOCKED.
+	heldOrg := f.seedKey(t, "chat", false, "free")
+	holder := testenv.BeginTx(t, t.Context(), f.pool)
+	_, err := testrepo.New(holder).LockOpenRouterAPIKeyForUpdateFixture(t.Context(), testrepo.LockOpenRouterAPIKeyForUpdateFixtureParams{OrganizationID: heldOrg, KeyType: "chat"})
+	require.NoError(t, err)
 	start := make(chan struct{})
 	var wg sync.WaitGroup
-	errs := make(chan error, 2)
+	type result struct {
+		summary Summary
+		err     error
+	}
+	results := make(chan result, 2)
 	for range 2 {
 		wg.Go(func() {
 			<-start
-			_, err := newTestRunner(f.pool, 1).Run(context.Background(), ModeApply)
-			errs <- err
+			summary, err := newTestRunner(f.pool, 1).Run(ctx, ModeApply)
+			results <- result{summary: summary, err: err}
 		})
 	}
 	close(start)
 	wg.Wait()
-	close(errs)
-	for err := range errs {
-		require.NoError(t, err)
+	close(results)
+	var updated int64
+	for got := range results {
+		// The held row deliberately stays unclassified after the bounded skip retries.
+		require.ErrorContains(t, got.err, "live rows remain NULL after bounded retries")
+		updated += got.summary.Updated
 	}
+	require.EqualValues(t, 20, updated)
 
 	remaining, err := New(f.pool).CountLiveNullClassifications(t.Context())
+	require.NoError(t, err)
+	require.EqualValues(t, 1, remaining, "the row held by the fixture must be skipped")
+	require.Nil(t, f.causes(t, heldOrg, "chat"))
+	require.NoError(t, holder.Rollback(t.Context()))
+	_, err = newTestRunner(f.pool, 1).Run(t.Context(), ModeApply)
+	require.NoError(t, err)
+	remaining, err = New(f.pool).CountLiveNullClassifications(t.Context())
 	require.NoError(t, err)
 	require.Zero(t, remaining)
 }

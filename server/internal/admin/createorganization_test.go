@@ -17,7 +17,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/workos/workos-go/v6/pkg/events"
 	goahttp "goa.design/goa/v3/http"
@@ -387,14 +386,7 @@ func TestCreateOrganization_SyncCommittingUnderTheSlugLockKeepsItsSlug(t *testin
 		done <- outcome{res: res, err: err}
 	}()
 
-	// The handler calls WorkOS before it opens its transaction, so a recorded
-	// name means it is at or past its first read of the organization and about
-	// to ask for the slug lock this test is holding. Committing earlier than
-	// that cannot fail the test, because the handler would then see the row in
-	// its first read and reach the same slug; it would only prove less.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, fake.names(), 1)
-	}, 10*time.Second, 10*time.Millisecond)
+	testenv.WaitForBackendsBlockedBy(t, ctx, conn, testenv.BackendPID(blocker), 1)
 
 	_, err := blockerQueries.UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
 		ID:          orgid.FromWorkOSID(workosOrgID),
