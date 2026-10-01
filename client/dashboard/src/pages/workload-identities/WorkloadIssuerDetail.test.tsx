@@ -516,3 +516,56 @@ it("reopens on values a refresh brought in after the sheet closed", async () => 
     },
   });
 });
+
+// Stands in for the browser's back and forward buttons, which still move the
+// page while a sheet or dialog is open. The dialog hides the link from the
+// accessibility tree, so it is found by its text.
+function goToOtherPlatform(): void {
+  fireEvent.click(screen.getByText("Other platform"));
+}
+
+it("drops an open platform edit when the page moves to another platform", () => {
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "Example deploys" },
+  });
+
+  goToOtherPlatform();
+
+  // The edit was of the first platform, so it does not follow to the second.
+  expect(screen.queryByText("Edit platform")).toBeNull();
+  expect(mocks.updateIssuer).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(
+    "Other CI",
+  );
+  fireEvent.change(screen.getByLabelText("Description"), {
+    target: { value: "Nightly jobs" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(mocks.updateIssuer).toHaveBeenCalledTimes(1);
+  expect(mocks.updateIssuer).toHaveBeenCalledWith({
+    request: {
+      updateWorkloadIssuerForm: {
+        id: OTHER_ISSUER_ID,
+        description: "Nightly jobs",
+      },
+    },
+  });
+});
+
+it("drops an open stop-trusting confirmation when the page moves to another platform", () => {
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Stop trusting" }));
+  expect(screen.getByText("Stop trusting this platform?")).toBeTruthy();
+
+  goToOtherPlatform();
+
+  expect(screen.getByText("Other CI")).toBeTruthy();
+  expect(screen.queryByText("Stop trusting this platform?")).toBeNull();
+});
