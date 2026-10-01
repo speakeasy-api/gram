@@ -291,7 +291,7 @@ func handleToolsCall(
 		}
 	}
 
-	userConfig, err := resolveUserConfiguration(ctx, logger, env, payload, plan)
+	userConfig, callerBearerInjected, err := resolveUserConfiguration(ctx, logger, env, payload, plan)
 	if err != nil {
 		return nil, err
 	}
@@ -489,7 +489,7 @@ func handleToolsCall(
 
 	outputBytes = int64(rw.body.Len())
 
-	if rw.statusCode == http.StatusUnauthorized && slices.ContainsFunc(payload.oauthTokenInputs, func(t oauthTokenInputs) bool { return t.fromCaller }) {
+	if rw.statusCode == http.StatusUnauthorized && callerBearerInjected {
 		return nil, errUpstreamUnauthorized
 	}
 
@@ -587,8 +587,8 @@ func resolveUserConfiguration(
 	env toolconfig.EnvironmentLoader,
 	payload *mcpInputs,
 	plan *gateway.ToolCallPlan,
-) (*toolconfig.CaseInsensitiveEnv, error) {
-	userConfig := toolconfig.NewCaseInsensitiveEnv()
+) (userConfig *toolconfig.CaseInsensitiveEnv, callerBearerInjected bool, err error) {
+	userConfig = toolconfig.NewCaseInsensitiveEnv()
 
 	// IMPORTANT: we must only attach gram environments to authenticated payloads. Gram environments contain
 	// secrets owned by Gram projects and should not be usable by public clients
@@ -596,9 +596,9 @@ func resolveUserConfiguration(
 		storedEnvVars, err := env.Load(ctx, payload.projectID, toolconfig.Slug(payload.environment))
 		switch {
 		case errors.Is(err, toolconfig.ErrNotFound):
-			return nil, oops.E(oops.CodeBadRequest, err, "environment not found").LogError(ctx, logger)
+			return nil, false, oops.E(oops.CodeBadRequest, err, "environment not found").LogError(ctx, logger)
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").LogError(ctx, logger)
+			return nil, false, oops.E(oops.CodeUnexpected, err, "failed to load environment").LogError(ctx, logger)
 		}
 
 		for k, v := range storedEnvVars {
@@ -618,6 +618,7 @@ func resolveUserConfiguration(
 					for _, envVar := range security.EnvVariables {
 						if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
 							userConfig.Set(envVar, token.Token)
+							callerBearerInjected = callerBearerInjected || token.fromCaller
 						}
 					}
 				}
@@ -630,11 +631,12 @@ func resolveUserConfiguration(
 		for _, token := range payload.oauthTokenInputs {
 			if plan.Function.AuthInput.Type == "oauth2" {
 				userConfig.Set(plan.Function.AuthInput.Variable, token.Token)
+				callerBearerInjected = callerBearerInjected || token.fromCaller
 			}
 		}
 	}
 
-	return userConfig, nil
+	return userConfig, callerBearerInjected, nil
 }
 
 func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string, accountType string, billingRepository billing.Repository) error {

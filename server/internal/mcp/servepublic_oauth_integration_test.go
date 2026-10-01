@@ -480,18 +480,15 @@ func TestServePublic_ExternalOAuth_UpstreamUnauthorizedChallenges(t *testing.T) 
 		Slug:     "ext-oauth-upstream-401",
 		IsPublic: true,
 	})
-	addAuthorizationCodeTool(t, ctx, ti, result.Toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, upstream.URL)
-
-	callBody, err := json.Marshal(map[string]any{
-		"jsonrpc": "2.0",
-		"id":      2,
-		"method":  "tools/call",
-		"params":  map[string]any{"name": "passthrough_tool", "arguments": map[string]any{}},
+	addUpstreamTool(t, ctx, ti, result.Toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, upstream.URL, deployments_repo.CreateHTTPSecurityParams{
+		Key:          "upstream_oauth",
+		Type:         pgtype.Text{String: "oauth2", Valid: true},
+		EnvVariables: []string{"UPSTREAM_OAUTH_ACCESS_TOKEN"},
+		OauthTypes:   []string{"authorization_code"},
 	})
-	require.NoError(t, err)
 
 	slug := result.Toolset.McpSlug.String
-	w, err := servePublicHTTP(t, t.Context(), ti, slug, callBody, "revoked-upstream-token", nil)
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeUpstreamToolCallBody(t), "revoked-upstream-token", nil)
 	requireOopsCode(t, err, oops.CodeUnauthorized)
 	got, _ := upstreamAuth.Load().(string)
 	require.Equal(t, "Bearer revoked-upstream-token", got, "the bearer must still be forwarded upstream")
@@ -501,9 +498,76 @@ func TestServePublic_ExternalOAuth_UpstreamUnauthorizedChallenges(t *testing.T) 
 	require.Contains(t, challenge, `error="invalid_token"`)
 }
 
-// addAuthorizationCodeTool attaches an HTTP tool secured by an oauth2
-// authorization_code scheme, served from serverURL, to the toolset.
-func addAuthorizationCodeTool(t *testing.T, ctx context.Context, ti *testInstance, toolsetID, projectID uuid.UUID, orgID, serverURL string) {
+// TestServePublic_ExternalOAuth_UnrelatedUpstreamUnauthorizedKeepsBearer proves
+// that an upstream 401 for a credential other than the caller's bearer stays an
+// isError result, since reauthorizing could not fix it.
+func TestServePublic_ExternalOAuth_UnrelatedUpstreamUnauthorizedKeepsBearer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	var upstreamAuth, upstreamAPIKey atomic.Value
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamAuth.Store(r.Header.Get("Authorization"))
+		upstreamAPIKey.Store(r.Header.Get("X-Api-Key"))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"message":"invalid api key"}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	result := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
+		Slug:     "ext-oauth-apikey-401",
+		IsPublic: true,
+	})
+	addUpstreamTool(t, ctx, ti, result.Toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, upstream.URL, deployments_repo.CreateHTTPSecurityParams{
+		Key:          "upstream_api_key",
+		Type:         pgtype.Text{String: "apiKey", Valid: true},
+		Name:         pgtype.Text{String: "X-Api-Key", Valid: true},
+		InPlacement:  pgtype.Text{String: "header", Valid: true},
+		EnvVariables: []string{"UPSTREAM_API_KEY"},
+	})
+
+	w, err := servePublicHTTP(t, t.Context(), ti, result.Toolset.McpSlug.String, makeUpstreamToolCallBody(t), "valid-oauth-token", map[string]string{
+		"MCP-UPSTREAM-API-KEY": "invalid-api-key",
+	})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+	require.Empty(t, w.Header().Get("WWW-Authenticate"))
+
+	gotKey, _ := upstreamAPIKey.Load().(string)
+	require.Equal(t, "invalid-api-key", gotKey, "the API key must be what the upstream rejected")
+	gotAuth, _ := upstreamAuth.Load().(string)
+	require.Empty(t, gotAuth, "an API-key tool must not carry the caller's bearer")
+
+	var response struct {
+		Result struct {
+			IsError bool `json:"isError"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.True(t, response.Result.IsError)
+}
+
+func makeUpstreamToolCallBody(t *testing.T) []byte {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/call",
+		"params":  map[string]any{"name": "passthrough_tool", "arguments": map[string]any{}},
+	})
+	require.NoError(t, err)
+	return body
+}
+
+// addUpstreamTool attaches an HTTP tool served from serverURL and secured by
+// the given scheme to the toolset.
+func addUpstreamTool(t *testing.T, ctx context.Context, ti *testInstance, toolsetID, projectID uuid.UUID, orgID, serverURL string, security deployments_repo.CreateHTTPSecurityParams) {
 	t.Helper()
 
 	deployments := deployments_repo.New(ti.conn)
@@ -529,7 +593,7 @@ func addAuthorizationCodeTool(t *testing.T, ctx context.Context, ti *testInstanc
 		UntruncatedName:     pgtype.Text{},
 		Openapiv3Operation:  pgtype.Text{},
 		Summary:             "Passthrough tool",
-		Description:         "A tool authorized by the caller's upstream bearer",
+		Description:         "A tool calling the upstream API",
 		Tags:                []string{},
 		Confirm:             pgtype.Text{},
 		ConfirmPrompt:       pgtype.Text{},
@@ -537,7 +601,7 @@ func addAuthorizationCodeTool(t *testing.T, ctx context.Context, ti *testInstanc
 		OriginalName:        pgtype.Text{},
 		OriginalSummary:     pgtype.Text{},
 		OriginalDescription: pgtype.Text{},
-		Security:            []byte(`[{"upstream_oauth": []}]`),
+		Security:            []byte(`[{"` + security.Key + `": []}]`),
 		HttpMethod:          "GET",
 		Path:                "/items",
 		SchemaVersion:       "3.0.0",
@@ -556,20 +620,9 @@ func addAuthorizationCodeTool(t *testing.T, ctx context.Context, ti *testInstanc
 	})
 	require.NoError(t, err)
 
-	_, err = deployments.CreateHTTPSecurity(ctx, deployments_repo.CreateHTTPSecurityParams{
-		Key:                 "upstream_oauth",
-		DeploymentID:        deploymentID,
-		ProjectID:           uuid.NullUUID{UUID: projectID, Valid: true},
-		Openapiv3DocumentID: uuid.NullUUID{},
-		Type:                pgtype.Text{String: "oauth2", Valid: true},
-		Name:                pgtype.Text{},
-		InPlacement:         pgtype.Text{},
-		Scheme:              pgtype.Text{},
-		BearerFormat:        pgtype.Text{},
-		EnvVariables:        []string{"UPSTREAM_OAUTH_ACCESS_TOKEN"},
-		OauthTypes:          []string{"authorization_code"},
-		OauthFlows:          nil,
-	})
+	security.DeploymentID = deploymentID
+	security.ProjectID = uuid.NullUUID{UUID: projectID, Valid: true}
+	_, err = deployments.CreateHTTPSecurity(ctx, security)
 	require.NoError(t, err)
 
 	_, err = toolsets_repo.New(ti.conn).CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
