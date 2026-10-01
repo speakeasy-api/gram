@@ -229,6 +229,7 @@ function SuggestionCard({
     suggestion.oktaApplications,
     (app) => app.xaaSupported,
   );
+  const slugs = [...new Set(apps.map((app) => app.name))];
   const remotes = primaryFirst(suggestion.remotes, isInstallableRemote);
   return (
     <Card className="h-full">
@@ -248,6 +249,18 @@ function SuggestionCard({
         <dd className="flex min-w-0 flex-col">
           {apps.map((app) => (
             <OktaApplicationLine key={app.oktaAppId} app={app} />
+          ))}
+        </dd>
+        <dt className={DETAIL_LABEL}>
+          {slugs.length > 1 ? "Okta slugs" : "Okta slug"}
+        </dt>
+        <dd className="flex min-w-0 flex-col">
+          {slugs.map((slug) => (
+            <code key={slug} className={`${DETAIL_LINE} font-mono text-xs`}>
+              <span className="truncate" title={slug}>
+                {slug}
+              </span>
+            </code>
           ))}
         </dd>
         <dt className={DETAIL_LABEL}>
@@ -363,18 +376,18 @@ type OktaApplication = OktaServerSuggestion["oktaApplications"][number];
 
 function OktaApplicationLine({ app }: { app: OktaApplication }): JSX.Element {
   const mode = (
-    <Badge variant="neutral" size="sm">
+    <Badge variant="neutral" size="sm" className="shrink-0">
       {humanizeOktaToken(app.signOnMode)}
     </Badge>
   );
   return (
-    <span className={`${DETAIL_LINE} gap-2`}>
-      <span className="truncate">{app.label}</span>
+    <span className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-2">
+      <span className="max-w-full truncate">{app.label}</span>
       {app.xaaSupported ? (
         mode
       ) : (
         <SimpleTooltip tooltip="This sign-on mode cannot be used for Cross App Access.">
-          <span>{mode}</span>
+          <span className="flex shrink-0">{mode}</span>
         </SimpleTooltip>
       )}
     </span>
