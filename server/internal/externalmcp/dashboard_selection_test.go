@@ -13,7 +13,7 @@ func TestDashboardSSESelectionCompatibility(t *testing.T) {
 		name   string
 		native bool
 		tool   string
-	}{{"native", true, "last"}, {"pulse", false, "first"}} {
+	}{{"native", true, "last"}, {"legacy", false, "first"}} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			details, err := decodeDashboardDetails(body, tc.native)

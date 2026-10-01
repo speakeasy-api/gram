@@ -59,10 +59,10 @@ type CatalogService struct {
 	adapters map[string]RegistryReader
 }
 
-func NewCatalogService(db *pgxpool.Pool, pulse RegistryReader, native RegistryReader, providers ...feature.Provider) *CatalogService {
+func NewCatalogService(db *pgxpool.Pool, legacy RegistryReader, native RegistryReader, providers ...feature.Provider) *CatalogService {
 	adapters := make(map[string]RegistryReader, 2)
-	if pulse != nil {
-		adapters[registryAdapterKey(registrySourceTypePulseV01, registryAuthProfilePulseServerCredentials)] = pulse
+	if legacy != nil {
+		adapters[registryAdapterKey(registrySourceTypePulseV01, registryAuthProfilePulseServerCredentials)] = legacy
 	}
 	if native != nil {
 		adapters[registryAdapterKey(registrySourceTypeNative, registryAuthProfileNone)] = native
@@ -225,7 +225,7 @@ func (s *CatalogService) sources(ctx context.Context, registryID *uuid.UUID) ([]
 	return []CatalogSource{source}, nil
 }
 
-// SelectedSource selects exactly one catalog. Flag errors/off/unknown select Pulse;
+// SelectedSource selects exactly one catalog. Flag errors/off/unknown select the legacy catalog;
 // missing or failing selected sources never fall back to the other catalog.
 func (s *CatalogService) SelectedSource(ctx context.Context, organizationID, organizationSlug string) (CatalogSource, error) {
 	if s == nil || s.repo == nil {
@@ -329,7 +329,7 @@ var NativeCatalogRegistryID = uuid.MustParse("7de663c2-4975-4a3d-a7d4-707866aaf1
 const NativeCatalogRegistryURL = "https://registry.speakeasy.com"
 
 // EnsureNativeCatalogSource retains a stable namespace using existing metadata.
-// It never changes Pulse rows or overwrites an operator-disabled native source.
+// It never changes legacy catalog rows or overwrites an operator-disabled native source.
 func EnsureNativeCatalogSource(ctx context.Context, db *pgxpool.Pool) error {
 	_, err := db.Exec(ctx, `INSERT INTO mcp_registries
  (id,name,url,source_type,auth_profile,enabled,certification_state,source_key)

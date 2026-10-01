@@ -112,9 +112,9 @@ func (f routingFlags) IsFlagEnabled(context.Context, feature.Flag, string, map[s
 }
 func TestCatalogSelectsExactlyOneSource(t *testing.T) {
 	t.Parallel()
-	pulseID := uuid.New()
+	legacyID := uuid.New()
 	rows := []repo.ListMCPRegistriesRow{
-		{ID: pulseID, Url: "https://api.pulsemcp.com"},
+		{ID: legacyID, Url: "https://api.pulsemcp.com"},
 		{ID: NativeCatalogRegistryID, Url: NativeCatalogRegistryURL, SourceType: pgtype.Text{String: registrySourceTypeNative, Valid: true}, AuthProfile: pgtype.Text{String: registryAuthProfileNone, Valid: true}, Enabled: pgtype.Bool{Bool: true, Valid: true}, CertificationState: pgtype.Text{String: "certified", Valid: true}, SourceKey: pgtype.Text{String: "speakeasy", Valid: true}},
 	}
 	for _, tc := range []struct {
@@ -123,7 +123,7 @@ func TestCatalogSelectsExactlyOneSource(t *testing.T) {
 		err  error
 		want uuid.UUID
 	}{
-		{name: "off", want: pulseID}, {name: "on", on: true, want: NativeCatalogRegistryID}, {name: "error", on: true, err: errors.New("flags down"), want: pulseID},
+		{name: "off", want: legacyID}, {name: "on", on: true, want: NativeCatalogRegistryID}, {name: "error", on: true, err: errors.New("flags down"), want: legacyID},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -132,7 +132,7 @@ func TestCatalogSelectsExactlyOneSource(t *testing.T) {
 			source, err := s.SelectedSource(t.Context(), "org-id", "org-slug")
 			require.NoError(t, err)
 			require.Equal(t, tc.want, source.Registry.ID)
-			wrong := pulseID
+			wrong := legacyID
 			if wrong == tc.want {
 				wrong = NativeCatalogRegistryID
 			}
@@ -172,8 +172,8 @@ func (r *failedCatalogReader) GetServerDetails(context.Context, Registry, string
 }
 func TestCatalogSelectedFailureNeverFallsBack(t *testing.T) {
 	t.Parallel()
-	pulse, native := &failedCatalogReader{}, &failedCatalogReader{}
-	s := NewCatalogService(nil, pulse, native, routingFlags{on: true})
+	legacy, native := &failedCatalogReader{}, &failedCatalogReader{}
+	s := NewCatalogService(nil, legacy, native, routingFlags{on: true})
 	s.repo = routingRepo{rows: []repo.ListMCPRegistriesRow{
 		{ID: uuid.New(), Url: "https://api.pulsemcp.com"},
 		{ID: NativeCatalogRegistryID, Url: NativeCatalogRegistryURL, SourceType: pgtype.Text{String: registrySourceTypeNative, Valid: true}, AuthProfile: pgtype.Text{String: registryAuthProfileNone, Valid: true}, Enabled: pgtype.Bool{Bool: true, Valid: true}, CertificationState: pgtype.Text{String: "certified", Valid: true}, SourceKey: pgtype.Text{String: "speakeasy", Valid: true}},
@@ -182,9 +182,9 @@ func TestCatalogSelectedFailureNeverFallsBack(t *testing.T) {
 	_, err := s.List(ctx, nil, nil)
 	require.ErrorContains(t, err, "selected source failed")
 	require.Equal(t, 1, native.calls)
-	require.Zero(t, pulse.calls)
+	require.Zero(t, legacy.calls)
 	_, err = s.IdentityDetails(t.Context(), NativeCatalogRegistryID, "example/server", nil)
 	require.ErrorContains(t, err, "selected source failed")
 	require.Equal(t, 2, native.calls)
-	require.Zero(t, pulse.calls)
+	require.Zero(t, legacy.calls)
 }

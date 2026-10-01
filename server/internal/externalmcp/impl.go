@@ -390,7 +390,7 @@ func decodeDashboardDetails(body []byte, nativeSelection bool) (*serverDetailsRe
 			Headers:       toExternalMCPRemoteHeaders(r.Headers),
 			Variables:     toExternalMCPRemoteVariables(r.Variables),
 		})
-		// Prefer first streamable-http; native falls back to last SSE, Pulse to first.
+		// Prefer first streamable-http; native falls back to last SSE, the legacy catalog to first.
 		// Can't break early because we need all remotes in the slice.
 		if r.Type == "streamable-http" && !foundStreamable {
 			preferredIndex = i
