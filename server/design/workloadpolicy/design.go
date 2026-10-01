@@ -151,6 +151,31 @@ var _ = Service("workloadIdentities", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AdmitWorkloadSubject"}`)
 	})
 
+	Method("updateSubject", func() {
+		Description("Edit an admitted subject's label, tags, or assigned agent. Omitted fields are left unchanged. The subject, match kind, issuer, and tier are fixed at admission. The agent assignment is shared by every admission of the same subject under the same issuer, at either tier, so reassigning it through one admission reassigns it for both. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.")
+
+		Payload(func() {
+			Extend(UpdateWorkloadSubjectForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(WorkloadIdentityPolicy)
+
+		HTTP(func() {
+			POST("/rpc/workloadIdentities.updateSubject")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateWorkloadSubject")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateSubject")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateWorkloadSubject"}`)
+	})
+
 	Method("withdrawSubject", func() {
 		Description("Withdraw an admitted subject and its agent assignment, stopping it authenticating. Requires workload:write.")
 
@@ -255,6 +280,25 @@ var AdmitWorkloadSubjectForm = Type("AdmitWorkloadSubjectForm", func() {
 	})
 
 	Required("issuer", "subject", "agent_id")
+})
+
+var UpdateWorkloadSubjectForm = Type("UpdateWorkloadSubjectForm", func() {
+	Description("Form for editing an admitted workload subject. Every field but id is optional; an omitted field is left unchanged.")
+
+	Attribute("id", String, "The admission id.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Optional label, for platforms whose subjects are not self-describing. Trimmed on write; blank clears it.")
+	Attribute("tags", ArrayOf(String), "Replaces the admission's tags; an empty list clears them. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.", func() {
+		// omitzero, not omitempty: an empty list is the instruction to clear
+		// the tags and has to reach the wire, while a nil one stays omitted.
+		Meta("struct:tag:json", "tags,omitzero")
+	})
+	Attribute("agent_id", String, "The agent whose policy the admitted workload inherits. Shared with any admission of the same subject under the same issuer at the other tier.", func() {
+		Format(FormatUUID)
+	})
+
+	Required("id")
 })
 
 var WorkloadIssuer = Type("WorkloadIssuer", func() {

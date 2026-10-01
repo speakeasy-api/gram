@@ -41,6 +41,13 @@ type Service interface {
 	// without an agent is refused at the token endpoint, so that half-configured
 	// state is not reachable. Requires workload:write.
 	AdmitSubject(context.Context, *AdmitSubjectPayload) (res *WorkloadIdentityPolicy, err error)
+	// Edit an admitted subject's label, tags, or assigned agent. Omitted fields
+	// are left unchanged. The subject, match kind, issuer, and tier are fixed at
+	// admission. The agent assignment is shared by every admission of the same
+	// subject under the same issuer, at either tier, so reassigning it through one
+	// admission reassigns it for both. Requires workload:write. Returns the whole
+	// policy, so a caller replaces its view rather than merging into it.
+	UpdateSubject(context.Context, *UpdateSubjectPayload) (res *WorkloadIdentityPolicy, err error)
 	// Withdraw an admitted subject and its agent assignment, stopping it
 	// authenticating. Requires workload:write.
 	WithdrawSubject(context.Context, *WithdrawSubjectPayload) (res *WorkloadIdentityPolicy, err error)
@@ -66,7 +73,7 @@ const ServiceName = "workloadIdentities"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"list", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "withdrawSubject"}
+var MethodNames = [7]string{"list", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "updateSubject", "withdrawSubject"}
 
 // AdmitSubjectPayload is the payload type of the workloadIdentities service
 // admitSubject method.
@@ -158,6 +165,26 @@ type UpdateIssuerPayload struct {
 	// de-duplicated on write, then limited to 40 tags of at most 64 characters
 	// each.
 	Tags []string `json:"tags,omitzero"`
+}
+
+// UpdateSubjectPayload is the payload type of the workloadIdentities service
+// updateSubject method.
+type UpdateSubjectPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The admission id.
+	ID string
+	// Optional label, for platforms whose subjects are not self-describing.
+	// Trimmed on write; blank clears it.
+	Name *string
+	// Replaces the admission's tags; an empty list clears them. Trimmed and
+	// de-duplicated on write, then limited to 40 tags of at most 64 characters
+	// each.
+	Tags []string `json:"tags,omitzero"`
+	// The agent whose policy the admitted workload inherits. Shared with any
+	// admission of the same subject under the same issuer at the other tier.
+	AgentID *string
 }
 
 // WithdrawIssuerPayload is the payload type of the workloadIdentities service

@@ -74177,6 +74177,111 @@ paths:
       x-speakeasy-name-override: updateIssuer
       x-speakeasy-react-hook:
         name: UpdateWorkloadIssuer
+  /rpc/workloadIdentities.updateSubject:
+    post:
+      description: Edit an admitted subject's label, tags, or assigned agent. Omitted fields are left unchanged. The subject, match kind, issuer, and tier are fixed at admission. The agent assignment is shared by every admission of the same subject under the same issuer, at either tier, so reassigning it through one admission reassigns it for both. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
+      operationId: updateWorkloadSubject
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWorkloadSubjectForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadIdentityPolicy'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: updateSubject workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: updateSubject
+      x-speakeasy-react-hook:
+        name: UpdateWorkloadSubject
   /rpc/workloadIdentities.withdrawIssuer:
     delete:
       description: Stop trusting an issuer. Every subject admitted under it is withdrawn in the same transaction, so no admission can outlive the issuer it names. Requires workload:write.
@@ -103690,6 +103795,28 @@ components:
             type: string
           description: Replaces the issuer's tags; an empty list clears them. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
       description: Form for editing a trusted workload issuer. Every field but id is optional; an omitted field is left unchanged.
+      required:
+        - id
+    UpdateWorkloadSubjectForm:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: The agent whose policy the admitted workload inherits. Shared with any admission of the same subject under the same issuer at the other tier.
+          format: uuid
+        id:
+          type: string
+          description: The admission id.
+          format: uuid
+        name:
+          type: string
+          description: Optional label, for platforms whose subjects are not self-describing. Trimmed on write; blank clears it.
+        tags:
+          type: array
+          items:
+            type: string
+          description: Replaces the admission's tags; an empty list clears them. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
+      description: Form for editing an admitted workload subject. Every field but id is optional; an omitted field is left unchanged.
       required:
         - id
     UploadChatAttachmentResult:

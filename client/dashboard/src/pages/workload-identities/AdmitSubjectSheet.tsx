@@ -21,7 +21,8 @@ import { Stack } from "@/components/ui/Stack";
 import { TagInput } from "@/components/ui/TagInput";
 import { Text } from "@/components/ui/Text";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { admissionValuesDiffer } from "./admissionEdit";
 import {
   buildAdmitValues,
   canAdmit,
@@ -44,29 +45,131 @@ export interface AdmitSubjectValues {
  * The form's own state. matchKind is derived and the issuer comes from the page,
  * so neither is held here.
  */
-interface AdmitSubjectForm {
+export interface AdmitSubjectFormValues {
   subject: string;
   name: string;
   tags: string[];
   agentId: string;
 }
 
+/** An allowed machine's current values, for editing it. */
+export interface AdmitSubjectInitialValues extends AdmitSubjectFormValues {
+  /**
+   * The assigned agent's name, so the picker can show it even when the agent
+   * has dropped out of the active list.
+   */
+  agentName: string;
+}
+
 interface AdmitSubjectSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (values: AdmitSubjectValues) => void;
+  /**
+   * Called with the submitted values and, when editing, the machine's values as
+   * they stood when the sheet opened, which is what the edit is diffed against.
+   */
+  onSubmit: (
+    values: AdmitSubjectValues,
+    baseline: AdmitSubjectInitialValues | undefined,
+  ) => void;
   isPending: boolean;
   /** The platform whose page opened the sheet; every machine allowed here is admitted under it. */
   issuer: WorkloadIssuer;
   agents: { id: string; name: string }[];
+  /**
+   * An allowed machine's current values. When set, the sheet edits that
+   * machine: every time it opens the form is prefilled from them, and the
+   * subject is read-only, because the server fixes it, and its match kind, at
+   * admission.
+   */
+  initial?: AdmitSubjectInitialValues;
 }
 
-const EMPTY: AdmitSubjectForm = {
+const EMPTY: AdmitSubjectFormValues = {
   subject: "",
   name: "",
   tags: [],
   agentId: "",
 };
+
+function formValues(
+  initial: AdmitSubjectInitialValues | undefined,
+): AdmitSubjectFormValues {
+  if (initial === undefined) {
+    return EMPTY;
+  }
+  return {
+    subject: initial.subject,
+    name: initial.name,
+    tags: initial.tags,
+    agentId: initial.agentId,
+  };
+}
+
+/**
+ * The agents to offer. An edit keeps the machine's assigned agent in the list
+ * even once it is no longer active, so the picker shows what is assigned
+ * rather than appearing empty.
+ */
+function withAssignedAgent(
+  agents: { id: string; name: string }[],
+  initial: AdmitSubjectInitialValues | undefined,
+): { id: string; name: string }[] {
+  if (
+    initial === undefined ||
+    initial.agentId.length === 0 ||
+    agents.some((agent) => agent.id === initial.agentId)
+  ) {
+    return agents;
+  }
+  return [
+    { id: initial.agentId, name: initial.agentName || "Assigned agent" },
+    ...agents,
+  ];
+}
+
+function submitLabel(isEditing: boolean, isPending: boolean): string {
+  if (isEditing) {
+    return isPending ? "Saving…" : "Save changes";
+  }
+  return isPending ? "Allowing…" : "Allow access";
+}
+
+function SubjectHint({ isEditing }: { isEditing: boolean }): JSX.Element {
+  if (isEditing) {
+    return (
+      <Text muted small>
+        Fixed once access is allowed. To allow a different subject, allow access
+        for it separately.
+      </Text>
+    );
+  }
+  return (
+    <Text muted small>
+      Surrounding spaces are trimmed; otherwise stored and compared exactly as
+      entered. End it with <code>*</code> to admit every subject beginning with
+      the part before the <code>*</code>.
+    </Text>
+  );
+}
+
+function AgentHint({ isEditing }: { isEditing: boolean }): JSX.Element {
+  if (isEditing) {
+    return (
+      <Text muted small>
+        The machine inherits this agent&apos;s policy in full. Where the same
+        subject is also allowed at the other tier, that access uses the same
+        agent and changes with it.
+      </Text>
+    );
+  }
+  return (
+    <Text muted small>
+      Choose the most narrowly scoped agent that can do the job. The machine
+      inherits its policy in full.
+    </Text>
+  );
+}
 
 export function AdmitSubjectSheet({
   open,
@@ -75,25 +178,30 @@ export function AdmitSubjectSheet({
   isPending,
   issuer,
   agents,
+  initial,
 }: AdmitSubjectSheetProps): JSX.Element {
-  const [values, setValues] = useState<AdmitSubjectForm>(EMPTY);
+  const isEditing = initial !== undefined;
+  const [values, setValues] = useState<AdmitSubjectFormValues>(() =>
+    formValues(initial),
+  );
+  // The machine as it stood when the sheet opened. A query refresh can replace
+  // `initial` mid-edit, and diffing against that would turn fields the operator
+  // never touched into changes that overwrite the newer values.
+  const [baseline, setBaseline] = useState(initial);
 
-  // A successful admission closes the sheet through the parent's own state,
-  // which never reaches handleOpenChange — so without this the next admission
-  // opens prefilled with the previous workload. The sheet stays mounted, so
-  // there is no unmount to do it for us.
-  useEffect(() => {
-    if (!open) {
-      setValues(EMPTY);
+  // The sheet stays mounted between uses, so each opening starts the form over
+  // from what is stored now. It is done as the sheet opens, during render,
+  // because the page hands over a machine's values in the same render that
+  // opens the sheet: a reset on close would keep what the form held before
+  // them, and the next save would write those stale values back.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setValues(formValues(initial));
+      setBaseline(initial);
     }
-  }, [open]);
-
-  const handleOpenChange = (next: boolean) => {
-    if (!next) {
-      setValues(EMPTY);
-    }
-    onOpenChange(next);
-  };
+  }
 
   const wildcardAvailable = issuer.allowWildcardAdmission;
 
@@ -104,19 +212,22 @@ export function AdmitSubjectSheet({
   // An issuer can forbid wildcards (an older row, or one cleared during an
   // incident). Say so under the field rather than leave the submit disabled
   // with no reason.
-  const warning =
+  const admitWarning =
     subjectRuleWarning(matchKind, storedSubject) ??
     (matchKind === "wildcard" && !wildcardAvailable
       ? "This issuer does not permit wildcard matching, so a rule ending in \u201c*\u201d cannot be admitted under it. Give the subject in full, or turn wildcard admission back on for the issuer."
       : null);
+  // The subject is fixed once admitted, so an edit has nothing to warn about.
+  const warning = isEditing ? null : admitWarning;
 
   // Naming the stem and the agent makes the reach of a wildcard rule concrete.
   const wildcardStem =
     matchKind === "wildcard" && storedSubject.endsWith("*")
       ? storedSubject.slice(0, -1)
       : "";
+  const agentOptions = withAssignedAgent(agents, baseline);
   const selectedAgentName =
-    agents.find((agent) => agent.id === values.agentId)?.name ?? "";
+    agentOptions.find((agent) => agent.id === values.agentId)?.name ?? "";
   const showCaution = wildcardStem.length > 0 && warning === null;
 
   const tagProblem = tagsProblem(values.tags);
@@ -124,39 +235,47 @@ export function AdmitSubjectSheet({
   // The agent list refetches while the sheet is open, and the server accepts a
   // suspended or revoked agent — leaving a machine that authenticates and can
   // reach nothing — so a choice that has dropped out of the active list is
-  // refused here.
-  const agentStillActive = agents.some((agent) => agent.id === values.agentId);
+  // refused here. An edit that leaves the agent alone does not send it, so the
+  // assigned agent needs no such check.
+  const agentStillActive =
+    agents.some((agent) => agent.id === values.agentId) ||
+    (baseline !== undefined && values.agentId === baseline.agentId);
+
+  const hasChanges =
+    baseline === undefined || admissionValuesDiffer(baseline, values);
 
   const canSubmit =
+    hasChanges &&
     tagProblem === null &&
     agentStillActive &&
-    canAdmit({
-      subject: storedSubject,
-      agentId: values.agentId,
-      warning,
-      matchKindPermitted: matchKind !== "wildcard" || wildcardAvailable,
-    });
+    (isEditing ||
+      canAdmit({
+        subject: storedSubject,
+        agentId: values.agentId,
+        warning,
+        matchKindPermitted: matchKind !== "wildcard" || wildcardAvailable,
+      }));
 
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
     if (!canSubmit || isPending) return;
-    onSubmit(buildAdmitValues(values, issuer.issuer));
+    onSubmit(buildAdmitValues(values, issuer.issuer), baseline);
   };
 
   return (
-    <Sheet open={open} onOpenChange={handleOpenChange}>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
         className="flex w-[560px] max-w-[calc(100vw-2rem)] flex-col sm:max-w-[560px]"
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle className="text-lg font-semibold">
-            Allow access
+            {isEditing ? "Edit access" : "Allow access"}
           </SheetTitle>
           <SheetDescription>
-            Allowing access lets a machine sign in to Gram. The agent you choose
-            supplies the whole policy that the machine acts under, so it is
-            chosen at the same time.
+            {isEditing
+              ? "The subject is fixed once access is allowed. Changing the agent changes the whole policy this machine acts under."
+              : "Allowing access lets a machine sign in to Gram. The agent you choose supplies the whole policy that the machine acts under, so it is chosen at the same time."}
           </SheetDescription>
         </SheetHeader>
 
@@ -168,6 +287,7 @@ export function AdmitSubjectSheet({
                 id="admit-subject"
                 value={values.subject}
                 placeholder="wimse://identity.example.com/org/acme/agent/a-1"
+                readOnly={isEditing}
                 aria-describedby={warning ? "admit-subject-warning" : undefined}
                 aria-invalid={warning !== null}
                 onChange={(value) => setValues({ ...values, subject: value })}
@@ -177,11 +297,7 @@ export function AdmitSubjectSheet({
                   {warning}
                 </Text>
               ) : (
-                <Text muted small>
-                  Surrounding spaces are trimmed; otherwise stored and compared
-                  exactly as entered. End it with <code>*</code> to admit every
-                  subject beginning with the part before the <code>*</code>.
-                </Text>
+                <SubjectHint isEditing={isEditing} />
               )}
             </Stack>
 
@@ -195,17 +311,14 @@ export function AdmitSubjectSheet({
                   <SelectValue placeholder="Select an agent" />
                 </SelectTrigger>
                 <SelectContent>
-                  {agents.map((agent) => (
+                  {agentOptions.map((agent) => (
                     <SelectItem key={agent.id} value={agent.id}>
                       {agent.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <Text muted small>
-                Choose the most narrowly scoped agent that can do the job. The
-                machine inherits its policy in full.
-              </Text>
+              <AgentHint isEditing={isEditing} />
               {showCaution && (
                 // alignTop because this body runs to several lines: a centred icon
                 // drifts into the middle of the text and stops reading as a marker.
@@ -278,7 +391,7 @@ export function AdmitSubjectSheet({
             <Button
               type="button"
               variant="secondary"
-              onClick={() => handleOpenChange(false)}
+              onClick={() => onOpenChange(false)}
               disabled={isPending}
             >
               <Button.Text>Cancel</Button.Text>
@@ -288,9 +401,7 @@ export function AdmitSubjectSheet({
               variant="primary"
               disabled={!canSubmit || isPending}
             >
-              <Button.Text>
-                {isPending ? "Allowing…" : "Allow access"}
-              </Button.Text>
+              <Button.Text>{submitLabel(isEditing, isPending)}</Button.Text>
             </Button>
           </SheetFooter>
         </form>

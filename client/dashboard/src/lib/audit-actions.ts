@@ -286,6 +286,7 @@ export const AUDIT_ACTIONS = [
   "widget:delete",
   "widget:update",
   "workload-admission:admit",
+  "workload-admission:update",
   "workload-admission:withdraw",
   "workload-issuer:create",
   "workload-issuer:delete",
@@ -923,6 +924,8 @@ export function staticActionPhrase(action: AuditAction): string {
     // rather than a record about one.
     case "workload-admission:admit":
       return "admitted workload";
+    case "workload-admission:update":
+      return "updated workload";
     case "workload-admission:withdraw":
       return "withdrew workload";
 

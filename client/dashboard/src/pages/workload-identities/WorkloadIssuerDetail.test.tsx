@@ -58,6 +58,10 @@ const mocks = vi.hoisted(() => ({
     onSuccess?: () => Promise<void> | void;
     onError?: (error: unknown) => void;
   },
+  updateSubject: vi.fn(),
+  updateSubjectOptions: {} as {
+    onSuccess?: () => Promise<void> | void;
+  },
 }));
 
 vi.mock("sonner", () => ({
@@ -155,6 +159,15 @@ vi.mock("@gram/client/react-query/updateWorkloadIssuer.js", () => ({
     return { mutate: mocks.updateIssuer, isPending: false };
   },
 }));
+const updateSubject = mocks.updateSubject;
+vi.mock("@gram/client/react-query/updateWorkloadSubject.js", () => ({
+  useUpdateWorkloadSubjectMutation: (
+    options: typeof mocks.updateSubjectOptions = {},
+  ) => {
+    mocks.updateSubjectOptions = options;
+    return { mutate: mocks.updateSubject, isPending: false };
+  },
+}));
 vi.mock("@gram/client/react-query/withdrawWorkloadIssuer.js", () => ({
   useWithdrawWorkloadIssuerMutation: () => ({
     mutate: vi.fn(),
@@ -176,6 +189,8 @@ beforeEach(() => {
   mocks.toastSuccess.mockReset();
   mocks.toastError.mockReset();
   mocks.updateOptions = {};
+  mocks.updateSubjectOptions = {};
+  updateSubject.mockReset();
 });
 afterEach(cleanup);
 
@@ -232,6 +247,16 @@ it("gives tags a column of their own", () => {
   expect(subject.parentElement?.contains(tag)).toBe(false);
 });
 
+// Opens a machine row's menu and picks one of its actions.
+function chooseMachineAction(action: "Edit" | "Remove", row = 0): void {
+  const trigger = screen.getAllByRole("button", { name: /^Actions for / })[row];
+  if (trigger === undefined) {
+    throw new Error(`no machine row ${row}`);
+  }
+  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+  fireEvent.click(screen.getByRole("menuitem", { name: action }));
+}
+
 it("offers to allow access and to remove a machine", () => {
   admissions = [admission(1)];
   renderPage();
@@ -239,8 +264,22 @@ it("offers to allow access and to remove a machine", () => {
   expect(screen.getByRole("button", { name: "Allow access" })).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Withdraw" })).toBeNull();
 
-  fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+  chooseMachineAction("Remove");
   expect(screen.getByText("Remove this machine's access?")).toBeTruthy();
+});
+
+it("puts a machine's Edit and Remove in its row menu", () => {
+  admissions = [admission(1)];
+  renderPage();
+
+  const trigger = screen.getByRole("button", {
+    name: "Actions for machine-01",
+  });
+  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+
+  expect(
+    screen.getAllByRole("menuitem").map((item) => item.textContent),
+  ).toEqual(["Edit", "Remove"]);
 });
 
 it("shows ten machines a page", () => {
@@ -365,6 +404,62 @@ it("sends only the fields the edit changed", () => {
   });
 });
 
+it("opens the machine edit sheet prefilled, with the subject read-only", () => {
+  admissions = [admission(1, ["production"])];
+  renderPage();
+
+  chooseMachineAction("Edit");
+
+  expect(screen.getByText("Edit access")).toBeTruthy();
+  expect(
+    (screen.getByLabelText("Label (optional)") as HTMLInputElement).value,
+  ).toBe("machine-01");
+  // Once in the machine's row and once in the sheet's tag field.
+  expect(screen.getAllByText("production")).toHaveLength(2);
+
+  const subject = screen.getByLabelText("Subject") as HTMLInputElement;
+  expect(subject.value).toBe("repo:example/machine-01");
+  expect(subject.readOnly).toBe(true);
+});
+
+it("saves no machine edit until a field changes", () => {
+  admissions = [admission(1)];
+  renderPage();
+
+  chooseMachineAction("Edit");
+
+  const save = screen.getByRole("button", {
+    name: "Save changes",
+  }) as HTMLButtonElement;
+  expect(save.disabled).toBe(true);
+
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Release bot" },
+  });
+  expect(save.disabled).toBe(false);
+});
+
+it("sends only the machine fields the edit changed", () => {
+  admissions = [admission(1)];
+  renderPage();
+
+  chooseMachineAction("Edit");
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "  Release bot  " },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(updateSubject).toHaveBeenCalledTimes(1);
+  expect(updateSubject).toHaveBeenCalledWith({
+    request: {
+      updateWorkloadSubjectForm: {
+        id: `admission-${ISSUER_ID}-1`,
+        name: "Release bot",
+      },
+    },
+  });
+});
+
 it("repoints the JWKS URI and clears the tags", () => {
   issuer = { ...baseIssuer, tags: ["deploys"] };
   renderPage();
@@ -382,6 +477,111 @@ it("repoints the JWKS URI and clears the tags", () => {
         id: ISSUER_ID,
         jwksUri: "https://keys.example.com/jwks",
         tags: [],
+      },
+    },
+  });
+});
+
+it("keeps the wildcard caution on a wildcard machine being edited", () => {
+  admissions = [
+    {
+      ...admission(1),
+      subject: "repo:example/*",
+      matchKind: "wildcard",
+      wildcardActive: false,
+    },
+  ];
+  renderPage();
+
+  chooseMachineAction("Edit");
+
+  expect(
+    screen.getByText("This rule admits more than one identity"),
+  ).toBeTruthy();
+  // The subject is fixed, so the inactive-wildcard refusal meant for a new rule
+  // does not block saving the label.
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Every repository" },
+  });
+  expect(
+    (screen.getByRole("button", { name: "Save changes" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(false);
+});
+
+it("opens each machine's own values when editing one after another", () => {
+  admissions = [admission(1), admission(2)];
+  renderPage();
+
+  chooseMachineAction("Edit", 0);
+  expect(
+    (screen.getByLabelText("Label (optional)") as HTMLInputElement).value,
+  ).toBe("machine-01");
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+  chooseMachineAction("Edit", 1);
+  expect(
+    (screen.getByLabelText("Label (optional)") as HTMLInputElement).value,
+  ).toBe("machine-02");
+});
+
+it("reopens a machine on its saved values and diffs the next edit against them", async () => {
+  admissions = [admission(1, ["production"])];
+  const { rerender } = renderPage();
+  // The refresh that follows a save brings the stored machine back.
+  mocks.invalidate.mockImplementation(async () => {
+    admissions = [{ ...admission(1, ["production"]), name: "Release bot" }];
+    rerender();
+  });
+
+  chooseMachineAction("Edit");
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Release bot" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  await act(async () => {
+    await mocks.updateSubjectOptions.onSuccess?.();
+  });
+  await waitFor(() => expect(screen.queryByText("Edit access")).toBeNull());
+
+  chooseMachineAction("Edit");
+  expect(
+    (screen.getByLabelText("Label (optional)") as HTMLInputElement).value,
+  ).toBe("Release bot");
+  fireEvent.click(screen.getByRole("button", { name: "Remove production" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(updateSubject).toHaveBeenCalledTimes(2);
+  expect(updateSubject).toHaveBeenLastCalledWith({
+    request: {
+      updateWorkloadSubjectForm: {
+        id: `admission-${ISSUER_ID}-1`,
+        tags: [],
+      },
+    },
+  });
+});
+
+it("diffs a machine edit against the machine as it stood when the sheet opened", () => {
+  admissions = [admission(1)];
+  const { rerender } = renderPage();
+
+  chooseMachineAction("Edit");
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Release bot" },
+  });
+
+  // Another operator's edit arrives through a refresh while the sheet is open.
+  admissions = [admission(1, ["production"])];
+  rerender();
+
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(updateSubject).toHaveBeenCalledWith({
+    request: {
+      updateWorkloadSubjectForm: {
+        id: `admission-${ISSUER_ID}-1`,
+        name: "Release bot",
       },
     },
   });
@@ -568,4 +768,39 @@ it("drops an open stop-trusting confirmation when the page moves to another plat
 
   expect(screen.getByText("Other CI")).toBeTruthy();
   expect(screen.queryByText("Stop trusting this platform?")).toBeNull();
+});
+
+it("drops an open machine edit when the page moves to another platform", () => {
+  admissions = [admission(1), admission(1, [], OTHER_ISSUER_ID)];
+  renderPage();
+
+  chooseMachineAction("Edit");
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Release bot" },
+  });
+
+  goToOtherPlatform();
+
+  expect(screen.getByText("Other CI")).toBeTruthy();
+  expect(screen.queryByText("Edit access")).toBeNull();
+  expect(updateSubject).not.toHaveBeenCalled();
+
+  chooseMachineAction("Edit");
+  expect(
+    (screen.getByLabelText("Label (optional)") as HTMLInputElement).value,
+  ).toBe("machine-01");
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Nightly bot" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(updateSubject).toHaveBeenCalledTimes(1);
+  expect(updateSubject).toHaveBeenCalledWith({
+    request: {
+      updateWorkloadSubjectForm: {
+        id: `admission-${OTHER_ISSUER_ID}-1`,
+        name: "Nightly bot",
+      },
+    },
+  });
 });

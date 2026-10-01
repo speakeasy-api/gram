@@ -127,6 +127,21 @@ INSERT INTO workload_identity_admissions (organization_id, project_id, workload_
 VALUES (@organization_id, @project_id, @workload_issuer_id, @subject, @match_kind, @name, @tags)
 RETURNING *;
 
+-- name: UpdateWorkloadAdmission :one
+-- Writes every editable field, so the caller merges an edit into the row it
+-- read under LockWorkloadIssuerForWrite. Scoped as GetWorkloadAdmission is: a
+-- row the caller cannot list is a row it cannot edit. The subject, match kind,
+-- issuer, and tier are deliberately absent.
+UPDATE workload_identity_admissions
+SET name = sqlc.narg(name),
+    tags = @tags,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND (project_id IS NULL OR project_id = @project_id)
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: SoftDeleteWorkloadAdmission :one
 UPDATE workload_identity_admissions
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
