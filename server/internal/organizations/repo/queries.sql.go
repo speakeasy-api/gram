@@ -445,15 +445,6 @@ func (q *Queries) DeleteOnboardingStepDependencies(ctx context.Context, stepID u
 	return err
 }
 
-const deleteOnboardingStepMethods = `-- name: DeleteOnboardingStepMethods :exec
-DELETE FROM onboarding_step_methods WHERE step_id = $1
-`
-
-func (q *Queries) DeleteOnboardingStepMethods(ctx context.Context, stepID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteOnboardingStepMethods, stepID)
-	return err
-}
-
 const deleteOnboardingUseCase = `-- name: DeleteOnboardingUseCase :execrows
 UPDATE onboarding_use_cases
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
@@ -1303,34 +1294,9 @@ func (q *Queries) InsertOnboardingStepDependency(ctx context.Context, arg Insert
 	return err
 }
 
-const insertOnboardingStepMethod = `-- name: InsertOnboardingStepMethod :execrows
-INSERT INTO onboarding_step_methods (step_id, integration_method_id)
-SELECT $1, m.id
-FROM support_matrix_integration_methods m
-WHERE m.slug = $2 AND m.deleted_at IS NULL
-ON CONFLICT DO NOTHING
-`
-
-type InsertOnboardingStepMethodParams struct {
-	StepID     uuid.UUID
-	MethodSlug string
-}
-
-func (q *Queries) InsertOnboardingStepMethod(ctx context.Context, arg InsertOnboardingStepMethodParams) (int64, error) {
-	result, err := q.db.Exec(ctx, insertOnboardingStepMethod, arg.StepID, arg.MethodSlug)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const insertOrganizationOnboardingVendor = `-- name: InsertOrganizationOnboardingVendor :exec
-INSERT INTO organization_onboarding_vendors (organization_id, vendor, plan_id)
-VALUES (
-  $1,
-  $2,
-  (SELECT p.id FROM support_matrix_plans p WHERE p.slug = $3::text AND p.deleted_at IS NULL)
-)
+INSERT INTO organization_onboarding_vendors (organization_id, vendor, plan_slug)
+VALUES ($1, $2, $3::text)
 `
 
 type InsertOrganizationOnboardingVendorParams struct {
@@ -1611,72 +1577,9 @@ func (q *Queries) ListOnboardingPlaybooks(ctx context.Context, organizationID pg
 	return items, nil
 }
 
-const listOnboardingStepMethodApplicability = `-- name: ListOnboardingStepMethodApplicability :many
-SELECT s.slug AS step_slug, m.slug AS method_slug, m.vendor AS method_vendor,
-  -- Over the stack's platforms of the method's own vendor, or of every vendor
-  -- for a method that belongs to none, so an unrelated vendor in the stack
-  -- never changes the verdict. A platform the matrix does not map the method
-  -- to is unknown, which is not the same as not applicable.
-  coalesce((
-    SELECT bool_and(mp.platform_id IS NOT NULL AND mp.applicability = 'na')
-    FROM support_matrix_platforms p
-    LEFT JOIN support_matrix_method_platforms mp ON mp.platform_id = p.id AND mp.integration_method_id = m.id AND mp.deleted_at IS NULL
-    WHERE p.deleted_at IS NULL AND p.vendor = ANY($1::text[])
-      AND (m.vendor IN ('Cross-platform', 'Others') OR p.vendor = m.vendor)
-  ), false)::boolean AS not_applicable_everywhere
-FROM onboarding_step_methods sm
-JOIN onboarding_steps s ON s.id = sm.step_id AND s.deleted_at IS NULL
-JOIN support_matrix_integration_methods m ON m.id = sm.integration_method_id AND m.deleted_at IS NULL
-WHERE s.slug = ANY($2::text[])
-ORDER BY s.slug, m.sort_order, m.slug
-`
-
-type ListOnboardingStepMethodApplicabilityParams struct {
-	Vendors   []string
-	StepSlugs []string
-}
-
-type ListOnboardingStepMethodApplicabilityRow struct {
-	StepSlug                string
-	MethodSlug              string
-	MethodVendor            string
-	NotApplicableEverywhere bool
-}
-
-func (q *Queries) ListOnboardingStepMethodApplicability(ctx context.Context, arg ListOnboardingStepMethodApplicabilityParams) ([]ListOnboardingStepMethodApplicabilityRow, error) {
-	rows, err := q.db.Query(ctx, listOnboardingStepMethodApplicability, arg.Vendors, arg.StepSlugs)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListOnboardingStepMethodApplicabilityRow
-	for rows.Next() {
-		var i ListOnboardingStepMethodApplicabilityRow
-		if err := rows.Scan(
-			&i.StepSlug,
-			&i.MethodSlug,
-			&i.MethodVendor,
-			&i.NotApplicableEverywhere,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listOnboardingSteps = `-- name: ListOnboardingSteps :many
 SELECT s.id, s.slug, s.title, s.description, s.completion, s.hidden_by_default, s.sort_order,
   p.slug AS parent_slug,
-  (
-    SELECT coalesce(array_agg(m.slug ORDER BY m.sort_order, m.slug), '{}')::text[]
-    FROM onboarding_step_methods sm
-    JOIN support_matrix_integration_methods m ON m.id = sm.integration_method_id AND m.deleted_at IS NULL
-    WHERE sm.step_id = s.id
-  ) AS method_slugs,
   (
     SELECT coalesce(array_agg(r.slug ORDER BY r.sort_order, r.slug), '{}')::text[]
     FROM onboarding_step_dependencies d
@@ -1698,7 +1601,6 @@ type ListOnboardingStepsRow struct {
 	HiddenByDefault bool
 	SortOrder       int32
 	ParentSlug      pgtype.Text
-	MethodSlugs     []string
 	RequiresSlugs   []string
 }
 
@@ -1720,7 +1622,6 @@ func (q *Queries) ListOnboardingSteps(ctx context.Context) ([]ListOnboardingStep
 			&i.HiddenByDefault,
 			&i.SortOrder,
 			&i.ParentSlug,
-			&i.MethodSlugs,
 			&i.RequiresSlugs,
 		); err != nil {
 			return nil, err
@@ -1809,7 +1710,7 @@ func (q *Queries) ListOrganizationOnboardingPlaybookSteps(ctx context.Context, o
 }
 
 const listOrganizationOnboardingVendors = `-- name: ListOrganizationOnboardingVendors :many
-SELECT v.vendor, p.slug AS plan_slug
+SELECT v.vendor, v.plan_slug, p.slug AS legacy_plan_slug
 FROM organization_onboarding_vendors v
 LEFT JOIN support_matrix_plans p ON p.id = v.plan_id AND p.deleted_at IS NULL
 WHERE v.organization_id = $1
@@ -1817,10 +1718,14 @@ ORDER BY v.vendor
 `
 
 type ListOrganizationOnboardingVendorsRow struct {
-	Vendor   string
-	PlanSlug pgtype.Text
+	Vendor         string
+	PlanSlug       pgtype.Text
+	LegacyPlanSlug pgtype.Text
 }
 
+// plan_slug names the plan in the support matrix in code. legacy_plan_slug
+// resolves rows recorded through plan_id before it existed, until the
+// contract migration drops that column with the support matrix tables.
 func (q *Queries) ListOrganizationOnboardingVendors(ctx context.Context, organizationID string) ([]ListOrganizationOnboardingVendorsRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationOnboardingVendors, organizationID)
 	if err != nil {
@@ -1830,7 +1735,7 @@ func (q *Queries) ListOrganizationOnboardingVendors(ctx context.Context, organiz
 	var items []ListOrganizationOnboardingVendorsRow
 	for rows.Next() {
 		var i ListOrganizationOnboardingVendorsRow
-		if err := rows.Scan(&i.Vendor, &i.PlanSlug); err != nil {
+		if err := rows.Scan(&i.Vendor, &i.PlanSlug, &i.LegacyPlanSlug); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -2065,80 +1970,6 @@ func (q *Queries) ListPendingInvitations(ctx context.Context, organizationID str
 			&i.RevokedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listSupportMatrixPlansForOnboarding = `-- name: ListSupportMatrixPlansForOnboarding :many
-SELECT slug, vendor, name
-FROM support_matrix_plans
-WHERE deleted_at IS NULL
-ORDER BY sort_order, slug
-`
-
-type ListSupportMatrixPlansForOnboardingRow struct {
-	Slug   string
-	Vendor string
-	Name   string
-}
-
-func (q *Queries) ListSupportMatrixPlansForOnboarding(ctx context.Context) ([]ListSupportMatrixPlansForOnboardingRow, error) {
-	rows, err := q.db.Query(ctx, listSupportMatrixPlansForOnboarding)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListSupportMatrixPlansForOnboardingRow
-	for rows.Next() {
-		var i ListSupportMatrixPlansForOnboardingRow
-		if err := rows.Scan(&i.Slug, &i.Vendor, &i.Name); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listSupportMatrixPlatformsForOnboarding = `-- name: ListSupportMatrixPlatformsForOnboarding :many
-SELECT slug, name, vendor, family, surface
-FROM support_matrix_platforms
-WHERE deleted_at IS NULL
-ORDER BY sort_order, slug
-`
-
-type ListSupportMatrixPlatformsForOnboardingRow struct {
-	Slug    string
-	Name    string
-	Vendor  string
-	Family  string
-	Surface string
-}
-
-func (q *Queries) ListSupportMatrixPlatformsForOnboarding(ctx context.Context) ([]ListSupportMatrixPlatformsForOnboardingRow, error) {
-	rows, err := q.db.Query(ctx, listSupportMatrixPlatformsForOnboarding)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListSupportMatrixPlatformsForOnboardingRow
-	for rows.Next() {
-		var i ListSupportMatrixPlatformsForOnboardingRow
-		if err := rows.Scan(
-			&i.Slug,
-			&i.Name,
-			&i.Vendor,
-			&i.Family,
-			&i.Surface,
 		); err != nil {
 			return nil, err
 		}
