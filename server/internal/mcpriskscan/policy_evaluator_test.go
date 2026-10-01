@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -523,11 +524,147 @@ func TestPolicyEvaluator_DropsFlagLaneWhenCapacityIsFull(t *testing.T) {
 			require.Equal(t, attribute.NewSet(
 				attribute.String("gram.mcp.risk.scan.surface", mcpriskscan.SurfaceHostedMCP),
 				attribute.String("gram.mcp.risk.scan.method", mcpriskscan.MethodToolsCall),
+				attribute.String("gram.mcp.risk.scan.phase", mcpriskscan.PhaseRequest),
 			), sum.DataPoints[0].Attributes)
 			return
 		}
 	}
 	t.Fatal("flag drop metric was not recorded")
+}
+
+func TestPolicyEvaluator_ResponseBlockWithholdsFinding(t *testing.T) {
+	t.Parallel()
+	projectID := uuid.New()
+	serverID := uuid.New()
+	policyID := uuid.New()
+	userMessage := "Remove personal data before continuing."
+	publisher := &findingPublisher{}
+	evaluator := newPolicyEvaluator(t, staticPolicies(policycore.Policy{
+		ID:             policyID,
+		ProjectID:      projectID,
+		OrganizationID: "org-test",
+		Name:           "Response PII",
+		Action:         "block",
+		UserMessage:    &userMessage,
+	}), policyDetectorFunc(func(_ context.Context, _ policycore.Policy, request risk.MCPScanRequest) ([]scanners.Finding, error) {
+		require.Equal(t, message.ToolResponse, request.MessageType)
+		require.Equal(t, "person@example.com", request.Text)
+		return []scanners.Finding{{
+			RuleID: "pii.email", Description: "Email detected", Match: "person@example.com",
+			StartPos: 0, EndPos: 18, Tags: []string{}, Source: "presidio", Confidence: 1,
+		}}, nil
+	}), publisher, mcpriskscan.DefaultPolicyConfig)
+
+	request := requestSubject(t.Context(), projectID, serverID, `{}`)
+	decision := evaluator.Scan(t.Context(), mcpriskscan.NewResponse(request, mcpriskscan.TextResponsePayload([]byte("person@example.com"))))
+
+	require.True(t, decision.Denied())
+	require.False(t, decision.Indeterminate)
+	require.Equal(t, userMessage, decision.UserMessage)
+	published := publisher.snapshot()
+	require.Len(t, published, 1)
+	require.Equal(t, riskv1.Finding_ENFORCEMENT_OUTCOME_WITHHELD, published[0].GetEnforcementOutcome())
+	require.Equal(t, mcpriskscan.PhaseResponse, published[0].GetExecution().GetPhase())
+	require.Equal(t, request.Event.ExecutionID(), published[0].GetExecution().GetExecutionId())
+}
+
+func TestPolicyEvaluator_ResponseFlagPublishesLoggedFinding(t *testing.T) {
+	t.Parallel()
+	projectID := uuid.New()
+	serverID := uuid.New()
+	publisher := &findingPublisher{}
+	evaluator := newPolicyEvaluator(t, staticPolicies(policycore.Policy{
+		ID:             uuid.New(),
+		ProjectID:      projectID,
+		OrganizationID: "org-test",
+		Name:           "Response PII",
+		Action:         "flag",
+	}), policyDetectorFunc(func(_ context.Context, _ policycore.Policy, request risk.MCPScanRequest) ([]scanners.Finding, error) {
+		require.Equal(t, message.ToolResponse, request.MessageType)
+		return []scanners.Finding{{
+			RuleID: "pii.email", Description: "Email detected", Match: "person@example.com",
+			StartPos: 0, EndPos: 18, Tags: []string{}, Source: "presidio", Confidence: 1,
+		}}, nil
+	}), publisher, mcpriskscan.DefaultPolicyConfig)
+
+	request := requestSubject(t.Context(), projectID, serverID, `{}`)
+	decision := evaluator.Scan(t.Context(), mcpriskscan.NewResponse(request, mcpriskscan.TextResponsePayload([]byte("person@example.com"))))
+
+	require.False(t, decision.Denied())
+	require.Eventually(t, func() bool { return len(publisher.snapshot()) == 1 }, time.Second, time.Millisecond)
+	published := publisher.snapshot()
+	require.Equal(t, riskv1.Finding_ENFORCEMENT_OUTCOME_LOGGED, published[0].GetEnforcementOutcome())
+	require.Equal(t, mcpriskscan.PhaseResponse, published[0].GetExecution().GetPhase())
+}
+
+func TestPolicyEvaluator_OversizedResponseFlagIsSkippedAndCounted(t *testing.T) {
+	t.Parallel()
+	projectID := uuid.New()
+	serverID := uuid.New()
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, meter.Shutdown(context.Background())) })
+	detectorCalls := 0
+	evaluator := mcpriskscan.NewPolicyEvaluator(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		meter,
+		staticPolicies(policycore.Policy{
+			ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Response PII", Action: "flag",
+		}),
+		policyDetectorFunc(func(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
+			detectorCalls++
+			return nil, nil
+		}),
+		&findingPublisher{},
+		mcpriskscan.DefaultPolicyConfig,
+	)
+
+	request := requestSubject(t.Context(), projectID, serverID, `{}`)
+	payload := mcpriskscan.TextResponsePayload(make([]byte, mcpriskscan.MaxPayloadBytes+1))
+	decision := evaluator.Scan(t.Context(), mcpriskscan.NewResponse(request, payload))
+
+	require.False(t, decision.Denied())
+	require.Zero(t, detectorCalls)
+	var metrics metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &metrics))
+	for _, scope := range metrics.ScopeMetrics {
+		for _, instrument := range scope.Metrics {
+			if instrument.Name != "mcp.risk.scan.flag_oversized" {
+				continue
+			}
+			sum, ok := instrument.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			require.Len(t, sum.DataPoints, 1)
+			require.Equal(t, int64(1), sum.DataPoints[0].Value)
+			require.Equal(t, attribute.NewSet(
+				attribute.String("gram.mcp.risk.scan.surface", mcpriskscan.SurfaceHostedMCP),
+				attribute.String("gram.mcp.risk.scan.method", mcpriskscan.MethodToolsCall),
+				attribute.String("gram.mcp.risk.scan.phase", mcpriskscan.PhaseResponse),
+			), sum.DataPoints[0].Attributes)
+			return
+		}
+	}
+	t.Fatal("oversized flag metric was not recorded")
+}
+
+func TestPolicyEvaluator_OversizedResponseBlockUsesFailMode(t *testing.T) {
+	t.Parallel()
+	projectID := uuid.New()
+	serverID := uuid.New()
+	evaluator := newPolicyEvaluator(t, staticPolicies(policycore.Policy{
+		ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Response PII", Action: "block",
+	}), policyDetectorFunc(nil), &findingPublisher{}, mcpriskscan.PolicyConfig{
+		Deadline: time.Second, FailMode: mcpriskscan.FailClosed, FlagConcurrency: 1,
+	})
+
+	request := requestSubject(t.Context(), projectID, serverID, `{}`)
+	payload := mcpriskscan.TextResponsePayload(make([]byte, mcpriskscan.MaxPayloadBytes+1))
+	decision := evaluator.Scan(t.Context(), mcpriskscan.NewResponse(request, payload))
+
+	require.True(t, decision.Denied())
+	require.True(t, decision.Indeterminate)
+	require.Contains(t, decision.UserMessage, "result was withheld")
 }
 
 func newPolicyEvaluator(
