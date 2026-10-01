@@ -267,6 +267,10 @@ export type AdminOrganization = {
   workos_dashboard_url?: string;
   stripe_customer_id?: string;
   stripe_subscription_id?: string;
+  // Absent unless the matching Stripe ID is set and the deployment has a
+  // Stripe API key that says which dashboard mode the IDs belong to.
+  stripe_customer_dashboard_url?: string;
+  stripe_subscription_dashboard_url?: string;
   whitelisted: boolean;
   disabled_at?: string;
   trial_state?: TrialState;

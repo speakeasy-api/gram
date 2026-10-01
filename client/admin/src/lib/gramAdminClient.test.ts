@@ -647,6 +647,10 @@ describe("organizationFromSdk", () => {
           "https://dashboard.workos.com/environment_placeholder/organizations/org_workos_placeholder",
         stripeCustomerId: "cus_placeholder",
         stripeSubscriptionId: "sub_placeholder",
+        stripeCustomerDashboardUrl:
+          "https://dashboard.stripe.com/test/customers/cus_placeholder",
+        stripeSubscriptionDashboardUrl:
+          "https://dashboard.stripe.com/test/subscriptions/sub_placeholder",
         whitelisted: true,
         disabledAt: new Date("2026-02-01T00:00:00Z"),
         trialState: "converted",
@@ -669,6 +673,10 @@ describe("organizationFromSdk", () => {
         "https://dashboard.workos.com/environment_placeholder/organizations/org_workos_placeholder",
       stripe_customer_id: "cus_placeholder",
       stripe_subscription_id: "sub_placeholder",
+      stripe_customer_dashboard_url:
+        "https://dashboard.stripe.com/test/customers/cus_placeholder",
+      stripe_subscription_dashboard_url:
+        "https://dashboard.stripe.com/test/subscriptions/sub_placeholder",
       whitelisted: true,
       disabled_at: "2026-02-01T00:00:00.000Z",
       trial_state: "converted",
@@ -706,6 +714,8 @@ describe("organizationFromSdk", () => {
     expect(record.workos_id).toBeUndefined();
     expect(record.workos_dashboard_url).toBeUndefined();
     expect(record.stripe_customer_id).toBeUndefined();
+    expect(record.stripe_customer_dashboard_url).toBeUndefined();
+    expect(record.stripe_subscription_dashboard_url).toBeUndefined();
     expect(record.creation_source).toBeUndefined();
   });
 });

@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { CopyValue } from "@/components/CopyValue";
+import { ExternalLinkButton } from "@/components/ExternalLinkButton";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -207,11 +208,19 @@ export function SetStripeSubscription({
 
   if (hasValue(org.stripe_subscription_id)) {
     return (
-      <CopyValue
-        label="Stripe subscription ID"
-        value={org.stripe_subscription_id}
-        className="text-sm"
-      />
+      <span className="flex min-w-0 items-center gap-1">
+        <CopyValue
+          label="Stripe subscription ID"
+          value={org.stripe_subscription_id}
+          className="text-sm"
+        />
+        {org.stripe_subscription_dashboard_url ? (
+          <ExternalLinkButton
+            href={org.stripe_subscription_dashboard_url}
+            label="Open subscription in Stripe"
+          />
+        ) : null}
+      </span>
     );
   }
 
