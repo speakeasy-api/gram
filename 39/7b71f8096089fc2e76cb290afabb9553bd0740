@@ -43,7 +43,7 @@ server/internal/admin/impl.go
 server/internal/adminmcp/write_guard_test.go
   h_9630b74bdac540 46-61
 server/internal/adminmcp/write_guard.go
-  h_9630b74bdac540 89-92,94-103,110
+  h_9630b74bdac540 89-103,110
 .changeset/admin-mcp-guarded-configuration.md
   h_9630b74bdac540 1-5
 server/internal/adminmcp/tool_support_matrix_entry_test.go
@@ -67,7 +67,7 @@ server/internal/adminmcp/proposal_approval.go
 server/internal/adminmcp/tool_support_matrix_entry.go
   h_9630b74bdac540 1-127
 server/internal/adminmcp/write_tools.go
-  h_9630b74bdac540 100,247
+  h_9630b74bdac540 100,232-235,247
   h_9630b74bdac540 99
 server/internal/audit/organizations.go
   h_9630b74bdac540 47-48,992-1044
