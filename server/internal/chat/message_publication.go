@@ -46,9 +46,22 @@ type preparedPublication struct {
 	raw         []byte
 	toolCalls   []byte
 	asset       pgtype.Text
-	attachments []string
+	attachments []publicationAttachment
 	body        *conversationv1.Message_Body
 	reference   *conversationv1.Message_ContentReference
+}
+
+type publicationAttachment struct {
+	uri        string
+	externalID pgtype.Text
+	metadata   []byte
+}
+
+// publicationAttachmentMetadata is the stored attachment metadata used by the
+// provider-independent conversation contract.
+type publicationAttachmentMetadata struct {
+	// DisplayPath is the source-observed filename or display path.
+	DisplayPath string `json:"display_path"`
 }
 
 func (p preparedPublication) matches(write MessageWrite, attached []repo.CreateChatContentPartParams) bool {
@@ -57,7 +70,7 @@ func (p preparedPublication) matches(write MessageWrite, attached []repo.CreateC
 		return false
 	}
 	for i, part := range attached {
-		if p.attachments[i] != part.ContentAssetUrl {
+		if p.attachments[i].uri != part.ContentAssetUrl || p.attachments[i].externalID != part.ExternalID || !bytes.Equal(p.attachments[i].metadata, part.Metadata) {
 			return false
 		}
 	}
@@ -81,7 +94,7 @@ func (w *ChatMessageWriter) preparePublications(ctx context.Context, projectID u
 		}
 		item := preparedPublication{content: p.Content, raw: bytes.Clone(p.ContentRaw), toolCalls: bytes.Clone(p.ToolCalls), asset: p.ContentAssetUrl, attachments: nil, body: nil, reference: nil}
 		for _, part := range attached[p.ID] {
-			item.attachments = append(item.attachments, part.ContentAssetUrl)
+			item.attachments = append(item.attachments, publicationAttachment{uri: part.ContentAssetUrl, externalID: part.ExternalID, metadata: bytes.Clone(part.Metadata)})
 		}
 		body, err := publicationBody(item.content, item.raw, item.toolCalls, item.asset, attached[p.ID])
 		if err != nil {
@@ -289,6 +302,18 @@ func publicationBody(content string, raw, toolCalls []byte, asset pgtype.Text, a
 		ref := &conversationv1.Message_ContentReference{}
 		ref.SetUri(attachedPart.ContentAssetUrl)
 		ref.SetMediaType("text/plain; charset=utf-8")
+		if attachedPart.ExternalID.Valid {
+			ref.SetExternalId(attachedPart.ExternalID.String)
+		}
+		if len(attachedPart.Metadata) > 0 {
+			var metadata publicationAttachmentMetadata
+			if err := json.Unmarshal(attachedPart.Metadata, &metadata); err != nil {
+				return nil, fmt.Errorf("decode publication attachment metadata: %w", err)
+			}
+			if metadata.DisplayPath != "" {
+				ref.SetFilename(metadata.DisplayPath)
+			}
+		}
 		part := &conversationv1.Message_Part{}
 		part.SetContentReference(ref)
 		parts = append(parts, part)
@@ -340,5 +365,11 @@ func externalPublication(write ExternalMessageWrite) MessageWrite {
 	params.ContentRaw = write.Params.ContentRaw
 	params.ToolCalls = write.Params.ToolCalls
 	params.ContentAssetUrl = write.Params.ContentAssetUrl
+	if write.PublishRowLocalContent {
+		// Archival content may contain the whole source message on every split
+		// row. Publishing it would reevaluate sibling content under each row ID.
+		params.ContentRaw = nil
+		params.ContentAssetUrl = pgtype.Text{String: "", Valid: false}
+	}
 	return MessageWrite{Params: params, BillingUserID: write.BillingUserID, AssistantID: uuid.Nil, WorkloadSource: write.WorkloadSource, UserEmail: write.UserEmail, Provider: write.Provider, HookHostname: write.HookHostname, AccountType: write.AccountType, BillingMode: write.BillingMode}
 }

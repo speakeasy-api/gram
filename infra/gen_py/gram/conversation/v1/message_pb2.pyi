@@ -101,16 +101,20 @@ class Message(_message.Message):
         arguments_json: str
         def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., arguments_json: _Optional[str] = ...) -> None: ...
     class ContentReference(_message.Message):
-        __slots__ = ("uri", "media_type", "size_bytes", "sha256")
+        __slots__ = ("uri", "media_type", "size_bytes", "sha256", "external_id", "filename")
         URI_FIELD_NUMBER: _ClassVar[int]
         MEDIA_TYPE_FIELD_NUMBER: _ClassVar[int]
         SIZE_BYTES_FIELD_NUMBER: _ClassVar[int]
         SHA256_FIELD_NUMBER: _ClassVar[int]
+        EXTERNAL_ID_FIELD_NUMBER: _ClassVar[int]
+        FILENAME_FIELD_NUMBER: _ClassVar[int]
         uri: str
         media_type: str
         size_bytes: int
         sha256: bytes
-        def __init__(self, uri: _Optional[str] = ..., media_type: _Optional[str] = ..., size_bytes: _Optional[int] = ..., sha256: _Optional[bytes] = ...) -> None: ...
+        external_id: str
+        filename: str
+        def __init__(self, uri: _Optional[str] = ..., media_type: _Optional[str] = ..., size_bytes: _Optional[int] = ..., sha256: _Optional[bytes] = ..., external_id: _Optional[str] = ..., filename: _Optional[str] = ...) -> None: ...
     ID_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
