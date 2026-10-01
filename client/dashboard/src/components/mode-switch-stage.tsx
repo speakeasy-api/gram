@@ -2,7 +2,13 @@ import { ModeSwitchStarfield } from "@/components/mode-switch-starfield";
 import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/utils";
 import { HeadlessContent } from "@/pages/org/HeadlessContent";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate } from "react-router";
 import {
   EASE_OUT,
@@ -13,10 +19,12 @@ import {
   SHRINK_MS,
   ZOOM_MS,
   computeGrid,
+  parkOnCard,
   slotOf,
   useModeSwitch,
   type Grid,
   type Mode,
+  type Parking,
   type StageState,
 } from "./mode-switch-context";
 
@@ -173,46 +181,71 @@ export function ModeSurface({
 }): JSX.Element {
   const { phase, from, to, grid } = useModeSwitch();
   const card = grid?.cards[slotOf(mode)];
+  const scale = grid?.scale;
   const isShrinking = phase === "shrinking" && from === mode;
   const isZooming = phase === "zooming" && to === mode;
+  const animating = isShrinking || isZooming;
+  const surfaceRef = useRef<HTMLDivElement | null>(null);
+
+  // Measured from this pane rather than taken from the grid: the incoming pane
+  // is not the one the grid was measured from, and the two can differ in height
+  // and scroll position. Layout effect, so the pane is measured untransformed
+  // and parked before the browser paints it.
+  const [parking, setParking] = useState<Parking | null>(null);
+  useLayoutEffect(() => {
+    const surface = surfaceRef.current;
+    if (!animating || !surface || !card || scale === undefined) {
+      setParking(null);
+      return;
+    }
+    setParking(parkOnCard(surface, card, scale));
+  }, [animating, card, scale]);
 
   // The incoming pane mounts already parked on its card, then releases to full
-  // size on the next frame so the browser has a start value to animate from.
+  // size on the next frame.
   const [zoomReleased, setZoomReleased] = useState(false);
   useEffect(() => {
     if (!isZooming) {
       setZoomReleased(false);
       return;
     }
-    const frame = window.requestAnimationFrame(() => setZoomReleased(true));
+    const frame = window.requestAnimationFrame(() => {
+      // Flush the parked style first. Parking lands in the same task as the
+      // mount, so without a style read the browser never computes it and the
+      // release has no start value to animate from.
+      surfaceRef.current?.getBoundingClientRect();
+      setZoomReleased(true);
+    });
     return () => window.cancelAnimationFrame(frame);
   }, [isZooming]);
 
-  const animating = isShrinking || isZooming;
   const parked = isShrinking || (isZooming && !zoomReleased);
-  const surfaceStyle: React.CSSProperties | undefined = animating
-    ? {
-        transform: parked ? card?.transform : "none",
-        transition: `transform ${isShrinking ? SHRINK_MS : ZOOM_MS}ms ${EASE_OUT}`,
-      }
+  // No transition while the incoming pane is parked, so moving onto its card
+  // is instant and only the release animates.
+  const transition =
+    isZooming && !zoomReleased
+      ? "none"
+      : `transform ${isShrinking ? SHRINK_MS : ZOOM_MS}ms ${EASE_OUT}`;
+  const surfaceStyle = animating
+    ? ({
+        transform: parked ? parking?.transform : "none",
+        clipPath: parking?.clipPath,
+        transition,
+        // A transform makes this element the containing block for the fixed
+        // sidebar inside it, so --header-offset (which positions the sidebar
+        // below the chrome) is measured from the pane top instead of the
+        // viewport. Point it at the top of the on-screen slice: the pane
+        // already starts below the chrome, and a scrolled pane's sidebar
+        // belongs where the user was looking.
+        "--header-offset": `${parking?.clipTop ?? 0}px`,
+      } as React.CSSProperties)
     : undefined;
 
   return (
     <div
+      ref={surfaceRef}
       data-mode-surface=""
-      // A transform makes this element the containing block for the fixed
-      // sidebar inside it, so --header-offset (which positions the sidebar
-      // below the chrome) would be measured from the pane top and push it down
-      // a second time. The pane already starts below the chrome, so zero it
-      // for the duration of the animation.
-      style={
-        animating
-          ? ({
-              ...surfaceStyle,
-              "--header-offset": "0px",
-            } as React.CSSProperties)
-          : surfaceStyle
-      }
+      style={surfaceStyle}
       className={cn(
         className,
         animating &&
@@ -222,12 +255,20 @@ export function ModeSurface({
           // added and removed (a transform makes this element its containing
           // block), and its own left/width transition would animate that
           // re-anchor as a visible slide.
-          // ring rather than border so the edge costs no layout while the pane
-          // is scaled into its card.
-          "bg-background relative z-20 origin-top-left overflow-hidden rounded-[14px] shadow-2xl ring-1 ring-white/25 will-change-transform [&_*]:!transition-none",
+          "bg-background relative z-20 origin-top-left overflow-hidden will-change-transform [&_*]:!transition-none",
       )}
     >
       {children}
+      {/* The card's hairline edge. The clip would cut a ring on the pane
+          itself (it paints outside the box), so it is drawn inset over the
+          on-screen slice instead. */}
+      {parking && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 z-50 rounded-[14px] ring-1 ring-white/25 ring-inset"
+          style={{ top: parking.clipTop, height: parking.sliceHeight }}
+        />
+      )}
     </div>
   );
 }
