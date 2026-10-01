@@ -2789,6 +2789,17 @@ type RiskExclusion struct {
 	Deleted        bool
 }
 
+type RiskExecutionEvidence struct {
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	ExecutionID      string
+	Phase            string
+	PayloadEncrypted string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	ExpiresAt        pgtype.Timestamptz
+}
+
 type RiskFindingEvidence struct {
 	FindingID      uuid.UUID
 	OrganizationID string
