@@ -119,7 +119,7 @@ func TestNativeListPrunesToolsPreservingMetadata(t *testing.T) {
 	meta := record["_meta"].(map[string]any)
 	version := meta["com.pulsemcp/server-version"].(map[string]any)
 	auth := []any{map[string]any{"type": "oauth", "detail": map[string]any{"authorizationServerMetadata": map[string]any{"registration_endpoint": "https://example.com/register"}, "custom": true}}}
-	for _, key := range []string{"remotes[0]", "remotes[1]", "remotes[2]", "remotes[3]", "remotes[4]"} {
+	for _, key := range []string{"remotes[0]", "remotes[1]", "remotes[2]", "remotes[3]", "remotes[4]", "remotes[5]", "remotes[12]"} {
 		version[key] = map[string]any{"tools": []any{map[string]any{"name": "read", "inputSchema": map[string]any{"type": "object"}, "annotations": map[string]any{"readOnlyHint": true}}}, "authOptions": auth, "custom": "retained"}
 	}
 	raw, err := json.Marshal(record)
@@ -135,7 +135,7 @@ func TestNativeListPrunesToolsPreservingMetadata(t *testing.T) {
 	got := row.Meta.(map[string]any)
 	require.Equal(t, meta["custom.example/metadata"], got["custom.example/metadata"])
 	require.Equal(t, meta["io.modelcontextprotocol.registry/official"], got["io.modelcontextprotocol.registry/official"])
-	for _, key := range []string{"remotes[0]", "remotes[1]", "remotes[2]", "remotes[3]", "remotes[4]"} {
+	for _, key := range []string{"remotes[0]", "remotes[1]", "remotes[2]", "remotes[3]", "remotes[4]", "remotes[5]", "remotes[12]"} {
 		remote := got["com.pulsemcp/server-version"].(map[string]any)[key].(map[string]any)
 		require.Empty(t, remote["tools"], key)
 		require.Equal(t, auth, remote["authOptions"])
@@ -155,6 +155,67 @@ func TestNativeListSearch(t *testing.T) {
 			result, err := NewNativeRegistryReader(source).ListServers(t.Context(), Registry{ID: uuid.New()}, ListServersParams{Search: &tc.search})
 			require.NoError(t, err)
 			require.Len(t, result.Servers, tc.count)
+		})
+	}
+}
+
+type nativeEvidenceTestSource struct {
+	nativeTestSource
+	evidencePages   []mcpregistry.Page
+	evidenceOptions []mcpregistry.ListOptions
+	names           []string
+}
+
+func (s *nativeEvidenceTestSource) List(_ context.Context, opts mcpregistry.ListOptions) (mcpregistry.Page, error) {
+	s.evidenceOptions = append(s.evidenceOptions, opts)
+	page := s.evidencePages[0]
+	s.evidencePages = s.evidencePages[1:]
+	return page, nil
+}
+
+func (s *nativeEvidenceTestSource) GetByName(ctx context.Context, name string) (mcpregistry.Entry, error) {
+	s.names = append(s.names, name)
+	return s.nativeTestSource.GetByName(ctx, name)
+}
+
+func TestNativeListEvidenceServers(t *testing.T) {
+	t.Parallel()
+	const valid = `{"server":{"name":"io.example/evidence","description":"Evidence server","version":"1","remotes":[{"type":"streamable-http","url":"https://example.com/mcp"}]},"_meta":{"io.modelcontextprotocol.registry/official":{"status":"active"}}}`
+	summary := mcpregistry.Summary{Name: "io.example/evidence"}
+	for _, tc := range []struct {
+		name        string
+		data        string
+		pages       []mcpregistry.Page
+		wantCount   int
+		wantLookups int
+		cursors     []string
+	}{
+		{name: "eligible unpublished", data: valid, pages: []mcpregistry.Page{{Entries: []mcpregistry.Summary{summary}}}, wantCount: 1, wantLookups: 1, cursors: []string{""}},
+		{name: "summary issues", data: valid, pages: []mcpregistry.Page{{Entries: []mcpregistry.Summary{{Name: summary.Name, Issues: []mcpregistry.Issue{{Message: "invalid"}}}}}}, cursors: []string{""}},
+		{name: "invalid stored record", data: `{}`, pages: []mcpregistry.Page{{Entries: []mcpregistry.Summary{summary}}}, wantLookups: 1, cursors: []string{""}},
+		{name: "deleted", data: strings.Replace(valid, "active", "deleted", 1), pages: []mcpregistry.Page{{Entries: []mcpregistry.Summary{summary}}}, wantLookups: 1, cursors: []string{""}},
+		{name: "deprecated retained", data: strings.Replace(valid, "active", "deprecated", 1), pages: []mcpregistry.Page{{Entries: []mcpregistry.Summary{summary}}}, wantCount: 1, wantLookups: 1, cursors: []string{""}},
+		{name: "pagination after filtered page", data: valid, pages: []mcpregistry.Page{{Entries: []mcpregistry.Summary{{Issues: []mcpregistry.Issue{{Message: "invalid"}}}}, NextCursor: "next"}, {Entries: []mcpregistry.Summary{summary}, NextCursor: "last"}, {Entries: []mcpregistry.Summary{summary}}}, wantCount: 2, wantLookups: 2, cursors: []string{"", "next", "last"}},
+		{name: "empty", data: valid, pages: []mcpregistry.Page{{}}, cursors: []string{""}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			source := &nativeEvidenceTestSource{nativeTestSource: nativeTestSource{entry: mcpregistry.Entry{Data: json.RawMessage(tc.data)}}, evidencePages: tc.pages}
+			registry := Registry{ID: uuid.New()}
+			result, err := NewNativeRegistryReader(source).ListEvidenceServers(t.Context(), registry)
+			require.NoError(t, err)
+			require.Len(t, result.Servers, tc.wantCount)
+			require.Len(t, source.names, tc.wantLookups)
+			for _, name := range source.names {
+				require.Equal(t, summary.Name, name)
+			}
+			require.Len(t, source.evidenceOptions, len(tc.cursors))
+			for i, cursor := range tc.cursors {
+				require.Equal(t, mcpregistry.ListOptions{Limit: 50, Cursor: cursor}, source.evidenceOptions[i])
+			}
+			for _, server := range result.Servers {
+				require.Equal(t, registry.ID.String(), *server.RegistryID)
+			}
 		})
 	}
 }

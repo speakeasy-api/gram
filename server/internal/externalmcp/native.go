@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 )
@@ -56,8 +57,11 @@ func (r *NativeRegistryReader) ListServers(ctx context.Context, registry Registr
 			}
 			// Keep arbitrary extensions and auth metadata, but not list tool payloads.
 			if version, ok := full.Meta["com.pulsemcp/server-version"].(map[string]any); ok {
-				for i := range 5 {
-					if remote, ok := version[fmt.Sprintf("remotes[%d]", i)].(map[string]any); ok {
+				for key, value := range version {
+					if !strings.HasPrefix(key, "remotes[") || !strings.HasSuffix(key, "]") {
+						continue
+					}
+					if remote, ok := value.(map[string]any); ok {
 						delete(remote, "tools")
 					}
 				}
