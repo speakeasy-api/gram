@@ -35,9 +35,10 @@ type Classifier interface {
 	// also sets Result.Err() to match ErrRequestTooLarge. Callers may retry only those marked
 	// retryable; successful answers must not be discarded because another fails.
 	//
-	// Invalid request structure, including a nil request, sets Result.Err() to match
-	// ErrInvalidRequest before
-	// any provider execution. Cancellation or an operation-wide failure may return
+	// Disabled implementations return ErrDisabled without validating the request.
+	// Otherwise, invalid request structure, including a nil request, sets
+	// Result.Err() to match ErrInvalidRequest before any provider execution.
+	// Cancellation or an operation-wide failure may return
 	// partial outcomes and a non-nil Result.Err(). A partial result contains only known outcomes, in submission
 	// order; absence of an outcome does not prove a provider request was not sent.
 	//
