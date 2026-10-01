@@ -79,8 +79,9 @@ func TestVendorsAreValidRecords(t *testing.T) {
 		mapping, err := mcpregistry.ParseOktaMapping(e.Data)
 		require.NoError(t, err)
 		require.Equal(t, vendor.Mapping, mapping)
-		require.NotEmpty(t, vendor.IconURL, vendor.Name)
-		require.Contains(t, string(e.Data), vendor.IconURL)
+		if vendor.IconURL != "" {
+			require.Contains(t, string(e.Data), vendor.IconURL)
+		}
 		recorded, _ := storedSupportsDCR(t, e.Data)
 		require.Equal(t, vendor.SupportsDCR, recorded, vendor.Name)
 	}

@@ -51,7 +51,9 @@ type Vendor struct {
 // are the keys of the public OIN catalog listings, checked in the catalog;
 // integrator-prefixed keys belong to listings published from an integrator
 // account and are just as public. Issuers are the authorization server Okta
-// accepted as the identity assertion audience.
+// accepted as the identity assertion audience; entries without Cross App
+// Access fields have not been checked for it. Endpoints are the ones
+// organizations already run.
 var Vendors = []Vendor{
 	{
 		Name:             "ai.granola/mcp",
@@ -91,6 +93,42 @@ var Vendors = []Vendor{
 		},
 	},
 	{
+		Name:             "co.lucid/mcp",
+		Title:            "Lucid",
+		Description:      "Lucid's hosted MCP server for diagrams and whiteboards.",
+		WebsiteURL:       "https://lucid.co",
+		DocumentationURL: "",
+		IconURL:          "https://cdn-cashy-static-assets.lucidchart.com/marketing/images/LucidSoftwareFavicon.png",
+		SupportsDCR:      true,
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.lucid.app/mcp"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"lucid"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
+		Name:             "com.amplitude/mcp",
+		Title:            "Amplitude",
+		Description:      "Amplitude's hosted MCP server for product analytics.",
+		WebsiteURL:       "https://amplitude.com",
+		DocumentationURL: "",
+		IconURL:          "https://amplitude.com/nextjs-public/favicon/apple-touch-icon.png",
+		SupportsDCR:      true,
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.amplitude.com/mcp"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"amplitude"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
 		Name:             "com.atlassian/mcp",
 		Title:            "Atlassian",
 		Description:      "Atlassian's hosted MCP server for Jira and Confluence Cloud.",
@@ -104,6 +142,42 @@ var Vendors = []Vendor{
 		},
 		Mapping: mcpregistry.OktaMapping{
 			OINNames:         []string{"atlassian"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
+		Name:             "com.box/mcp",
+		Title:            "Box",
+		Description:      "Box's hosted MCP server for files and folders.",
+		WebsiteURL:       "https://www.box.com",
+		DocumentationURL: "",
+		IconURL:          "",
+		SupportsDCR:      false,
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.box.com"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"boxnet"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
+		Name:             "com.brex/mcp",
+		Title:            "Brex",
+		Description:      "Brex's hosted MCP server for spend and expenses.",
+		WebsiteURL:       "https://www.brex.com",
+		DocumentationURL: "",
+		IconURL:          "https://www.brex.com/apple-touch-icon.png",
+		SupportsDCR:      true,
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://api.brex.com/mcp"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"brex"},
 			OINIntegrationID: "",
 			XAASignOnModes:   nil,
 			XAAIssuer:        "",
@@ -128,6 +202,42 @@ var Vendors = []Vendor{
 		},
 	},
 	{
+		Name:             "com.clickup/mcp",
+		Title:            "ClickUp",
+		Description:      "ClickUp's hosted MCP server for tasks and docs.",
+		WebsiteURL:       "https://clickup.com",
+		DocumentationURL: "",
+		IconURL:          "https://clickup.com/favicons/apple-touch-icon.png",
+		SupportsDCR:      true,
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.clickup.com/mcp"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"clickup"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
+		Name:             "com.cloudflare/mcp",
+		Title:            "Cloudflare",
+		Description:      "Cloudflare's hosted MCP server for its developer platform.",
+		WebsiteURL:       "https://www.cloudflare.com",
+		DocumentationURL: "",
+		IconURL:          "https://dash.cloudflare.com/apple-touch-icon.png",
+		SupportsDCR:      true,
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.cloudflare.com/mcp"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"cloudflare", "integrator-8026030_cloudflareone_1"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
 		Name:             "com.datadoghq/mcp",
 		Title:            "Datadog",
 		Description:      "Datadog's hosted MCP server for monitors, logs, and incidents.",
@@ -146,6 +256,24 @@ var Vendors = []Vendor{
 		},
 	},
 	{
+		Name:             "com.fullstory/mcp",
+		Title:            "Fullstory",
+		Description:      "Fullstory's hosted MCP server for behavioral analytics.",
+		WebsiteURL:       "https://www.fullstory.com",
+		DocumentationURL: "",
+		IconURL:          "https://www.fullstory.com/icons/icon-48x48.png?v=7cac1bc6d731746740d72903d25cd5bf",
+		SupportsDCR:      true,
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://api.fullstory.com/mcp/fullstory"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"dev-85865693_fullstory_1"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
 		Name:             "com.github/mcp",
 		Title:            "GitHub",
 		Description:      "GitHub's hosted MCP server for repositories, issues, and pull requests.",
@@ -158,6 +286,96 @@ var Vendors = []Vendor{
 		},
 		Mapping: mcpregistry.OktaMapping{
 			OINNames:         []string{"github"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
+		Name:             "com.hubspot/mcp",
+		Title:            "HubSpot",
+		Description:      "HubSpot's hosted MCP server for CRM records.",
+		WebsiteURL:       "https://www.hubspot.com",
+		DocumentationURL: "",
+		IconURL:          "https://www.hubspot.com/hubfs/HubSpot_Logos/HubSpot-Inversed-Favicon.png",
+		SupportsDCR:      false,
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.hubspot.com"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"hubspot", "hubspotsaml"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
+		Name:             "com.intercom/mcp",
+		Title:            "Intercom",
+		Description:      "Intercom's hosted MCP server for conversations and contacts.",
+		WebsiteURL:       "https://www.intercom.com",
+		DocumentationURL: "",
+		IconURL:          "https://www.intercom.com/intercom-marketing-site/favicons/favicon-32x32.png",
+		SupportsDCR:      true,
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.intercom.com/mcp"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"intercom"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
+		Name:             "com.miro/mcp",
+		Title:            "Miro",
+		Description:      "Miro's hosted MCP server for boards.",
+		WebsiteURL:       "https://miro.com",
+		DocumentationURL: "",
+		IconURL:          "https://framerusercontent.com/images/6FBG66PBxjV2QFaDfIdUi5mi9A.png",
+		SupportsDCR:      true,
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.miro.com/"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"realtime_board"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
+		Name:             "com.monday/mcp",
+		Title:            "monday.com",
+		Description:      "monday.com's hosted MCP server for boards and items.",
+		WebsiteURL:       "https://monday.com",
+		DocumentationURL: "",
+		IconURL:          "https://cdn.prod.website-files.com/656da6fea306219773d04208/65af6bd6e742d497b5f23f69_645898132bbaac20f1963919_256x256.png",
+		SupportsDCR:      true,
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.monday.com/mcp"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"mondaycom"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
+		Name:             "com.navan/mcp",
+		Title:            "Navan",
+		Description:      "Navan's hosted MCP server for travel and expenses.",
+		WebsiteURL:       "https://navan.com",
+		DocumentationURL: "",
+		IconURL:          "https://navan.com/favicon.png",
+		SupportsDCR:      true,
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.navan.com/mcp"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"navan"},
 			OINIntegrationID: "",
 			XAASignOnModes:   nil,
 			XAAIssuer:        "",
@@ -182,6 +400,42 @@ var Vendors = []Vendor{
 		},
 	},
 	{
+		Name:             "com.pagerduty/mcp",
+		Title:            "PagerDuty",
+		Description:      "PagerDuty's hosted MCP server for incidents and on-call.",
+		WebsiteURL:       "https://www.pagerduty.com",
+		DocumentationURL: "",
+		IconURL:          "https://www.pagerduty.com/favicon/prod/apple-touch-icon.png",
+		SupportsDCR:      false,
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.pagerduty.com/mcp"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"pagerduty"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
+		Name:             "com.ramp/mcp",
+		Title:            "Ramp",
+		Description:      "Ramp's hosted MCP server for spend and expenses.",
+		WebsiteURL:       "https://ramp.com",
+		DocumentationURL: "",
+		IconURL:          "https://ramp.com/apple-touch-icon.png",
+		SupportsDCR:      true,
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.ramp.com/mcp"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"ramp", "rampcom"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
 		Name:             "com.slack/mcp",
 		Title:            "Slack",
 		Description:      "Slack's hosted MCP server for channels, messages, and search.",
@@ -200,6 +454,24 @@ var Vendors = []Vendor{
 		},
 	},
 	{
+		Name:             "com.stripe/mcp",
+		Title:            "Stripe",
+		Description:      "Stripe's hosted MCP server for payments and billing.",
+		WebsiteURL:       "https://stripe.com",
+		DocumentationURL: "",
+		IconURL:          "https://images.stripeassets.com/fzn2n1nzq965/4vVgZi0ZMoEzOhkcv7EVwK/8cce6fdcf2733b2ec8e99548908847ed/favicon.png?w=180&h=180",
+		SupportsDCR:      true,
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.stripe.com"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"dev-67337717_stripe_1"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
 		Name:             "com.supabase/mcp",
 		Title:            "Supabase",
 		Description:      "Supabase's hosted MCP server for projects, databases, and edge functions.",
@@ -215,6 +487,78 @@ var Vendors = []Vendor{
 			OINIntegrationID: "",
 			XAASignOnModes:   []string{"SAML_2_0"},
 			XAAIssuer:        "https://api.supabase.com",
+		},
+	},
+	{
+		Name:             "com.vercel/mcp",
+		Title:            "Vercel",
+		Description:      "Vercel's hosted MCP server for projects and deployments.",
+		WebsiteURL:       "https://vercel.com",
+		DocumentationURL: "",
+		IconURL:          "https://assets.vercel.com/image/upload/q_auto/front/favicon/vercel/apple-touch-icon-57x57.png",
+		SupportsDCR:      true,
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.vercel.com"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"vercel"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
+		Name:             "com.zapier/mcp",
+		Title:            "Zapier",
+		Description:      "Zapier's hosted MCP server for automations.",
+		WebsiteURL:       "https://zapier.com",
+		DocumentationURL: "",
+		IconURL:          "",
+		SupportsDCR:      true,
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.zapier.com/api/v1/connect"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"zapier"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
+		Name:             "com.zoom/mcp",
+		Title:            "Zoom",
+		Description:      "Zoom's hosted MCP server for meetings.",
+		WebsiteURL:       "https://www.zoom.com",
+		DocumentationURL: "",
+		IconURL:          "https://www.zoom.com/apple-touch-icon.png",
+		SupportsDCR:      false,
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.zoom.us/mcp/zoom/streamable"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"zoomus"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
+		Name:             "io.sentry/mcp",
+		Title:            "Sentry",
+		Description:      "Sentry's hosted MCP server for errors and issues.",
+		WebsiteURL:       "https://sentry.io",
+		DocumentationURL: "",
+		IconURL:          "https://sentry-brand.storage.googleapis.com/sentry-glyph-black.png",
+		SupportsDCR:      true,
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.sentry.dev/mcp"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"sentry"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
 		},
 	},
 }
