@@ -19,6 +19,7 @@ function page(withProvider = true, initialize = true) {
       <label data-agent-option><input type="radio" data-agent-select name="agent_id" value="agent-b" data-subject-display="Beta Helper" form="approve" disabled></label>
       <p data-agent-empty hidden>No agents match your search.</p>
     </div>
+    <p data-agent-setup hidden>Missing an agent?</p>
     <div data-agent-self-only>Tool access</div>
     <span data-consent-subject-display></span>
     <div data-agent-policy hidden><span data-agent-policy-name></span></div>
@@ -73,6 +74,16 @@ afterEach(() => {
 });
 
 describe("consent agent connections", () => {
+  it("shows the agent setup hint only in Agent mode", () => {
+    page(false);
+    const hint = document.querySelector<HTMLElement>("[data-agent-setup]")!;
+    expect(hint.hidden).toBe(true);
+    mode("agent");
+    expect(hint.hidden).toBe(false);
+    mode("self");
+    expect(hint.hidden).toBe(true);
+  });
+
   it("keeps Agent mode unavailable until its script initializes", () => {
     page(false, false);
     const agentMode = document.querySelector<HTMLInputElement>(

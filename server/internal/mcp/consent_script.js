@@ -68,6 +68,7 @@
     );
     var selfAgentInput = document.querySelector("[data-agent-self]");
     var agentPicker = document.querySelector("[data-agent-picker]");
+    var agentSetup = document.querySelector("[data-agent-setup]");
     var agentSearch = document.querySelector("[data-agent-search]");
     var agentEmpty = document.querySelector("[data-agent-empty]");
     var agentPolicy = document.querySelector("[data-agent-policy]");
@@ -350,6 +351,7 @@
         });
         if (selfAgentInput) selfAgentInput.disabled = authorizingAgent;
         if (agentPicker) agentPicker.hidden = !authorizingAgent;
+        if (agentSetup) agentSetup.hidden = !authorizingAgent;
         var selectedDisplay = selected
           ? selected.getAttribute("data-subject-display") || ""
           : "";
