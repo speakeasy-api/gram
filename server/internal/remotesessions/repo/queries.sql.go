@@ -3149,6 +3149,45 @@ func (q *Queries) GetEMABinding(ctx context.Context, arg GetEMABindingParams) (R
 	return i, err
 }
 
+const getEMAChainingConfirmedAudience = `-- name: GetEMAChainingConfirmedAudience :one
+SELECT r.audience
+FROM okta_resource_connections AS r
+JOIN identity_provider_connections AS c
+  ON c.id = r.identity_provider_connection_id AND c.organization_id = r.organization_id
+ AND c.provider = 'okta' AND c.deleted IS FALSE
+JOIN okta_identity_provider_connections AS o
+  ON o.identity_provider_connection_id = c.id AND o.organization_id = c.organization_id
+ AND o.deleted IS FALSE
+WHERE r.organization_id = $1
+  AND o.remote_session_issuer_id = $2
+  AND r.remote_session_issuer_id = $3
+  AND r.resource = rtrim($4::text, '/')
+`
+
+type GetEMAChainingConfirmedAudienceParams struct {
+	OrganizationID        string
+	TrustedIssuerID       uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	Resource              string
+}
+
+// The ID-JAG audience an administrator confirmed for one upstream on the
+// organization's live Okta connection to the trusted identity provider. Okta
+// mints only for the resource app's Issuer URL, which can differ from the
+// downstream authorization server's issuer. Confirmed resources are stored
+// without a trailing slash.
+func (q *Queries) GetEMAChainingConfirmedAudience(ctx context.Context, arg GetEMAChainingConfirmedAudienceParams) (string, error) {
+	row := q.db.QueryRow(ctx, getEMAChainingConfirmedAudience,
+		arg.OrganizationID,
+		arg.TrustedIssuerID,
+		arg.RemoteSessionIssuerID,
+		arg.Resource,
+	)
+	var audience string
+	err := row.Scan(&audience)
+	return audience, err
+}
+
 const getEMAChainingUserIssuer = `-- name: GetEMAChainingUserIssuer :one
 SELECT trusted_remote_session_issuer_id, trusted_remote_session_client_id
 FROM user_session_issuers

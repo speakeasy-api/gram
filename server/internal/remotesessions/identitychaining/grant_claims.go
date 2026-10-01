@@ -41,8 +41,8 @@ func (claims grantClaims) check(header jose.Header, idpIssuer, upstreamSubject s
 	if !remotesessions.IssuerURLsEqual(claims.Issuer, idpIssuer) {
 		return errors.New("iss is not the trusted identity provider")
 	}
-	if len(claims.Audience) != 1 || !remotesessions.IssuerURLsEqual(claims.Audience[0], sel.issuer) {
-		return errors.New("aud is not the resource authorization server")
+	if len(claims.Audience) != 1 || !remotesessions.IssuerURLsEqual(claims.Audience[0], sel.audience) {
+		return errors.New("aud is not the requested audience")
 	}
 	if claims.Expiry == nil || claims.IssuedAt == nil {
 		return errors.New("exp and iat are required")

@@ -40,6 +40,7 @@ func testSelection() selection {
 		scopes:           []string{"read", "write"},
 		trustedIssuerID:  uuid.New(),
 		trustedClientID:  uuid.New(),
+		audience:         testResourceIssuer,
 	}
 }
 
@@ -95,7 +96,7 @@ func TestExchange_RequestsIDJAGForTheResource(t *testing.T) {
 	require.Equal(t, "id-token-value", form.Get("subject_token"))
 	require.Equal(t, oauthwire.TokenTypeIDToken, form.Get("subject_token_type"))
 	require.Equal(t, oauthwire.TokenTypeIDJAG, form.Get("requested_token_type"))
-	require.Equal(t, testResourceIssuer, form.Get("audience"), "audience is the resource authorization server issuer")
+	require.Equal(t, testResourceIssuer, form.Get("audience"), "audience is the selected ID-JAG audience")
 	require.Equal(t, testResource, form.Get("resource"), "the canonical resource keeps its trailing slash")
 	require.Equal(t, "read write", form.Get("scope"))
 	require.NotContains(t, form.Encode(), testResourceClient, "the resource client is never sent to the identity provider")
@@ -253,7 +254,7 @@ func (v claimsVerifier) VerifyAssertion(_ context.Context, _ string, dest ...any
 
 func validGrantClaims(sel selection, now time.Time) map[string]any {
 	return map[string]any{
-		"iss": testIdPIssuer, "sub": testUpstreamSubject, "aud": sel.issuer,
+		"iss": testIdPIssuer, "sub": testUpstreamSubject, "aud": sel.audience,
 		"client_id": sel.externalClientID, "resource": sel.resource, "scope": "read write",
 		"iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix(), "jti": uuid.NewString(),
 	}

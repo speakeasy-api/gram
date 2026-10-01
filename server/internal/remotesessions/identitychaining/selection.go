@@ -29,6 +29,11 @@ type selection struct {
 	// upstream identity provider registration, filled in by authorize.
 	trustedIssuerID uuid.UUID
 	trustedClientID uuid.UUID
+
+	// audience is the ID-JAG audience: an administrator-confirmed Okta
+	// resource app audience when one exists, else the resource authorization
+	// server's issuer. Filled in by authorize.
+	audience string
 }
 
 // selectBinding applies explicit binding selection: exactly one ready binding
@@ -88,5 +93,6 @@ func (c *Chainer) selectBinding(ctx context.Context, logger *slog.Logger, req Re
 		scopes:           result.Scopes,
 		trustedIssuerID:  uuid.Nil,
 		trustedClientID:  uuid.Nil,
+		audience:         "",
 	}, success
 }

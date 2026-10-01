@@ -4889,3 +4889,22 @@ SELECT id, deleted, access_token_encrypted, ema_binding_generation, subject_urn,
 FROM remote_session_ema_credentials
 WHERE project_id = @project_id
 ORDER BY created_at, id;
+
+-- name: GetEMAChainingConfirmedAudience :one
+-- The ID-JAG audience an administrator confirmed for one upstream on the
+-- organization's live Okta connection to the trusted identity provider. Okta
+-- mints only for the resource app's Issuer URL, which can differ from the
+-- downstream authorization server's issuer. Confirmed resources are stored
+-- without a trailing slash.
+SELECT r.audience
+FROM okta_resource_connections AS r
+JOIN identity_provider_connections AS c
+  ON c.id = r.identity_provider_connection_id AND c.organization_id = r.organization_id
+ AND c.provider = 'okta' AND c.deleted IS FALSE
+JOIN okta_identity_provider_connections AS o
+  ON o.identity_provider_connection_id = c.id AND o.organization_id = c.organization_id
+ AND o.deleted IS FALSE
+WHERE r.organization_id = @organization_id
+  AND o.remote_session_issuer_id = @trusted_issuer_id
+  AND r.remote_session_issuer_id = @remote_session_issuer_id
+  AND r.resource = rtrim(@resource::text, '/');

@@ -75,7 +75,7 @@ func newChainStoreFixture(t *testing.T) chainStoreFixture {
 		sel: selection{
 			bindingID: binding, generation: generation, remoteIssuerID: resourceIssuer, clientID: resourceClient,
 			externalClientID: testResourceClient, issuer: testResourceIssuer, resource: testResource,
-			scopes: []string{"read"}, trustedIssuerID: idpIssuer, trustedClientID: idpClient,
+			scopes: []string{"read"}, trustedIssuerID: idpIssuer, trustedClientID: idpClient, audience: testResourceIssuer,
 		},
 		sessionID: session.ID,
 	}
@@ -311,10 +311,12 @@ func TestStore_RevokedDelegationMakesCredentialUnusable(t *testing.T) {
 func TestStore_Authorize(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
-	sel := selection{}
+	sel := f.sel
+	sel.trustedIssuerID, sel.trustedClientID, sel.audience = uuid.Nil, uuid.Nil, ""
 	require.True(t, f.chainer.authorize(t.Context(), testenv.NewLogger(t), f.req, &sel).Succeeded())
 	require.Equal(t, f.sel.trustedIssuerID, sel.trustedIssuerID)
 	require.Equal(t, f.sel.trustedClientID, sel.trustedClientID)
+	require.Equal(t, testResourceIssuer, sel.audience, "without a confirmed Okta audience the resource authorization server's issuer is the audience")
 
 	nonMember := f.req
 	nonMember.UserID = "user-not-a-member"

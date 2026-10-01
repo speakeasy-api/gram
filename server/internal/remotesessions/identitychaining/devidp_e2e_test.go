@@ -3,6 +3,7 @@ package identitychaining
 import (
 	"bytes"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,7 +18,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	identityproviderconnectionsrepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	oktaresourceconnectionsrepo "github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -49,18 +52,33 @@ type devIDPFixture struct {
 	idpClientID uuid.UUID
 }
 
+// devIDPOptions varies the dev-idp tenant a fixture builds.
+type devIDPOptions struct {
+	// unassigned withholds the dev-idp assignment that lets Gram's app act for
+	// the human at the resource.
+	unassigned bool
+
+	// remoteIssuer, when set, is the issuer Gram records for the downstream
+	// authorization server instead of the dev-idp resource server's own, as
+	// with Linear, whose MCP authorization server and Okta resource app differ.
+	remoteIssuer string
+
+	// confirmAudience records an administrator-confirmed Okta resource
+	// connection naming the dev-idp resource server's issuer as audience.
+	confirmAudience bool
+}
+
 // newDevIDPFixture wires a human with a retained dev-idp ID token, a ready
 // binding for the dev-idp resource, and a chainer over the real egress, key
-// resolution and delegation service. assigned controls whether the dev-idp
-// lets Gram's app act for the human at the resource.
-func newDevIDPFixture(t *testing.T, assigned bool) devIDPFixture {
+// resolution and delegation service.
+func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 	t.Helper()
 	ctx := t.Context()
 	idp := devidptest.Launch(t, devidptest.LaunchOpts{TLS: true})
 	app := devidptest.CreateEmaApp(t, ctx, idp.Repo, devidptest.EmaAppOpts{ClientID: devIDPClientID, ClientSecret: "idp-secret"})
 	resource := devidptest.CreateEmaResource(t, ctx, idp.Repo, devidptest.EmaResourceOpts{Slug: devIDPResourceSlug, ResourceIdentifier: devIDPResource})
 	devidptest.TrustEmaIssuer(t, ctx, idp.Repo, resource.ID, idp.OAuth21URL, devidptest.EmaTrustRuleOpts{AllowedScopes: "read"})
-	if assigned {
+	if !opts.unassigned {
 		devidptest.AssignEmaApp(t, ctx, idp.Repo, app, idp.DefaultUser.ID, resource.ID, "read")
 	}
 
@@ -110,9 +128,28 @@ func newDevIDPFixture(t *testing.T, assigned bool) devIDPFixture {
 
 	// The resource authorization server registration and its ready binding.
 	resourceAS := idp.ResourceASURL(devIDPResourceSlug)
-	resourceIssuer, resourceClient := prepareResourceClient(t, db, enc, org, resourceAS, resourceAS+"/token", devIDPClientID, "unused-secret")
+	remoteIssuer := resourceAS
+	if opts.remoteIssuer != "" {
+		remoteIssuer = opts.remoteIssuer
+	}
+	resourceIssuer, resourceClient := prepareResourceClient(t, db, enc, org, remoteIssuer, resourceAS+"/token", devIDPClientID, "unused-secret")
 	req := Request{OrganizationID: org, ProjectID: project, UserSessionIssuerID: usi.ID, UserID: human, UpstreamResource: "https://mcp.docs.example"}
 	bindResource(t, db, req, resourceIssuer, resourceClient, devIDPResource, remotesessions.PreparationStateReady)
+
+	if opts.confirmAudience {
+		connection, err := identityproviderconnectionsrepo.New(db).CreateIdentityProviderConnection(ctx, identityproviderconnectionsrepo.CreateIdentityProviderConnectionParams{OrganizationID: org, Provider: "okta"})
+		require.NoError(t, err)
+		_, err = identityproviderconnectionsrepo.New(db).CreateOktaIdentityProviderConnection(ctx, identityproviderconnectionsrepo.CreateOktaIdentityProviderConnectionParams{
+			IdentityProviderConnectionID: connection.ID, OrganizationID: org, OrgUrl: idp.Issuer, IssuerUrl: idp.OAuth21URL,
+			RemoteSessionIssuerID: idpIssuer.ID, RemoteSessionClientID: idpClient.ID, ListingMode: "custom_app",
+		})
+		require.NoError(t, err)
+		_, err = oktaresourceconnectionsrepo.New(db).UpsertResourceConnection(ctx, oktaresourceconnectionsrepo.UpsertResourceConnectionParams{
+			OrganizationID: org, IdentityProviderConnectionID: connection.ID, RemoteSessionIssuerID: resourceIssuer,
+			Resource: strings.TrimRight(devIDPResource, "/"), Audience: resourceAS, OktaApplicationID: pgtype.Text{},
+		})
+		require.NoError(t, err)
+	}
 
 	// The human's delegation, as a verified federated login would retain it.
 	trusted, err := q.GetTrustedRemoteSessionClientForOrganization(ctx, repo.GetTrustedRemoteSessionClientForOrganizationParams{OrganizationID: org, IssuerID: idpIssuer.ID, ClientID: idpClient.ID})
@@ -170,7 +207,7 @@ func mintDevIDPIDToken(t *testing.T, idp *devidptest.Instance, subject string) s
 
 func TestDevIDP_AcquiresAndReusesDownstreamToken(t *testing.T) {
 	t.Parallel()
-	f := newDevIDPFixture(t, true)
+	f := newDevIDPFixture(t, devIDPOptions{})
 
 	token, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
@@ -202,7 +239,7 @@ func TestDevIDP_AcquiresAndReusesDownstreamToken(t *testing.T) {
 
 func TestDevIDP_UnassignedHumanIsDeniedAndCached(t *testing.T) {
 	t.Parallel()
-	f := newDevIDPFixture(t, false)
+	f := newDevIDPFixture(t, devIDPOptions{unassigned: true})
 
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.Equal(t, Outcome{Stage: StageExchange, Reason: ReasonAccessDenied, Confidence: ConfidenceInferred, Retryable: false, Cached: false}, outcome)
@@ -216,7 +253,7 @@ func TestDevIDP_UnassignedHumanIsDeniedAndCached(t *testing.T) {
 
 func TestDevIDP_RegistrationChangeRetiresStoredToken(t *testing.T) {
 	t.Parallel()
-	f := newDevIDPFixture(t, true)
+	f := newDevIDPFixture(t, devIDPOptions{})
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
 
@@ -232,4 +269,22 @@ func TestDevIDP_RegistrationChangeRetiresStoredToken(t *testing.T) {
 	require.Equal(t, Outcome{Stage: StageDelegation, Reason: ReasonConfigurationRequired, Confidence: ConfidenceVerified, Retryable: false, Cached: false}, outcome,
 		"a token acquired under the previous trusted registration is never released")
 	require.Equal(t, requests, f.idp.Requests())
+}
+
+// Okta mints ID-JAGs only for a resource app's Issuer URL, which can differ
+// from the downstream authorization server's issuer (Linear's resource app is
+// auth.linear.com, its MCP authorization server mcp.linear.app).
+func TestDevIDP_ConfirmedAudienceDiffersFromRemoteIssuer(t *testing.T) {
+	t.Parallel()
+	const remoteIssuer = "https://mcp.docs.example"
+
+	unconfirmed := newDevIDPFixture(t, devIDPOptions{remoteIssuer: remoteIssuer})
+	_, outcome := unconfirmed.chainer.Acquire(t.Context(), unconfirmed.req)
+	require.Equal(t, StageExchange, outcome.Stage)
+	require.False(t, outcome.Succeeded(), "without a confirmed audience the identity provider refuses the remote issuer as audience")
+
+	confirmed := newDevIDPFixture(t, devIDPOptions{remoteIssuer: remoteIssuer, confirmAudience: true})
+	token, outcome := confirmed.chainer.Acquire(t.Context(), confirmed.req)
+	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
+	require.NotEmpty(t, token.Value())
 }

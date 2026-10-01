@@ -237,14 +237,15 @@ func (c *Chainer) awaitConcurrentAcquisition(ctx context.Context, logger *slog.L
 }
 
 // cacheKey hashes the chained identity so resources of any length and content
-// make bounded, delimiter-safe keys. The binding generation and the trusted
-// identity provider registration are part of the identity, so a rebind or a
-// changed trust never inherits an earlier failure or lock.
+// make bounded, delimiter-safe keys. The binding generation, the trusted
+// identity provider registration and the audience are part of the identity, so
+// a rebind, changed trust or newly confirmed audience never inherits an
+// earlier failure or lock.
 func cacheKey(prefix string, req Request, sel selection) string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		req.OrganizationID, req.ProjectID.String(), req.UserSessionIssuerID.String(), req.UserID,
 		sel.bindingID.String(), strconv.FormatInt(sel.generation, 10),
-		sel.trustedIssuerID.String(), sel.trustedClientID.String(),
+		sel.trustedIssuerID.String(), sel.trustedClientID.String(), sel.audience,
 		sel.clientID.String(), sel.resource, strings.Join(sel.scopes, " "),
 	}, "\n")))
 	return prefix + ":" + hex.EncodeToString(digest[:])

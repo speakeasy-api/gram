@@ -94,7 +94,7 @@ func exchange(ctx context.Context, idp tokenPoster, idToken string, sel selectio
 	form.Set(oauthwire.ParamSubjectToken, idToken)
 	form.Set(oauthwire.ParamSubjectTokenType, oauthwire.TokenTypeIDToken)
 	form.Set(oauthwire.ParamRequestedTokenType, oauthwire.TokenTypeIDJAG)
-	form.Set(oauthwire.ParamAudience, sel.issuer)
+	form.Set(oauthwire.ParamAudience, sel.audience)
 	form.Set(oauthwire.ParamResource, sel.resource)
 	if len(sel.scopes) > 0 {
 		form.Set(oauthwire.ParamScope, strings.Join(sel.scopes, " "))
