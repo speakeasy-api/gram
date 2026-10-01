@@ -20,6 +20,8 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/HoverCard";
 import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { MultiSelect } from "@/components/ui/MultiSelect";
 import {
   Popover,
   PopoverContent,
@@ -50,7 +52,7 @@ import {
   X,
 } from "lucide-react";
 import type * as React from "react";
-import { useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { Link } from "react-router";
 import type {
   ClientOption,
@@ -699,6 +701,60 @@ function RegistrationMethodField({
   );
 }
 
+// Enough that a typical selection shows whole before it collapses to a count.
+const SCOPE_BADGE_LIMIT = 8;
+
+/** The scopes a manual client requests: advertised ones to pick, or typed. */
+function ScopeField({
+  draft,
+  disabled,
+  providerName,
+}: {
+  draft: UserIdentityDraft;
+  disabled: boolean;
+  providerName: string;
+}): JSX.Element {
+  const id = useId();
+  const labelId = `${id}-label`;
+  // Typed scopes join the list so the menu shows every selection.
+  const options = useMemo(
+    () =>
+      [...new Set([...draft.scopeOptions, ...draft.scopes])].map((scope) => ({
+        label: scope,
+        value: scope,
+      })),
+    [draft.scopeOptions, draft.scopes],
+  );
+  return (
+    <>
+      <Label id={labelId} htmlFor={id} className="block leading-normal">
+        Scope
+      </Label>
+      <MultiSelect
+        id={id}
+        // The trigger's built-in aria-label would otherwise hide the label.
+        aria-labelledby={labelId}
+        options={options}
+        value={draft.scopes}
+        onValueChange={draft.setScopes}
+        placeholder="Default scopes"
+        emptyIndicator="Type a scope to add it."
+        // Scopes are case-sensitive, so the badge must not uppercase them.
+        badgeClassName="normal-case tracking-normal"
+        maxCount={SCOPE_BADGE_LIMIT}
+        disabled={disabled}
+        creatable
+        caseSensitiveCreate
+        hideSelectAll
+      />
+      <Text muted small className="block">
+        Choose from the scopes this server and {providerName} advertise, or type
+        one to add it. Leave blank to request the default scopes.
+      </Text>
+    </>
+  );
+}
+
 function ManualCredentialsFields({
   draft,
   disabled,
@@ -743,20 +799,11 @@ function ManualCredentialsFields({
         </div>
       </div>
       <AdvancedOptions>
-        <Text small className="block font-medium">
-          Scope
-        </Text>
-        <Input
-          value={draft.scopeText}
-          onChange={draft.setScopeText}
-          placeholder="read write"
+        <ScopeField
+          draft={draft}
           disabled={disabled}
-          aria-label="Scope"
+          providerName={providerName}
         />
-        <Text muted small className="block">
-          Space-separated. Leave blank to request the scopes {providerName}{" "}
-          advertises.
-        </Text>
       </AdvancedOptions>
       {registrationGuideUrl ? (
         <Button variant="secondary" size="sm" asChild>
