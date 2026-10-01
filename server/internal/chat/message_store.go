@@ -552,10 +552,9 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		return 0, fmt.Errorf("get project organization id: %w", err)
 	}
 
-	prepared, err := w.PreparePublications(ctx, projectID, writes)
-	if err != nil {
-		return 0, err
-	}
+	// Preparation is speculative until the upsert confirms an insertion.
+	// Promotions and conflict no-ops do not need publication assets.
+	prepared, preparationErr := w.PreparePublications(ctx, projectID, writes)
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("begin correlated chat message transaction: %w", err)
@@ -609,6 +608,9 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		return 0, err
 	}
 	if stored.Inserted {
+		if preparationErr != nil {
+			return 0, preparationErr
+		}
 		writes[0].Params.ID = stored.ID
 		metered := writes[0]
 		metered.Params.Content = stored.Content
@@ -720,10 +722,9 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 		}
 
 		publicationWrites := []MessageWrite{externalPublication(*write)}
-		prepared, err := w.preparePublications(ctx, projectID, publicationWrites, parts)
-		if err != nil {
-			return total, err
-		}
+		// A duplicate requires no publication; defer speculative preparation
+		// errors until the insert decides whether the body is needed.
+		prepared, preparationErr := w.preparePublications(ctx, projectID, publicationWrites, parts)
 		inserted, err := func() (bool, error) {
 			tx, err := w.db.Begin(ctx)
 			if err != nil {
@@ -738,6 +739,9 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 				return false, nil
 			} else if err != nil {
 				return false, fmt.Errorf("create external chat message: %w", err)
+			}
+			if preparationErr != nil {
+				return false, preparationErr
 			}
 			if attached := parts[param.ID]; len(attached) > 0 {
 				for _, part := range attached {

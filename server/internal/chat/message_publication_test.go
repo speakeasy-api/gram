@@ -130,6 +130,70 @@ func conversationMessages(t *testing.T, ti *chatTestInstance) []*conversationv1.
 	return messages
 }
 
+func TestPublicationPreparationFailureOnlyRejectsInsertions(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"external", "correlated"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			ti := newTestChatService(t)
+			ctx := initSessionCtx(t, ti)
+			chatID := seedChat(t, ctx, ti, "u", "", "preparation failure")
+			// No asset store: oversized preparations fail deterministically.
+			writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
+			t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+			params := minimalChatMessageParams(chatID, ti.projectID)
+			params.Source = conv.ToPGText("litellm")
+			write := func(externalID string) (int64, error) {
+				if mode == "correlated" {
+					return writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{Params: params}, externalID)
+				}
+				return writer.WriteExternal(ctx, ti.projectID, []chat.ExternalMessageWrite{{Params: repo.CreateExternalChatMessageParams{
+					ID: params.ID, ChatID: chatID, ProjectID: ti.projectID, Role: params.Role, Content: params.Content,
+					ContentRaw: params.ContentRaw, ExternalMessageID: conv.ToPGText(externalID), Source: params.Source,
+				}}})
+			}
+			_, err := write("existing")
+			require.NoError(t, err)
+			params.ID = uuid.New()
+			params.Source = conv.ToPGText("opencode")
+			params.ContentRaw = []byte(`{"payload":"` + strings.Repeat("x", 8*1024*1024) + `"}`)
+			n, err := write("existing")
+			require.NoError(t, err)
+			if mode == "correlated" {
+				require.EqualValues(t, 1, n)
+			} else {
+				require.Zero(t, n)
+			}
+			_, err = write("existing")
+			require.NoError(t, err)
+			_, err = write("new")
+			require.Error(t, err)
+			require.Len(t, conversationMessages(t, ti), 1)
+			params.ContentRaw = nil
+			n, err = write("new")
+			require.NoError(t, err)
+			require.EqualValues(t, 1, n, "failed preparation must roll back insertion")
+		})
+	}
+}
+
+func TestPublicationPreservesObjectToolArguments(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	chatID := seedChat(t, ctx, ti, "u", "", "object arguments")
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
+	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	_, err := writer.WriteExternal(ctx, ti.projectID, []chat.ExternalMessageWrite{{Params: repo.CreateExternalChatMessageParams{
+		ID: uuid.New(), ChatID: chatID, ProjectID: ti.projectID, Role: "assistant", ExternalMessageID: conv.ToPGText("object-args"),
+		ToolCalls: []byte(`[{"id":"call-1","function":{"name":"lookup","arguments":{"query":"example","limit":2}}}]`),
+	}}})
+	require.NoError(t, err)
+	messages := conversationMessages(t, ti)
+	require.Len(t, messages, 1)
+	require.JSONEq(t, `{"query":"example","limit":2}`, messages[0].GetBody().GetParts()[0].GetToolCall().GetArgumentsJson())
+}
+
 func TestConversationPublicationIncludesEmptyMessages(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)

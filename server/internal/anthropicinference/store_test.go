@@ -366,6 +366,21 @@ func TestStorePreservesNativePolicyScopesAndIncomingMessageCount(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, messages, 5)
 	require.Equal(t, "summary", messages[4].Content)
+	publications, err = testrepo.New(db).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	var unsplit *conversationv1.Message
+	for _, row := range publications {
+		if row.Topic != string(proto.MessageName(&conversationv1.Message{})) {
+			continue
+		}
+		event := &conversationv1.Message{}
+		require.NoError(t, proto.Unmarshal(row.Message, event))
+		if event.GetId() == messages[4].ID.String() {
+			unsplit = event
+		}
+	}
+	require.NotNil(t, unsplit)
+	require.JSONEq(t, string(frame.Messages[2].Content), string(unsplit.GetBody().GetSourceContentJson()))
 }
 
 func TestExternalContentPartsCommitWithParent(t *testing.T) {

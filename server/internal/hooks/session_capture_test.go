@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -31,6 +33,34 @@ import (
 )
 
 type alwaysEnabledFeatures struct{}
+
+func TestPromptFallbackSuppressesPublicationPreparationFailure(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
+	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	ti.service.writer = writer
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	sessionID := uuid.NewString()
+	metadata := &SessionMetadata{SessionID: sessionID, ServiceName: "claude-code", GramOrgID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String()}
+	params := chatRepo.CreateChatMessageParams{
+		ID: uuid.New(), ChatID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID,
+		Role: "user", Content: "native prompt", Source: conv.ToPGText("claude-code"),
+	}
+	inserted, err := ti.service.insertUncorrelatedAgentPrompt(ctx, metadata, params, "native prompt", true)
+	require.NoError(t, err)
+	require.True(t, inserted)
+	params.ID = uuid.New()
+	params.Source = conv.ToPGText("litellm")
+	params.ContentRaw = []byte(`{"payload":"` + strings.Repeat("x", 8*1024*1024) + `"}`)
+	_, err = writer.PreparePublications(ctx, *authCtx.ProjectID, []chat.MessageWrite{{Params: params}})
+	require.Error(t, err)
+	inserted, err = ti.service.insertUncorrelatedAgentPrompt(ctx, metadata, params, "duplicate prompt", false)
+	require.NoError(t, err)
+	require.False(t, inserted)
+}
 
 func (alwaysEnabledFeatures) IsFeatureEnabled(_ context.Context, _ string, _ productfeatures.Feature) (bool, error) {
 	return true, nil
