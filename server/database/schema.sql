@@ -2802,6 +2802,15 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   -- Announces the deployment's authentication host, rather than the MCP host,
   -- as the OAuth issuer and endpoint origin for this issuer's servers.
   use_authentication_host boolean NOT NULL DEFAULT false,
+  -- One of ('endpoint', 'shared'), validated in application code. 'endpoint'
+  -- gives every MCP server attached to this issuer its own OAuth authorization
+  -- server. 'shared' serves one authorization server for the issuer, used by
+  -- all of its MCP servers.
+  authorization_server_mode TEXT NOT NULL DEFAULT 'endpoint',
+  -- The OAuth issuer identifier of a 'shared' authorization server, fixed when
+  -- the issuer is created so it stays the same if the deployment's server URL
+  -- later changes. NULL in 'endpoint' mode, where each server derives its own.
+  pinned_issuer_url TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3045,6 +3054,11 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   -- reports credential maintenance rather than use. NULL means the session has
   -- not been used since the column was introduced.
   last_used_at timestamptz,
+  -- The MCP server this session's access token is bound to, as its RFC 8707
+  -- resource indicator. A 'shared' authorization server serves several MCP
+  -- servers, so a refresh reads this to issue for the same one. NULL for
+  -- sessions of an 'endpoint' authorization server, which serves only one.
+  resource TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
