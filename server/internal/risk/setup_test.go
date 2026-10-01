@@ -235,6 +235,7 @@ type testInstance struct {
 	completionClient             openrouter.CompletionClient
 	cacheDeletes                 *countingCache
 	chConn                       clickhouse.Conn
+	findingEvidence              *risk.MCPFindingEvidenceStore
 	// assetStorage backs content-part reads on the ClickHouse reveal path.
 	assetStorage     blobio.Reader
 	riskPublisher    gcp.Publisher[*meteringv1.MeterReading]
@@ -270,6 +271,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
 	auditLogger := audit.NewLogger()
 	flags := &feature.InMemory{}
+	findingEvidence := risk.NewMCPFindingEvidenceStore(conn, testenv.NewEncryptionClient(t))
 
 	judge := &stubJudge{evaluate: nil}
 
@@ -290,6 +292,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		cacheDeletes:     cacheAdapter,
 		chConn:           chConn,
 		assetStorage:     assetstest.NewTestBlobStore(t),
+		findingEvidence:  findingEvidence,
 		riskPublisher:    nil,
 		platformToolsets: platformtools.BuildToolsets(platformtools.ToolsetDependencies{}),
 	}
@@ -303,7 +306,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)
 	}, func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
 		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURLs)
-	}, chrepo.New(chConn), ti.assetStorage, metering.NewRiskRecorder(ti.riskPublisher), ti.platformToolsets)
+	}, ti.findingEvidence, chrepo.New(chConn), ti.assetStorage, metering.NewRiskRecorder(ti.riskPublisher), ti.platformToolsets)
 
 	return ctx, ti
 }

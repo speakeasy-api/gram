@@ -432,6 +432,26 @@ SET disabled_at = NULL,
     updated_at = clock_timestamp()
 WHERE id = @id;
 
+-- name: LockOrganizationAccess :one
+-- Pin canonical identity and current access state before a guarded transition.
+SELECT id, name, slug, disabled_at
+FROM organization_metadata
+WHERE id = @id
+FOR UPDATE;
+
+-- name: SetOrganizationAccess :one
+-- Caller holds the metadata lock. Preserve disable timestamp semantics and the
+-- WorkOS webhook cursor while checking that the expected state still matches.
+UPDATE organization_metadata
+SET disabled_at = CASE
+        WHEN @enabled::boolean THEN NULL
+        ELSE COALESCE(disabled_at, clock_timestamp())
+    END,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND disabled_at IS NOT DISTINCT FROM @expected_disabled_at::timestamptz
+RETURNING id, name, slug, disabled_at;
+
 -- name: AdminListProjectsForOrganization :many
 -- Not a plain sum: once AGE-1880 copies legacy servers into mcp_servers, a
 -- toolset and its mcp_servers row would each be counted. The anti join on the
@@ -532,6 +552,32 @@ WHERE our.organization_id = @organization_id
 ORDER BY u.email ASC
 LIMIT 200;
 
+-- name: AdminListOrganizationMembersPage :many
+SELECT
+    u.id,
+    u.email,
+    u.display_name,
+    u.last_login,
+    u.created_at,
+    u.updated_at
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = @organization_id
+  AND our.deleted IS FALSE
+  AND u.deleted_at IS NULL
+  AND u.id > @after_user_id::text
+ORDER BY u.id ASC
+LIMIT @page_limit;
+
+-- name: AdminGetOrganizationMemberCursor :one
+SELECT u.id
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = @organization_id
+  AND our.deleted IS FALSE
+  AND u.deleted_at IS NULL
+  AND u.id = @user_id;
+
 -- name: AdminGetOrganization :one
 -- Resolving a slug is opt-in because every admin write is keyed on id alone.
 -- Both columns are bare TEXT, so one organization's slug can equal another's
@@ -622,10 +668,52 @@ RETURNING organization_id;
 SELECT pg_advisory_xact_lock(719438201);
 
 -- name: SeedSupportPlatforms :exec
+-- The catalog owns a platform's name, vendor, family, surface and order, so
+-- those follow the file on every start; staff edit facts, not platforms.
 INSERT INTO support_matrix_platforms (slug, name, vendor, family, surface, sort_order)
 SELECT value->>'id', value->>'name', value->>'vendor', value->>'family', value->>'surface', ordinality::integer
 FROM jsonb_array_elements(sqlc.arg(catalog)::jsonb->'products') WITH ORDINALITY
-ON CONFLICT (slug) DO NOTHING;
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    vendor = EXCLUDED.vendor,
+    family = EXCLUDED.family,
+    surface = EXCLUDED.surface,
+    sort_order = EXCLUDED.sort_order,
+    updated_at = clock_timestamp()
+WHERE support_matrix_platforms.name IS DISTINCT FROM EXCLUDED.name
+   OR support_matrix_platforms.vendor IS DISTINCT FROM EXCLUDED.vendor
+   OR support_matrix_platforms.family IS DISTINCT FROM EXCLUDED.family
+   OR support_matrix_platforms.surface IS DISTINCT FROM EXCLUDED.surface
+   OR support_matrix_platforms.sort_order IS DISTINCT FROM EXCLUDED.sort_order;
+
+-- name: SeedSupportPlans :exec
+-- The catalog owns plans outright: a plan it names is (re)instated with the
+-- catalog's vendor, name and order, and RetireSupportPlans below soft-deletes
+-- the ones it no longer names.
+INSERT INTO support_matrix_plans (slug, vendor, name, sort_order)
+SELECT value->>'id', value->>'vendor', value->>'name', ordinality::integer
+FROM jsonb_array_elements(sqlc.arg(catalog)::jsonb->'plans') WITH ORDINALITY
+ON CONFLICT (slug) DO UPDATE SET
+    vendor = EXCLUDED.vendor,
+    name = EXCLUDED.name,
+    sort_order = EXCLUDED.sort_order,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+WHERE support_matrix_plans.vendor IS DISTINCT FROM EXCLUDED.vendor
+   OR support_matrix_plans.name IS DISTINCT FROM EXCLUDED.name
+   OR support_matrix_plans.sort_order IS DISTINCT FROM EXCLUDED.sort_order
+   OR support_matrix_plans.deleted_at IS NOT NULL;
+
+-- name: RetireSupportPlans :exec
+-- An organization that declared a retired plan keeps its vendor and loses the
+-- plan: the stack reads plans through deleted_at IS NULL.
+UPDATE support_matrix_plans
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE deleted_at IS NULL
+  AND slug NOT IN (
+    SELECT value->>'id'
+    FROM jsonb_array_elements(sqlc.arg(catalog)::jsonb->'plans')
+  );
 
 -- name: SeedSupportMethods :exec
 INSERT INTO support_matrix_integration_methods (slug, name, vendor, plan_notes, sort_order)

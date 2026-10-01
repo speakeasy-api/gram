@@ -1238,66 +1238,6 @@ func BuildMarkEnterpriseTrialConvertedPayload(adminMarkEnterpriseTrialConvertedB
 	return v, nil
 }
 
-// BuildGetOrganizationOnboardingPayload builds the payload for the admin
-// getOrganizationOnboarding endpoint from CLI flags.
-func BuildGetOrganizationOnboardingPayload(adminGetOrganizationOnboardingOrganizationID string, adminGetOrganizationOnboardingAdminSessionToken string) (*admin.GetOrganizationOnboardingPayload, error) {
-	var organizationID string
-	{
-		organizationID = adminGetOrganizationOnboardingOrganizationID
-	}
-	var adminSessionToken *string
-	{
-		if adminGetOrganizationOnboardingAdminSessionToken != "" {
-			adminSessionToken = &adminGetOrganizationOnboardingAdminSessionToken
-		}
-	}
-	v := &admin.GetOrganizationOnboardingPayload{}
-	v.OrganizationID = organizationID
-	v.AdminSessionToken = adminSessionToken
-
-	return v, nil
-}
-
-// BuildSetOrganizationOnboardingPayload builds the payload for the admin
-// setOrganizationOnboarding endpoint from CLI flags.
-func BuildSetOrganizationOnboardingPayload(adminSetOrganizationOnboardingBody string, adminSetOrganizationOnboardingAdminSessionToken string) (*admin.SetOrganizationOnboardingPayload, error) {
-	var err error
-	var body SetOrganizationOnboardingRequestBody
-	{
-		err = json.Unmarshal([]byte(adminSetOrganizationOnboardingBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\",\n      \"preset\": \"abc123\",\n      \"visible_task_keys\": [\n         \"abc123\"\n      ]\n   }'")
-		}
-		if body.VisibleTaskKeys == nil {
-			err = goa.MergeErrors(err, goa.MissingFieldError("visible_task_keys", "body"))
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var adminSessionToken *string
-	{
-		if adminSetOrganizationOnboardingAdminSessionToken != "" {
-			adminSessionToken = &adminSetOrganizationOnboardingAdminSessionToken
-		}
-	}
-	v := &admin.SetOrganizationOnboardingPayload{
-		OrganizationID: body.OrganizationID,
-		Preset:         body.Preset,
-	}
-	if body.VisibleTaskKeys != nil {
-		v.VisibleTaskKeys = make([]string, len(body.VisibleTaskKeys))
-		for i, val := range body.VisibleTaskKeys {
-			v.VisibleTaskKeys[i] = val
-		}
-	} else {
-		v.VisibleTaskKeys = []string{}
-	}
-	v.AdminSessionToken = adminSessionToken
-
-	return v, nil
-}
-
 // BuildCreateGlobalIssuerPayload builds the payload for the admin
 // createGlobalIssuer endpoint from CLI flags.
 func BuildCreateGlobalIssuerPayload(adminCreateGlobalIssuerBody string, adminCreateGlobalIssuerAdminSessionToken string) (*admin.CreateGlobalIssuerPayload, error) {
@@ -2309,6 +2249,400 @@ func BuildSetRegistryEntryPublishedPayload(adminSetRegistryEntryPublishedBody st
 		ID:        body.ID,
 		UpdatedAt: body.UpdatedAt,
 		Published: body.Published,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListOnboardingStepsPayload builds the payload for the admin
+// listOnboardingSteps endpoint from CLI flags.
+func BuildListOnboardingStepsPayload(adminListOnboardingStepsAdminSessionToken string) (*admin.ListOnboardingStepsPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminListOnboardingStepsAdminSessionToken != "" {
+			adminSessionToken = &adminListOnboardingStepsAdminSessionToken
+		}
+	}
+	v := &admin.ListOnboardingStepsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetOnboardingStackOptionsPayload builds the payload for the admin
+// getOnboardingStackOptions endpoint from CLI flags.
+func BuildGetOnboardingStackOptionsPayload(adminGetOnboardingStackOptionsAdminSessionToken string) (*admin.GetOnboardingStackOptionsPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminGetOnboardingStackOptionsAdminSessionToken != "" {
+			adminSessionToken = &adminGetOnboardingStackOptionsAdminSessionToken
+		}
+	}
+	v := &admin.GetOnboardingStackOptionsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetOrganizationOnboardingStackPayload builds the payload for the admin
+// getOrganizationOnboardingStack endpoint from CLI flags.
+func BuildGetOrganizationOnboardingStackPayload(adminGetOrganizationOnboardingStackOrganizationID string, adminGetOrganizationOnboardingStackAdminSessionToken string) (*admin.GetOrganizationOnboardingStackPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetOrganizationOnboardingStackOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetOrganizationOnboardingStackAdminSessionToken != "" {
+			adminSessionToken = &adminGetOrganizationOnboardingStackAdminSessionToken
+		}
+	}
+	v := &admin.GetOrganizationOnboardingStackPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildSetOrganizationOnboardingStackPayload builds the payload for the admin
+// setOrganizationOnboardingStack endpoint from CLI flags.
+func BuildSetOrganizationOnboardingStackPayload(adminSetOrganizationOnboardingStackBody string, adminSetOrganizationOnboardingStackAdminSessionToken string) (*admin.SetOrganizationOnboardingStackPayload, error) {
+	var err error
+	var body SetOrganizationOnboardingStackRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetOrganizationOnboardingStackBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mdm_vendor\": \"abc123\",\n      \"mdm_vendor_name\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"vendors\": [\n         {\n            \"plan_slug\": \"abc123\",\n            \"vendor\": \"abc123\"\n         }\n      ]\n   }'")
+		}
+		if body.Vendors == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("vendors", "body"))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetOrganizationOnboardingStackAdminSessionToken != "" {
+			adminSessionToken = &adminSetOrganizationOnboardingStackAdminSessionToken
+		}
+	}
+	v := &admin.SetOrganizationOnboardingStackPayload{
+		OrganizationID: body.OrganizationID,
+		MdmVendor:      body.MdmVendor,
+		MdmVendorName:  body.MdmVendorName,
+	}
+	if body.Vendors != nil {
+		v.Vendors = make([]*admin.AdminOnboardingStackVendor, len(body.Vendors))
+		for i, val := range body.Vendors {
+			if val == nil {
+				v.Vendors[i] = nil
+				continue
+			}
+			v.Vendors[i] = marshalAdminOnboardingStackVendorRequestBodyToAdminAdminOnboardingStackVendor(val)
+		}
+	} else {
+		v.Vendors = []*admin.AdminOnboardingStackVendor{}
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListOnboardingUseCasesPayload builds the payload for the admin
+// listOnboardingUseCases endpoint from CLI flags.
+func BuildListOnboardingUseCasesPayload(adminListOnboardingUseCasesAdminSessionToken string) (*admin.ListOnboardingUseCasesPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminListOnboardingUseCasesAdminSessionToken != "" {
+			adminSessionToken = &adminListOnboardingUseCasesAdminSessionToken
+		}
+	}
+	v := &admin.ListOnboardingUseCasesPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildCreateOnboardingUseCasePayload builds the payload for the admin
+// createOnboardingUseCase endpoint from CLI flags.
+func BuildCreateOnboardingUseCasePayload(adminCreateOnboardingUseCaseBody string, adminCreateOnboardingUseCaseAdminSessionToken string) (*admin.CreateOnboardingUseCasePayload, error) {
+	var err error
+	var body CreateOnboardingUseCaseRequestBody
+	{
+		err = json.Unmarshal([]byte(adminCreateOnboardingUseCaseBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminCreateOnboardingUseCaseAdminSessionToken != "" {
+			adminSessionToken = &adminCreateOnboardingUseCaseAdminSessionToken
+		}
+	}
+	v := &admin.CreateOnboardingUseCasePayload{
+		Slug:        body.Slug,
+		Name:        body.Name,
+		Description: body.Description,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildUpdateOnboardingUseCasePayload builds the payload for the admin
+// updateOnboardingUseCase endpoint from CLI flags.
+func BuildUpdateOnboardingUseCasePayload(adminUpdateOnboardingUseCaseBody string, adminUpdateOnboardingUseCaseAdminSessionToken string) (*admin.UpdateOnboardingUseCasePayload, error) {
+	var err error
+	var body UpdateOnboardingUseCaseRequestBody
+	{
+		err = json.Unmarshal([]byte(adminUpdateOnboardingUseCaseBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"use_case_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminUpdateOnboardingUseCaseAdminSessionToken != "" {
+			adminSessionToken = &adminUpdateOnboardingUseCaseAdminSessionToken
+		}
+	}
+	v := &admin.UpdateOnboardingUseCasePayload{
+		UseCaseID:   body.UseCaseID,
+		Name:        body.Name,
+		Description: body.Description,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildDeleteOnboardingUseCasePayload builds the payload for the admin
+// deleteOnboardingUseCase endpoint from CLI flags.
+func BuildDeleteOnboardingUseCasePayload(adminDeleteOnboardingUseCaseBody string, adminDeleteOnboardingUseCaseAdminSessionToken string) (*admin.DeleteOnboardingUseCasePayload, error) {
+	var err error
+	var body DeleteOnboardingUseCaseRequestBody
+	{
+		err = json.Unmarshal([]byte(adminDeleteOnboardingUseCaseBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"use_case_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminDeleteOnboardingUseCaseAdminSessionToken != "" {
+			adminSessionToken = &adminDeleteOnboardingUseCaseAdminSessionToken
+		}
+	}
+	v := &admin.DeleteOnboardingUseCasePayload{
+		UseCaseID: body.UseCaseID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListOnboardingPlaybooksPayload builds the payload for the admin
+// listOnboardingPlaybooks endpoint from CLI flags.
+func BuildListOnboardingPlaybooksPayload(adminListOnboardingPlaybooksOrganizationID string, adminListOnboardingPlaybooksAdminSessionToken string) (*admin.ListOnboardingPlaybooksPayload, error) {
+	var organizationID *string
+	{
+		if adminListOnboardingPlaybooksOrganizationID != "" {
+			organizationID = &adminListOnboardingPlaybooksOrganizationID
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListOnboardingPlaybooksAdminSessionToken != "" {
+			adminSessionToken = &adminListOnboardingPlaybooksAdminSessionToken
+		}
+	}
+	v := &admin.ListOnboardingPlaybooksPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildCreateOnboardingPlaybookPayload builds the payload for the admin
+// createOnboardingPlaybook endpoint from CLI flags.
+func BuildCreateOnboardingPlaybookPayload(adminCreateOnboardingPlaybookBody string, adminCreateOnboardingPlaybookAdminSessionToken string) (*admin.CreateOnboardingPlaybookPayload, error) {
+	var err error
+	var body CreateOnboardingPlaybookRequestBody
+	{
+		err = json.Unmarshal([]byte(adminCreateOnboardingPlaybookBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"is_default\": false,\n      \"name\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"step_slugs\": [\n         \"abc123\"\n      ],\n      \"use_case_id\": \"abc123\"\n   }'")
+		}
+		if body.StepSlugs == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("step_slugs", "body"))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminCreateOnboardingPlaybookAdminSessionToken != "" {
+			adminSessionToken = &adminCreateOnboardingPlaybookAdminSessionToken
+		}
+	}
+	v := &admin.CreateOnboardingPlaybookPayload{
+		UseCaseID:      body.UseCaseID,
+		OrganizationID: body.OrganizationID,
+		Name:           body.Name,
+		Description:    body.Description,
+		IsDefault:      body.IsDefault,
+	}
+	if body.StepSlugs != nil {
+		v.StepSlugs = make([]string, len(body.StepSlugs))
+		for i, val := range body.StepSlugs {
+			v.StepSlugs[i] = val
+		}
+	} else {
+		v.StepSlugs = []string{}
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildUpdateOnboardingPlaybookPayload builds the payload for the admin
+// updateOnboardingPlaybook endpoint from CLI flags.
+func BuildUpdateOnboardingPlaybookPayload(adminUpdateOnboardingPlaybookBody string, adminUpdateOnboardingPlaybookAdminSessionToken string) (*admin.UpdateOnboardingPlaybookPayload, error) {
+	var err error
+	var body UpdateOnboardingPlaybookRequestBody
+	{
+		err = json.Unmarshal([]byte(adminUpdateOnboardingPlaybookBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"is_default\": false,\n      \"name\": \"abc123\",\n      \"playbook_id\": \"abc123\",\n      \"step_slugs\": [\n         \"abc123\"\n      ]\n   }'")
+		}
+		if body.StepSlugs == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("step_slugs", "body"))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminUpdateOnboardingPlaybookAdminSessionToken != "" {
+			adminSessionToken = &adminUpdateOnboardingPlaybookAdminSessionToken
+		}
+	}
+	v := &admin.UpdateOnboardingPlaybookPayload{
+		PlaybookID:  body.PlaybookID,
+		Name:        body.Name,
+		Description: body.Description,
+		IsDefault:   body.IsDefault,
+	}
+	if body.StepSlugs != nil {
+		v.StepSlugs = make([]string, len(body.StepSlugs))
+		for i, val := range body.StepSlugs {
+			v.StepSlugs[i] = val
+		}
+	} else {
+		v.StepSlugs = []string{}
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildDeleteOnboardingPlaybookPayload builds the payload for the admin
+// deleteOnboardingPlaybook endpoint from CLI flags.
+func BuildDeleteOnboardingPlaybookPayload(adminDeleteOnboardingPlaybookBody string, adminDeleteOnboardingPlaybookAdminSessionToken string) (*admin.DeleteOnboardingPlaybookPayload, error) {
+	var err error
+	var body DeleteOnboardingPlaybookRequestBody
+	{
+		err = json.Unmarshal([]byte(adminDeleteOnboardingPlaybookBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"playbook_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminDeleteOnboardingPlaybookAdminSessionToken != "" {
+			adminSessionToken = &adminDeleteOnboardingPlaybookAdminSessionToken
+		}
+	}
+	v := &admin.DeleteOnboardingPlaybookPayload{
+		PlaybookID: body.PlaybookID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildCloneOnboardingPlaybookPayload builds the payload for the admin
+// cloneOnboardingPlaybook endpoint from CLI flags.
+func BuildCloneOnboardingPlaybookPayload(adminCloneOnboardingPlaybookBody string, adminCloneOnboardingPlaybookAdminSessionToken string) (*admin.CloneOnboardingPlaybookPayload, error) {
+	var err error
+	var body CloneOnboardingPlaybookRequestBody
+	{
+		err = json.Unmarshal([]byte(adminCloneOnboardingPlaybookBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"playbook_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminCloneOnboardingPlaybookAdminSessionToken != "" {
+			adminSessionToken = &adminCloneOnboardingPlaybookAdminSessionToken
+		}
+	}
+	v := &admin.CloneOnboardingPlaybookPayload{
+		OrganizationID: body.OrganizationID,
+		PlaybookID:     body.PlaybookID,
+		Name:           body.Name,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetOrganizationOnboardingPlaybookPayload builds the payload for the
+// admin getOrganizationOnboardingPlaybook endpoint from CLI flags.
+func BuildGetOrganizationOnboardingPlaybookPayload(adminGetOrganizationOnboardingPlaybookOrganizationID string, adminGetOrganizationOnboardingPlaybookAdminSessionToken string) (*admin.GetOrganizationOnboardingPlaybookPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetOrganizationOnboardingPlaybookOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetOrganizationOnboardingPlaybookAdminSessionToken != "" {
+			adminSessionToken = &adminGetOrganizationOnboardingPlaybookAdminSessionToken
+		}
+	}
+	v := &admin.GetOrganizationOnboardingPlaybookPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildAssignOrganizationOnboardingPlaybookPayload builds the payload for the
+// admin assignOrganizationOnboardingPlaybook endpoint from CLI flags.
+func BuildAssignOrganizationOnboardingPlaybookPayload(adminAssignOrganizationOnboardingPlaybookBody string, adminAssignOrganizationOnboardingPlaybookAdminSessionToken string) (*admin.AssignOrganizationOnboardingPlaybookPayload, error) {
+	var err error
+	var body AssignOrganizationOnboardingPlaybookRequestBody
+	{
+		err = json.Unmarshal([]byte(adminAssignOrganizationOnboardingPlaybookBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\",\n      \"playbook_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminAssignOrganizationOnboardingPlaybookAdminSessionToken != "" {
+			adminSessionToken = &adminAssignOrganizationOnboardingPlaybookAdminSessionToken
+		}
+	}
+	v := &admin.AssignOrganizationOnboardingPlaybookPayload{
+		OrganizationID: body.OrganizationID,
+		PlaybookID:     body.PlaybookID,
 	}
 	v.AdminSessionToken = adminSessionToken
 

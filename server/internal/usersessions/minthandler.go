@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -36,10 +37,6 @@ const (
 	// doesn't have a refresh-token surface; the dashboard re-mints by calling
 	// this method again with a fresh dashboard session.
 	mintAccessTokenLifetime = 1 * time.Hour
-
-	// dashboardMintRefreshTokenHashPrefix marks user_sessions rows minted by the
-	// dashboard instead of a DCR-registered OAuth client.
-	dashboardMintRefreshTokenHashPrefix = "dashboard-mint"
 )
 
 // mintTarget is the issuer-gated audience the JWT is bound to, resolved from
@@ -70,9 +67,10 @@ type mintTarget struct {
 //
 // Persists a user_sessions row with user_session_client_id = NULL — the minted
 // JWT has no DCR-registered OAuth client behind it. Its refresh token hash uses
-// dashboardMintRefreshTokenHashPrefix as the source sentinel. The row is
-// otherwise identical to a /token-issued session so userSessions.list,
-// userSessions.revoke, and the runtime revocation cache all work unchanged.
+// sessiontokens.DashboardMintRefreshTokenHashPrefix as the source sentinel, which
+// is what userSessions.list reads to label the connection. The row is otherwise
+// identical to a /token-issued session so userSessions.revoke and the runtime
+// revocation cache all work unchanged.
 func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSessionPayload) (*gen.MintUserSessionResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.UserID == "" || authCtx.ProjectID == nil {
@@ -154,7 +152,8 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	now := time.Now()
 	if _, err := repo.New(s.db).CreateUserSession(ctx, repo.CreateUserSessionParams{
 		UserSessionIssuerID: target.issuerID,
-		// No DCR-registered client — this mint bypasses the OAuth dance.
+		// No registration row. The refresh-token sentinel is what the session
+		// list reads to label the connection as the dashboard.
 		UserSessionClientID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		SubjectUrn:             subject,
 		AuthorizerUserID:       pgtype.Text{String: "", Valid: false},
@@ -165,7 +164,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		// again. Store a sentinel that satisfies the NOT NULL + unique constraint
 		// without colliding with any real sha256 hash; the column will be migrated
 		// to nullable separately.
-		RefreshTokenHash: conv.ToPGText(fmt.Sprintf("%s:%s", dashboardMintRefreshTokenHashPrefix, jti)),
+		RefreshTokenHash: conv.ToPGText(fmt.Sprintf("%s:%s", sessiontokens.DashboardMintRefreshTokenHashPrefix, jti)),
 		ExpiresAt:        pgtype.Timestamptz{Time: now.Add(mintAccessTokenLifetime), InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt: pgtype.Timestamptz{Time: now.Add(refreshLifetime), InfinityModifier: 0, Valid: true},
 		ToolSelection:    nil,

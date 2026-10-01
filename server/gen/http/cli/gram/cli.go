@@ -195,7 +195,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|get-organization-onboarding|set-organization-onboarding|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|get-stripe-subscription-candidate|set-stripe-subscription)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|get-stripe-subscription-candidate|set-stripe-subscription)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -4255,14 +4255,6 @@ func ParseEndpoint(
 		adminMarkEnterpriseTrialConvertedBodyFlag              = adminMarkEnterpriseTrialConvertedFlags.String("body", "REQUIRED", "")
 		adminMarkEnterpriseTrialConvertedAdminSessionTokenFlag = adminMarkEnterpriseTrialConvertedFlags.String("admin-session-token", "", "")
 
-		adminGetOrganizationOnboardingFlags                 = flag.NewFlagSet("get-organization-onboarding", flag.ExitOnError)
-		adminGetOrganizationOnboardingOrganizationIDFlag    = adminGetOrganizationOnboardingFlags.String("organization-id", "REQUIRED", "")
-		adminGetOrganizationOnboardingAdminSessionTokenFlag = adminGetOrganizationOnboardingFlags.String("admin-session-token", "", "")
-
-		adminSetOrganizationOnboardingFlags                 = flag.NewFlagSet("set-organization-onboarding", flag.ExitOnError)
-		adminSetOrganizationOnboardingBodyFlag              = adminSetOrganizationOnboardingFlags.String("body", "REQUIRED", "")
-		adminSetOrganizationOnboardingAdminSessionTokenFlag = adminSetOrganizationOnboardingFlags.String("admin-session-token", "", "")
-
 		adminCreateGlobalIssuerFlags                 = flag.NewFlagSet("create-global-issuer", flag.ExitOnError)
 		adminCreateGlobalIssuerBodyFlag              = adminCreateGlobalIssuerFlags.String("body", "REQUIRED", "")
 		adminCreateGlobalIssuerAdminSessionTokenFlag = adminCreateGlobalIssuerFlags.String("admin-session-token", "", "")
@@ -4381,6 +4373,63 @@ func ParseEndpoint(
 		adminSetRegistryEntryPublishedFlags                 = flag.NewFlagSet("set-registry-entry-published", flag.ExitOnError)
 		adminSetRegistryEntryPublishedBodyFlag              = adminSetRegistryEntryPublishedFlags.String("body", "REQUIRED", "")
 		adminSetRegistryEntryPublishedAdminSessionTokenFlag = adminSetRegistryEntryPublishedFlags.String("admin-session-token", "", "")
+
+		adminListOnboardingStepsFlags                 = flag.NewFlagSet("list-onboarding-steps", flag.ExitOnError)
+		adminListOnboardingStepsAdminSessionTokenFlag = adminListOnboardingStepsFlags.String("admin-session-token", "", "")
+
+		adminGetOnboardingStackOptionsFlags                 = flag.NewFlagSet("get-onboarding-stack-options", flag.ExitOnError)
+		adminGetOnboardingStackOptionsAdminSessionTokenFlag = adminGetOnboardingStackOptionsFlags.String("admin-session-token", "", "")
+
+		adminGetOrganizationOnboardingStackFlags                 = flag.NewFlagSet("get-organization-onboarding-stack", flag.ExitOnError)
+		adminGetOrganizationOnboardingStackOrganizationIDFlag    = adminGetOrganizationOnboardingStackFlags.String("organization-id", "REQUIRED", "")
+		adminGetOrganizationOnboardingStackAdminSessionTokenFlag = adminGetOrganizationOnboardingStackFlags.String("admin-session-token", "", "")
+
+		adminSetOrganizationOnboardingStackFlags                 = flag.NewFlagSet("set-organization-onboarding-stack", flag.ExitOnError)
+		adminSetOrganizationOnboardingStackBodyFlag              = adminSetOrganizationOnboardingStackFlags.String("body", "REQUIRED", "")
+		adminSetOrganizationOnboardingStackAdminSessionTokenFlag = adminSetOrganizationOnboardingStackFlags.String("admin-session-token", "", "")
+
+		adminListOnboardingUseCasesFlags                 = flag.NewFlagSet("list-onboarding-use-cases", flag.ExitOnError)
+		adminListOnboardingUseCasesAdminSessionTokenFlag = adminListOnboardingUseCasesFlags.String("admin-session-token", "", "")
+
+		adminCreateOnboardingUseCaseFlags                 = flag.NewFlagSet("create-onboarding-use-case", flag.ExitOnError)
+		adminCreateOnboardingUseCaseBodyFlag              = adminCreateOnboardingUseCaseFlags.String("body", "REQUIRED", "")
+		adminCreateOnboardingUseCaseAdminSessionTokenFlag = adminCreateOnboardingUseCaseFlags.String("admin-session-token", "", "")
+
+		adminUpdateOnboardingUseCaseFlags                 = flag.NewFlagSet("update-onboarding-use-case", flag.ExitOnError)
+		adminUpdateOnboardingUseCaseBodyFlag              = adminUpdateOnboardingUseCaseFlags.String("body", "REQUIRED", "")
+		adminUpdateOnboardingUseCaseAdminSessionTokenFlag = adminUpdateOnboardingUseCaseFlags.String("admin-session-token", "", "")
+
+		adminDeleteOnboardingUseCaseFlags                 = flag.NewFlagSet("delete-onboarding-use-case", flag.ExitOnError)
+		adminDeleteOnboardingUseCaseBodyFlag              = adminDeleteOnboardingUseCaseFlags.String("body", "REQUIRED", "")
+		adminDeleteOnboardingUseCaseAdminSessionTokenFlag = adminDeleteOnboardingUseCaseFlags.String("admin-session-token", "", "")
+
+		adminListOnboardingPlaybooksFlags                 = flag.NewFlagSet("list-onboarding-playbooks", flag.ExitOnError)
+		adminListOnboardingPlaybooksOrganizationIDFlag    = adminListOnboardingPlaybooksFlags.String("organization-id", "", "")
+		adminListOnboardingPlaybooksAdminSessionTokenFlag = adminListOnboardingPlaybooksFlags.String("admin-session-token", "", "")
+
+		adminCreateOnboardingPlaybookFlags                 = flag.NewFlagSet("create-onboarding-playbook", flag.ExitOnError)
+		adminCreateOnboardingPlaybookBodyFlag              = adminCreateOnboardingPlaybookFlags.String("body", "REQUIRED", "")
+		adminCreateOnboardingPlaybookAdminSessionTokenFlag = adminCreateOnboardingPlaybookFlags.String("admin-session-token", "", "")
+
+		adminUpdateOnboardingPlaybookFlags                 = flag.NewFlagSet("update-onboarding-playbook", flag.ExitOnError)
+		adminUpdateOnboardingPlaybookBodyFlag              = adminUpdateOnboardingPlaybookFlags.String("body", "REQUIRED", "")
+		adminUpdateOnboardingPlaybookAdminSessionTokenFlag = adminUpdateOnboardingPlaybookFlags.String("admin-session-token", "", "")
+
+		adminDeleteOnboardingPlaybookFlags                 = flag.NewFlagSet("delete-onboarding-playbook", flag.ExitOnError)
+		adminDeleteOnboardingPlaybookBodyFlag              = adminDeleteOnboardingPlaybookFlags.String("body", "REQUIRED", "")
+		adminDeleteOnboardingPlaybookAdminSessionTokenFlag = adminDeleteOnboardingPlaybookFlags.String("admin-session-token", "", "")
+
+		adminCloneOnboardingPlaybookFlags                 = flag.NewFlagSet("clone-onboarding-playbook", flag.ExitOnError)
+		adminCloneOnboardingPlaybookBodyFlag              = adminCloneOnboardingPlaybookFlags.String("body", "REQUIRED", "")
+		adminCloneOnboardingPlaybookAdminSessionTokenFlag = adminCloneOnboardingPlaybookFlags.String("admin-session-token", "", "")
+
+		adminGetOrganizationOnboardingPlaybookFlags                 = flag.NewFlagSet("get-organization-onboarding-playbook", flag.ExitOnError)
+		adminGetOrganizationOnboardingPlaybookOrganizationIDFlag    = adminGetOrganizationOnboardingPlaybookFlags.String("organization-id", "REQUIRED", "")
+		adminGetOrganizationOnboardingPlaybookAdminSessionTokenFlag = adminGetOrganizationOnboardingPlaybookFlags.String("admin-session-token", "", "")
+
+		adminAssignOrganizationOnboardingPlaybookFlags                 = flag.NewFlagSet("assign-organization-onboarding-playbook", flag.ExitOnError)
+		adminAssignOrganizationOnboardingPlaybookBodyFlag              = adminAssignOrganizationOnboardingPlaybookFlags.String("body", "REQUIRED", "")
+		adminAssignOrganizationOnboardingPlaybookAdminSessionTokenFlag = adminAssignOrganizationOnboardingPlaybookFlags.String("admin-session-token", "", "")
 
 		adminGetStripeSubscriptionCandidateFlags                    = flag.NewFlagSet("get-stripe-subscription-candidate", flag.ExitOnError)
 		adminGetStripeSubscriptionCandidateOrganizationIDFlag       = adminGetStripeSubscriptionCandidateFlags.String("organization-id", "REQUIRED", "")
@@ -5556,8 +5605,6 @@ func ParseEndpoint(
 	adminCancelStripeSubscriptionFlags.Usage = adminCancelStripeSubscriptionUsage
 	adminResumeStripeSubscriptionFlags.Usage = adminResumeStripeSubscriptionUsage
 	adminMarkEnterpriseTrialConvertedFlags.Usage = adminMarkEnterpriseTrialConvertedUsage
-	adminGetOrganizationOnboardingFlags.Usage = adminGetOrganizationOnboardingUsage
-	adminSetOrganizationOnboardingFlags.Usage = adminSetOrganizationOnboardingUsage
 	adminCreateGlobalIssuerFlags.Usage = adminCreateGlobalIssuerUsage
 	adminGetGlobalIssuerDuplicatePreflightFlags.Usage = adminGetGlobalIssuerDuplicatePreflightUsage
 	adminListGlobalIssuersFlags.Usage = adminListGlobalIssuersUsage
@@ -5585,6 +5632,21 @@ func ParseEndpoint(
 	adminCreateRegistryEntryFlags.Usage = adminCreateRegistryEntryUsage
 	adminSaveRegistryEntryFlags.Usage = adminSaveRegistryEntryUsage
 	adminSetRegistryEntryPublishedFlags.Usage = adminSetRegistryEntryPublishedUsage
+	adminListOnboardingStepsFlags.Usage = adminListOnboardingStepsUsage
+	adminGetOnboardingStackOptionsFlags.Usage = adminGetOnboardingStackOptionsUsage
+	adminGetOrganizationOnboardingStackFlags.Usage = adminGetOrganizationOnboardingStackUsage
+	adminSetOrganizationOnboardingStackFlags.Usage = adminSetOrganizationOnboardingStackUsage
+	adminListOnboardingUseCasesFlags.Usage = adminListOnboardingUseCasesUsage
+	adminCreateOnboardingUseCaseFlags.Usage = adminCreateOnboardingUseCaseUsage
+	adminUpdateOnboardingUseCaseFlags.Usage = adminUpdateOnboardingUseCaseUsage
+	adminDeleteOnboardingUseCaseFlags.Usage = adminDeleteOnboardingUseCaseUsage
+	adminListOnboardingPlaybooksFlags.Usage = adminListOnboardingPlaybooksUsage
+	adminCreateOnboardingPlaybookFlags.Usage = adminCreateOnboardingPlaybookUsage
+	adminUpdateOnboardingPlaybookFlags.Usage = adminUpdateOnboardingPlaybookUsage
+	adminDeleteOnboardingPlaybookFlags.Usage = adminDeleteOnboardingPlaybookUsage
+	adminCloneOnboardingPlaybookFlags.Usage = adminCloneOnboardingPlaybookUsage
+	adminGetOrganizationOnboardingPlaybookFlags.Usage = adminGetOrganizationOnboardingPlaybookUsage
+	adminAssignOrganizationOnboardingPlaybookFlags.Usage = adminAssignOrganizationOnboardingPlaybookUsage
 	adminGetStripeSubscriptionCandidateFlags.Usage = adminGetStripeSubscriptionCandidateUsage
 	adminSetStripeSubscriptionFlags.Usage = adminSetStripeSubscriptionUsage
 
@@ -8389,12 +8451,6 @@ func ParseEndpoint(
 			case "mark-enterprise-trial-converted":
 				epf = adminMarkEnterpriseTrialConvertedFlags
 
-			case "get-organization-onboarding":
-				epf = adminGetOrganizationOnboardingFlags
-
-			case "set-organization-onboarding":
-				epf = adminSetOrganizationOnboardingFlags
-
 			case "create-global-issuer":
 				epf = adminCreateGlobalIssuerFlags
 
@@ -8475,6 +8531,51 @@ func ParseEndpoint(
 
 			case "set-registry-entry-published":
 				epf = adminSetRegistryEntryPublishedFlags
+
+			case "list-onboarding-steps":
+				epf = adminListOnboardingStepsFlags
+
+			case "get-onboarding-stack-options":
+				epf = adminGetOnboardingStackOptionsFlags
+
+			case "get-organization-onboarding-stack":
+				epf = adminGetOrganizationOnboardingStackFlags
+
+			case "set-organization-onboarding-stack":
+				epf = adminSetOrganizationOnboardingStackFlags
+
+			case "list-onboarding-use-cases":
+				epf = adminListOnboardingUseCasesFlags
+
+			case "create-onboarding-use-case":
+				epf = adminCreateOnboardingUseCaseFlags
+
+			case "update-onboarding-use-case":
+				epf = adminUpdateOnboardingUseCaseFlags
+
+			case "delete-onboarding-use-case":
+				epf = adminDeleteOnboardingUseCaseFlags
+
+			case "list-onboarding-playbooks":
+				epf = adminListOnboardingPlaybooksFlags
+
+			case "create-onboarding-playbook":
+				epf = adminCreateOnboardingPlaybookFlags
+
+			case "update-onboarding-playbook":
+				epf = adminUpdateOnboardingPlaybookFlags
+
+			case "delete-onboarding-playbook":
+				epf = adminDeleteOnboardingPlaybookFlags
+
+			case "clone-onboarding-playbook":
+				epf = adminCloneOnboardingPlaybookFlags
+
+			case "get-organization-onboarding-playbook":
+				epf = adminGetOrganizationOnboardingPlaybookFlags
+
+			case "assign-organization-onboarding-playbook":
+				epf = adminAssignOrganizationOnboardingPlaybookFlags
 
 			case "get-stripe-subscription-candidate":
 				epf = adminGetStripeSubscriptionCandidateFlags
@@ -11226,12 +11327,6 @@ func ParseEndpoint(
 			case "mark-enterprise-trial-converted":
 				endpoint = c.MarkEnterpriseTrialConverted()
 				data, err = adminc.BuildMarkEnterpriseTrialConvertedPayload(*adminMarkEnterpriseTrialConvertedBodyFlag, *adminMarkEnterpriseTrialConvertedAdminSessionTokenFlag)
-			case "get-organization-onboarding":
-				endpoint = c.GetOrganizationOnboarding()
-				data, err = adminc.BuildGetOrganizationOnboardingPayload(*adminGetOrganizationOnboardingOrganizationIDFlag, *adminGetOrganizationOnboardingAdminSessionTokenFlag)
-			case "set-organization-onboarding":
-				endpoint = c.SetOrganizationOnboarding()
-				data, err = adminc.BuildSetOrganizationOnboardingPayload(*adminSetOrganizationOnboardingBodyFlag, *adminSetOrganizationOnboardingAdminSessionTokenFlag)
 			case "create-global-issuer":
 				endpoint = c.CreateGlobalIssuer()
 				data, err = adminc.BuildCreateGlobalIssuerPayload(*adminCreateGlobalIssuerBodyFlag, *adminCreateGlobalIssuerAdminSessionTokenFlag)
@@ -11316,6 +11411,51 @@ func ParseEndpoint(
 			case "set-registry-entry-published":
 				endpoint = c.SetRegistryEntryPublished()
 				data, err = adminc.BuildSetRegistryEntryPublishedPayload(*adminSetRegistryEntryPublishedBodyFlag, *adminSetRegistryEntryPublishedAdminSessionTokenFlag)
+			case "list-onboarding-steps":
+				endpoint = c.ListOnboardingSteps()
+				data, err = adminc.BuildListOnboardingStepsPayload(*adminListOnboardingStepsAdminSessionTokenFlag)
+			case "get-onboarding-stack-options":
+				endpoint = c.GetOnboardingStackOptions()
+				data, err = adminc.BuildGetOnboardingStackOptionsPayload(*adminGetOnboardingStackOptionsAdminSessionTokenFlag)
+			case "get-organization-onboarding-stack":
+				endpoint = c.GetOrganizationOnboardingStack()
+				data, err = adminc.BuildGetOrganizationOnboardingStackPayload(*adminGetOrganizationOnboardingStackOrganizationIDFlag, *adminGetOrganizationOnboardingStackAdminSessionTokenFlag)
+			case "set-organization-onboarding-stack":
+				endpoint = c.SetOrganizationOnboardingStack()
+				data, err = adminc.BuildSetOrganizationOnboardingStackPayload(*adminSetOrganizationOnboardingStackBodyFlag, *adminSetOrganizationOnboardingStackAdminSessionTokenFlag)
+			case "list-onboarding-use-cases":
+				endpoint = c.ListOnboardingUseCases()
+				data, err = adminc.BuildListOnboardingUseCasesPayload(*adminListOnboardingUseCasesAdminSessionTokenFlag)
+			case "create-onboarding-use-case":
+				endpoint = c.CreateOnboardingUseCase()
+				data, err = adminc.BuildCreateOnboardingUseCasePayload(*adminCreateOnboardingUseCaseBodyFlag, *adminCreateOnboardingUseCaseAdminSessionTokenFlag)
+			case "update-onboarding-use-case":
+				endpoint = c.UpdateOnboardingUseCase()
+				data, err = adminc.BuildUpdateOnboardingUseCasePayload(*adminUpdateOnboardingUseCaseBodyFlag, *adminUpdateOnboardingUseCaseAdminSessionTokenFlag)
+			case "delete-onboarding-use-case":
+				endpoint = c.DeleteOnboardingUseCase()
+				data, err = adminc.BuildDeleteOnboardingUseCasePayload(*adminDeleteOnboardingUseCaseBodyFlag, *adminDeleteOnboardingUseCaseAdminSessionTokenFlag)
+			case "list-onboarding-playbooks":
+				endpoint = c.ListOnboardingPlaybooks()
+				data, err = adminc.BuildListOnboardingPlaybooksPayload(*adminListOnboardingPlaybooksOrganizationIDFlag, *adminListOnboardingPlaybooksAdminSessionTokenFlag)
+			case "create-onboarding-playbook":
+				endpoint = c.CreateOnboardingPlaybook()
+				data, err = adminc.BuildCreateOnboardingPlaybookPayload(*adminCreateOnboardingPlaybookBodyFlag, *adminCreateOnboardingPlaybookAdminSessionTokenFlag)
+			case "update-onboarding-playbook":
+				endpoint = c.UpdateOnboardingPlaybook()
+				data, err = adminc.BuildUpdateOnboardingPlaybookPayload(*adminUpdateOnboardingPlaybookBodyFlag, *adminUpdateOnboardingPlaybookAdminSessionTokenFlag)
+			case "delete-onboarding-playbook":
+				endpoint = c.DeleteOnboardingPlaybook()
+				data, err = adminc.BuildDeleteOnboardingPlaybookPayload(*adminDeleteOnboardingPlaybookBodyFlag, *adminDeleteOnboardingPlaybookAdminSessionTokenFlag)
+			case "clone-onboarding-playbook":
+				endpoint = c.CloneOnboardingPlaybook()
+				data, err = adminc.BuildCloneOnboardingPlaybookPayload(*adminCloneOnboardingPlaybookBodyFlag, *adminCloneOnboardingPlaybookAdminSessionTokenFlag)
+			case "get-organization-onboarding-playbook":
+				endpoint = c.GetOrganizationOnboardingPlaybook()
+				data, err = adminc.BuildGetOrganizationOnboardingPlaybookPayload(*adminGetOrganizationOnboardingPlaybookOrganizationIDFlag, *adminGetOrganizationOnboardingPlaybookAdminSessionTokenFlag)
+			case "assign-organization-onboarding-playbook":
+				endpoint = c.AssignOrganizationOnboardingPlaybook()
+				data, err = adminc.BuildAssignOrganizationOnboardingPlaybookPayload(*adminAssignOrganizationOnboardingPlaybookBodyFlag, *adminAssignOrganizationOnboardingPlaybookAdminSessionTokenFlag)
 			case "get-stripe-subscription-candidate":
 				endpoint = c.GetStripeSubscriptionCandidate()
 				data, err = adminc.BuildGetStripeSubscriptionCandidatePayload(*adminGetStripeSubscriptionCandidateOrganizationIDFlag, *adminGetStripeSubscriptionCandidateStripeSubscriptionIDFlag, *adminGetStripeSubscriptionCandidateAdminSessionTokenFlag)
@@ -23799,7 +23939,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    release-session-quarantine: Release an active session quarantine.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results: List risk analysis results for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results-for-agent: List risk analysis results with the `+"`"+`match`+"`"+` field redacted to an opaque length+sha256-prefix fingerprint. Matches the payload and pagination semantics of listRiskResults. Designed for AI assistant / MCP consumption so secret content (gitleaks captures, presidio entities, prompt-injection payloads) never reaches the model context. For shadow_mcp findings the `+"`"+`match`+"`"+` value — a non-sensitive server URL or command identifier — is passed through verbatim.`)
-	fmt.Fprintln(os.Stderr, `    unmask-risk-result: Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.`)
+	fmt.Fprintln(os.Stderr, `    unmask-risk-result: Return the plaintext match for a single risk result on demand. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results-by-chat: List risk results grouped by chat session for the current project.`)
 	fmt.Fprintln(os.Stderr, `    mark-risk-results-false-positive: Mark one or more risk results as manually-reviewed false positives. Distinct from exclusions: this suppresses the specific results picked, not future findings matching a rule.`)
 	fmt.Fprintln(os.Stderr, `    unmark-risk-results-false-positive: Undo a false-positive dismissal for one or more risk results.`)
@@ -24187,7 +24327,7 @@ func riskUnmaskRiskResultUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.`)
+	fmt.Fprintln(os.Stderr, `Return the plaintext match for a single risk result on demand. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -28800,8 +28940,6 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    cancel-stripe-subscription: Schedules an organization's PAYG subscription to cancel at period end.`)
 	fmt.Fprintln(os.Stderr, `    resume-stripe-subscription: Removes a scheduled period-end cancellation from an organization's PAYG subscription.`)
 	fmt.Fprintln(os.Stderr, `    mark-enterprise-trial-converted: Records that an organization's enterprise trial converted to a signed contract.`)
-	fmt.Fprintln(os.Stderr, `    get-organization-onboarding: GetOrganizationOnboarding implements getOrganizationOnboarding.`)
-	fmt.Fprintln(os.Stderr, `    set-organization-onboarding: SetOrganizationOnboarding implements setOrganizationOnboarding.`)
 	fmt.Fprintln(os.Stderr, `    create-global-issuer: Create a global remote_session_issuer (project_id NULL, organization_id NULL). Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    get-global-issuer-duplicate-preflight: Report the global remote_session_issuers that already describe an upstream issuer URL, so the catalog create and edit forms can warn before curating a second entry for the same authorization server. Requires platform admin.
 	
@@ -28833,6 +28971,21 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    create-registry-entry: Staff-only registry administration.`)
 	fmt.Fprintln(os.Stderr, `    save-registry-entry: Staff-only registry administration.`)
 	fmt.Fprintln(os.Stderr, `    set-registry-entry-published: Staff-only registry administration.`)
+	fmt.Fprintln(os.Stderr, `    list-onboarding-steps: Read the onboarding steps the code defines, mirrored into the database, with their groups, methods and prerequisites.`)
+	fmt.Fprintln(os.Stderr, `    get-onboarding-stack-options: Read the vendors, plans and platforms the stack form offers, from the support matrix catalog.`)
+	fmt.Fprintln(os.Stderr, `    get-organization-onboarding-stack: Read the stack staff recorded for an organization: its vendors with plans and its device management.`)
+	fmt.Fprintln(os.Stderr, `    set-organization-onboarding-stack: Replace the stack recorded for an organization. Vendors and plans must come from the catalog; other needs a name and none clears it.`)
+	fmt.Fprintln(os.Stderr, `    list-onboarding-use-cases: Read the use cases staff defined, each with its default playbook.`)
+	fmt.Fprintln(os.Stderr, `    create-onboarding-use-case: Define a use case.`)
+	fmt.Fprintln(os.Stderr, `    update-onboarding-use-case: Rename or describe a use case. The slug never changes.`)
+	fmt.Fprintln(os.Stderr, `    delete-onboarding-use-case: Retire a use case and its playbooks. Organizations assigned one of them fall back to their setup task selection.`)
+	fmt.Fprintln(os.Stderr, `    list-onboarding-playbooks: Read every playbook, or, when an organization is named, the shared ones and its own.`)
+	fmt.Fprintln(os.Stderr, `    create-onboarding-playbook: Create a playbook from top-level steps, for a use case or for one organization, not both. Every prerequisite of a step must be in the playbook, before it. Marking a default replaces the use case's previous default.`)
+	fmt.Fprintln(os.Stderr, `    update-onboarding-playbook: Replace a playbook's name, description, default mark and steps. A custom playbook is also checked against its organization's stack.`)
+	fmt.Fprintln(os.Stderr, `    delete-onboarding-playbook: Retire a playbook. Organizations assigned it fall back to their setup task selection.`)
+	fmt.Fprintln(os.Stderr, `    clone-onboarding-playbook: Copy a playbook into a custom one for an organization, so staff can edit it for that organization alone.`)
+	fmt.Fprintln(os.Stderr, `    get-organization-onboarding-playbook: Read the playbook assigned to an organization and how each of its steps fares against the recorded stack.`)
+	fmt.Fprintln(os.Stderr, `    assign-organization-onboarding-playbook: Assign a playbook to an organization, or clear it. Rejected when a step's methods do not apply to the recorded stack; the error names the steps.`)
 	fmt.Fprintln(os.Stderr, `    get-stripe-subscription-candidate: Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.`)
 	fmt.Fprintln(os.Stderr, `    set-stripe-subscription: Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.`)
 	fmt.Fprintln(os.Stderr)
@@ -29621,46 +29774,6 @@ func adminMarkEnterpriseTrialConvertedUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin mark-enterprise-trial-converted --body '{\n      \"id\": \"aa\"\n   }' --admin-session-token \"abc123\"")
 }
 
-func adminGetOrganizationOnboardingUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin get-organization-onboarding", os.Args[0])
-	fmt.Fprint(os.Stderr, " -organization-id STRING")
-	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `GetOrganizationOnboarding implements getOrganizationOnboarding.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-organization-onboarding --organization-id \"abc123\" --admin-session-token \"abc123\"")
-}
-
-func adminSetOrganizationOnboardingUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin set-organization-onboarding", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `SetOrganizationOnboarding implements setOrganizationOnboarding.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-organization-onboarding --body '{\n      \"organization_id\": \"abc123\",\n      \"preset\": \"abc123\",\n      \"visible_task_keys\": [\n         \"abc123\"\n      ]\n   }' --admin-session-token \"abc123\"")
-}
-
 func adminCreateGlobalIssuerUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] admin create-global-issuer", os.Args[0])
@@ -30225,6 +30338,300 @@ func adminSetRegistryEntryPublishedUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-registry-entry-published --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"published\": false,\n      \"updated_at\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminListOnboardingStepsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-onboarding-steps", os.Args[0])
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read the onboarding steps the code defines, mirrored into the database, with their groups, methods and prerequisites.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-onboarding-steps --admin-session-token \"abc123\"")
+}
+
+func adminGetOnboardingStackOptionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-onboarding-stack-options", os.Args[0])
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read the vendors, plans and platforms the stack form offers, from the support matrix catalog.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-onboarding-stack-options --admin-session-token \"abc123\"")
+}
+
+func adminGetOrganizationOnboardingStackUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-organization-onboarding-stack", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read the stack staff recorded for an organization: its vendors with plans and its device management.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-organization-onboarding-stack --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminSetOrganizationOnboardingStackUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin set-organization-onboarding-stack", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace the stack recorded for an organization. Vendors and plans must come from the catalog; other needs a name and none clears it.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-organization-onboarding-stack --body '{\n      \"mdm_vendor\": \"abc123\",\n      \"mdm_vendor_name\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"vendors\": [\n         {\n            \"plan_slug\": \"abc123\",\n            \"vendor\": \"abc123\"\n         }\n      ]\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminListOnboardingUseCasesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-onboarding-use-cases", os.Args[0])
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read the use cases staff defined, each with its default playbook.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-onboarding-use-cases --admin-session-token \"abc123\"")
+}
+
+func adminCreateOnboardingUseCaseUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin create-onboarding-use-case", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Define a use case.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin create-onboarding-use-case --body '{\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminUpdateOnboardingUseCaseUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin update-onboarding-use-case", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Rename or describe a use case. The slug never changes.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-onboarding-use-case --body '{\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"use_case_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminDeleteOnboardingUseCaseUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin delete-onboarding-use-case", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Retire a use case and its playbooks. Organizations assigned one of them fall back to their setup task selection.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin delete-onboarding-use-case --body '{\n      \"use_case_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminListOnboardingPlaybooksUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-onboarding-playbooks", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read every playbook, or, when an organization is named, the shared ones and its own.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-onboarding-playbooks --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminCreateOnboardingPlaybookUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin create-onboarding-playbook", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a playbook from top-level steps, for a use case or for one organization, not both. Every prerequisite of a step must be in the playbook, before it. Marking a default replaces the use case's previous default.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin create-onboarding-playbook --body '{\n      \"description\": \"abc123\",\n      \"is_default\": false,\n      \"name\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"step_slugs\": [\n         \"abc123\"\n      ],\n      \"use_case_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminUpdateOnboardingPlaybookUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin update-onboarding-playbook", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace a playbook's name, description, default mark and steps. A custom playbook is also checked against its organization's stack.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-onboarding-playbook --body '{\n      \"description\": \"abc123\",\n      \"is_default\": false,\n      \"name\": \"abc123\",\n      \"playbook_id\": \"abc123\",\n      \"step_slugs\": [\n         \"abc123\"\n      ]\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminDeleteOnboardingPlaybookUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin delete-onboarding-playbook", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Retire a playbook. Organizations assigned it fall back to their setup task selection.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin delete-onboarding-playbook --body '{\n      \"playbook_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminCloneOnboardingPlaybookUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin clone-onboarding-playbook", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Copy a playbook into a custom one for an organization, so staff can edit it for that organization alone.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin clone-onboarding-playbook --body '{\n      \"name\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"playbook_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminGetOrganizationOnboardingPlaybookUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-organization-onboarding-playbook", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read the playbook assigned to an organization and how each of its steps fares against the recorded stack.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-organization-onboarding-playbook --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminAssignOrganizationOnboardingPlaybookUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin assign-organization-onboarding-playbook", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Assign a playbook to an organization, or clear it. Rejected when a step's methods do not apply to the recorded stack; the error names the steps.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin assign-organization-onboarding-playbook --body '{\n      \"organization_id\": \"abc123\",\n      \"playbook_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminGetStripeSubscriptionCandidateUsage() {

@@ -109,6 +109,24 @@ func TestValidateMCPScopeSources(t *testing.T) {
 		`source "shadow_mcp" cannot be used by an MCP-scoped policy`,
 	)
 }
+func TestValidateMCPScopeAction(t *testing.T) {
+	t.Parallel()
+
+	scope := &MCPScope{AllServers: true}
+	require.NoError(t, ValidateMCPScope(nil, nil, "warn"))
+	require.NoError(t, ValidateMCPScope(scope, nil, "flag"))
+	require.NoError(t, ValidateMCPScope(scope, nil, "block"))
+	require.EqualError(
+		t,
+		ValidateMCPScope(scope, nil, "warn"),
+		`action "warn" cannot be used by an MCP-scoped policy; use flag or block`,
+	)
+	require.EqualError(
+		t,
+		ValidateMCPScope(scope, nil, "quarantine"),
+		`action "quarantine" cannot be used by an MCP-scoped policy; use flag or block`,
+	)
+}
 
 func TestValidateActionAndSourceCompatibility(t *testing.T) {
 	t.Parallel()

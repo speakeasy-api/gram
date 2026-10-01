@@ -133,6 +133,39 @@ func TestOktaMappingUniqueness(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestOktaMappingPublishConflict(t *testing.T) {
+	t.Parallel()
+	ctx, s, db := newTestService(t)
+	_, err := s.Create(ctx, json.RawMessage(oktaRecord("example.test/holder", "shared")))
+	require.NoError(t, err)
+
+	// Before this namespace had validation, retained records could contain
+	// duplicate claims. Publishing must not make those mappings discoverable.
+	id := uuid.New()
+	require.NoError(t, repo.New(db).InsertRegistryEntryFixture(ctx, repo.InsertRegistryEntryFixtureParams{
+		ID: id, Data: []byte(oktaRecord("example.test/retained", "shared")), Published: true,
+	}))
+	retained, err := s.Get(ctx, id)
+	require.NoError(t, err)
+	// Unpublishing must remain available even when the mapping conflicts.
+	retained, err = s.SetPublished(ctx, id, Token(retained), false)
+	require.NoError(t, err)
+	_, err = s.SetPublished(ctx, id, Token(retained), true)
+	var invalid *InvalidError
+	require.ErrorAs(t, err, &invalid)
+	require.Equal(t, []Issue{{Path: oktaNamespacePath + "/oinNames/0", Message: "OIN name is already mapped by entry example.test/holder"}}, invalid.Issues)
+	retained, err = s.Get(ctx, id)
+	require.NoError(t, err)
+	require.False(t, retained.Published)
+
+	// A repaired claim can be published normally.
+	retained, err = s.Save(ctx, id, Token(retained), json.RawMessage(oktaRecord("example.test/retained", "unique")))
+	require.NoError(t, err)
+	retained, err = s.SetPublished(ctx, id, Token(retained), true)
+	require.NoError(t, err)
+	require.True(t, retained.Published)
+}
+
 func TestOktaMappingConcurrentClaims(t *testing.T) {
 	t.Parallel()
 	for _, mode := range []string{"create-create", "create-save", "save-save"} {
