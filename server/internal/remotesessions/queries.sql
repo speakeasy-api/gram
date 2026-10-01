@@ -4684,3 +4684,227 @@ SET state = 'indeterminate', updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND organization_id = @organization_id
   AND generation = @generation AND claim_id = sqlc.narg('claim_id')
   AND state = 'in_progress';
+
+-- name: ListEMAChainingBindings :many
+-- Ready bindings whose canonical resource names an endpoint's upstream.
+-- Endpoint upstreams are recorded without a trailing slash while a binding
+-- keeps the exact RFC 9728 identifier, so both compare under the routing trim.
+-- Unlinked tombstones and unfinished preparations never select or conflict.
+-- A tunneled upstream passes its own derived issuer: its resource identifier is
+-- operator supplied, so only a binding for that issuer may serve it. Two rows
+-- are enough to prove the selection ambiguous.
+SELECT * FROM remote_session_ema_bindings
+WHERE project_id = @project_id AND organization_id = @organization_id
+  AND user_session_issuer_id = @user_session_issuer_id
+  AND rtrim(resource, '/') = @upstream_resource::text
+  AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
+  AND state = 'ready' AND remote_session_client_id IS NOT NULL
+ORDER BY id
+LIMIT 2;
+
+-- name: GetEMAChainingUserIssuer :one
+-- Identity chaining requires an organization-level user session issuer with a
+-- trusted upstream registration; project-level issuers cannot hold one.
+SELECT trusted_remote_session_issuer_id, trusted_remote_session_client_id
+FROM user_session_issuers
+WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL
+  AND deleted IS FALSE
+  AND trusted_remote_session_issuer_id IS NOT NULL
+  AND trusted_remote_session_client_id IS NOT NULL;
+
+-- name: AuthorizeEMADelegation :one
+-- Current authority to use a human's retained delegation for one endpoint:
+-- its organization-level user session issuer still trusts exactly this
+-- registration, the project is live in the enabled organization, and the
+-- human is a live member of it.
+SELECT EXISTS (
+  SELECT 1 FROM user_session_issuers AS usi
+  JOIN organization_metadata AS o ON o.id = usi.organization_id
+  JOIN projects AS p ON p.organization_id = o.id
+  WHERE usi.id = @user_session_issuer_id AND usi.organization_id = @organization_id
+    AND usi.project_id IS NULL AND usi.deleted IS FALSE
+    AND usi.trusted_remote_session_issuer_id = @trusted_issuer_id
+    AND usi.trusted_remote_session_client_id = @trusted_client_id
+    AND o.disabled_at IS NULL
+    AND p.id = @project_id AND p.deleted IS FALSE
+    AND EXISTS (
+      SELECT 1 FROM users AS u
+      JOIN organization_user_relationships AS m ON m.user_id = u.id AND m.organization_id = o.id
+      WHERE u.id = @user_id AND u.deleted_at IS NULL AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE
+    )
+) AS authorized;
+
+-- name: GetEMACredentialForUse :one
+-- Reads the live slot for one chained identity and whether its provenance
+-- still matches the request's current binding and delegation. Callers decrypt
+-- access_token_encrypted only when usable is true, and retire the slot when
+-- it is false. A credential published before the human's latest sign-in is
+-- unusable, so signing in again replaces a token the upstream revoked.
+-- NULL provenance left by a parent delete reads as unusable, never as NULL.
+SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
+  COALESCE(
+    c.remote_session_issuer_id = @remote_session_issuer_id::uuid
+    AND c.client_selection = 'binding'
+    AND c.remote_session_ema_binding_id = @binding_id::uuid
+    AND c.ema_binding_generation = @binding_generation::bigint
+    AND c.requested_scopes = @requested_scopes::text[]
+    AND c.access_token_encrypted IS NOT NULL
+    AND c.access_expires_at > @usable_after::timestamptz
+    AND EXISTS (
+      SELECT 1 FROM remote_session_ema_bindings AS b
+      WHERE b.id = c.remote_session_ema_binding_id AND b.generation = c.ema_binding_generation
+        AND b.project_id = c.project_id AND b.organization_id = c.organization_id
+        AND b.user_session_issuer_id = c.user_session_issuer_id
+        AND b.remote_session_issuer_id = c.remote_session_issuer_id
+        AND b.remote_session_client_id = c.remote_session_client_id
+        AND b.resource = c.resource AND b.state = 'ready'
+    )
+    AND EXISTS (
+      SELECT 1 FROM trusted_issuer_sessions AS s
+      WHERE s.id = c.trusted_issuer_session_id AND s.deleted IS FALSE
+        AND s.organization_id = c.organization_id AND s.project_id IS NULL
+        AND s.subject_urn = c.subject_urn
+        AND s.observation_status IS DISTINCT FROM 'reauthentication_required'
+        AND s.observation_status IS DISTINCT FROM 'configuration_failure'
+        AND s.remote_session_client_id = @trusted_client_id::uuid
+        AND c.updated_at >= COALESCE(s.credential_obtained_at, '-infinity'::timestamptz)
+    ),
+    FALSE
+  )::boolean AS usable
+FROM remote_session_ema_credentials AS c
+WHERE c.organization_id = @organization_id::text AND c.project_id = @project_id
+  AND c.user_session_issuer_id = @user_session_issuer_id
+  AND c.remote_session_client_id = @remote_session_client_id AND c.resource = @resource
+  AND c.subject_urn = @subject_urn AND c.deleted IS FALSE;
+
+-- name: UpsertEMACredential :one
+-- Publishes a chained credential only while the binding generation, the
+-- human's latest sign-in, and the delegation and endpoint authority it was
+-- acquired under still hold, so a sign-in, revocation, unlink, rebind or
+-- deletion during the exchange cannot install a usable stale credential. A
+-- routine refresh of the delegation does not invalidate the result. No row
+-- means the result must be discarded.
+INSERT INTO remote_session_ema_credentials AS c (
+  organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
+  resource, subject_urn, client_selection, remote_session_ema_binding_id, ema_binding_generation,
+  trusted_issuer_session_id, requested_scopes, granted_scopes, access_token_encrypted, access_expires_at,
+  downstream_refresh_token_observed, last_used_at
+)
+SELECT @organization_id::text, @project_id::uuid, @user_session_issuer_id::uuid, @remote_session_issuer_id::uuid, @remote_session_client_id::uuid,
+  @resource::text, @subject_urn::text, 'binding', @binding_id::uuid, @binding_generation::bigint,
+  @trusted_issuer_session_id::uuid, @requested_scopes::text[], @granted_scopes::text[], @access_token_encrypted::text, @access_expires_at::timestamptz,
+  @downstream_refresh_token_observed::boolean, clock_timestamp()
+WHERE EXISTS (
+    SELECT 1 FROM remote_session_ema_bindings AS b
+    WHERE b.id = @binding_id::uuid AND b.generation = @binding_generation::bigint
+      AND b.project_id = @project_id::uuid AND b.organization_id = @organization_id::text
+      AND b.user_session_issuer_id = @user_session_issuer_id::uuid
+      AND b.remote_session_issuer_id = @remote_session_issuer_id::uuid
+      AND b.remote_session_client_id = @remote_session_client_id::uuid
+      AND b.resource = @resource::text AND b.state = 'ready'
+  )
+  -- The resource client and its issuer must still be live and reachable from
+  -- the project.
+  AND EXISTS (
+    SELECT 1 FROM remote_session_clients AS rc
+    JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id AND ri.deleted IS FALSE
+      AND (ri.project_id = @project_id::uuid OR (ri.project_id IS NULL AND (ri.organization_id = @organization_id::text OR ri.organization_id IS NULL)))
+    WHERE rc.id = @remote_session_client_id::uuid AND rc.remote_session_issuer_id = @remote_session_issuer_id::uuid AND rc.deleted IS FALSE
+      AND (rc.project_id = @project_id::uuid OR (rc.project_id IS NULL AND rc.organization_id = @organization_id::text))
+  )
+  AND EXISTS (
+    SELECT 1 FROM trusted_issuer_sessions AS s
+    JOIN user_session_issuers AS usi ON usi.trusted_remote_session_client_id = s.remote_session_client_id
+    -- The trusted registration must still be a live, organization-owned client
+    -- of the live issuer the user session issuer trusts.
+    JOIN remote_session_clients AS tc ON tc.id = usi.trusted_remote_session_client_id
+      AND tc.remote_session_issuer_id = usi.trusted_remote_session_issuer_id
+      AND tc.project_id IS NULL AND tc.organization_id = @organization_id::text AND tc.deleted IS FALSE
+    JOIN remote_session_issuers AS ti ON ti.id = tc.remote_session_issuer_id
+      AND ti.project_id IS NULL AND (ti.organization_id = @organization_id::text OR ti.organization_id IS NULL) AND ti.deleted IS FALSE
+    WHERE s.id = @trusted_issuer_session_id::uuid AND s.deleted IS FALSE
+      AND s.credential_obtained_at IS NOT DISTINCT FROM sqlc.narg('trusted_credential_obtained_at')::timestamptz
+      AND s.observation_status IS DISTINCT FROM 'reauthentication_required'
+      AND s.observation_status IS DISTINCT FROM 'configuration_failure'
+      AND s.organization_id = @organization_id::text AND s.project_id IS NULL
+      AND s.subject_urn = @subject_urn::text
+      AND usi.id = @user_session_issuer_id::uuid AND usi.organization_id = @organization_id::text
+      AND usi.project_id IS NULL AND usi.deleted IS FALSE
+  )
+  AND EXISTS (
+    SELECT 1 FROM projects AS p
+    JOIN organization_metadata AS o ON o.id = p.organization_id
+    WHERE p.id = @project_id::uuid AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+      AND o.disabled_at IS NULL
+      AND EXISTS (
+        SELECT 1 FROM users AS u
+        JOIN organization_user_relationships AS m ON m.user_id = u.id AND m.organization_id = o.id
+        WHERE 'user:' || u.id = @subject_urn::text AND u.deleted_at IS NULL
+          AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE
+      )
+  )
+ON CONFLICT (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn) WHERE deleted IS FALSE
+DO UPDATE SET
+  organization_id = EXCLUDED.organization_id,
+  remote_session_issuer_id = EXCLUDED.remote_session_issuer_id,
+  client_selection = EXCLUDED.client_selection,
+  remote_session_ema_binding_id = EXCLUDED.remote_session_ema_binding_id,
+  ema_binding_generation = EXCLUDED.ema_binding_generation,
+  trusted_issuer_session_id = EXCLUDED.trusted_issuer_session_id,
+  requested_scopes = EXCLUDED.requested_scopes,
+  granted_scopes = EXCLUDED.granted_scopes,
+  access_token_encrypted = EXCLUDED.access_token_encrypted,
+  access_expires_at = EXCLUDED.access_expires_at,
+  downstream_refresh_token_observed = EXCLUDED.downstream_refresh_token_observed,
+  last_used_at = EXCLUDED.last_used_at,
+  updated_at = clock_timestamp()
+RETURNING id;
+
+-- name: RetireEMACredential :exec
+-- Soft deletes one credential slot and erases its ciphertext in the same write.
+-- expected_updated_at is the version the caller judged unusable, so a
+-- concurrent publish into the same slot is never erased.
+UPDATE remote_session_ema_credentials
+SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = @id AND organization_id = @organization_id AND project_id = @project_id AND deleted IS FALSE
+  AND updated_at = @expected_updated_at;
+
+-- name: TouchEMACredentialLastUsed :exec
+-- Best-effort use stamp, throttled like remote sessions so a hot credential
+-- does not write on every proxied call.
+UPDATE remote_session_ema_credentials
+SET last_used_at = @now_ts
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+  AND (last_used_at IS NULL OR last_used_at < @used_cutoff);
+
+-- name: SoftDeleteTrustedIssuerSessionFixture :execrows
+-- TEST FIXTURE ONLY. Soft deletes a retained delegation without erasing its
+-- secrets, the parent state a chained credential must treat as unusable.
+UPDATE trusted_issuer_sessions SET deleted_at = clock_timestamp()
+WHERE id = @id AND organization_id = @organization_id::text AND deleted IS FALSE;
+
+-- name: ListEMACredentialsFixture :many
+-- TEST FIXTURE ONLY. Every credential slot in a project, live and retired.
+SELECT id, deleted, access_token_encrypted, ema_binding_generation, subject_urn, updated_at
+FROM remote_session_ema_credentials
+WHERE project_id = @project_id
+ORDER BY created_at, id;
+
+-- name: GetEMAChainingConfirmedAudience :one
+-- The ID-JAG audience an administrator confirmed for one upstream on the
+-- organization's live Okta connection to the trusted identity provider. Okta
+-- mints only for the resource app's Issuer URL, which can differ from the
+-- downstream authorization server's issuer. Confirmed resources are stored
+-- without a trailing slash.
+SELECT r.audience
+FROM okta_resource_connections AS r
+JOIN identity_provider_connections AS c
+  ON c.id = r.identity_provider_connection_id AND c.organization_id = r.organization_id
+ AND c.provider = 'okta' AND c.deleted IS FALSE
+JOIN okta_identity_provider_connections AS o
+  ON o.identity_provider_connection_id = c.id AND o.organization_id = c.organization_id
+ AND o.deleted IS FALSE
+WHERE r.organization_id = @organization_id
+  AND o.remote_session_issuer_id = @trusted_issuer_id
+  AND r.remote_session_issuer_id = @remote_session_issuer_id
+  AND r.resource = rtrim(@resource::text, '/');

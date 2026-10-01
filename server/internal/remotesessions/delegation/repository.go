@@ -26,6 +26,7 @@ func credentialFromRow(row repo.TrustedIssuerSession) delegationCredential {
 		generation = row.CredentialGeneration.Int64
 	}
 	return delegationCredential{
+		id:         row.ID,
 		generation: generation, claim: row.RefreshClaimID.UUID,
 		assertion:       row.IdentityAssertionEncrypted.String,
 		assertionExpiry: row.IdentityAssertionExpiresAt.Time,

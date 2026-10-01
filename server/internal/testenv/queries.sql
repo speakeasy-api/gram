@@ -1463,11 +1463,9 @@ WHERE c.id = @remote_session_client_id
   AND i.id = c.remote_session_issuer_id
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id::text));
 
--- TEST FIXTURE ONLY. Writes a token_endpoint_auth_method the Goa enum does not
--- accept, which no production path can produce. private_key_jwt arrives with
--- AIM-156; until then planting the value directly is the only way to exercise
--- requireDetachableKeySet and requirePrivateKeyJWTKeySet, the rules that guard
--- it.
+-- TEST FIXTURE ONLY. Plants a token_endpoint_auth_method directly, bypassing
+-- the management API's key-set checks, so tests can build states those checks
+-- (requireDetachableKeySet, requirePrivateKeyJWTKeySet) must then refuse.
 -- name: ForceRemoteSessionClientAuthMethodFixture :execrows
 UPDATE remote_session_clients
 SET token_endpoint_auth_method = @token_endpoint_auth_method
