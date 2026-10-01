@@ -113,6 +113,7 @@ export function TunnelObservability({
     (p) =>
       p.toolCalls != null ||
       p.toolsList != null ||
+      p.otherRequests != null ||
       p.successes != null ||
       p.errors != null,
   );
@@ -230,7 +231,7 @@ function activityUnavailable(state?: string) {
 
 function ActivityCharts({ history }: { history: TunnelMetrics }) {
   const points = history.points;
-  const sum = (key: "toolCalls" | "toolsList" | "errors") =>
+  const sum = (key: "toolCalls" | "toolsList" | "otherRequests" | "errors") =>
     points.reduce((n, p) => n + Number(p[key] ?? 0), 0);
   return (
     <>
@@ -241,6 +242,7 @@ function ActivityCharts({ history }: { history: TunnelMetrics }) {
           series={[
             { key: "toolCalls", label: "Tool calls" },
             { key: "toolsList", label: "Tools/list" },
+            { key: "otherRequests", label: "Other requests" },
             { key: "errors", label: "Errors", error: true },
           ]}
         />
@@ -269,6 +271,7 @@ function ActivityCharts({ history }: { history: TunnelMetrics }) {
         <p className="text-muted-foreground">
           {sum("toolCalls").toLocaleString()} tool calls ·{" "}
           {sum("toolsList").toLocaleString()} tools/list ·{" "}
+          {sum("otherRequests").toLocaleString()} other requests ·{" "}
           {sum("errors").toLocaleString()} errors ·{" "}
           {points
             .reduce((n, p) => n + (p.connectionsOpened ?? 0), 0)
@@ -310,6 +313,11 @@ function ActivityCharts({ history }: { history: TunnelMetrics }) {
                 key: "toolsList",
                 header: "Tools/list",
                 render: (p) => p.toolsList ?? "—",
+              },
+              {
+                key: "otherRequests",
+                header: "Other requests",
+                render: (p) => p.otherRequests ?? "—",
               },
               {
                 key: "errors",
@@ -572,6 +580,13 @@ function DiagnosticDetails({ value: d }: { value: TunnelDiagnostics }) {
 }
 
 function HttpProgress({ value: d }: { value: TunnelDiagnostics }) {
+  if (d.state === "disabled") {
+    return (
+      <p className="text-muted-foreground text-sm">
+        HTTP progress is unavailable because diagnostics are disabled.
+      </p>
+    );
+  }
   if (d.state !== "available") {
     return (
       <p className="text-muted-foreground text-sm">
@@ -621,6 +636,7 @@ function HttpProgress({ value: d }: { value: TunnelDiagnostics }) {
 type SeriesKey =
   | "toolCalls"
   | "toolsList"
+  | "otherRequests"
   | "errors"
   | "connections"
   | "consumerSessions"

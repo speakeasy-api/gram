@@ -100,9 +100,9 @@ func (c *Collector) Observe(source, server, method, client, outcome string, dura
 	default:
 		row.Incomplete++
 	}
-	if outcome != "attempt" {
+	if outcome == "success" || outcome == "error" || outcome == "canceled" {
 		i := 0
-		for i < len(LatencyBounds) && duration.Milliseconds() > LatencyBounds[i] {
+		for i < len(LatencyBounds) && duration > time.Duration(LatencyBounds[i])*time.Millisecond {
 			i++
 		}
 		row.LatencyBins[i]++
@@ -180,6 +180,13 @@ func (c *Collector) Flush(ctx context.Context, publish func(context.Context, Sna
 			}
 			delete(c.series, key)
 			delete(c.published, key)
+			continue
+		}
+		if row.Revision <= c.published[key] {
+			if now.Unix()-key.Bucket >= 75 {
+				delete(c.series, key)
+				delete(c.published, key)
+			}
 			continue
 		}
 		batch = append(batch, row)
