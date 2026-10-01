@@ -468,13 +468,16 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 					Generation:        0,
 					CreatedAt:         createdAt,
 				},
-				BillingUserID:  userID,
-				WorkloadSource: metering.WorkloadSourceHook,
-				UserEmail:      frame.Actor.EmailAddress,
-				Provider:       "anthropic",
-				HookHostname:   "",
-				AccountType:    "team",
-				BillingMode:    "unknown",
+				// Split rows publish only their own content; an unsplit row
+				// retains the complete structured source message.
+				PublishRowLocalContent: len(rows) > 1,
+				BillingUserID:          userID,
+				WorkloadSource:         metering.WorkloadSourceHook,
+				UserEmail:              frame.Actor.EmailAddress,
+				Provider:               "anthropic",
+				HookHostname:           "",
+				AccountType:            "team",
+				BillingMode:            "unknown",
 			})
 		}
 	}

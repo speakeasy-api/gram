@@ -13,13 +13,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
+	"google.golang.org/protobuf/proto"
 
+	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestStoreDeduplicatesGrowingTranscripts(t *testing.T) {
@@ -317,12 +320,66 @@ func TestStorePreservesNativePolicyScopesAndIncomingMessageCount(t *testing.T) {
 	count, err := queries.CountInferenceMessages(t.Context(), chatrepo.CountInferenceMessagesParams{ChatID: chatID, ProjectID: uuid.NullUUID{UUID: config.ProjectID, Valid: true}})
 	require.NoError(t, err)
 	require.EqualValues(t, 2, count)
+	// Every split row keeps the archival message, but publishes only its own
+	// content so consumers cannot classify the full message once per sibling.
+	publications, err := testrepo.New(db).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	byID := make(map[string]*conversationv1.Message)
+	for _, row := range publications {
+		if row.Topic != string(proto.MessageName(&conversationv1.Message{})) {
+			continue
+		}
+		event := &conversationv1.Message{}
+		require.NoError(t, proto.Unmarshal(row.Message, event))
+		require.NotContains(t, byID, event.GetId())
+		byID[event.GetId()] = event
+		require.Empty(t, event.GetBody().GetSourceContentJson())
+		require.Nil(t, event.GetBody().GetSourceContent())
+	}
+	require.Len(t, byID, 4)
+	for i, message := range messages {
+		source := frame.Messages[0].Content
+		if i >= 2 {
+			source = frame.Messages[1].Content
+		}
+		require.JSONEq(t, string(source), string(message.ContentRaw))
+	}
+	textParts := byID[messages[0].ID.String()].GetBody().GetParts()
+	require.Len(t, textParts, 1)
+	require.Equal(t, "Reading the file", textParts[0].GetText())
+	toolParts := byID[messages[1].ID.String()].GetBody().GetParts()
+	require.Len(t, toolParts, 1)
+	require.Equal(t, "read_file", toolParts[0].GetToolCall().GetName())
+	resultParts := byID[messages[2].ID.String()].GetBody().GetParts()
+	require.Len(t, resultParts, 1)
+	require.Equal(t, "file output", resultParts[0].GetText())
+	promptParts := byID[messages[3].ID.String()].GetBody().GetParts()
+	require.Len(t, promptParts, 2)
+	require.Equal(t, "Summarize this", promptParts[0].GetText())
+	require.Equal(t, parts[0].ContentAssetUrl, promptParts[1].GetContentReference().GetUri())
+	require.Equal(t, "example.txt", promptParts[1].GetContentReference().GetFilename())
+	require.Equal(t, parts[0].ExternalID.String, promptParts[1].GetContentReference().GetExternalId())
 	frame.Messages = append(frame.Messages, Message{Role: "assistant", Content: json.RawMessage(`[{"type":"text","text":"summary"}]`)})
 	saveFrame(t, store, config, frame, "")
 	messages, err = queries.ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: config.ProjectID})
 	require.NoError(t, err)
 	require.Len(t, messages, 5)
 	require.Equal(t, "summary", messages[4].Content)
+	publications, err = testrepo.New(db).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	var unsplit *conversationv1.Message
+	for _, row := range publications {
+		if row.Topic != string(proto.MessageName(&conversationv1.Message{})) {
+			continue
+		}
+		event := &conversationv1.Message{}
+		require.NoError(t, proto.Unmarshal(row.Message, event))
+		if event.GetId() == messages[4].ID.String() {
+			unsplit = event
+		}
+	}
+	require.NotNil(t, unsplit)
+	require.JSONEq(t, string(frame.Messages[2].Content), string(unsplit.GetBody().GetSourceContentJson()))
 }
 
 func TestExternalContentPartsCommitWithParent(t *testing.T) {

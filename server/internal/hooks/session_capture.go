@@ -575,6 +575,20 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 		}
 	}
 
+	writes := []chat.MessageWrite{{
+		Params:         msgParams,
+		BillingUserID:  metadata.UserID,
+		AssistantID:    uuid.Nil,
+		WorkloadSource: metering.WorkloadSourceHook,
+		UserEmail:      metadata.UserEmail,
+		Provider:       metadata.Provider,
+		HookHostname:   metadata.Hostname,
+		AccountType:    metadata.AccountType,
+		BillingMode:    metadata.BillingMode,
+	}}
+	// The locked native-prompt fallback can suppress this write even when
+	// speculative publication preparation fails.
+	prepared, preparationErr := s.writer.PreparePublications(ctx, projectID, writes)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin prompt correlation transaction: %w", err)
@@ -602,22 +616,14 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 	// Claude and Cursor have no turn ID shared with LiteLLM. If LiteLLM won the
 	// lock, keep both rows rather than guessing from prompt text and losing or
 	// misattributing a legitimate repeated native turn.
+	if preparationErr != nil {
+		return false, fmt.Errorf("prepare prompt publication: %w", preparationErr)
+	}
 
 	if err := s.ensureHookChat(ctx, repo.New(tx), metadata, msgParams.ChatID, projectID, defaultTitle); err != nil {
 		return false, err
 	}
-	writes := []chat.MessageWrite{{
-		Params:         msgParams,
-		BillingUserID:  metadata.UserID,
-		AssistantID:    uuid.Nil,
-		WorkloadSource: metering.WorkloadSourceHook,
-		UserEmail:      metadata.UserEmail,
-		Provider:       metadata.Provider,
-		HookHostname:   metadata.Hostname,
-		AccountType:    metadata.AccountType,
-		BillingMode:    metadata.BillingMode,
-	}}
-	n, err := s.writer.WriteInTx(ctx, tx, writes)
+	n, err := s.writer.WriteInTx(ctx, tx, writes, prepared)
 	if err != nil {
 		return false, fmt.Errorf("insert uncorrelated agent prompt: %w", err)
 	}

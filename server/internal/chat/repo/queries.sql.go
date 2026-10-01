@@ -1301,6 +1301,82 @@ func (q *Queries) GetMaxGenerationForChat(ctx context.Context, arg GetMaxGenerat
 	return generation, err
 }
 
+const getMessagesForPublication = `-- name: GetMessagesForPublication :many
+SELECT m.id, m.chat_id, m.role, m.created_at, m.message_id, m.tool_call_id,
+       m.finish_reason, m.source, m.user_id, m.external_user_id,
+       m.external_message_id, m.model, m.user_agent, m.replayed,
+       c.external_chat_id, c.cwd, c.user_account_id
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+WHERE m.project_id = $1::uuid AND m.id = ANY($2::uuid[])
+ORDER BY m.seq
+`
+
+type GetMessagesForPublicationParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+type GetMessagesForPublicationRow struct {
+	ID                uuid.UUID
+	ChatID            uuid.UUID
+	Role              string
+	CreatedAt         pgtype.Timestamptz
+	MessageID         pgtype.Text
+	ToolCallID        pgtype.Text
+	FinishReason      pgtype.Text
+	Source            pgtype.Text
+	UserID            pgtype.Text
+	ExternalUserID    pgtype.Text
+	ExternalMessageID pgtype.Text
+	Model             pgtype.Text
+	UserAgent         pgtype.Text
+	Replayed          bool
+	ExternalChatID    pgtype.Text
+	Cwd               pgtype.Text
+	UserAccountID     uuid.NullUUID
+}
+
+// Read authoritative identity and attribution in the write transaction.
+// Bodies are carried from preparation rather than fetched or rebuilt here.
+func (q *Queries) GetMessagesForPublication(ctx context.Context, arg GetMessagesForPublicationParams) ([]GetMessagesForPublicationRow, error) {
+	rows, err := q.db.Query(ctx, getMessagesForPublication, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetMessagesForPublicationRow
+	for rows.Next() {
+		var i GetMessagesForPublicationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.Role,
+			&i.CreatedAt,
+			&i.MessageID,
+			&i.ToolCallID,
+			&i.FinishReason,
+			&i.Source,
+			&i.UserID,
+			&i.ExternalUserID,
+			&i.ExternalMessageID,
+			&i.Model,
+			&i.UserAgent,
+			&i.Replayed,
+			&i.ExternalChatID,
+			&i.Cwd,
+			&i.UserAccountID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getOldestChatCreatedAt = `-- name: GetOldestChatCreatedAt :one
 SELECT MIN(created_at)::timestamptz AS created_at
 FROM chats

@@ -489,13 +489,14 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 				Generation:  0,
 				CreatedAt:   conv.ToPGTimestamptz(admittedAt[i]),
 			},
-			BillingUserID:  userID,
-			WorkloadSource: metering.WorkloadSourceImport,
-			UserEmail:      event.Actor.UserEmail,
-			Provider:       codexProviderOpenAI,
-			HookHostname:   "",
-			AccountType:    complianceAccountTypeTeam,
-			BillingMode:    src.cfg.BillingMode,
+			PublishRowLocalContent: false,
+			BillingUserID:          userID,
+			WorkloadSource:         metering.WorkloadSourceImport,
+			UserEmail:              event.Actor.UserEmail,
+			Provider:               codexProviderOpenAI,
+			HookHostname:           "",
+			AccountType:            complianceAccountTypeTeam,
+			BillingMode:            src.cfg.BillingMode,
 		})
 	}
 	if len(rows) == 0 {
