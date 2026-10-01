@@ -77,6 +77,10 @@ func TestNormalizeAudience(t *testing.T) {
 	got, err = normalizeAudience("https://auth.example.com/oauth2/default")
 	require.NoError(t, err)
 	require.Equal(t, "https://auth.example.com/oauth2/default", got)
+	// Only the ends are trimmed; the catalog's invisible-character rule does not apply.
+	got, err = normalizeAudience("https://auth.example.com/a\u00a0b")
+	require.NoError(t, err)
+	require.Equal(t, "https://auth.example.com/a\u00a0b", got)
 	for _, bad := range []string{"", "auth.linear.com", "http://auth.linear.com", "https://auth.linear.com/?x=1", "https://auth.linear.com/#f", "https://auth.linear.com/?", "https://auth.linear.com#", "https://user@auth.linear.com"} {
 		_, err := normalizeAudience(bad)
 		require.Error(t, err, bad)
