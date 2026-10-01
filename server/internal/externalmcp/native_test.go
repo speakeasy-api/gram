@@ -171,11 +171,15 @@ type nativeEvidenceTestSource struct {
 	nativeTestSource
 	evidencePages   []mcpregistry.Page
 	evidenceOptions []mcpregistry.ListOptions
+	listErr         error
 	names           []string
 }
 
 func (s *nativeEvidenceTestSource) List(_ context.Context, opts mcpregistry.ListOptions) (mcpregistry.Page, error) {
 	s.evidenceOptions = append(s.evidenceOptions, opts)
+	if s.listErr != nil || len(s.evidencePages) == 0 {
+		return mcpregistry.Page{}, s.listErr
+	}
 	page := s.evidencePages[0]
 	s.evidencePages = s.evidencePages[1:]
 	return page, nil
@@ -190,12 +194,16 @@ func TestNativeListEvidenceServers(t *testing.T) {
 	t.Parallel()
 	const valid = `{"server":{"name":"io.example/evidence","description":"Evidence server","version":"1","remotes":[{"type":"streamable-http","url":"https://example.com/mcp"}]},"_meta":{"io.modelcontextprotocol.registry/official":{"status":"active"}}}`
 	summary := mcpregistry.Summary{Name: "io.example/evidence"}
+	sourceErr := errors.New("evidence source unavailable")
 	for _, tc := range []struct {
 		name        string
 		data        string
 		pages       []mcpregistry.Page
 		wantCount   int
 		wantLookups int
+		listErr     error
+		lookupErr   error
+		errorPrefix string
 		cursors     []string
 	}{
 		{name: "eligible unpublished", data: valid, pages: []mcpregistry.Page{{Entries: []mcpregistry.Summary{summary}}}, wantCount: 1, wantLookups: 1, cursors: []string{""}},
@@ -205,13 +213,21 @@ func TestNativeListEvidenceServers(t *testing.T) {
 		{name: "deprecated retained", data: strings.Replace(valid, "active", "deprecated", 1), pages: []mcpregistry.Page{{Entries: []mcpregistry.Summary{summary}}}, wantCount: 1, wantLookups: 1, cursors: []string{""}},
 		{name: "pagination after filtered page", data: valid, pages: []mcpregistry.Page{{Entries: []mcpregistry.Summary{{Issues: []mcpregistry.Issue{{Message: "invalid"}}}}, NextCursor: "next"}, {Entries: []mcpregistry.Summary{summary}, NextCursor: "last"}, {Entries: []mcpregistry.Summary{summary}}}, wantCount: 2, wantLookups: 2, cursors: []string{"", "next", "last"}},
 		{name: "empty", data: valid, pages: []mcpregistry.Page{{}}, cursors: []string{""}},
+		{name: "exhausted pages", pages: []mcpregistry.Page{{NextCursor: "next"}}, cursors: []string{"", "next"}},
+		{name: "list failure", listErr: sourceErr, errorPrefix: "list retained evidence", cursors: []string{""}},
+		{name: "lookup failure", pages: []mcpregistry.Page{{Entries: []mcpregistry.Summary{summary}}}, lookupErr: sourceErr, errorPrefix: "read retained evidence", wantLookups: 1, cursors: []string{""}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			source := &nativeEvidenceTestSource{nativeTestSource: nativeTestSource{entry: mcpregistry.Entry{Data: json.RawMessage(tc.data)}}, evidencePages: tc.pages}
+			source := &nativeEvidenceTestSource{nativeTestSource: nativeTestSource{entry: mcpregistry.Entry{Data: json.RawMessage(tc.data)}, err: tc.lookupErr}, evidencePages: tc.pages, listErr: tc.listErr}
 			registry := Registry{ID: uuid.New()}
 			result, err := NewNativeRegistryReader(source).ListEvidenceServers(t.Context(), registry)
-			require.NoError(t, err)
+			if tc.errorPrefix != "" {
+				require.ErrorIs(t, err, sourceErr)
+				require.ErrorContains(t, err, tc.errorPrefix)
+			} else {
+				require.NoError(t, err)
+			}
 			require.Len(t, result.Servers, tc.wantCount)
 			require.Len(t, source.names, tc.wantLookups)
 			for _, name := range source.names {
