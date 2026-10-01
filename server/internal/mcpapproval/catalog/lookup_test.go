@@ -3,15 +3,16 @@ package catalog
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
+	"testing"
+
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/stretchr/testify/require"
-	"io"
-	"log/slog"
-	"testing"
 )
 
 type lookupProjects struct {
