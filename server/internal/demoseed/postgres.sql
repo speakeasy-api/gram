@@ -2592,6 +2592,38 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
      now() - interval '10 hours');
 
   ------------------------------------------------------------------
+  -- Explore saved queries: the questions the team keeps, each saved by a
+  -- demo user so the list shows who made it. Names repeat on purpose —
+  -- two people saving "Sessions by surface" is normal. Each spec is the
+  -- shape the dashboard saves (savedSpec.ts) and plans against the
+  -- analytics catalog, so the list reads them as valid. Rows cascade with
+  -- the demo project, which the reset at the top deletes.
+  ------------------------------------------------------------------
+  INSERT INTO queries (id, project_id, organization_id, created_by_user_id,
+                       name, dataset, spec, created_at, updated_at)
+  VALUES
+    (demo.det_uuid('gram-demo-explore-query-1'), proj_a, demo_org, 'user_demo_amara',
+     'Sessions by surface', 'sessions',
+     '{"chart_type":"bar","window":"7d","grain":"day","ungrouped":false,"dimensions":["surface"],"measures":[{"op":"count","field":"","alias":"count"}],"filters":[],"order_by":[],"limit":0}',
+     now() - interval '9 days', now() - interval '2 hours'),
+    (demo.det_uuid('gram-demo-explore-query-2'), proj_a, demo_org, 'user_demo_priya',
+     'Slowest MCP tools', 'tool_calls',
+     '{"chart_type":"table","window":"7d","grain":"none","ungrouped":false,"dimensions":["mcp_server","mcp_tool"],"measures":[{"op":"p95","field":"duration_ms","alias":"p95_duration_ms"},{"op":"count","field":"","alias":"count"}],"filters":[],"order_by":[{"measure":"p95_duration_ms","direction":"desc"}],"limit":20}',
+     now() - interval '6 days', now() - interval '1 day'),
+    (demo.det_uuid('gram-demo-explore-query-3'), proj_a, demo_org, 'user_demo_jonas',
+     'Tool calls by status', 'tool_calls',
+     '{"chart_type":"line","window":"7d","grain":"day","ungrouped":false,"dimensions":["status"],"measures":[{"op":"count","field":"","alias":"count"}],"filters":[],"order_by":[],"limit":0}',
+     now() - interval '5 days', now() - interval '3 days'),
+    (demo.det_uuid('gram-demo-explore-query-4'), proj_a, demo_org, 'user_demo_mateo',
+     'Turns per session by model', 'sessions',
+     '{"chart_type":"ranked","window":"30d","grain":"none","ungrouped":false,"dimensions":["model"],"measures":[{"op":"avg","field":"turn_count","alias":"avg_turn_count"}],"filters":[],"order_by":[{"measure":"avg_turn_count","direction":"desc"}],"limit":0}',
+     now() - interval '8 days', now() - interval '4 days'),
+    (demo.det_uuid('gram-demo-explore-query-5'), proj_a, demo_org, 'user_demo_hana',
+     'Sessions by surface', 'sessions',
+     '{"chart_type":"area","window":"30d","grain":"day","ungrouped":false,"dimensions":["surface"],"measures":[{"op":"count","field":"","alias":"count"}],"filters":[],"order_by":[],"limit":0}',
+     now() - interval '11 days', now() - interval '6 days');
+
+  ------------------------------------------------------------------
   -- Postflight asserts: demo data landed, and nothing leaked outside
   -- the demo org.
   ------------------------------------------------------------------
@@ -3486,6 +3518,11 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   SELECT count(*) INTO stray FROM slack_directory_connections WHERE organization_id = demo_org;
   IF stray <> 2 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 2 Slack workspace connections, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM queries WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 5 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 5 Explore saved queries, found %', stray;
   END IF;
 
   RAISE NOTICE 'demo seed ok: % chats, % findings, % members, % tools',

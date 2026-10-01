@@ -463,6 +463,15 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     **+ Allow a machine** and type a subject ending in `*`: the warning appears
     in destructive red under the field and **Allow machine** stays disabled.
 
+26. **Explore saved queries** — open `/<org>/projects/default/explore` and
+    click **Saved queries**. Five queries, most recently updated first,
+    starting with Amara Okafor's "Sessions by surface"; Hana Sato's query of
+    the same name sits further down with her name beside it. None carries
+    the broken-query warning. Opening "Slowest MCP tools" restores the
+    tool_calls dataset, a 7-day window and a table ordered by p95 duration,
+    runs it, and returns rows; the bar names the query with Priya Raman as
+    its creator and **Save** stays disabled until something is edited.
+
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
