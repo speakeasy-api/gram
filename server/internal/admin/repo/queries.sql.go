@@ -404,6 +404,28 @@ func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganiza
 	return i, err
 }
 
+const adminGetOrganizationMemberCursor = `-- name: AdminGetOrganizationMemberCursor :one
+SELECT u.id
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.deleted IS FALSE
+  AND u.deleted_at IS NULL
+  AND u.id = $2
+`
+
+type AdminGetOrganizationMemberCursorParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) AdminGetOrganizationMemberCursor(ctx context.Context, arg AdminGetOrganizationMemberCursorParams) (string, error) {
+	row := q.db.QueryRow(ctx, adminGetOrganizationMemberCursor, arg.OrganizationID, arg.UserID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const adminGetOrganizationStats = `-- name: AdminGetOrganizationStats :one
 WITH orgs AS (
     SELECT
@@ -564,6 +586,66 @@ func (q *Queries) AdminListOrganizationMembers(ctx context.Context, organization
 	var items []AdminListOrganizationMembersRow
 	for rows.Next() {
 		var i AdminListOrganizationMembersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.LastLogin,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListOrganizationMembersPage = `-- name: AdminListOrganizationMembersPage :many
+SELECT
+    u.id,
+    u.email,
+    u.display_name,
+    u.last_login,
+    u.created_at,
+    u.updated_at
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.deleted IS FALSE
+  AND u.deleted_at IS NULL
+  AND u.id > $2::text
+ORDER BY u.id ASC
+LIMIT $3
+`
+
+type AdminListOrganizationMembersPageParams struct {
+	OrganizationID string
+	AfterUserID    string
+	PageLimit      int32
+}
+
+type AdminListOrganizationMembersPageRow struct {
+	ID          string
+	Email       string
+	DisplayName string
+	LastLogin   pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
+func (q *Queries) AdminListOrganizationMembersPage(ctx context.Context, arg AdminListOrganizationMembersPageParams) ([]AdminListOrganizationMembersPageRow, error) {
+	rows, err := q.db.Query(ctx, adminListOrganizationMembersPage, arg.OrganizationID, arg.AfterUserID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListOrganizationMembersPageRow
+	for rows.Next() {
+		var i AdminListOrganizationMembersPageRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Email,
