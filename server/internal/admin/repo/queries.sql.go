@@ -1509,6 +1509,33 @@ func (q *Queries) LockEnterpriseTrialInOrganizations(ctx context.Context, ids []
 	return organization_id, err
 }
 
+const lockOrganizationAccess = `-- name: LockOrganizationAccess :one
+SELECT id, name, slug, disabled_at
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+type LockOrganizationAccessRow struct {
+	ID         string
+	Name       string
+	Slug       string
+	DisabledAt pgtype.Timestamptz
+}
+
+// Pin canonical identity and current access state before a guarded transition.
+func (q *Queries) LockOrganizationAccess(ctx context.Context, id string) (LockOrganizationAccessRow, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationAccess, id)
+	var i LockOrganizationAccessRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
 const lockOrganizationMetadata = `-- name: LockOrganizationMetadata :one
 SELECT id
 FROM organization_metadata
@@ -1673,6 +1700,45 @@ ON CONFLICT (integration_method_id, capability_id) DO NOTHING
 func (q *Queries) SeedSupportReferences(ctx context.Context, catalog []byte) error {
 	_, err := q.db.Exec(ctx, seedSupportReferences, catalog)
 	return err
+}
+
+const setOrganizationAccess = `-- name: SetOrganizationAccess :one
+UPDATE organization_metadata
+SET disabled_at = CASE
+        WHEN $1::boolean THEN NULL
+        ELSE COALESCE(disabled_at, clock_timestamp())
+    END,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND disabled_at IS NOT DISTINCT FROM $3::timestamptz
+RETURNING id, name, slug, disabled_at
+`
+
+type SetOrganizationAccessParams struct {
+	Enabled            bool
+	ID                 string
+	ExpectedDisabledAt pgtype.Timestamptz
+}
+
+type SetOrganizationAccessRow struct {
+	ID         string
+	Name       string
+	Slug       string
+	DisabledAt pgtype.Timestamptz
+}
+
+// Caller holds the metadata lock. Preserve disable timestamp semantics and the
+// WorkOS webhook cursor while checking that the expected state still matches.
+func (q *Queries) SetOrganizationAccess(ctx context.Context, arg SetOrganizationAccessParams) (SetOrganizationAccessRow, error) {
+	row := q.db.QueryRow(ctx, setOrganizationAccess, arg.Enabled, arg.ID, arg.ExpectedDisabledAt)
+	var i SetOrganizationAccessRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.DisabledAt,
+	)
+	return i, err
 }
 
 const upsertSupportCoverage = `-- name: UpsertSupportCoverage :exec

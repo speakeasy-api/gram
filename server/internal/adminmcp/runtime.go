@@ -50,6 +50,7 @@ type Runtime struct {
 	authenticator Authenticator
 	server        *mcp.Server
 	resourceURL   string
+	writes        *writeTools
 }
 
 // OrganizationReader is the existing admin service read contract. The runtime
@@ -114,7 +115,8 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	organizationMemberReader, _ := reader.(OrganizationMemberReader)
 	billingDetailReader, _ := reader.(BillingDetailReader)
 	registryReader, _ := reader.(RegistryReader)
-	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, usageReader != nil, coverageReader != nil, issuerReader != nil, matrixReader != nil, onboardingReader != nil, projectMCPReader != nil, billingDiagnosticsReader != nil, organizationStatsReader != nil, organizationMemberReader != nil, billingDetailReader != nil, registryReader != nil)
+	runtime := &Runtime{authenticator: authenticator, server: server, resourceURL: resourceURL}
+	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, usageReader != nil, coverageReader != nil, issuerReader != nil, matrixReader != nil, onboardingReader != nil, projectMCPReader != nil, billingDiagnosticsReader != nil, organizationStatsReader != nil, organizationMemberReader != nil, billingDetailReader != nil, registryReader != nil, runtime)
 	registerOrganizationTools(server, reader)
 	registerUserTools(server, userReader)
 	registerProjectTools(server, reader, projectReader)
@@ -124,12 +126,13 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	registerCoverageTools(server, reader, coverageReader)
 	registerIssuerTools(server, issuerReader)
 	registerSupportMatrixTools(server, matrixReader)
+	registerSupportMatrixEntryTool(server, matrixReader)
 	registerDiagnosticTools(server, reader, projectReader, onboardingReader, projectMCPReader)
 	registerBillingDiagnosticTools(server, reader, billingDiagnosticsReader)
 	registerOrganizationDetailTools(server, reader, organizationStatsReader, organizationMemberReader)
 	registerBillingDetailTools(server, reader, billingDetailReader)
 	registerRegistryTools(server, registryReader)
-	return &Runtime{authenticator: authenticator, server: server, resourceURL: resourceURL}
+	return runtime
 }
 
 func (r *Runtime) Handler() http.Handler {

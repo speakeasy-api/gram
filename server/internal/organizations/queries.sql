@@ -52,6 +52,14 @@ SELECT *
 FROM organization_metadata
 WHERE id = @id;
 
+-- name: LockOrganizationForAdminConfiguration :one
+-- Pin the displayed identity without blocking settings inserts that acquire
+-- foreign-key KEY SHARE locks after the chat-analysis budget lock.
+SELECT *
+FROM organization_metadata
+WHERE id = @id
+FOR NO KEY UPDATE;
+
 -- name: LockOrganizationForInviteAcceptance :one
 SELECT *
 FROM organization_metadata

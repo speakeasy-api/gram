@@ -10,13 +10,14 @@ import (
 )
 
 type AdminContext struct {
-	Email     string   `json:"email"`
-	ReadOnly  bool     `json:"read_only"`
-	Scopes    []string `json:"scopes"`
-	Workflows []string `json:"available_workflows"`
+	Email           string           `json:"email"`
+	ReadOnly        bool             `json:"read_only"`
+	Scopes          []string         `json:"scopes"`
+	Workflows       []string         `json:"available_workflows"`
+	WriteOperations []WriteOperation `json:"available_write_operations"`
 }
 
-func registerContextTool(server *mcp.Server, organizationReadsAvailable, projectReadsAvailable, configurationReadsAvailable, activityReadsAvailable, usageReadsAvailable, coverageReadsAvailable, issuerReadsAvailable, matrixReadsAvailable, onboardingReadsAvailable, projectMCPReadsAvailable, billingDiagnosticsAvailable, organizationStatsAvailable, organizationMembersAvailable, billingDetailsAvailable, registryAvailable bool) {
+func registerContextTool(server *mcp.Server, organizationReadsAvailable, projectReadsAvailable, configurationReadsAvailable, activityReadsAvailable, usageReadsAvailable, coverageReadsAvailable, issuerReadsAvailable, matrixReadsAvailable, onboardingReadsAvailable, projectMCPReadsAvailable, billingDiagnosticsAvailable, organizationStatsAvailable, organizationMembersAvailable, billingDetailsAvailable, registryAvailable bool, runtime *Runtime) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_admin_context",
 		Title:       "Get Staff Admin Context",
@@ -50,7 +51,7 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 			workflows = append(workflows, "inspect global issuers and bounded duplicate/migration preflights")
 		}
 		if matrixReadsAvailable {
-			workflows = append(workflows, "inspect global support matrix facts without operator notes")
+			workflows = append(workflows, "inspect global support matrix facts without operator notes", "inspect one exact support matrix entry with bounded editable fields and revision")
 		}
 		if onboardingReadsAvailable {
 			workflows = append(workflows, "inspect the onboarding playbook assigned to an organization")
@@ -73,11 +74,23 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 		if registryAvailable {
 			workflows = append(workflows, "inspect bounded registry entries and safe validation summaries")
 		}
+		operations := []WriteOperation{}
+		if slices.Contains(principal.Scopes, ScopeWrite) && runtime.writes != nil {
+			for _, op := range runtime.writes.writes.EnabledOperations() {
+				if runtime.writes.writers[op] != nil {
+					operations = append(operations, op)
+				}
+			}
+		}
+		if len(operations) > 0 {
+			workflows = append(workflows, "prepare enabled exact staff changes for separate browser approval, execute approved proposals and inspect receipts")
+		}
 		return nil, AdminContext{
-			Email:     principal.Email,
-			ReadOnly:  !slices.Contains(principal.Scopes, "admin:write"),
-			Scopes:    slices.Clone(principal.Scopes),
-			Workflows: workflows,
+			Email:           principal.Email,
+			ReadOnly:        len(operations) == 0,
+			WriteOperations: operations,
+			Scopes:          slices.Clone(principal.Scopes),
+			Workflows:       workflows,
 		}, nil
 	})
 }

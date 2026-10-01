@@ -432,6 +432,26 @@ SET disabled_at = NULL,
     updated_at = clock_timestamp()
 WHERE id = @id;
 
+-- name: LockOrganizationAccess :one
+-- Pin canonical identity and current access state before a guarded transition.
+SELECT id, name, slug, disabled_at
+FROM organization_metadata
+WHERE id = @id
+FOR UPDATE;
+
+-- name: SetOrganizationAccess :one
+-- Caller holds the metadata lock. Preserve disable timestamp semantics and the
+-- WorkOS webhook cursor while checking that the expected state still matches.
+UPDATE organization_metadata
+SET disabled_at = CASE
+        WHEN @enabled::boolean THEN NULL
+        ELSE COALESCE(disabled_at, clock_timestamp())
+    END,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND disabled_at IS NOT DISTINCT FROM @expected_disabled_at::timestamptz
+RETURNING id, name, slug, disabled_at;
+
 -- name: AdminListProjectsForOrganization :many
 -- Not a plain sum: once AGE-1880 copies legacy servers into mcp_servers, a
 -- toolset and its mcp_servers row would each be counted. The anti join on the

@@ -44,6 +44,8 @@ const (
 	ActionOrganizationEnterpriseTrialStarted    Action = "organization:enterprise_trial_started"
 	ActionOrganizationEnterpriseTrialEndChanged Action = "organization:enterprise_trial_end_changed"
 
+	ActionOrganizationDisabled        Action = "organization:disabled"
+	ActionOrganizationEnabled         Action = "organization:enabled"
 	ActionOrganizationPaygActivated   Action = "organization:payg_activated"
 	ActionOrganizationPaygDeactivated Action = "organization:payg_deactivated"
 )
@@ -985,6 +987,61 @@ type LogOrganizationPaygDeactivatedEvent struct {
 
 	OrganizationSnapshotBefore *OrganizationPaygActivationSnapshot
 	OrganizationSnapshotAfter  *OrganizationPaygActivationSnapshot
+}
+
+// OrganizationAccessSnapshot records whether the organization was disabled.
+type OrganizationAccessSnapshot struct {
+	DisabledAt *time.Time `json:"disabled_at"`
+}
+
+// LogOrganizationAccessEvent describes an organization access transition.
+type LogOrganizationAccessEvent struct {
+	OrganizationID             string
+	Actor                      urn.Principal
+	ActorDisplayName           *string
+	ActorSlug                  *string
+	OrganizationName           string
+	OrganizationSlug           string
+	OrganizationSnapshotBefore *OrganizationAccessSnapshot
+	OrganizationSnapshotAfter  *OrganizationAccessSnapshot
+}
+
+func (l *Logger) LogOrganizationEnabled(ctx context.Context, dbtx repo.DBTX, event LogOrganizationAccessEvent) error {
+	return l.logOrganizationAccess(ctx, dbtx, event, ActionOrganizationEnabled)
+}
+
+func (l *Logger) LogOrganizationDisabled(ctx context.Context, dbtx repo.DBTX, event LogOrganizationAccessEvent) error {
+	return l.logOrganizationAccess(ctx, dbtx, event, ActionOrganizationDisabled)
+}
+
+func (l *Logger) logOrganizationAccess(ctx context.Context, dbtx repo.DBTX, event LogOrganizationAccessEvent, action Action) error {
+	before, err := marshalAuditPayload(event.OrganizationSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+	after, err := marshalAuditPayload(event.OrganizationSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+	entry := repo.InsertAuditLogParams{
+		OrganizationID:     event.OrganizationID,
+		ProjectID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ActorID:            event.Actor.ID,
+		ActorType:          string(event.Actor.Type),
+		ActorDisplayName:   conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:          conv.PtrToPGTextEmpty(event.ActorSlug),
+		Action:             string(action),
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+		BeforeSnapshot:     before,
+		AfterSnapshot:      after,
+		Metadata:           nil,
+		ActingSurface:      conv.ToPGTextEmpty(""),
+		ActingClientID:     conv.ToPGTextEmpty(""),
+	}
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationAccessV1})
 }
 
 func (l *Logger) LogOrganizationPaygDeactivated(ctx context.Context, dbtx repo.DBTX, event LogOrganizationPaygDeactivatedEvent) error {
