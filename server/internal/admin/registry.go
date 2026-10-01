@@ -87,7 +87,7 @@ func (s *Service) registryMutationResult(ctx context.Context, action string, e m
 				paths = append(paths, issue.Path)
 			}
 		}
-		s.logger.WarnContext(ctx, "registry mutation failed", attr.SlogAuditAction(action), attr.SlogAuthorizationActorID(actor.String()), attr.SlogRegistryIssuePaths(paths))
+		s.logger.WarnContext(ctx, "registry mutation failed", attr.SlogAuditAction(action), attr.SlogAuthorizationActorID(actor.String()), attr.SlogRegistryInvalidPaths(paths))
 		return nil, s.registryError(ctx, err)
 	}
 
