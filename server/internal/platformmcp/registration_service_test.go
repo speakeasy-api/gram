@@ -667,8 +667,10 @@ func TestRegistrationRetainsAcceptedCatalogIdentity(t *testing.T) {
 			store := &retainedReceiptStore{recordingRegistrationStore: recordingRegistrationStore{project: ResolvedProject{ID: uuid.New(), Slug: "project"}, converged: receipt, completed: receipt}, receipt: receipt}
 			details := CatalogDetails{CatalogCandidate: CatalogCandidate{ProviderKey: "provider", CatalogRef: "reviewed/mcp", SetupIntent: "authorize"}, Transport: "streamable-http", remoteURL: "https://provider.test/mcp"}
 			service := newRegistrationService(retainedTestCatalog{testCatalog: testCatalog{err: ErrCatalogRejected}, details: details}, &testRegistrationGate{enabled: true}, store)
-			_, err := service.RegisterCatalogMCP(t.Context(), registrationServicePrincipal(), RegisterCatalogMCPInput{ProjectSlug: "project", ProviderKey: "provider", CatalogRef: "reviewed/mcp", IdempotencyKey: "accepted"})
+			result, err := service.RegisterCatalogMCP(t.Context(), registrationServicePrincipal(), RegisterCatalogMCPInput{ProjectSlug: "project", ProviderKey: "provider", CatalogRef: "reviewed/mcp", IdempotencyKey: "accepted"})
 			require.NoError(t, err)
+			require.Equal(t, id.String(), result.Registration)
+			require.Equal(t, receipt.ID, result.Receipt.ID)
 			require.Zero(t, store.beginCalls)
 		})
 	}
