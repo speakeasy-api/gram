@@ -440,7 +440,7 @@ func (s *Service) decode(ctx context.Context, logger *slog.Logger, id uuid.UUID,
 		for _, issue := range issues {
 			paths = append(paths, issue.Path)
 		}
-		logger.WarnContext(ctx, "skipping invalid catalog entry", attr.SlogRegistryEntryID(id.String()), attr.SlogRegistryIssuePaths(paths))
+		logger.WarnContext(ctx, "skipping invalid catalog entry", attr.SlogRegistryEntryID(id.String()), attr.SlogRegistryInvalidPaths(paths))
 		return zero, false
 	}
 	rec, err := decodeRecord(data)
