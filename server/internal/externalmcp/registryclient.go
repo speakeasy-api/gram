@@ -572,7 +572,7 @@ func filterServers(servers []*types.ExternalMCPServerEntry, search string) []*ty
 func convertListServers(registryUUID uuid.UUID, entries []serverEntry) ([]*types.ExternalMCPServerEntry, error) {
 	servers := make([]*types.ExternalMCPServerEntry, 0, len(entries))
 	for _, entry := range entries {
-		// Pulse lifecycle filtering does not apply to native discovery records.
+		// Legacy lifecycle filtering does not apply to native discovery records.
 		if entry.Meta.Version.Status == "deleted" {
 			continue
 		}
@@ -610,7 +610,7 @@ func projectListServer(registryUUID uuid.UUID, s serverEntry) (*types.ExternalMC
 	}
 
 	// A server supports DCR when any remote's OAuth auth option carries a
-	// non-empty registration endpoint in PulseMCP's embedded discovery
+	// non-empty registration endpoint in the legacy catalog’s embedded discovery
 	// result. Computed in the same pass that strips per-remote tools.
 	supportsDCR := false
 	for _, remote := range []*serverRemoteMeta{
