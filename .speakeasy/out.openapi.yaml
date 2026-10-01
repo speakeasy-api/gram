@@ -90187,6 +90187,9 @@ components:
             - open
             - dismissed
             - installed
+        supports_dcr:
+          type: boolean
+          description: Whether the catalog records that the server's authorization server supports OAuth dynamic client registration; install flows default to per-user OAuth when true.
         title:
           type: string
           description: Catalog display title when the entry has one.
@@ -90202,6 +90205,7 @@ components:
         - okta_applications
         - state
         - installed_urls
+        - supports_dcr
     OktaServerSuggestionApplication:
       type: object
       properties:

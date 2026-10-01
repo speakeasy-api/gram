@@ -41,7 +41,7 @@ var Application = Type("OktaServerSuggestionApplication", func() {
 
 var Suggestion = Type("OktaServerSuggestion", func() {
 	Description("A Gram-owned catalog entry whose Okta mapping matches at least one active, assigned application in the organization's Okta snapshot. Suggest only; nothing is created until the administrator accepts through the remote MCP install flow.")
-	Required("registry_entry_id", "server_name", "description", "remotes", "okta_applications", "state", "installed_urls")
+	Required("registry_entry_id", "server_name", "description", "remotes", "okta_applications", "state", "installed_urls", "supports_dcr")
 	Attribute("registry_entry_id", String, "Catalog entry id; the key for dismiss and restore.", func() {
 		Format(FormatUUID)
 	})
@@ -52,6 +52,7 @@ var Suggestion = Type("OktaServerSuggestion", func() {
 	Attribute("icon_url", String, "HTTPS URL of the entry's icon when it has one.", func() {
 		Format(FormatURI)
 	})
+	Attribute("supports_dcr", Boolean, "Whether the catalog records that the server's authorization server supports OAuth dynamic client registration; install flows default to per-user OAuth when true.")
 	Attribute("remotes", ArrayOf(Remote), "Remote endpoints in catalog order.")
 	Attribute("okta_applications", ArrayOf(Application), "Matching Okta application instances, by label.")
 	Attribute("xaa_issuer", String, "Vendor Issuer URL for Cross App Access when the catalog knows it.")

@@ -821,6 +821,7 @@ func unmarshalOktaServerSuggestionResponseBodyToOktaserversuggestionsOktaServerS
 		Description:      *v.Description,
 		DocumentationURL: v.DocumentationURL,
 		IconURL:          v.IconURL,
+		SupportsDcr:      *v.SupportsDcr,
 		XaaIssuer:        v.XaaIssuer,
 		State:            *v.State,
 		DismissedAt:      v.DismissedAt,

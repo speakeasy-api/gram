@@ -103,6 +103,10 @@ type OktaServerSuggestion struct {
 	DocumentationURL *string
 	// HTTPS URL of the entry's icon when it has one.
 	IconURL *string
+	// Whether the catalog records that the server's authorization server supports
+	// OAuth dynamic client registration; install flows default to per-user OAuth
+	// when true.
+	SupportsDcr bool
 	// Remote endpoints in catalog order.
 	Remotes []*OktaServerSuggestionRemote
 	// Matching Okta application instances, by label.
