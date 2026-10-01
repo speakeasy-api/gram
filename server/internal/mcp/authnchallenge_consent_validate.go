@@ -422,6 +422,7 @@ func probeProxyBuilder(build memberProxyBuilder) memberProxyBuilder {
 		p.InitializeRequestInterceptors = nil
 		p.UserRequestObservationInterceptors = nil
 		p.Metrics = nil
+		p.RequestObserver = nil
 		return p, nil
 	}
 }

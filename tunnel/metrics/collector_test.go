@@ -2,7 +2,9 @@ package metrics
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -45,11 +47,12 @@ func TestDimensionsDiscardUnknownNames(t *testing.T) {
 func TestFullFleetFlushIsBoundedAndRecordingContinues(t *testing.T) {
 	c := New()
 	for i := range 10000 {
-		c.Observe(fmt.Sprint(i), "server", "tools/call", "private-agent-secret", "attempt", 0)
+		c.Observe(fmt.Sprint(i), "server", "tools/call", fmt.Sprintf("client-%d", i), "attempt", 0)
 	}
 	entered := make(chan struct{}, 16)
 	release := make(chan struct{})
 	done := make(chan struct{})
+	var unbounded atomic.Bool
 	ctx, cancel := context.WithCancel(t.Context())
 	go func() {
 		c.Flush(ctx, func(ctx context.Context, s Snapshot) error {
@@ -58,7 +61,7 @@ func TestFullFleetFlushIsBoundedAndRecordingContinues(t *testing.T) {
 			default:
 			}
 			if s.Kind == "requests" && s.ClientFamily != "other" {
-				return fmt.Errorf("unbounded family")
+				unbounded.Store(true)
 			}
 			select {
 			case <-ctx.Done():
@@ -86,6 +89,7 @@ func TestFullFleetFlushIsBoundedAndRecordingContinues(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("flush did not stop")
 	}
+	require.False(t, unbounded.Load())
 	require.LessOrEqual(t, len(c.series), MaxSeries)
 }
 
@@ -133,4 +137,81 @@ func TestCoverageSourcesExpireAndPublishedRowsDoNotCountAsLoss(t *testing.T) {
 	require.Zero(t, c.dropped.Load())
 	c.Observe("replacement", "server", "tools/list", "unknown", "attempt", 0)
 	require.Contains(t, c.sources, "replacement")
+}
+
+func TestLatencyUsesExactCompletionBoundaries(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		duration time.Duration
+		bin      int
+	}{
+		{"at boundary", 10 * time.Millisecond, 0},
+		{"above boundary", 10*time.Millisecond + time.Nanosecond, 1},
+		{"above last boundary", 60*time.Second + time.Nanosecond, 11},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c := New()
+			c.Observe("source", "server", "tools/call", "unknown", "success", tc.duration)
+			for _, row := range c.series {
+				var expected [12]uint64
+				expected[tc.bin] = 1
+				require.Equal(t, expected, row.LatencyBins)
+			}
+		})
+	}
+}
+
+func TestIncompleteObservationsHaveNoCompletionLatency(t *testing.T) {
+	t.Parallel()
+	c := New()
+	c.Observe("source", "server", "tools/call", "unknown", "incomplete", time.Second)
+	for _, row := range c.series {
+		require.EqualValues(t, 1, row.Incomplete)
+		require.Equal(t, [12]uint64{}, row.LatencyBins)
+	}
+}
+
+func TestFlushSkipsConfirmedRevisionsAndRetainsNewObservations(t *testing.T) {
+	t.Parallel()
+	c := New()
+	now := time.Now().UTC().Truncate(time.Minute).Add(10 * time.Second)
+	c.now = func() time.Time { return now }
+	c.Observe("source", "server", "tools/call", "unknown", "attempt", 0)
+	var count atomic.Uint64
+	publish := func(_ context.Context, s Snapshot) error {
+		if s.Kind == "requests" {
+			count.Add(1)
+		}
+		return nil
+	}
+	c.Flush(t.Context(), publish)
+	c.Flush(t.Context(), publish)
+	require.EqualValues(t, 1, count.Load())
+	c.Observe("source", "server", "tools/call", "unknown", "success", time.Second)
+	c.Flush(t.Context(), publish)
+	require.EqualValues(t, 2, count.Load())
+	now = now.Add(2 * time.Minute)
+	c.Flush(t.Context(), publish)
+	require.EqualValues(t, 2, count.Load())
+	for key := range c.series {
+		require.NotEqual(t, "requests", key.Kind)
+	}
+	require.Zero(t, c.dropped.Load())
+}
+
+func TestFlushRetriesUnconfirmedRevisions(t *testing.T) {
+	t.Parallel()
+	c := New()
+	c.Observe("source", "server", "tools/list", "unknown", "attempt", 0)
+	c.Flush(t.Context(), func(context.Context, Snapshot) error { return errors.New("publisher unavailable") })
+	var attempts atomic.Uint64
+	c.Flush(t.Context(), func(_ context.Context, s Snapshot) error {
+		if s.Kind == "requests" {
+			attempts.Add(s.Attempts)
+		}
+		return nil
+	})
+	require.EqualValues(t, 1, attempts.Load())
 }

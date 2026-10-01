@@ -35,6 +35,9 @@ func (g *Gateway) recordMetrics(source string, opened uint64) {
 	if g.cfg.Metrics == nil {
 		return
 	}
+	// Keep registry snapshots and their collector revisions in the same order.
+	g.metricsMu.Lock()
+	defer g.metricsMu.Unlock()
 	var consumers, substreams uint32
 	now := time.Now()
 	connections := g.reg.connections(source, now)
