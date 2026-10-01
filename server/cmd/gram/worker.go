@@ -697,7 +697,7 @@ func newWorkerCommand() *cli.Command {
 			}
 
 			if err := externalmcp.EnsureNativeCatalogSource(ctx, db); err != nil {
-				return err
+				return fmt.Errorf("ensure native catalog source: %w", err)
 			}
 			catalogValidator, err := mcpregistry.LoadValidator()
 			if err != nil {

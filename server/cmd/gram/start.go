@@ -1639,7 +1639,7 @@ func newStartCommand() *cli.Command {
 			assetsService := assets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, chatSessionsManager, assetStorage, c.String(usersessions.JWTSigningKeyFlag), authzEngine, auditLogger)
 			assets.Attach(mux, assetsService)
 			if err := externalmcp.EnsureNativeCatalogSource(ctx, db); err != nil {
-				return err
+				return fmt.Errorf("ensure native catalog source: %w", err)
 			}
 			catalogValidator, err := mcpregistry.LoadValidator()
 			if err != nil {

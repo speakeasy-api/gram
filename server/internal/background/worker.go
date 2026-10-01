@@ -290,6 +290,7 @@ func NewTemporalWorker(
 ) *Workers {
 	opts := &WorkerOptions{
 		PublicationRequests:          plugins.PublicationRequests{Enabled: false},
+		MCPCatalog:                   nil,
 		GuardianPolicy:               nil,
 		TunnelHTTPClient:             nil,
 		DB:                           nil,

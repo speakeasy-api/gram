@@ -3,8 +3,6 @@ package catalog
 import (
 	"context"
 	"errors"
-	"io"
-	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
@@ -12,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -67,8 +66,10 @@ func (r *lookupReader) GetServerDetails(_ context.Context, _ externalmcp.Registr
 	return r.details, r.detailErr
 }
 func TestLookupSelectedSourceAndTrustedOrganization(t *testing.T) {
+	t.Parallel()
 	for _, native := range []bool{false, true} {
 		t.Run(map[bool]string{false: "off", true: "on"}[native], func(t *testing.T) {
+			t.Parallel()
 			selected := uuid.New()
 			if native {
 				selected = externalmcp.NativeCatalogRegistryID
@@ -77,7 +78,7 @@ func TestLookupSelectedSourceAndTrustedOrganization(t *testing.T) {
 			catalogs := &lookupCatalog{selected: externalmcp.CatalogSource{Registry: externalmcp.Registry{ID: selected}}, reader: reader}
 			projects := &lookupProjects{}
 			orgs := &lookupOrganizations{}
-			source := &Source{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), projects: projects, organizations: orgs, catalog: catalogs}
+			source := &Source{logger: testenv.NewLogger(t), projects: projects, organizations: orgs, catalog: catalogs}
 			projectID := uuid.New()
 			match, err := source.Lookup(t.Context(), projectID, "https://example.com/mcp", true)
 			require.NoError(t, err)
@@ -100,6 +101,7 @@ func TestLookupSelectedSourceAndTrustedOrganization(t *testing.T) {
 }
 
 func TestLookupMatchKeepsProvenanceAndToolPresence(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name         string
 		raw          string
@@ -113,12 +115,13 @@ func TestLookupMatchKeepsProvenanceAndToolPresence(t *testing.T) {
 		{"provenance only", `{}`, errors.New("must not fetch"), false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			reader := &lookupReader{details: details(t, tc.raw), detailErr: tc.detailErr, result: externalmcp.ListServersResult{Servers: []*types.ExternalMCPServerEntry{
 				{RegistrySpecifier: "wrong", Remotes: []*types.ExternalMCPRemote{{URL: "https://example.com/other"}}},
 				{RegistrySpecifier: "matched", Meta: map[string]any{"com.pulsemcp/server": map[string]any{"isOfficial": true}}, Remotes: []*types.ExternalMCPRemote{{URL: "https://example.com/mcp"}}},
 			}}}
 			catalogs := &lookupCatalog{selected: externalmcp.CatalogSource{Registry: externalmcp.Registry{ID: uuid.New()}, SourceKey: "selected-key", Name: "Selected display"}, reader: reader}
-			source := &Source{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), projects: &lookupProjects{}, organizations: &lookupOrganizations{}, catalog: catalogs}
+			source := &Source{logger: testenv.NewLogger(t), projects: &lookupProjects{}, organizations: &lookupOrganizations{}, catalog: catalogs}
 			match, err := source.Lookup(t.Context(), uuid.New(), "https://example.com/mcp", tc.includeTools)
 			require.NoError(t, err)
 			require.NotNil(t, match)
@@ -153,9 +156,10 @@ func (r *retainedLookupReader) ListEvidenceServers(_ context.Context, source ext
 	return r.result, nil
 }
 func TestLookupUsesSelectedRetainedEvidenceReader(t *testing.T) {
+	t.Parallel()
 	reader := &retainedLookupReader{lookupReader: lookupReader{result: externalmcp.ListServersResult{Servers: []*types.ExternalMCPServerEntry{{RegistrySpecifier: "retained", Remotes: []*types.ExternalMCPRemote{{URL: "https://example.com/mcp"}}}}}}}
 	catalogs := &lookupCatalog{selected: externalmcp.CatalogSource{Registry: externalmcp.Registry{ID: externalmcp.NativeCatalogRegistryID}, Name: "Speakeasy", SourceKey: "speakeasy"}, reader: reader}
-	source := &Source{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), projects: &lookupProjects{}, organizations: &lookupOrganizations{}, catalog: catalogs}
+	source := &Source{logger: testenv.NewLogger(t), projects: &lookupProjects{}, organizations: &lookupOrganizations{}, catalog: catalogs}
 	match, err := source.Lookup(t.Context(), uuid.New(), "https://example.com/mcp", false)
 	require.NoError(t, err)
 	require.Equal(t, "retained", match.Specifier)
