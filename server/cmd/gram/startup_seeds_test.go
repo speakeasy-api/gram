@@ -24,6 +24,10 @@ func TestSelectStartupSeeds(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, seeds[1:], one)
 
+	reversed, err := selectStartupSeeds(seeds, []string{"second", "first"})
+	require.NoError(t, err)
+	require.Equal(t, []activities.StartupSeed{seeds[1], seeds[0]}, reversed)
+
 	_, err = selectStartupSeeds(seeds, []string{"missing"})
 	require.ErrorContains(t, err, `unknown startup seed "missing"; known seeds: first, second`)
 }

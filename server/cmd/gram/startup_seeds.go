@@ -83,7 +83,7 @@ func newAppSeedCommand() *cli.Command {
 }
 
 // selectStartupSeeds returns every seed when names is empty, and otherwise
-// the named ones in the order they are listed.
+// the named ones in the order names gives them.
 func selectStartupSeeds(seeds []activities.StartupSeed, names []string) ([]activities.StartupSeed, error) {
 	if len(names) == 0 {
 		return seeds, nil
@@ -92,16 +92,13 @@ func selectStartupSeeds(seeds []activities.StartupSeed, names []string) ([]activ
 	for _, seed := range seeds {
 		known = append(known, seed.Name)
 	}
+	selected := make([]activities.StartupSeed, 0, len(names))
 	for _, name := range names {
-		if !slices.Contains(known, name) {
+		i := slices.Index(known, name)
+		if i < 0 {
 			return nil, fmt.Errorf("unknown startup seed %q; known seeds: %s", name, strings.Join(known, ", "))
 		}
-	}
-	selected := make([]activities.StartupSeed, 0, len(names))
-	for _, seed := range seeds {
-		if slices.Contains(names, seed.Name) {
-			selected = append(selected, seed)
-		}
+		selected = append(selected, seeds[i])
 	}
 	return selected, nil
 }
