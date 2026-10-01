@@ -79,6 +79,8 @@ func TestVendorsAreValidRecords(t *testing.T) {
 		mapping, err := mcpregistry.ParseOktaMapping(e.Data)
 		require.NoError(t, err)
 		require.Equal(t, vendor.Mapping, mapping)
+		require.NotEmpty(t, vendor.IconURL, vendor.Name)
+		require.Contains(t, string(e.Data), vendor.IconURL)
 	}
 
 	// A second run changes nothing.
@@ -148,4 +150,37 @@ func TestApplyRepairsNullMetadata(t *testing.T) {
 	mapping, err := mcpregistry.ParseOktaMapping(e.Data)
 	require.NoError(t, err)
 	require.Equal(t, first.Mapping, mapping)
+	require.Contains(t, string(e.Data), first.IconURL)
+}
+
+func TestApplyKeepsExistingIcon(t *testing.T) {
+	t.Parallel()
+	v, err := mcpregistry.LoadValidator()
+	require.NoError(t, err)
+	ctx := t.Context()
+	db, err := infra.CloneTestDatabase(t, "oktaseedicontestdb")
+	require.NoError(t, err)
+	svc := mcpregistry.New(db, v)
+
+	first := oktaseed.Vendors[0]
+	remotes := make([]map[string]string, 0, len(first.Remotes))
+	for _, r := range first.Remotes {
+		remotes = append(remotes, map[string]string{"type": r.Type, "url": r.URL})
+	}
+	const chosen = "https://icons.example.test/chosen.png"
+	stored, err := json.Marshal(map[string]any{
+		"server": map[string]any{"name": first.Name, "description": "Curated", "version": "1", "remotes": remotes, "icons": []map[string]string{{"src": chosen}}},
+		"_meta":  map[string]any{mcpregistry.OktaNamespace: first.Mapping},
+	})
+	require.NoError(t, err)
+	_, err = svc.Create(ctx, stored)
+	require.NoError(t, err)
+
+	result, err := oktaseed.Apply(ctx, testenv.NewLogger(t), svc, false)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Unchanged)
+	e, err := svc.GetByName(ctx, first.Name)
+	require.NoError(t, err)
+	require.Contains(t, string(e.Data), chosen)
+	require.NotContains(t, string(e.Data), first.IconURL)
 }
