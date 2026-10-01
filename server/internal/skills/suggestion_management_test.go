@@ -245,14 +245,7 @@ func TestSkillsApproveSuggestionRejectsConcurrentSuggestionUpdate(t *testing.T) 
 		})
 		finished <- approveResult{result: result, err: approveErr}
 	}()
-	require.Never(t, func() bool {
-		select {
-		case <-finished:
-			return true
-		default:
-			return false
-		}
-	}, 100*time.Millisecond, 10*time.Millisecond)
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(lockTx), 1)
 	_, err = repo.New(lockTx).UpdateOpenSkillEditSuggestion(ctx, repo.UpdateOpenSkillEditSuggestionParams{
 		Rationale:          "updated rationale",
 		ScoredSessionCount: 5,

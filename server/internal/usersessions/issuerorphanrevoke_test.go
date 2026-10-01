@@ -613,6 +613,8 @@ func TestDeleteUserSessionIssuer_ConcurrentSiblingDeleteStillRevokes(t *testing.
 		})
 	}()
 
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), 1)
+
 	// The sibling's delete, replayed inside the lock-holding transaction:
 	// tombstone the issuer and drop its bindings, then commit.
 	txIssuers := usersessionsrepo.New(tx)

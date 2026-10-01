@@ -104,6 +104,52 @@ func (q *Queries) AttachRemoteSessionClientToUserSessionIssuer(ctx context.Conte
 	return err
 }
 
+const authorizeEMADelegation = `-- name: AuthorizeEMADelegation :one
+SELECT EXISTS (
+  SELECT 1 FROM user_session_issuers AS usi
+  JOIN organization_metadata AS o ON o.id = usi.organization_id
+  JOIN projects AS p ON p.organization_id = o.id
+  WHERE usi.id = $1 AND usi.organization_id = $2
+    AND usi.project_id IS NULL AND usi.deleted IS FALSE
+    AND usi.trusted_remote_session_issuer_id = $3
+    AND usi.trusted_remote_session_client_id = $4
+    AND o.disabled_at IS NULL
+    AND p.id = $5 AND p.deleted IS FALSE
+    AND EXISTS (
+      SELECT 1 FROM users AS u
+      JOIN organization_user_relationships AS m ON m.user_id = u.id AND m.organization_id = o.id
+      WHERE u.id = $6 AND u.deleted_at IS NULL AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE
+    )
+) AS authorized
+`
+
+type AuthorizeEMADelegationParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      pgtype.Text
+	TrustedIssuerID     uuid.NullUUID
+	TrustedClientID     uuid.NullUUID
+	ProjectID           uuid.UUID
+	UserID              string
+}
+
+// Current authority to use a human's retained delegation for one endpoint:
+// its organization-level user session issuer still trusts exactly this
+// registration, the project is live in the enabled organization, and the
+// human is a live member of it.
+func (q *Queries) AuthorizeEMADelegation(ctx context.Context, arg AuthorizeEMADelegationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, authorizeEMADelegation,
+		arg.UserSessionIssuerID,
+		arg.OrganizationID,
+		arg.TrustedIssuerID,
+		arg.TrustedClientID,
+		arg.ProjectID,
+		arg.UserID,
+	)
+	var authorized bool
+	err := row.Scan(&authorized)
+	return authorized, err
+}
+
 const checkRemoteSessionClientBindingForUserSessionIssuer = `-- name: CheckRemoteSessionClientBindingForUserSessionIssuer :one
 SELECT EXISTS (
   SELECT 1
@@ -3103,6 +3149,168 @@ func (q *Queries) GetEMABinding(ctx context.Context, arg GetEMABindingParams) (R
 	return i, err
 }
 
+const getEMAChainingConfirmedAudience = `-- name: GetEMAChainingConfirmedAudience :one
+SELECT r.audience
+FROM okta_resource_connections AS r
+JOIN identity_provider_connections AS c
+  ON c.id = r.identity_provider_connection_id AND c.organization_id = r.organization_id
+ AND c.provider = 'okta' AND c.deleted IS FALSE
+JOIN okta_identity_provider_connections AS o
+  ON o.identity_provider_connection_id = c.id AND o.organization_id = c.organization_id
+ AND o.deleted IS FALSE
+WHERE r.organization_id = $1
+  AND o.remote_session_issuer_id = $2
+  AND r.remote_session_issuer_id = $3
+  AND r.resource = rtrim($4::text, '/')
+`
+
+type GetEMAChainingConfirmedAudienceParams struct {
+	OrganizationID        string
+	TrustedIssuerID       uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	Resource              string
+}
+
+// The ID-JAG audience an administrator confirmed for one upstream on the
+// organization's live Okta connection to the trusted identity provider. Okta
+// mints only for the resource app's Issuer URL, which can differ from the
+// downstream authorization server's issuer. Confirmed resources are stored
+// without a trailing slash.
+func (q *Queries) GetEMAChainingConfirmedAudience(ctx context.Context, arg GetEMAChainingConfirmedAudienceParams) (string, error) {
+	row := q.db.QueryRow(ctx, getEMAChainingConfirmedAudience,
+		arg.OrganizationID,
+		arg.TrustedIssuerID,
+		arg.RemoteSessionIssuerID,
+		arg.Resource,
+	)
+	var audience string
+	err := row.Scan(&audience)
+	return audience, err
+}
+
+const getEMAChainingUserIssuer = `-- name: GetEMAChainingUserIssuer :one
+SELECT trusted_remote_session_issuer_id, trusted_remote_session_client_id
+FROM user_session_issuers
+WHERE id = $1 AND organization_id = $2 AND project_id IS NULL
+  AND deleted IS FALSE
+  AND trusted_remote_session_issuer_id IS NOT NULL
+  AND trusted_remote_session_client_id IS NOT NULL
+`
+
+type GetEMAChainingUserIssuerParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+type GetEMAChainingUserIssuerRow struct {
+	TrustedRemoteSessionIssuerID uuid.NullUUID
+	TrustedRemoteSessionClientID uuid.NullUUID
+}
+
+// Identity chaining requires an organization-level user session issuer with a
+// trusted upstream registration; project-level issuers cannot hold one.
+func (q *Queries) GetEMAChainingUserIssuer(ctx context.Context, arg GetEMAChainingUserIssuerParams) (GetEMAChainingUserIssuerRow, error) {
+	row := q.db.QueryRow(ctx, getEMAChainingUserIssuer, arg.ID, arg.OrganizationID)
+	var i GetEMAChainingUserIssuerRow
+	err := row.Scan(&i.TrustedRemoteSessionIssuerID, &i.TrustedRemoteSessionClientID)
+	return i, err
+}
+
+const getEMACredentialForUse = `-- name: GetEMACredentialForUse :one
+SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
+  COALESCE(
+    c.remote_session_issuer_id = $1::uuid
+    AND c.client_selection = 'binding'
+    AND c.remote_session_ema_binding_id = $2::uuid
+    AND c.ema_binding_generation = $3::bigint
+    AND c.requested_scopes = $4::text[]
+    AND c.access_token_encrypted IS NOT NULL
+    AND c.access_expires_at > $5::timestamptz
+    AND EXISTS (
+      SELECT 1 FROM remote_session_ema_bindings AS b
+      WHERE b.id = c.remote_session_ema_binding_id AND b.generation = c.ema_binding_generation
+        AND b.project_id = c.project_id AND b.organization_id = c.organization_id
+        AND b.user_session_issuer_id = c.user_session_issuer_id
+        AND b.remote_session_issuer_id = c.remote_session_issuer_id
+        AND b.remote_session_client_id = c.remote_session_client_id
+        AND b.resource = c.resource AND b.state = 'ready'
+    )
+    AND EXISTS (
+      SELECT 1 FROM trusted_issuer_sessions AS s
+      WHERE s.id = c.trusted_issuer_session_id AND s.deleted IS FALSE
+        AND s.organization_id = c.organization_id AND s.project_id IS NULL
+        AND s.subject_urn = c.subject_urn
+        AND s.observation_status IS DISTINCT FROM 'reauthentication_required'
+        AND s.observation_status IS DISTINCT FROM 'configuration_failure'
+        AND s.remote_session_client_id = $6::uuid
+        AND c.updated_at >= COALESCE(s.credential_obtained_at, '-infinity'::timestamptz)
+    ),
+    FALSE
+  )::boolean AS usable
+FROM remote_session_ema_credentials AS c
+WHERE c.organization_id = $7::text AND c.project_id = $8
+  AND c.user_session_issuer_id = $9
+  AND c.remote_session_client_id = $10 AND c.resource = $11
+  AND c.subject_urn = $12 AND c.deleted IS FALSE
+`
+
+type GetEMACredentialForUseParams struct {
+	RemoteSessionIssuerID uuid.UUID
+	BindingID             uuid.UUID
+	BindingGeneration     int64
+	RequestedScopes       []string
+	UsableAfter           pgtype.Timestamptz
+	TrustedClientID       uuid.UUID
+	OrganizationID        string
+	ProjectID             uuid.NullUUID
+	UserSessionIssuerID   uuid.NullUUID
+	RemoteSessionClientID uuid.NullUUID
+	Resource              string
+	SubjectUrn            string
+}
+
+type GetEMACredentialForUseRow struct {
+	ID                   uuid.UUID
+	UpdatedAt            pgtype.Timestamptz
+	AccessTokenEncrypted pgtype.Text
+	AccessExpiresAt      pgtype.Timestamptz
+	GrantedScopes        []string
+	Usable               bool
+}
+
+// Reads the live slot for one chained identity and whether its provenance
+// still matches the request's current binding and delegation. Callers decrypt
+// access_token_encrypted only when usable is true, and retire the slot when
+// it is false. A credential published before the human's latest sign-in is
+// unusable, so signing in again replaces a token the upstream revoked.
+// NULL provenance left by a parent delete reads as unusable, never as NULL.
+func (q *Queries) GetEMACredentialForUse(ctx context.Context, arg GetEMACredentialForUseParams) (GetEMACredentialForUseRow, error) {
+	row := q.db.QueryRow(ctx, getEMACredentialForUse,
+		arg.RemoteSessionIssuerID,
+		arg.BindingID,
+		arg.BindingGeneration,
+		arg.RequestedScopes,
+		arg.UsableAfter,
+		arg.TrustedClientID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.Resource,
+		arg.SubjectUrn,
+	)
+	var i GetEMACredentialForUseRow
+	err := row.Scan(
+		&i.ID,
+		&i.UpdatedAt,
+		&i.AccessTokenEncrypted,
+		&i.AccessExpiresAt,
+		&i.GrantedScopes,
+		&i.Usable,
+	)
+	return i, err
+}
+
 const getEMAProjectOrganization = `-- name: GetEMAProjectOrganization :one
 SELECT organization_id FROM projects WHERE id = $1 AND deleted IS FALSE FOR SHARE
 `
@@ -5727,6 +5935,118 @@ func (q *Queries) ListConflictingClientBindingsForIssuerMigration(ctx context.Co
 	for rows.Next() {
 		var i ListConflictingClientBindingsForIssuerMigrationRow
 		if err := rows.Scan(&i.UserSessionIssuerID, &i.McpServerName, &i.McpServerUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMAChainingBindings = `-- name: ListEMAChainingBindings :many
+SELECT id, project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource, remote_session_client_id, generation, state, grant_source, requested_scopes, claim_id, claimed_at, created_at, updated_at FROM remote_session_ema_bindings
+WHERE project_id = $1 AND organization_id = $2
+  AND user_session_issuer_id = $3
+  AND rtrim(resource, '/') = $4::text
+  AND ($5::uuid IS NULL OR remote_session_issuer_id = $5::uuid)
+  AND state = 'ready' AND remote_session_client_id IS NOT NULL
+ORDER BY id
+LIMIT 2
+`
+
+type ListEMAChainingBindingsParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	UserSessionIssuerID   uuid.UUID
+	UpstreamResource      string
+	RemoteSessionIssuerID uuid.NullUUID
+}
+
+// Ready bindings whose canonical resource names an endpoint's upstream.
+// Endpoint upstreams are recorded without a trailing slash while a binding
+// keeps the exact RFC 9728 identifier, so both compare under the routing trim.
+// Unlinked tombstones and unfinished preparations never select or conflict.
+// A tunneled upstream passes its own derived issuer: its resource identifier is
+// operator supplied, so only a binding for that issuer may serve it. Two rows
+// are enough to prove the selection ambiguous.
+func (q *Queries) ListEMAChainingBindings(ctx context.Context, arg ListEMAChainingBindingsParams) ([]RemoteSessionEmaBinding, error) {
+	rows, err := q.db.Query(ctx, listEMAChainingBindings,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+		arg.UpstreamResource,
+		arg.RemoteSessionIssuerID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RemoteSessionEmaBinding
+	for rows.Next() {
+		var i RemoteSessionEmaBinding
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.UserSessionIssuerID,
+			&i.RemoteSessionIssuerID,
+			&i.Resource,
+			&i.RemoteSessionClientID,
+			&i.Generation,
+			&i.State,
+			&i.GrantSource,
+			&i.RequestedScopes,
+			&i.ClaimID,
+			&i.ClaimedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMACredentialsFixture = `-- name: ListEMACredentialsFixture :many
+SELECT id, deleted, access_token_encrypted, ema_binding_generation, subject_urn, updated_at
+FROM remote_session_ema_credentials
+WHERE project_id = $1
+ORDER BY created_at, id
+`
+
+type ListEMACredentialsFixtureRow struct {
+	ID                   uuid.UUID
+	Deleted              bool
+	AccessTokenEncrypted pgtype.Text
+	EmaBindingGeneration pgtype.Int8
+	SubjectUrn           string
+	UpdatedAt            pgtype.Timestamptz
+}
+
+// TEST FIXTURE ONLY. Every credential slot in a project, live and retired.
+func (q *Queries) ListEMACredentialsFixture(ctx context.Context, projectID uuid.NullUUID) ([]ListEMACredentialsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listEMACredentialsFixture, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMACredentialsFixtureRow
+	for rows.Next() {
+		var i ListEMACredentialsFixtureRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Deleted,
+			&i.AccessTokenEncrypted,
+			&i.EmaBindingGeneration,
+			&i.SubjectUrn,
+			&i.UpdatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -9972,6 +10292,33 @@ func (q *Queries) ReprojectRemoteSessionIssuerMetadataCapabilities(ctx context.C
 	return i, err
 }
 
+const retireEMACredential = `-- name: RetireEMACredential :exec
+UPDATE remote_session_ema_credentials
+SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = $1 AND organization_id = $2 AND project_id = $3 AND deleted IS FALSE
+  AND updated_at = $4
+`
+
+type RetireEMACredentialParams struct {
+	ID                uuid.UUID
+	OrganizationID    pgtype.Text
+	ProjectID         uuid.NullUUID
+	ExpectedUpdatedAt pgtype.Timestamptz
+}
+
+// Soft deletes one credential slot and erases its ciphertext in the same write.
+// expected_updated_at is the version the caller judged unusable, so a
+// concurrent publish into the same slot is never erased.
+func (q *Queries) RetireEMACredential(ctx context.Context, arg RetireEMACredentialParams) error {
+	_, err := q.db.Exec(ctx, retireEMACredential,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ExpectedUpdatedAt,
+	)
+	return err
+}
+
 const revokeOrganizationRemoteSession = `-- name: RevokeOrganizationRemoteSession :one
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp(),
@@ -11196,6 +11543,52 @@ func (q *Queries) SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx cont
 		return nil, err
 	}
 	return items, nil
+}
+
+const softDeleteTrustedIssuerSessionFixture = `-- name: SoftDeleteTrustedIssuerSessionFixture :execrows
+UPDATE trusted_issuer_sessions SET deleted_at = clock_timestamp()
+WHERE id = $1 AND organization_id = $2::text AND deleted IS FALSE
+`
+
+type SoftDeleteTrustedIssuerSessionFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// TEST FIXTURE ONLY. Soft deletes a retained delegation without erasing its
+// secrets, the parent state a chained credential must treat as unusable.
+func (q *Queries) SoftDeleteTrustedIssuerSessionFixture(ctx context.Context, arg SoftDeleteTrustedIssuerSessionFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteTrustedIssuerSessionFixture, arg.ID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const touchEMACredentialLastUsed = `-- name: TouchEMACredentialLastUsed :exec
+UPDATE remote_session_ema_credentials
+SET last_used_at = $1
+WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+  AND (last_used_at IS NULL OR last_used_at < $4)
+`
+
+type TouchEMACredentialLastUsedParams struct {
+	NowTs      pgtype.Timestamptz
+	ID         uuid.UUID
+	ProjectID  uuid.NullUUID
+	UsedCutoff pgtype.Timestamptz
+}
+
+// Best-effort use stamp, throttled like remote sessions so a hot credential
+// does not write on every proxied call.
+func (q *Queries) TouchEMACredentialLastUsed(ctx context.Context, arg TouchEMACredentialLastUsedParams) error {
+	_, err := q.db.Exec(ctx, touchEMACredentialLastUsed,
+		arg.NowTs,
+		arg.ID,
+		arg.ProjectID,
+		arg.UsedCutoff,
+	)
+	return err
 }
 
 const touchRemoteSessionLastUsed = `-- name: TouchRemoteSessionLastUsed :exec
@@ -12881,6 +13274,133 @@ func (q *Queries) UpdateTrustedIssuerJWKSCache(ctx context.Context, arg UpdateTr
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const upsertEMACredential = `-- name: UpsertEMACredential :one
+INSERT INTO remote_session_ema_credentials AS c (
+  organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
+  resource, subject_urn, client_selection, remote_session_ema_binding_id, ema_binding_generation,
+  trusted_issuer_session_id, requested_scopes, granted_scopes, access_token_encrypted, access_expires_at,
+  downstream_refresh_token_observed, last_used_at
+)
+SELECT $1::text, $2::uuid, $3::uuid, $4::uuid, $5::uuid,
+  $6::text, $7::text, 'binding', $8::uuid, $9::bigint,
+  $10::uuid, $11::text[], $12::text[], $13::text, $14::timestamptz,
+  $15::boolean, clock_timestamp()
+WHERE EXISTS (
+    SELECT 1 FROM remote_session_ema_bindings AS b
+    WHERE b.id = $8::uuid AND b.generation = $9::bigint
+      AND b.project_id = $2::uuid AND b.organization_id = $1::text
+      AND b.user_session_issuer_id = $3::uuid
+      AND b.remote_session_issuer_id = $4::uuid
+      AND b.remote_session_client_id = $5::uuid
+      AND b.resource = $6::text AND b.state = 'ready'
+  )
+  -- The resource client and its issuer must still be live and reachable from
+  -- the project.
+  AND EXISTS (
+    SELECT 1 FROM remote_session_clients AS rc
+    JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id AND ri.deleted IS FALSE
+      AND (ri.project_id = $2::uuid OR (ri.project_id IS NULL AND (ri.organization_id = $1::text OR ri.organization_id IS NULL)))
+    WHERE rc.id = $5::uuid AND rc.remote_session_issuer_id = $4::uuid AND rc.deleted IS FALSE
+      AND (rc.project_id = $2::uuid OR (rc.project_id IS NULL AND rc.organization_id = $1::text))
+  )
+  AND EXISTS (
+    SELECT 1 FROM trusted_issuer_sessions AS s
+    JOIN user_session_issuers AS usi ON usi.trusted_remote_session_client_id = s.remote_session_client_id
+    -- The trusted registration must still be a live, organization-owned client
+    -- of the live issuer the user session issuer trusts.
+    JOIN remote_session_clients AS tc ON tc.id = usi.trusted_remote_session_client_id
+      AND tc.remote_session_issuer_id = usi.trusted_remote_session_issuer_id
+      AND tc.project_id IS NULL AND tc.organization_id = $1::text AND tc.deleted IS FALSE
+    JOIN remote_session_issuers AS ti ON ti.id = tc.remote_session_issuer_id
+      AND ti.project_id IS NULL AND (ti.organization_id = $1::text OR ti.organization_id IS NULL) AND ti.deleted IS FALSE
+    WHERE s.id = $10::uuid AND s.deleted IS FALSE
+      AND s.credential_obtained_at IS NOT DISTINCT FROM $16::timestamptz
+      AND s.observation_status IS DISTINCT FROM 'reauthentication_required'
+      AND s.observation_status IS DISTINCT FROM 'configuration_failure'
+      AND s.organization_id = $1::text AND s.project_id IS NULL
+      AND s.subject_urn = $7::text
+      AND usi.id = $3::uuid AND usi.organization_id = $1::text
+      AND usi.project_id IS NULL AND usi.deleted IS FALSE
+  )
+  AND EXISTS (
+    SELECT 1 FROM projects AS p
+    JOIN organization_metadata AS o ON o.id = p.organization_id
+    WHERE p.id = $2::uuid AND p.organization_id = $1::text AND p.deleted IS FALSE
+      AND o.disabled_at IS NULL
+      AND EXISTS (
+        SELECT 1 FROM users AS u
+        JOIN organization_user_relationships AS m ON m.user_id = u.id AND m.organization_id = o.id
+        WHERE 'user:' || u.id = $7::text AND u.deleted_at IS NULL
+          AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE
+      )
+  )
+ON CONFLICT (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn) WHERE deleted IS FALSE
+DO UPDATE SET
+  organization_id = EXCLUDED.organization_id,
+  remote_session_issuer_id = EXCLUDED.remote_session_issuer_id,
+  client_selection = EXCLUDED.client_selection,
+  remote_session_ema_binding_id = EXCLUDED.remote_session_ema_binding_id,
+  ema_binding_generation = EXCLUDED.ema_binding_generation,
+  trusted_issuer_session_id = EXCLUDED.trusted_issuer_session_id,
+  requested_scopes = EXCLUDED.requested_scopes,
+  granted_scopes = EXCLUDED.granted_scopes,
+  access_token_encrypted = EXCLUDED.access_token_encrypted,
+  access_expires_at = EXCLUDED.access_expires_at,
+  downstream_refresh_token_observed = EXCLUDED.downstream_refresh_token_observed,
+  last_used_at = EXCLUDED.last_used_at,
+  updated_at = clock_timestamp()
+RETURNING id
+`
+
+type UpsertEMACredentialParams struct {
+	OrganizationID                 string
+	ProjectID                      uuid.UUID
+	UserSessionIssuerID            uuid.UUID
+	RemoteSessionIssuerID          uuid.UUID
+	RemoteSessionClientID          uuid.UUID
+	Resource                       string
+	SubjectUrn                     string
+	BindingID                      uuid.UUID
+	BindingGeneration              int64
+	TrustedIssuerSessionID         uuid.UUID
+	RequestedScopes                []string
+	GrantedScopes                  []string
+	AccessTokenEncrypted           string
+	AccessExpiresAt                pgtype.Timestamptz
+	DownstreamRefreshTokenObserved bool
+	TrustedCredentialObtainedAt    pgtype.Timestamptz
+}
+
+// Publishes a chained credential only while the binding generation, the
+// human's latest sign-in, and the delegation and endpoint authority it was
+// acquired under still hold, so a sign-in, revocation, unlink, rebind or
+// deletion during the exchange cannot install a usable stale credential. A
+// routine refresh of the delegation does not invalidate the result. No row
+// means the result must be discarded.
+func (q *Queries) UpsertEMACredential(ctx context.Context, arg UpsertEMACredentialParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertEMACredential,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.Resource,
+		arg.SubjectUrn,
+		arg.BindingID,
+		arg.BindingGeneration,
+		arg.TrustedIssuerSessionID,
+		arg.RequestedScopes,
+		arg.GrantedScopes,
+		arg.AccessTokenEncrypted,
+		arg.AccessExpiresAt,
+		arg.DownstreamRefreshTokenObserved,
+		arg.TrustedCredentialObtainedAt,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const upsertRemoteSession = `-- name: UpsertRemoteSession :one
