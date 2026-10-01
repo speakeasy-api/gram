@@ -219,23 +219,38 @@ function OrgHomeInner() {
             project.slug.toLowerCase().includes(query)
           );
         })
-        .sort((a, b) => a.name.localeCompare(b.name)),
+        .sort(
+          (a, b) =>
+            Number(b.slug === "default") - Number(a.slug === "default") ||
+            a.name.localeCompare(b.name),
+        ),
     [organization.projects, search],
   );
 
   const isSearching = search.length > 0;
 
-  const { favoriteProjects, otherProjects } = useMemo(() => {
+  // The `default` project is always pinned above favorites.
+  const { pinnedProjects, favoriteProjects, otherProjects } = useMemo(() => {
     if (isSearching) {
-      return { favoriteProjects: [], otherProjects: filteredProjects };
+      return {
+        pinnedProjects: [],
+        favoriteProjects: [],
+        otherProjects: filteredProjects,
+      };
     }
+    const pinned: OrgProject[] = [];
     const favs: OrgProject[] = [];
     const rest: OrgProject[] = [];
     for (const p of filteredProjects) {
-      if (favoriteSet.has(p.id)) favs.push(p);
+      if (p.slug === "default") pinned.push(p);
+      else if (favoriteSet.has(p.id)) favs.push(p);
       else rest.push(p);
     }
-    return { favoriteProjects: favs, otherProjects: rest };
+    return {
+      pinnedProjects: pinned,
+      favoriteProjects: favs,
+      otherProjects: rest,
+    };
   }, [filteredProjects, favoriteSet, isSearching]);
 
   const hasMore = !isSearching && otherProjects.length > PROJECT_LIMIT;
@@ -346,6 +361,10 @@ function OrgHomeInner() {
                 </div>
               ) : (
                 <>
+                  {pinnedProjects.length > 0 &&
+                    renderProjectContainer(
+                      pinnedProjects.map(renderProjectItem),
+                    )}
                   {favoriteProjects.length > 0 && (
                     <>
                       <section className="flex flex-col">
@@ -393,7 +412,8 @@ function OrgHomeInner() {
                   )}
 
                   {otherProjects.length === 0 &&
-                    favoriteProjects.length === 0 && (
+                    favoriteProjects.length === 0 &&
+                    pinnedProjects.length === 0 && (
                       <div className="border-border bg-card flex flex-col items-center gap-3 border border-dashed py-12 text-center">
                         <Text muted>No projects yet</Text>
                         <RequireScope scope="org:admin" level="component">
@@ -645,7 +665,7 @@ function ProjectRow({
               e.stopPropagation();
             }}
           >
-            <MemberFacepile members={facepile} maxFaces={5} />
+            <MemberFacepile members={facepile} maxFaces={3} />
           </div>
 
           <ProjectRowActions
@@ -880,7 +900,7 @@ function ProjectRowActions({
 function RecentActionBlock({ log }: { log: AuditLog | undefined }) {
   if (!log) {
     return (
-      <Text small muted className="text-xs">
+      <Text small muted className="truncate text-xs whitespace-nowrap">
         No recent activity
       </Text>
     );
