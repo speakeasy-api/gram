@@ -489,8 +489,15 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		})
 	}
 
-	if err := s.admitExternalMCPSelections(ctx, organizationID, authCtx.OrganizationSlug, newExternalMCPs, nil, nil); err != nil {
-		return nil, err
+	// Existing keys identify accepted work, not a fresh catalog selection.
+	_, existingErr := tx.GetDeploymentByIdempotencyKey(ctx, repo.GetDeploymentByIdempotencyKeyParams{IdempotencyKey: form.IdempotencyKey, ProjectID: projectID})
+	if existingErr != nil && !errors.Is(existingErr, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeUnexpected, existingErr, "error reading deployment").LogError(ctx, logger)
+	}
+	if errors.Is(existingErr, pgx.ErrNoRows) {
+		if err := s.admitExternalMCPSelections(ctx, organizationID, authCtx.OrganizationSlug, newExternalMCPs, nil, nil); err != nil {
+			return nil, err
+		}
 	}
 
 	if len(newPackages) == 0 && len(newOpenAPIAssets) == 0 && len(newFunctions) == 0 && len(newExternalMCPs) == 0 {
