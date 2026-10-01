@@ -1,0 +1,53 @@
+client/dashboard/src/lib/audit-actions.test.ts
+  h_9630b74bdac540 55-58
+  h_9630b74bdac540 59-61
+server/internal/outbox/events/audit_log.go
+  h_9630b74bdac540 59
+server/internal/admin/organization_whitelist.go
+  h_9630b74bdac540 1-83
+server/internal/adminmcp/write_tools.go
+  h_9630b74bdac540 231
+server/internal/adminmcp/tool_write_organization_whitelist_test.go
+  h_9630b74bdac540 1-333
+client/dashboard/src/lib/audit-actions.ts
+  h_9630b74bdac540 140,594-595
+server/internal/adminmcp/runtime.go
+  h_9630b74bdac540 96
+server/internal/admin/converttrial_lock_test.go
+  h_9630b74bdac540 175-176
+server/internal/audit/organization_access_test.go
+  h_9630b74bdac540 25,43-51,53,60-62,64,77-79,83
+  h_9630b74bdac540 63,80-82
+server/internal/admin/queries.sql
+  h_9630b74bdac540 435-450
+server/internal/admin/organization_whitelist_test.go
+  h_9630b74bdac540 1-65
+.changeset/admin-mcp-organization-whitelist.md
+  h_9630b74bdac540 1-5
+server/internal/admin/impl.go
+  h_9630b74bdac540 1112-1129
+server/internal/adminmcp/tool_write_organization_whitelist.go
+  h_9630b74bdac540 1-207
+server/internal/adminmcp/write_guard.go
+  h_9630b74bdac540 24,38,95
+server/internal/audit/organizations.go
+  h_9630b74bdac540 49,993-1038
+  h_9630b74bdac540 47-48,50-51,1039-1040
+server/internal/auditapi/speakeasy_mask_test.go
+  h_9630b74bdac540 109,120
+server/internal/admin/repo/queries.sql.go
+  h_9630b74bdac540 1555-1587,1777-1799
+server/internal/outbox/events/catalog_gen.yaml
+  h_9630b74bdac540 2387
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "34f7ac1b46f3f390f188534bffad45c8e6d83503",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
