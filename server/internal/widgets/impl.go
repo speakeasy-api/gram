@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
-	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -398,7 +397,7 @@ func lowercaseChartType(visualization map[string]any) map[string]any {
 		return visualization
 	}
 	out := maps.Clone(visualization)
-	out["type"] = strings.ToLower(chart)
+	out["type"] = string(ChartType(chart).normalize())
 	return out
 }
 

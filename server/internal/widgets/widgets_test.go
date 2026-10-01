@@ -35,7 +35,12 @@ func validQuery() map[string]any {
 }
 
 func barChart() map[string]any {
-	return map[string]any{"type": "bar", "options": map[string]any{}}
+	return chart(widgets.ChartBar)
+}
+
+// chart is a visualization of the given type with no options.
+func chart(chartType widgets.ChartType) map[string]any {
+	return map[string]any{"type": string(chartType), "options": map[string]any{}}
 }
 
 func createPayload(name string, query, visualization map[string]any) *gen.CreateWidgetPayload {
@@ -62,7 +67,7 @@ func TestCreateWidget(t *testing.T) {
 		require.Equal(t, ti.projectID.String(), created.ProjectID)
 		require.NotNil(t, created.CreatedByUserID)
 		require.Equal(t, ti.userID, *created.CreatedByUserID)
-		require.Equal(t, "bar", created.Visualization["type"])
+		require.Equal(t, string(widgets.ChartBar), created.Visualization["type"])
 		require.Equal(t, "day", created.Query["grain"])
 		require.Nil(t, created.InvalidReason)
 
@@ -74,8 +79,8 @@ func TestCreateWidget(t *testing.T) {
 	t.Run("it keeps visualization options it does not interpret", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestService(t)
-		chart := map[string]any{"type": "bar", "options": map[string]any{"stack": "normal", "series_limit": 12}}
-		created, err := ti.service.CreateWidget(ctx, createPayload("stacked", validQuery(), chart))
+		stacked := map[string]any{"type": string(widgets.ChartBar), "options": map[string]any{"stack": "normal", "series_limit": 12}}
+		created, err := ti.service.CreateWidget(ctx, createPayload("stacked", validQuery(), stacked))
 		require.NoError(t, err)
 		options, ok := created.Visualization["options"].(map[string]any)
 		require.True(t, ok)
@@ -137,18 +142,18 @@ func TestCreateWidget(t *testing.T) {
 		cases := []struct {
 			name   string
 			query  map[string]any
-			chart  string
+			chart  widgets.ChartType
 			reason string
 		}{
-			{name: "a timeseries with no grain", query: withQuery(validQuery(), "grain", "none"), chart: "line", reason: "timeseries"},
-			{name: "a timeseries of rows", query: rowsQuery(), chart: "area", reason: "timeseries"},
-			{name: "a number broken down by a dimension", query: withQuery(validQuery(), "grain", "none"), chart: "number", reason: "no dimensions"},
-			{name: "a ranking with nothing to rank by", query: withQuery(withQuery(validQuery(), "grain", "none"), "dimensions", []any{}), chart: "ranked", reason: "at least one dimension"},
-			{name: "a number over time buckets", query: withQuery(validQuery(), "dimensions", []any{}), chart: "number", reason: "no grain"},
-			{name: "a ranking over time buckets", query: validQuery(), chart: "ranked", reason: "no grain"},
+			{name: "a timeseries with no grain", query: withQuery(validQuery(), "grain", "none"), chart: widgets.ChartLine, reason: "timeseries"},
+			{name: "a timeseries of rows", query: rowsQuery(), chart: widgets.ChartArea, reason: "timeseries"},
+			{name: "a number broken down by a dimension", query: withQuery(validQuery(), "grain", "none"), chart: widgets.ChartNumber, reason: "no dimensions"},
+			{name: "a ranking with nothing to rank by", query: withQuery(withQuery(validQuery(), "grain", "none"), "dimensions", []any{}), chart: widgets.ChartRanked, reason: "at least one dimension"},
+			{name: "a number over time buckets", query: withQuery(validQuery(), "dimensions", []any{}), chart: widgets.ChartNumber, reason: "no grain"},
+			{name: "a ranking over time buckets", query: validQuery(), chart: widgets.ChartRanked, reason: "no grain"},
 		}
 		for _, tc := range cases {
-			_, err := ti.service.CreateWidget(ctx, createPayload(tc.name, tc.query, map[string]any{"type": tc.chart}))
+			_, err := ti.service.CreateWidget(ctx, createPayload(tc.name, tc.query, chart(tc.chart)))
 			requireOopsCode(t, err, oops.CodeBadRequest)
 			require.ErrorContains(t, err, tc.reason, tc.name)
 		}
@@ -157,13 +162,13 @@ func TestCreateWidget(t *testing.T) {
 	t.Run("it draws rows only as a table", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestService(t)
-		_, err := ti.service.CreateWidget(ctx, createPayload("rows", rowsQuery(), map[string]any{"type": "table"}))
+		_, err := ti.service.CreateWidget(ctx, createPayload("rows", rowsQuery(), chart(widgets.ChartTable)))
 		require.NoError(t, err)
 
-		for _, chart := range []string{"line", "area", "bar", "number", "ranked"} {
-			_, err := ti.service.CreateWidget(ctx, createPayload("rows as "+chart, rowsQuery(), map[string]any{"type": chart}))
+		for _, chartType := range []widgets.ChartType{widgets.ChartLine, widgets.ChartArea, widgets.ChartBar, widgets.ChartNumber, widgets.ChartRanked} {
+			_, err := ti.service.CreateWidget(ctx, createPayload("rows as "+string(chartType), rowsQuery(), chart(chartType)))
 			requireOopsCode(t, err, oops.CodeBadRequest)
-			require.ErrorContains(t, err, "unsatisfiable", chart)
+			require.ErrorContains(t, err, "unsatisfiable", chartType)
 		}
 	})
 
@@ -171,7 +176,7 @@ func TestCreateWidget(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestService(t)
 		query := withQuery(withQuery(validQuery(), "grain", "none"), "dimensions", []any{"user", "surface"})
-		_, err := ti.service.CreateWidget(ctx, createPayload("ranked pairs", query, map[string]any{"type": "ranked"}))
+		_, err := ti.service.CreateWidget(ctx, createPayload("ranked pairs", query, chart(widgets.ChartRanked)))
 		require.NoError(t, err)
 	})
 
@@ -185,10 +190,10 @@ func TestCreateWidget(t *testing.T) {
 
 		created, err := ti.service.CreateWidget(ctx, createPayload("Bar", validQuery(), map[string]any{"type": "Bar"}))
 		require.NoError(t, err)
-		require.Equal(t, "bar", created.Visualization["type"])
+		require.Equal(t, string(widgets.ChartBar), created.Visualization["type"])
 		got, err := ti.service.GetWidget(ctx, &gen.GetWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil})
 		require.NoError(t, err)
-		require.Equal(t, "bar", got.Visualization["type"])
+		require.Equal(t, string(widgets.ChartBar), got.Visualization["type"])
 	})
 
 	t.Run("it rejects a query key it does not know, naming it", func(t *testing.T) {
@@ -313,12 +318,12 @@ func TestUpdateWidget(t *testing.T) {
 
 		updated, err := ti.service.UpdateWidget(ctx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "after", Description: nil, Dataset: "tool_calls",
 			Query:         map[string]any{"window": "24h", "dimensions": []any{"tool_name", "status"}, "ungrouped": true},
-			Visualization: map[string]any{"type": "table"}, SessionToken: nil, ProjectSlugInput: nil})
+			Visualization: chart(widgets.ChartTable), SessionToken: nil, ProjectSlugInput: nil})
 		require.NoError(t, err)
 		require.Equal(t, "after", updated.Name)
 		require.Equal(t, "tool_calls", updated.Dataset)
 		require.Equal(t, true, updated.Query["ungrouped"])
-		require.Equal(t, "table", updated.Visualization["type"])
+		require.Equal(t, string(widgets.ChartTable), updated.Visualization["type"])
 
 		after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionWidgetUpdate)
 		require.NoError(t, err)

@@ -44,11 +44,32 @@ type QueryOrderBy struct {
 	Direction string `json:"direction"`
 }
 
+// ChartType names a chart a widget is drawn with. The constants are the
+// types the server reasons about when checking a chart against its question,
+// not an allow-list: the client owns the chart vocabulary, so a type with no
+// constant here is accepted and left unchecked.
+type ChartType string
+
+const (
+	ChartLine   ChartType = "line"
+	ChartArea   ChartType = "area"
+	ChartBar    ChartType = "bar"
+	ChartRanked ChartType = "ranked"
+	ChartTable  ChartType = "table"
+	ChartNumber ChartType = "number"
+)
+
+// normalize returns the type lowercased, the form it is checked and stored
+// in, so "Line" is checked as a line chart.
+func (t ChartType) normalize() ChartType {
+	return ChartType(strings.ToLower(string(t)))
+}
+
 // Visualization is how a widget's question is drawn. The chart vocabulary
 // belongs to the client; the server reads the type only to check that the
 // chart can draw the question.
 type Visualization struct {
-	Type    string          `json:"type"`
+	Type    ChartType       `json:"type"`
 	Options json.RawMessage `json:"options"`
 }
 
@@ -155,20 +176,22 @@ func validateVisualization(visualization Visualization, query Query) string {
 	// Compared lowercased, so "Line" gets the same checks as "line" rather
 	// than passing as an unknown type and drawing an empty frame. Saving
 	// stores the type lowercased.
-	chart := strings.ToLower(visualization.Type)
+	chart := visualization.Type.normalize()
 	switch chart {
-	case "line", "area", "bar":
+	case ChartLine, ChartArea, ChartBar:
 		if !grained || !aggregated {
 			return fmt.Sprintf("unsatisfiable: a %s chart draws a timeseries, so its query needs a grain and at least one measure", chart)
 		}
-	case "number":
+	case ChartNumber:
 		if !aggregated || grained || len(query.Dimensions) > 0 {
 			return "unsatisfiable: a number chart draws whole-window totals, so its query needs at least one measure, no grain and no dimensions"
 		}
-	case "ranked":
+	case ChartRanked:
 		if !aggregated || grained || len(query.Dimensions) == 0 {
 			return "unsatisfiable: a ranked chart ranks groups over the whole window, so its query needs at least one measure, no grain and at least one dimension"
 		}
+	case ChartTable:
+		// A table draws any question: rows, totals or a timeseries.
 	}
 	return ""
 }
