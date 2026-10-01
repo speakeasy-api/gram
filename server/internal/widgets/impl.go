@@ -1,0 +1,379 @@
+package widgets
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"time"
+	"unicode/utf8"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/trace"
+	goahttp "goa.design/goa/v3/http"
+	"goa.design/goa/v3/security"
+
+	srv "github.com/speakeasy-api/gram/server/gen/http/widgets/server"
+	gen "github.com/speakeasy-api/gram/server/gen/widgets"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/widgets/repo"
+)
+
+// maxNameLength matches the widgets table's name check.
+const maxNameLength = 200
+
+// copySuffix marks a widget made by duplication.
+const copySuffix = " (copy)"
+
+// Service serves widgets: Explore's saved questions, each kept with the
+// chart that draws it.
+type Service struct {
+	tracer  trace.Tracer
+	logger  *slog.Logger
+	db      *pgxpool.Pool
+	auth    *auth.Auth
+	authz   *authz.Engine
+	audit   *audit.Logger
+	catalog *analytics.Catalog
+	now     func() time.Time
+}
+
+var _ gen.Service = (*Service)(nil)
+var _ gen.Auther = (*Service)(nil)
+
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, auditLogger *audit.Logger) *Service {
+	logger = logger.With(attr.SlogComponent("widgets"))
+	return &Service{
+		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/widgets"),
+		logger:  logger,
+		db:      db,
+		auth:    auth.New(logger, db, sessions, authzEngine),
+		authz:   authzEngine,
+		audit:   auditLogger,
+		catalog: analytics.Default,
+		now:     time.Now,
+	}
+}
+
+func Attach(mux goahttp.Muxer, service *Service) {
+	endpoints := gen.NewEndpoints(service)
+	endpoints.Use(middleware.MapErrors())
+	endpoints.Use(middleware.TraceMethods(service.tracer))
+	srv.Mount(mux, srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+}
+
+func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	return s.auth.Authorize(ctx, key, schema)
+}
+
+// authorize resolves the project a request runs in and checks a scope on it.
+// Membership is project:read, which every member holds: saving a chart is
+// not an administrative act.
+func (s *Service) authorize(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	return authCtx, nil
+}
+
+// view renders a stored widget, validating it as it is read.
+func (s *Service) view(row repo.Widget, now time.Time) *gen.Widget {
+	return mv.BuildWidgetView(row, validate(s.catalog, row.Dataset, row.Query, row.Visualization, now))
+}
+
+// ListWidgets lists the project's widgets, most recently updated first, each
+// validated as it is read.
+func (s *Service) ListWidgets(ctx context.Context, _ *gen.ListWidgetsPayload) (*gen.ListWidgetsResult, error) {
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := repo.New(s.db).ListWidgets(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list widgets").LogError(ctx, s.logger)
+	}
+
+	now := s.now()
+	result := &gen.ListWidgetsResult{Widgets: make([]*gen.Widget, 0, len(rows))}
+	for _, row := range rows {
+		result.Widgets = append(result.Widgets, s.view(row, now))
+	}
+	return result, nil
+}
+
+// GetWidget returns one widget, validated as it is read.
+func (s *Service) GetWidget(ctx context.Context, payload *gen.GetWidgetPayload) (*gen.Widget, error) {
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	if err != nil {
+		return nil, err
+	}
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid widget id")
+	}
+
+	row, err := repo.New(s.db).GetWidget(ctx, repo.GetWidgetParams{ProjectID: *authCtx.ProjectID, ID: id})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "widget not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get widget").LogError(ctx, s.logger)
+	}
+	return s.view(row, s.now()), nil
+}
+
+// CreateWidget saves a widget after validating its query against the
+// catalog and its visualization against the query.
+func (s *Service) CreateWidget(ctx context.Context, payload *gen.CreateWidgetPayload) (*gen.Widget, error) {
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	if err != nil {
+		return nil, err
+	}
+
+	query, visualization, err := s.checkWidget(payload.Dataset, payload.Query, payload.Visualization)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.insert(ctx, authCtx, repo.CreateWidgetParams{
+		ProjectID:       *authCtx.ProjectID,
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		CreatedByUserID: conv.ToPGTextEmpty(authCtx.UserID),
+		Name:            payload.Name,
+		Description:     conv.PtrToPGTextEmpty(payload.Description),
+		Dataset:         payload.Dataset,
+		Query:           query,
+		Visualization:   visualization,
+	}, nil)
+}
+
+// DuplicateWidget copies a widget into a new one the caller owns. This is
+// how a widget is shared and reused: the copy is the caller's to change
+// without redrawing anyone else's. Like every save it is validated, so a
+// widget the catalog has broken cannot be copied until it is fixed.
+func (s *Service) DuplicateWidget(ctx context.Context, payload *gen.DuplicateWidgetPayload) (*gen.Widget, error) {
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	if err != nil {
+		return nil, err
+	}
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid widget id")
+	}
+
+	source, err := repo.New(s.db).GetWidget(ctx, repo.GetWidgetParams{ProjectID: *authCtx.ProjectID, ID: id})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "widget not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "load widget").LogError(ctx, s.logger)
+	}
+	if reason := validate(s.catalog, source.Dataset, source.Query, source.Visualization, s.now()); reason != "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "widget cannot be duplicated until it is fixed: %s", reason)
+	}
+
+	sourceURN := urn.NewWidget(source.ID)
+	return s.insert(ctx, authCtx, repo.CreateWidgetParams{
+		ProjectID:       *authCtx.ProjectID,
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		CreatedByUserID: conv.ToPGTextEmpty(authCtx.UserID),
+		Name:            copyName(source.Name),
+		Description:     source.Description,
+		Dataset:         source.Dataset,
+		Query:           source.Query,
+		Visualization:   source.Visualization,
+	}, &sourceURN)
+}
+
+// insert stores a new widget and audits it, in one transaction.
+func (s *Service) insert(ctx context.Context, authCtx *contextvalues.AuthContext, params repo.CreateWidgetParams, duplicatedFrom *urn.Widget) (*gen.Widget, error) {
+	if authCtx.UserID == "" {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "saving a widget requires a user identity")
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin widget creation").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	row, err := repo.New(dbtx).CreateWidget(ctx, params)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "create widget").LogError(ctx, s.logger)
+	}
+
+	view := mv.BuildWidgetView(row, "")
+	if err := s.audit.LogWidgetCreate(ctx, dbtx, audit.LogWidgetCreateEvent{WidgetEventBase: s.auditBase(authCtx, row), Snapshot: view, DuplicatedFrom: duplicatedFrom}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "audit widget creation").LogError(ctx, s.logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit widget creation").LogError(ctx, s.logger)
+	}
+	return view, nil
+}
+
+// UpdateWidget replaces a widget's name, description, dataset, query and
+// visualization.
+func (s *Service) UpdateWidget(ctx context.Context, payload *gen.UpdateWidgetPayload) (*gen.Widget, error) {
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	if err != nil {
+		return nil, err
+	}
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid widget id")
+	}
+
+	query, visualization, err := s.checkWidget(payload.Dataset, payload.Query, payload.Visualization)
+	if err != nil {
+		return nil, err
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin widget update").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	queries := repo.New(dbtx)
+
+	before, err := queries.GetWidgetForUpdate(ctx, repo.GetWidgetForUpdateParams{ProjectID: *authCtx.ProjectID, ID: id})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "widget not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "load widget").LogError(ctx, s.logger)
+	}
+
+	row, err := queries.UpdateWidget(ctx, repo.UpdateWidgetParams{
+		Name:          payload.Name,
+		Description:   conv.PtrToPGTextEmpty(payload.Description),
+		Dataset:       payload.Dataset,
+		Query:         query,
+		Visualization: visualization,
+		ProjectID:     *authCtx.ProjectID,
+		ID:            id,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "widget not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "update widget").LogError(ctx, s.logger)
+	}
+
+	view := mv.BuildWidgetView(row, "")
+	if err := s.audit.LogWidgetUpdate(ctx, dbtx, audit.LogWidgetUpdateEvent{WidgetEventBase: s.auditBase(authCtx, row), Before: s.view(before, s.now()), After: view}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "audit widget update").LogError(ctx, s.logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit widget update").LogError(ctx, s.logger)
+	}
+	return view, nil
+}
+
+// DeleteWidget soft-deletes a widget. Its creator can always delete it;
+// deleting someone else's needs project write access.
+func (s *Service) DeleteWidget(ctx context.Context, payload *gen.DeleteWidgetPayload) error {
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	if err != nil {
+		return err
+	}
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid widget id")
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin widget deletion").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	queries := repo.New(dbtx)
+
+	existing, err := queries.GetWidgetForUpdate(ctx, repo.GetWidgetForUpdateParams{ProjectID: *authCtx.ProjectID, ID: id})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "widget not found")
+		}
+		return oops.E(oops.CodeUnexpected, err, "load widget").LogError(ctx, s.logger)
+	}
+	if creator := conv.FromPGText[string](existing.CreatedByUserID); creator == nil || *creator != authCtx.UserID {
+		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+			return err
+		}
+	}
+
+	row, err := queries.DeleteWidget(ctx, repo.DeleteWidgetParams{ProjectID: *authCtx.ProjectID, ID: id})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "widget not found")
+		}
+		return oops.E(oops.CodeUnexpected, err, "delete widget").LogError(ctx, s.logger)
+	}
+	if err := s.audit.LogWidgetDelete(ctx, dbtx, audit.LogWidgetDeleteEvent{WidgetEventBase: s.auditBase(authCtx, row)}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "audit widget deletion").LogError(ctx, s.logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit widget deletion").LogError(ctx, s.logger)
+	}
+	return nil
+}
+
+// checkWidget validates a widget's query against the catalog and its
+// visualization against the query, and returns both encoded for storage.
+func (s *Service) checkWidget(dataset string, query, visualization map[string]any) ([]byte, []byte, error) {
+	if _, ok := s.catalog.Dataset(dataset); !ok {
+		return nil, nil, oops.E(oops.CodeBadRequest, nil, "unknown_dataset: dataset %q does not exist", dataset)
+	}
+	encodedQuery, err := json.Marshal(query)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeBadRequest, err, "query is not encodable as JSON")
+	}
+	encodedVisualization, err := json.Marshal(visualization)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeBadRequest, err, "visualization is not encodable as JSON")
+	}
+	if reason := validate(s.catalog, dataset, encodedQuery, encodedVisualization, s.now()); reason != "" {
+		return nil, nil, oops.E(oops.CodeBadRequest, nil, "%s", reason)
+	}
+	return encodedQuery, encodedVisualization, nil
+}
+
+func (s *Service) auditBase(authCtx *contextvalues.AuthContext, row repo.Widget) audit.WidgetEventBase {
+	return audit.WidgetEventBase{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        row.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		WidgetURN:        urn.NewWidget(row.ID),
+		Name:             row.Name,
+	}
+}
+
+// copyName names a duplicate "<name> (copy)", shortening the original name
+// so the result still fits the column.
+func copyName(name string) string {
+	room := maxNameLength - utf8.RuneCountInString(copySuffix)
+	if utf8.RuneCountInString(name) > room {
+		name = string([]rune(name)[:room])
+	}
+	return name + copySuffix
+}
