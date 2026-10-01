@@ -11,7 +11,6 @@ import {
 } from "../components/updateworkloadsubjectform.js";
 
 export type UpdateWorkloadSubjectSecurityOption1 = {
-  projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
 
@@ -43,7 +42,6 @@ export type UpdateWorkloadSubjectRequest = {
 
 /** @internal */
 export type UpdateWorkloadSubjectSecurityOption1$Outbound = {
-  "project_slug_header_Gram-Project": string;
   "session_header_Gram-Session": string;
 };
 
@@ -53,12 +51,10 @@ export const UpdateWorkloadSubjectSecurityOption1$outboundSchema: z.ZodMiniType<
   UpdateWorkloadSubjectSecurityOption1
 > = z.pipe(
   z.object({
-    projectSlugHeaderGramProject: z.string(),
     sessionHeaderGramSession: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
       sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),

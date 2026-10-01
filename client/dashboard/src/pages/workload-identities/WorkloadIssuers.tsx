@@ -18,7 +18,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, Outlet } from "react-router";
-import { useRoutes } from "@/routes";
+import { useOrgRoutes } from "@/routes";
 import { toast } from "sonner";
 import { issuerMatches } from "./search";
 import {
@@ -215,7 +215,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
 type IssuerView = "catalog" | "custom";
 
 function IssuerCard({ issuer }: { issuer: WorkloadIssuer }): JSX.Element {
-  const routes = useRoutes();
+  const orgRoutes = useOrgRoutes();
   // A description identifies the platform better than its URL, so it takes the
   // URL's place when there is one.
   const hasDescription = issuer.description !== "";
@@ -224,7 +224,7 @@ function IssuerCard({ issuer }: { issuer: WorkloadIssuer }): JSX.Element {
     // A link rather than an onClick, so the card keeps what a link gives for
     // free: middle-click, open in a new tab, and a focus ring for the keyboard.
     <Link
-      to={routes.workloadIssuers.issuerDetail.href(issuer.id)}
+      to={orgRoutes.workloadIssuers.issuerDetail.href(issuer.id)}
       className="block h-full focus-visible:outline-2 focus-visible:outline-offset-2"
     >
       <Card className="hover:border-foreground/30 h-full transition-colors">
