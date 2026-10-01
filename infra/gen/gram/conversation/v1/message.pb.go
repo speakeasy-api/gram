@@ -75,11 +75,11 @@ func (x Message_Role) Number() protoreflect.EnumNumber {
 }
 
 // Message is a snapshot of one persisted conversation message.
-// Producers publish atomically with persistence through the outbox, including
-// successful correlated provenance promotions. Exact conflict no-ops emit nothing.
+// Producers publish atomically with initial persistence through the outbox.
+// Metadata-only correlated promotions and exact conflict no-ops emit nothing:
+// the message content is unchanged, so neither should trigger reevaluation.
 // Delivery is at-least-once; each publication's snapshot survives redelivery.
-// Multiple publications can share id: downstream consumers decide whether a
-// changed snapshot requires processing. This is not a streaming chunk contract.
+// This is not a streaming chunk contract.
 type Message struct {
 	state                          protoimpl.MessageState       `protogen:"opaque.v1"`
 	xxx_hidden_Id                  *string                      `protobuf:"bytes,1,opt,name=id"`

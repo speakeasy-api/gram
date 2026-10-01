@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/url"
 	"strings"
@@ -11,16 +12,106 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
 	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
+
+type publicationAssetGuard struct {
+	assets.BlobStore
+	pool    *pgxpool.Pool
+	uploads int
+}
+
+func (a *publicationAssetGuard) Write(ctx context.Context, path, media string, size int64) (io.WriteCloser, *url.URL, error) {
+	// With a one-connection pool, an open writer transaction would prevent
+	// acquisition. Fail promptly rather than hanging a regression indefinitely.
+	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	conn, err := a.pool.Acquire(checkCtx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("asset upload started while database connection was held: %w", err)
+	}
+	conn.Release()
+	a.uploads++
+	return a.BlobStore.Write(ctx, path, media, size)
+}
+
+func TestPublicationUploadsBeforeWriterTransactions(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"write", "turn", "external", "caller transaction", "correlated promotion"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			ti := newTestChatService(t)
+			ctx := initSessionCtx(t, ti)
+			chatID := seedChat(t, ctx, ti, "u", "", "pretransaction publication")
+			cfg := ti.conn.Config()
+			cfg.MaxConns = 1
+			pool, err := pgxpool.NewWithConfig(ctx, cfg)
+			require.NoError(t, err)
+			t.Cleanup(pool.Close)
+			guard := &publicationAssetGuard{BlobStore: ti.assets, pool: pool}
+			writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), pool, guard)
+			t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+			params := minimalChatMessageParams(chatID, ti.projectID)
+			params.Content = "short display text"
+			// Publish the original JSON spelling, independent of jsonb's
+			// whitespace and numeric normalization in the persisted row.
+			params.ContentRaw = []byte(`{"n":1e2,"payload":"` + strings.Repeat("x", 8*1024*1024) + `"}`)
+			writes := []chat.MessageWrite{{Params: params}}
+			switch mode {
+			case "write":
+				_, err = writer.Write(ctx, ti.projectID, writes)
+			case "turn":
+				err = writer.WriteTurn(ctx, ti.projectID, nil, writes)
+			case "external":
+				_, err = writer.WriteExternal(ctx, ti.projectID, []chat.ExternalMessageWrite{{Params: repo.CreateExternalChatMessageParams{ID: params.ID, ChatID: chatID, ProjectID: ti.projectID, Role: params.Role, Content: params.Content, ContentRaw: params.ContentRaw, ExternalMessageID: conv.ToPGText("external-large")}}})
+			case "caller transaction":
+				prepared, prepErr := writer.PreparePublications(ctx, ti.projectID, writes)
+				require.NoError(t, prepErr)
+				tx := testenv.BeginTx(t, ctx, pool)
+				_, err = writer.WriteInTx(ctx, tx, writes, prepared)
+				require.NoError(t, err)
+				err = tx.Commit(ctx)
+			case "correlated promotion":
+				writes[0].Params.Source = conv.ToPGText("litellm")
+				_, err = writer.WriteCorrelated(ctx, ti.projectID, writes[0], "correlated-large")
+				require.NoError(t, err)
+				writes[0].Params.ID = uuid.New()
+				writes[0].Params.Content = "different incoming body"
+				writes[0].Params.ContentRaw = nil
+				writes[0].Params.Source = conv.ToPGText("opencode")
+				_, err = writer.WriteCorrelated(ctx, ti.projectID, writes[0], "correlated-large")
+			}
+			require.NoError(t, err)
+			messages := conversationMessages(t, ti)
+			require.Len(t, messages, 1)
+			require.Equal(t, 1, guard.uploads)
+			for _, msg := range messages {
+				require.True(t, msg.HasBodyReference())
+				u, err := url.Parse(msg.GetBodyReference().GetUri())
+				require.NoError(t, err)
+				r, err := ti.assets.Read(ctx, u)
+				require.NoError(t, err)
+				data, err := io.ReadAll(r)
+				require.NoError(t, err)
+				require.NoError(t, r.Close())
+				body := &conversationv1.Message_Body{}
+				require.NoError(t, proto.Unmarshal(data, body))
+				require.Equal(t, params.Content, body.GetParts()[0].GetText())
+				require.Equal(t, params.ContentRaw, body.GetSourceContentJson())
+			}
+		})
+	}
+}
 
 func conversationMessages(t *testing.T, ti *chatTestInstance) []*conversationv1.Message {
 	t.Helper()
@@ -61,6 +152,62 @@ func TestConversationPublicationIncludesEmptyMessages(t *testing.T) {
 	require.Empty(t, messages[0].GetBody().GetParts())
 	require.Empty(t, meterMessages(t, ti))
 	require.False(t, messages[0].GetProvenance().HasBillingUserId())
+}
+
+func TestWriteInTxRejectsUnpreparedBodyWithoutUploading(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	chatID := seedChat(t, ctx, ti, "u", "", "stale publication preparation")
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
+	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	writes := []chat.MessageWrite{{Params: minimalChatMessageParams(chatID, ti.projectID)}}
+	prepared, err := writer.PreparePublications(ctx, ti.projectID, writes)
+	require.NoError(t, err)
+	writes[0].Params.ContentRaw = []byte(`{"payload":"` + strings.Repeat("x", 8*1024*1024) + `"}`)
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	_, err = writer.WriteInTx(ctx, tx, writes, prepared)
+	// The nil asset backend must not be consulted while the transaction is open.
+	require.ErrorContains(t, err, "body changed after preparation")
+	require.NoError(t, tx.Rollback(ctx))
+	require.Empty(t, listAllMessages(t, ctx, ti.conn, chatID, ti.projectID))
+	require.Empty(t, conversationMessages(t, ti))
+	require.Empty(t, meterMessages(t, ti))
+}
+
+func TestPreparedInlinePublicationOwnsOriginalJSON(t *testing.T) {
+	t.Parallel()
+	for _, mutate := range []bool{false, true} {
+		t.Run(fmt.Sprintf("mutate=%t", mutate), func(t *testing.T) {
+			t.Parallel()
+			ti := newTestChatService(t)
+			ctx := initSessionCtx(t, ti)
+			chatID := seedChat(t, ctx, ti, "u", "", "prepared inline publication")
+			writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
+			t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+			params := minimalChatMessageParams(chatID, ti.projectID)
+			params.ContentRaw = []byte(`{"n":1e2}`)
+			writes := []chat.MessageWrite{{Params: params}}
+			prepared, err := writer.PreparePublications(ctx, ti.projectID, writes)
+			require.NoError(t, err)
+			if mutate {
+				params.ContentRaw[5] = '2'
+			}
+			tx := testenv.BeginTx(t, ctx, ti.conn)
+			_, err = writer.WriteInTx(ctx, tx, writes, prepared)
+			if mutate {
+				require.ErrorContains(t, err, "body changed after preparation")
+				require.NoError(t, tx.Rollback(ctx))
+				require.Empty(t, conversationMessages(t, ti))
+				return
+			}
+			require.NoError(t, err)
+			require.NoError(t, tx.Commit(ctx))
+			messages := conversationMessages(t, ti)
+			require.Len(t, messages, 1)
+			require.Equal(t, `{"n":1e2}`, string(messages[0].GetBody().GetSourceContentJson()))
+		})
+	}
 }
 
 func TestConversationPublicationSeparatesActorAndBillingUser(t *testing.T) {
