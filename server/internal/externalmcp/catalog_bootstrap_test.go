@@ -15,6 +15,7 @@ import (
 )
 
 func TestNativeNamespaceBootstrap(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestExternalMCPService(t)
 	require.NoError(t, externalmcp.EnsureNativeCatalogSource(ctx, ti.conn))
 	require.NoError(t, externalmcp.EnsureNativeCatalogSource(ctx, ti.conn))
@@ -33,6 +34,7 @@ func TestNativeNamespaceBootstrap(t *testing.T) {
 }
 
 func TestNativeRetainedEvidenceNotDiscovery(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestExternalMCPService(t)
 	for _, row := range []struct{ name, status string }{{"retained", "active"}, {"deleted", "deleted"}} {
 		raw := []byte(`{"server":{"name":"io.example/` + row.name + `","description":"Evidence","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://example.com/mcp"}]},"_meta":{"io.modelcontextprotocol.registry/official":{"status":"` + row.status + `"}}}`)
@@ -52,6 +54,7 @@ func TestNativeRetainedEvidenceNotDiscovery(t *testing.T) {
 }
 
 func TestNativeNamespaceBootstrapConflictingURL(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestExternalMCPService(t)
 	id := uuid.New()
 	_, err := ti.conn.Exec(ctx, `INSERT INTO mcp_registries (id,name,url) VALUES ($1,'Existing',$2)`, id, externalmcp.NativeCatalogRegistryURL)
@@ -63,6 +66,7 @@ func TestNativeNamespaceBootstrapConflictingURL(t *testing.T) {
 }
 
 func TestNativeDashboardDetailsRejectUnpublishedSelection(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestExternalMCPService(t)
 	require.NoError(t, externalmcp.EnsureNativeCatalogSource(ctx, ti.conn))
 	auth, ok := contextvalues.GetAuthContext(ctx)

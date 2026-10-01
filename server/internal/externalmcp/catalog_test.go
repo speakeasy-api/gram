@@ -111,6 +111,7 @@ func (f routingFlags) IsFlagEnabled(context.Context, feature.Flag, string, map[s
 	return f.on, f.err
 }
 func TestCatalogSelectsExactlyOneSource(t *testing.T) {
+	t.Parallel()
 	pulseID := uuid.New()
 	rows := []repo.ListMCPRegistriesRow{
 		{ID: pulseID, Url: "https://api.pulsemcp.com"},
@@ -125,6 +126,7 @@ func TestCatalogSelectsExactlyOneSource(t *testing.T) {
 		{name: "off", want: pulseID}, {name: "on", on: true, want: NativeCatalogRegistryID}, {name: "error", on: true, err: errors.New("flags down"), want: pulseID},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			s := NewCatalogService(nil, &RegistryClient{}, &NativeRegistryReader{}, routingFlags{on: tc.on, err: tc.err})
 			s.repo = routingRepo{rows}
 			source, err := s.SelectedSource(t.Context(), "org-id", "org-slug")
@@ -147,6 +149,7 @@ func TestCatalogSelectsExactlyOneSource(t *testing.T) {
 }
 
 func TestDashboardDetailsRetainEveryRemote(t *testing.T) {
+	t.Parallel()
 	result, err := decodeDashboardDetails([]byte(`{"server":{"name":"example/server","version":"1","description":"full","title":"Full title","icons":[{"src":"https://example.test/icon.png"}],"remotes":[{"type":"sse","url":"https://example.test/sse"},{"type":"streamable-http","url":"https://example.test/mcp","headers":[{"name":"X-Token","description":"token","isRequired":true}]}]},"_meta":{"com.pulsemcp/server-version":{"remotes[1]":{"tools":[{"name":"search","description":"find","inputSchema":{"type":"object"}}]}}}}`), true)
 	require.NoError(t, err)
 	require.Len(t, result.Remotes, 2)
@@ -168,6 +171,7 @@ func (r *failedCatalogReader) GetServerDetails(context.Context, Registry, string
 	return nil, errors.New("selected source failed")
 }
 func TestCatalogSelectedFailureNeverFallsBack(t *testing.T) {
+	t.Parallel()
 	pulse, native := &failedCatalogReader{}, &failedCatalogReader{}
 	s := NewCatalogService(nil, pulse, native, routingFlags{on: true})
 	s.repo = routingRepo{rows: []repo.ListMCPRegistriesRow{

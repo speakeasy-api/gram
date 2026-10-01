@@ -85,6 +85,7 @@ func zeroRegistry() Registry {
 func zeroCatalogSource() CatalogSource {
 	return CatalogSource{
 		Registry:             zeroRegistry(),
+		Name:                 "",
 		SourceType:           "",
 		AuthProfile:          "",
 		CertificationVersion: "",
@@ -310,7 +311,11 @@ func (s *CatalogService) IdentityDetails(ctx context.Context, id uuid.UUID, name
 	if err != nil {
 		return nil, err
 	}
-	return reader.GetServerDetails(ctx, source.Registry, name, allowed)
+	details, err := reader.GetServerDetails(ctx, source.Registry, name, allowed)
+	if err != nil {
+		return nil, fmt.Errorf("read catalog identity details: %w", err)
+	}
+	return details, nil
 }
 
 type catalogRepository interface {
@@ -439,5 +444,9 @@ func (r *NativeRegistryReader) discoveryEntry(ctx context.Context, name string) 
 	if !ok {
 		return mcpregistry.Entry{}, ErrUnknownRegistrySource
 	}
-	return source.LookupDiscoveryVersion(ctx, name, "latest", false)
+	entry, err := source.LookupDiscoveryVersion(ctx, name, "latest", false)
+	if err != nil {
+		return mcpregistry.Entry{}, fmt.Errorf("lookup catalog discovery version: %w", err)
+	}
+	return entry, nil
 }

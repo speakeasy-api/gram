@@ -295,44 +295,6 @@ type serverDetailsResult struct {
 	Remotes     []*types.ExternalMCPRemote
 }
 
-func serverDetailsResultFromRegistryDetails(details *ServerDetails) *serverDetailsResult {
-	if details == nil {
-		return nil
-	}
-
-	var tools []*types.ExternalMCPTool
-	if details.Tools != nil {
-		tools = make([]*types.ExternalMCPTool, 0, len(details.Tools))
-		for i := range details.Tools {
-			tool := &details.Tools[i]
-			tools = append(tools, &types.ExternalMCPTool{
-				Name:        &tool.Name,
-				Description: &tool.Description,
-				InputSchema: tool.InputSchema,
-				Annotations: tool.Annotations,
-			})
-		}
-	}
-
-	var remotes []*types.ExternalMCPRemote
-	if details.RemoteURL != "" {
-		remotes = []*types.ExternalMCPRemote{{
-			URL:           details.RemoteURL,
-			TransportType: string(details.TransportType),
-			Headers:       toExternalMCPRemoteHeaders(details.Headers),
-			Variables:     toExternalMCPRemoteVariables(details.Variables),
-		}}
-	}
-
-	return &serverDetailsResult{
-		Name:        details.Name,
-		Description: details.Description,
-		Version:     details.Version,
-		Tools:       tools,
-		Remotes:     remotes,
-	}
-}
-
 // fetchServerDetails fetches all server details from the registry in a single HTTP call.
 func (s *Service) fetchServerDetails(ctx context.Context, registry Registry, serverName string) (*serverDetailsResult, error) {
 	registryURL, err := reviewedRegistryDetailsURL(registry.URL)
