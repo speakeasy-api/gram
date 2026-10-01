@@ -8,7 +8,7 @@ import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
-import { useMemo, useState, type JSX } from "react";
+import { useEffect, useMemo, useState, type JSX } from "react";
 import {
   findDataset,
   hasChartShape,
@@ -16,8 +16,10 @@ import {
   queryBodyFromSpec,
   type ExploreSpec,
 } from "./exploreModel";
+import { encodeSpec } from "./exploreUrl";
 import { ExploreResults } from "./ExploreResults";
 import { QueryBuilder } from "./QueryBuilder";
+import { useQueryUrl } from "./useQueryUrl";
 import { useRunQuery } from "./useRunQuery";
 
 // Explore: ask questions of this project's agent activity. The page is
@@ -80,7 +82,6 @@ function ExploreBody(): JSX.Element {
 
 function ExploreCatalog(): JSX.Element {
   const describe = useAnalyticsDescribe();
-  const [draft, setDraft] = useState<ExploreSpec | null>(null);
 
   if (describe.isPending) return <BuilderSkeleton />;
   // A refetch that fails still leaves the cached catalog usable, so the
@@ -104,37 +105,27 @@ function ExploreCatalog(): JSX.Element {
     );
   }
 
-  return (
-    <ExploreWorkbench
-      datasets={describe.data.datasets}
-      draft={draft}
-      onChange={setDraft}
-    />
-  );
+  return <ExploreWorkbench datasets={describe.data.datasets} />;
 }
 
 function ExploreWorkbench({
   datasets,
-  draft,
-  onChange,
 }: {
   datasets: AnalyticsDataset[];
-  draft: ExploreSpec | null;
-  onChange: (spec: ExploreSpec) => void;
 }): JSX.Element {
-  // Until the user edits something, the builder opens on the catalog's first
-  // dataset. Memoized so a run can tell it apart from an edit by reference.
-  const opening = useMemo(() => initialSpec(datasets), [datasets]);
-  // A draft naming a dataset the catalog has since dropped is stale, so it
-  // opens afresh rather than querying a dataset that is no longer there.
-  const live = draft && findDataset(datasets, draft.dataset) ? draft : null;
-  const spec = live ?? opening;
-
   // Queries run when asked, never as a side effect of editing: a query scans
   // the dataset across its whole window, so the builder waits for Run. The
   // spec the last run answered is kept apart from the one being edited, so
   // the results panel keeps describing the query that produced them.
   const [submitted, setSubmitted] = useState<ExploreSpec | null>(null);
+
+  // The query being edited lives in the URL, so it is a link at every step.
+  // A link opened, or a question stepped back to, runs as it arrives.
+  const url = useQueryUrl(datasets, setSubmitted);
+  // Without a query in the URL — or with one the catalog can no longer
+  // answer — the builder opens on the catalog's first dataset.
+  const opening = useMemo(() => initialSpec(datasets), [datasets]);
+  const spec = url.spec ?? opening;
   const ran =
     submitted && findDataset(datasets, submitted.dataset) ? submitted : null;
   const chartBody = useMemo(
@@ -148,10 +139,18 @@ function ExploreWorkbench({
   const chart = useRunQuery(chartBody);
   const summary = useRunQuery(summaryBody);
 
-  // Every edit replaces the spec object, so the same reference means nothing
-  // changed since the last run: Run then asks the same question again rather
-  // than serving the cached answer.
-  const unchanged = ran !== null && ran === spec;
+  // The same query text means nothing changed since the last run: Run then
+  // asks the same question again rather than serving the cached answer.
+  const unchanged =
+    ran !== null && spec !== null && encodeSpec(ran) === encodeSpec(spec);
+
+  // A run that returns claims its history entry, so the next edit starts a
+  // new one and Back returns to this question.
+  const { ran: markRan } = url;
+  const answered = summary.isSuccess && !summary.isPlaceholderData;
+  useEffect(() => {
+    if (ran && answered) markRan(ran);
+  }, [ran, answered, markRan]);
   const run = () => {
     if (!unchanged) {
       setSubmitted(spec);
@@ -175,7 +174,7 @@ function ExploreWorkbench({
       <QueryBuilder
         datasets={datasets}
         spec={spec}
-        onChange={onChange}
+        onChange={url.edit}
         onRun={run}
         changed={ran !== null && !unchanged}
       />
