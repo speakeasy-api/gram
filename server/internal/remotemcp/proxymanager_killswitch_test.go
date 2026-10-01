@@ -2,7 +2,6 @@ package remotemcp
 
 import (
 	"context"
-	"github.com/speakeasy-api/gram/tunnel/metrics"
 	"slices"
 	"testing"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/tunnel/metrics"
 	"github.com/stretchr/testify/require"
 )
 

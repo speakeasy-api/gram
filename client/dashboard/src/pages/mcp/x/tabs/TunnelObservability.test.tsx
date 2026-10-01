@@ -157,6 +157,11 @@ it.each([
     "HTTP / MCP: Not observed. No traffic has reached this agent.",
   ],
   [
+    "disabled",
+    { state: "disabled" },
+    "HTTP progress is unavailable because diagnostics are disabled.",
+  ],
+  [
     "pending",
     { state: "pending" },
     "HTTP progress unavailable. Waiting for a fresh report.",
@@ -395,7 +400,9 @@ it("keeps failure guidance visible and reveals dependent checks and HTTP details
   expect(screen.getByText(/Last HTTP response: 200/).closest("details")).toBe(
     details,
   );
-  expect(screen.queryByText(/7866s ago/)).toBeNull();
+  expect(
+    screen.getByText(/Last HTTP response: 200 · about 2 hours ago/),
+  ).toBeTruthy();
   fireEvent.click(screen.getByText("Connection details"));
   expect(details.open).toBe(true);
   expect(screen.getByText("Not checked (DNS failed)")).toBeTruthy();
@@ -481,3 +488,34 @@ it.each([
     ).toBeTruthy();
   },
 );
+
+it("shows activity from other MCP methods", () => {
+  mocks.history.mockReturnValue({
+    data: {
+      state: "available",
+      points: [{ time: new Date(), otherRequests: 7 }],
+      clients: [],
+    },
+    isPending: false,
+    isError: false,
+  });
+  render(
+    <MemoryRouter>
+      <TunnelObservability
+        id="source"
+        connections={legacy}
+        loading={false}
+        error={false}
+        logsHref="/logs"
+        agentSetupHref="/settings"
+      />
+    </MemoryRouter>,
+  );
+  expect(screen.getByRole("img", { name: "MCP requests" })).toBeTruthy();
+  expect(screen.getByText(/7 other requests/)).toBeTruthy();
+  expect(screen.getByText("Other requests")).toBeTruthy();
+  expect(screen.getByText("7", { exact: true })).toBeTruthy();
+  expect(
+    within(screen.getByRole("group", { name: "MCP responses" })).getByText("0"),
+  ).toBeTruthy();
+});

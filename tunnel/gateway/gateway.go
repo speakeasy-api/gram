@@ -68,6 +68,7 @@ type Gateway struct {
 	reconciler      *routeReconciler
 	logger          *slog.Logger
 	publicKeys      *jwks.Set
+	metricsMu       sync.Mutex
 	drain           sync.Once
 	diagnosticSlots chan struct{}
 }
@@ -98,6 +99,7 @@ func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) 
 		reconciler:      newRouteReconciler(reg, keys, routes, cfg.AdvertiseAddr, logger, cfg.routeRefreshInterval),
 		logger:          logger,
 		publicKeys:      publicKeys,
+		metricsMu:       sync.Mutex{},
 		drain:           sync.Once{},
 		diagnosticSlots: make(chan struct{}, 32),
 	}, nil

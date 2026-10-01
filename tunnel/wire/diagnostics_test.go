@@ -13,6 +13,7 @@ func TestTargetDisplayRemovesCredentialsQueryAndFragment(t *testing.T) {
 	require.Empty(t, TargetDisplay("file:///private/key"))
 	require.Empty(t, TargetDisplay("https://example.com/"+strings.Repeat("a", MaxTargetDisplayBytes)))
 }
+
 func TestOptionalCapabilityIgnoresMalformedHeaders(t *testing.T) {
 	require.False(t, SupportsDiagnostics(DiagnosticsCapability, "secret"))
 	require.False(t, SupportsDiagnostics(DiagnosticsCapability, strings.Repeat("g", 64)))
@@ -20,6 +21,7 @@ func TestOptionalCapabilityIgnoresMalformedHeaders(t *testing.T) {
 	require.False(t, SupportsDiagnostics("future.v2", strings.Repeat("a", 64)))
 	require.True(t, SupportsDiagnostics("future.v2, diagnostics.v1", strings.Repeat("a", 64)))
 }
+
 func TestDiagnosticsRejectArbitraryErrorLabels(t *testing.T) {
 	step := DiagnosticStep{State: "not_tested"}
 	r := DiagnosticsReport{Version: 1, TargetState: "pending", DNS: step, TCP: step, TLS: step}
