@@ -107,7 +107,7 @@ func TestNativeErrors(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestNativeListIgnoresStalePulseLifecycle(t *testing.T) {
+func TestNativeListIgnoresStaleLegacyLifecycle(t *testing.T) {
 	t.Parallel()
 	raw := strings.Replace(nativeRecord, `"status":"deprecated"`, `"status":"active"`, 1)
 	raw = strings.Replace(raw, `"com.pulsemcp/server-version":{`, `"com.pulsemcp/server-version":{"status":"deleted",`, 1)

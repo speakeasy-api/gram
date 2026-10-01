@@ -47,7 +47,7 @@ func (r *NativeRegistryReader) ListServers(ctx context.Context, registry Registr
 			if err != nil {
 				return ListServersResult{}, err
 			}
-			// Preserve extension metadata that the Pulse-specific projection cannot
+			// Preserve extension metadata that the legacy catalog projection cannot
 			// represent, including official lifecycle information.
 			var full struct {
 				Meta map[string]any `json:"_meta"`
