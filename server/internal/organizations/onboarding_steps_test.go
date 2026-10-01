@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	admingen "github.com/speakeasy-api/gram/server/gen/admin"
-	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +12,6 @@ func TestSyncOnboardingStepsMirrorsTheCatalog(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-	require.NoError(t, admin.SeedSupportMatrix(ctx, ti.conn))
 	require.NoError(t, organizations.SyncOnboardingSteps(ctx, ti.conn))
 	// A second start finds everything in place and changes nothing.
 	require.NoError(t, organizations.SyncOnboardingSteps(ctx, ti.conn))

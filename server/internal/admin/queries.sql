@@ -664,69 +664,6 @@ WHERE billing_metadata.stripe_customer_id IS NULL
   AND billing_metadata.stripe_subscription_id IS NULL
 RETURNING organization_id;
 
--- name: LockSupportMatrix :exec
-SELECT pg_advisory_xact_lock(719438201);
-
--- name: SeedSupportPlatforms :exec
--- The catalog owns a platform's name, vendor, family, surface and order, so
--- those follow the file on every start; staff edit facts, not platforms.
-INSERT INTO support_matrix_platforms (slug, name, vendor, family, surface, sort_order)
-SELECT value->>'id', value->>'name', value->>'vendor', value->>'family', value->>'surface', ordinality::integer
-FROM jsonb_array_elements(sqlc.arg(catalog)::jsonb->'products') WITH ORDINALITY
-ON CONFLICT (slug) DO UPDATE SET
-    name = EXCLUDED.name,
-    vendor = EXCLUDED.vendor,
-    family = EXCLUDED.family,
-    surface = EXCLUDED.surface,
-    sort_order = EXCLUDED.sort_order,
-    updated_at = clock_timestamp()
-WHERE support_matrix_platforms.name IS DISTINCT FROM EXCLUDED.name
-   OR support_matrix_platforms.vendor IS DISTINCT FROM EXCLUDED.vendor
-   OR support_matrix_platforms.family IS DISTINCT FROM EXCLUDED.family
-   OR support_matrix_platforms.surface IS DISTINCT FROM EXCLUDED.surface
-   OR support_matrix_platforms.sort_order IS DISTINCT FROM EXCLUDED.sort_order;
-
--- name: SeedSupportPlans :exec
--- The catalog owns plans outright: a plan it names is (re)instated with the
--- catalog's vendor, name and order, and RetireSupportPlans below soft-deletes
--- the ones it no longer names.
-INSERT INTO support_matrix_plans (slug, vendor, name, sort_order)
-SELECT value->>'id', value->>'vendor', value->>'name', ordinality::integer
-FROM jsonb_array_elements(sqlc.arg(catalog)::jsonb->'plans') WITH ORDINALITY
-ON CONFLICT (slug) DO UPDATE SET
-    vendor = EXCLUDED.vendor,
-    name = EXCLUDED.name,
-    sort_order = EXCLUDED.sort_order,
-    deleted_at = NULL,
-    updated_at = clock_timestamp()
-WHERE support_matrix_plans.vendor IS DISTINCT FROM EXCLUDED.vendor
-   OR support_matrix_plans.name IS DISTINCT FROM EXCLUDED.name
-   OR support_matrix_plans.sort_order IS DISTINCT FROM EXCLUDED.sort_order
-   OR support_matrix_plans.deleted_at IS NOT NULL;
-
--- name: RetireSupportPlans :exec
--- An organization that declared a retired plan keeps its vendor and loses the
--- plan: the stack reads plans through deleted_at IS NULL.
-UPDATE support_matrix_plans
-SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE deleted_at IS NULL
-  AND slug NOT IN (
-    SELECT value->>'id'
-    FROM jsonb_array_elements(sqlc.arg(catalog)::jsonb->'plans')
-  );
-
--- name: SeedSupportMethods :exec
-INSERT INTO support_matrix_integration_methods (slug, name, vendor, plan_notes, sort_order)
-SELECT value->>'id', value->>'name', value->>'vendor', value->>'plans', ordinality::integer
-FROM jsonb_array_elements(sqlc.arg(catalog)::jsonb->'methods') WITH ORDINALITY
-ON CONFLICT (slug) DO NOTHING;
-
--- name: SeedSupportCapabilities :exec
-INSERT INTO support_matrix_capabilities (slug, name, category, sort_order)
-SELECT value->>'id', value->>'name', value->>'group', ordinality::integer
-FROM jsonb_array_elements(sqlc.arg(catalog)::jsonb->'capabilities') WITH ORDINALITY
-ON CONFLICT (slug) DO NOTHING;
-
 -- name: AdminListUsers :many
 SELECT u.id, u.email, u.display_name, u.last_login
 FROM users u
@@ -787,10 +724,3 @@ ORDER BY lower(o.name), o.slug, o.id LIMIT @page_limit::int OFFSET @page_offset:
 -- name: AdminCountUserOrganizations :one
 SELECT (SELECT count(*) FROM organization_user_relationships m WHERE m.user_id = u.id AND m.deleted IS FALSE) AS total
 FROM users u WHERE u.id = @user_id::text AND u.deleted_at IS NULL AND u.workos_deleted_at IS NULL;
--- name: ListSupportMatrixSlugs :many
-SELECT 'platform' AS kind, slug FROM support_matrix_platforms WHERE deleted_at IS NULL
-UNION ALL SELECT 'method', slug FROM support_matrix_integration_methods WHERE deleted_at IS NULL
-UNION ALL SELECT 'capability', slug FROM support_matrix_capabilities WHERE deleted_at IS NULL
-UNION ALL SELECT 'plan', slug FROM support_matrix_plans WHERE deleted_at IS NULL
-ORDER BY 1, 2;
-

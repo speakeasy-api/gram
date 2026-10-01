@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	admingen "github.com/speakeasy-api/gram/server/gen/admin"
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
-	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -22,7 +21,6 @@ import (
 
 func seedOnboardingCatalog(t *testing.T, ti *testInstance) {
 	t.Helper()
-	require.NoError(t, admin.SeedSupportMatrix(t.Context(), ti.conn))
 	require.NoError(t, organizations.SyncOnboardingSteps(t.Context(), ti.conn))
 }
 
@@ -307,35 +305,6 @@ func TestOrganizationWalksOnboardingPlaybookOnlyThroughItsOwnCopy(t *testing.T) 
 	require.True(t, organizations.OrganizationWalksOnboardingPlaybook(copied, copied), "its own custom playbook")
 	require.False(t, organizations.OrganizationWalksOnboardingPlaybook(template, template), "pointed straight at a template, it still needs its copy")
 	require.False(t, organizations.OrganizationWalksOnboardingPlaybook(nil, template))
-}
-
-func TestOnboardingPlaybookApplicabilityJudgesAMethodOnItsOwnVendor(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestOrganizationsService(t)
-	seedOnboardingCatalog(t, ti)
-	ac, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	actor := urn.NewPrincipal(urn.PrincipalTypeUser, "staff-test")
-	// The Cursor API is not applicable on any Cursor platform. The matrix in
-	// code owns these cells; the mirror rows are written directly here.
-	for _, platform := range []string{"cursor-ide", "cursor-cli", "cursor-cloud"} {
-		_, err := ti.conn.Exec(ctx, //nolint:glint // notestingrawsql: nothing writes support matrix cells any more; the check under test still reads them.
-			"INSERT INTO support_matrix_method_platforms (integration_method_id, platform_id, applicability, conditions) SELECT m.id, p.id, 'na', '' FROM support_matrix_integration_methods m, support_matrix_platforms p WHERE m.slug = 'cursor-api' AND p.slug = $1 AND m.deleted_at IS NULL AND p.deleted_at IS NULL",
-			platform)
-		require.NoError(t, err)
-	}
-	// OpenCode joins the stack. Its platform has no entry for the Cursor API,
-	// which must not count in the Cursor API's favour.
-	_, err := organizations.SaveOnboardingStack(ctx, ti.conn, audit.NewLogger(), ac.ActiveOrganizationID, organizations.OnboardingStackInput{Vendors: []organizations.OnboardingStackVendorInput{{Vendor: "Cursor", PlanSlug: conv.PtrEmpty("cursor-teams")}, {Vendor: "OpenCode", PlanSlug: nil}}, MdmVendor: "none", MdmVendorName: nil}, actor, nil)
-	require.NoError(t, err)
-	// Configure integrations lists the Anthropic, Cursor and OpenAI APIs; only
-	// Cursor is in the stack, and its API is ruled out on Cursor's platforms.
-	_, err = organizations.CreateOnboardingPlaybook(ctx, ti.conn, organizations.OnboardingPlaybookInput{
-		UseCaseID: nil, OrganizationID: &ac.ActiveOrganizationID, Name: "Integrations", Description: "", IsDefault: false, StepSlugs: []string{"additional-agent-config"},
-	})
-	requireOopsCode(t, err, oops.CodeBadRequest)
-	require.ErrorContains(t, err, "Configure integrations")
 }
 
 func TestOnboardingPlaybookSkipsAStepThisBuildDoesNotKnow(t *testing.T) {

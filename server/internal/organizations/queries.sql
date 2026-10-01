@@ -1065,16 +1065,6 @@ UPDATE onboarding_steps
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE deleted_at IS NULL AND NOT (slug = ANY(@slugs::text[]));
 
--- name: DeleteOnboardingStepMethods :exec
-DELETE FROM onboarding_step_methods WHERE step_id = @step_id;
-
--- name: InsertOnboardingStepMethod :execrows
-INSERT INTO onboarding_step_methods (step_id, integration_method_id)
-SELECT @step_id, m.id
-FROM support_matrix_integration_methods m
-WHERE m.slug = @method_slug AND m.deleted_at IS NULL
-ON CONFLICT DO NOTHING;
-
 -- name: DeleteOnboardingStepDependencies :exec
 DELETE FROM onboarding_step_dependencies WHERE step_id = @step_id;
 
@@ -1088,12 +1078,6 @@ ON CONFLICT DO NOTHING;
 -- name: ListOnboardingSteps :many
 SELECT s.id, s.slug, s.title, s.description, s.completion, s.hidden_by_default, s.sort_order,
   p.slug AS parent_slug,
-  (
-    SELECT coalesce(array_agg(m.slug ORDER BY m.sort_order, m.slug), '{}')::text[]
-    FROM onboarding_step_methods sm
-    JOIN support_matrix_integration_methods m ON m.id = sm.integration_method_id AND m.deleted_at IS NULL
-    WHERE sm.step_id = s.id
-  ) AS method_slugs,
   (
     SELECT coalesce(array_agg(r.slug ORDER BY r.sort_order, r.slug), '{}')::text[]
     FROM onboarding_step_dependencies d
@@ -1112,7 +1096,10 @@ LEFT JOIN organization_onboarding onboarding ON onboarding.organization_id = om.
 WHERE om.id = @organization_id;
 
 -- name: ListOrganizationOnboardingVendors :many
-SELECT v.vendor, p.slug AS plan_slug
+-- plan_slug names the plan in the support matrix in code. legacy_plan_slug
+-- resolves rows recorded through plan_id before it existed, until the
+-- contract migration drops that column with the support matrix tables.
+SELECT v.vendor, v.plan_slug, p.slug AS legacy_plan_slug
 FROM organization_onboarding_vendors v
 LEFT JOIN support_matrix_plans p ON p.id = v.plan_id AND p.deleted_at IS NULL
 WHERE v.organization_id = @organization_id
@@ -1130,24 +1117,8 @@ ON CONFLICT (organization_id) DO UPDATE SET
 DELETE FROM organization_onboarding_vendors WHERE organization_id = @organization_id;
 
 -- name: InsertOrganizationOnboardingVendor :exec
-INSERT INTO organization_onboarding_vendors (organization_id, vendor, plan_id)
-VALUES (
-  @organization_id,
-  @vendor,
-  (SELECT p.id FROM support_matrix_plans p WHERE p.slug = sqlc.narg(plan_slug)::text AND p.deleted_at IS NULL)
-);
-
--- name: ListSupportMatrixPlatformsForOnboarding :many
-SELECT slug, name, vendor, family, surface
-FROM support_matrix_platforms
-WHERE deleted_at IS NULL
-ORDER BY sort_order, slug;
-
--- name: ListSupportMatrixPlansForOnboarding :many
-SELECT slug, vendor, name
-FROM support_matrix_plans
-WHERE deleted_at IS NULL
-ORDER BY sort_order, slug;
+INSERT INTO organization_onboarding_vendors (organization_id, vendor, plan_slug)
+VALUES (@organization_id, @vendor, sqlc.narg(plan_slug)::text);
 
 -- name: LockOnboardingPlaybooks :exec
 SELECT pg_advisory_xact_lock(719438203);
@@ -1285,21 +1256,3 @@ JOIN onboarding_steps s ON s.id = ps.step_id AND s.deleted_at IS NULL
 WHERE o.organization_id = @organization_id
 ORDER BY ps.position, s.slug;
 
--- name: ListOnboardingStepMethodApplicability :many
-SELECT s.slug AS step_slug, m.slug AS method_slug, m.vendor AS method_vendor,
-  -- Over the stack's platforms of the method's own vendor, or of every vendor
-  -- for a method that belongs to none, so an unrelated vendor in the stack
-  -- never changes the verdict. A platform the matrix does not map the method
-  -- to is unknown, which is not the same as not applicable.
-  coalesce((
-    SELECT bool_and(mp.platform_id IS NOT NULL AND mp.applicability = 'na')
-    FROM support_matrix_platforms p
-    LEFT JOIN support_matrix_method_platforms mp ON mp.platform_id = p.id AND mp.integration_method_id = m.id AND mp.deleted_at IS NULL
-    WHERE p.deleted_at IS NULL AND p.vendor = ANY(@vendors::text[])
-      AND (m.vendor IN ('Cross-platform', 'Others') OR p.vendor = m.vendor)
-  ), false)::boolean AS not_applicable_everywhere
-FROM onboarding_step_methods sm
-JOIN onboarding_steps s ON s.id = sm.step_id AND s.deleted_at IS NULL
-JOIN support_matrix_integration_methods m ON m.id = sm.integration_method_id AND m.deleted_at IS NULL
-WHERE s.slug = ANY(@step_slugs::text[])
-ORDER BY s.slug, m.sort_order, m.slug;

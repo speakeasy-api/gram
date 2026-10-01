@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/supportmatrix"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -64,38 +65,29 @@ type OnboardingStackInput struct {
 }
 
 // LoadOnboardingStackOptions reads what the stack form offers from the
-// support matrix catalog: each vendor with its plans and platforms.
-func LoadOnboardingStackOptions(ctx context.Context, db repo.DBTX) (*admingen.AdminOnboardingStackOptions, error) {
-	queries := repo.New(db)
-	platforms, err := queries.ListSupportMatrixPlatformsForOnboarding(ctx)
+// support matrix in code: each vendor with its plans and platforms, in
+// matrix order.
+func LoadOnboardingStackOptions() (*admingen.AdminOnboardingStackOptions, error) {
+	matrix, err := supportmatrix.Current()
 	if err != nil {
-		return nil, fmt.Errorf("list support matrix platforms: %w", err)
+		return nil, fmt.Errorf("load support matrix: %w", err)
 	}
-	plans, err := queries.ListSupportMatrixPlansForOnboarding(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list support matrix plans: %w", err)
-	}
-	options := &admingen.AdminOnboardingStackOptions{Vendors: nil, MdmVendors: nil}
-	byVendor := make(map[string]*admingen.AdminOnboardingVendorOption, len(platforms))
-	for _, platform := range platforms {
+	options := &admingen.AdminOnboardingStackOptions{Vendors: []*admingen.AdminOnboardingVendorOption{}, MdmVendors: nil}
+	byVendor := make(map[string]*admingen.AdminOnboardingVendorOption, len(matrix.Platforms))
+	for _, platform := range matrix.Platforms {
 		option, ok := byVendor[platform.Vendor]
 		if !ok {
 			option = &admingen.AdminOnboardingVendorOption{Vendor: platform.Vendor, Plans: []*admingen.AdminOnboardingPlan{}, Platforms: nil}
 			byVendor[platform.Vendor] = option
 			options.Vendors = append(options.Vendors, option)
 		}
-		option.Platforms = append(option.Platforms, &admingen.AdminOnboardingPlatform{Slug: platform.Slug, Name: platform.Name, Family: platform.Family, Surface: platform.Surface})
+		option.Platforms = append(option.Platforms, &admingen.AdminOnboardingPlatform{Slug: platform.ID, Name: platform.Name, Family: platform.Family, Surface: platform.Surface})
 	}
-	for _, plan := range plans {
-		option, ok := byVendor[plan.Vendor]
-		if !ok {
-			// A plan whose vendor sells no platform is unusable in the form.
-			continue
+	for _, plan := range matrix.Plans {
+		// The matrix refuses a plan whose vendor sells no platform.
+		if option, ok := byVendor[plan.Vendor]; ok {
+			option.Plans = append(option.Plans, &admingen.AdminOnboardingPlan{Slug: plan.ID, Name: plan.Name})
 		}
-		option.Plans = append(option.Plans, &admingen.AdminOnboardingPlan{Slug: plan.Slug, Name: plan.Name})
-	}
-	if options.Vendors == nil {
-		options.Vendors = []*admingen.AdminOnboardingVendorOption{}
 	}
 	options.MdmVendors = make([]*admingen.AdminMdmVendorOption, 0, len(mdmVendors))
 	for _, vendor := range mdmVendors {
@@ -126,7 +118,11 @@ func LoadOnboardingStack(ctx context.Context, db repo.DBTX, organizationID strin
 		MdmVendorName:  conv.FromPGText[string](row.MdmVendorName),
 	}
 	for _, vendor := range vendors {
-		stack.Vendors = append(stack.Vendors, &admingen.AdminOnboardingStackVendor{Vendor: vendor.Vendor, PlanSlug: conv.FromPGText[string](vendor.PlanSlug)})
+		planSlug := conv.FromPGText[string](vendor.PlanSlug)
+		if planSlug == nil {
+			planSlug = conv.FromPGText[string](vendor.LegacyPlanSlug)
+		}
+		stack.Vendors = append(stack.Vendors, &admingen.AdminOnboardingStackVendor{Vendor: vendor.Vendor, PlanSlug: planSlug})
 	}
 	return stack, nil
 }
@@ -134,7 +130,7 @@ func LoadOnboardingStack(ctx context.Context, db repo.DBTX, organizationID strin
 // SaveOnboardingStack replaces the recorded stack after checking it against
 // the support matrix catalog. Its caller authenticates staff.
 func SaveOnboardingStack(ctx context.Context, db *pgxpool.Pool, logger *audit.Logger, organizationID string, input OnboardingStackInput, actor urn.Principal, displayName *string) (*admingen.AdminOnboardingStack, error) {
-	options, err := LoadOnboardingStackOptions(ctx, db)
+	options, err := LoadOnboardingStackOptions()
 	if err != nil {
 		return nil, err
 	}
@@ -178,18 +174,6 @@ func SaveOnboardingStack(ctx context.Context, db *pgxpool.Pool, logger *audit.Lo
 	after, err := LoadOnboardingStack(ctx, tx, organizationID)
 	if err != nil {
 		return nil, err
-	}
-	// The insert resolves each plan against the catalog as it stands inside
-	// the transaction, so a plan retired since validation would be recorded
-	// as none. Refuse the save rather than record less than was asked.
-	for _, vendor := range input.Vendors {
-		if vendor.PlanSlug == nil {
-			continue
-		}
-		index := slices.IndexFunc(after.Vendors, func(saved *admingen.AdminOnboardingStackVendor) bool { return saved.Vendor == vendor.Vendor })
-		if index < 0 || after.Vendors[index].PlanSlug == nil {
-			return nil, oops.E(oops.CodeConflict, nil, "plan %q of vendor %q is no longer in the support matrix", *vendor.PlanSlug, vendor.Vendor)
-		}
 	}
 	if err := logger.LogOrganizationOnboardingStackUpdated(ctx, tx, audit.LogOrganizationOnboardingStackUpdatedEvent{
 		OrganizationID: organizationID, Actor: actor, ActorDisplayName: displayName,

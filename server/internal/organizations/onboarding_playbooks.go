@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/supportmatrix"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -467,11 +468,90 @@ func CloneOnboardingPlaybook(ctx context.Context, db *pgxpool.Pool, organization
 	})
 }
 
+// verdict is whether a card applies to a stack and, when it does not, why.
+type verdict struct {
+	applies bool
+	reason  string
+}
+
+// judgeCards decides, per card, whether the recorded stack supports it. A
+// card with no method applies. Every method is weighed: one that belongs to
+// a vendor in the stack, or to no vendor in particular, and that the support
+// matrix does not mark not applicable on every platform the scan covers
+// settles the card; the vendors of the ones the stack lacks are what the
+// reason names. The scan covers the stack's platforms of the method's own
+// vendor, or every stack platform for a method that belongs to none, so an
+// unrelated vendor joining the stack never changes a verdict. An unknown
+// applicability is not the same as not applicable.
+func judgeCards(matrix *supportmatrix.Matrix, vendors []string, cards []string) map[string]verdict {
+	inStack := make(map[string]bool, len(vendors))
+	for _, vendor := range vendors {
+		inStack[vendor] = true
+	}
+	verdicts := make(map[string]verdict, len(cards))
+	for _, card := range cards {
+		definition := setupTaskDefinitionForKey(card)
+		if definition == nil || len(definition.Methods) == 0 {
+			verdicts[card] = verdict{applies: true, reason: ""}
+			continue
+		}
+		applies := false
+		needs := make([]string, 0)
+		for _, id := range definition.Methods {
+			method, ok := matrix.Method(id)
+			if !ok {
+				// Start-up refuses a catalog that names a method the matrix lacks.
+				continue
+			}
+			anyVendor := method.Vendor == "Cross-platform" || method.Vendor == "Others"
+			if !anyVendor && !inStack[method.Vendor] {
+				if !slices.Contains(needs, method.Vendor) {
+					needs = append(needs, method.Vendor)
+				}
+				continue
+			}
+			if !notApplicableEverywhere(matrix, method, inStack, anyVendor) {
+				applies = true
+				break
+			}
+		}
+		v := verdict{applies: applies, reason: ""}
+		if !applies {
+			switch {
+			case len(vendors) == 0:
+				v.reason = "record the organization's stack first"
+			case len(needs) > 0:
+				v.reason = "needs " + strings.Join(needs, " or ") + " in the stack"
+			default:
+				v.reason = "the support matrix marks its methods not applicable to this stack"
+			}
+		}
+		verdicts[card] = v
+	}
+	return verdicts
+}
+
+// notApplicableEverywhere reports whether the matrix marks the method not
+// applicable on every platform the scan covers. With nothing to scan, nothing
+// rules the method out.
+func notApplicableEverywhere(matrix *supportmatrix.Matrix, method *supportmatrix.Method, inStack map[string]bool, anyVendor bool) bool {
+	scanned := false
+	for _, platform := range matrix.Platforms {
+		if !inStack[platform.Vendor] || (!anyVendor && platform.Vendor != method.Vendor) {
+			continue
+		}
+		scanned = true
+		support, ok := method.Support(platform.ID)
+		if !ok || support.Applicability != supportmatrix.NotApplicable {
+			return false
+		}
+	}
+	return scanned
+}
+
 // stepApplicability says, for each top-level step, whether the organization's
-// recorded stack supports it. A card applies when it has no methods, or when
-// one of its methods belongs to a vendor in the stack (or to no vendor in
-// particular) and the support matrix does not mark it not applicable on every
-// platform of the stack. A group applies when any of its cards does.
+// recorded stack supports it, as judgeCards decides per card. A group applies
+// when any of its cards does.
 func stepApplicability(ctx context.Context, queries *repo.Queries, organizationID string, topLevel []string) ([]*admingen.AdminOnboardingStepApplicability, error) {
 	rows, err := queries.ListOrganizationOnboardingVendors(ctx, organizationID)
 	if err != nil {
@@ -481,51 +561,11 @@ func stepApplicability(ctx context.Context, queries *repo.Queries, organizationI
 	for _, row := range rows {
 		vendors = append(vendors, row.Vendor)
 	}
-	cards := playbookCards(topLevel)
-	methods, err := queries.ListOnboardingStepMethodApplicability(ctx, repo.ListOnboardingStepMethodApplicabilityParams{Vendors: vendors, StepSlugs: cards})
+	matrix, err := supportmatrix.Current()
 	if err != nil {
-		return nil, fmt.Errorf("list onboarding step applicability: %w", err)
+		return nil, fmt.Errorf("load support matrix: %w", err)
 	}
-	type verdict struct {
-		applies bool
-		reason  string
-	}
-	cardVerdicts := make(map[string]verdict, len(cards))
-	for _, card := range cards {
-		cardVerdicts[card] = verdict{applies: true, reason: ""}
-	}
-	needs := make(map[string][]string, len(cards))
-	// Every method is weighed: one that matches settles the card, and the
-	// vendors of the ones that do not are what the reason names.
-	for _, method := range methods {
-		if _, first := needs[method.StepSlug]; !first {
-			// The first method seen makes the card conditional.
-			cardVerdicts[method.StepSlug] = verdict{applies: false, reason: ""}
-			needs[method.StepSlug] = nil
-		}
-		anyVendor := method.MethodVendor == "Cross-platform" || method.MethodVendor == "Others"
-		if (anyVendor || slices.Contains(vendors, method.MethodVendor)) && !method.NotApplicableEverywhere {
-			cardVerdicts[method.StepSlug] = verdict{applies: true, reason: ""}
-			continue
-		}
-		if !anyVendor && !slices.Contains(needs[method.StepSlug], method.MethodVendor) {
-			needs[method.StepSlug] = append(needs[method.StepSlug], method.MethodVendor)
-		}
-	}
-	for card, v := range cardVerdicts {
-		if v.applies {
-			continue
-		}
-		switch {
-		case len(vendors) == 0:
-			v.reason = "record the organization's stack first"
-		case len(needs[card]) > 0:
-			v.reason = "needs " + strings.Join(needs[card], " or ") + " in the stack"
-		default:
-			v.reason = "the support matrix marks its methods not applicable to this stack"
-		}
-		cardVerdicts[card] = v
-	}
+	cardVerdicts := judgeCards(matrix, vendors, playbookCards(topLevel))
 	result := make([]*admingen.AdminOnboardingStepApplicability, 0, len(topLevel))
 	for _, slug := range topLevel {
 		if group := setupTaskGroupForKey(slug); group != nil {

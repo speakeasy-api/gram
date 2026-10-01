@@ -32,7 +32,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/about"
 	"github.com/speakeasy-api/gram/server/internal/access"
-	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/agent"
 	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
@@ -1514,12 +1513,6 @@ func newStartCommand() *cli.Command {
 				auditLogger,
 				trialEmailNotifier,
 			))
-			// The support matrix is seeded here as well as in the admin server, since
-			// the step mirror needs its integration methods and either process may
-			// start first.
-			if err := admin.SeedSupportMatrix(ctx, db); err != nil {
-				return fmt.Errorf("seed support matrix: %w", err)
-			}
 			if err := organizations.SyncOnboardingSteps(ctx, db); err != nil {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
