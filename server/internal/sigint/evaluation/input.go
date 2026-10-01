@@ -55,6 +55,7 @@ type Input interface {
 	Event() Event
 
 	// Resolve returns complete source-specific text or structured JSON. A
-	// wrapped ErrInvalidInput acknowledges invalid content; other errors trigger retry.
+	// wrapped ErrInvalidInput acknowledges invalid content. The conversation adapter's
+	// asset-validation permanentError is also terminal; other errors trigger retry.
 	Resolve(context.Context) (classifier.Entry, error)
 }

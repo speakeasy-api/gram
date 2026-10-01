@@ -53,8 +53,9 @@ an event ID unique within organization/project/kind; a connection-local protocol
 call ID alone is not sufficient. `Reading.source` continues to namespace external
 actor identities and is distinct from the event kind.
 
-Adapters wrap `ErrInvalidInput` for permanent content failures; other resolution
-errors retry. Resolved JSON must be non-null and at most 16 MiB. Evaluation is
+Adapters wrap `ErrInvalidInput` for permanent content failures. Conversation asset
+validation also returns terminal failures; other resolution errors retry.
+Resolved JSON must be non-null and at most 16 MiB. Evaluation is
 per event; cross-event windows and correlation are separate input-building work.
 
 ## Compilation and readiness
