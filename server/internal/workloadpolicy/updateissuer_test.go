@@ -2,13 +2,18 @@ package workloadpolicy_test
 
 import (
 	"context"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
+	genclient "github.com/speakeasy-api/gram/server/gen/http/workload_identities/client"
+	genserver "github.com/speakeasy-api/gram/server/gen/http/workload_identities/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -147,6 +152,85 @@ func TestUpdateIssuer_ClearsTheTagsWithAnEmptyList(t *testing.T) {
 	updated := onlyIssuer(t, policy)
 	require.NotNil(t, updated.Tags)
 	require.Empty(t, updated.Tags)
+}
+
+// encodeUpdateIssuerRequest runs a payload through the generated Go client's
+// request encoder, giving the request a Go caller or the CLI puts on the wire.
+func encodeUpdateIssuerRequest(t *testing.T, payload *gen.UpdateIssuerPayload) *http.Request {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, genclient.UpdateIssuerWorkloadIdentitiesPath(), nil)
+	require.NoError(t, err)
+	require.NoError(t, genclient.EncodeUpdateIssuerRequest(goahttp.RequestEncoder)(req, payload))
+
+	return req
+}
+
+func TestUpdateIssuer_ClientRequestKeepsAnEmptyTagListAndOmitsANilOne(t *testing.T) {
+	t.Parallel()
+
+	id := uuid.NewString()
+	tests := []struct {
+		name string
+		tags []string
+		want string
+	}{
+		{name: "empty list is sent", tags: []string{}, want: `{"id":"` + id + `","tags":[]}`},
+		{name: "nil list is omitted", tags: nil, want: `{"id":"` + id + `"}`},
+		{name: "tags are sent", tags: []string{"ci"}, want: `{"id":"` + id + `","tags":["ci"]}`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			payload := updatePayload(id)
+			payload.Tags = tc.tags
+			body, err := io.ReadAll(encodeUpdateIssuerRequest(t, payload).Body)
+			require.NoError(t, err)
+
+			require.JSONEq(t, tc.want, string(body))
+		})
+	}
+}
+
+func TestUpdateIssuer_ClearsTheTagsThroughTheGoClient(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	original := registerDescribedAnthropic(t, ctx, ti)
+	require.NotEmpty(t, original.Tags)
+
+	payload := updatePayload(original.ID)
+	payload.Tags = []string{}
+	decoded, err := genserver.DecodeUpdateIssuerRequest(goahttp.NewMuxer(), goahttp.RequestDecoder)(encodeUpdateIssuerRequest(t, payload))
+	require.NoError(t, err)
+
+	policy, err := ti.service.UpdateIssuer(ctx, decoded)
+	require.NoError(t, err)
+
+	updated := onlyIssuer(t, policy)
+	require.Empty(t, updated.Tags)
+	require.Equal(t, original.Name, updated.Name)
+}
+
+func TestUpdateIssuer_KeepsTheTagsWhenTheGoClientOmitsThem(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	original := registerDescribedAnthropic(t, ctx, ti)
+
+	payload := updatePayload(original.ID)
+	payload.Name = new("Claude Tag (renamed)")
+	decoded, err := genserver.DecodeUpdateIssuerRequest(goahttp.NewMuxer(), goahttp.RequestDecoder)(encodeUpdateIssuerRequest(t, payload))
+	require.NoError(t, err)
+
+	policy, err := ti.service.UpdateIssuer(ctx, decoded)
+	require.NoError(t, err)
+
+	updated := onlyIssuer(t, policy)
+	require.Equal(t, "Claude Tag (renamed)", updated.Name)
+	require.Equal(t, original.Tags, updated.Tags)
 }
 
 func TestUpdateIssuer_RepointsTheJWKSURI(t *testing.T) {

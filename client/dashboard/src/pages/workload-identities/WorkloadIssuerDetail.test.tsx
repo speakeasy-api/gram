@@ -451,3 +451,68 @@ it("keeps the sheet open and shows the server's message when the edit fails", as
   expect(mocks.toastSuccess).not.toHaveBeenCalled();
   expect(screen.getByText("Edit platform")).toBeTruthy();
 });
+
+it("reopens on the saved values and diffs the next edit against them", async () => {
+  issuer = { ...baseIssuer, tags: ["deploys"] };
+  const { rerender } = renderPage();
+  // The refresh that follows a save brings the stored platform back.
+  mocks.invalidate.mockImplementation(async () => {
+    issuer = { ...baseIssuer, name: "Example deploys", tags: ["deploys"] };
+    rerender();
+  });
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "Example deploys" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  await act(async () => {
+    await mocks.updateOptions.onSuccess?.();
+  });
+  await waitFor(() => expect(screen.queryByText("Edit platform")).toBeNull());
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(
+    "Example deploys",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Remove deploys" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(mocks.updateIssuer).toHaveBeenCalledTimes(2);
+  expect(mocks.updateIssuer).toHaveBeenLastCalledWith({
+    request: {
+      updateWorkloadIssuerForm: { id: ISSUER_ID, tags: [] },
+    },
+  });
+});
+
+it("reopens on values a refresh brought in after the sheet closed", async () => {
+  issuer = { ...baseIssuer, tags: ["deploys"] };
+  const { rerender } = renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "Example deploys" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  await act(async () => {
+    await mocks.updateOptions.onSuccess?.();
+  });
+  await waitFor(() => expect(screen.queryByText("Edit platform")).toBeNull());
+
+  issuer = { ...baseIssuer, name: "Example deploys", tags: ["deploys"] };
+  rerender();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(
+    "Example deploys",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Remove deploys" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(mocks.updateIssuer).toHaveBeenLastCalledWith({
+    request: {
+      updateWorkloadIssuerForm: { id: ISSUER_ID, tags: [] },
+    },
+  });
+});
