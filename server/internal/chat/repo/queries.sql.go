@@ -1357,7 +1357,10 @@ func (q *Queries) GetMaxGenerationForChat(ctx context.Context, arg GetMaxGenerat
 }
 
 const getMessagesForPublication = `-- name: GetMessagesForPublication :many
-SELECT m.id, m.seq, m.chat_id, m.project_id, m.role, m.content, m.content_raw, m.content_asset_url, m.model, m.message_id, m.finish_reason, m.tool_calls, m.prompt_tokens, m.completion_tokens, m.total_tokens, m.storage_error, m.user_id, m.external_user_id, m.external_message_id, m.origin, m.user_agent, m.ip_address, m.source, m.tool_call_id, m.tool_urn, m.tool_outcome, m.tool_outcome_notes, m.tool_call_summaries, m.content_hash, m.generation, m.replayed, m.created_at, m.risk_analyzed_at, c.external_chat_id, c.cwd, c.user_account_id
+SELECT m.id, m.chat_id, m.role, m.created_at, m.message_id, m.tool_call_id,
+       m.finish_reason, m.source, m.user_id, m.external_user_id,
+       m.external_message_id, m.model, m.user_agent, m.replayed,
+       c.external_chat_id, c.cwd, c.user_account_id
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 WHERE m.project_id = $1::uuid AND m.id = ANY($2::uuid[])
@@ -1370,14 +1373,27 @@ type GetMessagesForPublicationParams struct {
 }
 
 type GetMessagesForPublicationRow struct {
-	ChatMessage    ChatMessage
-	ExternalChatID pgtype.Text
-	Cwd            pgtype.Text
-	UserAccountID  uuid.NullUUID
+	ID                uuid.UUID
+	ChatID            uuid.UUID
+	Role              string
+	CreatedAt         pgtype.Timestamptz
+	MessageID         pgtype.Text
+	ToolCallID        pgtype.Text
+	FinishReason      pgtype.Text
+	Source            pgtype.Text
+	UserID            pgtype.Text
+	ExternalUserID    pgtype.Text
+	ExternalMessageID pgtype.Text
+	Model             pgtype.Text
+	UserAgent         pgtype.Text
+	Replayed          bool
+	ExternalChatID    pgtype.Text
+	Cwd               pgtype.Text
+	UserAccountID     uuid.NullUUID
 }
 
-// Read the durable rows and their tenant-pinned conversation context in the
-// write transaction so publication always uses the authoritative identity.
+// Read authoritative identity and attribution in the write transaction.
+// Bodies are carried from preparation rather than fetched or rebuilt here.
 func (q *Queries) GetMessagesForPublication(ctx context.Context, arg GetMessagesForPublicationParams) ([]GetMessagesForPublicationRow, error) {
 	rows, err := q.db.Query(ctx, getMessagesForPublication, arg.ProjectID, arg.Ids)
 	if err != nil {
@@ -1388,39 +1404,20 @@ func (q *Queries) GetMessagesForPublication(ctx context.Context, arg GetMessages
 	for rows.Next() {
 		var i GetMessagesForPublicationRow
 		if err := rows.Scan(
-			&i.ChatMessage.ID,
-			&i.ChatMessage.Seq,
-			&i.ChatMessage.ChatID,
-			&i.ChatMessage.ProjectID,
-			&i.ChatMessage.Role,
-			&i.ChatMessage.Content,
-			&i.ChatMessage.ContentRaw,
-			&i.ChatMessage.ContentAssetUrl,
-			&i.ChatMessage.Model,
-			&i.ChatMessage.MessageID,
-			&i.ChatMessage.FinishReason,
-			&i.ChatMessage.ToolCalls,
-			&i.ChatMessage.PromptTokens,
-			&i.ChatMessage.CompletionTokens,
-			&i.ChatMessage.TotalTokens,
-			&i.ChatMessage.StorageError,
-			&i.ChatMessage.UserID,
-			&i.ChatMessage.ExternalUserID,
-			&i.ChatMessage.ExternalMessageID,
-			&i.ChatMessage.Origin,
-			&i.ChatMessage.UserAgent,
-			&i.ChatMessage.IpAddress,
-			&i.ChatMessage.Source,
-			&i.ChatMessage.ToolCallID,
-			&i.ChatMessage.ToolUrn,
-			&i.ChatMessage.ToolOutcome,
-			&i.ChatMessage.ToolOutcomeNotes,
-			&i.ChatMessage.ToolCallSummaries,
-			&i.ChatMessage.ContentHash,
-			&i.ChatMessage.Generation,
-			&i.ChatMessage.Replayed,
-			&i.ChatMessage.CreatedAt,
-			&i.ChatMessage.RiskAnalyzedAt,
+			&i.ID,
+			&i.ChatID,
+			&i.Role,
+			&i.CreatedAt,
+			&i.MessageID,
+			&i.ToolCallID,
+			&i.FinishReason,
+			&i.Source,
+			&i.UserID,
+			&i.ExternalUserID,
+			&i.ExternalMessageID,
+			&i.Model,
+			&i.UserAgent,
+			&i.Replayed,
 			&i.ExternalChatID,
 			&i.Cwd,
 			&i.UserAccountID,

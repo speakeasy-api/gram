@@ -7,11 +7,11 @@ import "gcp/pubsub/v1/options.proto";
 option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1;conversationv1";
 
 // Message is a snapshot of one persisted conversation message.
-// Producers publish atomically with persistence through the outbox, including
-// successful correlated provenance promotions. Exact conflict no-ops emit nothing.
+// Producers publish atomically with initial persistence through the outbox.
+// Metadata-only correlated promotions and exact conflict no-ops emit nothing:
+// the message content is unchanged, so neither should trigger reevaluation.
 // Delivery is at-least-once; each publication's snapshot survives redelivery.
-// Multiple publications can share id: downstream consumers decide whether a
-// changed snapshot requires processing. This is not a streaming chunk contract.
+// This is not a streaming chunk contract.
 message Message {
   enum Role {
     ROLE_UNSPECIFIED = 0;

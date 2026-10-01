@@ -423,14 +423,12 @@ func TestChatMessageWriterPreservesInitialReadingOnCorrelatedPromotion(t *testin
 	require.Equal(t, base.Content, storedMessages[0].Content)
 	require.JSONEq(t, string(base.ToolCalls), string(storedMessages[0].ToolCalls))
 	publications := conversationMessages(t, ti)
-	require.Len(t, publications, 2)
-	require.Equal(t, publications[0].GetId(), publications[1].GetId())
+	require.Len(t, publications, 1, "metadata-only promotion must not republish the message")
+	require.Equal(t, initialMessages[0].ID.String(), publications[0].GetId())
 	require.Equal(t, "litellm", publications[0].GetProvenance().GetSource())
-	require.Equal(t, "codex", publications[1].GetProvenance().GetSource())
-	require.Equal(t, base.MessageID.String, publications[1].GetCorrelationId())
-	require.Equal(t, base.Content, publications[1].GetBody().GetParts()[0].GetText())
-	require.Equal(t, "lookup", publications[1].GetBody().GetParts()[1].GetToolCall().GetName())
-	require.Equal(t, "native-observed@example.test", publications[1].GetProvenance().GetUserEmail())
+	require.Equal(t, base.MessageID.String, publications[0].GetCorrelationId())
+	require.Equal(t, base.Content, publications[0].GetBody().GetParts()[0].GetText())
+	require.Equal(t, "lookup", publications[0].GetBody().GetParts()[1].GetToolCall().GetName())
 }
 
 func TestChatMessageWriterPreservesNativeReadingOnLaterLiteLLMObservation(t *testing.T) {
@@ -512,8 +510,10 @@ func TestChatMessageWriterWriteInTxRollsBackMessageAndReading(t *testing.T) {
 		},
 		UserEmail: "",
 	}}
+	prepared, err := writer.PreparePublications(ctx, ti.projectID, writes)
+	require.NoError(t, err)
 	tx := testenv.BeginTx(t, ctx, ti.conn)
-	_, err := writer.WriteInTx(ctx, tx, writes)
+	_, err = writer.WriteInTx(ctx, tx, writes, prepared)
 	require.NoError(t, err)
 	require.NoError(t, tx.Rollback(ctx))
 

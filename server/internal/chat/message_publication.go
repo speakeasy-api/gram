@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/protobuf/proto"
 
 	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
@@ -26,19 +27,116 @@ import (
 // outbox's 9 MiB serialized-message limit before spilling the body to an asset.
 const maxInlineConversationBodyBytes = 8 << 20 // 8 MiB
 
-// enqueueMessages publishes inserted rows and successful correlated promotions.
-// Callers exclude conflict no-ops and pass the mutation transaction.
+// PreparedPublications holds bodies and assets prepared before a transaction.
+// Non-body fields (such as a generation selected under a lock) may still change.
+// Changing a prepared body's content requires preparing it again.
+type PreparedPublications struct {
+	// projectID prevents reusing another tenant's prepared references.
+	projectID uuid.UUID
+
+	// messages follows the input write order, independently of IDs assigned later.
+	messages []preparedPublication
+}
+
+// preparedPublication owns a snapshot of body inputs as well as their prepared
+// representation. Checking the inputs avoids rebuilding from jsonb-normalized
+// database bytes while rejecting caller mutations after preparation.
+type preparedPublication struct {
+	content     string
+	raw         []byte
+	toolCalls   []byte
+	asset       pgtype.Text
+	attachments []string
+	body        *conversationv1.Message_Body
+	reference   *conversationv1.Message_ContentReference
+}
+
+func (p preparedPublication) matches(write MessageWrite, attached []repo.CreateChatContentPartParams) bool {
+	w := write.Params
+	if p.content != w.Content || !bytes.Equal(p.raw, w.ContentRaw) || !bytes.Equal(p.toolCalls, w.ToolCalls) || p.asset != w.ContentAssetUrl || len(p.attachments) != len(attached) {
+		return false
+	}
+	for i, part := range attached {
+		if p.attachments[i] != part.ContentAssetUrl {
+			return false
+		}
+	}
+	return true
+}
+
+// PreparePublications uploads oversized bodies before the caller opens its
+// transaction. Message rows and outbox entries must still be committed together.
+// Failed or deduplicated writes can leave unreferenced content-addressed assets.
+func (w *ChatMessageWriter) PreparePublications(ctx context.Context, projectID uuid.UUID, writes []MessageWrite) (*PreparedPublications, error) {
+	return w.preparePublications(ctx, projectID, writes, nil)
+}
+
+func (w *ChatMessageWriter) preparePublications(ctx context.Context, projectID uuid.UUID, writes []MessageWrite, attached map[uuid.UUID][]repo.CreateChatContentPartParams) (*PreparedPublications, error) {
+	prepared := &PreparedPublications{projectID: projectID, messages: make([]preparedPublication, 0, len(writes))}
+	refs := make(map[[32]byte]*conversationv1.Message_ContentReference)
+	for _, write := range writes {
+		p := write.Params
+		if p.ProjectID != projectID {
+			return nil, fmt.Errorf("publication project does not match message")
+		}
+		item := preparedPublication{content: p.Content, raw: bytes.Clone(p.ContentRaw), toolCalls: bytes.Clone(p.ToolCalls), asset: p.ContentAssetUrl, attachments: nil, body: nil, reference: nil}
+		for _, part := range attached[p.ID] {
+			item.attachments = append(item.attachments, part.ContentAssetUrl)
+		}
+		body, err := publicationBody(item.content, item.raw, item.toolCalls, item.asset, attached[p.ID])
+		if err != nil {
+			return nil, err
+		}
+		if proto.Size(body) <= maxInlineConversationBodyBytes {
+			item.body = body
+			prepared.messages = append(prepared.messages, item)
+			continue
+		}
+		var marshalOptions proto.MarshalOptions
+		marshalOptions.Deterministic = true
+		data, err := marshalOptions.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("encode conversation body: %w", err)
+		}
+		key := sha256.Sum256(data)
+		ref := refs[key]
+		if ref == nil {
+			ref, err = w.storePublicationContent(ctx, projectID, data, "application/x-protobuf", ".pb")
+			if err != nil {
+				return nil, err
+			}
+			refs[key] = ref
+		}
+		item.reference = ref
+		prepared.messages = append(prepared.messages, item)
+	}
+	return prepared, nil
+}
+
+// enqueueMessages publishes inserted rows. Callers exclude metadata-only
+// correlated promotions and conflict no-ops, and pass the mutation transaction.
 // The snapshot's text precedes tool calls because storage does not retain their
 // original interleaving. Attached content parts follow in supplied order.
-func (w *ChatMessageWriter) enqueueMessages(ctx context.Context, tx repo.DBTX, organizationID string, projectID uuid.UUID, writes []MessageWrite, attached map[uuid.UUID][]repo.CreateChatContentPartParams, producedAt time.Time) error {
+func (w *ChatMessageWriter) enqueueMessages(ctx context.Context, tx repo.DBTX, organizationID string, projectID uuid.UUID, writes []MessageWrite, attached map[uuid.UUID][]repo.CreateChatContentPartParams, producedAt time.Time, prepared *PreparedPublications) error {
+	if prepared != nil && prepared.projectID != projectID {
+		return fmt.Errorf("prepared publication belongs to another project")
+	}
 	if len(writes) == 0 {
 		return nil
 	}
+	if prepared == nil || len(prepared.messages) != len(writes) {
+		return fmt.Errorf("conversation bodies require preparation before transaction")
+	}
 	ids := make([]uuid.UUID, len(writes))
 	metadata := make(map[uuid.UUID]MessageWrite, len(writes))
+	bodies := make(map[uuid.UUID]preparedPublication, len(writes))
 	for i, write := range writes {
+		if !prepared.messages[i].matches(write, attached[write.Params.ID]) {
+			return fmt.Errorf("conversation body changed after preparation")
+		}
 		ids[i] = write.Params.ID
 		metadata[write.Params.ID] = write
+		bodies[write.Params.ID] = prepared.messages[i]
 	}
 	rows, err := repo.New(tx).GetMessagesForPublication(ctx, repo.GetMessagesForPublicationParams{ProjectID: projectID, Ids: ids})
 	if err != nil {
@@ -48,8 +146,7 @@ func (w *ChatMessageWriter) enqueueMessages(ctx context.Context, tx repo.DBTX, o
 		return fmt.Errorf("publication requires one persisted row per message")
 	}
 	publications := make([]outbox.Message, 0, len(rows))
-	for _, row := range rows {
-		p := row.ChatMessage
+	for _, p := range rows {
 		write := metadata[p.ID]
 		role, ok := conversationv1.Message_Role_value["ROLE_"+strings.ToUpper(p.Role)]
 		if !ok {
@@ -110,8 +207,8 @@ func (w *ChatMessageWriter) enqueueMessages(ctx context.Context, tx repo.DBTX, o
 			provenance.SetHookSource(p.Source.String)
 		}
 		account := &conversationv1.Message_Account{}
-		if row.UserAccountID.Valid {
-			account.SetUserAccountId(row.UserAccountID.UUID.String())
+		if p.UserAccountID.Valid {
+			account.SetUserAccountId(p.UserAccountID.UUID.String())
 		}
 		if write.AccountType != "" {
 			account.SetAccountType(write.AccountType)
@@ -124,85 +221,23 @@ func (w *ChatMessageWriter) enqueueMessages(ctx context.Context, tx repo.DBTX, o
 		}
 		msg.SetProvenance(provenance)
 		conversation := &conversationv1.Message_ConversationContext{}
-		if row.ExternalChatID.Valid {
-			conversation.SetExternalConversationId(row.ExternalChatID.String)
+		if p.ExternalChatID.Valid {
+			conversation.SetExternalConversationId(p.ExternalChatID.String)
 		}
-		if row.Cwd.Valid {
-			conversation.SetWorkingDirectory(row.Cwd.String)
+		if p.Cwd.Valid {
+			conversation.SetWorkingDirectory(p.Cwd.String)
 		}
 		if proto.Size(conversation) > 0 {
 			msg.SetConversationContext(conversation)
 		}
 
-		body := &conversationv1.Message_Body{}
-		parts := make([]*conversationv1.Message_Part, 0)
-		if p.Content != "" {
-			part := &conversationv1.Message_Part{}
-			part.SetText(p.Content)
-			parts = append(parts, part)
-		}
-		var calls []struct {
-			ID       string `json:"id"`
-			Function struct {
-				Name      string `json:"name"`
-				Arguments string `json:"arguments"`
-			} `json:"function"`
-		}
-		if len(p.ToolCalls) > 0 {
-			toolCalls := bytes.TrimSpace(p.ToolCalls)
-			// Legacy rows can contain a JSON string wrapping the tool-call array.
-			if len(toolCalls) > 0 && toolCalls[0] == '"' {
-				var encoded string
-				if err := json.Unmarshal(toolCalls, &encoded); err != nil {
-					return fmt.Errorf("decode wrapped tool calls for publication: %w", err)
-				}
-				toolCalls = []byte(encoded)
-			}
-			if err := json.Unmarshal(toolCalls, &calls); err != nil {
-				return fmt.Errorf("decode persisted tool calls for publication: %w", err)
-			}
-		}
-		for _, call := range calls {
-			tool := &conversationv1.Message_ToolCall{}
-			tool.SetId(call.ID)
-			tool.SetName(call.Function.Name)
-			tool.SetArgumentsJson(call.Function.Arguments)
-			part := &conversationv1.Message_Part{}
-			part.SetToolCall(tool)
-			parts = append(parts, part)
-		}
-		for _, attachedPart := range attached[p.ID] {
-			ref := &conversationv1.Message_ContentReference{}
-			ref.SetUri(attachedPart.ContentAssetUrl)
-			ref.SetMediaType("text/plain; charset=utf-8")
-			part := &conversationv1.Message_Part{}
-			part.SetContentReference(ref)
-			parts = append(parts, part)
-		}
-		body.SetParts(parts)
-		if len(p.ContentRaw) > 0 {
-			body.SetSourceContentJson(p.ContentRaw)
-		} else if p.ContentAssetUrl.Valid && p.ContentAssetUrl.String != "" {
-			ref := &conversationv1.Message_ContentReference{}
-			ref.SetUri(p.ContentAssetUrl.String)
-			ref.SetMediaType("application/json")
-			body.SetSourceContent(ref)
-		}
-		msg.SetBody(body)
-		// Keep normal events inline. Exceptional large bodies are immutable blobs,
-		// leaving ample room below the outbox's 9 MiB serialized-message limit.
-		if proto.Size(body) > maxInlineConversationBodyBytes {
-			var marshalOptions proto.MarshalOptions
-			marshalOptions.Deterministic = true
-			data, err := marshalOptions.Marshal(body)
-			if err != nil {
-				return fmt.Errorf("encode conversation body: %w", err)
-			}
-			ref, err := w.storePublicationContent(ctx, projectID, data, "application/x-protobuf", ".pb")
-			if err != nil {
-				return err
-			}
-			msg.SetBodyReference(ref)
+		// Only insertions publish. Their body is exactly the prepared write input;
+		// persisted rows supply identity and attribution, not a second body build.
+		body := bodies[p.ID]
+		if body.reference != nil {
+			msg.SetBodyReference(body.reference)
+		} else {
+			msg.SetBody(body.body)
 		}
 		publications = append(publications, outbox.Message{Proto: msg, PublicID: uuid.Nil, Attributes: map[string]string{"role": p.Role, "source": provenance.GetSource()}})
 	}
@@ -210,6 +245,64 @@ func (w *ChatMessageWriter) enqueueMessages(ctx context.Context, tx repo.DBTX, o
 		return fmt.Errorf("enqueue conversation messages: %w", err)
 	}
 	return nil
+}
+
+func publicationBody(content string, raw, toolCalls []byte, asset pgtype.Text, attached []repo.CreateChatContentPartParams) (*conversationv1.Message_Body, error) {
+	body := &conversationv1.Message_Body{}
+	parts := make([]*conversationv1.Message_Part, 0)
+	if content != "" {
+		part := &conversationv1.Message_Part{}
+		part.SetText(content)
+		parts = append(parts, part)
+	}
+	var calls []struct {
+		ID       string `json:"id"`
+		Function struct {
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+		} `json:"function"`
+	}
+	if len(toolCalls) > 0 {
+		toolCalls = bytes.TrimSpace(toolCalls)
+		// Legacy rows can contain a JSON string wrapping the tool-call array.
+		if len(toolCalls) > 0 && toolCalls[0] == '"' {
+			var encoded string
+			if err := json.Unmarshal(toolCalls, &encoded); err != nil {
+				return nil, fmt.Errorf("decode wrapped tool calls for publication: %w", err)
+			}
+			toolCalls = []byte(encoded)
+		}
+		if err := json.Unmarshal(toolCalls, &calls); err != nil {
+			return nil, fmt.Errorf("decode persisted tool calls for publication: %w", err)
+		}
+	}
+	for _, call := range calls {
+		tool := &conversationv1.Message_ToolCall{}
+		tool.SetId(call.ID)
+		tool.SetName(call.Function.Name)
+		tool.SetArgumentsJson(call.Function.Arguments)
+		part := &conversationv1.Message_Part{}
+		part.SetToolCall(tool)
+		parts = append(parts, part)
+	}
+	for _, attachedPart := range attached {
+		ref := &conversationv1.Message_ContentReference{}
+		ref.SetUri(attachedPart.ContentAssetUrl)
+		ref.SetMediaType("text/plain; charset=utf-8")
+		part := &conversationv1.Message_Part{}
+		part.SetContentReference(ref)
+		parts = append(parts, part)
+	}
+	body.SetParts(parts)
+	if len(raw) > 0 {
+		body.SetSourceContentJson(raw)
+	} else if asset.Valid && asset.String != "" {
+		ref := &conversationv1.Message_ContentReference{}
+		ref.SetUri(asset.String)
+		ref.SetMediaType("application/json")
+		body.SetSourceContent(ref)
+	}
+	return body, nil
 }
 
 func (w *ChatMessageWriter) storePublicationContent(ctx context.Context, projectID uuid.UUID, data []byte, mediaType, extension string) (*conversationv1.Message_ContentReference, error) {
@@ -237,10 +330,15 @@ func (w *ChatMessageWriter) storePublicationContent(ctx context.Context, project
 	return ref, nil
 }
 
-// externalPublication carries producer-only provenance alongside the ID used to
-// load the authoritative imported row. Other Params fields are not consumed.
+// externalPublication carries body preparation fields and producer-only provenance
+// alongside the ID used to load the authoritative imported row.
 func externalPublication(write ExternalMessageWrite) MessageWrite {
 	var params repo.CreateChatMessageParams
 	params.ID = write.Params.ID
+	params.ProjectID = write.Params.ProjectID
+	params.Content = write.Params.Content
+	params.ContentRaw = write.Params.ContentRaw
+	params.ToolCalls = write.Params.ToolCalls
+	params.ContentAssetUrl = write.Params.ContentAssetUrl
 	return MessageWrite{Params: params, BillingUserID: write.BillingUserID, AssistantID: uuid.Nil, WorkloadSource: write.WorkloadSource, UserEmail: write.UserEmail, Provider: write.Provider, HookHostname: write.HookHostname, AccountType: write.AccountType, BillingMode: write.BillingMode}
 }
