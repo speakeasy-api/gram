@@ -66,13 +66,20 @@ type testInstance struct {
 // the mcp package tests against the discovery document it shares a derivation
 // with. It records the server each call resolved and answers with endpoints.
 type fakeFederation struct {
-	endpoints []mcp.FederationEndpoint
-	resolved  []uuid.UUID
+	endpoints     []mcp.FederationEndpoint
+	resolved      []uuid.UUID
+	organization  mcp.OrganizationAuthorizationServer
+	organizations []string
 }
 
 func (f *fakeFederation) FederationEndpoints(_ context.Context, _ string, server *mcpservers_repo.McpServer) ([]mcp.FederationEndpoint, error) {
 	f.resolved = append(f.resolved, server.ID)
 	return f.endpoints, nil
+}
+
+func (f *fakeFederation) OrganizationAuthorizationServer(_ context.Context, organizationID string) (mcp.OrganizationAuthorizationServer, error) {
+	f.organizations = append(f.organizations, organizationID)
+	return f.organization, nil
 }
 
 // newTestService builds the service against a cloned database and a dashboard
@@ -98,7 +105,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	federation := &fakeFederation{endpoints: nil, resolved: nil}
+	federation := &fakeFederation{endpoints: nil, resolved: nil, organization: mcp.OrganizationAuthorizationServer{}, organizations: nil}
 	service := workloadpolicy.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), federation)
 
 	return ctx, &testInstance{

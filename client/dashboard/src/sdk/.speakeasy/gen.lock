@@ -769,6 +769,7 @@ trackedFiles:
   src/funcs/workloadIdentitiesAdmitSubject.ts: {}
   src/funcs/workloadIdentitiesConnectionDetails.ts: {}
   src/funcs/workloadIdentitiesList.ts: {}
+  src/funcs/workloadIdentitiesOrganizationConnectionDetails.ts: {}
   src/funcs/workloadIdentitiesRegisterIssuer.ts: {}
   src/funcs/workloadIdentitiesUpdateIssuer.ts: {}
   src/funcs/workloadIdentitiesUpdateSubject.ts: {}
@@ -1901,6 +1902,7 @@ trackedFiles:
   src/models/components/workloadconnectionendpoint.ts: {}
   src/models/components/workloadidentitypolicy.ts: {}
   src/models/components/workloadissuer.ts: {}
+  src/models/components/workloadorganizationconnectiondetails.ts: {}
   src/models/components/workosdomainverificationintentoptions.ts: {}
   src/models/components/workosintentoptions.ts: {}
   src/models/components/workosssointentoptions.ts: {}
@@ -2235,6 +2237,7 @@ trackedFiles:
   src/models/operations/getusersessionissuer.ts: {}
   src/models/operations/getusersessionissuercimdclient.ts: {}
   src/models/operations/getworkloadconnectiondetails.ts: {}
+  src/models/operations/getworkloadorganizationconnectiondetails.ts: {}
   src/models/operations/getworkunitstrend.ts: {}
   src/models/operations/hooksnumberclaude.ts: {}
   src/models/operations/hooksnumbercodex.ts: {}
@@ -3720,6 +3723,8 @@ trackedFiles:
   src/react-query/workloadConnectionDetails.ts: {}
   src/react-query/workloadIdentities.core.ts: {}
   src/react-query/workloadIdentities.ts: {}
+  src/react-query/workloadOrganizationConnectionDetails.core.ts: {}
+  src/react-query/workloadOrganizationConnectionDetails.ts: {}
   src/sdk/access.ts: {}
   src/sdk/actorattributes.ts: {}
   src/sdk/adminassets.ts: {}
@@ -7808,6 +7813,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getWorkloadOrganizationConnectionDetails:
+    speakeasy-default-get-workload-organization-connection-details:
+      responses:
+        "200":
+          application/json: {"available": false, "grant_types_supported": ["<value 1>", "<value 2>", "<value 3>"], "issuer": "american_express", "metadata_url": "https://querulous-conversation.info/", "on_authentication_host": true, "ready": true, "token_endpoint": "<value>", "workload_grant_advertised": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   hooks#claude:
     speakeasy-default-hooks#claude:
       requestBody:

@@ -78759,6 +78759,103 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: WorkloadIdentities
+    /rpc/workloadIdentities.organizationConnectionDetails:
+        get:
+            description: 'Read the organization''s own token endpoint for workload identity tokens: one endpoint at which a platform exchanges an assertion for a session on any of the organization''s MCP servers its workload may reach, naming the server by resource. Returns the values the organization''s authorization server metadata serves, and whether an exchange there can succeed. Requires workload:read.'
+            operationId: getWorkloadOrganizationConnectionDetails
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkloadOrganizationConnectionDetails'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: organizationConnectionDetails workloadIdentities
+            tags:
+                - workloadIdentities
+            x-speakeasy-name-override: organizationConnectionDetails
+            x-speakeasy-react-hook:
+                name: WorkloadOrganizationConnectionDetails
     /rpc/workloadIdentities.registerIssuer:
         post:
             description: Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
@@ -112700,6 +112797,52 @@ components:
                 - tags
                 - created_at
                 - updated_at
+        WorkloadOrganizationConnectionDetails:
+            type: object
+            properties:
+                available:
+                    type: boolean
+                    description: Whether the organization token endpoint is served for this organization. When false its routes answer 404 and a platform must use a server's own token endpoint.
+                grant_types_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: grant_types_supported as the metadata lists it. Empty when the endpoint is not available or the workload grant is not.
+                issuer:
+                    type: string
+                    description: The organization authorization server's issuer identifier, and the iss of the sessions it mints. An assertion's aud must be exactly this or token_endpoint.
+                metadata_url:
+                    type: string
+                    description: Where the organization authorization server's RFC 8414 metadata is served.
+                not_ready_reason:
+                    type: string
+                    description: 'Why an exchange here cannot succeed; absent when ready. organization_endpoint_disabled: the organization is outside the organization token endpoint''s rollout. workload_grant_unavailable: the deployment does not serve the workload grant. agent_rollout_disabled: the organization is outside the agent authorization rollout the token endpoint requires.'
+                    enum:
+                        - organization_endpoint_disabled
+                        - workload_grant_unavailable
+                        - agent_rollout_disabled
+                on_authentication_host:
+                    type: boolean
+                    description: Whether token_endpoint is on Gram's dedicated authentication host rather than the platform host.
+                ready:
+                    type: boolean
+                    description: Whether nothing Gram knows of stops an exchange here. The platform's own configuration, the trust policy, and which servers the workload's agent may reach are not checked.
+                token_endpoint:
+                    type: string
+                    description: 'Where the platform sends its assertion, naming the MCP server it wants a session for as resource: that server''s URL.'
+                workload_grant_advertised:
+                    type: boolean
+                    description: Whether the metadata lists the jwt-bearer grant because the clientless workload assertion exchange is available here.
+            description: The values a federating platform is configured with to exchange workload identity tokens at the organization's own token endpoint.
+            required:
+                - available
+                - issuer
+                - token_endpoint
+                - metadata_url
+                - on_authentication_host
+                - grant_types_supported
+                - workload_grant_advertised
+                - ready
     securitySchemes:
         admin_auth_header_Authorization:
             type: apiKey

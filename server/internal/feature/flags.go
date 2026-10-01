@@ -34,6 +34,14 @@ const (
 	// and agent identity selection in MCP OAuth authorization.
 	// It is evaluated per organization and fails closed unless explicitly on.
 	FlagAgentIdentityCredentials Flag = "agent-identity-credentials"
+	// FlagOrgTokenEndpoint gates the organization-level token endpoint for the
+	// workload assertion grant (/o/{orgSlug}/token and its RFC 8414 metadata)
+	// and the Access Hub's display of it. Evaluated server-side on both routes
+	// and in workloadIdentities.organizationConnectionDetails, and in the
+	// dashboard; targeted by PostHog organization group (org slug). Fails
+	// closed: off or indeterminate answers 404 on both routes. Removed once
+	// the organization endpoint is GA.
+	FlagOrgTokenEndpoint Flag = "gram-org-token-endpoint" //nolint:gosec // a feature flag key, not a credential
 
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
 	// device's assigned-user email against user-keyed heartbeats to matching

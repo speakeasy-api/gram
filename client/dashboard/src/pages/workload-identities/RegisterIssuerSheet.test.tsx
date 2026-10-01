@@ -3,8 +3,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { RegisterIssuerSheet } from "./RegisterIssuerSheet";
 
 // Covered by its own tests; stubbed so these stay about where it appears.
-vi.mock("./TokenEndpointPicker", () => ({
-  TokenEndpointPicker: () => <div data-testid="token-endpoint" />,
+vi.mock("./OrganizationTokenEndpoint", () => ({
+  OrganizationTokenEndpoint: () => <div data-testid="token-endpoint" />,
 }));
 
 afterEach(cleanup);

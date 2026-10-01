@@ -422,3 +422,32 @@ func BuildConnectionDetailsPayload(workloadIdentitiesConnectionDetailsMcpServerI
 
 	return v, nil
 }
+
+// BuildOrganizationConnectionDetailsPayload builds the payload for the
+// workloadIdentities organizationConnectionDetails endpoint from CLI flags.
+func BuildOrganizationConnectionDetailsPayload(workloadIdentitiesOrganizationConnectionDetailsSessionToken string, workloadIdentitiesOrganizationConnectionDetailsApikeyToken string, workloadIdentitiesOrganizationConnectionDetailsProjectSlugInput string) (*workloadidentities.OrganizationConnectionDetailsPayload, error) {
+	var sessionToken *string
+	{
+		if workloadIdentitiesOrganizationConnectionDetailsSessionToken != "" {
+			sessionToken = &workloadIdentitiesOrganizationConnectionDetailsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if workloadIdentitiesOrganizationConnectionDetailsApikeyToken != "" {
+			apikeyToken = &workloadIdentitiesOrganizationConnectionDetailsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if workloadIdentitiesOrganizationConnectionDetailsProjectSlugInput != "" {
+			projectSlugInput = &workloadIdentitiesOrganizationConnectionDetailsProjectSlugInput
+		}
+	}
+	v := &workloadidentities.OrganizationConnectionDetailsPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

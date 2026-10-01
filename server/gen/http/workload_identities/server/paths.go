@@ -46,3 +46,8 @@ func WithdrawSubjectWorkloadIdentitiesPath() string {
 func ConnectionDetailsWorkloadIdentitiesPath() string {
 	return "/rpc/workloadIdentities.connectionDetails"
 }
+
+// OrganizationConnectionDetailsWorkloadIdentitiesPath returns the URL path to the workloadIdentities service organizationConnectionDetails HTTP endpoint.
+func OrganizationConnectionDetailsWorkloadIdentitiesPath() string {
+	return "/rpc/workloadIdentities.organizationConnectionDetails"
+}

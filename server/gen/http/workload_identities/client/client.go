@@ -48,6 +48,10 @@ type Client struct {
 	// connectionDetails endpoint.
 	ConnectionDetailsDoer goahttp.Doer
 
+	// OrganizationConnectionDetails Doer is the HTTP client used to make requests
+	// to the organizationConnectionDetails endpoint.
+	OrganizationConnectionDetailsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -69,19 +73,20 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListDoer:              doer,
-		RegisterIssuerDoer:    doer,
-		UpdateIssuerDoer:      doer,
-		WithdrawIssuerDoer:    doer,
-		AdmitSubjectDoer:      doer,
-		UpdateSubjectDoer:     doer,
-		WithdrawSubjectDoer:   doer,
-		ConnectionDetailsDoer: doer,
-		RestoreResponseBody:   restoreBody,
-		scheme:                scheme,
-		host:                  host,
-		decoder:               dec,
-		encoder:               enc,
+		ListDoer:                          doer,
+		RegisterIssuerDoer:                doer,
+		UpdateIssuerDoer:                  doer,
+		WithdrawIssuerDoer:                doer,
+		AdmitSubjectDoer:                  doer,
+		UpdateSubjectDoer:                 doer,
+		WithdrawSubjectDoer:               doer,
+		ConnectionDetailsDoer:             doer,
+		OrganizationConnectionDetailsDoer: doer,
+		RestoreResponseBody:               restoreBody,
+		scheme:                            scheme,
+		host:                              host,
+		decoder:                           dec,
+		encoder:                           enc,
 	}
 }
 
@@ -272,6 +277,30 @@ func (c *Client) ConnectionDetails() goa.Endpoint {
 		resp, err := c.ConnectionDetailsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("workloadIdentities", "connectionDetails", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// OrganizationConnectionDetails returns an endpoint that makes HTTP requests
+// to the workloadIdentities service organizationConnectionDetails server.
+func (c *Client) OrganizationConnectionDetails() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeOrganizationConnectionDetailsRequest(c.encoder)
+		decodeResponse = DecodeOrganizationConnectionDetailsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildOrganizationConnectionDetailsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.OrganizationConnectionDetailsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "organizationConnectionDetails", err)
 		}
 		return decodeResponse(resp)
 	}

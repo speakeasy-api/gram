@@ -17,7 +17,7 @@ import { useEffect, useState } from "react";
 import { issuerValuesDiffer } from "./issuerEdit";
 import { httpsUrlProblem } from "./issuerUrl";
 import { tagsProblem } from "./tagLimits";
-import { TokenEndpointPicker } from "./TokenEndpointPicker";
+import { OrganizationTokenEndpoint } from "./OrganizationTokenEndpoint";
 
 export interface RegisterIssuerValues {
   name: string;
@@ -305,10 +305,10 @@ export function RegisterIssuerSheet({
               <Stack gap={2} className="border-y py-6">
                 <Text className="font-medium">Point the platform at Gram</Text>
                 <Text muted small>
-                  In the platform&apos;s console, set the token endpoint to the
-                  one for the MCP server its workloads will call.
+                  In the platform&apos;s console, set the token endpoint to this
+                  organization&apos;s.
                 </Text>
-                <TokenEndpointPicker />
+                <OrganizationTokenEndpoint />
               </Stack>
             )}
 

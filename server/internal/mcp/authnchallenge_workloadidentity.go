@@ -98,7 +98,7 @@ func newStaticWorkloadIdentityLookup(admitted ...workloadAdmission) workloadIden
 	}
 }
 
-// admitWorkloadIdentity reports nil when the endpoint's tenant admits
+// admitWorkloadIdentity reports nil when the tenancy admits
 // externalSubject from this issuer, errWorkloadNotAdmitted when it does not.
 //
 // The security boundary, and a different question from the one the signature
@@ -108,7 +108,7 @@ func newStaticWorkloadIdentityLookup(admitted ...workloadAdmission) workloadIden
 func admitWorkloadIdentity(
 	ctx context.Context,
 	lookup workloadIdentityLookup,
-	endpoint *ResolvedMcpEndpoint,
+	tenancy *workloadTenancy,
 	workloadIssuerID uuid.UUID,
 	externalSubject string,
 ) error {
@@ -116,16 +116,13 @@ func admitWorkloadIdentity(
 	// An unwired policy reads as "no admissions", an unbuildable key as "no
 	// row could answer", and an empty subject is refused rather than looked up
 	// so it can never match a row holding one.
-	case lookup == nil, endpoint == nil, workloadIssuerID == uuid.Nil, externalSubject == "":
+	case lookup == nil, tenancy == nil, tenancy.OrganizationID == "", workloadIssuerID == uuid.Nil, externalSubject == "":
 		return errWorkloadNotAdmitted
 	}
 
 	admitted, err := lookup(ctx, workloadIdentity{
-		OrganizationID: endpoint.OrganizationID,
-		// A zero project asks as an organization-scoped caller rather than as
-		// project uuid.Nil: a sentinel comparing equal by accident is not a
-		// property to rely on at a security boundary.
-		ProjectID:        uuid.NullUUID{UUID: endpoint.ProjectID, Valid: endpoint.ProjectID != uuid.Nil},
+		OrganizationID:   tenancy.OrganizationID,
+		ProjectID:        tenancy.ProjectID,
 		WorkloadIssuerID: workloadIssuerID,
 		ExternalSubject:  externalSubject,
 	})

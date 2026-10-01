@@ -97,14 +97,20 @@ func (t AgentAuthorizationTarget) connectCheck() authz.Check {
 // which callers that report why a request was refused must not record as a
 // deliberate rollout decision.
 func (s *Service) agentAuthorizationRollout(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (bool, string, error) {
-	organization, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, endpoint.OrganizationID)
+	return s.organizationAgentAuthorizationRollout(ctx, logger, endpoint.OrganizationID)
+}
+
+// organizationAgentAuthorizationRollout is agentAuthorizationRollout for an
+// organization named directly rather than through one of its endpoints.
+func (s *Service) organizationAgentAuthorizationRollout(ctx context.Context, logger *slog.Logger, organizationID string) (bool, string, error) {
+	organization, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
 	if err != nil {
 		logger.WarnContext(ctx, "agent authorization rollout organization unavailable")
 		return false, "", fmt.Errorf("read organization metadata: %w", err)
 	}
 	groups := feature.OrgProjectGroups(organization.Slug, "")
 	for _, flag := range []feature.Flag{feature.FlagAgentManagement, feature.FlagAgentIdentityCredentials} {
-		evaluation, err := feature.EvaluateFlag(ctx, s.features, flag, endpoint.OrganizationID, groups)
+		evaluation, err := feature.EvaluateFlag(ctx, s.features, flag, organizationID, groups)
 		if err != nil {
 			logger.WarnContext(ctx, "agent authorization rollout evaluation unavailable")
 			return false, "", fmt.Errorf("evaluate flag %s: %w", flag, err)

@@ -143,9 +143,10 @@ func (h *AuthenticationHost) Handle(method, pattern string, handler http.Handler
 	h.router.Method(method, pattern, handler)
 }
 
-// AttachAuthenticationHost mounts the /mcp authorization server routes on the
-// authentication host and lets service announce it for issuers that opt in.
-// It is a no-op when the host is disabled.
+// AttachAuthenticationHost mounts the /mcp authorization server routes and the
+// organization authorization servers on the authentication host, and lets
+// service announce it for issuers that opt in. It is a no-op when the host is
+// disabled.
 //
 // The IdP and upstream login callbacks are not mounted: they are registered
 // against the platform host and always return there.
@@ -172,6 +173,8 @@ func AttachAuthenticationHost(host *AuthenticationHost, service *Service) {
 	handle(http.MethodGet, "/mcp/consent-fonts/{file}", service.ServeConsentFont)
 	handle(http.MethodPost, PublicServerRoute+"/token", service.HandleToken)
 	handle(http.MethodPost, PublicServerRoute+"/revoke", service.HandleRevoke)
+	handle(http.MethodGet, wellknown.OAuthAuthorizationServerPath+OrganizationAuthorizationServerRoute, service.HandleGetOrganizationAuthorizationServer)
+	handle(http.MethodPost, OrganizationAuthorizationServerRoute+"/token", service.HandleOrganizationToken)
 }
 
 // authenticationHostBaseURL reports the authentication host's base URL when

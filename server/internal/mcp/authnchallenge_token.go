@@ -105,10 +105,14 @@ type mintSessionParams struct {
 	DelegatedGrants        []byte
 	DelegatedGrantsVersion pgtype.Int4
 	DesiredSessionDuration *time.Duration
-	Replayable             bool
-	Policy                 sessionIssuancePolicy
-	Subject                urn.SessionSubject
-	ToolSelection          []byte
+	// Issuer overrides the minted token's iss for a workload session issued
+	// by another authorization server than the endpoint's own. Empty keeps
+	// the endpoint's issuer; any other policy must leave it empty.
+	Issuer        string
+	Replayable    bool
+	Policy        sessionIssuancePolicy
+	Subject       urn.SessionSubject
+	ToolSelection []byte
 }
 
 type mintedSession struct {
@@ -526,6 +530,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		DelegatedGrants:        nil,
 		DelegatedGrantsVersion: pgtype.Int4{Int32: 0, Valid: false},
 		DesiredSessionDuration: nil,
+		Issuer:                 "",
 		Replayable:             false,
 		Policy:                 sessionIssuancePolicyResourceScoped,
 		Subject:                result.Subject,
@@ -791,6 +796,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		DelegatedGrants:        delegatedGrants,
 		DelegatedGrantsVersion: delegatedGrantsVersion,
 		DesiredSessionDuration: desiredSessionDuration,
+		Issuer:                 "",
 		Replayable:             false,
 		Policy:                 sessionIssuancePolicyIssuerScoped,
 		Subject:                subject,
@@ -1178,6 +1184,7 @@ func (s *Service) rotateRefreshToken(
 		DelegatedGrants:        oldSession.DelegatedGrants,
 		DelegatedGrantsVersion: oldSession.DelegatedGrantsVersion,
 		DesiredSessionDuration: nil,
+		Issuer:                 "",
 		Replayable:             true,
 		Policy:                 sessionIssuancePolicyIssuerScoped,
 		Subject:                oldSession.SubjectUrn,
@@ -1536,6 +1543,9 @@ func (s *Service) mintSession(
 	if clientRow == nil && params.Policy != sessionIssuancePolicyWorkload {
 		return nil, oops.E(oops.CodeUnexpected, nil, "session issuance requires a client").LogError(ctx, logger)
 	}
+	if params.Issuer != "" && params.Policy != sessionIssuancePolicyWorkload {
+		return nil, oops.E(oops.CodeUnexpected, nil, "only a workload session may override its issuer").LogError(ctx, logger)
+	}
 
 	switch {
 	case params.Subject.Kind == urn.SessionSubjectKindAgent:
@@ -1603,9 +1613,13 @@ func (s *Service) mintSession(
 	}
 	accessLifetime := accessExpiresAt.Sub(now)
 
-	issuerURL, err := s.issuerURL(endpoint, params.BaseURL)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, logger)
+	issuerURL := params.Issuer
+	var err error
+	if issuerURL == "" {
+		issuerURL, err = s.issuerURL(endpoint, params.BaseURL)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, logger)
+		}
 	}
 	jti := ""
 	if params.Replayable {

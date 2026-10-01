@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -38,6 +39,7 @@ const workloadGrantJWTBearer = "urn:ietf:params:oauth:grant-type:jwt-bearer"
 // workload issuer at the organization tier, an admitted subject, and an agent
 // assigned to it that may connect to the server.
 type workloadGrantFixture struct {
+	ctx      context.Context //nolint:containedctx // carries the seeded auth context the fixture was built under
 	ti       *testInstance
 	fx       agentConsentFixture
 	issuer   *devidptest.Instance
@@ -99,6 +101,7 @@ func newWorkloadGrantFixtureWithLogger(t *testing.T, logger *slog.Logger) worklo
 	advertisedIssuer, _ := fetchAdvertisedIssuer(t, ctx, ti, slug)
 
 	return workloadGrantFixture{
+		ctx:              ctx,
 		ti:               ti,
 		fx:               fx,
 		issuer:           issuer,

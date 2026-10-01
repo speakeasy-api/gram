@@ -688,6 +688,13 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/token", oops.ErrHandle(service.logger, service.HandleToken).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/revoke", oops.ErrHandle(service.logger, service.HandleRevoke).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
+
+	// Organization authorization servers belong on the authentication host.
+	// Mounted here too so a deployment without one still serves them; the
+	// handlers answer 404 on this host whenever an authentication host is
+	// configured.
+	o11y.AttachHandler(mux, "GET", wellknown.OAuthAuthorizationServerPath+OrganizationAuthorizationServerRoute, oops.ErrHandle(service.logger, service.HandleGetOrganizationAuthorizationServer).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", OrganizationAuthorizationServerRoute+"/token", oops.ErrHandle(service.logger, service.HandleOrganizationToken).ServeHTTP)
 }
 
 // HandleRemoteLoginCallback is the chi handler at

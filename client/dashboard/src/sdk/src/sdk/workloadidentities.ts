@@ -5,6 +5,7 @@
 import { workloadIdentitiesAdmitSubject } from "../funcs/workloadIdentitiesAdmitSubject.js";
 import { workloadIdentitiesConnectionDetails } from "../funcs/workloadIdentitiesConnectionDetails.js";
 import { workloadIdentitiesList } from "../funcs/workloadIdentitiesList.js";
+import { workloadIdentitiesOrganizationConnectionDetails } from "../funcs/workloadIdentitiesOrganizationConnectionDetails.js";
 import { workloadIdentitiesRegisterIssuer } from "../funcs/workloadIdentitiesRegisterIssuer.js";
 import { workloadIdentitiesUpdateIssuer } from "../funcs/workloadIdentitiesUpdateIssuer.js";
 import { workloadIdentitiesUpdateSubject } from "../funcs/workloadIdentitiesUpdateSubject.js";
@@ -13,6 +14,7 @@ import { workloadIdentitiesWithdrawSubject } from "../funcs/workloadIdentitiesWi
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { WorkloadConnectionDetails } from "../models/components/workloadconnectiondetails.js";
 import { WorkloadIdentityPolicy } from "../models/components/workloadidentitypolicy.js";
+import { WorkloadOrganizationConnectionDetails } from "../models/components/workloadorganizationconnectiondetails.js";
 import {
   AdmitWorkloadSubjectRequest,
   AdmitWorkloadSubjectSecurity,
@@ -21,6 +23,10 @@ import {
   GetWorkloadConnectionDetailsRequest,
   GetWorkloadConnectionDetailsSecurity,
 } from "../models/operations/getworkloadconnectiondetails.js";
+import {
+  GetWorkloadOrganizationConnectionDetailsRequest,
+  GetWorkloadOrganizationConnectionDetailsSecurity,
+} from "../models/operations/getworkloadorganizationconnectiondetails.js";
 import {
   ListWorkloadIdentitiesRequest,
   ListWorkloadIdentitiesSecurity,
@@ -98,6 +104,25 @@ export class WorkloadIdentities extends ClientSDK {
     options?: RequestOptions,
   ): Promise<WorkloadIdentityPolicy> {
     return unwrapAsync(workloadIdentitiesList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * organizationConnectionDetails workloadIdentities
+   *
+   * @remarks
+   * Read the organization's own token endpoint for workload identity tokens: one endpoint at which a platform exchanges an assertion for a session on any of the organization's MCP servers its workload may reach, naming the server by resource. Returns the values the organization's authorization server metadata serves, and whether an exchange there can succeed. Requires workload:read.
+   */
+  async organizationConnectionDetails(
+    request?: GetWorkloadOrganizationConnectionDetailsRequest | undefined,
+    security?: GetWorkloadOrganizationConnectionDetailsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<WorkloadOrganizationConnectionDetails> {
+    return unwrapAsync(workloadIdentitiesOrganizationConnectionDetails(
       this,
       request,
       security,

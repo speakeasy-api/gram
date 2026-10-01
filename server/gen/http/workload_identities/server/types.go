@@ -183,6 +183,44 @@ type ConnectionDetailsResponseBody struct {
 	Endpoints []*WorkloadConnectionEndpointResponseBody `form:"endpoints" json:"endpoints" xml:"endpoints"`
 }
 
+// OrganizationConnectionDetailsResponseBody is the type of the
+// "workloadIdentities" service "organizationConnectionDetails" endpoint HTTP
+// response body.
+type OrganizationConnectionDetailsResponseBody struct {
+	// Whether the organization token endpoint is served for this organization.
+	// When false its routes answer 404 and a platform must use a server's own
+	// token endpoint.
+	Available bool `form:"available" json:"available" xml:"available"`
+	// The organization authorization server's issuer identifier, and the iss of
+	// the sessions it mints. An assertion's aud must be exactly this or
+	// token_endpoint.
+	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+	// Where the platform sends its assertion, naming the MCP server it wants a
+	// session for as resource: that server's URL.
+	TokenEndpoint string `form:"token_endpoint" json:"token_endpoint" xml:"token_endpoint"`
+	// Where the organization authorization server's RFC 8414 metadata is served.
+	MetadataURL string `form:"metadata_url" json:"metadata_url" xml:"metadata_url"`
+	// Whether token_endpoint is on Gram's dedicated authentication host rather
+	// than the platform host.
+	OnAuthenticationHost bool `form:"on_authentication_host" json:"on_authentication_host" xml:"on_authentication_host"`
+	// grant_types_supported as the metadata lists it. Empty when the endpoint is
+	// not available or the workload grant is not.
+	GrantTypesSupported []string `form:"grant_types_supported" json:"grant_types_supported" xml:"grant_types_supported"`
+	// Whether the metadata lists the jwt-bearer grant because the clientless
+	// workload assertion exchange is available here.
+	WorkloadGrantAdvertised bool `form:"workload_grant_advertised" json:"workload_grant_advertised" xml:"workload_grant_advertised"`
+	// Whether nothing Gram knows of stops an exchange here. The platform's own
+	// configuration, the trust policy, and which servers the workload's agent may
+	// reach are not checked.
+	Ready bool `form:"ready" json:"ready" xml:"ready"`
+	// Why an exchange here cannot succeed; absent when ready.
+	// organization_endpoint_disabled: the organization is outside the organization
+	// token endpoint's rollout. workload_grant_unavailable: the deployment does
+	// not serve the workload grant. agent_rollout_disabled: the organization is
+	// outside the agent authorization rollout the token endpoint requires.
+	NotReadyReason *string `form:"not_ready_reason,omitempty" json:"not_ready_reason,omitempty" xml:"not_ready_reason,omitempty"`
+}
+
 // ListUnauthorizedResponseBody is the type of the "workloadIdentities" service
 // "list" endpoint HTTP response body for the "unauthorized" error.
 type ListUnauthorizedResponseBody struct {
@@ -1682,6 +1720,196 @@ type ConnectionDetailsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// OrganizationConnectionDetailsUnauthorizedResponseBody is the type of the
+// "workloadIdentities" service "organizationConnectionDetails" endpoint HTTP
+// response body for the "unauthorized" error.
+type OrganizationConnectionDetailsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// OrganizationConnectionDetailsForbiddenResponseBody is the type of the
+// "workloadIdentities" service "organizationConnectionDetails" endpoint HTTP
+// response body for the "forbidden" error.
+type OrganizationConnectionDetailsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// OrganizationConnectionDetailsBadRequestResponseBody is the type of the
+// "workloadIdentities" service "organizationConnectionDetails" endpoint HTTP
+// response body for the "bad_request" error.
+type OrganizationConnectionDetailsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// OrganizationConnectionDetailsNotFoundResponseBody is the type of the
+// "workloadIdentities" service "organizationConnectionDetails" endpoint HTTP
+// response body for the "not_found" error.
+type OrganizationConnectionDetailsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// OrganizationConnectionDetailsConflictResponseBody is the type of the
+// "workloadIdentities" service "organizationConnectionDetails" endpoint HTTP
+// response body for the "conflict" error.
+type OrganizationConnectionDetailsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// OrganizationConnectionDetailsUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "organizationConnectionDetails" endpoint HTTP
+// response body for the "unsupported_media" error.
+type OrganizationConnectionDetailsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// OrganizationConnectionDetailsInvalidResponseBody is the type of the
+// "workloadIdentities" service "organizationConnectionDetails" endpoint HTTP
+// response body for the "invalid" error.
+type OrganizationConnectionDetailsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// OrganizationConnectionDetailsInvariantViolationResponseBody is the type of
+// the "workloadIdentities" service "organizationConnectionDetails" endpoint
+// HTTP response body for the "invariant_violation" error.
+type OrganizationConnectionDetailsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// OrganizationConnectionDetailsUnexpectedResponseBody is the type of the
+// "workloadIdentities" service "organizationConnectionDetails" endpoint HTTP
+// response body for the "unexpected" error.
+type OrganizationConnectionDetailsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// OrganizationConnectionDetailsGatewayErrorResponseBody is the type of the
+// "workloadIdentities" service "organizationConnectionDetails" endpoint HTTP
+// response body for the "gateway_error" error.
+type OrganizationConnectionDetailsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // WorkloadIssuerResponseBody is used to define fields on response body types.
 type WorkloadIssuerResponseBody struct {
 	// The workload issuer id.
@@ -2019,6 +2247,31 @@ func NewConnectionDetailsResponseBody(res *workloadidentities.WorkloadConnection
 		}
 	} else {
 		body.Endpoints = []*WorkloadConnectionEndpointResponseBody{}
+	}
+	return body
+}
+
+// NewOrganizationConnectionDetailsResponseBody builds the HTTP response body
+// from the result of the "organizationConnectionDetails" endpoint of the
+// "workloadIdentities" service.
+func NewOrganizationConnectionDetailsResponseBody(res *workloadidentities.WorkloadOrganizationConnectionDetails) *OrganizationConnectionDetailsResponseBody {
+	body := &OrganizationConnectionDetailsResponseBody{
+		Available:               res.Available,
+		Issuer:                  res.Issuer,
+		TokenEndpoint:           res.TokenEndpoint,
+		MetadataURL:             res.MetadataURL,
+		OnAuthenticationHost:    res.OnAuthenticationHost,
+		WorkloadGrantAdvertised: res.WorkloadGrantAdvertised,
+		Ready:                   res.Ready,
+		NotReadyReason:          res.NotReadyReason,
+	}
+	if res.GrantTypesSupported != nil {
+		body.GrantTypesSupported = make([]string, len(res.GrantTypesSupported))
+		for i, val := range res.GrantTypesSupported {
+			body.GrantTypesSupported[i] = val
+		}
+	} else {
+		body.GrantTypesSupported = []string{}
 	}
 	return body
 }
@@ -3190,6 +3443,156 @@ func NewConnectionDetailsGatewayErrorResponseBody(res *goa.ServiceError) *Connec
 	return body
 }
 
+// NewOrganizationConnectionDetailsUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "organizationConnectionDetails"
+// endpoint of the "workloadIdentities" service.
+func NewOrganizationConnectionDetailsUnauthorizedResponseBody(res *goa.ServiceError) *OrganizationConnectionDetailsUnauthorizedResponseBody {
+	body := &OrganizationConnectionDetailsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewOrganizationConnectionDetailsForbiddenResponseBody builds the HTTP
+// response body from the result of the "organizationConnectionDetails"
+// endpoint of the "workloadIdentities" service.
+func NewOrganizationConnectionDetailsForbiddenResponseBody(res *goa.ServiceError) *OrganizationConnectionDetailsForbiddenResponseBody {
+	body := &OrganizationConnectionDetailsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewOrganizationConnectionDetailsBadRequestResponseBody builds the HTTP
+// response body from the result of the "organizationConnectionDetails"
+// endpoint of the "workloadIdentities" service.
+func NewOrganizationConnectionDetailsBadRequestResponseBody(res *goa.ServiceError) *OrganizationConnectionDetailsBadRequestResponseBody {
+	body := &OrganizationConnectionDetailsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewOrganizationConnectionDetailsNotFoundResponseBody builds the HTTP
+// response body from the result of the "organizationConnectionDetails"
+// endpoint of the "workloadIdentities" service.
+func NewOrganizationConnectionDetailsNotFoundResponseBody(res *goa.ServiceError) *OrganizationConnectionDetailsNotFoundResponseBody {
+	body := &OrganizationConnectionDetailsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewOrganizationConnectionDetailsConflictResponseBody builds the HTTP
+// response body from the result of the "organizationConnectionDetails"
+// endpoint of the "workloadIdentities" service.
+func NewOrganizationConnectionDetailsConflictResponseBody(res *goa.ServiceError) *OrganizationConnectionDetailsConflictResponseBody {
+	body := &OrganizationConnectionDetailsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewOrganizationConnectionDetailsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "organizationConnectionDetails"
+// endpoint of the "workloadIdentities" service.
+func NewOrganizationConnectionDetailsUnsupportedMediaResponseBody(res *goa.ServiceError) *OrganizationConnectionDetailsUnsupportedMediaResponseBody {
+	body := &OrganizationConnectionDetailsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewOrganizationConnectionDetailsInvalidResponseBody builds the HTTP response
+// body from the result of the "organizationConnectionDetails" endpoint of the
+// "workloadIdentities" service.
+func NewOrganizationConnectionDetailsInvalidResponseBody(res *goa.ServiceError) *OrganizationConnectionDetailsInvalidResponseBody {
+	body := &OrganizationConnectionDetailsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewOrganizationConnectionDetailsInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "organizationConnectionDetails"
+// endpoint of the "workloadIdentities" service.
+func NewOrganizationConnectionDetailsInvariantViolationResponseBody(res *goa.ServiceError) *OrganizationConnectionDetailsInvariantViolationResponseBody {
+	body := &OrganizationConnectionDetailsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewOrganizationConnectionDetailsUnexpectedResponseBody builds the HTTP
+// response body from the result of the "organizationConnectionDetails"
+// endpoint of the "workloadIdentities" service.
+func NewOrganizationConnectionDetailsUnexpectedResponseBody(res *goa.ServiceError) *OrganizationConnectionDetailsUnexpectedResponseBody {
+	body := &OrganizationConnectionDetailsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewOrganizationConnectionDetailsGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "organizationConnectionDetails"
+// endpoint of the "workloadIdentities" service.
+func NewOrganizationConnectionDetailsGatewayErrorResponseBody(res *goa.ServiceError) *OrganizationConnectionDetailsGatewayErrorResponseBody {
+	body := &OrganizationConnectionDetailsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListPayload builds a workloadIdentities service list endpoint payload.
 func NewListPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.ListPayload {
 	v := &workloadidentities.ListPayload{}
@@ -3335,6 +3738,17 @@ func NewWithdrawSubjectPayload(id string, sessionToken *string, apikeyToken *str
 func NewConnectionDetailsPayload(mcpServerID string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.ConnectionDetailsPayload {
 	v := &workloadidentities.ConnectionDetailsPayload{}
 	v.McpServerID = mcpServerID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewOrganizationConnectionDetailsPayload builds a workloadIdentities service
+// organizationConnectionDetails endpoint payload.
+func NewOrganizationConnectionDetailsPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.OrganizationConnectionDetailsPayload {
+	v := &workloadidentities.OrganizationConnectionDetailsPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

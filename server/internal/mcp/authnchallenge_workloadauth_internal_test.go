@@ -10,8 +10,9 @@ import (
 	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
 
-func workloadTestEndpoint(issuerID uuid.UUID) *ResolvedMcpEndpoint {
-	return &ResolvedMcpEndpoint{UserSessionIssuerID: issuerID}
+func workloadTestEndpoint(issuerID uuid.UUID) *workloadTenancy {
+	endpoint := &ResolvedMcpEndpoint{UserSessionIssuerID: issuerID}
+	return endpoint.workloadTenancy()
 }
 
 func workloadTestIssuer(name string, jwksURI string) *workloadidentity_repo.WorkloadIssuer {

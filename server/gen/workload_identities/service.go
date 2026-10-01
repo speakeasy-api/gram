@@ -60,6 +60,13 @@ type Service interface {
 	// mcp:read on the server. A caller that names a project can read only that
 	// project's servers.
 	ConnectionDetails(context.Context, *ConnectionDetailsPayload) (res *WorkloadConnectionDetails, err error)
+	// Read the organization's own token endpoint for workload identity tokens: one
+	// endpoint at which a platform exchanges an assertion for a session on any of
+	// the organization's MCP servers its workload may reach, naming the server by
+	// resource. Returns the values the organization's authorization server
+	// metadata serves, and whether an exchange there can succeed. Requires
+	// workload:read.
+	OrganizationConnectionDetails(context.Context, *OrganizationConnectionDetailsPayload) (res *WorkloadOrganizationConnectionDetails, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -82,7 +89,7 @@ const ServiceName = "workloadIdentities"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"list", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "updateSubject", "withdrawSubject", "connectionDetails"}
+var MethodNames = [9]string{"list", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "updateSubject", "withdrawSubject", "connectionDetails", "organizationConnectionDetails"}
 
 // AdmitSubjectPayload is the payload type of the workloadIdentities service
 // admitSubject method.
@@ -129,6 +136,14 @@ type ConnectionDetailsPayload struct {
 // ListPayload is the payload type of the workloadIdentities service list
 // method.
 type ListPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// OrganizationConnectionDetailsPayload is the payload type of the
+// workloadIdentities service organizationConnectionDetails method.
+type OrganizationConnectionDetailsPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -287,6 +302,43 @@ type WorkloadIdentityPolicy struct {
 	Issuers []*types.WorkloadIssuer
 	// Admitted subjects.
 	Admissions []*types.WorkloadAdmission
+}
+
+// WorkloadOrganizationConnectionDetails is the result type of the
+// workloadIdentities service organizationConnectionDetails method.
+type WorkloadOrganizationConnectionDetails struct {
+	// Whether the organization token endpoint is served for this organization.
+	// When false its routes answer 404 and a platform must use a server's own
+	// token endpoint.
+	Available bool
+	// The organization authorization server's issuer identifier, and the iss of
+	// the sessions it mints. An assertion's aud must be exactly this or
+	// token_endpoint.
+	Issuer string
+	// Where the platform sends its assertion, naming the MCP server it wants a
+	// session for as resource: that server's URL.
+	TokenEndpoint string
+	// Where the organization authorization server's RFC 8414 metadata is served.
+	MetadataURL string
+	// Whether token_endpoint is on Gram's dedicated authentication host rather
+	// than the platform host.
+	OnAuthenticationHost bool
+	// grant_types_supported as the metadata lists it. Empty when the endpoint is
+	// not available or the workload grant is not.
+	GrantTypesSupported []string
+	// Whether the metadata lists the jwt-bearer grant because the clientless
+	// workload assertion exchange is available here.
+	WorkloadGrantAdvertised bool
+	// Whether nothing Gram knows of stops an exchange here. The platform's own
+	// configuration, the trust policy, and which servers the workload's agent may
+	// reach are not checked.
+	Ready bool
+	// Why an exchange here cannot succeed; absent when ready.
+	// organization_endpoint_disabled: the organization is outside the organization
+	// token endpoint's rollout. workload_grant_unavailable: the deployment does
+	// not serve the workload grant. agent_rollout_disabled: the organization is
+	// outside the agent authorization rollout the token endpoint requires.
+	NotReadyReason *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

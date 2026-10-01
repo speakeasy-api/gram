@@ -111,13 +111,60 @@ func newWorkloadGrant(db *pgxpool.Pool, redisClient *redis.Client, policy *guard
 	}
 }
 
+// workloadTenancy is what an authorization server admits a workload under:
+// the organization and project its issuers and subjects are looked up in, and
+// the scope its replay guard and budgets are keyed on.
+type workloadTenancy struct {
+	OrganizationID string
+	// ProjectID unset asks as an organization-scoped caller, which sees only
+	// organization-tier issuers and admissions. A zero project is never sent
+	// as project uuid.Nil: a sentinel comparing equal by accident is not a
+	// property to rely on at a security boundary.
+	ProjectID uuid.NullUUID
+	// Scope names the authorization server: a server's user session issuer
+	// id, or organizationWorkloadScope for the organization's own. Assertions
+	// are single use within it, and its lookups and key fetches share one
+	// budget.
+	Scope string
+}
+
+// workloadTenancy is the tenancy of the endpoint's own authorization server.
+func (e *ResolvedMcpEndpoint) workloadTenancy() *workloadTenancy {
+	if e == nil {
+		return nil
+	}
+	return &workloadTenancy{
+		OrganizationID: e.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: e.ProjectID, Valid: e.ProjectID != uuid.Nil},
+		Scope:          e.UserSessionIssuerID.String(),
+	}
+}
+
+// organizationWorkloadScope is the scope of an organization's own
+// authorization server. The prefix keeps it apart from every user session
+// issuer id, which is a bare uuid.
+func organizationWorkloadScope(organizationID string) string {
+	return "org:" + organizationID
+}
+
+// organizationWorkloadTenancy is the tenancy of the organization's own
+// authorization server. It names no project, so only organization-tier
+// issuers and admissions answer there.
+func organizationWorkloadTenancy(organizationID string) *workloadTenancy {
+	return &workloadTenancy{
+		OrganizationID: organizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Scope:          organizationWorkloadScope(organizationID),
+	}
+}
+
 // workloadIssuerStoreLookup resolves an assertion's iss to a workload issuer in
-// the endpoint's own project or organization.
+// the tenancy's project or organization.
 func workloadIssuerStoreLookup(db workloadidentity_repo.DBTX) workloadIssuerLookup {
-	return func(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (workloadidentity_repo.WorkloadIssuer, bool, error) {
+	return func(ctx context.Context, tenancy *workloadTenancy, issuerURL string) (workloadidentity_repo.WorkloadIssuer, bool, error) {
 		issuer, err := workloadidentity.ResolveIssuerByURL(ctx, db, workloadidentity.ResolveIssuerParams{
-			OrganizationID: endpoint.OrganizationID,
-			ProjectID:      uuid.NullUUID{UUID: endpoint.ProjectID, Valid: endpoint.ProjectID != uuid.Nil},
+			OrganizationID: tenancy.OrganizationID,
+			ProjectID:      tenancy.ProjectID,
 			IssuerURL:      issuerURL,
 		})
 		switch {
@@ -159,6 +206,10 @@ const (
 	workloadGrantUnavailable workloadGrantOutcome = "unavailable"
 	// workloadGrantRateLimited answers 429 with the limiter's Retry-After.
 	workloadGrantRateLimited workloadGrantOutcome = "rate_limited"
+	// workloadGrantTargetRefused answers invalid_target, identically for a
+	// resource that does not exist, belongs to another organization, or is
+	// out of the workload's reach.
+	workloadGrantTargetRefused workloadGrantOutcome = "target_refused"
 )
 
 // workloadGrantError is a stage's refusal of the grant. The reason is a
@@ -191,7 +242,7 @@ type presentedWorkload struct {
 }
 
 // admitWorkloadAssertion runs the grant's verification stages in order:
-// resolve iss to a workload issuer in the endpoint's tenancy, verify the
+// resolve iss to a workload issuer in the tenancy, verify the
 // assertion against that issuer's key set, then check the tenant admits the
 // subject. Admission is the security boundary; every earlier stage only
 // establishes that the platform minted the token.
@@ -201,7 +252,7 @@ type presentedWorkload struct {
 func admitWorkloadAssertion(
 	ctx context.Context,
 	grant *workloadGrant,
-	endpoint *ResolvedMcpEndpoint,
+	tenancy *workloadTenancy,
 	audiences []string,
 	raw string,
 ) (presentedWorkload, error) {
@@ -221,13 +272,13 @@ func admitWorkloadAssertion(
 	switch {
 	case len(claims.Audience) != 1:
 		// A token naming several audiences is valid at each of them; the
-		// grant accepts only one minted for this endpoint alone.
+		// grant accepts only one minted for this authorization server alone.
 		return presented, refuseWorkloadGrant("assertion_audience_not_single", fmt.Errorf("aud names %d values", len(claims.Audience)))
 	case claims.Subject == "" || claims.Subject == claims.Issuer:
 		return presented, refuseWorkloadGrant("assertion_subject_invalid", errors.New("sub is empty or equals iss"))
 	}
 
-	issuer, err := grant.issuers.admit(ctx, endpoint, claims.Issuer)
+	issuer, err := grant.issuers.admit(ctx, tenancy, claims.Issuer)
 	switch {
 	case errors.Is(err, errWorkloadIssuerUntrusted):
 		return presented, refuseWorkloadGrant("issuer_untrusted", err)
@@ -242,7 +293,7 @@ func admitWorkloadAssertion(
 	}
 	presented.issuerID = issuer.ID
 
-	source, err := workloadIssuerKeySource(endpoint, &issuer)
+	source, err := workloadIssuerKeySource(tenancy, &issuer)
 	if err != nil {
 		return presented, refuseWorkloadGrant("issuer_jwks_uri_invalid", err)
 	}
@@ -251,7 +302,7 @@ func admitWorkloadAssertion(
 		Issuer:       issuer.Issuer,
 		Subject:      claims.Subject,
 		KeySource:    source,
-		ReplayIssuer: endpoint.UserSessionIssuerID.String(),
+		ReplayIssuer: tenancy.Scope,
 		ReplayParty:  issuer.ID.String(),
 		Audiences:    audiences,
 		MaxLifetime:  workloadAssertionMaxLifetime,
@@ -273,7 +324,7 @@ func admitWorkloadAssertion(
 		}
 	}
 
-	err = admitWorkloadIdentity(ctx, grant.identities, endpoint, issuer.ID, claims.Subject)
+	err = admitWorkloadIdentity(ctx, grant.identities, tenancy, issuer.ID, claims.Subject)
 	switch {
 	case errors.Is(err, errWorkloadNotAdmitted):
 		return presented, refuseWorkloadGrant("subject_not_admitted", err)
@@ -360,18 +411,58 @@ func (s *Service) handleWorkloadAssertionGrant(
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build workload assertion audiences").LogError(ctx, logger)
 	}
-	presented, err = admitWorkloadAssertion(ctx, s.workloadGrant, endpoint, []string{urls.Issuer, urls.Token}, assertion)
+	presented, err = admitWorkloadAssertion(ctx, s.workloadGrant, endpoint.workloadTenancy(), []string{urls.Issuer, urls.Token}, assertion)
 	if err != nil {
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
 	}
 
+	err = s.issueWorkloadSession(ctx, w, endpoint, presented, workloadSessionIssuance{
+		Resource: canonicalResource,
+		BaseURL:  baseURL,
+		Issuer:   "",
+	}, logger)
+	if _, refused := errors.AsType[*workloadGrantError](err); refused {
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
+	}
+	return err
+}
+
+// workloadSessionIssuance is where a session minted for an admitted workload
+// is bound.
+type workloadSessionIssuance struct {
+	// Resource is the endpoint's canonical resource URL, the minted token's
+	// audience.
+	Resource string
+	// BaseURL is the origin the endpoint's resource is served under.
+	BaseURL string
+	// Issuer overrides the minted token's iss. Empty keeps the endpoint's own
+	// issuer.
+	Issuer string
+}
+
+// issueWorkloadSession authorizes an admitted workload against endpoint and
+// mints its session there. It runs the same agent policy check the MCP side
+// runs on every request with the session, stores the session under the
+// endpoint's user session issuer, and writes the token response.
+//
+// A refusal is returned as a *workloadGrantError for the caller to answer, so
+// each authorization server decides how a refused target reads on the wire.
+// Any other error has already been written.
+func (s *Service) issueWorkloadSession(
+	ctx context.Context,
+	w http.ResponseWriter,
+	endpoint *ResolvedMcpEndpoint,
+	presented presentedWorkload,
+	issuance workloadSessionIssuance,
+	logger *slog.Logger,
+) error {
 	subject := urn.NewWorkloadSubject(presented.issuerID, presented.subject)
 	if _, _, err := subject.Workload(); err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("assertion_subject_invalid", err))
+		return refuseWorkloadGrant("assertion_subject_invalid", err)
 	}
 	target, ok := agentAuthorizationTarget(endpoint)
 	if !ok {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("endpoint_not_agent_addressable", errors.New("endpoint cannot carry an agent session policy")))
+		return refuseWorkloadGrant("endpoint_not_agent_addressable", errors.New("endpoint cannot carry an agent session policy"))
 	}
 	version := runtimepolicy.CurrentDelegatedPolicyVersion
 	delegatedGrants, err := encodeAgentSessionPolicy(*target, version)
@@ -387,14 +478,14 @@ func (s *Service) handleWorkloadAssertionGrant(
 	// an internal call, so a namespaced id makes this context session-like.
 	authorizationCtx, err := s.contextForSessionSubject(ctx, endpoint, subject, "workload-grant:"+uuid.NewString(), "")
 	if err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
+		return workloadGrantStageUnavailable("agent_admission_unavailable", err)
 	}
 	authorizationCtx, err = s.admitWorkloadSession(authorizationCtx, endpoint, subject, credential)
 	switch {
 	case errors.Is(err, errWorkloadRolloutDisabled), errors.Is(err, errCredentialRejected), err != nil && isCredentialDenial(err):
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("agent_admission_denied", err))
+		return refuseWorkloadGrant("agent_admission_denied", err)
 	case err != nil:
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
+		return workloadGrantStageUnavailable("agent_admission_unavailable", err)
 	}
 
 	// A database that cannot start or commit the transaction is an outage,
@@ -402,19 +493,20 @@ func (s *Service) handleWorkloadAssertionGrant(
 	// handed a permanent failure.
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("session_persist_unavailable", err))
+		return workloadGrantStageUnavailable("session_persist_unavailable", err)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	lifetime := workloadSessionLifetime
 	minted, err := s.mintSession(authorizationCtx, endpoint, nil, usersessions_repo.New(dbtx), mintSessionParams{
-		Audience:               canonicalResource,
+		Audience:               issuance.Resource,
 		AuthorizationExpiresAt: nil,
 		AuthorizerUserID:       pgtype.Text{String: "", Valid: false},
-		BaseURL:                baseURL,
+		BaseURL:                issuance.BaseURL,
 		DelegatedGrants:        delegatedGrants,
 		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(version), Valid: true},
 		DesiredSessionDuration: &lifetime,
+		Issuer:                 issuance.Issuer,
 		Replayable:             false,
 		Policy:                 sessionIssuancePolicyWorkload,
 		Subject:                subject,
@@ -424,7 +516,7 @@ func (s *Service) handleWorkloadAssertionGrant(
 		return err
 	}
 	if err := dbtx.Commit(ctx); err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("session_persist_unavailable", err))
+		return workloadGrantStageUnavailable("session_persist_unavailable", err)
 	}
 
 	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
@@ -434,7 +526,7 @@ func (s *Service) handleWorkloadAssertionGrant(
 		attr.SlogOAuthGrant(oauthwire.GrantTypeJWTBearer),
 		attr.SlogWorkloadIssuerID(presented.issuerID.String()),
 		attr.SlogWorkloadSubject(presented.subject),
-		attr.SlogOAuthResource(canonicalResource),
+		attr.SlogOAuthResource(issuance.Resource),
 		attr.SlogUserSessionID(minted.ID.String()),
 	)
 	return nil
@@ -465,6 +557,8 @@ func (s *Service) writeWorkloadGrantRefusal(ctx context.Context, w http.Response
 	switch refusal.outcome {
 	case workloadGrantRefused:
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "assertion is invalid")
+	case workloadGrantTargetRefused:
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, "resource is not available")
 	case workloadGrantRateLimited:
 		w.Header().Set("Retry-After", retryAfterSeconds(refusal.retryAfter))
 		return writeTokenError(ctx, w, logger, http.StatusTooManyRequests, oautherr.CodeTemporarilyUnavailable, "too many requests; retry later")

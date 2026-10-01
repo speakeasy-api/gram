@@ -49,7 +49,7 @@ func (f workloadIdentityFixture) projectTier(projectID uuid.UUID) workloadAdmiss
 // admit runs the admission this fixture describes against lookup.
 func (f workloadIdentityFixture) admit(t *testing.T, lookup workloadIdentityLookup) error {
 	t.Helper()
-	return admitWorkloadIdentity(t.Context(), lookup, f.endpoint, f.issuerID, f.subject)
+	return admitWorkloadIdentity(t.Context(), lookup, f.endpoint.workloadTenancy(), f.issuerID, f.subject)
 }
 
 // A static policy naming exactly one subject admits that subject.
@@ -146,7 +146,7 @@ func TestAdmitWorkloadIdentity_OneSubjectFromTwoIssuersDoesNotShareAnAdmission(t
 	// controls every claim in it — asserting a byte-identical subject.
 	staging := uuid.New()
 
-	err := admitWorkloadIdentity(t.Context(), lookup, fixture.endpoint, staging, fixture.subject)
+	err := admitWorkloadIdentity(t.Context(), lookup, fixture.endpoint.workloadTenancy(), staging, fixture.subject)
 
 	require.ErrorIs(t, err, errWorkloadNotAdmitted, "an identical sub from another issuer is another workload")
 }
@@ -162,7 +162,7 @@ func TestAdmitWorkloadIdentity_EmptySubjectIsNeverAdmitted(t *testing.T) {
 	// Even with the empty subject explicitly in the policy.
 	lookup := newStaticWorkloadIdentityLookup(empty)
 
-	err := admitWorkloadIdentity(t.Context(), lookup, fixture.endpoint, fixture.issuerID, "")
+	err := admitWorkloadIdentity(t.Context(), lookup, fixture.endpoint.workloadTenancy(), fixture.issuerID, "")
 
 	require.ErrorIs(t, err, errWorkloadNotAdmitted)
 }
@@ -196,7 +196,7 @@ func TestAdmitWorkloadIdentity_MissingTenancyOrIssuerAdmitsNothing(t *testing.T)
 	}
 
 	require.ErrorIs(t, admitWorkloadIdentity(t.Context(), lookup, nil, fixture.issuerID, fixture.subject), errWorkloadNotAdmitted)
-	require.ErrorIs(t, admitWorkloadIdentity(t.Context(), lookup, fixture.endpoint, uuid.Nil, fixture.subject), errWorkloadNotAdmitted)
+	require.ErrorIs(t, admitWorkloadIdentity(t.Context(), lookup, fixture.endpoint.workloadTenancy(), uuid.Nil, fixture.subject), errWorkloadNotAdmitted)
 	require.False(t, consulted, "an unbuildable key must never reach the lookup")
 }
 
@@ -210,7 +210,7 @@ func TestAdmitWorkloadIdentity_OrganizationTierAdmitsAnyProjectInIt(t *testing.T
 	// A second server in the same organization, in a different project.
 	elsewhere := &ResolvedMcpEndpoint{OrganizationID: fixture.endpoint.OrganizationID, ProjectID: uuid.New()}
 
-	require.NoError(t, admitWorkloadIdentity(t.Context(), lookup, elsewhere, fixture.issuerID, fixture.subject))
+	require.NoError(t, admitWorkloadIdentity(t.Context(), lookup, elsewhere.workloadTenancy(), fixture.issuerID, fixture.subject))
 }
 
 // A project admits its own workload without an organization administrator.
@@ -246,13 +246,13 @@ func TestAdmitWorkloadIdentity_AnOrganizationScopedCallerSeesOnlyTheOrganization
 
 	projectTier := newStaticWorkloadIdentityLookup(fixture.projectTier(fixture.endpoint.ProjectID))
 	require.ErrorIs(t,
-		admitWorkloadIdentity(t.Context(), projectTier, organizationScoped, fixture.issuerID, fixture.subject),
+		admitWorkloadIdentity(t.Context(), projectTier, organizationScoped.workloadTenancy(), fixture.issuerID, fixture.subject),
 		errWorkloadNotAdmitted,
 		"a project's admission must not answer a caller that named no project")
 
 	organizationTier := newStaticWorkloadIdentityLookup(fixture.organizationTier())
 	require.NoError(t,
-		admitWorkloadIdentity(t.Context(), organizationTier, organizationScoped, fixture.issuerID, fixture.subject))
+		admitWorkloadIdentity(t.Context(), organizationTier, organizationScoped.workloadTenancy(), fixture.issuerID, fixture.subject))
 }
 
 // Pins the guard, not a reachable state: no table row carries a zero project
@@ -269,6 +269,6 @@ func TestAdmitWorkloadIdentity_AZeroProjectTierRowAnswersNobody(t *testing.T) {
 	organizationScoped := &ResolvedMcpEndpoint{OrganizationID: fixture.endpoint.OrganizationID}
 
 	require.ErrorIs(t,
-		admitWorkloadIdentity(t.Context(), lookup, organizationScoped, fixture.issuerID, fixture.subject),
+		admitWorkloadIdentity(t.Context(), lookup, organizationScoped.workloadTenancy(), fixture.issuerID, fixture.subject),
 		errWorkloadNotAdmitted)
 }

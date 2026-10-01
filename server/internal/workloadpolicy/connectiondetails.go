@@ -24,6 +24,7 @@ import (
 // cannot drift from what a client discovers.
 type FederationResolver interface {
 	FederationEndpoints(ctx context.Context, organizationID string, server *mcpservers_repo.McpServer) ([]mcp.FederationEndpoint, error)
+	OrganizationAuthorizationServer(ctx context.Context, organizationID string) (mcp.OrganizationAuthorizationServer, error)
 }
 
 func (s *Service) ConnectionDetails(ctx context.Context, payload *gen.ConnectionDetailsPayload) (*gen.WorkloadConnectionDetails, error) {
@@ -109,5 +110,37 @@ func (s *Service) ConnectionDetails(ctx context.Context, payload *gen.Connection
 		McpServerID:   server.ID.String(),
 		McpServerName: conv.FromPGTextOrEmpty[string](server.Name),
 		Endpoints:     endpoints,
+	}, nil
+}
+
+// OrganizationConnectionDetails reads the organization's own token endpoint.
+// It is a sibling of ConnectionDetails rather than a mode of it: it names no
+// MCP server, so it needs no mcp:read and reads the same for every caller in
+// the organization, including one whose API key names a project.
+func (s *Service) OrganizationConnectionDetails(ctx context.Context, _ *gen.OrganizationConnectionDetailsPayload) (*gen.WorkloadOrganizationConnectionDetails, error) {
+	t, err := s.resolve(ctx, authz.ScopeWorkloadRead)
+	if err != nil {
+		return nil, err
+	}
+
+	server, err := s.federation.OrganizationAuthorizationServer(ctx, t.organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve organization authorization server: %w", err)
+	}
+
+	var reason *string
+	if server.NotReady != mcp.FederationReady {
+		reason = new(string(server.NotReady))
+	}
+	return &gen.WorkloadOrganizationConnectionDetails{
+		Available:               server.Enabled,
+		Issuer:                  server.Issuer,
+		TokenEndpoint:           server.TokenEndpoint,
+		MetadataURL:             server.MetadataURL,
+		OnAuthenticationHost:    server.OnAuthenticationHost,
+		GrantTypesSupported:     server.GrantTypesSupported,
+		WorkloadGrantAdvertised: server.WorkloadGrantAdvertised,
+		Ready:                   server.NotReady == mcp.FederationReady,
+		NotReadyReason:          reason,
 	}, nil
 }

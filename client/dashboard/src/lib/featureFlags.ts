@@ -18,6 +18,9 @@ export const FEATURE_FLAGS = {
   mcpScopedPolicies: "gram-mcp-scoped-policies",
   newCostsPage: "gram-new-costs-page",
   oktaConnections: "okta-connections",
+  // Evaluated server-side: the Access Hub reads whether the organization
+  // token endpoint is served from workloadIdentities.organizationConnectionDetails.
+  orgTokenEndpoint: "gram-org-token-endpoint",
   paygSelfServeBilling: "gram-payg-self-serve-billing",
   promptPolicies: "gram-prompt-policies",
   rbac: "gram-rbac",

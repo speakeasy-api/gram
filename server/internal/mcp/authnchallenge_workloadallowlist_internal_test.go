@@ -21,16 +21,17 @@ import (
 
 // workloadTenantEndpoint names the tenancy an admission resolves under, which
 // is what the flight key is built from.
-func workloadTenantEndpoint(organizationID string, projectID, issuerID uuid.UUID) *ResolvedMcpEndpoint {
-	return &ResolvedMcpEndpoint{
+func workloadTenantEndpoint(organizationID string, projectID, issuerID uuid.UUID) *workloadTenancy {
+	endpoint := &ResolvedMcpEndpoint{
 		OrganizationID:      organizationID,
 		ProjectID:           projectID,
 		UserSessionIssuerID: issuerID,
 	}
+	return endpoint.workloadTenancy()
 }
 
 // workloadTestTenant is a fresh, fully distinct tenancy.
-func workloadTestTenant() *ResolvedMcpEndpoint {
+func workloadTestTenant() *workloadTenancy {
 	return workloadTenantEndpoint(uuid.NewString(), uuid.New(), uuid.New())
 }
 
@@ -61,7 +62,7 @@ type countingLookup struct {
 }
 
 func (l *countingLookup) fn() workloadIssuerLookup {
-	return func(_ context.Context, _ *ResolvedMcpEndpoint, _ string) (workloadidentity_repo.WorkloadIssuer, bool, error) {
+	return func(_ context.Context, _ *workloadTenancy, _ string) (workloadidentity_repo.WorkloadIssuer, bool, error) {
 		l.calls.Add(1)
 		l.enter()
 		defer l.running.Add(-1)
@@ -261,12 +262,13 @@ func TestWorkloadIssuerAdmission_UnresolvableInputsFailClosed(t *testing.T) {
 
 	cases := map[string]struct {
 		lookup    func(*countingLookup) workloadIssuerLookup
-		endpoint  *ResolvedMcpEndpoint
+		tenancy   *workloadTenancy
 		issuerURL string
 	}{
-		"unwired lookup": {lookup: func(*countingLookup) workloadIssuerLookup { return nil }, endpoint: workloadTestTenant(), issuerURL: "https://idp.example.test"},
-		"no endpoint":    {lookup: (*countingLookup).fn, endpoint: nil, issuerURL: "https://idp.example.test"},
-		"empty issuer":   {lookup: (*countingLookup).fn, endpoint: workloadTestTenant(), issuerURL: ""},
+		"unwired lookup": {lookup: func(*countingLookup) workloadIssuerLookup { return nil }, tenancy: workloadTestTenant(), issuerURL: "https://idp.example.test"},
+		"no tenancy":     {lookup: (*countingLookup).fn, tenancy: nil, issuerURL: "https://idp.example.test"},
+		"no scope":       {lookup: (*countingLookup).fn, tenancy: &workloadTenancy{OrganizationID: uuid.NewString(), ProjectID: uuid.NullUUID{}, Scope: ""}, issuerURL: "https://idp.example.test"},
+		"empty issuer":   {lookup: (*countingLookup).fn, tenancy: workloadTestTenant(), issuerURL: ""},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -279,7 +281,7 @@ func TestWorkloadIssuerAdmission_UnresolvableInputsFailClosed(t *testing.T) {
 				return allowAllWorkloadLookups(ctx, scope)
 			})
 
-			row, err := admission.admit(t.Context(), tc.endpoint, tc.issuerURL)
+			row, err := admission.admit(t.Context(), tc.tenancy, tc.issuerURL)
 
 			require.ErrorIs(t, err, errWorkloadIssuerUntrusted)
 			require.Equal(t, workloadidentity_repo.WorkloadIssuer{}, row)

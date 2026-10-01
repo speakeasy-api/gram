@@ -235,6 +235,30 @@ var _ = Service("workloadIdentities", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "connectionDetails")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WorkloadConnectionDetails"}`)
 	})
+
+	Method("organizationConnectionDetails", func() {
+		Description("Read the organization's own token endpoint for workload identity tokens: one endpoint at which a platform exchanges an assertion for a session on any of the organization's MCP servers its workload may reach, naming the server by resource. Returns the values the organization's authorization server metadata serves, and whether an exchange there can succeed. Requires workload:read.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(WorkloadOrganizationConnectionDetails)
+
+		HTTP(func() {
+			GET("/rpc/workloadIdentities.organizationConnectionDetails")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getWorkloadOrganizationConnectionDetails")
+		Meta("openapi:extension:x-speakeasy-name-override", "organizationConnectionDetails")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WorkloadOrganizationConnectionDetails"}`)
+	})
 })
 
 var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {
@@ -423,4 +447,22 @@ var WorkloadConnectionDetails = Type("WorkloadConnectionDetails", func() {
 	Attribute("endpoints", ArrayOf(WorkloadConnectionEndpoint), "The server's addresses, platform-host addresses first. Empty when the server has no address.")
 
 	Required("mcp_server_id", "mcp_server_name", "endpoints")
+})
+
+var WorkloadOrganizationConnectionDetails = Type("WorkloadOrganizationConnectionDetails", func() {
+	Description("The values a federating platform is configured with to exchange workload identity tokens at the organization's own token endpoint.")
+
+	Attribute("available", Boolean, "Whether the organization token endpoint is served for this organization. When false its routes answer 404 and a platform must use a server's own token endpoint.")
+	Attribute("issuer", String, "The organization authorization server's issuer identifier, and the iss of the sessions it mints. An assertion's aud must be exactly this or token_endpoint.")
+	Attribute("token_endpoint", String, "Where the platform sends its assertion, naming the MCP server it wants a session for as resource: that server's URL.")
+	Attribute("metadata_url", String, "Where the organization authorization server's RFC 8414 metadata is served.")
+	Attribute("on_authentication_host", Boolean, "Whether token_endpoint is on Gram's dedicated authentication host rather than the platform host.")
+	Attribute("grant_types_supported", ArrayOf(String), "grant_types_supported as the metadata lists it. Empty when the endpoint is not available or the workload grant is not.")
+	Attribute("workload_grant_advertised", Boolean, "Whether the metadata lists the jwt-bearer grant because the clientless workload assertion exchange is available here.")
+	Attribute("ready", Boolean, "Whether nothing Gram knows of stops an exchange here. The platform's own configuration, the trust policy, and which servers the workload's agent may reach are not checked.")
+	Attribute("not_ready_reason", String, "Why an exchange here cannot succeed; absent when ready. organization_endpoint_disabled: the organization is outside the organization token endpoint's rollout. workload_grant_unavailable: the deployment does not serve the workload grant. agent_rollout_disabled: the organization is outside the agent authorization rollout the token endpoint requires.", func() {
+		Enum("organization_endpoint_disabled", "workload_grant_unavailable", "agent_rollout_disabled")
+	})
+
+	Required("available", "issuer", "token_endpoint", "metadata_url", "on_authentication_host", "grant_types_supported", "workload_grant_advertised", "ready")
 })
