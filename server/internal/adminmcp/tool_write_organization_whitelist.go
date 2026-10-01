@@ -18,9 +18,9 @@ import (
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
-const organizationWhitelistSideEffects = "Changes the dashboard's demo-access gate when session information is refreshed. Removing whitelisting may show the demo gate or existing trial-ended screen; it is not credential revocation and does not stop in-flight work. Whitelisting suppresses base-tier access-paused billing notifications. Does not change account type, subscriptions, trial records, provider keys or disabled state. Organisations with any enterprise-trial record are unavailable for this MCP operation. Existing signup, billing and trial lifecycle flows may change whitelisting independently. Records a tenant audit event."
+const organizationWhitelistSideEffects = "Changes the dashboard's demo-access gate when session information is refreshed. Removing whitelisting may show the demo gate or existing trial-ended screen; it is not credential revocation and does not stop in-flight work. Whitelisting suppresses base-tier access-paused billing notifications. Does not change account type, subscriptions, trial records, provider keys or disabled state. Organisations with any trial record, regardless of tier or lifecycle state, are unavailable for this MCP operation. Existing signup, billing and trial lifecycle flows may change whitelisting independently. Records a tenant audit event."
 
-var errWhitelistEnterpriseTrial = errors.New("enterprise-trial organisations are unavailable for this whitelist operation; use the staff dashboard")
+var errWhitelistTrial = errors.New("organisations with a trial record are unavailable for this whitelist operation; use the staff dashboard")
 
 // PrepareOrganizationWhitelistInput describes one exact demo-gate change.
 type PrepareOrganizationWhitelistInput struct {
@@ -67,12 +67,12 @@ func (w *organizationWhitelistWriter) readState(ctx context.Context, tx pgx.Tx, 
 	}
 	// Read after the metadata lock: trial creation takes that same row lock.
 	// A non-locking read avoids reversing conversion's trial-to-organization lock order.
-	trial, err := trialsrepo.New(tx).GetTrial(ctx, organizationID)
+	_, err = trialsrepo.New(tx).GetTrial(ctx, organizationID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return admin.OrganizationWhitelistState{}, fmt.Errorf("check enterprise trial before whitelist change: %w", err)
+		return admin.OrganizationWhitelistState{}, fmt.Errorf("check trial before whitelist change: %w", err)
 	}
-	if err == nil && trial.Tier == "enterprise" {
-		return admin.OrganizationWhitelistState{}, errWhitelistEnterpriseTrial
+	if err == nil {
+		return admin.OrganizationWhitelistState{}, errWhitelistTrial
 	}
 	return state, nil
 }
@@ -86,7 +86,7 @@ func (w *organizationWhitelistWriter) expectedState(ctx context.Context, tx pgx.
 		return organizationWhitelistChange{}, ErrProposalInvalidated
 	}
 	state, err := w.readState(ctx, tx, proposal.Target.OrganizationID)
-	if errors.Is(err, errWhitelistEnterpriseTrial) {
+	if errors.Is(err, errWhitelistTrial) {
 		return organizationWhitelistChange{}, ErrStaleState
 	}
 	if err != nil {
@@ -200,7 +200,7 @@ func (w *organizationWhitelistWriter) execution(authority writeAuthority) Propos
 }
 
 func (w *organizationWhitelistWriter) registerPrepare(server *mcp.Server) {
-	mcp.AddTool(server, &mcp.Tool{Name: "prepare_set_organization_whitelist", Title: "Prepare Organization Whitelist Change", Description: "Prepare changing the dashboard demo-access whitelist for one exact canonical organization ID without an enterprise-trial record. Does not change account type, subscriptions, trial records or disabled state, revoke credentials or stop running work. Whitelisting suppresses base-tier access-paused billing notifications. Returns a stored before/after preview and private same-staff browser approval URL; does not make the change. Requires admin:write."}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareOrganizationWhitelistInput) (*mcp.CallToolResult, ProposalOutput, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "prepare_set_organization_whitelist", Title: "Prepare Organization Whitelist Change", Description: "Prepare changing the dashboard demo-access whitelist for one exact canonical organization ID without any trial record, regardless of tier or lifecycle state. Does not change account type, subscriptions, trial records or disabled state, revoke credentials or stop running work. Whitelisting suppresses base-tier access-paused billing notifications. Returns a stored before/after preview and private same-staff browser approval URL; does not make the change. Requires admin:write."}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareOrganizationWhitelistInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := w.prepare(ctx, input)
 		return nil, out, err
 	})

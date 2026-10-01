@@ -238,16 +238,19 @@ func TestOrganizationWhitelistViewRejectsWrongEnvelope(t *testing.T) {
 	}
 }
 
-func TestOrganizationWhitelistRefusesEnterpriseTrialTargets(t *testing.T) {
+func TestOrganizationWhitelistRefusesTrialTargets(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name      string
+		tier      string
 		converted bool
 		expired   bool
 	}{
-		{name: "running"},
-		{name: "expired", expired: true},
-		{name: "converted", converted: true},
+		{name: "running", tier: "enterprise"},
+		{name: "expired", tier: "enterprise", expired: true},
+		{name: "converted", tier: "enterprise", converted: true},
+		{name: "non_enterprise", tier: "pro"},
+		{name: "unknown_tier", tier: "unknown"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -256,12 +259,17 @@ func TestOrganizationWhitelistRefusesEnterpriseTrialTargets(t *testing.T) {
 			if tc.expired {
 				endsAt = time.Now().Add(-time.Hour)
 			}
-			seedTrial(t, f, f.orgA, endsAt, tc.converted)
-			trialBefore, err := trialsrepo.New(f.db).GetTrial(t.Context(), f.orgA)
+			q := trialsrepo.New(f.db)
+			require.NoError(t, q.CreateTrial(t.Context(), trialsrepo.CreateTrialParams{OrganizationID: f.orgA, Tier: tc.tier, EndsAt: conv.ToPGTimestamptz(endsAt)}))
+			if tc.converted {
+				_, err := q.MarkTrialConverted(t.Context(), f.orgA)
+				require.NoError(t, err)
+			}
+			trialBefore, err := q.GetTrial(t.Context(), f.orgA)
 			require.NoError(t, err)
 			writer, _ := newOrganizationWhitelistWriter(t, f)
 			_, err = writer.prepare(writeContext(t, f), PrepareOrganizationWhitelistInput{OrganizationID: f.orgA, Whitelisted: true, RetryKey: "trial-refused"})
-			require.ErrorIs(t, err, errWhitelistEnterpriseTrial)
+			require.ErrorIs(t, err, errWhitelistTrial)
 			trialAfter, err := trialsrepo.New(f.db).GetTrial(t.Context(), f.orgA)
 			require.NoError(t, err)
 			require.Equal(t, trialBefore, trialAfter)
@@ -273,34 +281,47 @@ func TestOrganizationWhitelistRefusesEnterpriseTrialTargets(t *testing.T) {
 	}
 }
 
-func TestOrganizationWhitelistRefusesNewEnterpriseTrialAtApproval(t *testing.T) {
+func TestOrganizationWhitelistRefusesNewTrialAtApproval(t *testing.T) {
 	t.Parallel()
-	f := newOrganizationWhitelistFixture(t, "admin_mcp_whitelist_trial_approval")
-	writer, _ := newOrganizationWhitelistWriter(t, f)
-	prepared, err := writer.prepare(writeContext(t, f), PrepareOrganizationWhitelistInput{OrganizationID: f.orgA, Whitelisted: true, RetryKey: "new-trial"})
-	require.NoError(t, err)
-	seedTrial(t, f, f.orgA, time.Now().Add(time.Hour), false)
-	proposal, err := f.store.GetForOwner(t.Context(), uuid.MustParse(prepared.ProposalID), f.owner)
-	require.NoError(t, err)
-	_, err = f.store.Approve(t.Context(), proposal.ID, f.owner.SubjectURN, proposal.ProposalDigest, time.Now(), allowProposalBrowser, writer.revalidate)
-	require.ErrorIs(t, err, ErrStaleState)
-	require.Zero(t, auditCount(t, f, audit.ActionOrganizationWhitelistUpdated))
+	for _, tier := range []string{"enterprise", "pro", "unknown"} {
+		t.Run(tier, func(t *testing.T) {
+			t.Parallel()
+			f := newOrganizationWhitelistFixture(t, "admin_mcp_whitelist_trial_approval_"+tier)
+			writer, _ := newOrganizationWhitelistWriter(t, f)
+			prepared, err := writer.prepare(writeContext(t, f), PrepareOrganizationWhitelistInput{OrganizationID: f.orgA, Whitelisted: true, RetryKey: "new-trial"})
+			require.NoError(t, err)
+			require.NoError(t, trialsrepo.New(f.db).CreateTrial(t.Context(), trialsrepo.CreateTrialParams{OrganizationID: f.orgA, Tier: tier, EndsAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour))}))
+			proposal, err := f.store.GetForOwner(t.Context(), uuid.MustParse(prepared.ProposalID), f.owner)
+			require.NoError(t, err)
+			_, err = f.store.Approve(t.Context(), proposal.ID, f.owner.SubjectURN, proposal.ProposalDigest, time.Now(), allowProposalBrowser, writer.revalidate)
+			require.ErrorIs(t, err, ErrStaleState)
+			org, err := orgrepo.New(f.db).GetOrganizationMetadata(t.Context(), f.orgA)
+			require.NoError(t, err)
+			require.False(t, org.Whitelisted)
+			require.Zero(t, auditCount(t, f, audit.ActionOrganizationWhitelistUpdated))
+		})
+	}
 }
 
-func TestOrganizationWhitelistRefusesNewEnterpriseTrialAtExecution(t *testing.T) {
+func TestOrganizationWhitelistRefusesNewTrialAtExecution(t *testing.T) {
 	t.Parallel()
-	f := newOrganizationWhitelistFixture(t, "admin_mcp_whitelist_trial_execution")
-	writer, tools := newOrganizationWhitelistWriter(t, f)
-	prepared, err := writer.prepare(writeContext(t, f), PrepareOrganizationWhitelistInput{OrganizationID: f.orgA, Whitelisted: true, RetryKey: "new-trial"})
-	require.NoError(t, err)
-	approveOrganizationWhitelist(t, f, writer, prepared.ProposalID)
-	seedTrial(t, f, f.orgA, time.Now().Add(time.Hour), false)
-	_, err = tools.execute(writeContext(t, f), ProposalIDInput{ProposalID: prepared.ProposalID})
-	require.ErrorIs(t, err, ErrStaleState)
-	org, err := orgrepo.New(f.db).GetOrganizationMetadata(t.Context(), f.orgA)
-	require.NoError(t, err)
-	require.False(t, org.Whitelisted)
-	require.Zero(t, auditCount(t, f, audit.ActionOrganizationWhitelistUpdated))
+	for _, tier := range []string{"enterprise", "pro", "unknown"} {
+		t.Run(tier, func(t *testing.T) {
+			t.Parallel()
+			f := newOrganizationWhitelistFixture(t, "admin_mcp_whitelist_trial_execution_"+tier)
+			writer, tools := newOrganizationWhitelistWriter(t, f)
+			prepared, err := writer.prepare(writeContext(t, f), PrepareOrganizationWhitelistInput{OrganizationID: f.orgA, Whitelisted: true, RetryKey: "new-trial"})
+			require.NoError(t, err)
+			approveOrganizationWhitelist(t, f, writer, prepared.ProposalID)
+			require.NoError(t, trialsrepo.New(f.db).CreateTrial(t.Context(), trialsrepo.CreateTrialParams{OrganizationID: f.orgA, Tier: tier, EndsAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour))}))
+			_, err = tools.execute(writeContext(t, f), ProposalIDInput{ProposalID: prepared.ProposalID})
+			require.ErrorIs(t, err, ErrStaleState)
+			org, err := orgrepo.New(f.db).GetOrganizationMetadata(t.Context(), f.orgA)
+			require.NoError(t, err)
+			require.False(t, org.Whitelisted)
+			require.Zero(t, auditCount(t, f, audit.ActionOrganizationWhitelistUpdated))
+		})
+	}
 }
 
 func TestOrganizationWhitelistPrepareRequiresAuthority(t *testing.T) {
