@@ -76,9 +76,11 @@ export function useQueryUrl(
   openRef.current = onOpen;
   useEffect(() => {
     if (entry !== "draft" && spec !== null) openRef.current(spec);
-    // Keyed on the entry: a render of the same entry is not an arrival.
+    // Keyed on the entry: a render of the same entry is not an arrival. A
+    // link that only resolves once a refetched catalog names what it asks
+    // for arrives then, so that counts too.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.key]);
+  }, [location.key, spec === null]);
 
   return { spec, edit, ran };
 }

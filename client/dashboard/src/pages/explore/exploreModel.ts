@@ -265,17 +265,22 @@ export function completeMeasures(drafts: MeasureDraft[]): MeasureDraft[] {
 /** At most this many values per filter, matching the analytics design. */
 export const MAX_FILTER_VALUES = 100;
 
+/** A filter's values as the query sends them: trimmed, non-blank, once each. */
+function distinctValues(values: string[]): string[] {
+  return values
+    .map((value) => value.trim())
+    .filter(
+      (value, index, all) => value !== "" && all.indexOf(value) === index,
+    );
+}
+
 export function completeFilters(drafts: FilterDraft[]): AnalyticsFilter[] {
   // The server takes at most this many values per filter and rejects the
   // whole query past it, so the builder never asks for more.
   const out: AnalyticsFilter[] = [];
   for (const draft of drafts) {
     if (draft.field === "") continue;
-    const values = draft.values
-      .map((value) => value.trim())
-      .filter(
-        (value, index, all) => value !== "" && all.indexOf(value) === index,
-      );
+    const values = distinctValues(draft.values);
     if (values.length === 0) continue;
     out.push({
       field: draft.field,
@@ -358,6 +363,14 @@ export function specProblem(
     }
   }
 
+  // The builder never asks for more dimensions than the cap or one twice,
+  // so a spec that does was not made by it.
+  if (
+    spec.dimensions.length > MAX_DIMENSIONS ||
+    new Set(spec.dimensions).size !== spec.dimensions.length
+  ) {
+    return `query asks for duplicate or more than ${MAX_DIMENSIONS} dimensions`;
+  }
   const dimensions = dimensionFields(dataset).map((field) => field.name);
   for (const dimension of spec.dimensions) {
     if (!dimensions.includes(dimension)) {
@@ -367,6 +380,15 @@ export function specProblem(
 
   for (const filter of spec.filters) {
     if (filter.field === "") continue;
+    // Past these bounds the query run would silently drop values, so the
+    // spec is refused rather than answered as a different question.
+    const values = distinctValues(filter.values);
+    if (
+      values.length > MAX_FILTER_VALUES ||
+      (filter.operator === "equals" && values.length > 1)
+    ) {
+      return `filter "${filter.field}" has too many values`;
+    }
     const field = fieldByName(dataset, filter.field);
     if (!operatorsForField(field).includes(filter.operator)) {
       return `field "${filter.field}" cannot be filtered by ${filter.operator} in ${spec.dataset}`;

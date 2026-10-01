@@ -142,5 +142,7 @@ function isChartType(value: unknown): value is ChartType {
 }
 
 function isFilterOperator(value: unknown): value is FilterOperator {
-  return typeof value === "string" && value in FILTER_OPERATOR_LABELS;
+  return (
+    typeof value === "string" && Object.hasOwn(FILTER_OPERATOR_LABELS, value)
+  );
 }

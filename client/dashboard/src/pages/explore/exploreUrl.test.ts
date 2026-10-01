@@ -90,6 +90,13 @@ describe("encodeSpec and decodeSpec", () => {
         filters: [{ field: "user", operator: "like", values: [] }],
       }),
     ],
+    [
+      "a filter operator inherited from Object",
+      JSON.stringify({
+        ...JSON.parse(encodeSpec(spec)),
+        filters: [{ field: "user", operator: "toString", values: [] }],
+      }),
+    ],
   ])("give nothing to restore for %s", (_, raw) => {
     expect(decodeSpec(raw, [sessions])).toBeNull();
   });
@@ -132,6 +139,29 @@ describe("specProblem", () => {
       "a dropped filter field",
       { filters: [{ field: "model", operator: "in", values: ["x"] }] },
       'field "model" cannot be filtered by in in sessions',
+    ],
+    [
+      "a dimension asked for twice",
+      { dimensions: ["user", "user"] },
+      "query asks for duplicate or more than 3 dimensions",
+    ],
+    [
+      "an equals filter with more than one value",
+      { filters: [{ field: "user", operator: "equals", values: ["a", "b"] }] },
+      'filter "user" has too many values',
+    ],
+    [
+      "a filter past the value cap",
+      {
+        filters: [
+          {
+            field: "user",
+            operator: "in",
+            values: Array.from({ length: 101 }, (_, i) => `u${i}`),
+          },
+        ],
+      },
+      'filter "user" has too many values',
     ],
     [
       "an order naming no measure",
