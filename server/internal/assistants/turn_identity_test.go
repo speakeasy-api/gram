@@ -18,6 +18,7 @@ func TestSelectTurnUser(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name, source, payload, mapped, want string
+		legacyUsers                         []string
 		lookupErr                           error
 		wantErr                             bool
 	}{
@@ -25,9 +26,13 @@ func TestSelectTurnUser(t *testing.T) {
 		{name: "unmapped Slack", source: sourceKindSlack, payload: `{"team_id":"workspace-a","user_id":"slack-sender"}`, want: "owner"},
 		{name: "mapping unavailable", source: sourceKindSlack, payload: `{"team_id":"workspace-a","user_id":"slack-sender"}`, lookupErr: errors.New("unavailable"), want: "owner"},
 		{name: "ordinary trigger", source: sourceKindCron, payload: `{}`, want: "owner"},
-		{name: "wake requester", source: sourceKindWake, payload: `{"requester_user_id":"requester"}`, want: "requester"},
-		{name: "wake captured owner", source: sourceKindWake, payload: `{"requester_user_id":"original-owner"}`, want: "original-owner"},
-		{name: "wake reuses Slack thread", source: sourceKindSlack, payload: `{"_gram_source_kind":"wake","requester_user_id":"requester"}`, want: "requester"},
+		{name: "wake requester", source: sourceKindWake, payload: `{"identity_version":1,"requester_user_id":"requester"}`, legacyUsers: []string{"scheduler"}, want: "requester"},
+		{name: "wake captured owner", source: sourceKindWake, payload: `{"identity_version":1,"requester_user_id":"original-owner"}`, want: "original-owner"},
+		{name: "wake reuses Slack thread", source: sourceKindSlack, payload: `{"_gram_source_kind":"wake","identity_version":1,"requester_user_id":"requester"}`, want: "requester"},
+		{name: "unversioned requester ignored without audit", source: sourceKindWake, payload: `{"requester_user_id":"supplied-requester"}`, want: "owner"},
+		{name: "version zero requester cannot override scheduler", source: sourceKindWake, payload: `{"identity_version":0,"requester_user_id":"supplied-requester"}`, legacyUsers: []string{"scheduler"}, want: "scheduler"},
+		{name: "unversioned requester cannot disambiguate audit", source: sourceKindWake, payload: `{"requester_user_id":"supplied-requester"}`, legacyUsers: []string{"scheduler-a", "scheduler-b"}, want: "owner"},
+		{name: "legacy wake recorded scheduler", source: sourceKindWake, payload: `{}`, legacyUsers: []string{"scheduler"}, want: "scheduler"},
 		{name: "legacy wake retains owner", source: sourceKindWake, payload: `{}`, want: "owner"},
 		{name: "legacy wake in Slack thread", source: sourceKindSlack, payload: `{"scheduled_at":"2026-01-01T00:00:00Z"}`, want: "owner"},
 		{name: "new wake missing capture fails closed", source: sourceKindWake, payload: `{"identity_version":1}`, wantErr: true},
@@ -36,13 +41,17 @@ func TestSelectTurnUser(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			assistant := assistantRecord{OrganizationID: "org-a", CreatedByUserID: "owner"}
-			event := assistantThreadEventRecord{NormalizedPayloadJSON: []byte(tc.payload)}
+			event := assistantThreadEventRecord{TriggerInstanceID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, NormalizedPayloadJSON: []byte(tc.payload)}
 			user, err := selectTurnUser(t.Context(), assistant, tc.source, event, func(_ context.Context, p slackrepo.ResolveSlackMappingUserParams) (string, error) {
 				require.Equal(t, "org-a", p.OrganizationID)
 				require.Equal(t, "workspace-a", p.SlackTeamID)
 				require.Equal(t, "slack-sender", p.SlackUserID)
 				return tc.mapped, tc.lookupErr
-			}, nil)
+			}, func(_ context.Context, p assistantrepo.FindLegacyWakeRequesterParams) ([]string, error) {
+				require.Equal(t, "org-a", p.OrganizationID)
+				require.Equal(t, event.TriggerInstanceID.UUID.String(), p.TriggerID)
+				return tc.legacyUsers, nil
+			})
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -61,10 +70,10 @@ func TestTurnUserIneligibleRequesterDoesNotRetryAsOwner(t *testing.T) {
 	core := &ServiceCore{db: db}
 	assistant := assistantRecord{OrganizationID: "org-turn", CreatedByUserID: "eligible-owner"}
 	thread := assistantThreadRecord{SourceKind: sourceKindWake}
-	user, err := core.turnUserID(t.Context(), assistant, thread, assistantThreadEventRecord{NormalizedPayloadJSON: []byte(`{"requester_user_id":"ineligible-requester"}`)})
+	user, err := core.turnUserID(t.Context(), assistant, thread, assistantThreadEventRecord{NormalizedPayloadJSON: []byte(`{"identity_version":1,"requester_user_id":"ineligible-requester"}`)})
 	require.ErrorContains(t, err, "not an active organization member")
 	require.Empty(t, user)
-	user, err = core.turnUserID(t.Context(), assistant, thread, assistantThreadEventRecord{NormalizedPayloadJSON: []byte(`{"requester_user_id":"eligible-owner"}`)})
+	user, err = core.turnUserID(t.Context(), assistant, thread, assistantThreadEventRecord{NormalizedPayloadJSON: []byte(`{"identity_version":1,"requester_user_id":"eligible-owner"}`)})
 	require.NoError(t, err)
 	require.Equal(t, "eligible-owner", user)
 }

@@ -39,12 +39,13 @@ func selectTurnUser(ctx context.Context, assistant assistantRecord, source strin
 		if payload.IdentityVersion != 0 && payload.IdentityVersion != 1 {
 			return "", fmt.Errorf("unsupported wake identity version")
 		}
-		if payload.RequesterUserID != "" {
+		if payload.IdentityVersion == 1 {
+			if payload.RequesterUserID == "" {
+				return "", fmt.Errorf("wake has no captured requester")
+			}
 			return payload.RequesterUserID, nil
 		}
-		if payload.IdentityVersion == 1 {
-			return "", fmt.Errorf("wake has no captured requester")
-		}
+		// Version zero has no captured-requester contract; ignore that field.
 		// Only unversioned legacy wakes retain the old owner selection. Prefer an
 		// unambiguous recorded scheduling actor, not a reconstructed historical user.
 		if event.TriggerInstanceID.Valid && legacyLookup != nil {
