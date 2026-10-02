@@ -208,6 +208,9 @@ func bindingFromRow(org string, project uuid.UUID, b repo.GetAssistantBindingRow
 // LockLiveProject protects a provisioning transaction from project deletion
 // without serializing independent provisioners. A failed lock requires rollback.
 func LockLiveProject(ctx context.Context, tx pgx.Tx, org string, project uuid.UUID) error {
+	if org == "" || project == uuid.Nil {
+		return ErrInvalidIdentity
+	}
 	if _, err := repo.New(tx).LockLiveProject(ctx, repo.LockLiveProjectParams{OrganizationID: org, ProjectID: project}); err != nil {
 		return resourceError("lock live identity project", err)
 	}

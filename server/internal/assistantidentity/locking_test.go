@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
@@ -87,4 +88,23 @@ func TestProjectLivenessLockIsSharedAndRejectsDeletion(t *testing.T) {
 	counts, err := repo.New(f.db).FixtureAuthorityCounts(t.Context(), f.org)
 	require.NoError(t, err)
 	require.Zero(t, counts.Assistants)
+}
+
+func TestProvisionRejectsInvalidProjectIdentityBeforeQuery(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		org     string
+		project uuid.UUID
+	}{
+		{name: "empty organization", project: uuid.New()},
+		{name: "nil project", org: "test-org"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			// A nil transaction ensures invalid input never reaches the database.
+			_, err := testIdentityService.Provision(t.Context(), nil, assistantidentity.ProvisionParams{OrganizationID: tc.org, ProjectID: tc.project, AssistantID: uuid.New(), ActorUserID: "test-actor"})
+			require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity)
+		})
+	}
 }
