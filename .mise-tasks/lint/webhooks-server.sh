@@ -13,7 +13,7 @@ BASE="${usage_base:-origin/main}"
 if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
   BREAKING=$(openapi-changes report --no-logo \
     "${BASE}:${CATALOG}" "${CATALOG}" 2>/dev/null \
-    | jq 'if type != "object" then error("unexpected report output") else [((.reportSummary // {}) | to_entries[]) | .value.breakingChanges] | add // 0 end')
+    | jq '[.reportSummary | to_entries[] | .value.breakingChanges] | add // 0')
 
   if [ "${BREAKING:-0}" -gt 0 ]; then
     openapi-changes markdown-report --no-logo \
