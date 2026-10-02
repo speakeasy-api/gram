@@ -1,7 +1,6 @@
 import { SetupGuideCallout } from "@/components/setup-guide/SetupGuideCallout";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
-import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { useGetMCPSetupDocs } from "@gram/client/react-query/getMCPSetupDocs.js";
 import { useEffect, useId, useState } from "react";
@@ -69,14 +68,14 @@ export function SlackSetup({
       (setup.manualActive &&
         setup.providerCompatible &&
         setup.scopesCompatible));
-  const chooseApp = (create: boolean): void => {
+  const createApp = (): void => {
     if (!canChooseApp) return;
     if (setup.canApplyDefaults) setup.applyDefaults(scopes);
-    setNewApp(create);
+    setNewApp(true);
   };
   return (
     <div className="mb-6 space-y-3 rounded border p-4">
-      <Text className="font-medium">Slack read/search setup</Text>
+      <Text className="font-medium">Slack Setup</Text>
       <Text small muted className="block">
         Choose the information each authorizing user can access. Two public
         channel options are selected by default. No message sending access is
@@ -126,17 +125,6 @@ export function SlackSetup({
           Choose at least one access option.
         </Text>
       )}
-      <Text small className="block">
-        Use an eligible internal or Marketplace-published app. Enable MCP, add
-        the selected user permissions and this redirect URL without replacing
-        unrelated app settings. Workspace approval and individual consent remain
-        separate.
-      </Text>
-      <Input
-        aria-label="Slack OAuth callback URL"
-        value={callback ?? ""}
-        readOnly
-      />
       {!isPending && !callbackValid && (
         <Text small warning className="block">
           Could not load a valid deployment callback. Guided defaults and app
@@ -183,16 +171,8 @@ export function SlackSetup({
         <Button
           variant="secondary"
           className="h-auto min-h-9 max-w-full whitespace-normal"
-          disabled={!canChooseApp || (setup.manualActive && !newApp)}
-          onClick={() => chooseApp(false)}
-        >
-          <Button.Text>Configure an existing Slack app</Button.Text>
-        </Button>
-        <Button
-          variant="secondary"
-          className="h-auto min-h-9 max-w-full whitespace-normal"
           disabled={!canChooseApp || (setup.manualActive && newApp)}
-          onClick={() => chooseApp(true)}
+          onClick={createApp}
         >
           <Button.Text>Create a new Slack app</Button.Text>
         </Button>

@@ -413,17 +413,16 @@ describe("RemoteMcpIdentitySectionBody", () => {
     slackFixture();
     const { container } = renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
-    expect(
-      (screen.getByLabelText("Slack OAuth callback URL") as HTMLInputElement)
-        .value,
-    ).toBe("https://api.example.com/mcp/remote_login_callback");
+    expect(screen.queryByLabelText("Slack OAuth callback URL")).toBeNull();
     fireEvent.click(
-      screen.getByRole("button", { name: "Configure an existing Slack app" }),
+      screen.getByRole("button", { name: "Create a new Slack app" }),
     );
     expect(document.activeElement).toBe(screen.getByLabelText("Client ID"));
-    expect(screen.getByRole("status").textContent).toContain(
-      "Selected access applied. Enter your Slack app's client ID and secret, then Save. Nothing has been saved yet.",
-    );
+    expect(
+      screen.getByText(
+        "Selected access applied. Enter your Slack app's client ID and secret, then Save. Nothing has been saved yet.",
+      ),
+    ).toBeDefined();
     expect(mocks.commit).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText("Client ID"), {
       target: { value: "slack-client" },
@@ -467,11 +466,17 @@ describe("RemoteMcpIdentitySectionBody", () => {
       screen.getByRole("button", { name: "Create a new Slack app" }),
     );
     expect(document.activeElement).toBe(screen.getByLabelText("Client ID"));
-    const config = slackAppConfiguration(
-      "https://api.example.com/mcp/remote_login_callback",
-    )!;
+    const callback = "https://api.example.com/mcp/remote_login_callback";
+    expect(
+      screen.queryByRole("textbox", { name: "Slack OAuth callback URL" }),
+    ).toBeNull();
+    const config = slackAppConfiguration(callback)!;
     const link = screen.getByRole("link", { name: "Open Slack app creation" });
     expect(link.getAttribute("href")).toBe(config.creationUrl);
+    const manifest = JSON.parse(
+      new URL(link.getAttribute("href")!).searchParams.get("manifest_json")!,
+    );
+    expect(manifest.oauth_config.redirect_urls).toEqual([callback]);
     expect(link.getAttribute("rel")).toBe("noopener noreferrer");
     fireEvent.click(screen.getByRole("button", { name: "Copy manifest JSON" }));
     await waitFor(() =>
@@ -486,12 +491,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
       target: { value: "test-secret" },
     });
     expect(link.getAttribute("href")).not.toContain("test-secret");
-    fireEvent.click(
-      screen.getByRole("button", { name: "Configure an existing Slack app" }),
-    );
     expect(
-      screen.queryByRole("link", { name: "Open Slack app creation" }),
+      screen.queryByRole("button", { name: "Configure an existing Slack app" }),
     ).toBeNull();
+    expect(screen.getByRole("link", { name: "Open Slack app creation" })).toBe(
+      link,
+    );
     expect(
       (screen.getByLabelText("Client secret") as HTMLInputElement).value,
     ).toBe("test-secret");
@@ -633,7 +638,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: "Configure an existing Slack app",
+          name: "Create a new Slack app",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -665,7 +670,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       const { refresh } = renderIdentity();
       fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
       fireEvent.click(
-        screen.getByRole("button", { name: "Configure an existing Slack app" }),
+        screen.getByRole("button", { name: "Create a new Slack app" }),
       );
       fireEvent.change(screen.getByLabelText("Client ID"), {
         target: { value: "stale-client" },
@@ -720,7 +725,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
     const action = screen.getByRole("button", {
-      name: "Configure an existing Slack app",
+      name: "Create a new Slack app",
     }) as HTMLButtonElement;
     expect(action.disabled).toBe(true);
     fireEvent.change(screen.getByLabelText("Client ID"), {
@@ -835,7 +840,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
     fireEvent.click(
-      screen.getByRole("button", { name: "Configure an existing Slack app" }),
+      screen.getByRole("button", { name: "Create a new Slack app" }),
     );
     fireEvent.change(screen.getByLabelText("Client ID"), {
       target: { value: "slack-client" },
@@ -857,7 +862,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
   });
   it("names the three identity modes after the upstream service", () => {
     renderIdentity();
-    expect(screen.queryByText("Slack read/search setup")).toBeNull();
+    expect(screen.queryByText("Slack Setup")).toBeNull();
 
     expect(screen.getByRole("radio", { name: /User Identity/ })).toBeDefined();
     expect(
@@ -895,7 +900,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: "Configure an existing Slack app",
+          name: "Create a new Slack app",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -911,7 +916,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
     fireEvent.click(
-      screen.getByRole("button", { name: "Configure an existing Slack app" }),
+      screen.getByRole("button", { name: "Create a new Slack app" }),
     );
     fireEvent.change(screen.getByLabelText("Client ID"), {
       target: { value: "unsaved-client" },
@@ -922,7 +927,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: "Configure an existing Slack app",
+          name: "Create a new Slack app",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -960,7 +965,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: "Configure an existing Slack app",
+          name: "Create a new Slack app",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -985,7 +990,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
     const defaults = screen.getByRole("button", {
-      name: "Configure an existing Slack app",
+      name: "Create a new Slack app",
     }) as HTMLButtonElement;
     await waitFor(() => expect(defaults.disabled).toBe(false));
     fireEvent.click(defaults);
