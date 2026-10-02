@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -47,7 +48,13 @@ var (
 	ErrMCPToolExposureInvalid  = errors.New("invalid MCP tool exposure request")
 	ErrMCPToolExposureConflict = errors.New("MCP tool list changed")
 	ErrMCPToolExposureMissing  = errors.New("MCP tool exposure target not found")
-	ErrToolInventoryCursor     = errors.New("invalid platform mcp tool inventory cursor")
+	// ErrMCPToolExposureShared marks a tool list shared too widely to change
+	// from here. It is deliberately not ErrMCPToolExposureConflict: a conflict
+	// tells the caller to re-read and repeat, and the shipped skill does
+	// exactly that, which for these two refusals would be an instruction to
+	// loop forever on a request that can never succeed.
+	ErrMCPToolExposureShared = errors.New("MCP tool list is shared beyond this change's reach")
+	ErrToolInventoryCursor   = errors.New("invalid platform mcp tool inventory cursor")
 )
 
 // MCPToolExposureError is safe to map into a tool refusal. UnknownTools names
@@ -117,11 +124,6 @@ type MCPToolExposure struct {
 	// warn, and naming servers would report them to a caller admitted only on
 	// this one.
 	SharedWithOther int `json:"shared_with_other_servers"`
-
-	// toolsetVersion is the version-chain number behind ExposureVersion. It
-	// stays internal: a caller passes the opaque token back, and only the
-	// toolsets package reasons about the chain itself.
-	toolsetVersion int64
 }
 
 type ChangeMCPToolsInput struct {
@@ -171,11 +173,21 @@ type MCPToolExposureService struct {
 	cursors     *toolInventoryCursorCodec
 	publication plugins.PublicationRequests
 	publisher   plugins.PluginPublishSignaler
-	now         func() time.Time
+	// reads meters the paginated project tool listing, and changes meters the
+	// write. They are separate allowances because the two cost different
+	// things and must not fund each other: walking the catalogue is a bounded
+	// PostgreSQL read an administrator legitimately repeats while narrowing
+	// down a tool, whereas one write takes the toolset row lock, appends a
+	// version and republishes every plugin carrying the server — so a caller
+	// hunting for a tool must not be able to spend the write allowance, and a
+	// loop of writes must not be fundable by not reading.
+	reads   OperationBudget
+	changes OperationBudget
+	now     func() time.Time
 }
 
-func NewMCPToolExposureService(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, engine *authz.Engine, admin Authorizer, cursorKeyMaterial string, publication plugins.PublicationRequests, publisher plugins.PluginPublishSignaler) (*MCPToolExposureService, error) {
-	if logger == nil || db == nil || auditLogger == nil || engine == nil || admin == nil {
+func NewMCPToolExposureService(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, engine *authz.Engine, admin Authorizer, cursorKeyMaterial string, publication plugins.PublicationRequests, publisher plugins.PluginPublishSignaler, reads, changes OperationBudget) (*MCPToolExposureService, error) {
+	if logger == nil || db == nil || auditLogger == nil || engine == nil || admin == nil || !reads.valid() || !changes.valid() {
 		return nil, ErrMCPToolExposureInvalid
 	}
 	cursors, err := newToolInventoryCursorCodec(cursorKeyMaterial)
@@ -184,12 +196,12 @@ func NewMCPToolExposureService(logger *slog.Logger, db *pgxpool.Pool, auditLogge
 	}
 	return &MCPToolExposureService{
 		db: db, queries: platformrepo.New(db), logger: logger, audit: auditLogger, engine: engine, admin: admin,
-		cursors: cursors, publication: publication, publisher: publisher, now: time.Now,
+		cursors: cursors, publication: publication, publisher: publisher, reads: reads, changes: changes, now: time.Now,
 	}, nil
 }
 
 func (s *MCPToolExposureService) valid() bool {
-	return s != nil && s.db != nil && s.queries != nil && s.audit != nil && s.engine != nil && s.admin != nil && s.cursors != nil && s.now != nil
+	return s != nil && s.db != nil && s.queries != nil && s.audit != nil && s.engine != nil && s.admin != nil && s.cursors != nil && s.reads.valid() && s.changes.valid() && s.now != nil
 }
 
 // ListProjectTools reports the tools a project's latest completed deployment
@@ -211,6 +223,13 @@ func (s *MCPToolExposureService) ListProjectTools(ctx context.Context, principal
 		}
 		after = decoded
 	}
+	// Charged once the input is known good and the caller has already cleared
+	// project read at the tool boundary, which is the order every sibling read
+	// uses: a request that was never going to run must not spend the
+	// allowance, and nothing reaches the database before it is paid for.
+	if err := s.reads.Allow(ctx, principal); err != nil {
+		return ListProjectToolsOutput{}, toolExposureBudgetError(err, "Listing a project's tools was asked for too often just now.")
+	}
 	limit := boundedLimit(input.Limit)
 	rows, err := s.queries.ListPlatformMCPProjectTools(ctx, platformrepo.ListPlatformMCPProjectToolsParams{
 		ProjectID:      project.ID,
@@ -230,7 +249,7 @@ func (s *MCPToolExposureService) ListProjectTools(ctx context.Context, principal
 			output.DeploymentID = row.DeploymentID.String()
 		}
 		output.Tools = append(output.Tools, ProjectTool{
-			Name: row.ToolName, URN: row.ToolUrn, Summary: boundedSummary(row.Summary),
+			Name: row.ToolName, URN: row.ToolUrn, Summary: conv.TruncateString(strings.TrimSpace(row.Summary), toolSummaryLimit),
 			SourceKind: row.SourceKind, SourceSlug: row.SourceSlug, SourceName: row.SourceName,
 		})
 	}
@@ -255,7 +274,11 @@ func (s *MCPToolExposureService) Exposure(ctx context.Context, principal Princip
 	if !s.valid() {
 		return MCPToolExposure{}, ErrUnavailable
 	}
-	return s.exposure(ctx, s.queries, principal, projectID, mcpID)
+	row, err := s.exposureRow(ctx, s.queries, principal, projectID, mcpID)
+	if err != nil {
+		return MCPToolExposure{}, err
+	}
+	return toolExposureFromRow(projectID, mcpID, row), nil
 }
 
 // exposureRow is the untruncated read. The public projection bounds the tool
@@ -274,14 +297,6 @@ func (s *MCPToolExposureService) exposureRow(ctx context.Context, queries *platf
 	return row, nil
 }
 
-func (s *MCPToolExposureService) exposure(ctx context.Context, queries *platformrepo.Queries, principal Principal, projectID, mcpID uuid.UUID) (MCPToolExposure, error) {
-	row, err := s.exposureRow(ctx, queries, principal, projectID, mcpID)
-	if err != nil {
-		return MCPToolExposure{}, err
-	}
-	return toolExposureFromRow(projectID, mcpID, row), nil
-}
-
 func toolExposureFromRow(projectID, mcpID uuid.UUID, row platformrepo.GetPlatformMCPServerToolExposureRow) MCPToolExposure {
 	urns, truncated := boundedRows(row.ToolUrns, maxExposedToolURNs)
 	return MCPToolExposure{
@@ -292,7 +307,6 @@ func toolExposureFromRow(projectID, mcpID uuid.UUID, row platformrepo.GetPlatfor
 		ToolURNs:        slices.Clone(urns),
 		Truncated:       truncated,
 		SharedWithOther: max(len(row.FrontingServerIds)-1, 0),
-		toolsetVersion:  row.ToolsetVersion,
 	}
 }
 
@@ -332,6 +346,13 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 	if err != nil {
 		return MCPToolExposureMutationOutput{}, err
 	}
+	// Charged after validation and authorization and before anything is read
+	// or written, matching the other Platform MCP mutations: a refused or
+	// unauthorized call must not consume the allowance, and no lock is taken
+	// until the write is paid for.
+	if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
+		return MCPToolExposureMutationOutput{}, toolExposureBudgetError(err, "Changing which tools an MCP server exposes was asked for too often just now.")
+	}
 	// The fresh target read, the version check and the tool-name check all
 	// happen inside the receipt transaction. Doing any of them here would
 	// defeat replay: a retry of a change that already committed would report a
@@ -348,7 +369,6 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 	}
 	digest := sha256.Sum256(append([]byte("platform-mcp-tool-exposure-v1\x00"+operation+"\x00"), payload...))
 
-	var toolsetID uuid.UUID
 	receipt, err := executeMutationReceipt(ctx, mutationReceiptExecution[toolExposureReceipt]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operation,
 		IdempotencyKey: input.IdempotencyKey, InputHash: hex.EncodeToString(digest[:]), Label: "MCP tool exposure",
@@ -374,19 +394,27 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 			// committed one, so a concurrent writer cannot be overwritten.
 			row, err := s.exposureRow(ctx, s.queries.WithTx(tx), principal, project.ID, mcpID)
 			if err != nil {
-				return toolExposureReceipt{}, s.classifyTargetError(err)
+				// exposureRow reports only a missing target or a wrapped query
+				// failure, and the latter is already the right error to return
+				// unchanged.
+				if errors.Is(err, ErrMCPToolExposureMissing) {
+					return toolExposureReceipt{}, toolExposureMissing()
+				}
+				return toolExposureReceipt{}, err
 			}
-			locked := toolExposureFromRow(project.ID, mcpID, row)
-			if !hmac.Equal([]byte(locked.ExposureVersion), []byte(input.ExpectedVersion)) {
+			// Compared against the version computed from the committed list
+			// rather than the public projection, which truncates the list it
+			// reports and would therefore be the wrong thing to hash.
+			committed := toolExposureVersion(project.ID, mcpID, row.ToolsetID, row.ToolsetVersion, row.ToolUrns)
+			if !hmac.Equal([]byte(committed), []byte(input.ExpectedVersion)) {
 				return toolExposureReceipt{}, toolExposureConflict()
 			}
 			// Under the same lock that performs the write, so the set of
 			// servers this change moves cannot grow between the check and the
 			// write.
-			if err := s.authorizeEveryAffectedServer(ctx, project.ID, mcpID, row.FrontingServerIds); err != nil {
+			if err := s.authorizeEveryAffectedServer(ctx, project.ID, mcpID, row.FrontingServerIds, row.ForeignFrontingServerCount); err != nil {
 				return toolExposureReceipt{}, err
 			}
-			toolsetID = row.ToolsetID
 			// Both halves refuse a name they cannot act on rather than
 			// reporting it as unchanged. A tool the server already exposes is
 			// still removable after its definition is gone, so a name already
@@ -399,7 +427,7 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 				change = toolsets.ToolExposureChange{Remove: requested}
 			}
 			actor := &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID}
-			applied, err := toolsets.ChangeToolsetToolsInTransaction(ctx, tx, s.logger, s.audit, actor, toolsetID, row.ToolsetVersion, change)
+			applied, err := toolsets.ChangeToolsetToolsInTransaction(ctx, tx, s.logger, s.audit, actor, row.ToolsetID, row.ToolsetVersion, change)
 			if err != nil {
 				return toolExposureReceipt{}, classifyToolExposureError(err)
 			}
@@ -553,7 +581,7 @@ func (s *MCPToolExposureService) resolveTarget(ctx context.Context, principal Pr
 
 // maxFrontingServers bounds how many servers one change may move. A toolset
 // behind more servers than this is a shape the dashboard should resolve, not
-// one to authorize in a loop of unbounded length.
+// one to confirm and move from a single tool call.
 const maxFrontingServers = 20
 
 // authorizeEveryAffectedServer closes the gap between what the caller named
@@ -561,30 +589,48 @@ const maxFrontingServers = 20
 // every live server fronting that toolset is an alias for the same list;
 // checking only the named one would let write access to it change the tools of
 // servers the caller was never authorized for.
-func (s *MCPToolExposureService) authorizeEveryAffectedServer(ctx context.Context, projectID, named uuid.UUID, fronting []uuid.UUID) error {
-	if len(fronting) > maxFrontingServers {
-		return &MCPToolExposureError{
-			Code:    "conflict",
-			Message: "Too many MCP servers offer this same set of tools to change it from here. Edit it in the dashboard, where the shared set and the servers using it are shown together.",
-			Cause:   ErrMCPToolExposureConflict,
-		}
+//
+// fronting carries only this project's servers, and foreignFronting counts the
+// live ones outside it. A foreign id cannot be authorized from here at all:
+// the check injects this project as a selector dimension, so a project-wide
+// mcp:write grant in this project would match it and wave it through. It is
+// therefore excluded from fronting — which leaves the write still moving a
+// server the caller was never checked for, so the change is refused instead.
+func (s *MCPToolExposureService) authorizeEveryAffectedServer(ctx context.Context, projectID, named uuid.UUID, fronting []uuid.UUID, foreignFronting int64) error {
+	if foreignFronting > 0 {
+		return toolExposureSharedOutsideProject()
 	}
+	if len(fronting) > maxFrontingServers {
+		return toolExposureTooManyFrontingServers()
+	}
+	checks := make([]authz.Check, 0, len(fronting))
 	for _, id := range fronting {
 		if id == named {
 			continue
 		}
-		if err := s.engine.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, id.String(), projectID.String())); err != nil {
-			mapped := toolExposureAuthorizationError(err, authz.ScopeMCPWrite)
-			if _, ok := errors.AsType[*ExternalAuthorizationError](mapped); !ok {
-				return toolExposureUnavailable(err)
-			}
-			// The other servers are deliberately not named: the caller has not
-			// cleared their boundary, and the count is what it needs in order
-			// to understand the refusal.
-			return &MCPToolExposureError{
-				Code: "forbidden", Cause: err,
-				Message: "Another MCP server offers this same set of tools, and changing it here would change that one too. You do not have permission to change every server it reaches, so nothing was changed.",
-			}
+		checks = append(checks, authz.MCPCheck(authz.ScopeMCPWrite, id.String(), projectID.String()))
+	}
+	if len(checks) == 0 {
+		return nil
+	}
+	// One Require for the whole set: it is variadic and requires every check
+	// to pass, so the outcome is identical to checking them one at a time.
+	// Looping would re-run the enforcement lookup — and its outbox insert — per
+	// alias on a non-transactional connection while the caller's transaction
+	// holds the toolset row lock, making lock-hold time grow with the number
+	// of aliases for no added safety. The refusal below is server-agnostic, so
+	// nothing is lost by not knowing which check failed.
+	if err := s.engine.Require(ctx, checks...); err != nil {
+		mapped := toolExposureAuthorizationError(err, authz.ScopeMCPWrite)
+		if _, ok := errors.AsType[*ExternalAuthorizationError](mapped); !ok {
+			return toolExposureUnavailable(err)
+		}
+		// The other servers are deliberately not named: the caller has not
+		// cleared their boundary, and the count is what it needs in order
+		// to understand the refusal.
+		return &MCPToolExposureError{
+			Code: "forbidden", Cause: err,
+			Message: "Another MCP server offers this same set of tools, and changing it here would change that one too. You do not have permission to change every server it reaches, so nothing was changed.",
 		}
 	}
 	return nil
@@ -622,16 +668,6 @@ func (s *MCPToolExposureService) requireKnownTools(ctx context.Context, queries 
 		Code: "invalid_request", UnknownTools: unknown, Cause: ErrMCPToolExposureInvalid,
 		Message: "Some of the named tools are neither produced by this project's latest deployment nor already on this MCP server, so nothing was changed. List the project's tools again; a tool pushed after that deployment finished is not available until the new one completes.",
 	}
-}
-
-func (s *MCPToolExposureService) classifyTargetError(err error) error {
-	if errors.Is(err, ErrMCPToolExposureMissing) {
-		return toolExposureMissing()
-	}
-	if errors.Is(err, ErrUnavailable) {
-		return toolExposureUnavailable(err)
-	}
-	return err
 }
 
 func classifyToolExposureError(err error) error {
@@ -690,6 +726,37 @@ func toolExposureConflict() error {
 	}
 }
 
+// toolExposureTooManyFrontingServers and toolExposureSharedOutsideProject are
+// structural, not optimistic-concurrency failures: re-reading and repeating
+// reaches the same answer every time, because the shape of the sharing is what
+// is refused. Both carry their own code and point at the dashboard, the way
+// toolExposureMissing does for a target this workflow cannot act on.
+func toolExposureTooManyFrontingServers() error {
+	return &MCPToolExposureError{
+		Code:    "shared_tool_list",
+		Message: "Too many MCP servers offer this same set of tools to change it from here, and re-reading will not change that. Edit it in the dashboard, where the shared set and the servers using it are shown together.",
+		Cause:   ErrMCPToolExposureShared,
+	}
+}
+
+func toolExposureSharedOutsideProject() error {
+	return &MCPToolExposureError{
+		Code:    "shared_outside_project",
+		Message: "This set of tools is also offered by an MCP server outside this project, so changing it here would change a server this project's permissions do not cover. Nothing was changed, and re-reading will not change that. Edit it in the dashboard, where the shared set and every server using it are shown together.",
+		Cause:   ErrMCPToolExposureShared,
+	}
+}
+
+// toolExposureBudgetError keeps a throttle readable and distinct from the
+// generic unavailable refusal, so a caller waits and retries rather than
+// treating a spent allowance as a broken feature.
+func toolExposureBudgetError(err error, message string) error {
+	if errors.Is(err, ErrOperationRateLimited) {
+		return &MCPToolExposureError{Code: "rate_limited", Message: message + " Try again shortly.", Cause: err}
+	}
+	return toolExposureUnavailable(err)
+}
+
 func toolExposureMissing() error {
 	return &MCPToolExposureError{
 		Code:    "not_found",
@@ -710,6 +777,20 @@ func toolExposureUnavailable(cause error) error {
 // exact list. Two toolsets at the same version number never share a token, and
 // a list edited and reverted between reads yields the token it started with —
 // which is the honest answer, because the committed list is the same one.
+//
+// The digest is deliberately unkeyed, unlike this package's riskVersionCodec,
+// distributionVersionTokenCodec and shadowDecisionVersionCodec, and like its
+// nearest neighbour connection_settings.go. Those codecs sign state the caller
+// must not be able to synthesize — a decision id, an audience, a distribution
+// version — where minting a token would grant authority the caller does not
+// hold. This token's entire preimage is the committed list itself, so anyone
+// who can compute it already knows the state a read would have returned; there
+// is nothing left for a signature to prove. Its job is detecting that the
+// committed list moved between read and write, which an unkeyed digest does
+// exactly as well. Proof of confirmation is carried separately, by the
+// explicit Confirmed flag and the shipped skill, not by this token. If the
+// token ever starts carrying state the caller is not otherwise told — a
+// principal, an expiry, a decision — it must become a keyed codec.
 func toolExposureVersion(projectID, mcpServerID, toolsetID uuid.UUID, version int64, urns []string) string {
 	sorted := slices.Clone(urns)
 	slices.Sort(sorted)
@@ -735,15 +816,10 @@ func toolURNStrings(tools []urn.Tool) []string {
 	return values
 }
 
-func boundedSummary(value string) string {
-	trimmed := strings.TrimSpace(value)
-	const limit = 240
-	runes := []rune(trimmed)
-	if len(runes) <= limit {
-		return trimmed
-	}
-	return string(runes[:limit])
-}
+// toolSummaryLimit bounds a tool's own description so one page of results
+// stays readable in a caller's context. The cut is by rune, which is what
+// conv.TruncateString does.
+const toolSummaryLimit = 240
 
 type toolInventoryCursor struct {
 	OrganizationID string `json:"organization_id"`

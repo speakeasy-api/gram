@@ -3618,6 +3618,10 @@ func TestGeneratePlatformMCPPackageEmitsToolExposureWorkflow(t *testing.T) {
 		"the `exposure_version` from the step-4 read",
 		"Never reuse the old exposure version",
 		"refused to avoid overwriting somebody else's edit",
+		// A shared tool list is structural, so the workflow must not send the
+		// caller back to a fresh read on it the way a conflict does.
+		"shared beyond what this change can reach is final, not a race",
+		"never loop back to a fresh read on it",
 		"Nothing is dropped silently.",
 		"Do not choose for them",
 		"Never retry a mutation automatically",

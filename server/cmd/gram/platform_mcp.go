@@ -432,7 +432,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
-		WithToolExposure(newPlatformMCPToolExposure(config, authorizer))
+		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore))
 	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
 	attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
@@ -643,10 +643,22 @@ func newPlatformMCPDistributionService(config platformMCPConfig, pluginTargets p
 // decide which tools a hosted MCP server exposes. A composition failure leaves
 // the tools registered as stable refusals rather than removing them from the
 // catalogue.
-func newPlatformMCPToolExposure(config platformMCPConfig, authorizer platformmcp.Authorizer) *platformmcp.MCPToolExposureService {
+func newPlatformMCPToolExposure(config platformMCPConfig, authorizer platformmcp.Authorizer, limitStore ratelimit.Store) *platformmcp.MCPToolExposureService {
 	service, err := platformmcp.NewMCPToolExposureService(
 		config.Logger, config.DB, config.AuditLogger, config.Authz, authorizer, config.JWTSigningKey,
 		config.PublicationRequests, config.PluginPublishSignaler,
+		// The catalogue read is metered well above the write: an administrator
+		// narrowing down one tool legitimately pages through it, while each
+		// write locks the toolset and republishes every plugin carrying the
+		// server. Separate allowances so neither can fund the other.
+		platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.ToolExposureReadConnectionLimitName, ratelimit.PerMinute(platformmcp.ToolExposureReadsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.ToolExposureReadOrganizationLimitName, ratelimit.PerMinute(platformmcp.ToolExposureReadsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
+		platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.ToolExposureMutationConnectionLimitName, ratelimit.PerMinute(platformmcp.ToolExposureMutationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.ToolExposureMutationOrganizationLimitName, ratelimit.PerMinute(platformmcp.ToolExposureMutationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 	)
 	if err != nil {
 		config.Logger.WarnContext(context.Background(), "Platform MCP tool exposure unavailable", attr.SlogError(err))
@@ -898,7 +910,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
-		WithToolExposure(newPlatformMCPToolExposure(config, authorizer))
+		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore))
 	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
 	if shadowErr != nil {
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(shadowErr))

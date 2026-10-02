@@ -6,8 +6,14 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestToolInventoryCursorBindsContinuationToPrincipalProjectAndFilters(t *testing.T) {
@@ -151,6 +157,71 @@ func TestToolExposureRefusalNamesTheToolsItRefused(t *testing.T) {
 	missingText, isText := missing.Content[0].(*mcp.TextContent)
 	require.True(t, isText)
 	require.Contains(t, missingText.Text, "dashboard", "a server outside this workflow points the caller somewhere that can do it")
+}
+
+// A shared tool list is a shape, not a race. Reporting it as a conflict would
+// send a caller following the shipped skill back to a fresh read and the same
+// refusal, forever, so these two carry their own codes and say re-reading will
+// not help.
+func TestToolExposureSharedRefusalsAreNotConflicts(t *testing.T) {
+	t.Parallel()
+
+	for code, err := range map[string]error{
+		"shared_tool_list":       toolExposureTooManyFrontingServers(),
+		"shared_outside_project": toolExposureSharedOutsideProject(),
+	} {
+		require.ErrorIs(t, err, ErrMCPToolExposureShared, "%s", code)
+		require.NotErrorIs(t, err, ErrMCPToolExposureConflict,
+			"%s must not read as an optimistic-concurrency failure the caller should retry", code)
+
+		result, ok := toolExposureToolResult(err)
+		require.True(t, ok, "%s", code)
+		require.True(t, result.IsError, "%s", code)
+		text, isText := result.Content[0].(*mcp.TextContent)
+		require.True(t, isText, "%s", code)
+		var refusal toolExposureRefusal
+		require.NoError(t, json.Unmarshal([]byte(text.Text), &refusal))
+		require.Equal(t, code, refusal.Code)
+		require.Contains(t, refusal.Message, "dashboard", "%s points somewhere that can do it", code)
+		require.Contains(t, refusal.Message, "re-reading will not", "%s tells the caller not to loop", code)
+	}
+}
+
+// A spent allowance is a wait, not a broken feature: it must not be reported
+// as the generic unavailable refusal, which reads as "this does not work here".
+func TestToolExposureBudgetRefusalsTellThrottleFromFailure(t *testing.T) {
+	t.Parallel()
+
+	throttled := toolExposureBudgetError(ErrOperationRateLimited, "Listing a project's tools was asked for too often just now.")
+	var refusal *MCPToolExposureError
+	require.ErrorAs(t, throttled, &refusal)
+	require.Equal(t, "rate_limited", refusal.Code)
+	require.Contains(t, refusal.Message, "Try again shortly")
+
+	broken := toolExposureBudgetError(ErrOperationBudgetUnavailable, "Listing a project's tools was asked for too often just now.")
+	require.ErrorAs(t, broken, &refusal)
+	require.Equal(t, unavailableCode, refusal.Code)
+	require.ErrorIs(t, broken, ErrUnavailable)
+}
+
+// The service refuses to compose without both allowances, so a deployment can
+// never register these tools as live while they are unmetered.
+func TestToolExposureServiceRequiresBothOperationBudgets(t *testing.T) {
+	t.Parallel()
+
+	compose := func(reads, changes OperationBudget) error {
+		_, err := NewMCPToolExposureService(
+			testenv.NewLogger(t), &pgxpool.Pool{}, audit.NewLogger(), &authz.Engine{},
+			allowExternalCallAuthorizer{}, "key", plugins.PublicationRequests{}, nil, reads, changes,
+		)
+		return err
+	}
+
+	require.ErrorIs(t, compose(OperationBudget{}, testOperationBudget()), ErrMCPToolExposureInvalid,
+		"a read without an allowance does not compose")
+	require.ErrorIs(t, compose(testOperationBudget(), OperationBudget{}), ErrMCPToolExposureInvalid,
+		"a write without an allowance does not compose")
+	require.NoError(t, compose(testOperationBudget(), testOperationBudget()))
 }
 
 // The tool list belongs to the server detail, not to the list of servers: an

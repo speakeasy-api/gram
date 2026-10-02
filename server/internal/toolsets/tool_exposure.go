@@ -31,13 +31,10 @@ type ToolExposureChange struct {
 // ToolExposureResult reports what the append actually did, separately from what
 // was asked for, so a caller can tell a real change from a no-op.
 type ToolExposureResult struct {
-	ToolsetID      uuid.UUID
-	ToolsetSlug    string
-	ToolsetName    string
-	VersionBefore  int64
-	VersionAfter   int64
-	ToolURNsBefore []urn.Tool
-	ToolURNsAfter  []urn.Tool
+	// VersionAfter is the version the toolset is on once this call returns:
+	// the version it was read at when Changed is false, one past it otherwise.
+	// It is what a caller stores so a replay can report the same outcome.
+	VersionAfter int64
 	// Applied names the URNs this call added or removed. Unchanged names the
 	// URNs that were already in the requested state, which is a no-op rather
 	// than a failure.
@@ -90,13 +87,12 @@ func ChangeToolsetToolsInTransaction(ctx context.Context, tx pgx.Tx, logger *slo
 		return ToolExposureResult{}, oops.E(oops.CodeConflict, nil, "the toolset's tools changed since they were read")
 	}
 
-	before := slices.Clone(latest.ToolUrns)
-	after, applied, unchanged := applyToolExposureChange(before, change)
+	// applyToolExposureChange never writes through its first argument, so the
+	// committed list is passed straight in rather than defensively cloned.
+	after, applied, unchanged := applyToolExposureChange(latest.ToolUrns, change)
 	result := ToolExposureResult{
-		ToolsetID: locked.ID, ToolsetSlug: locked.Slug, ToolsetName: locked.Name,
-		VersionBefore: latest.Version, VersionAfter: latest.Version,
-		ToolURNsBefore: before, ToolURNsAfter: before,
-		Applied: applied, Unchanged: unchanged, Changed: false,
+		VersionAfter: latest.Version,
+		Applied:      applied, Unchanged: unchanged, Changed: false,
 	}
 	if len(applied) == 0 {
 		return result, nil
@@ -145,7 +141,6 @@ func ChangeToolsetToolsInTransaction(ctx context.Context, tx pgx.Tx, logger *slo
 	}
 
 	result.VersionAfter = latest.Version + 1
-	result.ToolURNsAfter = after
 	result.Changed = true
 	return result, nil
 }
@@ -153,11 +148,16 @@ func ChangeToolsetToolsInTransaction(ctx context.Context, tx pgx.Tx, logger *slo
 // applyToolExposureChange keeps the surviving order stable so a version diff
 // reads as the edit that was made rather than as a reshuffle.
 func applyToolExposureChange(current []urn.Tool, change ToolExposureChange) (after, applied, unchanged []urn.Tool) {
+	// Tool.String concatenates four fields, so it allocates on every call. The
+	// currently exposed list is unbounded while one change names at most 50
+	// tools, so each exposed tool is rendered exactly once here and the result
+	// is reused by whichever branch runs.
+	keys := make([]string, len(current))
 	present := make(map[string]bool, len(current))
-	for _, tool := range current {
-		present[tool.String()] = true
+	for i, tool := range current {
+		keys[i] = tool.String()
+		present[keys[i]] = true
 	}
-	after = slices.Clone(current)
 	applied, unchanged = []urn.Tool{}, []urn.Tool{}
 	if len(change.Remove) > 0 {
 		removing := make(map[string]bool, len(change.Remove))
@@ -169,14 +169,15 @@ func applyToolExposureChange(current []urn.Tool, change ToolExposureChange) (aft
 			}
 			unchanged = append(unchanged, tool)
 		}
-		after = after[:0]
-		for _, tool := range current {
-			if !removing[tool.String()] {
+		after = make([]urn.Tool, 0, len(current))
+		for i, tool := range current {
+			if !removing[keys[i]] {
 				after = append(after, tool)
 			}
 		}
 		return after, applied, unchanged
 	}
+	after = slices.Clone(current)
 	for _, tool := range change.Add {
 		if present[tool.String()] {
 			unchanged = append(unchanged, tool)

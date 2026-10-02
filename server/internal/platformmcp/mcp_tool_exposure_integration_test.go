@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -120,7 +121,7 @@ func seedToolExposureFixture(t *testing.T, ctx context.Context, name string) (co
 	// membership and the org:admin grant against the database, so the test
 	// only passes when the seeded caller really is a live administrator.
 	admin := NewLiveOrgAdminAuthorizer(conn, engine)
-	service, err := NewMCPToolExposureService(testenv.NewLogger(t), conn, audit.NewLogger(), engine, admin, "tool-exposure-cursor-key", plugins.PublicationRequests{}, nil)
+	service, err := NewMCPToolExposureService(testenv.NewLogger(t), conn, audit.NewLogger(), engine, admin, "tool-exposure-cursor-key", plugins.PublicationRequests{}, nil, testOperationBudget(), testOperationBudget())
 	require.NoError(t, err)
 
 	return ctx, toolExposureFixture{principal: principal, project: project, toolsetID: toolset.ID, service: service, conn: conn, tools: tools, grants: grants}
@@ -395,6 +396,63 @@ func TestChangeMCPToolsAuthorizesEveryServerSharingTheToolList(t *testing.T) {
 	require.Equal(t, 1, applied.Exposure.SharedWithOther)
 }
 
+// Nothing in the schema pairs mcp_servers.toolset_id with project_id, so a
+// server in a different project can front this toolset. Authorizing such an id
+// from here is not possible: authz.MCPCheck injects the named project as a
+// selector dimension precisely so project-scoped grants match, which means a
+// project-wide mcp:write in THIS project satisfies the check for a foreign
+// server id. So the foreign server must be excluded from the authorized set
+// AND the change must be refused, because the write would otherwise move it
+// silently.
+func TestChangeMCPToolsRefusesAToolListSharedWithAnotherProject(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_tools_foreign_project")
+
+	foreignProject, err := projectsrepo.New(fixture.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "Other project", Slug: "other-" + uuid.NewString()[:8], OrganizationID: fixture.principal.OrganizationID,
+	})
+	require.NoError(t, err)
+	foreignServer := uuid.New()
+	_, err = mcpserversrepo.New(fixture.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: foreignServer, ProjectID: foreignProject.ID, Name: conv.ToPGText("Foreign front"),
+		Slug: conv.ToPGText("foreign-front"), ToolsetID: uuid.NullUUID{UUID: fixture.toolsetID, Valid: true},
+		Visibility: "private",
+	})
+	require.NoError(t, err)
+
+	shared, err := fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID)
+	require.NoError(t, err)
+	require.Equal(t, 0, shared.SharedWithOther,
+		"the foreign server is not counted among the servers this project's permissions cover")
+
+	// Even holding mcp:write on the foreign server id — which a project-wide
+	// grant in this project would supply for free — the change is refused.
+	_, err = fixture.add(t, fixture.grantMCP(ctx, foreignServer), shared.ExposureVersion, fixture.tools[0])
+	var refusal *MCPToolExposureError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, "shared_outside_project", refusal.Code)
+	require.ErrorIs(t, err, ErrMCPToolExposureShared,
+		"a structural refusal, not a conflict the caller should re-read and retry")
+	require.NotErrorIs(t, err, ErrMCPToolExposureConflict)
+	require.Contains(t, refusal.Message, "dashboard")
+	require.NotContains(t, refusal.Message, foreignServer.String(), "the foreign server is not named")
+	require.NotContains(t, refusal.Message, foreignProject.ID.String(), "nor is its project")
+
+	_, err = toolsetsrepo.New(fixture.conn).GetLatestToolsetVersion(ctx, fixture.toolsetID)
+	require.ErrorIs(t, err, pgx.ErrNoRows, "nothing was written for either project's server")
+
+	// Once the foreign server is gone the same change goes through, which
+	// proves the refusal was about the sharing and not about the request.
+	_, err = mcpserversrepo.New(fixture.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{
+		ID: foreignServer, ProjectID: foreignProject.ID,
+	})
+	require.NoError(t, err)
+	applied, err := fixture.add(t, ctx, shared.ExposureVersion, fixture.tools[0])
+	require.NoError(t, err)
+	require.Equal(t, "applied", applied.Outcome)
+	require.Equal(t, []string{fixture.tools[0]}, applied.Exposure.ToolURNs)
+}
+
 // Removal refuses a name it cannot act on for the same reason adding does: a
 // silent "unchanged" for a mistyped URN reads exactly like "that tool was
 // already gone". A tool the server really exposes stays removable even once
@@ -533,7 +591,9 @@ func invokeUnavailable(t *testing.T, descriptor Descriptor, arguments map[string
 	t.Helper()
 	encoded, err := json.Marshal(arguments)
 	require.NoError(t, err)
-	_, err = descriptor.invoke(t.Context(), encoded)
+	// Through the exported accessor, so the nil guard it exists for is part of
+	// what this exercises rather than bypassed.
+	_, err = descriptor.Invoke(t.Context(), encoded)
 	require.Error(t, err)
 	var refusal *ToolRefusalError
 	require.ErrorAs(t, err, &refusal)
