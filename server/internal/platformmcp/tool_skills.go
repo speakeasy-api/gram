@@ -42,7 +42,7 @@ type ListSkillSuggestionsToolInput struct {
 	ProjectSlug            string `json:"project_slug" jsonschema:"explicit project slug whose open suggestions to review"`
 	SkillID                string `json:"skill_id,omitempty" jsonschema:"optional skill ID returned by list_skills; omit to review suggestions across the project"`
 	IncludeProposedContent bool   `json:"include_proposed_content,omitempty" jsonschema:"include each complete proposed SKILL.md; off by default because a manifest is up to 64 KiB"`
-	OmitDiffs              bool   `json:"omit_diffs,omitempty" jsonschema:"leave each change's proposed diff out and return only its ID, rationale, and evidence counts; use to triage a large queue, then read one skill's suggestions with diffs"`
+	OmitDiffs              bool   `json:"omit_diffs,omitempty" jsonschema:"leave each change's proposed diff out; every other field, including its ID, rationale, whether it applies cleanly, and its feedback counts, is still returned. Use to triage a large queue, then read one skill's suggestions with diffs"`
 	Cursor                 string `json:"cursor,omitempty" jsonschema:"pagination cursor returned by a previous list_skill_suggestions call"`
 	Limit                  int    `json:"limit,omitempty" jsonschema:"maximum suggestions to return; defaults to 20 and is capped at 50"`
 }
