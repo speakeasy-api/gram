@@ -1630,6 +1630,9 @@ CREATE TABLE IF NOT EXISTS trigger_instances (
   CONSTRAINT trigger_instances_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_organization_project_id_key
+ON trigger_instances (organization_id, project_id, id);
+
 CREATE INDEX IF NOT EXISTS trigger_instances_project_id_idx
 ON trigger_instances (project_id, created_at DESC)
 WHERE deleted IS FALSE;
@@ -3106,6 +3109,8 @@ WHERE deleted IS FALSE;
 -- predicate every query has to remember.
 CREATE TABLE IF NOT EXISTS workload_issuers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  -- System issuers are provisioned internally, never through remote assertions.
+  issuer_kind TEXT NOT NULL DEFAULT 'remote',
   organization_id TEXT NOT NULL,
   -- NULL is the organization tier; set is the project tier. There is
   -- deliberately no third state.
@@ -3130,9 +3135,8 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
   -- input, never to this column.
   issuer TEXT NOT NULL,
 
-  -- The only field the verification path reads, so a row without one can
-  -- verify nothing and should not be creatable.
-  jwks_uri TEXT NOT NULL,
+  -- Remote issuers require JWKS. System issuers have no external trust source.
+  jwks_uri TEXT,
 
   -- Whether this issuer's admissions and agent assignments may match a subject
   -- by a trailing wildcard rather than in full. On by default, and not asked for
@@ -3173,6 +3177,10 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT workload_issuers_pkey PRIMARY KEY (id),
+  CONSTRAINT workload_issuers_trust_source_check CHECK (
+    (issuer_kind <> 'remote' OR jwks_uri IS NOT NULL) AND
+    (issuer_kind <> 'system' OR (jwks_uri IS NULL AND project_id IS NOT NULL AND NOT allow_wildcard_admission))
+  ),
   CONSTRAINT workload_issuers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   -- Composite rather than a plain reference: a project belonging to another
   -- organization becomes a schema error rather than a row every handler has to
@@ -3184,6 +3192,14 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
 -- workload table pins its tenancy through it, so a row in one organization
 -- cannot reference another organization's issuer. Declared as a unique index
 -- rather than a table constraint so Atlas builds it concurrently.
+CREATE UNIQUE INDEX IF NOT EXISTS workload_issuers_tenant_kind_key
+ON workload_issuers (organization_id, project_id, id, issuer_kind);
+
+-- Soft deletion does not release a first-party issuer identity for replacement.
+CREATE UNIQUE INDEX IF NOT EXISTS workload_issuers_system_project_key
+ON workload_issuers (organization_id, project_id)
+WHERE issuer_kind = 'system';
+
 CREATE UNIQUE INDEX IF NOT EXISTS workload_issuers_organization_id_id_key
 ON workload_issuers (organization_id, id);
 
@@ -3815,6 +3831,10 @@ ON chats (id, project_id);
 
 CREATE TABLE IF NOT EXISTS assistants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  -- Retained across soft deletion; the service compares normalized request hashes
+  -- before returning a prior creation for the same project-scoped retry key.
+  create_request_key TEXT,
+  create_request_hash TEXT,
   project_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
   created_by_user_id TEXT,
@@ -3831,6 +3851,7 @@ CREATE TABLE IF NOT EXISTS assistants (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT assistants_pkey PRIMARY KEY (id),
+  CONSTRAINT assistants_create_request_check CHECK ((create_request_key IS NULL) = (create_request_hash IS NULL)),
   CONSTRAINT assistants_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
@@ -3839,6 +3860,13 @@ ON assistants (project_id, name)
 WHERE deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_id_key ON assistants (project_id, id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistants_organization_project_id_key
+ON assistants (organization_id, project_id, id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistants_create_request_key
+ON assistants (project_id, create_request_key)
+WHERE create_request_key IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS skill_distributions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -5056,6 +5084,8 @@ ON slack_identity_mappings (user_id, organization_id);
 
 CREATE TABLE IF NOT EXISTS agents (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
+  -- The service advances this on authority/owner changes, including reinstatement.
+  identity_epoch BIGINT NOT NULL DEFAULT 1,
   organization_id TEXT NOT NULL,
   owner_user_id TEXT NOT NULL,
 
@@ -5084,12 +5114,16 @@ CREATE TABLE IF NOT EXISTS agents (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT agents_pkey PRIMARY KEY (id),
+  CONSTRAINT agents_identity_epoch_check CHECK (identity_epoch > 0),
   CONSTRAINT agents_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT agents_owner_tenant_fkey FOREIGN KEY (organization_id, owner_user_id) REFERENCES organization_user_relationships (organization_id, user_id) ON DELETE RESTRICT,
   CONSTRAINT agents_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
   CONSTRAINT agents_lifecycle_state_check CHECK (revoked_at IS NULL OR suspended_at IS NULL),
   CONSTRAINT agents_owner_reassignment_state_check CHECK ((owner_reassignment_required_at IS NULL) = (owner_reassignment_reason IS NULL))
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS agents_organization_project_id_key
+ON agents (organization_id, project_id, id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS agents_organization_id_id_key
 ON agents (organization_id, id);
@@ -5383,6 +5417,164 @@ ON workload_agent_assignments (organization_id, agent_id);
 CREATE INDEX IF NOT EXISTS workload_agent_assignments_workload_issuer_idx
 ON workload_agent_assignments (organization_id, workload_issuer_id);
 
+
+-- Binding history is retained even when live resources are hard-deleted. Original
+-- association keys and tenant keys are immutable in the service; nullable refs are
+-- only liveness signals. Missing refs must never select legacy authorization.
+-- Each FK owns a nullable tenant tuple: SET NULL clears that tuple without
+-- erasing provenance. All-or-none checks close the composite FK NULL loophole.
+-- Generations identify incarnations: lock the original resource before allocating
+-- above all retained generations, tombstone old incarnations, and never reuse them.
+CREATE TABLE IF NOT EXISTS assistant_agent_bindings (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  project_ref_organization_id TEXT,
+  project_ref_id uuid,
+  original_assistant_id uuid NOT NULL,
+  assistant_ref_organization_id TEXT,
+  assistant_ref_project_id uuid,
+  assistant_id uuid,
+  original_agent_id uuid NOT NULL,
+  agent_ref_organization_id TEXT,
+  agent_ref_project_id uuid,
+  agent_id uuid,
+  generation BIGINT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT assistant_agent_bindings_pkey PRIMARY KEY (id),
+  CONSTRAINT assistant_agent_bindings_generation_check CHECK (generation > 0),
+  CONSTRAINT assistant_agent_bindings_project_ref_check CHECK (
+    (project_ref_organization_id IS NULL AND project_ref_id IS NULL) OR
+    (project_ref_organization_id IS NOT NULL AND project_ref_id IS NOT NULL AND
+     project_ref_organization_id = organization_id AND project_ref_id = project_id)
+  ),
+  CONSTRAINT assistant_agent_bindings_assistant_ref_check CHECK (
+    (assistant_ref_organization_id IS NULL AND assistant_ref_project_id IS NULL AND assistant_id IS NULL) OR
+    (assistant_ref_organization_id IS NOT NULL AND assistant_ref_project_id IS NOT NULL AND assistant_id IS NOT NULL AND
+     assistant_ref_organization_id = organization_id AND assistant_ref_project_id = project_id AND assistant_id = original_assistant_id)
+  ),
+  CONSTRAINT assistant_agent_bindings_agent_ref_check CHECK (
+    (agent_ref_organization_id IS NULL AND agent_ref_project_id IS NULL AND agent_id IS NULL) OR
+    (agent_ref_organization_id IS NOT NULL AND agent_ref_project_id IS NOT NULL AND agent_id IS NOT NULL AND
+     agent_ref_organization_id = organization_id AND agent_ref_project_id = project_id AND agent_id = original_agent_id)
+  ),
+  CONSTRAINT assistant_agent_bindings_project_fkey FOREIGN KEY (project_ref_organization_id, project_ref_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL,
+  CONSTRAINT assistant_agent_bindings_assistant_fkey FOREIGN KEY (assistant_ref_organization_id, assistant_ref_project_id, assistant_id) REFERENCES assistants (organization_id, project_id, id) ON DELETE SET NULL,
+  CONSTRAINT assistant_agent_bindings_agent_fkey FOREIGN KEY (agent_ref_organization_id, agent_ref_project_id, agent_id) REFERENCES agents (organization_id, project_id, id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_agent_bindings_tenant_id_key
+ON assistant_agent_bindings (organization_id, project_id, id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_agent_bindings_assistant_generation_key
+ON assistant_agent_bindings (original_assistant_id, generation);
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_agent_bindings_live_assistant_key
+ON assistant_agent_bindings (original_assistant_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_agent_bindings_live_agent_key
+ON assistant_agent_bindings (original_agent_id)
+WHERE deleted IS FALSE;
+
+-- Unfiltered indexes also support foreign-key actions on historical rows.
+CREATE INDEX IF NOT EXISTS assistant_agent_bindings_project_ref_idx
+ON assistant_agent_bindings (project_ref_organization_id, project_ref_id);
+
+CREATE INDEX IF NOT EXISTS assistant_agent_bindings_assistant_ref_idx
+ON assistant_agent_bindings (assistant_ref_organization_id, assistant_ref_project_id, assistant_id);
+
+CREATE INDEX IF NOT EXISTS assistant_agent_bindings_agent_ref_idx
+ON assistant_agent_bindings (agent_ref_organization_id, agent_ref_project_id, agent_id);
+
+-- This is mapping history, not a workloads entity. Admissions and assignments
+-- remain authoritative. Subjects are exact and stable for the original durable
+-- trigger; continuations reuse that trigger rather than create event identities.
+CREATE TABLE IF NOT EXISTS trigger_workload_bindings (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  project_ref_organization_id TEXT,
+  project_ref_id uuid,
+  original_trigger_id uuid NOT NULL,
+  trigger_ref_organization_id TEXT,
+  trigger_ref_project_id uuid,
+  trigger_id uuid,
+  original_assistant_binding_id uuid NOT NULL,
+  assistant_binding_ref_organization_id TEXT,
+  assistant_binding_ref_project_id uuid,
+  assistant_binding_id uuid,
+  -- Captured incarnation, checked live by the service rather than constrained
+  -- by an FK that would prevent revoking the assistant binding independently.
+  assistant_binding_generation BIGINT NOT NULL,
+  original_workload_issuer_id uuid NOT NULL,
+  workload_issuer_ref_organization_id TEXT,
+  workload_issuer_ref_project_id uuid,
+  workload_issuer_id uuid,
+  workload_issuer_ref_kind TEXT,
+  subject TEXT NOT NULL,
+  generation BIGINT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT trigger_workload_bindings_pkey PRIMARY KEY (id),
+  CONSTRAINT trigger_workload_bindings_generation_check CHECK (generation > 0 AND assistant_binding_generation > 0),
+  CONSTRAINT trigger_workload_bindings_project_ref_check CHECK (
+    (project_ref_organization_id IS NULL AND project_ref_id IS NULL) OR
+    (project_ref_organization_id IS NOT NULL AND project_ref_id IS NOT NULL AND
+     project_ref_organization_id = organization_id AND project_ref_id = project_id)
+  ),
+  CONSTRAINT trigger_workload_bindings_trigger_ref_check CHECK (
+    (trigger_ref_organization_id IS NULL AND trigger_ref_project_id IS NULL AND trigger_id IS NULL) OR
+    (trigger_ref_organization_id IS NOT NULL AND trigger_ref_project_id IS NOT NULL AND trigger_id IS NOT NULL AND
+     trigger_ref_organization_id = organization_id AND trigger_ref_project_id = project_id AND trigger_id = original_trigger_id)
+  ),
+  CONSTRAINT trigger_workload_bindings_assistant_ref_check CHECK (
+    (assistant_binding_ref_organization_id IS NULL AND assistant_binding_ref_project_id IS NULL AND assistant_binding_id IS NULL) OR
+    (assistant_binding_ref_organization_id IS NOT NULL AND assistant_binding_ref_project_id IS NOT NULL AND assistant_binding_id IS NOT NULL AND
+     assistant_binding_ref_organization_id = organization_id AND assistant_binding_ref_project_id = project_id AND assistant_binding_id = original_assistant_binding_id)
+  ),
+  CONSTRAINT trigger_workload_bindings_issuer_ref_check CHECK (
+    (workload_issuer_ref_organization_id IS NULL AND workload_issuer_ref_project_id IS NULL AND workload_issuer_id IS NULL AND workload_issuer_ref_kind IS NULL) OR
+    (workload_issuer_ref_organization_id IS NOT NULL AND workload_issuer_ref_project_id IS NOT NULL AND workload_issuer_id IS NOT NULL AND workload_issuer_ref_kind IS NOT NULL AND
+     workload_issuer_ref_organization_id = organization_id AND workload_issuer_ref_project_id = project_id AND workload_issuer_id = original_workload_issuer_id AND workload_issuer_ref_kind = 'system')
+  ),
+  CONSTRAINT trigger_workload_bindings_project_fkey FOREIGN KEY (project_ref_organization_id, project_ref_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL,
+  CONSTRAINT trigger_workload_bindings_trigger_fkey FOREIGN KEY (trigger_ref_organization_id, trigger_ref_project_id, trigger_id) REFERENCES trigger_instances (organization_id, project_id, id) ON DELETE SET NULL,
+  CONSTRAINT trigger_workload_bindings_assistant_fkey FOREIGN KEY (assistant_binding_ref_organization_id, assistant_binding_ref_project_id, assistant_binding_id) REFERENCES assistant_agent_bindings (organization_id, project_id, id) ON DELETE SET NULL,
+  CONSTRAINT trigger_workload_bindings_issuer_fkey FOREIGN KEY (workload_issuer_ref_organization_id, workload_issuer_ref_project_id, workload_issuer_id, workload_issuer_ref_kind) REFERENCES workload_issuers (organization_id, project_id, id, issuer_kind) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_workload_bindings_trigger_generation_key
+ON trigger_workload_bindings (original_trigger_id, generation);
+
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_workload_bindings_live_trigger_key
+ON trigger_workload_bindings (original_trigger_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_workload_bindings_live_subject_key
+ON trigger_workload_bindings (organization_id, original_workload_issuer_id, subject)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS trigger_workload_bindings_project_ref_idx
+ON trigger_workload_bindings (project_ref_organization_id, project_ref_id);
+
+CREATE INDEX IF NOT EXISTS trigger_workload_bindings_trigger_ref_idx
+ON trigger_workload_bindings (trigger_ref_organization_id, trigger_ref_project_id, trigger_id);
+
+CREATE INDEX IF NOT EXISTS trigger_workload_bindings_assistant_ref_idx
+ON trigger_workload_bindings (assistant_binding_ref_organization_id, assistant_binding_ref_project_id, assistant_binding_id);
+
+CREATE INDEX IF NOT EXISTS trigger_workload_bindings_issuer_ref_idx
+ON trigger_workload_bindings (workload_issuer_ref_organization_id, workload_issuer_ref_project_id, workload_issuer_id, workload_issuer_ref_kind);
 
 CREATE TABLE IF NOT EXISTS oauth_proxy_client_info (
   mcp_slug TEXT NOT NULL CHECK (mcp_slug <> '' AND CHAR_LENGTH(mcp_slug) <= 60),
