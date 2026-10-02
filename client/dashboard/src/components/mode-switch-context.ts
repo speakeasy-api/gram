@@ -28,8 +28,8 @@ const CARD_GAP_PX = 24;
 const GRID_MAX_WIDTH_PX = 1200;
 const GRID_INSET_PX = 96;
 
-// Matches the cards' rounded-[14px], so a clipped pane keeps the card's corners.
-const CARD_RADIUS_PX = 14;
+// Matches the ghost card's rounded-[14px], so a parked pane has the same corners.
+export const CARD_RADIUS_PX = 14;
 
 /** A card slot, in viewport coordinates. */
 export type CardGeometry = {
@@ -49,10 +49,17 @@ export type Grid = {
 /**
  * The on-screen part of a pane. The dashboard scrolls the document, so its pane
  * is usually taller than the viewport and may be scrolled; only the part the
- * user is looking at becomes the card.
+ * user is looking at becomes the card. The sticky impersonation banner covers
+ * the top of the viewport once the document scrolls, so the slice starts below
+ * it.
  */
 function visibleSlice(rect: DOMRect): { top: number; height: number } {
-  const top = Math.max(rect.top, 0);
+  const banner = document.querySelector<HTMLElement>("[data-chrome-banner]");
+  const unobscuredTop = Math.max(
+    banner?.getBoundingClientRect().bottom ?? 0,
+    0,
+  );
+  const top = Math.max(rect.top, unobscuredTop);
   const bottom = Math.min(rect.bottom, window.innerHeight);
   return { top, height: Math.max(bottom - top, 0) };
 }
@@ -86,10 +93,16 @@ export function computeGrid(): Grid {
 
 export type Parking = {
   transform: string;
+  /** Rounds its corners with --mode-card-radius, so they animate with it. */
   clipPath: string;
   /** Distance from the pane's top edge to the top of its on-screen slice. */
   clipTop: number;
   sliceHeight: number;
+  /**
+   * The corner radius, in the pane's own pixels, that reads as CARD_RADIUS_PX
+   * once the pane is scaled onto its card.
+   */
+  parkedRadius: number;
 };
 
 /**
@@ -112,9 +125,10 @@ export function parkOnCard(
   const translateY = card.top - rect.top - clipTop * scale;
   return {
     transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`,
-    clipPath: `inset(${clipTop}px 0 ${clipBottom}px 0 round ${CARD_RADIUS_PX}px)`,
+    clipPath: `inset(${clipTop}px 0 ${clipBottom}px 0 round var(--mode-card-radius))`,
     clipTop,
     sliceHeight: slice.height,
+    parkedRadius: CARD_RADIUS_PX / scale,
   };
 }
 

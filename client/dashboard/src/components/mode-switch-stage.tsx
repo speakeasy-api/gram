@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router";
 import {
+  CARD_RADIUS_PX,
   EASE_OUT,
   HOLD_MS,
   IDLE,
@@ -222,15 +223,21 @@ export function ModeSurface({
   const parked = isShrinking || (isZooming && !zoomReleased);
   // No transition while the incoming pane is parked, so moving onto its card
   // is instant and only the release animates.
+  const timing = `${isShrinking ? SHRINK_MS : ZOOM_MS}ms ${EASE_OUT}`;
   const transition =
     isZooming && !zoomReleased
       ? "none"
-      : `transform ${isShrinking ? SHRINK_MS : ZOOM_MS}ms ${EASE_OUT}`;
+      : `transform ${timing}, --mode-card-radius ${timing}`;
+  // The clip's radius scales with the pane, so the parked radius is scaled up
+  // to read as the card's own. It animates with the transform (it is a
+  // registered property), keeping the corners steady through the zoom.
+  const radius = parked && parking ? parking.parkedRadius : CARD_RADIUS_PX;
   const surfaceStyle = animating
     ? ({
         transform: parked ? parking?.transform : "none",
         clipPath: parking?.clipPath,
         transition,
+        "--mode-card-radius": `${radius}px`,
         // A transform makes this element the containing block for the fixed
         // sidebar inside it, so --header-offset (which positions the sidebar
         // below the chrome) is measured from the pane top instead of the
@@ -265,7 +272,7 @@ export function ModeSurface({
       {parking && (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 z-50 rounded-[14px] ring-1 ring-white/25 ring-inset"
+          className="pointer-events-none absolute inset-x-0 z-50 rounded-(--mode-card-radius) ring-1 ring-white/25 ring-inset"
           style={{ top: parking.clipTop, height: parking.sliceHeight }}
         />
       )}
