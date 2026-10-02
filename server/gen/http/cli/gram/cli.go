@@ -31670,7 +31670,7 @@ func workloadIdentitiesUsage() {
 	fmt.Fprintln(os.Stderr, `Configure which workloads an organization recognises as its own: the issuers it trusts, the subjects those issuers may present, and the agent each admitted workload inherits its policy from.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] workload-identities COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    list: Read the whole trust policy: every trusted issuer and every admitted subject, at both the organization and project tiers, with the agent each subject resolves to. Requires workload:read.`)
+	fmt.Fprintln(os.Stderr, `    list: Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.`)
 	fmt.Fprintln(os.Stderr, `    register-issuer: Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
 	fmt.Fprintln(os.Stderr, `    update-issuer: Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
 	fmt.Fprintln(os.Stderr, `    withdraw-issuer: Stop trusting an issuer. Every subject admitted under it is withdrawn in the same transaction, so no admission can outlive the issuer it names. Requires workload:write.`)
@@ -31691,7 +31691,7 @@ func workloadIdentitiesListUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Read the whole trust policy: every trusted issuer and every admitted subject, at both the organization and project tiers, with the agent each subject resolves to. Requires workload:read.`)
+	fmt.Fprintln(os.Stderr, `Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)

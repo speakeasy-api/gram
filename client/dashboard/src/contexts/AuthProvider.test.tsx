@@ -54,6 +54,8 @@ vi.mock("@/routes", () => ({
     "data/exports",
     "setup",
     "setup/:taskSlug",
+    "access-hub",
+    "access-hub/:issuerId",
   ],
 }));
 
@@ -325,6 +327,30 @@ describe("AuthProvider legacy project redirects", () => {
     expect(screen.getByTestId("location").textContent).toBe(
       "/test-org/setup/idp",
     );
+  });
+
+  it.each([
+    "/test-org/access-hub",
+    "/test-org/access-hub/11111111-1111-1111-1111-111111111111",
+    "/test-org/access-hub/11111111-1111-1111-1111-111111111111?tab=machines#rules",
+  ])("preserves Access Hub URL %s over a same-named project", (path) => {
+    const ACCESS_HUB_PROJECT_ORG = {
+      ...ORG,
+      projects: [{ ...PROJECT, slug: "access-hub" }],
+    };
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        organizations: [ACCESS_HUB_PROJECT_ORG],
+        organization: ACCESS_HUB_PROJECT_ORG,
+        activeOrganizationId: ACCESS_HUB_PROJECT_ORG.id,
+        whitelisted: true,
+      }),
+    );
+
+    renderGate(path);
+
+    expect(screen.getByTestId("app")).toBeTruthy();
+    expect(screen.getByTestId("location").textContent).toBe(path);
   });
 
   it("preserves a legacy project whose slug is agents", () => {

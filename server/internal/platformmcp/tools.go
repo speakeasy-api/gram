@@ -215,6 +215,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"Before moving any MCP server or gateway to dual or private_only, call get_network_ingress. If ready_for_private_access is false, report its next_action and present its exact setup_url instead of attempting the change; Tailscale credentials are entered only in the dashboard, never in chat. Private access restricts who can reach the AI Control Plane endpoint over the organization's tailnet; it does not change where the upstream MCP server is hosted.",
 			"Creating a data export is a mutation: first show the exact project, endpoint, data source, enabled state, and sensitive-data policy, then ask for explicit confirmation. Never request or accept authorization header values in chat; create the export without headers and send the user to the returned management URL to add authentication securely.",
 			"Dismissing Watchdog findings as false positives, or restoring them, is a mutation: name the exact project and the exact findings, wait for explicit confirmation, then report which findings changed, which were already in that state, and which were not found in the project. A dismissal suppresses only the findings named; a risk exclusion is the tool for a whole class of findings.",
+			"Project-wide chat listings are metadata only: when a conversation was active, how long it ran, which app produced it, whether risk analysis found anything, and a masked participant. Never present a listed chat's title or what was said as known, and send the administrator to the dashboard to read a transcript. Personal session recall is separate: it may present the caller's own sessions by title and their own redacted handoff digest.",
 		}, "\n\n"),
 		PageSize: 32,
 		// Declared rather than inferred. Left unset, the SDK advertises
@@ -421,6 +422,19 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerUnavailableSessionRecallTools(reg)
 	} else {
 		registerSessionRecallTools(reg, sessionRecall)
+	}
+	// Registered beside session recall: recall serves a caller their own
+	// transcript as a digest, the listing serves an administrator every chat's
+	// metadata, and the two together are the whole of what this server says
+	// about conversations.
+	var chatMetadata *ChatMetadataService
+	if postgresReader, ok := reader.(*PostgresReader); ok {
+		chatMetadata = postgresReader.chatMetadata
+	}
+	if !chatMetadata.valid() {
+		registerUnavailableChatMetadataTools(reg)
+	} else {
+		registerChatMetadataTools(reg, chatMetadata)
 	}
 	if feedback == nil {
 		addTool(reg, &mcp.Tool{

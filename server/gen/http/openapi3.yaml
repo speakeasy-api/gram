@@ -79889,8 +79889,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
             summary: admitSubject workloadIdentities
@@ -79901,7 +79900,7 @@ paths:
                 name: AdmitWorkloadSubject
     /rpc/workloadIdentities.list:
         get:
-            description: 'Read the whole trust policy: every trusted issuer and every admitted subject, at both the organization and project tiers, with the agent each subject resolves to. Requires workload:read.'
+            description: 'Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project''s tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.'
             operationId: listWorkloadIdentities
             parameters:
                 - allowEmptyValue: true
@@ -79987,8 +79986,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
             summary: list workloadIdentities
@@ -80091,8 +80089,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
             summary: registerIssuer workloadIdentities
@@ -80195,8 +80192,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
             summary: updateIssuer workloadIdentities
@@ -80299,8 +80295,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
             summary: updateSubject workloadIdentities
@@ -80406,8 +80401,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
             summary: withdrawIssuer workloadIdentities
@@ -80513,8 +80507,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
             summary: withdrawSubject workloadIdentities
@@ -82858,7 +82851,7 @@ components:
                     minLength: 1
                 project_scoped:
                     type: boolean
-                    description: Admit the subject for the selected project alone rather than the whole organization. Defaults to false.
+                    description: Admit the subject for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.
                     default: false
                 subject:
                     type: string
@@ -100970,7 +100963,7 @@ components:
                     maxLength: 100
                 project_scoped:
                     type: boolean
-                    description: Register the issuer for the selected project alone rather than the whole organization. Defaults to false.
+                    description: Register the issuer for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.
                     default: false
                 tags:
                     type: array
