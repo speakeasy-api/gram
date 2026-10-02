@@ -553,9 +553,9 @@ func TestWorkloadScopeIsAdminAndMemberDefault(t *testing.T) {
 	require.True(t, slices.Contains(adminScopes, ScopeWorkloadRead))
 	require.True(t, slices.Contains(adminScopes, ScopeWorkloadWrite))
 
-	// Member defaults so that team members can access the Access Hub and manage
-	// workload identity configurations in preview deployments and development
-	// environments.
+	// workload:read is a member default so that team members can view the Access
+	// Hub in preview deployments. workload:write remains admin-only since it
+	// allows granting machine access.
 	require.True(t, slices.Contains(memberScopes, ScopeWorkloadRead))
-	require.True(t, slices.Contains(memberScopes, ScopeWorkloadWrite))
+	require.False(t, slices.Contains(memberScopes, ScopeWorkloadWrite))
 }

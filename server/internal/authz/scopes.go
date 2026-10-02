@@ -98,10 +98,10 @@ var adminScopes = []Scope{
 	ScopeAgentWrite,
 	ScopeAgentAuthorize,
 	ScopeAgentTransfer,
-	// workload:read and workload:write are member defaults (see memberScopes
-	// comment below) so that team members can access the Access Hub and manage
-	// workload identity configurations. Admins receive these scopes transitively
-	// through the admin role.
+	// workload:read is a member default (see memberScopes below) so that team
+	// members can view the Access Hub. workload:write remains admin-only:
+	// assigning an agent to a workload is the same delegation as issuing that
+	// agent a credential.
 	ScopeWorkloadRead,
 	ScopeWorkloadWrite,
 	// chat:read and chat:write are intentionally NOT defaults for any system
@@ -168,7 +168,6 @@ var memberScopes = []Scope{
 	ScopeMCPConnect,
 	ScopeSkillRead,
 	ScopeWorkloadRead,
-	ScopeWorkloadWrite,
 	// environment:read is intentionally NOT a default for members: environment
 	// values include secrets, so viewing them must be granted explicitly via a
 	// custom role. Admins retain environment:read/write via adminScopes.
@@ -177,9 +176,9 @@ var memberScopes = []Scope{
 	// roster and required-employee-scoped Shadow AI read are project:read
 	// surfaces; identity detail resolution separately requires org:read.
 	//
-	// workload:read and workload:write are member defaults so that team members
-	// can access the Access Hub and manage workload identity configurations in
-	// preview deployments and development environments.
+	// workload:read is a member default so that team members can view the
+	// Access Hub in preview deployments and development environments.
+	// workload:write remains admin-only since it allows granting machine access.
 }
 
 func (s Scope) Parts() ScopeParts {
