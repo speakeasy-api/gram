@@ -152,9 +152,10 @@ func TestToolsListMCPConnectFilterInterceptor_AllGrantedPreservesToolBytes(t *te
 	t.Parallel()
 
 	// When every tool is authorized there is nothing to replace, so the
-	// interceptor must label the result without rewriting the tools
-	// member: replacing it would re-marshal each kept tool through
-	// mcp.Tool, dropping per-tool members the SDK does not model.
+	// interceptor must leave the result exactly as it arrived: replacing
+	// the tools member would re-marshal each kept tool through mcp.Tool,
+	// dropping per-tool members the SDK does not model. The proxy applies
+	// the caller-varying label after the chain.
 	engine := newAuthzEngineForTest(t)
 	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
 	ctx = authztest.WithExactGrants(t, ctx,

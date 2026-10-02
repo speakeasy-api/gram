@@ -3,22 +3,44 @@ package proxy
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// callerVaryingCacheable is the cache stance the proxy stamps on every
-// tools/list and resources/list result it relays, matching the hosted
+// MCP JSON-RPC methods for resource template and prompt discovery. The proxy
+// has no typed views for them, and the official SDK keeps these constants
+// unexported, so they are repeated here.
+const (
+	// methodResourcesTemplatesList lists the server's resource templates.
+	methodResourcesTemplatesList = "resources/templates/list"
+
+	// methodPromptsList lists the server's prompts.
+	methodPromptsList = "prompts/list"
+)
+
+// callerVaryingListMethods are the list methods whose results the proxy
+// labels caller-varying.
+var callerVaryingListMethods = []string{
+	methodToolsList,
+	methodResourcesList,
+	methodResourcesTemplatesList,
+	methodPromptsList,
+}
+
+// callerVaryingCacheable is the cache stance the proxy stamps on every list
+// result it relays, matching the hosted
 // surface's cacheHintsCallerVarying so both paths label the same property
 // identically. The zero ttlMs is part of the stance: an upstream's own ttl
 // would let the requesting client keep serving a list from cache after the
 // grants or upstream credentials that shaped it changed.
 var callerVaryingCacheable = mcp.Cacheable{TTLMs: 0, CacheScope: "private"}
 
-// isCallerVaryingListRequest reports whether req is a single tools/list or
-// resources/list request, whose result the proxy labels caller-varying.
+// isCallerVaryingListRequest reports whether req is a single request for one
+// of [callerVaryingListMethods], whose result the proxy labels
+// caller-varying.
 //
 // The label is unconditional because a proxied list varies by caller on
 // axes no interceptor sees: header pass-through forwards caller-supplied
@@ -35,15 +57,18 @@ var callerVaryingCacheable = mcp.Cacheable{TTLMs: 0, CacheScope: "private"}
 // since the decoded method keeps only the last of duplicate members while an
 // upstream may honour the first.
 func isCallerVaryingListRequest(req *UserRequest) bool {
-	switch userRequestMethod(req) {
-	case methodToolsList, methodResourcesList:
+	if slices.Contains(callerVaryingListMethods, userRequestMethod(req)) {
 		return true
 	}
 	if req == nil {
 		return false
 	}
-	return hasTopLevelJSONRPCMethod(req.body, methodToolsList) ||
-		hasTopLevelJSONRPCMethod(req.body, methodResourcesList)
+	for _, method := range callerVaryingListMethods {
+		if hasTopLevelJSONRPCMethod(req.body, method) {
+			return true
+		}
+	}
+	return false
 }
 
 // markCallerVarying overwrites the cacheScope and ttlMs members of msg's

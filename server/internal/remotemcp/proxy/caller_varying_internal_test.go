@@ -217,10 +217,12 @@ func TestIsCallerVaryingListRequest(t *testing.T) {
 		{name: "resources/list", body: `{"jsonrpc":"2.0","id":1,"method":"resources/list","params":{}}`, want: true},
 		{name: "tools/list with undecodable params", body: `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"cursor":123}}`, want: true},
 		{name: "tools/call", body: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"a"}}`, want: false},
-		{name: "resources/templates/list", body: `{"jsonrpc":"2.0","id":1,"method":"resources/templates/list"}`, want: false},
-		{name: "prompts/list", body: `{"jsonrpc":"2.0","id":1,"method":"prompts/list"}`, want: false},
+		{name: "resources/templates/list", body: `{"jsonrpc":"2.0","id":1,"method":"resources/templates/list"}`, want: true},
+		{name: "prompts/list", body: `{"jsonrpc":"2.0","id":1,"method":"prompts/list"}`, want: true},
+		{name: "resources/read", body: `{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"file:///a"}}`, want: false},
 		{name: "tools/list hidden by a later duplicate method", body: `{"jsonrpc":"2.0","id":1,"method":"tools/list","method":"ping"}`, want: true},
 		{name: "resources/list hidden by a later duplicate method", body: `{"jsonrpc":"2.0","id":1,"method":"resources/list","method":"ping"}`, want: true},
+		{name: "prompts/list hidden by a later duplicate method", body: `{"jsonrpc":"2.0","id":1,"method":"prompts/list","method":"ping"}`, want: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -107,6 +107,47 @@ func TestProxy_Post_ResourcesListLabelledWithoutInterceptors(t *testing.T) {
 	require.Contains(t, string(result["resources"]), `"x-vendor":"keep"`, "the resources member must keep its original values")
 }
 
+// TestProxy_Post_UntypedListMethodsLabelled covers the list methods the proxy
+// has no typed views for: the label gates on the method and works on the raw
+// result, so they need no interceptor support.
+func TestProxy_Post_UntypedListMethodsLabelled(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		request  string
+		upstream string
+		list     string
+	}{
+		{
+			name:     "resources/templates/list",
+			request:  `{"jsonrpc":"2.0","id":5,"method":"resources/templates/list","params":{}}`,
+			upstream: `{"jsonrpc":"2.0","id":5,"result":{"cacheScope":"public","ttlMs":60000,"resourceTemplates":[{"name":"a","uriTemplate":"file:///{path}"}]}}`,
+			list:     "resourceTemplates",
+		},
+		{
+			name:     "prompts/list",
+			request:  `{"jsonrpc":"2.0","id":6,"method":"prompts/list","params":{}}`,
+			upstream: `{"jsonrpc":"2.0","id":6,"result":{"cacheScope":"public","ttlMs":60000,"prompts":[{"name":"a"}]}}`,
+			list:     "prompts",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			p := newProxyForTest(t, jsonUpstream(t, tc.upstream))
+
+			rr, err := postJSON(t, p, tc.request)
+			require.NoError(t, err)
+
+			result := relayedResult(t, rr.Body.String())
+			requireCallerVaryingResult(t, result)
+			require.NotEmpty(t, result[tc.list])
+		})
+	}
+}
+
 // TestProxy_Post_ToolsListLabelledAfterInterceptorMutation covers a result an
 // interceptor rewrote: SetTools touches only the tools member, so the label
 // must still land on the rewritten result.
