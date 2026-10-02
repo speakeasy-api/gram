@@ -1177,6 +1177,16 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 		return 0, 0, fmt.Errorf("read openrouter key for usage: %w", keyErr)
 	}
 
+	// OpenRouter rejects a disabled key's own credentials with 401, so its
+	// usage is read through the provisioning key instead.
+	if EffectiveDisabled(key.Disabled, key.DisableCauses) {
+		used, _, err := o.fetchKeyUsage(ctx, "/v1/keys/"+url.PathEscape(key.KeyHash), o.provisioningKey)
+		if err != nil {
+			return 0, limit, fmt.Errorf("read disabled key usage: %w", err)
+		}
+		return used, limit, nil
+	}
+
 	apiKey, err := o.keyMaterial(key)
 	if err != nil {
 		return 0, limit, fmt.Errorf("resolve openrouter key material: %w", err)
@@ -1198,13 +1208,20 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 // openrouter_api_keys in a single SQL query) can skip the org/key DB lookups
 // in GetCreditsUsed.
 func (o *OpenRouter) GetKeyUsage(ctx context.Context, apiKey string) (float64, *int64, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+"/v1/key", nil)
+	return o.fetchKeyUsage(ctx, "/v1/key", apiKey)
+}
+
+// fetchKeyUsage reads a key's monthly usage and limit from path, which is
+// either `/v1/key` authorized by the key itself or `/v1/keys/:hash`
+// authorized by the provisioning key. Both return the same key object.
+func (o *OpenRouter) fetchKeyUsage(ctx context.Context, path string, bearer string) (float64, *int64, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+path, nil)
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to build openrouter key usage request", attr.SlogError(err))
 		return 0, nil, fmt.Errorf("build key usage request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Authorization", "Bearer "+bearer)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := o.orClient.Do(req)
