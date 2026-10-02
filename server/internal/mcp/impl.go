@@ -125,6 +125,11 @@ type Service struct {
 	auth                      *auth.Auth
 	env                       toolconfig.EnvironmentLoader
 	serverURL                 *url.URL
+	// outboundCallbackOrigin is the pinned origin of URLs that external systems
+	// store: the IdP callback sent to WorkOS and to federated customer IdPs, and
+	// assistants' CIMD client IDs. It stays fixed when the server URL moves.
+	// Set by SetCallbackOrigins.
+	outboundCallbackOrigin *url.URL
 	// authenticationHostBaseURL is the authentication host's base URL, empty
 	// when none is configured. Set by AttachAuthenticationHost.
 	authenticationHostBaseURL string
@@ -468,6 +473,7 @@ func NewService(
 		auth:                      auth.New(logger, db, sessions, authzEngine),
 		env:                       env,
 		serverURL:                 serverURL,
+		outboundCallbackOrigin:    nil,
 		authenticationHostBaseURL: "",
 		siteURL:                   siteURL,
 		posthog:                   posthog,
@@ -548,6 +554,26 @@ func NewService(
 		metaRuntime:          metaRuntimeConfig.withDefaults(),
 	}
 	return service, nil
+}
+
+// SetCallbackOrigins pins the IdP callback URLs and assistants' CIMD client
+// IDs to origins.Outbound, the origin remote session clients are pinned to.
+func (s *Service) SetCallbackOrigins(origins remotesessions.CallbackOrigins) {
+	if origins.Outbound != nil {
+		s.outboundCallbackOrigin = origins.Outbound
+	}
+}
+
+// outboundOrigin is the pinned outbound origin. The IdP callback is served
+// there, so it also holds a federated browser's callback cookie. It falls back
+// to the server URL. It pins only URLs Gram sends to external systems, never
+// an authorization server issuer: shared-mode issuers carry their own pinned
+// issuer (<host>/oauth/usi/{id}) and must not be routed through it.
+func (s *Service) outboundOrigin() *url.URL {
+	if s.outboundCallbackOrigin != nil {
+		return s.outboundCallbackOrigin
+	}
+	return s.serverURL
 }
 
 func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverName string) string {
@@ -652,7 +678,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
 	// Both stops of the remote login browser hop: the bind stop on a remote
-	// client's callback host, and the confirm stop on the server URL's host.
+	// client's callback host, and the confirm stop on the IdP callback host.
 	o11y.AttachHandler(mux, "GET", remoteLoginBindPath, oops.ErrHandle(service.logger, service.HandleRemoteLoginBind).ServeHTTP)
 	// Backwards-compat: remote_session_clients flagged LegacyCallbackUrl were
 	// registered upstream against the retired oauth_proxy_servers /oauth/callback.

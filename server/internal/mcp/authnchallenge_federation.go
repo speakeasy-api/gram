@@ -65,7 +65,7 @@ func (s *Service) federatedProvider(ctx context.Context, endpoint *ResolvedMcpEn
 	}
 	// Reject an unusable callback before discovery or any provider traffic. This
 	// check is deliberately after the unlinked branch, preserving WorkOS HTTP dev.
-	callback, err := endpoint.IDPCallbackURL(s.serverURL.String())
+	callback, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
 	if err != nil {
 		return nil, uuid.Nil, uuid.Nil, "", remotesessions.ErrFederatedConfiguration
 	}
@@ -100,7 +100,7 @@ func (s *Service) prepareBoundFederatedLogin(w http.ResponseWriter, r *http.Requ
 	if retryHuman != "" && !state.FederatedBinding.matches(issuerID, clientID, provider) {
 		return nil, remotesessions.ErrFederatedConfiguration
 	}
-	callback, err := endpoint.IDPCallbackURL(s.serverURL.String())
+	callback, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
 	if err != nil {
 		return nil, err
 	}
