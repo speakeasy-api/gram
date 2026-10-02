@@ -45,8 +45,8 @@ const (
 	StateInstalled = "installed"
 )
 
-// defaultXAASignOnModes apply when the catalog entry does not say which modes
-// support Cross App Access.
+// defaultXAASignOnModes apply when the catalog entry omits xaaSignOnModes. An
+// explicit empty list means no mode supports Cross App Access.
 var defaultXAASignOnModes = []string{"SAML_2_0", "OPENID_CONNECT"}
 
 // liveStatuses are the connection statuses whose snapshot is served.
@@ -469,7 +469,7 @@ func group(rows []repo.ListMappedApplicationsRow, records map[uuid.UUID]record) 
 			suggestions = append(suggestions, suggestion{id: row.RegistryEntryID, record: rec, apps: nil})
 		}
 		modes := rec.mapping.XAASignOnModes
-		if len(modes) == 0 {
+		if modes == nil {
 			modes = defaultXAASignOnModes
 		}
 		suggestions[i].apps = append(suggestions[i].apps, &srv.OktaServerSuggestionApplication{
