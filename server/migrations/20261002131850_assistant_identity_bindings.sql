@@ -86,6 +86,7 @@ CREATE TABLE "trigger_workload_bindings" (
   CONSTRAINT "trigger_workload_bindings_generation_check" CHECK ((generation > 0) AND (assistant_binding_generation > 0)),
   CONSTRAINT "trigger_workload_bindings_issuer_ref_check" CHECK (((workload_issuer_ref_organization_id IS NULL) AND (workload_issuer_ref_project_id IS NULL) AND (workload_issuer_id IS NULL)) OR ((workload_issuer_ref_organization_id IS NOT NULL) AND (workload_issuer_ref_project_id IS NOT NULL) AND (workload_issuer_id IS NOT NULL) AND (workload_issuer_ref_organization_id = organization_id) AND (workload_issuer_ref_project_id = project_id) AND (workload_issuer_id = original_workload_issuer_id))),
   CONSTRAINT "trigger_workload_bindings_project_ref_check" CHECK (((project_ref_organization_id IS NULL) AND (project_ref_id IS NULL)) OR ((project_ref_organization_id IS NOT NULL) AND (project_ref_id IS NOT NULL) AND (project_ref_organization_id = organization_id) AND (project_ref_id = project_id))),
+  CONSTRAINT "trigger_workload_bindings_subject_check" CHECK (subject <> ''::text),
   CONSTRAINT "trigger_workload_bindings_trigger_ref_check" CHECK (((trigger_ref_organization_id IS NULL) AND (trigger_ref_project_id IS NULL) AND (trigger_id IS NULL)) OR ((trigger_ref_organization_id IS NOT NULL) AND (trigger_ref_project_id IS NOT NULL) AND (trigger_id IS NOT NULL) AND (trigger_ref_organization_id = organization_id) AND (trigger_ref_project_id = project_id) AND (trigger_id = original_trigger_id)))
 );
 -- Create index "trigger_workload_bindings_assistant_ref_idx" to table: "trigger_workload_bindings"

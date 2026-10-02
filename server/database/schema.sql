@@ -5472,7 +5472,7 @@ CREATE TABLE IF NOT EXISTS trigger_workload_bindings (
   workload_issuer_ref_organization_id TEXT,
   workload_issuer_ref_project_id uuid,
   workload_issuer_id uuid,
-  subject TEXT NOT NULL,
+  subject TEXT NOT NULL CHECK (subject <> ''),
   generation BIGINT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
