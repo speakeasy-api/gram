@@ -807,14 +807,7 @@ func (s *MCPToolExposureService) verifyAffectedServersUnmoved(ctx context.Contex
 		// have been deleted or unlinked; anything here is a read failure.
 		return fmt.Errorf("re-read platform MCP tool exposure affected servers: %w", err)
 	}
-	grew := current.ForeignFrontingServerCount > authorized.ForeignFrontingServerCount
-	for _, id := range current.FrontingServerIds {
-		if !slices.Contains(authorized.FrontingServerIds, id) {
-			grew = true
-			break
-		}
-	}
-	if !grew {
+	if !frontingSetGrew(authorized, current) {
 		return nil
 	}
 	return &MCPToolExposureError{
@@ -822,6 +815,31 @@ func (s *MCPToolExposureService) verifyAffectedServersUnmoved(ctx context.Contex
 		Message: "Another MCP server started offering this same set of tools while this change was being applied, so nothing was changed. Read the server again and repeat the request against what it reports now.",
 		Cause:   ErrMCPToolExposureConflict,
 	}
+}
+
+// frontingSetGrew reports whether the set of servers fronting this toolset
+// GAINED a member between the authorized read and the re-read.
+//
+// It deliberately answers "grew", never "changed". Shrinkage must not be
+// treated as a conflict: a concurrent DeleteMCPServer sets deleted_at without
+// touching mcp_servers.toolset_id, so it takes no FOR KEY SHARE on the
+// toolsets row and can commit inside the window where this transaction holds
+// FOR UPDATE. Refusing on shrinkage would turn that harmless delete into a
+// spurious conflict, and a server leaving the set only means the change
+// authorized more servers than it needed to — which is safe in that direction.
+//
+// Tightening this to an equality check looks stricter and therefore safer, and
+// is neither. See TestFrontingSetGrew.
+func frontingSetGrew(authorized, current platformrepo.GetPlatformMCPServerToolExposureRow) bool {
+	if current.ForeignFrontingServerCount > authorized.ForeignFrontingServerCount {
+		return true
+	}
+	for _, id := range current.FrontingServerIds {
+		if !slices.Contains(authorized.FrontingServerIds, id) {
+			return true
+		}
+	}
+	return false
 }
 
 // requireKnownTools refuses the whole batch and names every tool that is

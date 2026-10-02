@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -232,4 +233,85 @@ func TestFindMCPResultsCarryNoToolExposure(t *testing.T) {
 	encoded, err := json.Marshal(MCP{ID: uuid.NewString(), ProjectID: uuid.NewString()})
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), "tool_exposure")
+}
+
+// TestFrontingSetGrew pins the asymmetry of the fronting-server guard: it
+// refuses growth and tolerates shrinkage. Both halves are load-bearing in
+// opposite directions, and the tolerant half is the one that looks like a bug.
+//
+// The structural guarantee that makes growth near-impossible lives in the lock
+// ordering (the toolsets FOR UPDATE conflicts with the FK's FOR KEY SHARE), and
+// is covered by the integration test. This is the backstop for the case where
+// that ordering stops holding, so it is tested here on its own.
+func TestFrontingSetGrew(t *testing.T) {
+	t.Parallel()
+
+	alpha, bravo, charlie := uuid.New(), uuid.New(), uuid.New()
+	row := func(ids []uuid.UUID, foreign int64) platformrepo.GetPlatformMCPServerToolExposureRow {
+		return platformrepo.GetPlatformMCPServerToolExposureRow{FrontingServerIds: ids, ForeignFrontingServerCount: foreign}
+	}
+
+	tests := []struct {
+		name       string
+		authorized platformrepo.GetPlatformMCPServerToolExposureRow
+		current    platformrepo.GetPlatformMCPServerToolExposureRow
+		want       bool
+		why        string
+	}{
+		{
+			name:       "unchanged set is not growth",
+			authorized: row([]uuid.UUID{alpha, bravo}, 1),
+			current:    row([]uuid.UUID{alpha, bravo}, 1),
+			want:       false,
+			why:        "the common case: nothing raced, the change proceeds",
+		},
+		{
+			name:       "a server joining the set is growth",
+			authorized: row([]uuid.UUID{alpha}, 0),
+			current:    row([]uuid.UUID{alpha, bravo}, 1),
+			want:       true,
+			why:        "bravo would be changed without having been authorized",
+		},
+		{
+			name:       "a server the authorized read never saw is growth even at equal count",
+			authorized: row([]uuid.UUID{alpha, bravo}, 1),
+			current:    row([]uuid.UUID{alpha, charlie}, 1),
+			want:       true,
+			why:        "counts match, membership does not; charlie was never authorized",
+		},
+		{
+			name:       "a foreign server appearing is growth even with an unchanged id set",
+			authorized: row([]uuid.UUID{alpha}, 0),
+			current:    row([]uuid.UUID{alpha}, 1),
+			want:       true,
+			why:        "a server outside this project's visibility joined, and is not in FrontingServerIds to be spotted by membership alone",
+		},
+		{
+			// This case must stay tolerant. A concurrent DeleteMCPServer sets
+			// deleted_at without touching mcp_servers.toolset_id, so it takes
+			// no FOR KEY SHARE on the toolsets row and CAN commit while this
+			// transaction holds FOR UPDATE. Replacing frontingSetGrew with an
+			// equality check would make that ordinary delete refuse a fully
+			// authorized change. It reads as a hardening and is a regression.
+			name:       "a server leaving the set is not growth",
+			authorized: row([]uuid.UUID{alpha, bravo}, 1),
+			current:    row([]uuid.UUID{alpha}, 0),
+			want:       false,
+			why:        "a concurrent delete is harmless here; the change authorized more than it needed",
+		},
+		{
+			name:       "an emptied set is not growth",
+			authorized: row([]uuid.UUID{alpha, bravo}, 1),
+			current:    row(nil, 0),
+			want:       false,
+			why:        "same reasoning as a single delete, at the boundary",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, frontingSetGrew(tt.authorized, tt.current), tt.why)
+		})
+	}
 }
