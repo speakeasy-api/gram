@@ -125,6 +125,20 @@ type CompareSkillVersionsToolInput struct {
 	Window      string `json:"window,omitempty" jsonschema:"how far back to look: 1h, 24h, 7d, or 30d (default and maximum)"`
 }
 
+// approveSkillSuggestionAnnotations and dismissSkillSuggestionAnnotations are
+// shared by the live and unavailable registrations, so a client sees the same
+// safety and retry semantics before and after skills are switched on.
+// Approving adds a version rather than removing anything, and a repeat is
+// refused once the suggestion is closed; dismissing discards the suggestion
+// and settles on the same state when repeated.
+func approveSkillSuggestionAnnotations() *mcp.ToolAnnotations {
+	return &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(false), IdempotentHint: false}
+}
+
+func dismissSkillSuggestionAnnotations() *mcp.ToolAnnotations {
+	return &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(true), IdempotentHint: true}
+}
+
 type skillsRefusalResult struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
@@ -230,7 +244,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_skill_suggestions",
 		Title:       "List Skill Suggestions",
-		Description: "Review open proposed improvements for skills in a named project. Each suggestion includes the base version, separate reviewable changes, rationale, and whether it still applies cleanly. Complete proposed SKILL.md content is opt-in because each manifest can be 64 KiB. This tool never applies a suggestion: take one with approve_skill_suggestion or discard it with dismiss_skill_suggestion.",
+		Description: "Review open proposed improvements for skills in a named project. Each suggestion includes the base version, separate reviewable changes, rationale, and whether it still applies cleanly. Complete proposed SKILL.md content is opt-in because each manifest can be 64 KiB. This tool never applies a suggestion. On the Platform MCP, take one with approve_skill_suggestion or discard it with dismiss_skill_suggestion; where those tools are not offered, the user reviews it in the AI Control Plane dashboard.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListSkillSuggestionsToolInput) (*mcp.CallToolResult, ListSkillSuggestionsOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (ListSkillSuggestionsOutput, error) {
@@ -253,7 +267,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 		Name:        "approve_skill_suggestion",
 		Title:       "Approve a Skill Suggestion",
 		Description: "Take a proposed improvement from list_skill_suggestions: record it as the skill's new version and close the suggestion, exactly as approving it in the dashboard does. Name the reviewed changes in change_ids (every change to take the whole suggestion, or some to take only those and leave the rest proposed), or pass content to record a corrected SKILL.md instead. Tell the user which skill changes and what each taken change does, ask them to confirm out loud, then call this with confirmed: true. Constraints: a change proposed after your review is never taken, because it is not in change_ids. If the skill has moved on since the suggestion was written, nothing is recorded and the suggestion is closed as superseded. The new version reaches the plugins and assistants that already carry the skill and track its latest version; nobody new receives it.",
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(false), IdempotentHint: false},
+		Annotations: approveSkillSuggestionAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillWrite}, func(ctx context.Context, _ *mcp.CallToolRequest, input ApproveSkillSuggestionToolInput) (*mcp.CallToolResult, ApproveSkillSuggestionOutput, error) {
 		if !input.Confirmed {
 			return skillsRefusal("confirmation_required", "Tell the user which skill will change and what each change you are taking does, ask them to explicitly confirm it, then call this tool again with confirmed: true."), ApproveSkillSuggestionOutput{}, nil
@@ -272,7 +286,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 		Name:        "dismiss_skill_suggestion",
 		Title:       "Dismiss a Skill Suggestion",
 		Description: "Discard a proposed improvement from list_skill_suggestions without changing the skill, exactly as dismissing it in the dashboard does. Tell the user which suggestion is being discarded, ask them to confirm out loud, then call this with confirmed: true. Constraints: a suggestion that is already dismissed stays dismissed, so a retry is safe; an approved or superseded suggestion is refused as a conflict.",
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(true), IdempotentHint: true},
+		Annotations: dismissSkillSuggestionAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillWrite}, func(ctx context.Context, _ *mcp.CallToolRequest, input DismissSkillSuggestionToolInput) (*mcp.CallToolResult, DismissSkillSuggestionOutput, error) {
 		if !input.Confirmed {
 			return skillsRefusal("confirmation_required", "Tell the user which suggestion will be discarded, ask them to explicitly confirm it, then call this tool again with confirmed: true."), DismissSkillSuggestionOutput{}, nil
@@ -298,7 +312,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "add_skill_version",
 		Title:       "Add Skill Version",
-		Description: "Change what a skill tells an agent, by recording a new version from complete replacement SKILL.md content. Versions are fixed snapshots, so a correction is a new one rather than an edit. Constraints: pass the version you read as expected_latest_version_id — if the skill has moved on since, the write is refused rather than overwriting someone else's version. Identical content returns the existing version unchanged. Recording a version gives it to nobody new; the plugins and assistants that already carry the skill and track its latest version pick it up. To take a change proposed by list_skill_suggestions, use approve_skill_suggestion instead, which also closes the suggestion.",
+		Description: "Change what a skill tells an agent, by recording a new version from complete replacement SKILL.md content. Versions are fixed snapshots, so a correction is a new one rather than an edit. Constraints: pass the version you read as expected_latest_version_id — if the skill has moved on since, the write is refused rather than overwriting someone else's version. Identical content returns the existing version unchanged. Recording a version gives it to nobody new; the plugins and assistants that already carry the skill and track its latest version pick it up. To take a change proposed by list_skill_suggestions, use approve_skill_suggestion where it is offered, or have the user approve it in the AI Control Plane dashboard; either closes the suggestion, which a new version recorded here does not.",
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillWrite}, func(ctx context.Context, _ *mcp.CallToolRequest, input AddSkillVersionToolInput) (*mcp.CallToolResult, SkillAuthoringResult, error) {
 		return skillsToolCall(ctx, func(principal Principal) (SkillAuthoringResult, error) {
 			return skills.AddSkillVersion(ctx, principal, AddSkillVersionInput(input))
@@ -390,8 +404,13 @@ func registerUnavailableSkillsTools(reg *Registrar) {
 			Title:       tool.title,
 			Description: tool.description,
 		}
-		if tool.readOnly {
+		switch {
+		case tool.readOnly:
 			manifest.Annotations = readOnlyAnnotations()
+		case tool.name == "approve_skill_suggestion":
+			manifest.Annotations = approveSkillSuggestionAnnotations()
+		case tool.name == "dismiss_skill_suggestion":
+			manifest.Annotations = dismissSkillSuggestionAnnotations()
 		}
 		var discoveryScopes []authz.Scope
 		if tool.authority == ExternalAuthorizationMember {

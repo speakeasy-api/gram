@@ -303,9 +303,11 @@ func TestSkillSuggestionReviewToolsAreExternalWritesWithAndWithoutTheirDependenc
 				require.Equal(t, ExternalAuthorizationMember, descriptor.Meta.Authorization)
 				require.Equal(t, discoverySkillWrite, descriptor.Meta.DiscoveryScopes)
 				require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
-				if descriptor.Annotations != nil {
-					require.False(t, descriptor.Annotations.ReadOnlyHint)
-				}
+				require.NotNil(t, descriptor.Annotations)
+				require.False(t, descriptor.Annotations.ReadOnlyHint)
+				require.NotNil(t, descriptor.Annotations.DestructiveHint)
+				require.Equal(t, name == "dismiss_skill_suggestion", *descriptor.Annotations.DestructiveHint)
+				require.Equal(t, name == "dismiss_skill_suggestion", descriptor.Annotations.IdempotentHint)
 			}
 		})
 	}
