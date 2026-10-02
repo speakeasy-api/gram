@@ -710,8 +710,8 @@ UPDATE trigger_instances
 SET
     status = $1,
     updated_at = clock_timestamp()
-WHERE id = $2
-  AND status = $3
+WHERE id = $2 AND project_id = $3
+  AND status = $4
   AND definition_slug = 'wake'
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
@@ -720,11 +720,17 @@ RETURNING id, organization_id, project_id, definition_slug, name, environment_id
 type SetTriggerInstanceStatusByIDParams struct {
 	Status         string
 	ID             uuid.UUID
+	ProjectID      uuid.UUID
 	ExpectedStatus string
 }
 
 func (q *Queries) SetTriggerInstanceStatusByID(ctx context.Context, arg SetTriggerInstanceStatusByIDParams) (TriggerInstance, error) {
-	row := q.db.QueryRow(ctx, setTriggerInstanceStatusByID, arg.Status, arg.ID, arg.ExpectedStatus)
+	row := q.db.QueryRow(ctx, setTriggerInstanceStatusByID,
+		arg.Status,
+		arg.ID,
+		arg.ProjectID,
+		arg.ExpectedStatus,
+	)
 	var i TriggerInstance
 	err := row.Scan(
 		&i.ID,

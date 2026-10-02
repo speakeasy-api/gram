@@ -1335,17 +1335,29 @@ func (q *Queries) DeleteUserSessionIssuerCimdClient(ctx context.Context, arg Del
 }
 
 const fixtureSetHistoricalSessionSubject = `-- name: FixtureSetHistoricalSessionSubject :exec
-UPDATE user_sessions SET subject_urn = $1 WHERE id = $2
+UPDATE user_sessions s SET subject_urn = $1
+FROM user_session_issuers i
+WHERE s.id = $2 AND i.id = s.user_session_issuer_id
+ AND i.project_id = $3::uuid AND s.project_id = $3::uuid
+ AND s.organization_id = $4::text
+ AND COALESCE(i.organization_id, (SELECT organization_id FROM projects WHERE id = i.project_id)) = $4::text
 `
 
 type FixtureSetHistoricalSessionSubjectParams struct {
-	SubjectUrn urn.SessionSubject
-	SessionID  uuid.UUID
+	SubjectUrn     urn.SessionSubject
+	SessionID      uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
 }
 
 // Simulate pre-validation persisted credentials for management-display tests.
 func (q *Queries) FixtureSetHistoricalSessionSubject(ctx context.Context, arg FixtureSetHistoricalSessionSubjectParams) error {
-	_, err := q.db.Exec(ctx, fixtureSetHistoricalSessionSubject, arg.SubjectUrn, arg.SessionID)
+	_, err := q.db.Exec(ctx, fixtureSetHistoricalSessionSubject,
+		arg.SubjectUrn,
+		arg.SessionID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
 	return err
 }
 
@@ -1983,6 +1995,10 @@ WHERE user_session_issuer_id = $1
   -- broader wildcard when an exact rule invalidates the credential.
   AND (NOT starts_with(subject_urn, 'workload:') OR (
     SELECT wa.updated_at <= user_sessions.created_at
+      AND EXISTS (SELECT 1 FROM agents a WHERE a.id = wa.agent_id
+        AND a.organization_id = wa.organization_id AND NOT a.deleted
+        AND a.revoked_at IS NULL AND a.suspended_at IS NULL
+        AND a.owner_reassignment_required_at IS NULL)
       AND NOT EXISTS (
         -- Retiring an exact or narrower wildcard must not expose an older,
         -- broader assignment to a session minted before that withdrawal.

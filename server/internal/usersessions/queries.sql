@@ -1452,6 +1452,10 @@ WHERE user_session_issuer_id = @user_session_issuer_id
   -- broader wildcard when an exact rule invalidates the credential.
   AND (NOT starts_with(subject_urn, 'workload:') OR (
     SELECT wa.updated_at <= user_sessions.created_at
+      AND EXISTS (SELECT 1 FROM agents a WHERE a.id = wa.agent_id
+        AND a.organization_id = wa.organization_id AND NOT a.deleted
+        AND a.revoked_at IS NULL AND a.suspended_at IS NULL
+        AND a.owner_reassignment_required_at IS NULL)
       AND NOT EXISTS (
         -- Retiring an exact or narrower wildcard must not expose an older,
         -- broader assignment to a session minted before that withdrawal.
@@ -2155,4 +2159,9 @@ ORDER BY wia.project_id NULLS LAST, wia.created_at ASC, wia.id ASC;
 
 -- name: FixtureSetHistoricalSessionSubject :exec
 -- Simulate pre-validation persisted credentials for management-display tests.
-UPDATE user_sessions SET subject_urn = @subject_urn WHERE id = @session_id;
+UPDATE user_sessions s SET subject_urn = @subject_urn
+FROM user_session_issuers i
+WHERE s.id = @session_id AND i.id = s.user_session_issuer_id
+ AND i.project_id = @project_id::uuid AND s.project_id = @project_id::uuid
+ AND s.organization_id = @organization_id::text
+ AND COALESCE(i.organization_id, (SELECT organization_id FROM projects WHERE id = i.project_id)) = @organization_id::text;

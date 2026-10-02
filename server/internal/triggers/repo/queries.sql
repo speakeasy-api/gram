@@ -119,7 +119,7 @@ UPDATE trigger_instances
 SET
     status = @status,
     updated_at = clock_timestamp()
-WHERE id = @id
+WHERE id = @id AND project_id = @project_id
   AND status = @expected_status
   AND definition_slug = 'wake'
   AND deleted IS FALSE

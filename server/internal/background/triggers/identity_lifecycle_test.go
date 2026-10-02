@@ -158,7 +158,7 @@ func TestRootIdentityPausedCreateAndMutationRollback(t *testing.T) {
 	require.ErrorIs(t, err, hookErr)
 	require.Equal(t, before, f.resolve(t, f.assistantID, item.ID))
 	// The one-shot workflow completion helper cannot fire a root trigger.
-	require.NoError(t, f.app.MarkInstanceFired(t.Context(), item.ID.String()))
+	require.NoError(t, f.app.MarkInstanceFired(t.Context(), f.projectID, item.ID.String()))
 	persisted, err := f.app.GetInstance(t.Context(), f.projectID, item.ID)
 	require.NoError(t, err)
 	require.Equal(t, triggers.StatusActive, persisted.Status)
@@ -189,4 +189,19 @@ func TestRootIdentityUpdatePausePreservesIdentityAndPausedRetargetReplacesIt(t *
 	next := f.resolve(t, nextAssistant, item.ID)
 	require.Equal(t, assistantidentity.Active, next.State)
 	require.Greater(t, next.Identity.TriggerGeneration, first.Identity.TriggerGeneration)
+}
+
+func TestWakeCompletionRequiresOwningProject(t *testing.T) {
+	t.Parallel()
+	f := newIdentityFixture(t)
+	item, err := triggerrepo.New(f.db).CreateTriggerInstance(t.Context(), triggerrepo.CreateTriggerInstanceParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, DefinitionSlug: triggers.DefinitionSlugWake, Name: "Follow up", TargetKind: triggers.TargetKindAssistant, TargetRef: f.assistantID.String(), TargetDisplay: "Assistant", ConfigJson: []byte(`{"correlation_id":"thread-scope"}`), Status: triggers.StatusActive})
+	require.NoError(t, err)
+	require.NoError(t, f.app.MarkInstanceFired(t.Context(), uuid.New(), item.ID.String()))
+	unchanged, err := f.app.GetInstance(t.Context(), f.projectID, item.ID)
+	require.NoError(t, err)
+	require.Equal(t, triggers.StatusActive, unchanged.Status)
+	require.NoError(t, f.app.MarkScheduledInstanceFired(t.Context(), item.ID.String()))
+	fired, err := f.app.GetInstance(t.Context(), f.projectID, item.ID)
+	require.NoError(t, err)
+	require.Equal(t, triggers.StatusFired, fired.Status)
 }

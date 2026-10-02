@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -238,6 +239,20 @@ func TestAssistantIdentityTrustedOAuthUpgradeMatchesAPI(t *testing.T) {
 	require.Equal(t, api.IdentityState, output.IdentityState)
 	require.Equal(t, api.AgentID, output.AgentID)
 	require.Equal(t, api.IdentityGeneration, output.IdentityGeneration)
+	count, err := audittest.AuditLogCountByAction(ctx, db, audit.Action("assistant:identity_provision"))
+	require.NoError(t, err)
+	require.Equal(t, int64(1), count, "idempotent API retry must not duplicate the committed provisioning audit")
+	event, err := audittest.LatestAuditLogByAction(ctx, db, audit.Action("assistant:identity_provision"))
+	require.NoError(t, err)
+	require.Equal(t, principal.UserID, event.ActorID)
+	require.Equal(t, principal.OrganizationID, event.OrganizationID)
+	require.Equal(t, project.ID, event.ProjectID.UUID)
+	require.Equal(t, legacy.ID.String(), event.SubjectID)
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal(event.Metadata, &metadata))
+	require.Equal(t, *output.AgentID, metadata["agent_id"])
+	require.EqualValues(t, *output.IdentityGeneration, metadata["generation"])
+
 	clientID, ok = contextvalues.GetOAuthClientID(ctx)
 	require.True(t, ok)
 	require.Equal(t, principal.ClientID, clientID, "upgrade must not discard OAuth audit provenance")

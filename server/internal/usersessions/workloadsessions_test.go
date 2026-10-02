@@ -264,7 +264,7 @@ func TestListUserSessions_WorkloadIssuerOfSiblingProjectIsUnnamed(t *testing.T) 
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	session, err := seedUserSession(t, ctx, ti.conn, issuerID, urn.NewUserSubject("historical-user"))
 	require.NoError(t, err)
-	require.NoError(t, sessionsrepo.New(ti.conn).FixtureSetHistoricalSessionSubject(ctx, sessionsrepo.FixtureSetHistoricalSessionSubjectParams{SessionID: session.ID, SubjectUrn: subject}))
+	require.NoError(t, sessionsrepo.New(ti.conn).FixtureSetHistoricalSessionSubject(ctx, sessionsrepo.FixtureSetHistoricalSessionSubjectParams{SessionID: session.ID, SubjectUrn: subject, OrganizationID: session.OrganizationID.String, ProjectID: session.ProjectID.UUID}))
 
 	got := sessionByID(t, listAllSessions(t, ctx, ti, nil), session.ID).Workload
 	require.NotNil(t, got, "the identity parsed from the subject is always reported")

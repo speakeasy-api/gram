@@ -210,4 +210,9 @@ WHERE si.id = s.user_session_issuer_id
 
 -- name: FixtureMoveWorkloadSessionProject :exec
 -- Simulate a legacy persisted credential to exercise serve-path tenant checks.
-UPDATE user_sessions SET project_id = @project_id WHERE id = @session_id;
+UPDATE user_sessions s SET project_id = @project_id
+FROM user_session_issuers i, projects p
+WHERE s.id = @session_id AND i.id = s.user_session_issuer_id
+ AND p.id = @project_id AND p.organization_id = @organization_id::text
+ AND s.organization_id = @organization_id::text
+ AND COALESCE(i.organization_id, (SELECT organization_id FROM projects WHERE id = i.project_id)) = @organization_id::text;

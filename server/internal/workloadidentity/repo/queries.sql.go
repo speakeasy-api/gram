@@ -12,17 +12,23 @@ import (
 )
 
 const fixtureMoveWorkloadSessionProject = `-- name: FixtureMoveWorkloadSessionProject :exec
-UPDATE user_sessions SET project_id = $1 WHERE id = $2
+UPDATE user_sessions s SET project_id = $1
+FROM user_session_issuers i, projects p
+WHERE s.id = $2 AND i.id = s.user_session_issuer_id
+ AND p.id = $1 AND p.organization_id = $3::text
+ AND s.organization_id = $3::text
+ AND COALESCE(i.organization_id, (SELECT organization_id FROM projects WHERE id = i.project_id)) = $3::text
 `
 
 type FixtureMoveWorkloadSessionProjectParams struct {
-	ProjectID uuid.NullUUID
-	SessionID uuid.UUID
+	ProjectID      uuid.NullUUID
+	SessionID      uuid.UUID
+	OrganizationID string
 }
 
 // Simulate a legacy persisted credential to exercise serve-path tenant checks.
 func (q *Queries) FixtureMoveWorkloadSessionProject(ctx context.Context, arg FixtureMoveWorkloadSessionProjectParams) error {
-	_, err := q.db.Exec(ctx, fixtureMoveWorkloadSessionProject, arg.ProjectID, arg.SessionID)
+	_, err := q.db.Exec(ctx, fixtureMoveWorkloadSessionProject, arg.ProjectID, arg.SessionID, arg.OrganizationID)
 	return err
 }
 

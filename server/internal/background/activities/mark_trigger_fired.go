@@ -31,7 +31,7 @@ func (m *MarkTriggerFired) Do(ctx context.Context, input MarkTriggerFiredInput) 
 	// surface its caller carries.
 	ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceSystem))
 
-	if err := m.app.MarkInstanceFired(ctx, input.TriggerInstanceID); err != nil {
+	if err := m.app.MarkScheduledInstanceFired(ctx, input.TriggerInstanceID); err != nil {
 		return fmt.Errorf("mark trigger fired: %w", err)
 	}
 	return nil

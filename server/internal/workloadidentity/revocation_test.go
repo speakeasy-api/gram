@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -248,7 +249,7 @@ func TestWorkloadSessionsRequireIssuerProject(t *testing.T) {
 	_, err = q.CreateUserSession(t.Context(), params)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	// Simulate a credential persisted before the stricter tenant predicate.
-	err = identityrepo.New(conn).FixtureMoveWorkloadSessionProject(t.Context(), identityrepo.FixtureMoveWorkloadSessionProjectParams{ProjectID: uuid.NullUUID{UUID: sibling, Valid: true}, SessionID: session.ID})
+	err = identityrepo.New(conn).FixtureMoveWorkloadSessionProject(t.Context(), identityrepo.FixtureMoveWorkloadSessionProjectParams{OrganizationID: f.tenant.organizationID, ProjectID: uuid.NullUUID{UUID: sibling, Valid: true}, SessionID: session.ID})
 	require.NoError(t, err)
 	_, err = q.GetUserSessionPrincipalCredentialByJTI(t.Context(), sessionsrepo.GetUserSessionPrincipalCredentialByJTIParams{UserSessionIssuerID: issuer, Jti: session.Jti})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
@@ -280,4 +281,27 @@ func TestAgentRevocationFencesRacingSessionIssuance(t *testing.T) {
 	require.NoError(t, issuance.Rollback(ctx))
 	_, err = sessionsrepo.New(conn).CreateUserSession(ctx, workloadSessionParams(issuer, f.issuerID, testSubject))
 	require.NoError(t, err, "fresh authority is still issuable after a policy change")
+}
+
+func TestCredentialEligibilityTracksTemporaryAgentSuspension(t *testing.T) {
+	t.Parallel()
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	f := newAssignmentFixture(t, conn)
+	seedAssignment(t, conn, f.tenant.organizationID, f.issuerID, testSubject, f.agentID)
+	issuer := workloadSessionIssuer(t, conn, f.tenant.organizationID)
+	q := sessionsrepo.New(conn)
+	session, err := q.CreateUserSession(t.Context(), workloadSessionParams(issuer, f.issuerID, testSubject))
+	require.NoError(t, err)
+	params := sessionsrepo.GetUserSessionPrincipalCredentialByJTIParams{UserSessionIssuerID: issuer, Jti: session.Jti}
+	_, err = q.GetUserSessionPrincipalCredentialByJTI(t.Context(), params)
+	require.NoError(t, err)
+	_, err = agentrepo.New(conn).SuspendAgent(t.Context(), agentrepo.SuspendAgentParams{OrganizationID: f.tenant.organizationID, ID: f.agentID})
+	require.NoError(t, err)
+	_, err = q.GetUserSessionPrincipalCredentialByJTI(t.Context(), params)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = agentrepo.New(conn).ResumeAgent(t.Context(), agentrepo.ResumeAgentParams{OrganizationID: f.tenant.organizationID, ID: f.agentID})
+	require.NoError(t, err)
+	_, err = q.GetUserSessionPrincipalCredentialByJTI(t.Context(), params)
+	require.NoError(t, err, "temporary suspension must not permanently invalidate the credential")
 }

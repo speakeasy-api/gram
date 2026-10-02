@@ -677,11 +677,29 @@ func (a *App) CancelWakeInstance(ctx context.Context, projectID uuid.UUID, insta
 	return item, nil
 }
 
+// MarkScheduledInstanceFired is the privileged worker completion entry point.
+// Derive the tenant from the persisted schedule target, not external user input.
+// Keep the activity payload unchanged for already scheduled workflow histories.
+func (a *App) MarkScheduledInstanceFired(ctx context.Context, instanceID string) error {
+	id, err := uuid.Parse(instanceID)
+	if err != nil {
+		return fmt.Errorf("parse scheduled instance id: %w", err)
+	}
+	instance, err := a.repo.GetTriggerInstanceByIDPublic(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("load scheduled instance tenant: %w", err)
+	}
+	return a.MarkInstanceFired(ctx, instance.ProjectID, instanceID)
+}
+
 // MarkInstanceFired transitions an active wake instance to 'fired' and
 // records a wake:fired audit log. The UPDATE is guarded on status='active' so
 // a cancel that won the race is preserved (the workflow returns nil; the
 // already-cancelled row keeps its terminal state).
-func (a *App) MarkInstanceFired(ctx context.Context, instanceID string) error {
+func (a *App) MarkInstanceFired(ctx context.Context, projectID uuid.UUID, instanceID string) error {
 	id, err := uuid.Parse(instanceID)
 	if err != nil {
 		return fmt.Errorf("parse trigger instance id: %w", err)
@@ -695,6 +713,7 @@ func (a *App) MarkInstanceFired(ctx context.Context, instanceID string) error {
 
 	item, err := triggerrepo.New(tx).SetTriggerInstanceStatusByID(ctx, triggerrepo.SetTriggerInstanceStatusByIDParams{
 		Status:         StatusFired,
+		ProjectID:      projectID,
 		ID:             id,
 		ExpectedStatus: StatusActive,
 	})

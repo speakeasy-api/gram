@@ -112,7 +112,8 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (
 		ConsentUserID           string    `json:"consent_user_id"`
 		ProvisioningActorUserID string    `json:"provisioning_actor_user_id"`
 		AgentID                 uuid.UUID `json:"agent_id"`
-	}{CreatorUserID: nullableString(assistant.CreatedByUserID.String, assistant.CreatedByUserID.Valid), ConsentUserID: p.ActorUserID, ProvisioningActorUserID: p.ActorUserID, AgentID: agent.ID})
+		Generation              int64     `json:"generation"`
+	}{CreatorUserID: nullableString(assistant.CreatedByUserID.String, assistant.CreatedByUserID.Valid), ConsentUserID: p.ActorUserID, ProvisioningActorUserID: p.ActorUserID, AgentID: agent.ID, Generation: 1})
 	if err != nil {
 		return Binding{}, fmt.Errorf("encode provisioning provenance: %w", err)
 	}

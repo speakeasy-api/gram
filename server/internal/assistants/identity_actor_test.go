@@ -19,6 +19,7 @@ func TestIdentityProvisioningRequiresValidatedHumanOrPlatformOAuth(t *testing.T)
 	oauth := contextvalues.SetOAuthClientID(contextvalues.SetAuthContext(t.Context(), actor), "client-test")
 	require.Error(t, requireAssistantProvisioningActor(oauth))
 	require.NoError(t, requireAssistantProvisioningActor(contextvalues.SetActingSurface(oauth, contextvalues.ActingSurfacePlatformMCP)))
-	actor.APIKeyID = "key-test"
+	apiKeyActor := &contextvalues.AuthContext{UserID: "user-test", APIKeyID: "key-test"}
+	oauth = contextvalues.SetOAuthClientID(contextvalues.SetAuthContext(t.Context(), apiKeyActor), "client-test")
 	require.Error(t, requireAssistantProvisioningActor(contextvalues.SetActingSurface(oauth, contextvalues.ActingSurfacePlatformMCP)))
 }
