@@ -51,6 +51,34 @@ deduplication is not guaranteed: generated client keys use membership display na
 and supported clients may show the same server through multiple plugins. Runtime
 authorization remains authoritative regardless of stale published/client content.
 
+### Cross-plugin client check
+
+Verified on 2026-10-02 with **Claude Code 2.1.287 on macOS**, using a local
+marketplace and normal `claude plugin marketplace add` / `claude plugin install`
+commands in an isolated `CLAUDE_CONFIG_DIR` and empty workspace. Two synthetic
+plugins, `engineering` and `on-call`, each declared the same `shared-server` key
+and identical HTTP endpoint in `.mcp.json`, matching Gram's Claude package shape.
+The endpoint was a loopback MCP test server, not a deployed Gram server.
+
+Observed:
+
+- `claude plugin list --json` showed both plugins installed and enabled, each
+  containing the shared server configuration.
+- With both installed, `claude mcp list` showed **one** connected entry:
+  `plugin:engineering:shared-server`. The test server received one initialization
+  and one `tools/list` request during that health check.
+- After uninstalling `engineering`, a fresh `claude mcp list` showed
+  `plugin:on-call:shared-server` connected. Initialization and tool discovery
+  succeeded again through the remaining plugin.
+
+Thus this client/version deduplicated the identical configurations in its MCP
+listing; removing the displayed plugin did not prevent discovery through the
+remaining plugin. This does not establish which plugin wins in other install
+orders or a universal deduplication rule. Tool invocation, interactive UI,
+authenticated Gram endpoints, differing names/headers, remote marketplace refresh,
+Cursor, and Claude Desktop/Cowork were not verified by this check. Do not infer
+those behaviors from package generation or this CLI result.
+
 ## Delivery and failures
 
 - The shared outbox drains immediately while backlogged and sleeps five seconds
