@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -36,7 +37,11 @@ func (f *roleAdmissionOutsideTransactionFlags) EvaluateFlag(ctx context.Context,
 	f.t.Helper()
 	f.evaluated = true
 	require.Zero(f.t, f.db.Stat().AcquiredConns(), "role admission must resolve before opening the mutation transaction")
-	return feature.EvaluateFlag(ctx, f.Provider, flag, distinctID, groups)
+	evaluation, err := feature.EvaluateFlag(ctx, f.Provider, flag, distinctID, groups)
+	if err != nil {
+		return evaluation, fmt.Errorf("evaluate role admission flag: %w", err)
+	}
+	return evaluation, nil
 }
 
 func TestAccessRoleMutationsCommitReplayAndPreserveOtherGrants(t *testing.T) {
