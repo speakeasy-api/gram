@@ -13,6 +13,7 @@ import { RemoteMcpIdentitySectionBody } from "./RemoteMcpIdentitySection";
 import type { AuthTarget } from "./authTarget";
 import {
   SLACK_READ_SCOPES,
+  SLACK_DEFAULT_SCOPES,
   slackAppConfiguration,
 } from "@/lib/remote-identity/setup/slack";
 import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
@@ -418,7 +419,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
     expect(document.activeElement).toBe(screen.getByLabelText("Client ID"));
     expect(screen.getByRole("status").textContent).toContain(
-      "Read/search defaults applied. Enter your Slack app's client ID and secret, then Save. Nothing has been saved yet.",
+      "Selected access applied. Enter your Slack app's client ID and secret, then Save. Nothing has been saved yet.",
     );
     expect(mocks.commit).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText("Client ID"), {
@@ -435,7 +436,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
         initialBindingOnly: true,
         clientMode: "manual",
         clientConfiguration: expect.objectContaining({
-          scope: [...SLACK_READ_SCOPES],
+          scope: SLACK_DEFAULT_SCOPES,
           tokenEndpointAuthMethod: "client_secret_post",
         }),
       }),
@@ -514,6 +515,47 @@ describe("RemoteMcpIdentitySectionBody", () => {
         screen.queryByRole("link", { name: "Open Slack app creation" }),
       ).toBeNull(),
     );
+  });
+
+  it("uses checklist changes for both the Slack manifest and saved client", async () => {
+    slackFixture();
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Search public channel messages" })
+        .getAttribute("data-state"),
+    ).toBe("checked");
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Search private channel messages" })
+        .getAttribute("data-state"),
+    ).toBe("unchecked");
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Search private channel messages" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create a new Slack app" }),
+    );
+    const expected = [...SLACK_DEFAULT_SCOPES, "search:read.private"];
+    const link = screen.getByRole("link", { name: "Open Slack app creation" });
+    const manifest = JSON.parse(
+      new URL(link.getAttribute("href")!).searchParams.get("manifest_json")!,
+    );
+    expect(manifest.oauth_config.scopes.user).toEqual(expected);
+    fireEvent.change(screen.getByLabelText("Client ID"), {
+      target: { value: "slack-client" },
+    });
+    fireEvent.change(screen.getByLabelText("Client secret"), {
+      target: { value: "test-secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    expect(mocks.commit).toHaveBeenCalledWith({
+      commitServerIdentityConfigurationForm: expect.objectContaining({
+        clientConfiguration: expect.objectContaining({ scope: expected }),
+      }),
+    });
   });
 
   it("does not generate a new app without a callback or overwrite ordinary unsaved credentials", () => {
@@ -595,7 +637,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 
-  it("reuses only an exact compatible Slack client without credential configuration", async () => {
+  it("reuses only a compatible Slack client without credential configuration", async () => {
     slackFixture();
     const compatible = {
       id: "compatible-client",
@@ -627,7 +669,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
     expect(
       screen.getByText(
-        /Scopes must match the read\/search permissions exactly/,
+        /Scopes must match the supported read\/search access choices/,
       ),
     ).toBeDefined();
     fireEvent.click(
@@ -752,7 +794,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 
-  it("does not overwrite Slack drafts or accept broader scopes in guided setup", () => {
+  it("does not overwrite Slack drafts or save without selected access", () => {
     slackFixture();
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
@@ -772,15 +814,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
-    fireEvent.click(screen.getByRole("combobox", { name: "Scope" }));
-    fireEvent.change(screen.getByPlaceholderText("Search options..."), {
-      target: { value: "chat:write" },
-    });
-    fireEvent.click(screen.getByRole("option", { name: /Create new option/ }));
-    expect(
-      screen.getByRole("option", { name: /^chat:write, selected/ }),
-    ).toBeDefined();
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Search public channel messages" }),
+    );
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Read public channels" }),
+    );
     expect((screen.getByLabelText("Client ID") as HTMLInputElement).value).toBe(
       "unsaved-client",
     );
@@ -789,7 +828,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
         .disabled,
     ).toBe(true);
     expect(
-      screen.getByText(/Guided setup requires the exact read\/search scopes/),
+      screen.getByText("Choose at least one access option."),
     ).toBeDefined();
     fireEvent.click(screen.getByRole("radio", { name: /No Identity/ }));
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));

@@ -5,6 +5,7 @@ import {
   isSlackProvider,
   slackClientMismatch,
   SLACK_READ_SCOPES,
+  SLACK_DEFAULT_SCOPES,
   slackAppConfiguration,
 } from "./slack";
 
@@ -18,7 +19,7 @@ describe("Slack setup compatibility", () => {
       settings: { is_mcp_enabled: true },
       oauth_config: {
         redirect_urls: [callback],
-        scopes: { user: [...SLACK_READ_SCOPES] },
+        scopes: { user: SLACK_DEFAULT_SCOPES },
       },
     });
     const link = new URL(config.creationUrl);
@@ -53,16 +54,23 @@ describe("Slack setup compatibility", () => {
     ])
       expect(isSlackMcpUrl(url)).toBe(false);
   });
-  it("requires exact normalized read/search scopes, never writes or unknown scopes", () => {
+  it("accepts complete access choices, never writes, unknown, or partial choices", () => {
     expect(hasSlackReadScopes([...SLACK_READ_SCOPES].reverse())).toBe(true);
+    expect(hasSlackReadScopes(SLACK_DEFAULT_SCOPES)).toBe(true);
     expect(
       hasSlackReadScopes([...SLACK_READ_SCOPES, SLACK_READ_SCOPES[0]]),
     ).toBe(true);
     expect(hasSlackReadScopes([...SLACK_READ_SCOPES, "chat:write"])).toBe(
       false,
     );
-    expect(hasSlackReadScopes(SLACK_READ_SCOPES.slice(1))).toBe(false);
+    expect(hasSlackReadScopes(["channels:history"])).toBe(false);
     expect(hasSlackReadScopes(undefined)).toBe(false);
+    expect(
+      slackAppConfiguration(
+        "https://api.example.com/mcp/remote_login_callback",
+        [],
+      ),
+    ).toBeNull();
   });
   it("checks provider, auth method and callback without modifying stored clients", () => {
     const client = {

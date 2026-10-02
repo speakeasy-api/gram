@@ -1,24 +1,61 @@
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 
-export const SLACK_READ_SCOPES = [
-  "channels:history",
-  "channels:read",
-  "groups:history",
-  "groups:read",
-  "im:history",
-  "im:read",
-  "mpim:history",
-  "mpim:read",
-  "search:read.im",
-  "search:read.mpim",
-  "search:read.private",
-  "search:read.public",
+export const SLACK_SCOPE_CHOICES = [
+  {
+    label: "Search public channel messages",
+    description: "Find messages in public channels you can access.",
+    scopes: ["search:read.public"],
+    defaultSelected: true,
+  },
+  {
+    label: "Read public channels",
+    description:
+      "Read messages, channel details, and member lists in public channels.",
+    scopes: ["channels:history", "channels:read"],
+    defaultSelected: true,
+  },
+  {
+    label: "Search private channel messages",
+    description: "Find messages in private channels you belong to.",
+    scopes: ["search:read.private"],
+    defaultSelected: false,
+  },
+  {
+    label: "Read private channels",
+    description:
+      "Read messages, channel details, and member lists in private channels you belong to.",
+    scopes: ["groups:history", "groups:read"],
+    defaultSelected: false,
+  },
+  {
+    label: "Search direct messages",
+    description:
+      "Find messages in direct and group conversations you belong to.",
+    scopes: ["search:read.im", "search:read.mpim"],
+    defaultSelected: false,
+  },
+  {
+    label: "Read direct messages",
+    description:
+      "Read messages and conversation details in direct and group conversations you belong to.",
+    scopes: ["im:history", "im:read", "mpim:history", "mpim:read"],
+    defaultSelected: false,
+  },
 ] as const;
+
+export const SLACK_READ_SCOPES = SLACK_SCOPE_CHOICES.flatMap((choice) => [
+  ...choice.scopes,
+]);
+
+export const SLACK_DEFAULT_SCOPES = SLACK_SCOPE_CHOICES.filter(
+  (choice) => choice.defaultSelected,
+).flatMap((choice) => [...choice.scopes]);
 
 export function slackAppConfiguration(
   callback: string | undefined,
+  scopes: readonly string[] = SLACK_DEFAULT_SCOPES,
 ): { json: string; creationUrl: string } | null {
-  if (!callback) return null;
+  if (!callback || !hasSlackReadScopes(scopes)) return null;
   try {
     const url = new URL(callback);
     if (
@@ -39,7 +76,7 @@ export function slackAppConfiguration(
       settings: { is_mcp_enabled: true },
       oauth_config: {
         redirect_urls: [callback],
-        scopes: { user: [...SLACK_READ_SCOPES] },
+        scopes: { user: [...scopes] },
       },
     },
     null,
@@ -92,11 +129,17 @@ export function isSlackProvider(
 export function hasSlackReadScopes(
   scopes: readonly string[] | undefined,
 ): boolean {
-  if (!scopes) return false;
+  if (!scopes?.length) return false;
   const unique = new Set(scopes);
   return (
-    unique.size === SLACK_READ_SCOPES.length &&
-    SLACK_READ_SCOPES.every((scope) => unique.has(scope))
+    [...unique].every((scope) =>
+      SLACK_READ_SCOPES.some((allowed) => allowed === scope),
+    ) &&
+    SLACK_SCOPE_CHOICES.every(
+      (choice) =>
+        choice.scopes.every((scope) => unique.has(scope)) ||
+        choice.scopes.every((scope) => !unique.has(scope)),
+    )
   );
 }
 
@@ -113,7 +156,7 @@ export function slackClientMismatch(
   if (client.remoteSessionIssuerId !== providerId)
     return "Different identity provider";
   if (!hasSlackReadScopes(client.scope))
-    return "Scopes must match the read/search permissions exactly";
+    return "Scopes must match the supported read/search access choices";
   if (client.tokenEndpointAuthMethod !== "client_secret_post")
     return "Requires client_secret_post authentication";
   if (client.legacyCallbackUrl !== false)

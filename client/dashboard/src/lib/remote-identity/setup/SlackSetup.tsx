@@ -1,11 +1,16 @@
 import { SetupGuideCallout } from "@/components/setup-guide/SetupGuideCallout";
 import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { useGetMCPSetupDocs } from "@gram/client/react-query/getMCPSetupDocs.js";
 import { useEffect, useState } from "react";
 import type { UserIdentityDraft } from "../drafts/useIdentityDraft";
-import { SLACK_READ_SCOPES, slackAppConfiguration } from "./slack";
+import {
+  SLACK_DEFAULT_SCOPES,
+  SLACK_SCOPE_CHOICES,
+  slackAppConfiguration,
+} from "./slack";
 
 export function SlackSetup({
   serverUrl,
@@ -20,6 +25,11 @@ export function SlackSetup({
     throwOnError: false,
   });
   const [newApp, setNewApp] = useState(false);
+  const [selectedChoices, setSelectedChoices] = useState<string[]>(
+    SLACK_SCOPE_CHOICES.filter((choice) => choice.defaultSelected).map(
+      (choice) => choice.label,
+    ),
+  );
   const setup = draft.slackSetup;
   const manualActive = setup?.manualActive ?? false;
   useEffect(() => {
@@ -27,7 +37,30 @@ export function SlackSetup({
   }, [manualActive]);
   if (!setup) return null;
   const callback = data?.oauthCallbackUrl;
-  const configuration = slackAppConfiguration(callback);
+  const selected = setup.manualActive
+    ? SLACK_SCOPE_CHOICES.filter((choice) =>
+        choice.scopes.every((scope) => draft.scopes.includes(scope)),
+      ).map((choice) => choice.label)
+    : selectedChoices;
+  const scopes = SLACK_SCOPE_CHOICES.filter((choice) =>
+    selected.includes(choice.label),
+  ).flatMap((choice) => [...choice.scopes]);
+  const configuration = slackAppConfiguration(callback, scopes);
+  const callbackValid = !!slackAppConfiguration(callback, SLACK_DEFAULT_SCOPES);
+  const toggleChoice = (label: string, checked: boolean): void => {
+    const next = checked
+      ? [...selected, label]
+      : selected.filter((value) => value !== label);
+    if (setup.manualActive) {
+      draft.setScopes(
+        SLACK_SCOPE_CHOICES.filter((choice) =>
+          next.includes(choice.label),
+        ).flatMap((choice) => [...choice.scopes]),
+      );
+    } else {
+      setSelectedChoices(next);
+    }
+  };
   const canChooseApp =
     !disabled &&
     !!configuration &&
@@ -37,37 +70,69 @@ export function SlackSetup({
         setup.scopesCompatible));
   const chooseApp = (create: boolean): void => {
     if (!canChooseApp) return;
-    if (setup.canApplyDefaults) setup.applyDefaults();
+    if (setup.canApplyDefaults) setup.applyDefaults(scopes);
     setNewApp(create);
   };
   return (
     <div className="mb-6 space-y-3 rounded border p-4">
       <Text className="font-medium">Slack read/search setup</Text>
       <Text small muted className="block">
-        Reads and searches public and private channels, group DMs, and DMs
-        visible to each authorizing user. No message sending permissions are
-        requested.
+        Choose the information each authorizing user can access. Two public
+        channel options are selected by default. No message sending access is
+        requested. See the{" "}
+        <a
+          href="https://docs.slack.dev/ai/slack-mcp-server/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline"
+        >
+          Slack MCP permission guide
+        </a>
+        .
       </Text>
-      <details>
-        <summary className="cursor-pointer text-sm">
-          Required user scopes
-        </summary>
-        <Text small className="mt-2 block break-words font-mono">
-          {SLACK_READ_SCOPES.join(" ")}
+      {!draft.connected && draft.choice !== "existing" && (
+        <fieldset className="grid gap-2 sm:grid-cols-2" disabled={disabled}>
+          <legend className="mb-2 text-sm font-medium">Slack access</legend>
+          {SLACK_SCOPE_CHOICES.map((choice) => (
+            <label
+              key={choice.label}
+              className="flex cursor-pointer gap-3 rounded border p-3 text-sm"
+            >
+              <Checkbox
+                checked={selected.includes(choice.label)}
+                onCheckedChange={(checked) =>
+                  toggleChoice(choice.label, checked === true)
+                }
+                disabled={disabled}
+                aria-label={choice.label}
+              />
+              <span>
+                <span className="block font-medium">{choice.label}</span>
+                <span className="text-muted-foreground block">
+                  {choice.description}
+                </span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+      {!scopes.length && !draft.connected && draft.choice !== "existing" && (
+        <Text small warning className="block">
+          Choose at least one access option.
         </Text>
-      </details>
+      )}
       <Text small className="block">
-        Use an eligible internal or Marketplace-published app, not an unlisted
-        distributed app. Enable MCP, add these user scopes and this redirect URL
-        without replacing unrelated app settings. Workspace approval and
-        individual consent remain separate.
+        Use an eligible internal or Marketplace-published app. Enable MCP, add
+        the selected user permissions and this redirect URL without replacing
+        unrelated app settings. Workspace approval and individual consent remain
+        separate.
       </Text>
       <Input
         aria-label="Slack OAuth callback URL"
         value={callback ?? ""}
         readOnly
       />
-      {!configuration && (
+      {!callbackValid && (
         <Text small warning className="block">
           Could not load a valid deployment callback. Guided defaults and app
           creation are unavailable. Refresh the page to retry; the ordinary
@@ -84,8 +149,7 @@ export function SlackSetup({
       )}
       {setup.manualActive && !setup.scopesCompatible && (
         <Text small warning className="block">
-          Guided setup requires the exact read/search scopes listed here.
-          Restore them in Advanced before saving.
+          Choose a supported set of read/search access options before saving.
         </Text>
       )}
       <SetupGuideCallout serverUrl={serverUrl} />
@@ -93,6 +157,12 @@ export function SlackSetup({
         <Text small muted className="block">
           A saved identity is already configured. Use Clear connection below
           only if you intend to replace it.
+        </Text>
+      )}
+      {!draft.connected && draft.choice === "existing" && (
+        <Text small muted className="block">
+          A stored client keeps the permissions already saved with it. Choose an
+          app option to select different access.
         </Text>
       )}
       {!draft.connected &&

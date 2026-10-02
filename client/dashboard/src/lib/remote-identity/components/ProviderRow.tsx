@@ -778,8 +778,8 @@ function ManualCredentialsFields({
     <div className="space-y-3">
       {guidedManual && (
         <Text small className="block" role="status">
-          Read/search defaults applied. Enter your Slack app's client ID and
-          secret, then Save. Nothing has been saved yet.
+          Selected access applied. Enter your Slack app's client ID and secret,
+          then Save. Nothing has been saved yet.
         </Text>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
@@ -814,13 +814,15 @@ function ManualCredentialsFields({
           />
         </div>
       </div>
-      <AdvancedOptions>
-        <ScopeField
-          draft={draft}
-          disabled={disabled}
-          providerName={providerName}
-        />
-      </AdvancedOptions>
+      {!guidedManual && (
+        <AdvancedOptions>
+          <ScopeField
+            draft={draft}
+            disabled={disabled}
+            providerName={providerName}
+          />
+        </AdvancedOptions>
+      )}
       {registrationGuideUrl ? (
         <Button variant="secondary" size="sm" asChild>
           <a href={registrationGuideUrl} target="_blank" rel="noreferrer">

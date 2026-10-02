@@ -29,7 +29,6 @@ import {
   hasSlackReadScopes,
   isSlackMcpUrl,
   isSlackProvider,
-  SLACK_READ_SCOPES,
   slackClientMismatch,
 } from "../setup/slack";
 import {
@@ -295,7 +294,7 @@ export type UserIdentityDraft = {
     scopesCompatible: boolean;
     providerCompatible: boolean;
     canApplyDefaults: boolean;
-    applyDefaults: () => void;
+    applyDefaults: (scopes: string[]) => void;
     incompatibleClients: { id: string; hint: string; reason: string }[];
   };
   providerGroups: ProviderGroup[];
@@ -789,7 +788,7 @@ export function useUserIdentityDraft({
           !clientSecret.trim())
       ) {
         throw new Error(
-          "Slack setup requires the reviewed provider, exact read/search scopes, and a client secret.",
+          "Slack setup requires the reviewed provider, supported read/search access, and a client secret.",
         );
       }
 
@@ -1009,9 +1008,10 @@ export function useUserIdentityDraft({
             !clientSecret &&
             scopes.length === 0 &&
             !isPending,
-          applyDefaults: () => {
+          applyDefaults: (selectedScopes: string[]) => {
             if (
               !slackCompatible ||
+              !hasSlackReadScopes(selectedScopes) ||
               connected ||
               clientId ||
               clientSecret ||
@@ -1020,7 +1020,7 @@ export function useUserIdentityDraft({
             )
               return;
             setChoicePick("manual");
-            setScopes([...SLACK_READ_SCOPES]);
+            setScopes(selectedScopes);
             setGuidedManual(true);
             setGuidedInitialBinding(linkedClients.length === 0);
             setLocalStatus({ kind: "idle" });
