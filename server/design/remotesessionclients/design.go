@@ -769,7 +769,7 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
 	Attribute("token_endpoint_auth_audience_format", String, "Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.", tokenEndpointAuthAudienceFormatEnum)
 	Attribute("scope", ArrayOf(String), func() {
-		ScopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
+		ScopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scope_override, then its scopes_supported.")
 	})
 	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", AudienceAttribute)
 	RegistrationProvenanceAttributes()
@@ -802,7 +802,7 @@ var CreateCimdForm = Type("CreateCimdForm", func() {
 		})
 	})
 	Attribute("scope", ArrayOf(String), func() {
-		ScopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
+		ScopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scope_override, then its scopes_supported.")
 	})
 	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", AudienceAttribute)
 
@@ -920,7 +920,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 	Attribute("json_web_key_set_id", String, "The organization JSON Web Key Set attached to this client, managed through attachKeySet and detachKeySet. Null when no key set is attached.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.")
+	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scope_override, then its scopes_supported.")
 	Attribute("audience", String, "Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.")
 	Attribute("legacy_callback_url", Boolean, "Whether the client was registered upstream with the legacy callback URL. The authorize leg then sends that URL and a JSON state instead of the current callback. Cleared when the client is rotated.")
 	Attribute("callback_url", String, "The redirect URI this client registers with its upstream provider. It never changes after the client is created. Absent on global clients.", func() {

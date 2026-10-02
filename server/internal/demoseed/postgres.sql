@@ -1434,8 +1434,7 @@ BEGIN
      'https://identity.example.com/.well-known/jwks.json',
      ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
      ARRAY['code'], ARRAY['none'], ARRAY['S256'], TRUE,
-     -- A pinned scope request, so the provider's page shows its override and
-     -- its clients' scope fields show the ignored-scopes warning.
+     -- A pinned scope request, so the provider's page shows its override.
      'Example Workspace Identity', ARRAY['read']);
 
   INSERT INTO remote_session_clients

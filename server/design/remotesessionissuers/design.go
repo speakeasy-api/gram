@@ -633,7 +633,7 @@ var CreateRemoteSessionIssuerForm = Type("CreateRemoteSessionIssuerForm", func()
 	Attribute("claims_supported", ArrayOf(String), "Claims the issuer can return in ID tokens and from userinfo. Omitting the field stores null (\"not captured\"), distinct from an empty array (\"the issuer advertises none\").")
 	Attribute("backchannel_logout_supported", Boolean, "Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the field stores null (\"not captured\").")
 	Attribute("authorization_response_iss_parameter_supported", Boolean, "Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field stores null (\"not captured\").")
-	Attribute("scope_override", ArrayOf(String), "Operator-pinned scope request. When set, it is sent verbatim on the upstream authorize redirect in place of the resolved scope set. Omit or send an empty array to leave it unset.")
+	Attribute("scope_override", ArrayOf(String), "Operator-pinned scope request. When set, it is sent verbatim on the upstream authorize redirect for clients that have no scope of their own. Omit or send an empty array to leave it unset.")
 	Attribute("resource_indicator_supported", Boolean, "Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it unset: the parameter is then sent, and a login or refresh the issuer answers with invalid_target is retried once without it. Set false to never send it.")
 
 	Required("slug", "issuer")
@@ -746,7 +746,7 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	nullableCapability("claims_supported", "Claims the issuer can return in ID tokens and from userinfo. Null until discovery captures the field; an empty array means the field was captured and the issuer advertises none.")
 	Attribute("backchannel_logout_supported", Boolean, "Whether the issuer supports OpenID Connect Back-Channel Logout. Null until discovery captures the field.")
 	Attribute("authorization_response_iss_parameter_supported", Boolean, "Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Null until discovery captures the field.")
-	nullableCapability("scope_override", "Operator-pinned scope request, sent verbatim on the upstream authorize redirect in place of the resolved scope set. Null when unset.")
+	nullableCapability("scope_override", "Operator-pinned scope request, sent verbatim on the upstream authorize redirect for clients that have no scope of their own. Null when unset.")
 	Attribute("resource_indicator_supported", Boolean, "Whether the issuer accepts the RFC 8707 resource parameter, as an operator stated it. Null when unset; false omits the parameter on every grant.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)

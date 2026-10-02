@@ -35,10 +35,7 @@ import { Stack } from "@/components/ui/Stack";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import {
-  IssuerScopeOverrideAlert,
-  LegacyCallbackAlert,
-} from "@/pages/remote-identity-providers/clientAlerts";
+import { LegacyCallbackAlert } from "@/pages/remote-identity-providers/clientAlerts";
 import {
   ClientAssertionAudienceField,
   ClientCredentialsFields,
@@ -371,13 +368,11 @@ function ModifyRemoteIdentityProviderSheetBody({
           )
             ? authAudienceFormat
             : undefined,
-          // Backend update uses COALESCE — omitting (undefined) keeps the
-          // stored value, sending an empty array would clear it. Mirror the
-          // audience handling here: only send when non-empty so the Modify
-          // UI never silently wipes existing overrides. Clearing today
-          // requires the operator to detach + re-attach the identity
-          // provider with new settings.
-          scope: parsedScopes.length > 0 ? parsedScopes : undefined,
+          // An empty array clears the stored scope; undefined keeps it.
+          scope:
+            parsedScopes.length > 0 || (primaryClient.scope?.length ?? 0) > 0
+              ? parsedScopes
+              : undefined,
           audience: trimmedAudience || undefined,
         },
       });
@@ -591,7 +586,6 @@ function ModifyRemoteIdentityProviderSheetBody({
           audienceOverride={audienceOverride}
           onScopeOverrideChange={setScopeOverride}
           onAudienceOverrideChange={setAudienceOverride}
-          scopeWarning={<IssuerScopeOverrideAlert issuer={issuer} />}
         />
 
         {submitError && (

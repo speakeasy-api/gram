@@ -48,18 +48,28 @@ func TestValidateTrustedIdentityProviderClientRejectsIncompleteScopeOverride(t *
 	t.Parallel()
 
 	client, issuer := trustedIdentityProviderPair()
+	client.Scope = nil
 	issuer.ScopeOverride = []string{"openid"}
 
 	err := remotesessions.ValidateTrustedIdentityProviderClient(client, issuer)
 	require.ErrorContains(t, err, "email")
 }
 
-func TestValidateTrustedIdentityProviderClientUsesScopeOverrideAsEffectiveScopes(t *testing.T) {
+func TestValidateTrustedIdentityProviderClientUsesScopeOverrideWhenClientHasNoScope(t *testing.T) {
 	t.Parallel()
 
 	client, issuer := trustedIdentityProviderPair()
-	client.Scope = []string{"offline_access"}
+	client.Scope = nil
 	issuer.ScopeOverride = []string{"openid", "email"}
+
+	require.NoError(t, remotesessions.ValidateTrustedIdentityProviderClient(client, issuer))
+}
+
+func TestValidateTrustedIdentityProviderClientPrefersClientScopeOverScopeOverride(t *testing.T) {
+	t.Parallel()
+
+	client, issuer := trustedIdentityProviderPair()
+	issuer.ScopeOverride = []string{"openid"}
 
 	require.NoError(t, remotesessions.ValidateTrustedIdentityProviderClient(client, issuer))
 }

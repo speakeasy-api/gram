@@ -193,8 +193,8 @@ type CreateRemoteSessionIssuerPayload struct {
 	// responses. Omitting the field stores null ("not captured").
 	AuthorizationResponseIssParameterSupported *bool
 	// Operator-pinned scope request. When set, it is sent verbatim on the upstream
-	// authorize redirect in place of the resolved scope set. Omit or send an empty
-	// array to leave it unset.
+	// authorize redirect for clients that have no scope of their own. Omit or send
+	// an empty array to leave it unset.
 	ScopeOverride []string
 	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
 	// unset: the parameter is then sent, and a login or refresh the issuer answers

@@ -534,7 +534,7 @@ var CreateGlobalRemoteSessionClientForm = Type("CreateGlobalRemoteSessionClientF
 		Enum("client_secret_basic", "client_secret_post", "none")
 	})
 	Attribute("scope", ArrayOf(String), func() {
-		rsclients.ScopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
+		rsclients.ScopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scope_override, then its scopes_supported.")
 	})
 	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", rsclients.AudienceAttribute)
 

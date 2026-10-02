@@ -87168,7 +87168,7 @@ components:
                         type: string
                         pattern: ^[!#-[\]-~]+$
                         maxLength: 128
-                    description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+                    description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scope_override, then its scopes_supported.
                 user_session_issuer_ids:
                     type: array
                     items:
@@ -87200,7 +87200,7 @@ components:
                         type: string
                         pattern: ^[!#-[\]-~]+$
                         maxLength: 128
-                    description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+                    description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scope_override, then its scopes_supported.
             description: Form for an org admin to register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing issuer, with no user_session_issuer attachments. Gram generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported.
             required:
                 - remote_session_issuer_id
@@ -87496,7 +87496,7 @@ components:
                         type: string
                         pattern: ^[!#-[\]-~]+$
                         maxLength: 128
-                    description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+                    description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scope_override, then its scopes_supported.
                 token_endpoint_auth_method:
                     type: string
                     description: How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
@@ -87654,7 +87654,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Operator-pinned scope request. When set, it is sent verbatim on the upstream authorize redirect in place of the resolved scope set. Omit or send an empty array to leave it unset.
+                    description: Operator-pinned scope request. When set, it is sent verbatim on the upstream authorize redirect for clients that have no scope of their own. Omit or send an empty array to leave it unset.
                 scopes_supported:
                     type: array
                     items:
@@ -87908,7 +87908,7 @@ components:
                         type: string
                         pattern: ^[!#-[\]-~]+$
                         maxLength: 128
-                    description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+                    description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scope_override, then its scopes_supported.
                 token_endpoint_auth_audience_format:
                     type: string
                     description: Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
@@ -88221,7 +88221,7 @@ components:
                         type: string
                         pattern: ^[!#-[\]-~]+$
                         maxLength: 128
-                    description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+                    description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scope_override, then its scopes_supported.
                 token_endpoint_auth_audience_format:
                     type: string
                     description: Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
@@ -88340,7 +88340,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Operator-pinned scope request. When set, it is sent verbatim on the upstream authorize redirect in place of the resolved scope set. Omit or send an empty array to leave it unset.
+                    description: Operator-pinned scope request. When set, it is sent verbatim on the upstream authorize redirect for clients that have no scope of their own. Omit or send an empty array to leave it unset.
                 scopes_supported:
                     type: array
                     items:
@@ -102457,7 +102457,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.
+                    description: Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scope_override, then its scopes_supported.
                 token_endpoint_auth_audience_format:
                     type: string
                     description: Identifier used as the aud claim in private_key_jwt assertions. Null resolves to issuer.
@@ -102609,7 +102609,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Operator-pinned scope request, sent verbatim on the upstream authorize redirect in place of the resolved scope set. Null when unset.
+                    description: Operator-pinned scope request, sent verbatim on the upstream authorize redirect for clients that have no scope of their own. Null when unset.
                 scopes_supported:
                     type: array
                     items:

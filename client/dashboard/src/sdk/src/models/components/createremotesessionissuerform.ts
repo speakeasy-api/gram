@@ -106,7 +106,7 @@ export type CreateRemoteSessionIssuerForm = {
    */
   revocationEndpoint?: string | undefined;
   /**
-   * Operator-pinned scope request. When set, it is sent verbatim on the upstream authorize redirect in place of the resolved scope set. Omit or send an empty array to leave it unset.
+   * Operator-pinned scope request. When set, it is sent verbatim on the upstream authorize redirect for clients that have no scope of their own. Omit or send an empty array to leave it unset.
    */
   scopeOverride?: Array<string> | undefined;
   /**

@@ -124,7 +124,7 @@ export type RemoteSessionIssuer = {
    */
   revocationEndpoint?: string | undefined;
   /**
-   * Operator-pinned scope request, sent verbatim on the upstream authorize redirect in place of the resolved scope set. Null when unset.
+   * Operator-pinned scope request, sent verbatim on the upstream authorize redirect for clients that have no scope of their own. Null when unset.
    */
   scopeOverride?: Array<string> | null | undefined;
   scopesSupported?: Array<string> | undefined;

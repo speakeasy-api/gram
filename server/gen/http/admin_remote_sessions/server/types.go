@@ -104,8 +104,8 @@ type CreateGlobalIssuerRequestBody struct {
 	// responses. Omitting the field stores null ("not captured").
 	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
 	// Operator-pinned scope request. When set, it is sent verbatim on the upstream
-	// authorize redirect in place of the resolved scope set. Omit or send an empty
-	// array to leave it unset.
+	// authorize redirect for clients that have no scope of their own. Omit or send
+	// an empty array to leave it unset.
 	ScopeOverride []string `form:"scope_override,omitempty" json:"scope_override,omitempty" xml:"scope_override,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
 	// unset: the parameter is then sent, and a login or refresh the issuer answers
@@ -233,7 +233,7 @@ type CreateGlobalClientRequestBody struct {
 	// to client_secret_basic.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
 	// Explicit upstream OAuth scopes the dance should request for this client.
-	// Omit to fall back to the issuer's scopes_supported.
+	// Omit to fall back to the issuer's scope_override, then its scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
@@ -359,7 +359,7 @@ type CreateGlobalIssuerResponseBody struct {
 	// responses. Null until discovery captures the field.
 	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
 	// Operator-pinned scope request, sent verbatim on the upstream authorize
-	// redirect in place of the resolved scope set. Null when unset.
+	// redirect for clients that have no scope of their own. Null when unset.
 	ScopeOverride []string `json:"scope_override"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
@@ -502,7 +502,7 @@ type UpdateGlobalIssuerResponseBody struct {
 	// responses. Null until discovery captures the field.
 	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
 	// Operator-pinned scope request, sent verbatim on the upstream authorize
-	// redirect in place of the resolved scope set. Null when unset.
+	// redirect for clients that have no scope of their own. Null when unset.
 	ScopeOverride []string `json:"scope_override"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
@@ -641,7 +641,7 @@ type CreateGlobalClientResponseBody struct {
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
-	// falls back to the issuer's scopes_supported.
+	// falls back to the issuer's scope_override, then its scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
@@ -708,7 +708,7 @@ type GetGlobalClientResponseBody struct {
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
-	// falls back to the issuer's scopes_supported.
+	// falls back to the issuer's scope_override, then its scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
@@ -767,7 +767,7 @@ type UpdateGlobalClientResponseBody struct {
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
-	// falls back to the issuer's scopes_supported.
+	// falls back to the issuer's scope_override, then its scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
@@ -4022,7 +4022,7 @@ type RemoteSessionIssuerResponseBody struct {
 	// responses. Null until discovery captures the field.
 	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
 	// Operator-pinned scope request, sent verbatim on the upstream authorize
-	// redirect in place of the resolved scope set. Null when unset.
+	// redirect for clients that have no scope of their own. Null when unset.
 	ScopeOverride []string `json:"scope_override"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
@@ -4074,7 +4074,7 @@ type RemoteSessionClientResponseBody struct {
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
-	// falls back to the issuer's scopes_supported.
+	// falls back to the issuer's scope_override, then its scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.

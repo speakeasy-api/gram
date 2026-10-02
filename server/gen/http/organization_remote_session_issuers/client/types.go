@@ -106,8 +106,8 @@ type CreateIssuerRequestBody struct {
 	// responses. Omitting the field stores null ("not captured").
 	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
 	// Operator-pinned scope request. When set, it is sent verbatim on the upstream
-	// authorize redirect in place of the resolved scope set. Omit or send an empty
-	// array to leave it unset.
+	// authorize redirect for clients that have no scope of their own. Omit or send
+	// an empty array to leave it unset.
 	ScopeOverride []string `form:"scope_override,omitempty" json:"scope_override,omitempty" xml:"scope_override,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
 	// unset: the parameter is then sent, and a login or refresh the issuer answers
@@ -336,7 +336,7 @@ type CreateIssuerResponseBody struct {
 	// responses. Null until discovery captures the field.
 	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
 	// Operator-pinned scope request, sent verbatim on the upstream authorize
-	// redirect in place of the resolved scope set. Null when unset.
+	// redirect for clients that have no scope of their own. Null when unset.
 	ScopeOverride []string `json:"scope_override"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
@@ -445,7 +445,7 @@ type GetIssuerResponseBody struct {
 	// responses. Null until discovery captures the field.
 	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
 	// Operator-pinned scope request, sent verbatim on the upstream authorize
-	// redirect in place of the resolved scope set. Null when unset.
+	// redirect for clients that have no scope of their own. Null when unset.
 	ScopeOverride []string `json:"scope_override"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
@@ -575,7 +575,7 @@ type UpdateIssuerResponseBody struct {
 	// responses. Null until discovery captures the field.
 	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
 	// Operator-pinned scope request, sent verbatim on the upstream authorize
-	// redirect in place of the resolved scope set. Null when unset.
+	// redirect for clients that have no scope of their own. Null when unset.
 	ScopeOverride []string `json:"scope_override"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
@@ -675,7 +675,7 @@ type MoveIssuerResponseBody struct {
 	// responses. Null until discovery captures the field.
 	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
 	// Operator-pinned scope request, sent verbatim on the upstream authorize
-	// redirect in place of the resolved scope set. Null when unset.
+	// redirect for clients that have no scope of their own. Null when unset.
 	ScopeOverride []string `json:"scope_override"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
@@ -3201,7 +3201,7 @@ type RemoteSessionIssuerResponseBody struct {
 	// responses. Null until discovery captures the field.
 	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
 	// Operator-pinned scope request, sent verbatim on the upstream authorize
-	// redirect in place of the resolved scope set. Null when unset.
+	// redirect for clients that have no scope of their own. Null when unset.
 	ScopeOverride []string `json:"scope_override"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.

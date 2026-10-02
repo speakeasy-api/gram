@@ -82,7 +82,7 @@ type CreateRemoteSessionClientRequestBody struct {
 	// require the token endpoint URL.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// Explicit upstream OAuth scopes the dance should request for this client.
-	// Omit to fall back to the issuer's scopes_supported.
+	// Omit to fall back to the issuer's scope_override, then its scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
@@ -105,7 +105,7 @@ type CreateCimdRequestBody struct {
 	// or pass an empty array to create a standalone client with no attachments.
 	UserSessionIssuerIds []string `form:"user_session_issuer_ids,omitempty" json:"user_session_issuer_ids,omitempty" xml:"user_session_issuer_ids,omitempty"`
 	// Explicit upstream OAuth scopes the dance should request for this client.
-	// Omit to fall back to the issuer's scopes_supported.
+	// Omit to fall back to the issuer's scope_override, then its scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
@@ -282,7 +282,7 @@ type CreateRemoteSessionClientResponseBody struct {
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
-	// falls back to the issuer's scopes_supported.
+	// falls back to the issuer's scope_override, then its scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
@@ -341,7 +341,7 @@ type CreateCimdResponseBody struct {
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
-	// falls back to the issuer's scopes_supported.
+	// falls back to the issuer's scope_override, then its scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
@@ -401,7 +401,7 @@ type UpdateRemoteSessionClientResponseBody struct {
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
-	// falls back to the issuer's scopes_supported.
+	// falls back to the issuer's scope_override, then its scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
@@ -461,7 +461,7 @@ type AttachUserSessionIssuerResponseBody struct {
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
-	// falls back to the issuer's scopes_supported.
+	// falls back to the issuer's scope_override, then its scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
@@ -521,7 +521,7 @@ type DetachUserSessionIssuerResponseBody struct {
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
-	// falls back to the issuer's scopes_supported.
+	// falls back to the issuer's scope_override, then its scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
@@ -580,7 +580,7 @@ type AttachKeySetResponseBody struct {
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
-	// falls back to the issuer's scopes_supported.
+	// falls back to the issuer's scope_override, then its scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
@@ -639,7 +639,7 @@ type DetachKeySetResponseBody struct {
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
-	// falls back to the issuer's scopes_supported.
+	// falls back to the issuer's scope_override, then its scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
@@ -715,7 +715,7 @@ type GetRemoteSessionClientResponseBody struct {
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
-	// falls back to the issuer's scopes_supported.
+	// falls back to the issuer's scope_override, then its scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
@@ -3437,7 +3437,7 @@ type RemoteSessionClientResponseBody struct {
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
-	// falls back to the issuer's scopes_supported.
+	// falls back to the issuer's scope_override, then its scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.

@@ -788,7 +788,8 @@ export function useUserIdentityDraft({
         // A new client asks for what this server's protected resource
         // advertises, exactly as the create flow does. Left empty, the server
         // falls back to every scope the issuer advertises — the request that
-        // broke Salesforce logins. Scopes chosen for a manual client win.
+        // broke Salesforce logins. Scopes chosen for a manual client win. An
+        // issuer with a scope override keeps the client empty so it applies.
         const chosenScopes = manualNeeded ? scopes : [];
         const requestedScopes =
           chosenScopes.length > 0
@@ -797,7 +798,9 @@ export function useUserIdentityDraft({
                 prm.metadata?.scopesSupported ??
                   resourceScopes ??
                   (await protectedResourceScopes(client, remoteMcpServerId)),
-                selectedIssuer?.scopesSupported ?? draft?.scopesSupported,
+                selectedIssuer?.scopeOverride?.length
+                  ? undefined
+                  : (selectedIssuer?.scopesSupported ?? draft?.scopesSupported),
               );
         const secret = manualNeeded ? clientSecret.trim() : "";
         clientConfiguration = {

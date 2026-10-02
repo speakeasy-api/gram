@@ -351,7 +351,7 @@ export function SettingsTab({
 
       <SettingsSection
         title="Scopes"
-        description="When set, every sign-in through this provider requests exactly these scopes, and the scopes set on its clients are ignored. Leave blank to request each client's scopes, or the provider's supported scopes when a client sets none."
+        description="Scopes requested, exactly as written, for clients that set none of their own. A client's own scopes always take precedence. Leave blank to fall back to the provider's supported scopes."
       >
         <SettingsField
           label="Scope override (comma-separated)"
