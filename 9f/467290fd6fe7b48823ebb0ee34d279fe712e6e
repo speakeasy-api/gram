@@ -37,6 +37,8 @@ server/internal/admin/repo/queries.sql.go
   h_9630b74bdac540 1555-1587,1786-1808
 server/internal/outbox/events/catalog_gen.yaml
   h_9630b74bdac540 2387
+server/internal/admin/converttrial_lock_test.go
+  h_9630b74bdac540 153
 ---
 {
   "schema_version": "authorship/3.0.0",
