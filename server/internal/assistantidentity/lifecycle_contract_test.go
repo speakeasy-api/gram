@@ -1,6 +1,7 @@
 package assistantidentity_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -151,7 +152,10 @@ func TestCapabilityEditsRevokeSessionsWithoutChangingBinding(t *testing.T) {
 	require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
 		var err error
 		before, err = assistantidentity.ConfiguredCapabilities(t.Context(), tx, f.org, f.project, f.assistant)
-		return err
+		if err != nil {
+			return fmt.Errorf("capture configured capabilities: %w", err)
+		}
+		return nil
 	}))
 	require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
 		return assistantidentity.RevokeIfCapabilitiesChanged(t.Context(), tx, f.org, f.project, f.assistant, before)
