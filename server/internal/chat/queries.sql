@@ -1175,29 +1175,6 @@ LIMIT @lim::integer;
 SELECT COUNT(*) FROM chat_messages
 WHERE chat_id = @chat_id AND project_id = @project_id::uuid;
 
--- name: RestampMismatchedChatMessageProjects :execrows
--- One-shot repair: copy chats.project_id onto chat_messages rows whose stamp
--- drifted (or is NULL). Hook ingest used to accept any project header for a
--- session-derived chat id, so a later request could file messages under a
--- sibling project. Not project-scoped: every drifted row has to move, and the
--- chat's project is the destination.
-UPDATE chat_messages cm
-SET project_id = c.project_id
-FROM chats c
-WHERE c.id = cm.chat_id
-  AND cm.project_id IS DISTINCT FROM c.project_id;
-
--- name: CountChatMessagesWithMismatchedProject :one
-SELECT count(*)::bigint
-FROM chat_messages cm
-JOIN chats c ON c.id = cm.chat_id
-WHERE cm.project_id IS DISTINCT FROM c.project_id;
-
--- name: CountChatMessagesWithNullProject :one
-SELECT count(*)::bigint
-FROM chat_messages
-WHERE project_id IS NULL;
-
 -- name: GetChatMessageStats :one
 -- Chat-wide aggregates (total message count + most recent message timestamp).
 -- Used by loadChat so every paginated response can carry the chat's real

@@ -114,33 +114,6 @@ func (q *Queries) CountChatMessages(ctx context.Context, arg CountChatMessagesPa
 	return count, err
 }
 
-const countChatMessagesWithMismatchedProject = `-- name: CountChatMessagesWithMismatchedProject :one
-SELECT count(*)::bigint
-FROM chat_messages cm
-JOIN chats c ON c.id = cm.chat_id
-WHERE cm.project_id IS DISTINCT FROM c.project_id
-`
-
-func (q *Queries) CountChatMessagesWithMismatchedProject(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countChatMessagesWithMismatchedProject)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
-const countChatMessagesWithNullProject = `-- name: CountChatMessagesWithNullProject :one
-SELECT count(*)::bigint
-FROM chat_messages
-WHERE project_id IS NULL
-`
-
-func (q *Queries) CountChatMessagesWithNullProject(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countChatMessagesWithNullProject)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const countChats = `-- name: CountChats :one
 WITH risk_counts AS (
   SELECT cm.chat_id, COUNT(*)::integer AS cnt
@@ -3457,27 +3430,6 @@ func (q *Queries) RenameChat(ctx context.Context, arg RenameChatParams) error {
 		arg.ProjectID,
 	)
 	return err
-}
-
-const restampMismatchedChatMessageProjects = `-- name: RestampMismatchedChatMessageProjects :execrows
-UPDATE chat_messages cm
-SET project_id = c.project_id
-FROM chats c
-WHERE c.id = cm.chat_id
-  AND cm.project_id IS DISTINCT FROM c.project_id
-`
-
-// One-shot repair: copy chats.project_id onto chat_messages rows whose stamp
-// drifted (or is NULL). Hook ingest used to accept any project header for a
-// session-derived chat id, so a later request could file messages under a
-// sibling project. Not project-scoped: every drifted row has to move, and the
-// chat's project is the destination.
-func (q *Queries) RestampMismatchedChatMessageProjects(ctx context.Context) (int64, error) {
-	result, err := q.db.Exec(ctx, restampMismatchedChatMessageProjects)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const seedAssistant = `-- name: SeedAssistant :one
