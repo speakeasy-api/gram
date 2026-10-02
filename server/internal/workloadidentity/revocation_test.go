@@ -253,3 +253,31 @@ func TestWorkloadSessionsRequireIssuerProject(t *testing.T) {
 	_, err = q.GetUserSessionPrincipalCredentialByJTI(t.Context(), sessionsrepo.GetUserSessionPrincipalCredentialByJTIParams{UserSessionIssuerID: issuer, Jti: session.Jti})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
+
+func TestAgentRevocationFencesRacingSessionIssuance(t *testing.T) {
+	t.Parallel()
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	f := newAssignmentFixture(t, conn)
+	seedAssignment(t, conn, f.tenant.organizationID, f.issuerID, testSubject, f.agentID)
+	issuer := workloadSessionIssuer(t, conn, f.tenant.organizationID)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	issuance := testenv.BeginTx(t, ctx, conn)
+	defer func() { _ = issuance.Rollback(ctx) }()
+	_, err = identityrepo.New(issuance).ResolveWorkloadAgentAssignment(ctx, identityrepo.ResolveWorkloadAgentAssignmentParams{OrganizationID: f.tenant.organizationID, WorkloadIssuerID: f.issuerID, Subject: testSubject})
+	require.NoError(t, err)
+	mutation := testenv.BeginTx(t, ctx, conn)
+	defer func() { _ = mutation.Rollback(ctx) }()
+	require.NoError(t, workloadidentity.RevokeAgentWorkloadSessionsTx(ctx, mutation, f.tenant.organizationID, f.agentID))
+	done := make(chan error, 1)
+	go func() {
+		_, err := sessionsrepo.New(issuance).CreateUserSession(ctx, workloadSessionParams(issuer, f.issuerID, testSubject))
+		done <- err
+	}()
+	require.NoError(t, mutation.Commit(ctx))
+	require.ErrorIs(t, <-done, pgx.ErrNoRows, "old issuance transaction must not commit past the agent revocation fence")
+	require.NoError(t, issuance.Rollback(ctx))
+	_, err = sessionsrepo.New(conn).CreateUserSession(ctx, workloadSessionParams(issuer, f.issuerID, testSubject))
+	require.NoError(t, err, "fresh authority is still issuable after a policy change")
+}

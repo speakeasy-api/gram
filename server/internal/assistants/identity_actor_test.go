@@ -1,9 +1,10 @@
 package assistants
 
 import (
+	"testing"
+
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestIdentityProvisioningRequiresValidatedHumanOrPlatformOAuth(t *testing.T) {

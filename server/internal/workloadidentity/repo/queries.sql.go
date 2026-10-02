@@ -103,9 +103,8 @@ func (q *Queries) ListWorkloadIssuersByIssuerURL(ctx context.Context, arg ListWo
 }
 
 const lockWorkloadAgentForRevocation = `-- name: LockWorkloadAgentForRevocation :exec
-SELECT id FROM agents
+UPDATE agents SET updated_at = clock_timestamp()
 WHERE organization_id = $1 AND id = $2
-FOR UPDATE
 `
 
 type LockWorkloadAgentForRevocationParams struct {
@@ -113,6 +112,8 @@ type LockWorkloadAgentForRevocationParams struct {
 	AgentID        uuid.UUID
 }
 
+// Advance the issuance cutoff while holding the agent row lock. A transaction
+// begun before revocation must not insert old authority after waiting here.
 func (q *Queries) LockWorkloadAgentForRevocation(ctx context.Context, arg LockWorkloadAgentForRevocationParams) error {
 	_, err := q.db.Exec(ctx, lockWorkloadAgentForRevocation, arg.OrganizationID, arg.AgentID)
 	return err

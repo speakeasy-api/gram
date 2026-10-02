@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -63,6 +64,18 @@ func TestIdentityCreationConcurrentIndependentRequests(t *testing.T) {
 	agents, err := agentrepo.New(db).ListManagedAgents(t.Context(), "org-test")
 	require.NoError(t, err)
 	require.Len(t, agents, len(results), "each create owns one dedicated agent")
+	roots, err := triggerrepo.New(db).ListTriggerInstances(t.Context(), project)
+	require.NoError(t, err)
+	require.Len(t, roots, len(results), "each create owns one root trigger")
+	for _, root := range roots {
+		resolved, err := testIdentityService.Resolve(t.Context(), db, "org-test", project, uuid.MustParse(root.TargetRef), root.ID)
+		require.NoError(t, err)
+		require.Equal(t, assistantidentity.Active, resolved.State)
+		require.NotNil(t, resolved.Identity)
+		require.Equal(t, "org-test", resolved.Identity.OrganizationID)
+		require.Equal(t, project, resolved.Identity.ProjectID)
+		require.Equal(t, root.ID, resolved.Identity.TriggerID)
+	}
 
 	require.NoError(t, core.DeleteAssistant(t.Context(), project, results[0].ID, urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"), nil))
 	binding, err := identityrepo.New(db).GetAssistantBinding(t.Context(), identityrepo.GetAssistantBindingParams{OrganizationID: "org-test", ProjectID: project, AssistantID: results[0].ID})
@@ -165,7 +178,7 @@ func TestIdentityCreationManagedLegacyAndCanonicalDashboard(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Active, resolution.State)
 	require.NoError(t, core.DisableManagedAssistant(t.Context(), project, urn.NewPrincipal(urn.PrincipalTypeUser, "user-2"), nil))
-	require.Error(t, testIdentityService.Validate(t.Context(), db, *resolution.Identity))
+	require.ErrorIs(t, testIdentityService.Validate(t.Context(), db, *resolution.Identity), assistantidentity.ErrInvalidIdentity)
 	fresh, err := core.EnableManagedAssistant(t.Context(), "org-test", project, "user-1")
 	require.NoError(t, err)
 	require.NotEqual(t, legacy.ID, fresh.ID)
@@ -188,7 +201,7 @@ func TestIdentityCreationPauseResumePreservesBindingAndDeleteTombstones(t *testi
 	paused := StatusPaused
 	_, err = core.UpdateAssistant(t.Context(), project, record.ID, nil, nil, nil, nil, nil, nil, nil, &paused)
 	require.NoError(t, err)
-	require.Error(t, testIdentityService.Validate(t.Context(), db, *before.Identity))
+	require.ErrorIs(t, testIdentityService.Validate(t.Context(), db, *before.Identity), assistantidentity.ErrInvalidIdentity)
 	active := StatusActive
 	_, err = core.UpdateAssistant(t.Context(), project, record.ID, nil, nil, nil, nil, nil, nil, nil, &active)
 	require.NoError(t, err)
@@ -202,7 +215,7 @@ func TestIdentityCreationPauseResumePreservesBindingAndDeleteTombstones(t *testi
 	deleted, err := testIdentityService.Resolve(t.Context(), db, "org-test", project, record.ID, root)
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Tombstoned, deleted.State)
-	require.Error(t, testIdentityService.Validate(t.Context(), db, *after.Identity))
+	require.ErrorIs(t, testIdentityService.Validate(t.Context(), db, *after.Identity), assistantidentity.ErrInvalidIdentity)
 }
 
 var testIdentityService = func() *assistantidentity.Service {
@@ -212,3 +225,28 @@ var testIdentityService = func() *assistantidentity.Service {
 	}
 	return service
 }()
+
+func TestDisableLegacyManagedAssistantWithoutBinding(t *testing.T) {
+	t.Parallel()
+	db, err := assistantsInfra.CloneTestDatabase(t, "identity_legacy_disable")
+	require.NoError(t, err)
+	project := newProvisioningProject(t, db, "identity-legacy-disable")
+	core := newProvisioningCore(t, db)
+	q := assistantrepo.New(db)
+	legacy, err := q.CreateAssistant(t.Context(), assistantrepo.CreateAssistantParams{ProjectID: project, OrganizationID: "org-test", CreatedByUserID: pgtype.Text{String: "user-1", Valid: true}, Name: "Legacy managed", Model: "openai/gpt-4o-mini", WarmTtlSeconds: 300, MaxConcurrency: 1, Status: StatusActive})
+	require.NoError(t, err)
+	require.NoError(t, q.CreateProjectManagedAssistant(t.Context(), assistantrepo.CreateProjectManagedAssistantParams{ProjectID: project, AssistantID: legacy.ID}))
+	_, err = core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, legacy.ID, legacy.Name)
+	require.NoError(t, err)
+	_, err = identityrepo.New(db).GetAssistantBinding(t.Context(), identityrepo.GetAssistantBindingParams{OrganizationID: "org-test", ProjectID: project, AssistantID: legacy.ID})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.NoError(t, core.DisableManagedAssistant(t.Context(), project, urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"), nil))
+	_, err = q.GetManagedAssistantByProject(t.Context(), project)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	assistants, err := core.ListAssistants(t.Context(), project)
+	require.NoError(t, err)
+	require.Empty(t, assistants)
+	roots, err := triggerrepo.New(db).ListTriggerInstances(t.Context(), project)
+	require.NoError(t, err)
+	require.Empty(t, roots)
+}

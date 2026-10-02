@@ -46,7 +46,7 @@ func TestRootIdentityCreateRetargetPauseDelete(t *testing.T) {
 	_, err = f.app.SetStatus(ctx, f.projectID, item.ID, triggers.StatusPaused)
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Unavailable, f.resolve(t, nextAssistant, item.ID).State)
-	require.Error(t, testIdentityService.Validate(ctx, f.db, *next.Identity))
+	require.ErrorIs(t, testIdentityService.Validate(ctx, f.db, *next.Identity), assistantidentity.ErrInvalidIdentity)
 	_, err = f.app.SetStatus(ctx, f.projectID, item.ID, triggers.StatusActive)
 	require.NoError(t, err)
 	resumed := f.resolve(t, nextAssistant, item.ID)
@@ -56,7 +56,7 @@ func TestRootIdentityCreateRetargetPauseDelete(t *testing.T) {
 	require.Equal(t, next.Identity.Subject, resumed.Identity.Subject)
 	require.NoError(t, f.app.Delete(ctx, f.projectID, item.ID))
 	require.Equal(t, assistantidentity.Tombstoned, f.resolve(t, nextAssistant, item.ID).State)
-	require.Error(t, testIdentityService.Validate(ctx, f.db, *resumed.Identity))
+	require.ErrorIs(t, testIdentityService.Validate(ctx, f.db, *resumed.Identity), assistantidentity.ErrInvalidIdentity)
 }
 
 func TestRootIdentityRetargetLegacyDoesNotFallback(t *testing.T) {
@@ -69,7 +69,7 @@ func TestRootIdentityRetargetLegacyDoesNotFallback(t *testing.T) {
 	_, err = f.app.Update(t.Context(), triggers.UpdateParams{ID: item.ID, ProjectID: f.projectID, DefinitionSlug: item.DefinitionSlug, Name: item.Name, EnvironmentID: item.EnvironmentID, TargetKind: item.TargetKind, TargetRef: legacyID.String(), TargetDisplay: item.TargetDisplay, Config: map[string]any{}, Status: item.Status})
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Tombstoned, f.resolve(t, legacyID, item.ID).State)
-	require.Error(t, testIdentityService.Validate(t.Context(), f.db, *original.Identity))
+	require.ErrorIs(t, testIdentityService.Validate(t.Context(), f.db, *original.Identity), assistantidentity.ErrInvalidIdentity)
 }
 
 func TestRootIdentityConcurrentResumeIsIdempotent(t *testing.T) {

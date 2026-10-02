@@ -61,3 +61,16 @@ to agent execution. Runtime integration must:
 The existing Platform MCP exposes identity inspection and an explicitly confirmed,
 human-authorized legacy upgrade. It does not allow a managed assistant to grant
 itself an identity or treat a configuration-state field as execution permission.
+
+## Platform MCP parity decision
+
+Add `upgrade_assistant_workload_identity` for the outcome of explicitly upgrading
+one legacy assistant in the selected project. The actor must be an authenticated
+human authorized for project write (including the trusted Platform MCP OAuth
+surface), and must confirm the exact assistant target. Existing assistant read
+surfaces expose identity state but do not perform this irreversible upgrade;
+creation already provisions new assistants, so neither is a substitute.
+The tool calls the same authorized management endpoint as the API and returns
+safe identity state, not credentials or private instructions. Contract tests cover
+live registration, audience and project-write parity, confirmation, ambiguous or
+hidden targets, safe errors, and a trusted OAuth upgrade against the real service.

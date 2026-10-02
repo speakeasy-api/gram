@@ -1,9 +1,10 @@
 package assistantidentity_test
 
 import (
+	"testing"
+
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestIssuerRejectsForceQuery(t *testing.T) {

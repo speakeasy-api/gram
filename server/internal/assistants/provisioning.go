@@ -173,6 +173,8 @@ func (s *ServiceCore) DisableManagedAssistant(ctx context.Context, projectID uui
 	}
 
 	queries := assistantrepo.New(tx)
+	// This anchor is the assistant row itself, not an optional identity binding.
+	// Legacy assistants still proceed through the complete cleanup below.
 	anchor, err := queries.LockAssistantIdentityAnchor(ctx, assistantrepo.LockAssistantIdentityAnchorParams{ProjectID: projectID, AssistantID: row.ID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil

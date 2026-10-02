@@ -733,6 +733,9 @@ WITH invalidated_bindings AS (
  SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
  WHERE b.organization_id = $1 AND NOT b.deleted
  AND b.original_workload_issuer_id = $2 AND b.subject = $4 AND $3 = 'exact'
+ AND EXISTS (SELECT 1 FROM workload_agent_assignments a
+ WHERE a.organization_id = $1 AND a.workload_issuer_id = $2
+ AND a.subject = $4 AND a.match_kind = $3 AND NOT a.deleted)
  RETURNING b.organization_id, b.original_workload_issuer_id, b.subject
 ), retired_binding_sessions AS (
  UPDATE user_sessions s SET deleted_at = clock_timestamp()

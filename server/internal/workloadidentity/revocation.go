@@ -34,7 +34,8 @@ func RevokeWorkloadSessionsTx(ctx context.Context, tx pgx.Tx, organizationID str
 // RevokeAgentWorkloadSessionsTx retires the workload sessions currently assigned
 // to an agent, including external wildcard assignments with exact precedence.
 // Call before changing assignments. Issuance locks the issuer before the agent;
-// this helper only locks the agent so owner-loss updates cannot reverse that order.
+// this helper locks and advances the agent timestamp so owner-loss updates cannot
+// reverse that order. CreateUserSession checks the cutoff under its agent lock.
 func RevokeAgentWorkloadSessionsTx(ctx context.Context, tx pgx.Tx, organizationID string, agentID uuid.UUID) error {
 	if tx == nil || organizationID == "" || agentID == uuid.Nil {
 		return fmt.Errorf("agent workload session revocation requires a tenant and agent")

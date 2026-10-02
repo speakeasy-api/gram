@@ -166,9 +166,10 @@ WHERE organization_id = @organization_id AND id = @issuer_id
 FOR UPDATE;
 
 -- name: LockWorkloadAgentForRevocation :exec
-SELECT id FROM agents
-WHERE organization_id = @organization_id AND id = @agent_id
-FOR UPDATE;
+-- Advance the issuance cutoff while holding the agent row lock. A transaction
+-- begun before revocation must not insert old authority after waiting here.
+UPDATE agents SET updated_at = clock_timestamp()
+WHERE organization_id = @organization_id AND id = @agent_id;
 
 -- name: RevokeWorkloadSessions :exec
 UPDATE user_sessions s

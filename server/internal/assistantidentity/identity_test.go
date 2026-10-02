@@ -238,7 +238,7 @@ func TestLiveAuthorityDependenciesAndHardDeletes(t *testing.T) {
 				err = q.FixtureDeleteProject(ctx, repo.FixtureDeleteProjectParams{OrganizationID: f.org, ProjectID: f.project})
 			}
 			require.NoError(t, err)
-			require.Error(t, testIdentityService.Validate(ctx, f.db, id))
+			require.ErrorIs(t, testIdentityService.Validate(ctx, f.db, id), assistantidentity.ErrInvalidIdentity)
 			resolution, err := testIdentityService.Resolve(ctx, f.db, f.org, f.project, f.assistant, f.trigger)
 			require.NoError(t, err)
 			require.NotEqual(t, assistantidentity.Active, resolution.State)
@@ -331,7 +331,7 @@ func TestOrdinaryIssuerRenewalAndUntrustedActor(t *testing.T) {
 		return testIdentityService.BindRootTrigger(t.Context(), tx, f.org, f.project, root)
 	})
 	require.NoError(t, err)
-	require.Error(t, testIdentityService.Validate(t.Context(), f.db, id), "renewed trust cannot revive the old mapping")
+	require.ErrorIs(t, testIdentityService.Validate(t.Context(), f.db, id), assistantidentity.ErrInvalidIdentity, "renewed trust cannot revive the old mapping")
 	require.NoError(t, repo.New(f.db).FixtureWithdrawMembership(t.Context(), repo.FixtureWithdrawMembershipParams{OrganizationID: f.org, UserID: conv.ToPGText(f.actor)}))
 	err = inTx(t, f.db, func(tx pgx.Tx) error {
 		_, err := testIdentityService.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})

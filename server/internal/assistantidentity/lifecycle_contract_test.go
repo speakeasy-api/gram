@@ -123,7 +123,7 @@ func TestSharedPlatformIssuerDoesNotShareTenantMapping(t *testing.T) {
 	first.OrganizationID = other.org
 	require.Error(t, testIdentityService.Validate(t.Context(), f.db, first))
 	second.IssuerID = first.IssuerID
-	require.Error(t, testIdentityService.Validate(t.Context(), f.db, second))
+	require.ErrorIs(t, testIdentityService.Validate(t.Context(), f.db, second), assistantidentity.ErrInvalidIdentity)
 }
 
 func TestConfiguredSkillIncludesBoundedProjectGate(t *testing.T) {
@@ -172,4 +172,22 @@ func TestCapabilityEditsRevokeSessionsWithoutChangingBinding(t *testing.T) {
 	_, err = sessionsrepo.New(f.db).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ProjectID: f.project, OrganizationID: f.org, ID: session})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	require.NoError(t, testIdentityService.Validate(t.Context(), f.db, id), "configuration edits do not change identity generations")
+}
+
+func TestAssignmentWithdrawalWithoutLiveAssignmentIsNoop(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	id := f.provision(t)
+	q := repo.New(f.db)
+	require.NoError(t, q.FixtureWithdrawAssignment(t.Context(), repo.FixtureWithdrawAssignmentParams{OrganizationID: f.org, IssuerID: id.IssuerID, Subject: id.Subject}))
+	params := repo.GetTriggerBindingParams{OrganizationID: f.org, ProjectID: f.project, TriggerID: f.trigger, PlatformIssuer: "https://platform.example.invalid", PlatformJwksUri: "https://platform.example.invalid/.well-known/jwks.json"}
+	before, err := q.GetTriggerBinding(t.Context(), params)
+	require.NoError(t, err)
+	require.False(t, before.Deleted)
+	removed, err := policyrepo.New(f.db).SoftDeleteWorkloadAgentAssignmentForSubject(t.Context(), policyrepo.SoftDeleteWorkloadAgentAssignmentForSubjectParams{OrganizationID: f.org, WorkloadIssuerID: id.IssuerID, Subject: id.Subject, MatchKind: "exact"})
+	require.NoError(t, err)
+	require.Empty(t, removed)
+	after, err := q.GetTriggerBinding(t.Context(), params)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
 }
