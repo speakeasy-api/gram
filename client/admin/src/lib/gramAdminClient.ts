@@ -207,10 +207,9 @@ export function organizationSpendBreakdownQuery(
 }
 
 // Keyed on the route's own address for the organization, id or slug as typed,
-// the way `projectQuery` is: the breadcrumb builds this key from the route
-// alone and cannot know the resolved id. A missing window is the default one,
-// so the bar and the page agree on the key either way.
-export function mcpServerHealthKey(
+// the way `projectQuery` is, so the name entry the breadcrumb watches can be
+// built from the route alone. A missing window is the default one.
+function mcpServerHealthKey(
   organizationIdOrSlug: string,
   projectId: string,
   mcpServerId: string,
@@ -222,6 +221,22 @@ export function mcpServerHealthKey(
     projectId,
     mcpServerId,
     windowDays,
+  ] as const;
+}
+
+// The server's name alone, with no window in the key, for the breadcrumb.
+// Every window's health read writes it as it lands, so changing the window
+// never empties the crumb while the new answer is on its way.
+export function mcpServerNameKey(
+  organizationIdOrSlug: string,
+  projectId: string,
+  mcpServerId: string,
+): readonly [string, string, string, string] {
+  return [
+    "gram-admin-mcp-server-name",
+    organizationIdOrSlug,
+    projectId,
+    mcpServerId,
   ] as const;
 }
 
@@ -254,14 +269,25 @@ function createMcpServerHealthQuery(
       request.mcpServerId,
       request.windowDays,
     ),
-    queryFn: (context) => redirecting(generated.queryFn(context)),
+    queryFn: async (context) => {
+      const health = await redirecting(generated.queryFn(context));
+      context.client.setQueryData(
+        mcpServerNameKey(
+          organizationIdOrSlug,
+          request.projectId,
+          request.mcpServerId,
+        ),
+        { name: health.server.name },
+      );
+      return health;
+    },
     staleTime: 30_000,
   });
 }
 
 // Tool call telemetry for the same server, keyed the same way so the two
 // queries for one page share every part of their key but the name.
-export function mcpServerToolCallsKey(
+function mcpServerToolCallsKey(
   organizationIdOrSlug: string,
   projectId: string,
   mcpServerId: string,

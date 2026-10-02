@@ -177,8 +177,10 @@ export function McpServerHealth({
       projectName={projectName}
       window={window}
       // The report is as of its own fetch, so links and ranges built from it
-      // do not drift on every render.
-      asOf={new Date(health.dataUpdatedAt)}
+      // do not drift on every render. While another window's answer stands in
+      // for this one, the read has no time of its own yet (it reports 0), and
+      // "now" is what the new window is measured back from.
+      asOf={new Date(health.dataUpdatedAt || Date.now())}
       onWindowChange={(next) => {
         void navigate({
           search: (prev) => ({ ...prev, window: next }),

@@ -499,6 +499,45 @@ describe("McpServerHealth", () => {
     expect(screen.queryByRole("heading", { name: "crm" })).toBe(null);
   });
 
+  it("keeps the crumb and today's dates while a new window loads", async () => {
+    await open();
+    await screen.findByRole("heading", { name: "Tool calls per day" });
+    const nav = screen.getByRole("navigation", { name: "breadcrumb" });
+    await waitFor(() => expect(within(nav).getByText("crm")).toBeTruthy());
+
+    // The 30-day reads stay open, so the 14-day answer stands in for them.
+    const answer = mocks.healthFetch.getMockImplementation()!;
+    mocks.healthFetch.mockImplementation((input: RequestInfo | URL) =>
+      requestUrl(input).searchParams.get("window_days") === "30"
+        ? new Promise(() => {})
+        : answer(input),
+    );
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Window" }), {
+      key: "ArrowDown",
+    });
+    fireEvent.click(
+      await screen.findByRole("option", { name: "Last 30 days" }),
+    );
+    await waitFor(() =>
+      expect(healthRequests().at(-1)!.searchParams.get("window_days")).toBe(
+        "30",
+      ),
+    );
+
+    expect(within(nav).getByText("crm")).toBeTruthy();
+    // A stand-in has no answer time of its own; the page must not read that
+    // as the epoch.
+    expect(document.body.textContent).not.toContain("1970");
+    const login = new URL(
+      screen
+        .getByRole("link", { name: /Login challenge logs/ })
+        .getAttribute("href")!,
+    );
+    expect(Number(login.searchParams.get("to_ts"))).toBeGreaterThan(
+      Date.UTC(2020, 0, 1),
+    );
+  });
+
   it("names a legacy auth mode when there is no issuer", async () => {
     respond = (windowDays) => ({
       server: { ...SERVER, source: "toolset_only", visibility: "public" },
