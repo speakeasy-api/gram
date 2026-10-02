@@ -113,21 +113,22 @@ type WorkerOptions struct {
 	TelemetryLogger     *telemetry.Logger
 	ClickhouseConn      clickhouse.Conn
 	// MeterReadConn uses the least-privilege ClickHouse reader for billing summaries.
-	MeterReadConn     clickhouse.Conn
-	TelemetryRepo     *telemetryrepo.Queries
-	TriggersApp       *bgtriggers.App
-	AssistantsCore    *assistants.ServiceCore
-	TemporalEnv       *tenv.Environment
-	PIIScanner        risk_analysis.PIIScanner
-	PIScanner         *promptinjection.Scanner
-	CustomRuleScanner *customruleanalyzer.Scanner
-	BuiltinPresets    *presetlib.Library
-	ShadowMCPClient   *shadowmcp.Client
-	AuditLogger       *audit.Logger
-	WorkOSClient      activitiespkg.WorkOSClient
-	ProductFeatures   *productfeatures.Client
-	PluginPublisher   *plugins.Service
-	Publishers        *Publishers
+	MeterReadConn       clickhouse.Conn
+	TelemetryRepo       *telemetryrepo.Queries
+	TriggersApp         *bgtriggers.App
+	AssistantsCore      *assistants.ServiceCore
+	TemporalEnv         *tenv.Environment
+	PIIScanner          risk_analysis.PIIScanner
+	PIScanner           *promptinjection.Scanner
+	CustomRuleScanner   *customruleanalyzer.Scanner
+	BuiltinPresets      *presetlib.Library
+	ShadowMCPClient     *shadowmcp.Client
+	AuditLogger         *audit.Logger
+	WorkOSClient        activitiespkg.WorkOSClient
+	ProductFeatures     *productfeatures.Client
+	PluginPublisher     *plugins.Service
+	PublicationRequests plugins.PublicationRequests
+	Publishers          *Publishers
 
 	// IssuerMetadataRefresher is optional. Share it with every in-process producer;
 	// the constructing caller owns it and must call Wait after those producers stop.
@@ -135,6 +136,10 @@ type WorkerOptions struct {
 	// RemoteSessionAssertionSigner enables scheduled refreshes for clients that
 	// authenticate with private_key_jwt.
 	RemoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner
+
+	// StartupSeeds is the reference data this worker keeps applied. The
+	// worker kicks one run per seed version when it starts.
+	StartupSeeds []activitiespkg.StartupSeed
 
 	// TrialEmailsService synchronizes trial lifecycle changes with Loops.
 	TrialEmailsService *trialemails.Service
@@ -181,6 +186,7 @@ func ForDeploymentProcessing(
 	auditLogger *audit.Logger,
 ) *WorkerOptions {
 	return &WorkerOptions{
+		PublicationRequests:          plugins.PublicationRequests{Enabled: false},
 		DB:                           db,
 		GuardianPolicy:               guardianPolicy,
 		TunnelHTTPClient:             nil,
@@ -192,6 +198,7 @@ func ForDeploymentProcessing(
 		MCPRegistryClient:            mcpRegistryClient,
 		AuditLogger:                  auditLogger,
 		RemoteSessionAssertionSigner: nil,
+		StartupSeeds:                 nil,
 		SlackClient:                  nil,
 		SlackDirectoryTokenRefresher: nil,
 		ChatMessageWriter:            nil,
@@ -275,6 +282,7 @@ func NewTemporalWorker(
 	options ...*WorkerOptions,
 ) *Workers {
 	opts := &WorkerOptions{
+		PublicationRequests:          plugins.PublicationRequests{Enabled: false},
 		GuardianPolicy:               nil,
 		TunnelHTTPClient:             nil,
 		DB:                           nil,
@@ -308,6 +316,7 @@ func NewTemporalWorker(
 		CacheAdapter:                 nil,
 		IssuerMetadataRefresher:      nil,
 		RemoteSessionAssertionSigner: nil,
+		StartupSeeds:                 nil,
 		EmailService:                 nil,
 		AssistantsCore:               nil,
 		TemporalEnv:                  env,
@@ -364,6 +373,7 @@ func NewTemporalWorker(
 			CacheAdapter:                 conv.Default(o.CacheAdapter, opts.CacheAdapter),
 			IssuerMetadataRefresher:      conv.Default(o.IssuerMetadataRefresher, opts.IssuerMetadataRefresher),
 			RemoteSessionAssertionSigner: conv.Default(o.RemoteSessionAssertionSigner, opts.RemoteSessionAssertionSigner),
+			StartupSeeds:                 conv.DefaultSlice(o.StartupSeeds, opts.StartupSeeds),
 			EmailService:                 conv.Default(o.EmailService, opts.EmailService),
 			AssistantsCore:               conv.Default(o.AssistantsCore, opts.AssistantsCore),
 			TemporalEnv:                  conv.Default(o.TemporalEnv, opts.TemporalEnv),
@@ -377,6 +387,7 @@ func NewTemporalWorker(
 			ProductFeatures:              conv.Default(o.ProductFeatures, opts.ProductFeatures),
 			ClickhouseConn:               conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
 			PluginPublisher:              conv.Default(o.PluginPublisher, opts.PluginPublisher),
+			PublicationRequests:          conv.Default(o.PublicationRequests, opts.PublicationRequests),
 			Publishers:                   conv.Default(o.Publishers, opts.Publishers),
 			TrialEmailsService:           conv.Default(o.TrialEmailsService, opts.TrialEmailsService),
 			TrialFixtureHandler: func() func(context.Context, string) (bool, error) {
@@ -498,6 +509,7 @@ func NewTemporalWorker(
 		opts.IssuerMetadataRefresher,
 		remoteSessionEnricher,
 		opts.RemoteSessionAssertionSigner,
+		opts.StartupSeeds,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -571,6 +583,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ReapInactiveAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.ReapStoppedAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.RecycleAssistantRuntimeImages)
+	temporalWorker.RegisterActivity(activities.ApplyStartupSeed)
 	temporalWorker.RegisterActivity(activities.ReapSoftDeletedAssistantMemories)
 	temporalWorker.RegisterActivity(activities.SignalAssistantCoordinator)
 	temporalWorker.RegisterActivity(activities.SignalAssistantThread)
@@ -583,6 +596,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RecordDueKillswitchExpiries)
 	temporalWorker.RegisterActivity(activities.CleanupExpiredKillswitchOperations)
 	temporalWorker.RegisterActivity(activities.CleanupTrustedDelegationCredentials)
+	temporalWorker.RegisterActivity(activities.CleanupMCPFindingEvidence)
 	// Publish outbox relay activities
 	temporalWorker.RegisterActivity(activities.DrainPublishOutbox)
 	temporalWorker.RegisterActivity(activities.GCPublishOutboxDeadLetters)
@@ -718,6 +732,7 @@ func NewTemporalWorker(
 	// Killswitch expiry history and receipt retention
 	temporalWorker.RegisterWorkflow(KillswitchMaintenanceWorkflow)
 	temporalWorker.RegisterWorkflow(TrustedDelegationCleanupWorkflow)
+	temporalWorker.RegisterWorkflow(MCPFindingEvidenceCleanupWorkflow)
 	// Publish outbox -> Pub/Sub workflow and dead letter GC
 	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
@@ -746,6 +761,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(RemoteSessionRefreshWorkflow)
 	// Trial expiry workflows
 	temporalWorker.RegisterWorkflow(DemoteExpiredTrialsWorkflow)
+	temporalWorker.RegisterWorkflow(StartupSeedWorkflow)
 	temporalWorker.RegisterWorkflow(TrialLifecycleEmailWorkflow)
 	temporalWorker.RegisterWorkflow(AccessPausedEmailWorkflow)
 	temporalWorker.RegisterWorkflow(PaygActivatedEmailWorkflow)
@@ -797,6 +813,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddIndexToolsetSweepSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add index toolset sweep schedule", attr.SlogError(err))
+	}
+
+	// Each queue seeds its own database, so PR previews get the reference
+	// data too. A run per seed version, not per start.
+	if err := KickStartupSeeds(ctx, env, opts.StartupSeeds); err != nil {
+		logger.ErrorContext(ctx, "failed to kick startup seeds", attr.SlogError(err))
 	}
 
 	// Everything below is registered under a fixed ID and belongs to the
@@ -867,6 +889,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddAssistantMemoriesReaperSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add assistant memories reaper schedule", attr.SlogError(err))
+	}
+
+	if err := AddMCPFindingEvidenceCleanupSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add MCP finding evidence cleanup schedule", attr.SlogError(err))
 	}
 
 	if err := AddKillswitchMaintenanceSchedule(ctx, env); err != nil {

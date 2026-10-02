@@ -1,4 +1,6 @@
 import { lazy, Suspense, useRef, useState, type JSX } from "react";
+import { RegistryOktaCandidates } from "./RegistryOktaCandidates";
+import { addOinName } from "./registryOktaNames";
 import { useBlocker } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AdminRegistryEntry } from "@gram/admin-client/models/components/adminregistryentry";
@@ -113,7 +115,12 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
     setFailure(null);
     setConflict(false);
     await queryClient.invalidateQueries({
-      predicate: (query) => query.queryKey.includes("listRegistryEntries"),
+      predicate: (query) =>
+        query.queryKey.some(
+          (part) =>
+            typeof part === "string" &&
+            (part.includes("RegistryEntries") || part.includes("RegistryOkta")),
+        ),
     });
   };
 
@@ -251,6 +258,27 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
             )
           ) : (
             <>
+              {base && (
+                <RegistryOktaCandidates
+                  entryId={base.id}
+                  text={text}
+                  disabled={busy}
+                  onAdd={(name) => {
+                    const next = addOinName(text, name);
+                    if ("error" in next) {
+                      setFailure(new Error(next.error));
+                      return;
+                    }
+                    setText(next.text);
+                    setIssues([]);
+                    setServerIssues([]);
+                    // A conflict keeps its explanation; Save stays disabled
+                    // until the entry is reloaded.
+                    if (!conflict) setFailure(null);
+                    setEdited(true);
+                  }}
+                />
+              )}
               <Suspense fallback={<p role="status">Loading JSON editor…</p>}>
                 <RegistryJsonEditor
                   value={text}

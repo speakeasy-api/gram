@@ -175,7 +175,7 @@ type ListSetupTasksPayload struct {
 // ListSetupTasksResult is the result type of the organizations service
 // listSetupTasks method.
 type ListSetupTasksResult struct {
-	// Setup tasks in catalog order.
+	// Setup tasks in catalog order. A group precedes the cards under it.
 	Tasks []*SetupTask
 }
 
@@ -355,6 +355,13 @@ type SetupTask struct {
 	BlockedBy []string
 	// Whether a platform administrator hid the task.
 	Hidden bool
+	// Key of the group this card sits under. Absent for a top-level card or a
+	// group.
+	ParentKey *string
+	// True for a group that nests cards. A group has no card of its own: it is
+	// hidden when every card under it is, done when every visible card is, and
+	// cannot be assigned or marked by hand.
+	Group bool
 }
 
 type SetupTaskAssignee struct {

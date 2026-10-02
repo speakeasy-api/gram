@@ -1,5 +1,5 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
-import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
+import { Skeleton } from "@/components/ui/Skeleton";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import type { AnalyticsQueryResult } from "@gram/client/models/components/analyticsqueryresult.js";
 import type { UseQueryResult } from "@tanstack/react-query";
@@ -21,42 +21,27 @@ import { ResultTable } from "./ResultTable";
 export type RunQuery = UseQueryResult<AnalyticsQueryResult, Error>;
 
 /**
- * The results panel under the builder. A timeseries chart draws the chart
- * query with the summary query tabled beneath it; a ranked, table or number
- * chart draws the summary query alone. One generic empty state covers every reason
- * there is nothing to draw.
+ * The results panel under the builder: the one query the spec runs, drawn as
+ * its chart. One generic empty state covers every reason there is nothing to
+ * draw.
  */
 export function ExploreResults({
   dataset,
   spec,
-  chart,
-  summary,
+  result,
 }: {
   dataset: AnalyticsDataset | undefined;
   /** The spec the last run answered, which the builder may have moved past. */
   spec: ExploreSpec;
-  chart: RunQuery;
-  summary: RunQuery;
+  result: RunQuery;
 }): JSX.Element {
-  const drawsChart = hasChartShape(spec);
-  const primary = drawsChart ? chart : summary;
-  // A timeseries draws two requests, so busy watches both or the panel would
-  // swap the table underneath without ever saying it was working.
-  const busy = primary.isFetching || (drawsChart && summary.isFetching);
-
   return (
     <section
       className="border-border bg-card flex flex-col gap-4 border p-5"
-      aria-busy={busy}
+      aria-busy={result.isFetching}
     >
       <span className="text-eyebrow">Results</span>
-      <ResultsBody
-        dataset={dataset}
-        spec={spec}
-        primary={primary}
-        summary={summary}
-        drawsChart={drawsChart}
-      />
+      <ResultsBody dataset={dataset} spec={spec} primary={result} />
     </section>
   );
 }
@@ -65,14 +50,10 @@ function ResultsBody({
   dataset,
   spec,
   primary,
-  summary,
-  drawsChart,
 }: {
   dataset: AnalyticsDataset | undefined;
   spec: ExploreSpec;
   primary: RunQuery;
-  summary: RunQuery;
-  drawsChart: boolean;
 }): JSX.Element {
   if (primary.isError) {
     return <QueryFailed error={primary.error} />;
@@ -93,12 +74,9 @@ function ResultsBody({
       />
     );
   }
-  if (drawsChart) {
+  if (hasChartShape(spec)) {
     return (
-      <>
-        <ChartOrReason dataset={dataset} spec={spec} rows={primary.data.rows} />
-        <SummarySection dataset={dataset} spec={spec} summary={summary} />
-      </>
+      <ChartOrReason dataset={dataset} spec={spec} rows={primary.data.rows} />
     );
   }
   // Nothing measured means rows, so a number spec that lost its last measure
@@ -157,35 +135,6 @@ function ChartOrReason({
           {seriesSet.series.length + seriesSet.hidden} series.
         </p>
       ) : null}
-    </div>
-  );
-}
-
-// The table under a chart answers the same question over the whole window,
-// with the builder's order and limit, so it loads and fails on its own.
-function SummarySection({
-  dataset,
-  spec,
-  summary,
-}: {
-  dataset: AnalyticsDataset | undefined;
-  spec: ExploreSpec;
-  summary: RunQuery;
-}): JSX.Element {
-  let body: JSX.Element;
-  if (summary.isError) {
-    body = <QueryFailed error={summary.error} />;
-  } else if (summary.data === undefined) {
-    body = <SkeletonTable />;
-  } else {
-    body = (
-      <ResultTable dataset={dataset} spec={spec} rows={summary.data.rows} />
-    );
-  }
-  return (
-    <div className="flex flex-col gap-2">
-      <span className="text-eyebrow">Summary</span>
-      {body}
     </div>
   );
 }

@@ -251,13 +251,13 @@ describe("AddServerDialog guardrails", () => {
     expect(mocks.skip).not.toHaveBeenCalled();
   });
 
-  it("warns by default and installs without a policy when switched off", async () => {
+  it("logs by default and installs without a policy when switched off", async () => {
     mocks.workflow.mockReturnValue(
       guardrailsPhase([{ name: "search", destructive: false }]),
     );
     renderDialog();
 
-    expect(await screen.findByText("Warn & confirm · Severity")).toBeDefined();
+    expect(await screen.findByText("Log for review · Severity")).toBeDefined();
     fireEvent.click(
       screen.getByRole("switch", { name: "Create a risk policy" }),
     );
@@ -285,7 +285,7 @@ describe("AddServerDialog guardrails", () => {
     expect(url.pathname).toBe("/p/risk-policies/new");
     expect(url.searchParams.get("kind")).toBe("standard");
     expect(url.searchParams.get("mcp_server_id")).toBe("srv-1");
-    expect(url.searchParams.get("action")).toBe("warn");
+    expect(url.searchParams.get("action")).toBe("flag");
     expect(url.searchParams.get("name")).toBe("Test Server guardrail");
     expect(mocks.installWithGuardrail).not.toHaveBeenCalled();
   });

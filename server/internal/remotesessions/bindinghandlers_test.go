@@ -190,51 +190,16 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, locked, 1)
-	// A client deadline can race with server-side completion. Keep the
-	// contender rollback-only so releasing the admission lock cannot commit it.
 	competingTx := testenv.BeginTx(t, ctx, ti.conn)
-	blockerPID := tx.Conn().PgConn().PID()
-	contenderPID := competingTx.Conn().PgConn().PID()
-	blockedCtx, cancel := context.WithCancel(ctx)
-	result := make(chan error, 1)
-	finished := make(chan struct{})
-	t.Cleanup(func() {
-		cancel()
-		select {
-		case <-finished:
-		case <-time.After(5 * time.Second):
-			t.Error("competing detach did not stop after cancellation")
-		}
+	// probeTimeout bounds server-side lock acquisition without racing cancellation.
+	const probeTimeout = 100 * time.Millisecond
+	testenv.SetLockTimeout(t, ctx, competingTx, probeTimeout)
+	_, detachErr := repo.New(competingTx).DetachPrincipalRemoteSessionBinding(ctx, repo.DetachPrincipalRemoteSessionBindingParams{
+		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID,
+		UserSessionIssuerID: config, SubjectUrn: mine.SubjectUrn.String(), ID: uuid.MustParse(binding.ID),
 	})
-	go func() {
-		defer close(finished)
-		_, detachErr := repo.New(competingTx).DetachPrincipalRemoteSessionBinding(blockedCtx, repo.DetachPrincipalRemoteSessionBindingParams{
-			ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID,
-			UserSessionIssuerID: config, SubjectUrn: mine.SubjectUrn.String(), ID: uuid.MustParse(binding.ID),
-		})
-		result <- detachErr
-	}()
-	observerCtx, stopObserver := context.WithTimeout(ctx, 5*time.Second)
-	defer stopObserver()
-	require.Eventually(t, func() bool {
-		var blocked bool
-		//nolint:glint // notestingrawsql: pg_blocking_pids synchronizes this test's exact backend pair
-		observeErr := ti.conn.QueryRow(observerCtx, `SELECT $1::integer = ANY(pg_blocking_pids($2::integer))`, blockerPID, contenderPID).Scan(&blocked)
-		return observeErr == nil && blocked
-	}, 5*time.Second, 10*time.Millisecond, "competing detach must reach the admission lock")
-	select {
-	case detachErr := <-result:
-		t.Fatalf("competing detach completed before lock release: %v", detachErr)
-	default:
-	}
-	cancel()
-	select {
-	case detachErr := <-result:
-		require.ErrorIs(t, detachErr, context.Canceled, "session admission must serialize attachment revocation")
-	case <-time.After(5 * time.Second):
-		t.Fatal("competing detach did not return after cancellation")
-	}
-	_ = competingTx.Rollback(ctx) // Cancellation may already have closed the connection.
+	testenv.RequireLockNotAvailable(t, detachErr)
+	require.NoError(t, competingTx.Rollback(ctx))
 	require.NoError(t, tx.Rollback(ctx))
 
 	list, err := ti.service.ListBindings(ctx, &gen.ListBindingsPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String()})

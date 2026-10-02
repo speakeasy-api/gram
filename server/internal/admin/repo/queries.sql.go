@@ -152,6 +152,58 @@ func (q *Queries) AdminCountOrganizations(ctx context.Context, arg AdminCountOrg
 	return column_1, err
 }
 
+const adminCountUserOrganizations = `-- name: AdminCountUserOrganizations :one
+SELECT (SELECT count(*) FROM organization_user_relationships m WHERE m.user_id = u.id AND m.deleted IS FALSE) AS total
+FROM users u WHERE u.id = $1::text AND u.deleted_at IS NULL AND u.workos_deleted_at IS NULL
+`
+
+func (q *Queries) AdminCountUserOrganizations(ctx context.Context, userID string) (int64, error) {
+	row := q.db.QueryRow(ctx, adminCountUserOrganizations, userID)
+	var total int64
+	err := row.Scan(&total)
+	return total, err
+}
+
+const adminCountUsers = `-- name: AdminCountUsers :one
+SELECT count(*)
+FROM users u
+WHERE u.deleted_at IS NULL AND u.workos_deleted_at IS NULL
+AND NOT EXISTS (SELECT 1 FROM unnest($1::text[]) p(pattern) WHERE NOT (u.display_name ILIKE p.pattern))
+AND NOT EXISTS (SELECT 1 FROM unnest($2::text[]) p(pattern) WHERE NOT (u.email ILIKE p.pattern))
+AND (cardinality($3::text[]) = 0 OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE
+    AND NOT EXISTS (SELECT 1 FROM unnest($3::text[]) p(pattern) WHERE NOT (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern))
+))
+AND NOT EXISTS (
+    SELECT 1 FROM unnest($4::text[]) p(pattern)
+    WHERE NOT (u.display_name ILIKE p.pattern OR u.email ILIKE p.pattern OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE AND (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern)
+ ))
+)
+`
+
+type AdminCountUsersParams struct {
+	NamePatterns  []string
+	EmailPatterns []string
+	OrgPatterns   []string
+	AnyPatterns   []string
+}
+
+// Keep eligibility and search predicates identical to AdminListUsers.
+func (q *Queries) AdminCountUsers(ctx context.Context, arg AdminCountUsersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, adminCountUsers,
+		arg.NamePatterns,
+		arg.EmailPatterns,
+		arg.OrgPatterns,
+		arg.AnyPatterns,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const adminDisableOrganization = `-- name: AdminDisableOrganization :execrows
 UPDATE organization_metadata
 SET disabled_at = COALESCE(disabled_at, clock_timestamp()),
@@ -246,6 +298,25 @@ func (q *Queries) AdminGetEnterpriseTrialRetryOperationIDs(ctx context.Context, 
 	row := q.db.QueryRow(ctx, adminGetEnterpriseTrialRetryOperationIDs, targetOrganizationID)
 	var i AdminGetEnterpriseTrialRetryOperationIDsRow
 	err := row.Scan(&i.ArmOperationID, &i.RearmArmOperationID, &i.MatchingRearmCount)
+	return i, err
+}
+
+const adminGetIssuerFixture = `-- name: AdminGetIssuerFixture :one
+SELECT id, issuer
+FROM remote_session_issuers
+WHERE id = $1
+`
+
+type AdminGetIssuerFixtureRow struct {
+	ID     uuid.UUID
+	Issuer string
+}
+
+// Test fixture: an issuer row as the Okta connection references it.
+func (q *Queries) AdminGetIssuerFixture(ctx context.Context, id uuid.UUID) (AdminGetIssuerFixtureRow, error) {
+	row := q.db.QueryRow(ctx, adminGetIssuerFixture, id)
+	var i AdminGetIssuerFixtureRow
+	err := row.Scan(&i.ID, &i.Issuer)
 	return i, err
 }
 
@@ -350,6 +421,28 @@ func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganiza
 		&i.MemberCount,
 	)
 	return i, err
+}
+
+const adminGetOrganizationMemberCursor = `-- name: AdminGetOrganizationMemberCursor :one
+SELECT u.id
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.deleted IS FALSE
+  AND u.deleted_at IS NULL
+  AND u.id = $2
+`
+
+type AdminGetOrganizationMemberCursorParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) AdminGetOrganizationMemberCursor(ctx context.Context, arg AdminGetOrganizationMemberCursorParams) (string, error) {
+	row := q.db.QueryRow(ctx, adminGetOrganizationMemberCursor, arg.OrganizationID, arg.UserID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
 }
 
 const adminGetOrganizationStats = `-- name: AdminGetOrganizationStats :one
@@ -478,6 +571,77 @@ func (q *Queries) AdminGetProjectDetailByID(ctx context.Context, id uuid.UUID) (
 	return i, err
 }
 
+const adminListObservedOktaApplicationNames = `-- name: AdminListObservedOktaApplicationNames :many
+WITH live AS (
+    SELECT a.organization_id, a.name, a.label, a.sign_on_mode
+    FROM okta_applications AS a
+    WHERE a.removed_at IS NULL
+      AND a.status = 'ACTIVE'
+      AND EXISTS (
+        SELECT 1 FROM okta_application_assignments AS s
+        WHERE s.organization_id = a.organization_id
+          AND s.identity_provider_connection_id = a.identity_provider_connection_id
+          AND s.okta_app_id = a.okta_app_id
+          AND s.removed_at IS NULL
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM ROWS FROM (unnest($1::text[]), unnest($2::text[])) AS i(name, mode)
+        WHERE i.name = a.name AND i.mode = a.sign_on_mode
+      )
+)
+SELECT
+    l.name,
+    COUNT(DISTINCT l.organization_id)::integer AS organizations,
+    (ARRAY(SELECT DISTINCT x.label FROM live AS x WHERE x.name = l.name ORDER BY x.label LIMIT 8))::text[] AS labels,
+    (ARRAY(SELECT DISTINCT x.sign_on_mode FROM live AS x WHERE x.name = l.name ORDER BY x.sign_on_mode))::text[] AS sign_on_modes
+FROM live AS l
+GROUP BY l.name
+ORDER BY organizations DESC, l.name
+`
+
+type AdminListObservedOktaApplicationNamesParams struct {
+	InternalNames []string
+	InternalModes []string
+}
+
+type AdminListObservedOktaApplicationNamesRow struct {
+	Name          string
+	Organizations int32
+	Labels        []string
+	SignOnModes   []string
+}
+
+// Staff-only, deliberately cross-tenant: the OIN key is public catalog data
+// and only counts and labels leave here, never organization ids. Only active
+// applications with a live assignment count, as suggestions do; Okta's own
+// applications are excluded by (name, sign-on mode) as the sync defines them.
+// Labels are admin-editable per tenant and are used for matching, capped.
+func (q *Queries) AdminListObservedOktaApplicationNames(ctx context.Context, arg AdminListObservedOktaApplicationNamesParams) ([]AdminListObservedOktaApplicationNamesRow, error) {
+	rows, err := q.db.Query(ctx, adminListObservedOktaApplicationNames, arg.InternalNames, arg.InternalModes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListObservedOktaApplicationNamesRow
+	for rows.Next() {
+		var i AdminListObservedOktaApplicationNamesRow
+		if err := rows.Scan(
+			&i.Name,
+			&i.Organizations,
+			&i.Labels,
+			&i.SignOnModes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListOrganizationMembers = `-- name: AdminListOrganizationMembers :many
 SELECT
     u.id,
@@ -512,6 +676,66 @@ func (q *Queries) AdminListOrganizationMembers(ctx context.Context, organization
 	var items []AdminListOrganizationMembersRow
 	for rows.Next() {
 		var i AdminListOrganizationMembersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.LastLogin,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListOrganizationMembersPage = `-- name: AdminListOrganizationMembersPage :many
+SELECT
+    u.id,
+    u.email,
+    u.display_name,
+    u.last_login,
+    u.created_at,
+    u.updated_at
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.deleted IS FALSE
+  AND u.deleted_at IS NULL
+  AND u.id > $2::text
+ORDER BY u.id ASC
+LIMIT $3
+`
+
+type AdminListOrganizationMembersPageParams struct {
+	OrganizationID string
+	AfterUserID    string
+	PageLimit      int32
+}
+
+type AdminListOrganizationMembersPageRow struct {
+	ID          string
+	Email       string
+	DisplayName string
+	LastLogin   pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
+func (q *Queries) AdminListOrganizationMembersPage(ctx context.Context, arg AdminListOrganizationMembersPageParams) ([]AdminListOrganizationMembersPageRow, error) {
+	rows, err := q.db.Query(ctx, adminListOrganizationMembersPage, arg.OrganizationID, arg.AfterUserID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListOrganizationMembersPageRow
+	for rows.Next() {
+		var i AdminListOrganizationMembersPageRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Email,
@@ -979,6 +1203,245 @@ func (q *Queries) AdminListProjectsForOrganization(ctx context.Context, organiza
 	return items, nil
 }
 
+const adminListRegistryEntryFacts = `-- name: AdminListRegistryEntryFacts :many
+SELECT
+    id AS registry_entry_id,
+    data
+FROM mcp_registry_entries
+ORDER BY (data #>> '{server,name}') COLLATE "C"
+`
+
+type AdminListRegistryEntryFactsRow struct {
+	RegistryEntryID uuid.UUID
+	Data            []byte
+}
+
+// The fields the Okta matcher reads, for every entry.
+func (q *Queries) AdminListRegistryEntryFacts(ctx context.Context) ([]AdminListRegistryEntryFactsRow, error) {
+	rows, err := q.db.Query(ctx, adminListRegistryEntryFacts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListRegistryEntryFactsRow
+	for rows.Next() {
+		var i AdminListRegistryEntryFactsRow
+		if err := rows.Scan(&i.RegistryEntryID, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListRegistryOktaMappings = `-- name: AdminListRegistryOktaMappings :many
+SELECT
+    e.id AS registry_entry_id,
+    (e.data #>> '{server,name}')::text AS entry_name,
+    (n.value #>> '{}')::text AS oin_name
+FROM mcp_registry_entries AS e
+CROSS JOIN LATERAL jsonb_array_elements(
+    CASE WHEN jsonb_typeof(e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}') = 'array'
+        THEN e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}'
+        ELSE '[]'::jsonb
+    END
+) AS n(value)
+WHERE jsonb_typeof(n.value) = 'string'
+`
+
+type AdminListRegistryOktaMappingsRow struct {
+	RegistryEntryID uuid.UUID
+	EntryName       string
+	OinName         string
+}
+
+// Every OIN name a catalog entry claims, published or not, so a candidate
+// already taken can say by whom.
+func (q *Queries) AdminListRegistryOktaMappings(ctx context.Context) ([]AdminListRegistryOktaMappingsRow, error) {
+	rows, err := q.db.Query(ctx, adminListRegistryOktaMappings)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListRegistryOktaMappingsRow
+	for rows.Next() {
+		var i AdminListRegistryOktaMappingsRow
+		if err := rows.Scan(&i.RegistryEntryID, &i.EntryName, &i.OinName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListUserOrganizations = `-- name: AdminListUserOrganizations :many
+SELECT o.id, o.name, o.slug, o.disabled_at
+FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+WHERE m.user_id = $1::text AND m.deleted IS FALSE
+ORDER BY lower(o.name), o.slug, o.id LIMIT $3::int OFFSET $2::int
+`
+
+type AdminListUserOrganizationsParams struct {
+	UserID     string
+	PageOffset int32
+	PageLimit  int32
+}
+
+type AdminListUserOrganizationsRow struct {
+	ID         string
+	Name       string
+	Slug       string
+	DisabledAt pgtype.Timestamptz
+}
+
+func (q *Queries) AdminListUserOrganizations(ctx context.Context, arg AdminListUserOrganizationsParams) ([]AdminListUserOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, adminListUserOrganizations, arg.UserID, arg.PageOffset, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListUserOrganizationsRow
+	for rows.Next() {
+		var i AdminListUserOrganizationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.DisabledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListUsers = `-- name: AdminListUsers :many
+SELECT u.id, u.email, u.display_name, u.last_login
+FROM users u
+WHERE u.deleted_at IS NULL AND u.workos_deleted_at IS NULL
+AND NOT EXISTS (SELECT 1 FROM unnest($1::text[]) p(pattern) WHERE NOT (u.display_name ILIKE p.pattern))
+AND NOT EXISTS (SELECT 1 FROM unnest($2::text[]) p(pattern) WHERE NOT (u.email ILIKE p.pattern))
+AND (cardinality($3::text[]) = 0 OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE
+    AND NOT EXISTS (SELECT 1 FROM unnest($3::text[]) p(pattern) WHERE NOT (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern))
+))
+AND NOT EXISTS (
+    SELECT 1 FROM unnest($4::text[]) p(pattern)
+    WHERE NOT (u.display_name ILIKE p.pattern OR u.email ILIKE p.pattern OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE AND (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern)
+ ))
+)
+ORDER BY lower(u.email), u.id LIMIT $6::int OFFSET $5::int
+`
+
+type AdminListUsersParams struct {
+	NamePatterns  []string
+	EmailPatterns []string
+	OrgPatterns   []string
+	AnyPatterns   []string
+	PageOffset    int32
+	PageLimit     int32
+}
+
+type AdminListUsersRow struct {
+	ID          string
+	Email       string
+	DisplayName string
+	LastLogin   pgtype.Timestamptz
+}
+
+func (q *Queries) AdminListUsers(ctx context.Context, arg AdminListUsersParams) ([]AdminListUsersRow, error) {
+	rows, err := q.db.Query(ctx, adminListUsers,
+		arg.NamePatterns,
+		arg.EmailPatterns,
+		arg.OrgPatterns,
+		arg.AnyPatterns,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListUsersRow
+	for rows.Next() {
+		var i AdminListUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.LastLogin,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListUsersOrganizationPreviews = `-- name: AdminListUsersOrganizationPreviews :many
+WITH ranked AS (
+    SELECT m.user_id, o.id, o.name, o.slug, o.disabled_at,
+    count(*) OVER (PARTITION BY m.user_id) AS organization_count,
+    row_number() OVER (PARTITION BY m.user_id ORDER BY lower(o.name), o.slug, o.id) AS position
+    FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = ANY($1::text[]) AND m.deleted IS FALSE
+)
+SELECT user_id, id, name, slug, disabled_at, organization_count FROM ranked WHERE position <= 3
+ORDER BY user_id, position
+`
+
+type AdminListUsersOrganizationPreviewsRow struct {
+	UserID            pgtype.Text
+	ID                string
+	Name              string
+	Slug              string
+	DisabledAt        pgtype.Timestamptz
+	OrganizationCount int64
+}
+
+func (q *Queries) AdminListUsersOrganizationPreviews(ctx context.Context, userIds []string) ([]AdminListUsersOrganizationPreviewsRow, error) {
+	rows, err := q.db.Query(ctx, adminListUsersOrganizationPreviews, userIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListUsersOrganizationPreviewsRow
+	for rows.Next() {
+		var i AdminListUsersOrganizationPreviewsRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.DisabledAt,
+			&i.OrganizationCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminProjectBelongsToOrganization = `-- name: AdminProjectBelongsToOrganization :one
 SELECT EXISTS (
     SELECT 1 FROM projects
@@ -1213,6 +1676,33 @@ func (q *Queries) LockEnterpriseTrialInOrganizations(ctx context.Context, ids []
 	return organization_id, err
 }
 
+const lockOrganizationAccess = `-- name: LockOrganizationAccess :one
+SELECT id, name, slug, disabled_at
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+type LockOrganizationAccessRow struct {
+	ID         string
+	Name       string
+	Slug       string
+	DisabledAt pgtype.Timestamptz
+}
+
+// Pin canonical identity and current access state before a guarded transition.
+func (q *Queries) LockOrganizationAccess(ctx context.Context, id string) (LockOrganizationAccessRow, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationAccess, id)
+	var i LockOrganizationAccessRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
 const lockOrganizationMetadata = `-- name: LockOrganizationMetadata :one
 SELECT id
 FROM organization_metadata
@@ -1227,6 +1717,39 @@ func (q *Queries) LockOrganizationMetadata(ctx context.Context, id string) (stri
 	var id_2 string
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const lockOrganizationWhitelist = `-- name: LockOrganizationWhitelist :one
+SELECT id, name, slug, whitelisted, gram_account_type, disabled_at, updated_at
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+type LockOrganizationWhitelistRow struct {
+	ID              string
+	Name            string
+	Slug            string
+	Whitelisted     bool
+	GramAccountType string
+	DisabledAt      pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+// Pin the exact target and account context shown by whitelist approval.
+func (q *Queries) LockOrganizationWhitelist(ctx context.Context, id string) (LockOrganizationWhitelistRow, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationWhitelist, id)
+	var i LockOrganizationWhitelistRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Whitelisted,
+		&i.GramAccountType,
+		&i.DisabledAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const lockSupportMatrix = `-- name: LockSupportMatrix :exec
@@ -1274,6 +1797,32 @@ func (q *Queries) ReadSupportMatrix(ctx context.Context) ([]byte, error) {
 	return snapshot, err
 }
 
+const rejectOrganizationEntitlementsFixture = `-- name: RejectOrganizationEntitlementsFixture :exec
+ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK (feature_name = 'automatic-role-distribution') NOT VALID
+`
+
+func (q *Queries) RejectOrganizationEntitlementsFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, rejectOrganizationEntitlementsFixture)
+	return err
+}
+
+const retireSupportPlans = `-- name: RetireSupportPlans :exec
+UPDATE support_matrix_plans
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE deleted_at IS NULL
+  AND slug NOT IN (
+    SELECT value->>'id'
+    FROM jsonb_array_elements($1::jsonb->'plans')
+  )
+`
+
+// An organization that declared a retired plan keeps its vendor and loses the
+// plan: the stack reads plans through deleted_at IS NULL.
+func (q *Queries) RetireSupportPlans(ctx context.Context, catalog []byte) error {
+	_, err := q.db.Exec(ctx, retireSupportPlans, catalog)
+	return err
+}
+
 const seedSupportCapabilities = `-- name: SeedSupportCapabilities :exec
 INSERT INTO support_matrix_capabilities (slug, name, category, sort_order)
 SELECT value->>'id', value->>'name', value->>'group', ordinality::integer
@@ -1298,13 +1847,50 @@ func (q *Queries) SeedSupportMethods(ctx context.Context, catalog []byte) error 
 	return err
 }
 
+const seedSupportPlans = `-- name: SeedSupportPlans :exec
+INSERT INTO support_matrix_plans (slug, vendor, name, sort_order)
+SELECT value->>'id', value->>'vendor', value->>'name', ordinality::integer
+FROM jsonb_array_elements($1::jsonb->'plans') WITH ORDINALITY
+ON CONFLICT (slug) DO UPDATE SET
+    vendor = EXCLUDED.vendor,
+    name = EXCLUDED.name,
+    sort_order = EXCLUDED.sort_order,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+WHERE support_matrix_plans.vendor IS DISTINCT FROM EXCLUDED.vendor
+   OR support_matrix_plans.name IS DISTINCT FROM EXCLUDED.name
+   OR support_matrix_plans.sort_order IS DISTINCT FROM EXCLUDED.sort_order
+   OR support_matrix_plans.deleted_at IS NOT NULL
+`
+
+// The catalog owns plans outright: a plan it names is (re)instated with the
+// catalog's vendor, name and order, and RetireSupportPlans below soft-deletes
+// the ones it no longer names.
+func (q *Queries) SeedSupportPlans(ctx context.Context, catalog []byte) error {
+	_, err := q.db.Exec(ctx, seedSupportPlans, catalog)
+	return err
+}
+
 const seedSupportPlatforms = `-- name: SeedSupportPlatforms :exec
 INSERT INTO support_matrix_platforms (slug, name, vendor, family, surface, sort_order)
 SELECT value->>'id', value->>'name', value->>'vendor', value->>'family', value->>'surface', ordinality::integer
 FROM jsonb_array_elements($1::jsonb->'products') WITH ORDINALITY
-ON CONFLICT (slug) DO NOTHING
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    vendor = EXCLUDED.vendor,
+    family = EXCLUDED.family,
+    surface = EXCLUDED.surface,
+    sort_order = EXCLUDED.sort_order,
+    updated_at = clock_timestamp()
+WHERE support_matrix_platforms.name IS DISTINCT FROM EXCLUDED.name
+   OR support_matrix_platforms.vendor IS DISTINCT FROM EXCLUDED.vendor
+   OR support_matrix_platforms.family IS DISTINCT FROM EXCLUDED.family
+   OR support_matrix_platforms.surface IS DISTINCT FROM EXCLUDED.surface
+   OR support_matrix_platforms.sort_order IS DISTINCT FROM EXCLUDED.sort_order
 `
 
+// The catalog owns a platform's name, vendor, family, surface and order, so
+// those follow the file on every start; staff edit facts, not platforms.
 func (q *Queries) SeedSupportPlatforms(ctx context.Context, catalog []byte) error {
 	_, err := q.db.Exec(ctx, seedSupportPlatforms, catalog)
 	return err
@@ -1323,6 +1909,68 @@ ON CONFLICT (integration_method_id, capability_id) DO NOTHING
 func (q *Queries) SeedSupportReferences(ctx context.Context, catalog []byte) error {
 	_, err := q.db.Exec(ctx, seedSupportReferences, catalog)
 	return err
+}
+
+const setOrganizationAccess = `-- name: SetOrganizationAccess :one
+UPDATE organization_metadata
+SET disabled_at = CASE
+        WHEN $1::boolean THEN NULL
+        ELSE COALESCE(disabled_at, clock_timestamp())
+    END,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND disabled_at IS NOT DISTINCT FROM $3::timestamptz
+RETURNING id, name, slug, disabled_at
+`
+
+type SetOrganizationAccessParams struct {
+	Enabled            bool
+	ID                 string
+	ExpectedDisabledAt pgtype.Timestamptz
+}
+
+type SetOrganizationAccessRow struct {
+	ID         string
+	Name       string
+	Slug       string
+	DisabledAt pgtype.Timestamptz
+}
+
+// Caller holds the metadata lock. Preserve disable timestamp semantics and the
+// WorkOS webhook cursor while checking that the expected state still matches.
+func (q *Queries) SetOrganizationAccess(ctx context.Context, arg SetOrganizationAccessParams) (SetOrganizationAccessRow, error) {
+	row := q.db.QueryRow(ctx, setOrganizationAccess, arg.Enabled, arg.ID, arg.ExpectedDisabledAt)
+	var i SetOrganizationAccessRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
+const setOrganizationWhitelist = `-- name: SetOrganizationWhitelist :one
+UPDATE organization_metadata
+SET whitelisted = $1::boolean,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND whitelisted = $3::boolean
+RETURNING whitelisted
+`
+
+type SetOrganizationWhitelistParams struct {
+	Whitelisted         bool
+	ID                  string
+	ExpectedWhitelisted bool
+}
+
+// Only the demo-access gate changes; other account and lifecycle fields survive.
+func (q *Queries) SetOrganizationWhitelist(ctx context.Context, arg SetOrganizationWhitelistParams) (bool, error) {
+	row := q.db.QueryRow(ctx, setOrganizationWhitelist, arg.Whitelisted, arg.ID, arg.ExpectedWhitelisted)
+	var whitelisted bool
+	err := row.Scan(&whitelisted)
+	return whitelisted, err
 }
 
 const upsertSupportCoverage = `-- name: UpsertSupportCoverage :exec

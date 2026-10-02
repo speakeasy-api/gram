@@ -153,6 +153,7 @@ func TestList_RequiresWorkloadRead(t *testing.T) {
 func TestWithdrawSubject_LeavesTheOtherTiersAgentInPlace(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
+	ctx = asAPIKey(t, ctx)
 
 	registerAnthropic(t, ctx, ti, true)
 	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
@@ -172,6 +173,7 @@ func TestWithdrawSubject_LeavesTheOtherTiersAgentInPlace(t *testing.T) {
 		Subject:          channelOne,
 		MatchKind:        string(workloadidentity.MatchKindExact),
 		Name:             nil,
+		Tags:             nil,
 		AgentID:          agentID.String(),
 		ProjectScoped:    true,
 	})

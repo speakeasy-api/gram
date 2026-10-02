@@ -157,6 +157,7 @@ export default function RemoteSessionClientDetail(): JSX.Element {
               {client && (
                 <LegacyCallbackAlert
                   legacyCallbackUrl={client.legacyCallbackUrl}
+                  callbackUrl={client.callbackUrl}
                   onMigrate={() =>
                     migrate.mutate({
                       request: {

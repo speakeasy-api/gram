@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 #MISE dir="{{ config_root }}/server"
 #MISE description="Test the server with optional coverage generation. It takes the same arguments as 'go test'."
 
@@ -95,7 +96,7 @@ if [ -n "$shard" ] || [ -n "$rerun_fails" ]; then
   packages=("${patterns[@]}")
 
   if [ -n "$shard" ]; then
-    shard_packages=$(go run github.com/speakeasy-api/gram/ci/cmd/shard \
+    shard_packages=$(go run -buildvcs=false github.com/speakeasy-api/gram/ci/cmd/shard \
       -i "$shard" "${tags[@]}" "${patterns[@]}") || exit $?
 
     packages=()

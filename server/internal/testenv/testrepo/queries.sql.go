@@ -13,6 +13,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const acquireTestLockFixture = `-- name: AcquireTestLockFixture :exec
+SELECT pg_advisory_xact_lock($1::bigint)
+`
+
+// Transaction-scoped advisory locks for testing the synchronization helpers themselves.
+func (q *Queries) AcquireTestLockFixture(ctx context.Context, key int64) error {
+	_, err := q.db.Exec(ctx, acquireTestLockFixture, key)
+	return err
+}
+
 const addAttachmentReplacementOwnerMembershipFixture = `-- name: AddAttachmentReplacementOwnerMembershipFixture :execrows
 INSERT INTO organization_user_relationships (organization_id, user_id) VALUES ($1, 'replacement-owner')
 `
@@ -73,6 +83,18 @@ func (q *Queries) AttachmentSourceWasUsedFixture(ctx context.Context, id uuid.UU
 	var used bool
 	err := row.Scan(&used)
 	return used, err
+}
+
+const backendPIDFixture = `-- name: BackendPIDFixture :one
+SELECT pg_backend_pid()
+`
+
+// Identify a holder exposed only through a transaction-enlisted query interface.
+func (q *Queries) BackendPIDFixture(ctx context.Context) (int32, error) {
+	row := q.db.QueryRow(ctx, backendPIDFixture)
+	var pg_backend_pid int32
+	err := row.Scan(&pg_backend_pid)
+	return pg_backend_pid, err
 }
 
 const clearAttachmentRefreshClaimFixture = `-- name: ClearAttachmentRefreshClaimFixture :execrows
@@ -196,6 +218,26 @@ SELECT count(*) FROM user_sessions WHERE subject_urn = $1
 
 func (q *Queries) CountAttachmentHumanSessionsFixture(ctx context.Context, subjectUrn urn.SessionSubject) (int64, error) {
 	row := q.db.QueryRow(ctx, countAttachmentHumanSessionsFixture, subjectUrn)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countBackendsBlockedByFixture = `-- name: CountBackendsBlockedByFixture :one
+WITH RECURSIVE blocked(pid) AS (
+    SELECT pid FROM pg_catalog.pg_stat_activity
+    WHERE datname = current_database() AND $1::integer = ANY(pg_blocking_pids(pid))
+    UNION
+    SELECT activity.pid FROM pg_catalog.pg_stat_activity AS activity
+    JOIN blocked AS blocker ON blocker.pid = ANY(pg_blocking_pids(activity.pid))
+    WHERE activity.datname = current_database()
+)
+SELECT count(*) FROM blocked
+`
+
+// Follow queued row-lock waiters as well as the direct holder; UNION deduplicates paths.
+func (q *Queries) CountBackendsBlockedByFixture(ctx context.Context, holderPid int32) (int64, error) {
+	row := q.db.QueryRow(ctx, countBackendsBlockedByFixture, holderPid)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -1107,11 +1149,9 @@ type ForceRemoteSessionClientAuthMethodFixtureParams struct {
 	ProjectID               uuid.NullUUID
 }
 
-// TEST FIXTURE ONLY. Writes a token_endpoint_auth_method the Goa enum does not
-// accept, which no production path can produce. private_key_jwt arrives with
-// AIM-156; until then planting the value directly is the only way to exercise
-// requireDetachableKeySet and requirePrivateKeyJWTKeySet, the rules that guard
-// it.
+// TEST FIXTURE ONLY. Plants a token_endpoint_auth_method directly, bypassing
+// the management API's key-set checks, so tests can build states those checks
+// (requireDetachableKeySet, requirePrivateKeyJWTKeySet) must then refuse.
 func (q *Queries) ForceRemoteSessionClientAuthMethodFixture(ctx context.Context, arg ForceRemoteSessionClientAuthMethodFixtureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, forceRemoteSessionClientAuthMethodFixture, arg.TokenEndpointAuthMethod, arg.ID, arg.ProjectID)
 	if err != nil {
@@ -1384,6 +1424,23 @@ type ForceSoftDeleteUserSessionIssuerParams struct {
 func (q *Queries) ForceSoftDeleteUserSessionIssuer(ctx context.Context, arg ForceSoftDeleteUserSessionIssuerParams) error {
 	_, err := q.db.Exec(ctx, forceSoftDeleteUserSessionIssuer, arg.ID, arg.ProjectID)
 	return err
+}
+
+const getAdvisoryLockHolderFixture = `-- name: GetAdvisoryLockHolderFixture :one
+SELECT locks.pid::integer FROM pg_catalog.pg_locks AS locks
+WHERE locks.locktype = 'advisory' AND locks.granted
+  AND locks.database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database())
+  AND locks.classid = ((hashtextextended($1::text, 0) >> 32) & 4294967295)::oid
+  AND locks.objid = (hashtextextended($1::text, 0) & 4294967295)::oid
+  AND locks.objsubid = 1
+`
+
+// Resolve a service-owned session lock by its exact application key.
+func (q *Queries) GetAdvisoryLockHolderFixture(ctx context.Context, key string) (int32, error) {
+	row := q.db.QueryRow(ctx, getAdvisoryLockHolderFixture, key)
+	var locks_pid int32
+	err := row.Scan(&locks_pid)
+	return locks_pid, err
 }
 
 const getAttachmentSourceIDFixture = `-- name: GetAttachmentSourceIDFixture :one
@@ -2615,20 +2672,30 @@ func (q *Queries) IsLifecycleBackendBlockedFixture(ctx context.Context, pid int3
 	return blocked, err
 }
 
-const isQueryBlockedOnLockFixture = `-- name: IsQueryBlockedOnLockFixture :one
+const isQueryBlockedByFixture = `-- name: IsQueryBlockedByFixture :one
+WITH RECURSIVE blocked(pid) AS (
+    SELECT pid FROM pg_catalog.pg_stat_activity
+    WHERE datname = current_database() AND $2::integer = ANY(pg_blocking_pids(pid))
+    UNION
+    SELECT activity.pid FROM pg_catalog.pg_stat_activity AS activity
+    JOIN blocked AS blocker ON blocker.pid = ANY(pg_blocking_pids(activity.pid))
+    WHERE activity.datname = current_database()
+)
 SELECT EXISTS (
-    SELECT 1
-    FROM pg_catalog.pg_stat_activity
-    WHERE datname = current_database()
-      AND state = 'active'
-      AND wait_event_type = 'Lock'
-      AND query LIKE $1::text
+    SELECT 1 FROM pg_catalog.pg_stat_activity AS activity
+    JOIN blocked USING (pid)
+    WHERE activity.state = 'active' AND activity.wait_event_type = 'Lock'
+      AND activity.query LIKE $1::text
 )
 `
 
-// Test-only synchronization: reports whether a matching active query is waiting on a lock.
-func (q *Queries) IsQueryBlockedOnLockFixture(ctx context.Context, queryPattern string) (bool, error) {
-	row := q.db.QueryRow(ctx, isQueryBlockedOnLockFixture, queryPattern)
+type IsQueryBlockedByFixtureParams struct {
+	QueryPattern string
+	HolderPid    int32
+}
+
+func (q *Queries) IsQueryBlockedByFixture(ctx context.Context, arg IsQueryBlockedByFixtureParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isQueryBlockedByFixture, arg.QueryPattern, arg.HolderPid)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -3104,6 +3171,22 @@ func (q *Queries) ListRiskResultsAll(ctx context.Context, arg ListRiskResultsAll
 	return items, nil
 }
 
+const lockExternalOAuthMetadataNowaitFixture = `-- name: LockExternalOAuthMetadataNowaitFixture :one
+SELECT id FROM external_oauth_server_metadata WHERE id = $1 AND project_id = $2 FOR UPDATE NOWAIT
+`
+
+type LockExternalOAuthMetadataNowaitFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) LockExternalOAuthMetadataNowaitFixture(ctx context.Context, arg LockExternalOAuthMetadataNowaitFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockExternalOAuthMetadataNowaitFixture, arg.ID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockOpenRouterAPIKeyForUpdateFixture = `-- name: LockOpenRouterAPIKeyForUpdateFixture :one
 SELECT 1
 FROM openrouter_api_keys
@@ -3151,6 +3234,38 @@ type LockPreparationFixtureIssuerParams struct {
 
 func (q *Queries) LockPreparationFixtureIssuer(ctx context.Context, arg LockPreparationFixtureIssuerParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockPreparationFixtureIssuer, arg.ID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockPublishOutboxRowFixture = `-- name: LockPublishOutboxRowFixture :one
+SELECT id FROM publish_outbox WHERE id = $1 AND organization_id = $2 FOR UPDATE
+`
+
+type LockPublishOutboxRowFixtureParams struct {
+	ID             int64
+	OrganizationID string
+}
+
+func (q *Queries) LockPublishOutboxRowFixture(ctx context.Context, arg LockPublishOutboxRowFixtureParams) (int64, error) {
+	row := q.db.QueryRow(ctx, lockPublishOutboxRowFixture, arg.ID, arg.OrganizationID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockToolsetNowaitFixture = `-- name: LockToolsetNowaitFixture :one
+SELECT id FROM toolsets WHERE project_id = $1 AND slug = $2 AND deleted IS FALSE FOR UPDATE NOWAIT
+`
+
+type LockToolsetNowaitFixtureParams struct {
+	ProjectID uuid.UUID
+	Slug      string
+}
+
+func (q *Queries) LockToolsetNowaitFixture(ctx context.Context, arg LockToolsetNowaitFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockToolsetNowaitFixture, arg.ProjectID, arg.Slug)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -4596,6 +4711,17 @@ func (q *Queries) SetFunctionToolVariables(ctx context.Context, arg SetFunctionT
 	return err
 }
 
+const setLocalLockTimeoutFixture = `-- name: SetLocalLockTimeoutFixture :one
+SELECT set_config('lock_timeout', $1::text, true)
+`
+
+func (q *Queries) SetLocalLockTimeoutFixture(ctx context.Context, timeout string) (string, error) {
+	row := q.db.QueryRow(ctx, setLocalLockTimeoutFixture, timeout)
+	var set_config string
+	err := row.Scan(&set_config)
+	return set_config, err
+}
+
 const setMCPServerNetworkAccessModeFixture = `-- name: SetMCPServerNetworkAccessModeFixture :execrows
 UPDATE mcp_servers
 SET network_access_mode = $1
@@ -5062,6 +5188,34 @@ func (q *Queries) SetRemoteSessionValidationTrackingFixture(ctx context.Context,
 		arg.CreatedAt,
 		arg.ID,
 		arg.ProjectID,
+	)
+	return err
+}
+
+const setUserLifecycleFixture = `-- name: SetUserLifecycleFixture :exec
+UPDATE users
+SET deleted_at = $1::timestamptz,
+    workos_deleted_at = $2::timestamptz,
+    last_login = $3::timestamptz
+WHERE id = $4
+`
+
+type SetUserLifecycleFixtureParams struct {
+	DeletedAt       pgtype.Timestamptz
+	WorkosDeletedAt pgtype.Timestamptz
+	LastLogin       pgtype.Timestamptz
+	ID              string
+}
+
+// Test-only fixture: independently controls local/provider deletion and login
+// timestamps, including restoring local state without clearing provider deletion.
+// Users are global identities and have no project_id.
+func (q *Queries) SetUserLifecycleFixture(ctx context.Context, arg SetUserLifecycleFixtureParams) error {
+	_, err := q.db.Exec(ctx, setUserLifecycleFixture,
+		arg.DeletedAt,
+		arg.WorkosDeletedAt,
+		arg.LastLogin,
+		arg.ID,
 	)
 	return err
 }

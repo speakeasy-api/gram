@@ -340,6 +340,7 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 			Slug:                     r.Slug,
 			Description:              conv.FromPGText[string](r.Description),
 			IsDefault:                conv.FromPGBool[bool](r.IsDefault),
+			AutoCreated:              r.AutoCreated,
 			ServerCount:              &r.ServerCount,
 			SkillCount:               &r.SkillCount,
 			AssignmentCount:          &r.AssignmentCount,
@@ -485,19 +486,7 @@ func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) 
 		return nil, err
 	}
 
-	plugin := repo.Plugin{
-		ID:             pluginRow.ID,
-		OrganizationID: pluginRow.OrganizationID,
-		ProjectID:      pluginRow.ProjectID,
-		Name:           pluginRow.Name,
-		Slug:           pluginRow.Slug,
-		Description:    pluginRow.Description,
-		IsDefault:      pluginRow.IsDefault,
-		CreatedAt:      pluginRow.CreatedAt,
-		UpdatedAt:      pluginRow.UpdatedAt,
-		DeletedAt:      pluginRow.DeletedAt,
-		Deleted:        pluginRow.Deleted,
-	}
+	plugin := pluginRow.Plugin
 	result := pluginToGen(plugin, servers, assignments, compatibility[plugin.Slug])
 	result.ServerCount = &pluginRow.ServerCount
 	result.SkillCount = &pluginRow.SkillCount
@@ -533,6 +522,11 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	// Serialize name changes with role setup selection before taking plugin row locks.
+	if err := admission.LockProject(ctx, tx, *ac.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock plugin selection").LogError(ctx, s.logger)
+	}
 
 	plugin, err := s.repo.WithTx(tx).CreatePlugin(ctx, repo.CreatePluginParams{
 		OrganizationID: ac.ActiveOrganizationID,
@@ -625,6 +619,11 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	// Serialize name changes with role setup selection before taking plugin row locks.
+	if err := admission.LockProject(ctx, tx, *ac.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock plugin selection").LogError(ctx, s.logger)
+	}
 
 	txRepo := s.repo.WithTx(tx)
 
@@ -3561,6 +3560,7 @@ func pluginToGen(p repo.Plugin, servers []repo.PluginServer, assignments []repo.
 		Slug:                     p.Slug,
 		Description:              conv.FromPGText[string](p.Description),
 		IsDefault:                conv.FromPGBool[bool](p.IsDefault),
+		AutoCreated:              p.AutoCreated,
 		ServerCount:              nil,
 		SkillCount:               nil,
 		AssignmentCount:          nil,

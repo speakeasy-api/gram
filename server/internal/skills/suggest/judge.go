@@ -190,6 +190,7 @@ func (g *modelGenerator) Generate(ctx context.Context, in GenerateInput) (Genera
 	callCtx, cancel := context.WithTimeout(ctx, g.config.Timeout)
 	defer cancel()
 	response, err := g.completion.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
+		MaxTokens:      nil,
 		OrgID:          in.OrganizationID,
 		ProjectID:      in.ProjectID.String(),
 		Model:          g.config.Model,

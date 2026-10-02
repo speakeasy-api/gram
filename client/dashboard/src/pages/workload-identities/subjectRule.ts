@@ -7,6 +7,24 @@ const WILDCARD_SUFFIX = "*";
 
 export type MatchKind = "exact" | "wildcard";
 
+// The server's limit on a stored subject, in UTF-8 bytes: a workload subject's
+// id is 1024 bytes, less the issuer uuid and its delimiter that prefix it
+// (urn.MaxWorkloadExternalSubjectLength).
+export const MAX_SUBJECT_BYTES = 987;
+
+/**
+ * The match kind a subject states, read off the value itself.
+ *
+ * Lossless, because an exact subject may never contain a `*`: ValidateSubjectRule
+ * refuses one outright, so there is no legitimate exact value this could
+ * misread. A `*` anywhere therefore means a wildcard was intended, and a
+ * misplaced one is reported as a misplaced terminator rather than as a literal
+ * star, which is the more useful of the two messages.
+ */
+export function inferMatchKind(subject: string): MatchKind {
+  return subject.trim().includes(WILDCARD_SUFFIX) ? "wildcard" : "exact";
+}
+
 /**
  * Advisory problems with a subject as typed. The server refuses all of these;
  * surfacing them next to the field is what stops an operator submitting a rule
@@ -19,6 +37,10 @@ export function subjectRuleWarning(
   const trimmed = subject.trim();
   if (trimmed.length === 0) {
     return null;
+  }
+
+  if (new TextEncoder().encode(trimmed).length > MAX_SUBJECT_BYTES) {
+    return `A subject is at most ${MAX_SUBJECT_BYTES} bytes. This one is too long to store.`;
   }
 
   if (matchKind === "exact") {
@@ -56,30 +78,46 @@ export function subjectRuleWarning(
 // agent is selected yet", so a test driven through the UI stays green even if
 // the warning stops blocking the submit.
 export function canAdmit(input: {
-  issuer: string;
   subject: string;
   agentId: string;
   warning: string | null;
   /**
-   * Whether the selected issuer URL still resolves to a row in the list. A
-   * preselected single issuer, or one withdrawn in another tab between render
-   * and submit, can leave a URL selected that no longer exists.
-   */
-  issuerExists: boolean;
-  /**
-   * Whether the rule as typed is permitted by that issuer. The picker disables
-   * the wildcard option, but the selected match kind is held in state: switching
-   * issuers, or the issuer's permission being cleared elsewhere, can leave a
-   * wildcard selected under an issuer that forbids it.
+   * Whether the kind this subject states is permitted by the issuer.
+   * An issuer can forbid wildcards (an older row, or one cleared during an
+   * incident), so a rule stating one is refused here as well as by the server.
    */
   matchKindPermitted: boolean;
 }): boolean {
   return (
-    input.issuer.length > 0 &&
-    input.issuerExists &&
     input.matchKindPermitted &&
     input.subject.trim().length > 0 &&
     input.agentId.length > 0 &&
     input.warning === null
   );
+}
+
+/**
+ * The values an allow submits: the platform's issuer URL, the subject trimmed
+ * and stored as typed, and the match kind read off it rather than chosen.
+ * Kept apart from the sheet so the payload can be tested without driving its
+ * agent picker.
+ */
+export function buildAdmitValues(
+  form: { subject: string; name: string; tags: string[]; agentId: string },
+  issuerUrl: string,
+): {
+  issuer: string;
+  subject: string;
+  matchKind: MatchKind;
+  name: string;
+  tags: string[];
+  agentId: string;
+} {
+  const subject = form.subject.trim();
+  return {
+    ...form,
+    issuer: issuerUrl,
+    subject,
+    matchKind: inferMatchKind(subject),
+  };
 }

@@ -33,7 +33,70 @@ var AdminRegistryPage = Type("AdminRegistryPage", func() {
 	Required("entries")
 })
 
+var AdminRegistryOktaCandidate = Type("AdminRegistryOktaCandidate", func() {
+	Description("An Okta application name observed across synced tenants that plausibly belongs to a catalog entry. A proposal for staff to confirm, never applied automatically.")
+	Attribute("oin_name", String, "Okta application name, the OIN key.")
+	Attribute("organizations", Int, "How many organizations have the application.")
+	Attribute("sign_on_modes", ArrayOf(String), "Sign-on modes seen for the application.")
+	Attribute("reason", String, "domain: the vendor token matches a remote or website host; title: it matches the entry title; label: a tenant's label equals the entry title.", func() {
+		Enum("domain", "title", "label")
+	})
+	Attribute("integrator", Boolean, "Whether the name comes from an integrator listing rather than Okta's public catalog; any integrator account can publish under a vendor-like key, so confirm with care.")
+	Attribute("mapped_by", String, "Name of the entry that already claims this key, when one does.")
+	Required("oin_name", "organizations", "sign_on_modes", "reason", "integrator")
+})
+var AdminRegistryOktaCandidates = Type("AdminRegistryOktaCandidates", func() {
+	Attribute("candidates", ArrayOf(AdminRegistryOktaCandidate), "Strongest reason first, then by organizations.")
+	Required("candidates")
+})
+var AdminRegistryOktaUnmappedName = Type("AdminRegistryOktaUnmappedName", func() {
+	Description("An observed Okta application name no catalog entry claims.")
+	Attribute("oin_name", String)
+	Attribute("organizations", Int)
+	Attribute("sign_on_modes", ArrayOf(String))
+	Attribute("integrator", Boolean, "Whether the name comes from an integrator listing rather than Okta's public catalog.")
+	Attribute("suggested_entry_id", String, "The entry the heuristic would map it to, when one matches.")
+	Attribute("suggested_entry_name", String)
+	Attribute("reason", String, func() {
+		Enum("domain", "title", "label")
+	})
+	Required("oin_name", "organizations", "sign_on_modes", "integrator")
+})
+var AdminRegistryOktaUnmapped = Type("AdminRegistryOktaUnmapped", func() {
+	Attribute("names", ArrayOf(AdminRegistryOktaUnmappedName), "By organizations, most first. Okta's own applications are left out.")
+	Required("names")
+})
+
 func registryDesign() {
+	Method("getRegistryOktaCandidates", func() {
+		Description("Staff-only registry administration: Okta application names observed across synced tenants that plausibly belong to the entry, for confirmation in the editor.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("id", String, func() { Format(FormatUUID) })
+			Required("id")
+		})
+		Result(AdminRegistryOktaCandidates)
+		HTTP(func() {
+			GET("/admin/registry.oktaCandidates")
+			Param("id")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminGetRegistryOktaCandidates")
+		Meta("openapi:extension:x-speakeasy-name-override", "getRegistryOktaCandidates")
+	})
+	Method("listRegistryOktaUnmapped", func() {
+		Description("Staff-only registry administration: observed Okta application names no entry claims yet, with the entry the heuristic would propose.")
+		Payload(func() {
+			security.AdminAuthPayload()
+		})
+		Result(AdminRegistryOktaUnmapped)
+		HTTP(func() {
+			GET("/admin/registry.oktaUnmapped")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminListRegistryOktaUnmapped")
+		Meta("openapi:extension:x-speakeasy-name-override", "listRegistryOktaUnmapped")
+	})
 	Method("listRegistryEntries", func() {
 		Description("Staff-only registry administration.")
 		Payload(func() {

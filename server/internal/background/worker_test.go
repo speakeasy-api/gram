@@ -139,8 +139,9 @@ func TestWorkers_RegisterSchedulesPreservesManualPauses(t *testing.T) {
 		var err error
 		ids, err = scheduleIDs(ctx, env.Client())
 		assert.NoError(c, err)
-		assert.Len(c, ids, 26, "all unconditional schedules should be registered")
+		assert.Len(c, ids, 27, "all unconditional schedules should be registered")
 		assert.Contains(c, ids, fmt.Sprintf("v1:trusted-delegation-cleanup:%s", env.Queue()), "delegation cleanup is an unconditional schedule")
+		assert.Contains(c, ids, fmt.Sprintf("v1:mcp-finding-evidence-cleanup:%s", env.Queue()), "MCP finding evidence cleanup is an unconditional schedule")
 	}, 30*time.Second, 250*time.Millisecond)
 	sc := env.Client().ScheduleClient()
 	windows := make(map[string]time.Duration, len(ids))

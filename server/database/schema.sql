@@ -67,6 +67,10 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   verified_domains TEXT[] DEFAULT '{}', -- WorkOS domains in a verified state; SSO only works for these, and setup requires at least one
 
   creation_source TEXT, -- which flow created the organization; NULL where nothing recorded one
+  -- Platform host the org's rendered URLs (emails, Slack messages, background
+  -- jobs) use. NULL means the canonical host. Validated in application code and
+  -- re-checked on read.
+  default_host TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -863,6 +867,7 @@ CREATE TABLE IF NOT EXISTS plugins (
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
   description TEXT,
   is_default boolean DEFAULT false,
+  auto_created boolean NOT NULL DEFAULT false,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2511,6 +2516,15 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- traffic on /oauth/callback drops to zero and they can be re-issued.
   legacy_callback_url boolean NOT NULL DEFAULT FALSE,
 
+  -- Origin of the /mcp/remote_login_callback redirect_uri this client was
+  -- registered with upstream, e.g. https://ai.speakeasy.com. Set when an
+  -- organization-owned registration is created, so new registrations carry the
+  -- current platform host. NULL for shared clients and every client registered
+  -- before this column existed: they keep the pinned outbound callback origin
+  -- (app.getgram.ai), because customer OAuth apps and vendor allowlists hold that
+  -- exact URL and cannot be changed from here.
+  callback_base_url TEXT,
+
   -- RFC 9728 display members of the one protected resource this client was
   -- registered for, read from that resource's metadata document. The issuer
   -- row keeps only authorization-server (RFC 8414) data; a shared issuer must
@@ -2788,6 +2802,15 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   -- Announces the deployment's authentication host, rather than the MCP host,
   -- as the OAuth issuer and endpoint origin for this issuer's servers.
   use_authentication_host boolean NOT NULL DEFAULT false,
+  -- One of ('endpoint', 'shared'); the database does not constrain it.
+  -- 'endpoint' gives every MCP server attached to this issuer its own OAuth
+  -- authorization server. 'shared' serves one authorization server for the
+  -- issuer, used by all of its MCP servers.
+  authorization_server_mode TEXT NOT NULL DEFAULT 'endpoint',
+  -- The OAuth issuer identifier of a 'shared' authorization server, fixed when
+  -- the issuer is created so it stays the same if the deployment's server URL
+  -- later changes. NULL in 'endpoint' mode, where each server derives its own.
+  pinned_issuer_url TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3031,6 +3054,11 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   -- reports credential maintenance rather than use. NULL means the session has
   -- not been used since the column was introduced.
   last_used_at timestamptz,
+  -- The MCP server this session's access token is bound to, as its RFC 8707
+  -- resource indicator. A 'shared' authorization server serves several MCP
+  -- servers, and a refreshed token must be issued for the same one. NULL for
+  -- sessions of an 'endpoint' authorization server, which serves only one.
+  resource TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3107,25 +3135,31 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
   jwks_uri TEXT NOT NULL,
 
   -- Whether this issuer's admissions and agent assignments may match a subject
-  -- by a trailing wildcard rather than in full. Off unless an operator turns it
-  -- on when the issuer is created.
+  -- by a trailing wildcard rather than in full. On by default, and not asked for
+  -- when an issuer is registered.
   --
-  -- The gate lives here, not on the admission, because whether a wildcard can
-  -- ever be safe is a property of the platform rather than of one row. It is
-  -- sound only where the varying part of sub is minted by the issuer and cannot
-  -- be forged by the caller: Claude Tag's agent id, or a SPIFFE path assigned by
-  -- a registration entry. It is unsound where the caller controls that part
-  -- (GitHub Actions puts the git ref in sub, so `repo:org/repo:*` admits every
-  -- branch and so everyone who can open a pull request) and meaningless where
-  -- sub is an opaque identifier (Entra's GUID, Google's numeric id), because a
-  -- leading portion of those is a truncation that collides with unrelated
-  -- principals.
+  -- Revised 2026-09-25. This began as a setup-time gate, on the reasoning that
+  -- whether a wildcard is sound is a property of the platform: it holds only
+  -- where the varying part of sub is assigned by the issuer and cannot be chosen
+  -- by the caller. That reasoning is unchanged and still worth knowing — a CI
+  -- provider that puts the git ref in sub turns `repo:org/repo:*` into "anyone
+  -- who can push a branch", and for an opaque sub a leading portion is a
+  -- truncation that collides with unrelated principals.
   --
-  -- A per-admission confirmation cannot make that judgement: it asks whoever is
-  -- admitting a subject to re-derive their platform's sub semantics every time.
-  -- Recorded once here, an issuer whose subjects are opaque or caller-influenced
-  -- simply cannot carry a wildcard rule, whatever a later operator ticks.
-  allow_wildcard_admission boolean NOT NULL DEFAULT false,
+  -- What changed is who should answer it and when. Asking at registration put a
+  -- question in front of an operator before they had a rule in mind, about a
+  -- platform whose sub semantics they may not know, and the answer is theirs to
+  -- make about their own system rather than ours to withhold. The dialog now
+  -- states the consequence at the point a wildcard is actually written — which
+  -- subjects it admits, and which agent they would inherit — where it is
+  -- concrete and actionable instead of abstract.
+  --
+  -- The column stays because it does a second job the gate obscured: it is
+  -- checked on every lookup, not at write time, so clearing it makes every
+  -- wildcard rule under that issuer inert immediately, with nothing withdrawn.
+  -- That is an incident control, not a configuration step, and it is deliberately
+  -- absent from the registration UI.
+  allow_wildcard_admission boolean NOT NULL DEFAULT true,
 
   -- The last discovery document captured for this issuer, verbatim. The typed
   -- columns above model only what Gram acts on; the rest of a document is kept
@@ -7220,6 +7254,23 @@ ON risk_results (chat_message_id);
 CREATE INDEX IF NOT EXISTS risk_results_chat_content_part_idx
 ON risk_results (chat_content_part_id);
 
+-- Encrypted raw matches for MCP findings, retained with ClickHouse findings.
+CREATE TABLE IF NOT EXISTS risk_finding_evidence (
+  finding_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  match_encrypted TEXT NOT NULL,
+  created_at timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  expires_at timestamptz NOT NULL,
+
+  CONSTRAINT risk_finding_evidence_pkey PRIMARY KEY (organization_id, project_id, finding_id),
+  CONSTRAINT risk_finding_evidence_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects(organization_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS risk_finding_evidence_expires_at_idx
+ON risk_finding_evidence (expires_at, organization_id, project_id, finding_id);
+
 -- risk_policy_eval_reviews is the durable "regression set" for a prompt-based
 -- risk policy: a reviewer's ground-truth verdict on whether a given chat session
 -- should be flagged by the policy. The policy-eval workbench replays the
@@ -9677,9 +9728,14 @@ CREATE TABLE IF NOT EXISTS okta_resource_connections (
   resource TEXT NOT NULL,
   audience TEXT NOT NULL,
   okta_application_id TEXT,
+  -- What the latest identity chaining exchange for this upstream showed, and
+  -- when; set together, NULL until an exchange ran after confirmation.
+  observed_result TEXT,
+  observed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT okta_resource_connections_pkey PRIMARY KEY (id),
+  CONSTRAINT okta_resource_connections_observed_result_observed_at_check CHECK ((observed_result IS NULL) = (observed_at IS NULL)),
   CONSTRAINT okta_resource_connections_resource_check CHECK (btrim(resource) <> ''),
   CONSTRAINT okta_resource_connections_audience_check CHECK (btrim(audience) <> ''),
   CONSTRAINT okta_resource_connections_okta_application_id_check CHECK (okta_application_id IS NULL OR btrim(okta_application_id) <> ''),
@@ -9698,6 +9754,26 @@ CREATE TABLE IF NOT EXISTS okta_resource_connections (
 -- served by the unique key.
 CREATE INDEX IF NOT EXISTS okta_resource_connections_remote_session_issuer_idx
 ON okta_resource_connections (remote_session_issuer_id);
+
+-- An organization administrator dismissed the suggestion to add the MCP server
+-- a Gram-owned catalog entry describes, made because a synced Okta application
+-- maps to that entry. One row per organization x entry; restore deletes it, so
+-- created_at is when it was dismissed. Dismissals outlive the Okta connection:
+-- the decision was about the server, not the connection. Who dismissed or
+-- restored lives in the audit log.
+CREATE TABLE IF NOT EXISTS okta_server_suggestion_dismissals (
+  organization_id TEXT NOT NULL,
+  registry_entry_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT okta_server_suggestion_dismissals_pkey PRIMARY KEY (organization_id, registry_entry_id),
+  CONSTRAINT okta_server_suggestion_dismissals_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT okta_server_suggestion_dismissals_registry_entry_id_fkey FOREIGN KEY (registry_entry_id) REFERENCES mcp_registry_entries (id) ON DELETE CASCADE
+);
+
+-- Serves the cascade from mcp_registry_entries.
+CREATE INDEX IF NOT EXISTS okta_server_suggestion_dismissals_registry_entry_id_idx
+ON okta_server_suggestion_dismissals (registry_entry_id);
 
 CREATE TABLE IF NOT EXISTS remote_session_ema_bindings (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -10090,30 +10166,33 @@ CREATE TABLE IF NOT EXISTS organization_onboarding_vendors (
   CONSTRAINT organization_onboarding_vendors_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES support_matrix_plans (id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS organization_onboarding_vendors_plan_id_idx ON organization_onboarding_vendors (plan_id) WHERE plan_id IS NOT NULL;
--- Queries are Explore's one server-side object: a named, saved question
--- against a catalog dataset, kept with the builder state it was built with.
--- Columns are what the server reasons about (scope, listing, impact checks);
--- everything only the client interprets lives in spec. dataset is hoisted out
--- of spec so a catalog change can be impact-checked without deserialising
+-- Widgets are Explore's saved objects: a named question against a catalog
+-- dataset together with how it is drawn, so they can later be placed on
+-- dashboards. They replaced Explore's saved queries.
+-- query is the semantic question the server plans against the catalog;
+-- visualization is the chart the client draws it with. dataset is hoisted out
+-- of query so a catalog change can be impact-checked without deserialising
 -- every row.
-CREATE TABLE IF NOT EXISTS queries (
+CREATE TABLE IF NOT EXISTS widgets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
   created_by_user_id TEXT,
 
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 200),
+  description TEXT CHECK (CHAR_LENGTH(description) <= 2000),
   dataset TEXT NOT NULL CHECK (dataset <> ''),
-  spec jsonb NOT NULL,
+  query jsonb NOT NULL,
+  visualization jsonb NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT queries_pkey PRIMARY KEY (id),
-  CONSTRAINT queries_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  CONSTRAINT widgets_pkey PRIMARY KEY (id),
+  CONSTRAINT widgets_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS queries_project_id_updated_at_idx
-ON queries (project_id, updated_at DESC) WHERE deleted IS FALSE;
+CREATE INDEX IF NOT EXISTS widgets_project_id_updated_at_idx
+ON widgets (project_id, updated_at DESC) WHERE deleted IS FALSE;

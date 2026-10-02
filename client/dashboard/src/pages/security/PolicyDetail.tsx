@@ -143,6 +143,7 @@ import {
   allCategories,
   categoriesToPayload,
   categoryLevelDetectors,
+  mcpCompatibleAction,
   normalizeCategoriesForMode,
   parseApprovedEmailDomains,
   persistedCategories,
@@ -940,9 +941,16 @@ function PromptPolicyEditor({
   const [mcpScope, setMcpScope] = useState<PolicyMCPScopeValue>(() =>
     policyMCPScopeValue(policy?.mcpScope),
   );
-  const [action, setAction] = useState<PolicyAction>(
-    policy?.action ?? draft?.action ?? "flag",
-  );
+  const [action, setAction] = useState<PolicyAction>(() => {
+    const initial = policy?.action ?? draft?.action ?? "flag";
+    return mcpScope.mode === "mcp" ? mcpCompatibleAction(initial) : initial;
+  });
+  const updateMCPScope = (next: PolicyMCPScopeValue) => {
+    setMcpScope(next);
+    if (next.mode === "mcp") {
+      setAction((current) => mcpCompatibleAction(current));
+    }
+  };
   const [audienceType, setAudienceType] = useState<"everyone" | "targeted">(
     policy?.audienceType === "targeted" ? "targeted" : "everyone",
   );
@@ -1162,7 +1170,7 @@ function PromptPolicyEditor({
           scopeOverrides={scopeOverrides}
           setScopeOverrides={setScopeOverrides}
           mcpScope={mcpScope}
-          setMcpScope={setMcpScope}
+          setMcpScope={updateMCPScope}
           action={action}
           hasStoredMcpScope={!!policy?.mcpScope}
         />
@@ -1191,6 +1199,7 @@ function PromptPolicyEditor({
           setUserMessage={setUserMessage}
           score={score}
           setScore={setScore}
+          mcpScoped={mcpScope.mode === "mcp"}
         />
       )}
 
@@ -2153,6 +2162,7 @@ export function ActionStep({
   score,
   setScore,
   flagOnlySelected = false,
+  mcpScoped = false,
   shadowMCPAllowedServers,
 }: {
   action: PolicyAction;
@@ -2168,6 +2178,7 @@ export function ActionStep({
   score: number;
   setScore: React.Dispatch<React.SetStateAction<number>>;
   flagOnlySelected?: boolean;
+  mcpScoped?: boolean;
   shadowMCPAllowedServers?: ReactNode;
 }): JSX.Element {
   return (
@@ -2182,6 +2193,7 @@ export function ActionStep({
             formAction={action}
             setFormAction={setAction}
             flagOnlySelected={flagOnlySelected}
+            mcpScoped={mcpScoped}
           />
           {shadowMCPAllowedServers}
           <PolicyAudiencePicker
@@ -3779,8 +3791,12 @@ export function StandardPolicyEditor({
   const [selectedCustomRuleIds, setSelectedCustomRuleIds] = useState<
     Set<string>
   >(() => new Set(policy?.customRuleIds ?? []));
+  const initialAction =
+    (policy?.action as PolicyAction) ?? draft?.action ?? seed?.action ?? "flag";
   const [action, setAction] = useState<PolicyAction>(
-    (policy?.action as PolicyAction) ?? draft?.action ?? seed?.action ?? "flag",
+    mcpScope.mode === "mcp"
+      ? mcpCompatibleAction(initialAction)
+      : initialAction,
   );
   // Under block_all the URL set holds allowed servers; under allow_all it
   // holds blocked servers. The disposition is immutable after create, so the
@@ -3983,6 +3999,12 @@ export function StandardPolicyEditor({
     },
   });
   const saving = updateMutation.isPending || createMutation.isPending;
+  const updateMCPScope = (next: PolicyMCPScopeValue) => {
+    setMcpScope(next);
+    if (next.mode === "mcp") {
+      setAction((current) => mcpCompatibleAction(current));
+    }
+  };
 
   // Toggle a whole built-in detector category (clears its per-rule disables).
   // Flag-only categories force the policy action to flag.
@@ -4288,7 +4310,7 @@ export function StandardPolicyEditor({
             scopeOverrides={scopeOverrides}
             setScopeOverrides={setScopeOverrides}
             mcpScope={mcpScope}
-            setMcpScope={setMcpScope}
+            setMcpScope={updateMCPScope}
             action={action}
             hasStoredMcpScope={!!policy?.mcpScope}
           />
@@ -4307,6 +4329,7 @@ export function StandardPolicyEditor({
             score={score}
             setScore={setScore}
             flagOnlySelected={flagOnlySelected}
+            mcpScoped={mcpScope.mode === "mcp"}
             shadowMCPAllowedServers={
               targetIsShadowMCPBlock ? (
                 <div className="grid gap-5 lg:grid-cols-3 lg:items-start">

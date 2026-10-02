@@ -404,9 +404,12 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	// external-only because it contains user-personal cross-project
 	// transcripts. Data exports stay external-only because creation can send
 	// future project data off-platform. Network ingress status stays with
-	// connection-scoped org administration.
+	// connection-scoped org administration. Unlike connection-scoped tools,
+	// get_xaa_readiness reads an org-wide snapshot under live member org-admin
+	// authority, which managed assistants do not have; it stays external-only.
 	for _, name := range []string{
 		"get_network_ingress",
+		"get_xaa_readiness",
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
 		operationSetPluginAssignments,
@@ -434,6 +437,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"list_recent_tool_calls",
 		"get_tool_usage_summary",
 		"list_organization_events",
+		"list_chats",
 		"update_mcp_metadata",
 		"register_catalog_mcp",
 		"register_remote_mcp",

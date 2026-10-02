@@ -457,3 +457,64 @@ describe("projectQuery", () => {
     );
   });
 });
+
+describe("user query ownership", () => {
+  it("keys every list parameter and forwards AbortSignal through both helpers", async () => {
+    const { usersListQuery, userOrganizationsListQuery } =
+      await import("./adminQueries");
+    const signal = new AbortController().signal;
+    const fetcher = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            users: [],
+            organizations: [],
+            total: 0,
+            page: 1,
+            limit: 50,
+          }),
+        ),
+    );
+    const client = new QueryClient();
+    const users = usersListQuery({ q: "name:Alice", page: 2, limit: 50 });
+    expect(users.queryKey).not.toEqual(
+      usersListQuery({ q: "name:Alice", page: 1, limit: 50 }).queryKey,
+    );
+    expect(users.queryKey).not.toEqual(
+      usersListQuery({ q: "name:Bob", page: 2, limit: 50 }).queryKey,
+    );
+    expect(users.queryKey).not.toEqual(
+      usersListQuery({ q: "name:Alice", page: 2, limit: 10 }).queryKey,
+    );
+    if (typeof users.queryFn !== "function")
+      throw new Error("Missing query function");
+    await users.queryFn({
+      signal,
+      client,
+      queryKey: users.queryKey,
+      meta: undefined,
+    });
+    const orgs = userOrganizationsListQuery({
+      user_id: "u1",
+      page: 3,
+      limit: 20,
+    });
+    expect(orgs.queryKey).not.toEqual(
+      userOrganizationsListQuery({ user_id: "u2", page: 3, limit: 20 })
+        .queryKey,
+    );
+    if (typeof orgs.queryFn !== "function")
+      throw new Error("Missing query function");
+    await orgs.queryFn({
+      signal,
+      client,
+      queryKey: orgs.queryKey,
+      meta: undefined,
+    });
+    expect(fetcher.mock.calls.map((call) => call[1]?.signal)).toEqual([
+      signal,
+      signal,
+    ]);
+    fetcher.mockRestore();
+  });
+});

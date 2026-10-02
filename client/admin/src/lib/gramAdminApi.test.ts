@@ -857,3 +857,44 @@ describe("generated organization invalidation helpers", () => {
     },
   );
 });
+
+describe("user directory contract", () => {
+  it("encodes complete list parameters and forwards cancellation", async () => {
+    const { listUsers, listUserOrganizations } = await import("./gramAdminApi");
+    const signal = new AbortController().signal;
+    const fetcher = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(
+        async () =>
+          new Response(
+            JSON.stringify({ users: [], total: 0, page: 2, limit: 50 }),
+          ),
+      );
+    await listUsers({ q: 'org:"A & B"', page: 2, limit: 50 }, signal);
+    expect(fetcher.mock.calls[0]?.[0]).toBe(
+      "/admin/users.list?q=org%3A%22A+%26+B%22&page=2&limit=50",
+    );
+    expect(fetcher.mock.calls[0]?.[1]?.signal).toBe(signal);
+    await listUserOrganizations(
+      { user_id: "u/ &", page: 3, limit: 10 },
+      signal,
+    );
+    expect(fetcher.mock.calls[1]?.[0]).toBe(
+      "/admin/users.organizations.list?user_id=u%2F+%26&page=3&limit=10",
+    );
+    expect(fetcher.mock.calls[1]?.[1]?.signal).toBe(signal);
+    fetcher.mockRestore();
+  });
+  it("propagates user-search validation errors", async () => {
+    const { listUsers } = await import("./gramAdminApi");
+    const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ message: "Invalid search" }), {
+        status: 400,
+      }),
+    );
+    await expect(listUsers({ q: "wrong:value" })).rejects.toMatchObject({
+      status: 400,
+    });
+    fetcher.mockRestore();
+  });
+});

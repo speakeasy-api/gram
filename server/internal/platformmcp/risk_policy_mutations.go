@@ -757,7 +757,11 @@ func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, principal
 			return policycore.UpdateMutation{}, nil, invalidRiskPolicyRequest()
 		}
 	}
-	effectiveDisposition := valueOrEmpty(policycore.Project(current, nil, nil).ShadowMCPDisposition)
+	currentPolicy := policycore.Project(current, nil, nil)
+	if err := policycore.ValidateMCPScope(currentPolicy.MCPScope, params.Sources, params.Action); err != nil {
+		return policycore.UpdateMutation{}, nil, &RiskMutationError{Code: "invalid_request", Message: err.Error(), Cause: ErrRiskMutationInvalid}
+	}
+	effectiveDisposition := valueOrEmpty(currentPolicy.ShadowMCPDisposition)
 	if effectiveDisposition != "" && shadowmcp.EffectiveDisposition(current.ShadowMcpDisposition, params.Sources, params.Action) == "" {
 		// A Platform patch cannot author or remove Shadow MCP URL decisions. Do
 		// not silently drop an effective blocking posture and orphan its URL grants,

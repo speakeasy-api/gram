@@ -8,6 +8,7 @@ import (
 
 // ProductFeaturesSnapshot is the complete product-feature state for an organization.
 type ProductFeaturesSnapshot struct {
+	AutomaticRoleDistribution               bool
 	LogsEnabled                             bool
 	ToolIoLogsEnabled                       bool
 	SessionCaptureEnabled                   bool
@@ -105,6 +106,7 @@ func (c *Client) snapshot(ctx context.Context, organizationID string, strict boo
 		ConsentToolFilteringEnabled:             isEnabled(FeatureConsentToolFiltering),
 		SessionPortabilityEnabled:               isEnabled(FeatureSessionPortability),
 		NetworkIngressEnabled:                   isEnabled(FeatureNetworkIngress),
+		AutomaticRoleDistribution:               isEnabled(FeatureAutomaticRoleDistribution),
 		DeviceAgent:                             deviceAgent,
 	}
 	if readErr != nil {

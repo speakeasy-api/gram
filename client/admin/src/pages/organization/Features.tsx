@@ -24,11 +24,10 @@ import {
 } from "@/lib/gramAdminApi";
 import type { ProductFeatures } from "@gram/admin-client/models/components/productfeatures";
 import type { FeatureName } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
-import { Onboarding } from "./Onboarding";
 
 type EnabledProductFeatureKey = Extract<
   keyof ProductFeatures,
-  `${string}Enabled`
+  `${string}Enabled` | "automaticRoleDistribution"
 >;
 
 type ProductFeatureDecision =
@@ -41,6 +40,13 @@ type ProductFeatureDecision =
   | { kind: "omitted"; where: string };
 
 const PRODUCT_FEATURES = {
+  "automatic-role-distribution": {
+    kind: "toggle",
+    enabledKey: "automaticRoleDistribution",
+    label: "Automatic role distribution",
+    description:
+      "Automatically set up role distribution using matching or new plugins. Existing plugins and assignments are preserved when disabled; re-enabling checks active roles and reuses matching plugins and assignments.",
+  },
   ai_platform_push_integrations: {
     kind: "toggle",
     enabledKey: "aiPlatformPushIntegrationsEnabled",
@@ -167,7 +173,6 @@ export function Features({ org }: { org: AdminOrganization }): JSX.Element {
   return (
     <div className="space-y-6">
       <ProductFeatures org={org} />
-      <Onboarding organizationId={org.id} />
       <ChatAnalysis org={org} />
     </div>
   );

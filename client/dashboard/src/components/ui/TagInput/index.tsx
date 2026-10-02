@@ -19,8 +19,10 @@ export interface TagInputProps {
   onChange: (value: string[]) => void;
   /** Shown in the input while no tags are entered. */
   placeholder?: string;
-  /** Forces the error border. */
+  /** Forces the error border and marks the inner input invalid. */
   error?: boolean;
+  /** Id of the element describing the field, such as its error message. */
+  ariaDescribedBy?: string;
   /**
    * Also turns typed text into a tag on space. Only for values that can never
    * contain a space, such as command names.
@@ -52,6 +54,7 @@ export function TagInput({
   onChange,
   placeholder,
   error,
+  ariaDescribedBy,
   separateOnSpace = false,
   disabled,
   className,
@@ -134,6 +137,8 @@ export function TagInput({
       <input
         id={id}
         aria-label={ariaLabel}
+        aria-invalid={error || undefined}
+        aria-describedby={ariaDescribedBy}
         type="text"
         value={draft}
         disabled={disabled}

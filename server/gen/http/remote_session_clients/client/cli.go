@@ -735,6 +735,35 @@ func BuildListRemoteSessionClientsPayload(remoteSessionClientsListRemoteSessionC
 	return v, nil
 }
 
+// BuildGetNewClientCallbackURLPayload builds the payload for the
+// remoteSessionClients getNewClientCallbackUrl endpoint from CLI flags.
+func BuildGetNewClientCallbackURLPayload(remoteSessionClientsGetNewClientCallbackURLSessionToken string, remoteSessionClientsGetNewClientCallbackURLApikeyToken string, remoteSessionClientsGetNewClientCallbackURLProjectSlugInput string) (*remotesessionclients.GetNewClientCallbackURLPayload, error) {
+	var sessionToken *string
+	{
+		if remoteSessionClientsGetNewClientCallbackURLSessionToken != "" {
+			sessionToken = &remoteSessionClientsGetNewClientCallbackURLSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionClientsGetNewClientCallbackURLApikeyToken != "" {
+			apikeyToken = &remoteSessionClientsGetNewClientCallbackURLApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionClientsGetNewClientCallbackURLProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionClientsGetNewClientCallbackURLProjectSlugInput
+		}
+	}
+	v := &remotesessionclients.GetNewClientCallbackURLPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetRemoteSessionClientPayload builds the payload for the
 // remoteSessionClients getRemoteSessionClient endpoint from CLI flags.
 func BuildGetRemoteSessionClientPayload(remoteSessionClientsGetRemoteSessionClientID string, remoteSessionClientsGetRemoteSessionClientSessionToken string, remoteSessionClientsGetRemoteSessionClientApikeyToken string, remoteSessionClientsGetRemoteSessionClientProjectSlugInput string) (*remotesessionclients.GetRemoteSessionClientPayload, error) {

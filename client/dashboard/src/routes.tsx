@@ -108,9 +108,11 @@ import {
   RemoteIdentityProvidersRoot,
 } from "./pages/remote-identity-providers/RemoteIdentityProviders";
 import {
-  WorkloadIdentitiesPage,
-  WorkloadIdentitiesRoot,
-} from "./pages/workload-identities/WorkloadIdentities";
+  WorkloadIssuersPage,
+  WorkloadIssuersRoot,
+} from "./pages/workload-identities/WorkloadIssuers";
+import { WorkloadIssuerDetailPage } from "./pages/workload-identities/WorkloadIssuerDetail";
+import AccessHubRedirect from "./pages/workload-identities/AccessHubRedirect";
 import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
 import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
 import PlatformAdminOverview from "./pages/platform-admin/Overview";
@@ -705,13 +707,19 @@ const ROUTE_STRUCTURE = {
     },
   },
 
-  workloadIdentities: {
+  // Legacy project-scoped URLs for the Access Hub and the Workload Identities
+  // page redirect to the organization-level Access Hub.
+  legacyWorkloadIdentities: {
     title: "Workload Identities",
     url: "workload-identities",
-    icon: "cpu",
-    stage: "preview",
-    component: WorkloadIdentitiesRoot,
-    indexComponent: WorkloadIdentitiesPage,
+    legacyRedirect: true,
+    component: AccessHubRedirect,
+  },
+  legacyAccessHub: {
+    title: "Access Hub",
+    url: "access-hub/*",
+    legacyRedirect: true,
+    component: AccessHubRedirect,
   },
 
   agents: {
@@ -1434,6 +1442,23 @@ const ORG_ROUTE_STRUCTURE = {
       },
     },
   },
+  // The trust policy is configured for the organization as a whole, so the
+  // Access Hub names no project.
+  workloadIssuers: {
+    title: "Access Hub",
+    url: "access-hub",
+    icon: "cpu",
+    stage: "preview",
+    component: WorkloadIssuersRoot,
+    indexComponent: WorkloadIssuersPage,
+    subPages: {
+      issuerDetail: {
+        title: "Trusted Platform",
+        url: ":issuerId",
+        component: WorkloadIssuerDetailPage,
+      },
+    },
+  },
   auditLogs: {
     title: "Audit Logs",
     url: "audit-logs",
@@ -1610,10 +1635,24 @@ const ORG_ROUTE_STRUCTURE = {
 type OrgRouteStructure = typeof ORG_ROUTE_STRUCTURE;
 type OrgRoutesWithGoTo = TransformRouteToGoTo<OrgRouteStructure>;
 
-/** The URL segments used by org-level routes (for redirect logic). */
-export const orgRoutePaths = Object.values(ORG_ROUTE_STRUCTURE)
-  .map((r) => r.url)
-  .filter(Boolean);
+function routePaths(
+  routes: Record<string, RouteEntry>,
+  parent?: string,
+): string[] {
+  return Object.values(routes).flatMap((route) => {
+    if (!route.url) return [];
+    const path = parent ? `${parent}/${route.url}` : route.url;
+    return [path, ...routePaths(route.subPages ?? {}, path)];
+  });
+}
+
+/**
+ * The org-relative path of every org-level route, nested pages included (for
+ * redirect logic). A detail page such as "access-hub/:issuerId" has to be
+ * listed with its parent, or its URL reads as a path inside a project that
+ * happens to share the parent's slug.
+ */
+export const orgRoutePaths = routePaths(ORG_ROUTE_STRUCTURE);
 
 export const useOrgRoutes = (): OrgRoutesWithGoTo => {
   const location = useLocation();

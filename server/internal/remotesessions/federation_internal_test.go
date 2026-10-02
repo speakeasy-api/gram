@@ -70,7 +70,6 @@ func TestFederatedConfiguration(t *testing.T) {
 		mutate func(*FederatedProvider)
 	}{
 		{"exact discovery issuer", func(p *FederatedProvider) { p.metadata.Issuer += "/" }},
-		{"missing response issuer support", func(p *FederatedProvider) { p.metadata.AuthorizationResponseIssParameterSupported = false }},
 		{"missing jwks", func(p *FederatedProvider) { p.metadata.JwksURI = "" }},
 		{"insecure token endpoint", func(p *FederatedProvider) { p.metadata.TokenEndpoint = "http://idp.example.test/token" }},
 		{"endpoint fragment", func(p *FederatedProvider) { p.metadata.AuthorizationEndpoint += "#fragment" }},
@@ -280,4 +279,18 @@ func TestFederatedExchangeErrorClassification(t *testing.T) {
 		require.ErrorIs(t, classifyFederatedExchangeError(test.err), test.want)
 		require.NotContains(t, classifyFederatedExchangeError(test.err).Error(), "detail")
 	}
+}
+
+// RFC 9207 support gates login only: token exchange and refresh never receive
+// an authorization response, so a provider without it still loads.
+func TestFederatedLoginRequiresResponseIssuer(t *testing.T) {
+	t.Parallel()
+	p := federatedFixture(t)
+	p.metadata.AuthorizationResponseIssParameterSupported = false
+	loaded, err := newFederatedProvider(p.organizationID, p.issuer, p.client, p.metadata)
+	require.NoError(t, err, "exchange and refresh do not need response issuer identification")
+	require.ErrorIs(t, loaded.RequireLoginRedirect(), ErrFederatedConfiguration)
+	_, err = loaded.BuildAuthorizationURL("https://gram.example.test/callback", "state", "nonce", strings.Repeat("a", 43))
+	require.ErrorIs(t, err, ErrFederatedConfiguration, "login still refuses a provider without RFC 9207")
+	require.NoError(t, federatedFixture(t).RequireLoginRedirect())
 }

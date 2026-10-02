@@ -21,23 +21,24 @@ type GetRiskFindingForUnmaskParams struct {
 // they index, and the match length the reconstructed candidate is checked
 // against. See internal/risk/unmask_ch.go for how it is consumed.
 type RiskFindingUnmaskRow struct {
-	ID             uuid.UUID
-	CreatedAt      time.Time
-	ChatMessageID  string
-	ContentPartID  string
-	ChatID         string
-	Source         string
-	RuleID         string
-	StartPos       int32
-	EndPos         int32
-	MatchLen       uint32
-	MatchRedacted  string
-	Surface        string
-	Field          string
-	Path           string
-	ToolCallID     string
-	OrganizationID string
-	RiskPolicyID   string
+	ID               uuid.UUID
+	CreatedAt        time.Time
+	ChatMessageID    string
+	ContentPartID    string
+	ChatID           string
+	Source           string
+	RuleID           string
+	StartPos         int32
+	EndPos           int32
+	MatchLen         uint32
+	MatchRedacted    string
+	Surface          string
+	MediationSurface string
+	Field            string
+	Path             string
+	ToolCallID       string
+	OrganizationID   string
+	RiskPolicyID     string
 }
 
 // GetRiskFindingForUnmask returns the reveal-relevant state for one finding id,
@@ -65,6 +66,7 @@ func (q *Queries) GetRiskFindingForUnmask(ctx context.Context, p GetRiskFindingF
 		"match_len",
 		"match_redacted",
 		"surface",
+		"mediation_surface",
 		"field",
 		"path",
 		"tool_call_id",
@@ -95,6 +97,7 @@ func (q *Queries) GetRiskFindingForUnmask(ctx context.Context, p GetRiskFindingF
 		"match_len",
 		"match_redacted",
 		"surface",
+		"mediation_surface",
 		"field",
 		"path",
 		"tool_call_id",
@@ -141,6 +144,7 @@ func (q *Queries) GetRiskFindingForUnmask(ctx context.Context, p GetRiskFindingF
 		&row.MatchLen,
 		&row.MatchRedacted,
 		&row.Surface,
+		&row.MediationSurface,
 		&row.Field,
 		&row.Path,
 		&row.ToolCallID,
