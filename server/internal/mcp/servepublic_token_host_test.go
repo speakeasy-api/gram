@@ -110,6 +110,9 @@ func TestServePublic_IssuerGated_TokenBoundToMintHost(t *testing.T) {
 	customToken := mintToken(t, customBase+"/mcp/"+customSlug, "client-a")
 	noIssuerToken := mintToken(t, "", "client-a")
 	dashboardToken := mintToken(t, canonicalBase+"/mcp/"+platformSlug, sessiontokens.FirstPartyClientID)
+	siblingToken := mintToken(t, platformBase+"/mcp/other-"+uuid.NewString(), "client-a")
+	defaultPortToken := mintToken(t, "https://ai.gram.example.test:443/mcp/"+platformSlug, "client-a")
+	userinfoToken := mintToken(t, "https://attacker@ai.gram.example.test/mcp/"+platformSlug, "client-a")
 
 	cases := []struct {
 		name     string
@@ -131,6 +134,9 @@ func TestServePublic_IssuerGated_TokenBoundToMintHost(t *testing.T) {
 		{name: "dashboard token keeps working on platform host", origin: "platform", slug: platformSlug, token: dashboardToken, accepted: true},
 		{name: "dashboard token keeps working on custom domain", origin: "custom", slug: customSlug, token: dashboardToken, accepted: true},
 		{name: "internal caller keeps accepting any host", origin: "internal", slug: platformSlug, token: platformToken, accepted: true},
+		{name: "token for another endpoint on the same host is accepted", origin: "platform", slug: platformSlug, token: siblingToken, accepted: true},
+		{name: "explicit default port matches the same host", origin: "platform", slug: platformSlug, token: defaultPortToken, accepted: true},
+		{name: "issuer with userinfo is refused", origin: "platform", slug: platformSlug, token: userinfoToken, accepted: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

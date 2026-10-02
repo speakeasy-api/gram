@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 
@@ -77,12 +78,21 @@ func (s *Service) tokenMintOrigin(issuer string) string {
 	return minted
 }
 
-// urlOrigin is the lowercased scheme://host[:port] of raw, or "" when raw is
-// not an absolute URL.
+// urlOrigin is the lowercased scheme://host[:port] of raw, with the scheme's
+// default port dropped, or "" when raw is not an absolute URL or carries
+// userinfo.
 func urlOrigin(raw string) string {
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme == "" || u.Host == "" {
+	if err != nil || u.Scheme == "" || u.Host == "" || u.User != nil {
 		return ""
 	}
-	return strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Host)
+	scheme := strings.ToLower(u.Scheme)
+	host := strings.ToLower(u.Hostname())
+	if port := u.Port(); port != "" && !(scheme == "https" && port == "443") && !(scheme == "http" && port == "80") {
+		return scheme + "://" + net.JoinHostPort(host, port)
+	}
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	return scheme + "://" + host
 }
