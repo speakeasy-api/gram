@@ -103,6 +103,16 @@ func (s *Service) bindRoot(ctx context.Context, tx pgx.Tx, org string, project, 
 	if _, err := q.LockDedicatedAgent(ctx, repo.LockDedicatedAgentParams{OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}, AgentID: binding.OriginalAgentID}); err != nil {
 		return resourceError("lock dedicated agent", err)
 	}
+	// Eligibility was first read before locking the agent. Re-read after the
+	// lock so a concurrent owner transfer cannot leave a tombstoned assistant
+	// binding behind an otherwise active agent row.
+	current, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{OrganizationID: org, ProjectID: project, AssistantID: assistant})
+	if err != nil {
+		return resourceError("revalidate locked assistant binding", err)
+	}
+	if !current.Eligible || current.ID != binding.ID || current.Generation != binding.Generation || current.OriginalAgentID != binding.OriginalAgentID {
+		return ErrTombstoned
+	}
 	if hasHistory {
 		if err := tombstoneTrigger(ctx, tx, org, project, trigger); err != nil {
 			return err

@@ -36,10 +36,7 @@ func TestLegacyUpgradeAndConcurrentRetries(t *testing.T) {
 			err := inTx(t, f.db, func(tx pgx.Tx) error {
 				var err error
 				binding, err = testIdentityService.Upgrade(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
-				if err != nil {
-					return fmt.Errorf("fixture operation: %w", err)
-				}
-				return nil
+				return fmt.Errorf("fixture operation: %w", err)
 			})
 			if err != nil {
 				failures <- err
