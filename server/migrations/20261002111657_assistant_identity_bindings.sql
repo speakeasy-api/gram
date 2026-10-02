@@ -54,7 +54,7 @@ CREATE INDEX "assistant_agent_bindings_project_ref_idx" ON "assistant_agent_bind
 -- Create index "assistant_agent_bindings_tenant_id_key" to table: "assistant_agent_bindings"
 CREATE UNIQUE INDEX "assistant_agent_bindings_tenant_id_key" ON "assistant_agent_bindings" ("organization_id", "project_id", "id");
 -- Modify "workload_issuers" table
-ALTER TABLE "workload_issuers" ADD CONSTRAINT "workload_issuers_trust_source_check" CHECK (((issuer_kind <> 'remote'::text) OR (jwks_uri IS NOT NULL)) AND ((issuer_kind <> 'system'::text) OR ((jwks_uri IS NULL) AND (project_id IS NOT NULL) AND (NOT allow_wildcard_admission)))), ALTER COLUMN "jwks_uri" DROP NOT NULL, ADD COLUMN "issuer_kind" text NOT NULL DEFAULT 'remote';
+ALTER TABLE "workload_issuers" ADD CONSTRAINT "workload_issuers_trust_source_check" CHECK ((issuer_kind <> 'system'::text) OR ((jwks_uri = ''::text) AND (project_id IS NOT NULL) AND (NOT allow_wildcard_admission))), ADD COLUMN "issuer_kind" text NOT NULL DEFAULT 'remote';
 -- Create index "workload_issuers_system_project_key" to table: "workload_issuers"
 CREATE UNIQUE INDEX CONCURRENTLY "workload_issuers_system_project_key" ON "workload_issuers" ("organization_id", "project_id") WHERE (issuer_kind = 'system'::text);
 -- Create index "workload_issuers_tenant_kind_key" to table: "workload_issuers"

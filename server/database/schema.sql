@@ -3135,8 +3135,9 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
   -- input, never to this column.
   issuer TEXT NOT NULL,
 
-  -- Remote issuers require JWKS. System issuers have no external trust source.
-  jwks_uri TEXT,
+  -- System issuers store an empty sentinel, not a remote trust source.
+  -- The service must reject their kind before remote discovery or verification.
+  jwks_uri TEXT NOT NULL,
 
   -- Whether this issuer's admissions and agent assignments may match a subject
   -- by a trailing wildcard rather than in full. On by default, and not asked for
@@ -3178,8 +3179,7 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
 
   CONSTRAINT workload_issuers_pkey PRIMARY KEY (id),
   CONSTRAINT workload_issuers_trust_source_check CHECK (
-    (issuer_kind <> 'remote' OR jwks_uri IS NOT NULL) AND
-    (issuer_kind <> 'system' OR (jwks_uri IS NULL AND project_id IS NOT NULL AND NOT allow_wildcard_admission))
+    issuer_kind <> 'system' OR (jwks_uri = '' AND project_id IS NOT NULL AND NOT allow_wildcard_admission)
   ),
   CONSTRAINT workload_issuers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   -- Composite rather than a plain reference: a project belonging to another
