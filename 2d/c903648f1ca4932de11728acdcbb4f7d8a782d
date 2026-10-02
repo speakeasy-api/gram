@@ -1,13 +1,15 @@
 server/internal/adminmcp/runtime.go
   h_9630b74bdac540 96
 server/internal/adminmcp/tool_write_feature_test.go
-  h_9630b74bdac540 49,197,213
+  h_9630b74bdac540 49,64,197,213
 server/internal/adminmcp/tool_write_feature_refresh_test.go
   h_9630b74bdac540 19,36,139
 .changeset/admin-mcp-identity-entitlements.md
   h_9630b74bdac540 1-5
 server/internal/adminmcp/tool_write_feature_entitlements_test.go
   h_9630b74bdac540 1-177
+server/internal/adminmcp/tool_write_feature.go
+  h_9630b74bdac540 28-29,44,159,276
 ---
 {
   "schema_version": "authorship/3.0.0",
