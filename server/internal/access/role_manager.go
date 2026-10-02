@@ -26,7 +26,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -53,19 +56,23 @@ type RoleProvider interface {
 
 // RoleManager owns role reads and writes against local records, then syncs successful writes to WorkOS.
 type RoleManager struct {
-	db     *pgxpool.Pool
-	logger *slog.Logger
-	roles  RoleProvider
-	audit  *audit.Logger
+	db                      *pgxpool.Pool
+	logger                  *slog.Logger
+	roles                   RoleProvider
+	audit                   *audit.Logger
+	roleDeliveryPublication plugins.PublicationRequests
+	roleDeliveryGuard       *admission.Guard
 }
 
 // NewRoleManager wires the role manager to the local DB, the WorkOS role client, and the audit logger.
-func NewRoleManager(logger *slog.Logger, db *pgxpool.Pool, roles RoleProvider, auditLogger *audit.Logger) *RoleManager {
+func NewRoleManager(logger *slog.Logger, db *pgxpool.Pool, roles RoleProvider, auditLogger *audit.Logger, publication plugins.PublicationRequests, guard *admission.Guard) *RoleManager {
 	return &RoleManager{
-		db:     db,
-		logger: logger.With(attr.SlogComponent("access.role_manager")),
-		roles:  roles,
-		audit:  auditLogger,
+		roleDeliveryPublication: publication,
+		roleDeliveryGuard:       guard,
+		db:                      db,
+		logger:                  logger.With(attr.SlogComponent("access.role_manager")),
+		roles:                   roles,
+		audit:                   auditLogger,
 	}
 }
 
@@ -380,6 +387,13 @@ type RoleUpdateResult struct {
 // UpdateRole updates an existing local role, optional grants/assignments, and
 // audit entry atomically, then best-effort syncs WorkOS after commit.
 func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID string, actor RoleAuditActor, payload *gen.UpdateRolePayload) (roleUpdateResult, error) {
+	if payload.AddGrants != nil || payload.RemoveGrants != nil {
+		var err error
+		ctx, err = roledelivery.PrepareAdmission(ctx, r.db, r.roleDeliveryGuard, gramOrgID)
+		if err != nil {
+			return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "prepare role delivery admission").LogError(ctx, r.logger)
+		}
+	}
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "begin role transaction").LogError(ctx, r.logger)
@@ -401,6 +415,15 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 // UpdateRoleTx performs the local role, grant, member-assignment, and audit
 // writes on tx. It neither commits tx nor contacts WorkOS.
 func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, workosOrgID string, actor RoleAuditActor, payload *gen.UpdateRolePayload) (RoleUpdateResult, RoleReconciliation, error) {
+	// Caller-owned transactions prepare before acquiring role/plugin locks;
+	// UpdateRole already prepared outside its transaction, so this uses its cache.
+	if payload.AddGrants != nil || payload.RemoveGrants != nil {
+		var err error
+		ctx, err = roledelivery.PrepareAdmission(ctx, tx, r.roleDeliveryGuard, gramOrgID)
+		if err != nil {
+			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "prepare role delivery admission").LogError(ctx, r.logger)
+		}
+	}
 	roleID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid role ID").LogError(ctx, r.logger)
@@ -530,9 +553,26 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 	// custom and system roles. WorkOS only tracks role identity/membership, not
 	// Gram scopes, so no grant sync to WorkOS is needed.
 	if payload.AddGrants != nil || payload.RemoveGrants != nil {
+		before, err := roledelivery.Snapshot(ctx, tx, gramOrgID, currentRole.PrincipalURN)
+		if err != nil {
+			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "snapshot role delivery grants").LogError(ctx, r.logger)
+		}
 		syncedGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, addGrants, removeGrants)
 		if err != nil {
 			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "patch grants for updated role").LogError(ctx, r.logger)
+		}
+		changedProjectIDs, err := roledelivery.RoleChanged(ctx, tx, gramOrgID, currentRole.PrincipalURN, before, r.roleDeliveryGuard)
+		if err != nil {
+			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "update role audience plugin servers").LogError(ctx, r.logger)
+		}
+		actorID := ""
+		if actor.Principal.Type == urn.PrincipalTypeUser {
+			actorID = actor.Principal.ID
+		}
+		for _, projectID := range changedProjectIDs {
+			if err := r.roleDeliveryPublication.Project(ctx, tx, gramOrgID, projectID, actorID); err != nil {
+				return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "request role delivery publication").LogError(ctx, r.logger)
+			}
 		}
 		updatedGrants = make([]*gen.RoleGrant, 0, len(syncedGrants))
 		for _, grant := range syncedGrants {

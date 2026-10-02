@@ -1233,3 +1233,69 @@ SELECT pg_advisory_xact_lock(8241243);
 
 -- name: GetRoleSetupBlockedPIDFixture :one
 SELECT COALESCE((SELECT pid FROM pg_catalog.pg_stat_activity WHERE datname = current_database() AND @blocker::int = ANY(pg_blocking_pids(pid)) ORDER BY pid LIMIT 1), 0)::integer AS pid;
+
+-- name: ListRoleDeliveryServers :many
+-- Keep ineligible live backends as removal candidates. Only additions require eligibility.
+SELECT m.id, m.project_id, COALESCE(NULLIF(m.name, ''), NULLIF(m.slug, ''), m.id::text)::text AS name,
+  'mcp_server'::text AS backend_kind, COALESCE(m.toolset_id, m.id)::uuid AS resource_id, m.toolset_id AS legacy_toolset_id,
+  (m.visibility <> 'disabled' AND (m.unproxied_mcp_server_id IS NOT NULL OR EXISTS (
+    SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = m.id AND e.project_id = p.id AND e.deleted IS FALSE
+  )))::boolean AS eligible
+FROM mcp_servers m JOIN projects p ON p.id = m.project_id
+WHERE p.organization_id = @organization_id AND p.id = @project_id
+  AND p.deleted IS FALSE AND m.deleted IS FALSE
+UNION ALL
+SELECT t.id, t.project_id, t.name, 'toolset'::text, t.id, t.id,
+  (t.mcp_enabled AND COALESCE(t.mcp_slug, '') <> '' AND NOT EXISTS (
+    SELECT 1 FROM mcp_servers m WHERE m.toolset_id = t.id AND m.project_id = p.id AND m.deleted IS FALSE
+  ))::boolean
+FROM toolsets t JOIN projects p ON p.id = t.project_id
+WHERE p.organization_id = @organization_id AND p.id = @project_id
+  AND p.deleted IS FALSE AND t.deleted IS FALSE
+ORDER BY id;
+
+-- name: HasRoleDeliveryMembership :one
+-- A legacy toolset membership and its typed MCP wrapper are the same delivery.
+-- Setup/eligibility preserve deleted history; explicit new grants/audiences do not.
+SELECT EXISTS (
+  SELECT 1 FROM plugin_servers ps JOIN plugins p ON p.id = ps.plugin_id
+  WHERE p.id = @plugin_id AND p.organization_id = @organization_id AND p.project_id = @project_id
+    AND ((ps.toolset_id = sqlc.narg('toolset_id')::uuid)
+      OR (ps.mcp_server_id = sqlc.narg('mcp_server_id')::uuid)
+      OR (ps.toolset_id = sqlc.narg('legacy_toolset_id')::uuid))
+    AND (ps.deleted IS FALSE OR @preserve_removal::boolean)
+);
+
+-- name: ListRoleDeliveryProjects :many
+-- Organization-scoped discovery; every subsequent content write uses the discovered project.
+SELECT p.id, p.slug, o.slug AS organization_slug
+FROM projects p JOIN organization_metadata o ON o.id = p.organization_id
+WHERE p.organization_id = @organization_id AND p.deleted IS FALSE AND o.disabled_at IS NULL
+ORDER BY p.id;
+
+-- name: ListRoleDeliveryPlugins :many
+-- Organization-scoped role event discovery; locks and writes retain exact project scope.
+SELECT p.id, p.project_id
+FROM plugins p JOIN projects project ON project.id = p.project_id
+WHERE p.organization_id = @organization_id AND project.organization_id = @organization_id
+  AND p.deleted IS FALSE AND project.deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM plugin_assignments a WHERE a.plugin_id = p.id
+    AND a.organization_id = @organization_id AND a.principal_urn = @principal_urn)
+ORDER BY p.project_id, p.id;
+
+-- name: ListProjectRoleDeliveryPluginsForUpdate :many
+SELECT p.id FROM plugins p
+WHERE p.organization_id = @organization_id AND p.project_id = @project_id AND p.deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM plugin_assignments a WHERE a.plugin_id = p.id AND a.organization_id = @organization_id
+    AND (a.principal_urn LIKE 'role:organization:%' OR a.principal_urn LIKE 'role:global:%'))
+ORDER BY p.id FOR UPDATE OF p;
+
+-- name: LockRoleDeliveryPlugin :one
+SELECT id FROM plugins
+WHERE id = @plugin_id AND organization_id = @organization_id AND project_id = @project_id AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: LockRoleDeliveryProject :one
+SELECT id FROM projects
+WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FALSE
+FOR SHARE;

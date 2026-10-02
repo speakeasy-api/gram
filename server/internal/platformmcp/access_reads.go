@@ -23,6 +23,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -168,7 +169,7 @@ func NewAccessReadService(logger *slog.Logger, db *pgxpool.Pool, budget Operatio
 	return &AccessReadService{
 		logger:     logger,
 		db:         db,
-		roles:      access.NewRoleManager(logger, db, nil, nil),
+		roles:      access.NewRoleManager(logger, db, nil, nil, plugins.PublicationRequests{Enabled: false}, nil),
 		budget:     budget,
 		references: references,
 		now:        time.Now,

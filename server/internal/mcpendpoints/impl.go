@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -251,6 +252,7 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, logger)
 		}
+		ctx = roledelivery.WithProjectAdmission(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, rollout, rolloutErr)
 		attached, pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, mcpServer)
 		if err != nil {
 			return nil, err
@@ -283,13 +285,13 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 // own transaction commits, since this runs pre-commit and the DB writes
 // could still roll back.
 func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer) (bool, bool, error) {
-	pluginCreated, err := plugins.AttachToDefaultPluginAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
+	pluginCreated, err := plugins.AttachToDefaultAndRolePluginsAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		McpServerID:    uuid.NullUUID{UUID: server.ID, Valid: true},
 		DisplayName:    mcpservers.ServerDisplayName(server),
-	})
+	}, s.distributionAdmission)
 	if err != nil {
 		return false, false, oops.E(oops.CodeUnexpected, err, "attach mcp server to default plugin").LogError(ctx, s.logger)
 	}
