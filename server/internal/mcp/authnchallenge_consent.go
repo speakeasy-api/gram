@@ -1262,9 +1262,10 @@ func tokenLine(renderedAt time.Time, token *remotesessions.IntrospectedToken, ac
 }
 
 // issuerCardBranding resolves the branding a consent card renders for its
-// identity provider. The display fallback matches
-// formatRemoteSessionIssuerDisplay in the dashboard: a trimmed non-empty
-// name wins, otherwise the identifier the page always rendered (the slug).
+// identity provider: a trimmed non-empty name wins, otherwise the identifier
+// the page always rendered (the slug). Callers run WithCatalogBranding first,
+// so the name and logo may be the platform catalog's; the dashboard's
+// formatRemoteSessionIssuerDisplay has no such fallback.
 // The resource's own name outranks both, but only when the client recorded
 // it for a resource this endpoint fronts (ownResource): a client shared with
 // another endpoint must not lend that endpoint's name to this one.
@@ -1382,6 +1383,7 @@ func (s *Service) buildRemoteSessionCards(
 	if len(clients) == 0 {
 		return nil, nil
 	}
+	clients = s.remoteChallengeMgr.WithCatalogBranding(ctx, clients)
 
 	// Single round-trip for connection state across all cards. Empty when
 	// the subject hasn't been stamped yet (early render before IDP /
