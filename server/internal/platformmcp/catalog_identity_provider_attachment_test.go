@@ -1,7 +1,6 @@
 package platformmcp
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -37,41 +36,34 @@ func TestDiscoverSupportedIssuerMetadataRejectsEmptyCandidates(t *testing.T) {
 	require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
 }
 
-func TestIdentityProviderDynamicRegistrationErrorTreatsTimeoutAndRateLimitAsRetryable(t *testing.T) {
+func TestIdentityProviderRegistrationErrorTreatsTimeoutAndRateLimitAsRetryable(t *testing.T) {
 	t.Parallel()
 
 	for _, status := range []int{http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusInternalServerError} {
-		err := identityProviderDynamicRegistrationError(&registration.HTTPError{StatusCode: status})
+		err := identityProviderRegistrationError(failedRegistration(&registration.HTTPError{StatusCode: status, ProviderMessage: ""}))
 		require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnavailable, status)
 	}
 
-	err := identityProviderDynamicRegistrationError(&registration.HTTPError{StatusCode: http.StatusBadRequest, ProviderMessage: "provider-controlled detail"})
+	err := identityProviderRegistrationError(failedRegistration(&registration.HTTPError{StatusCode: http.StatusBadRequest, ProviderMessage: "provider-controlled detail"}))
 	require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
 	require.NotContains(t, err.Error(), "provider-controlled detail")
 }
 
-// A caller hanging up mid-registration is not an attachment outcome. Reporting
-// it as unavailable would blame the provider for something it never did.
-func TestIdentityProviderDynamicRegistrationErrorPreservesCallerCancellation(t *testing.T) {
+// A provider without dynamic registration cannot serve this flow unchanged.
+func TestIdentityProviderRegistrationErrorTreatsManualSetupAsUnsupported(t *testing.T) {
 	t.Parallel()
 
-	err := identityProviderDynamicRegistrationError(context.Canceled)
-
-	require.ErrorIs(t, err, context.Canceled)
-	require.NotErrorIs(t, err, ErrIdentityProviderAttachmentUnavailable)
-	require.NotErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
+	var reg remotesessions.Registration
+	reg.ManualSetupRequired = true
+	require.ErrorIs(t, identityProviderRegistrationError(reg), ErrIdentityProviderAttachmentUnsupported)
 }
 
-func TestValidBrowserCatalogDynamicClientRequiresConfidentialClient(t *testing.T) {
-	t.Parallel()
-
-	require.True(t, validBrowserCatalogDynamicClient(remotesessions.ProxyRegisterResponse{ClientID: "client", ClientSecret: "secret", TokenEndpointAuthMethod: string(remotesessions.TokenEndpointAuthMethodBasic)}))
-	require.True(t, validBrowserCatalogDynamicClient(remotesessions.ProxyRegisterResponse{ClientID: "client", ClientSecret: "secret"}), "RFC 7591 defaults an omitted method to client_secret_basic")
-	require.False(t, validBrowserCatalogDynamicClient(remotesessions.ProxyRegisterResponse{ClientID: "client", ClientSecret: "secret", TokenEndpointAuthMethod: string(remotesessions.TokenEndpointAuthMethodPost)}))
-	require.False(t, validBrowserCatalogDynamicClient(remotesessions.ProxyRegisterResponse{ClientSecret: "secret"}))
-	require.False(t, validBrowserCatalogDynamicClient(remotesessions.ProxyRegisterResponse{ClientID: "client"}))
-	require.False(t, validBrowserCatalogDynamicClient(remotesessions.ProxyRegisterResponse{ClientID: "client", ClientSecret: "secret", TokenEndpointAuthMethod: string(remotesessions.TokenEndpointAuthMethodNone)}))
-	require.False(t, validBrowserCatalogDynamicClient(remotesessions.ProxyRegisterResponse{ClientID: "client", ClientSecret: "secret", TokenEndpointAuthMethod: "private_key_jwt"}))
+func failedRegistration(err error) remotesessions.Registration {
+	failure := registration.ClassifyDCR(err)
+	var reg remotesessions.Registration
+	reg.Method = remotesessions.RegistrationDCR
+	reg.Failure = &failure
+	return reg
 }
 
 func TestCatalogIssuerIdentityIsExact(t *testing.T) {

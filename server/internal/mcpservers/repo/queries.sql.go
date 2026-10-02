@@ -700,6 +700,63 @@ func (q *Queries) ListEffectiveMCPServerToolAnnotations(ctx context.Context, arg
 	return items, nil
 }
 
+const listEnabledMCPServersByToolsetID = `-- name: ListEnabledMCPServersByToolsetID :many
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+FROM mcp_servers
+WHERE toolset_id = $1::uuid
+  AND project_id = $2
+  AND deleted IS FALSE
+  AND visibility <> 'disabled'
+ORDER BY created_at, id
+LIMIT 2
+`
+
+type ListEnabledMCPServersByToolsetIDParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// At most two rows are needed: zero means the legacy route has no attributable
+// wrapper, one is unambiguous, and two means callers must reject attribution.
+func (q *Queries) ListEnabledMCPServersByToolsetID(ctx context.Context, arg ListEnabledMCPServersByToolsetIDParams) ([]McpServer, error) {
+	rows, err := q.db.Query(ctx, listEnabledMCPServersByToolsetID, arg.ToolsetID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpServer
+	for rows.Next() {
+		var i McpServer
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.EnvironmentID,
+			&i.UserSessionIssuerID,
+			&i.RemoteSessionIssuerID,
+			&i.RemoteMcpServerID,
+			&i.TunneledMcpServerID,
+			&i.ToolsetID,
+			&i.UnproxiedMcpServerID,
+			&i.ToolVariationsGroupID,
+			&i.Visibility,
+			&i.NetworkAccessMode,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLiveMCPServerIDsInOrganization = `-- name: ListLiveMCPServerIDsInOrganization :many
 SELECT m.id
 FROM mcp_servers AS m
@@ -718,6 +775,43 @@ type ListLiveMCPServerIDsInOrganizationParams struct {
 
 func (q *Queries) ListLiveMCPServerIDsInOrganization(ctx context.Context, arg ListLiveMCPServerIDsInOrganizationParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listLiveMCPServerIDsInOrganization, arg.Ids, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMCPServerIDsByUserSessionIssuerID = `-- name: ListMCPServerIDsByUserSessionIssuerID :many
+SELECT id
+FROM mcp_servers
+WHERE project_id = $1
+  AND user_session_issuer_id = $2
+  AND deleted IS FALSE
+ORDER BY id
+`
+
+type ListMCPServerIDsByUserSessionIssuerIDParams struct {
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.NullUUID
+}
+
+// Every live MCP server in the project bound to one user session issuer.
+// A user session issuer is not unique per MCP server, so an operation that
+// mutates the issuer's client binding reaches every server listed here.
+func (q *Queries) ListMCPServerIDsByUserSessionIssuerID(ctx context.Context, arg ListMCPServerIDsByUserSessionIssuerIDParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMCPServerIDsByUserSessionIssuerID, arg.ProjectID, arg.UserSessionIssuerID)
 	if err != nil {
 		return nil, err
 	}

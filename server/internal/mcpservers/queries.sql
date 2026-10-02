@@ -44,6 +44,18 @@ WHERE toolset_id = @toolset_id::uuid AND project_id = @project_id AND deleted IS
 ORDER BY created_at, id
 LIMIT 1;
 
+-- name: ListEnabledMCPServersByToolsetID :many
+-- At most two rows are needed: zero means the legacy route has no attributable
+-- wrapper, one is unambiguous, and two means callers must reject attribution.
+SELECT *
+FROM mcp_servers
+WHERE toolset_id = @toolset_id::uuid
+  AND project_id = @project_id
+  AND deleted IS FALSE
+  AND visibility <> 'disabled'
+ORDER BY created_at, id
+LIMIT 2;
+
 -- name: LockMCPServerByIDAndProjectID :one
 SELECT *
 FROM mcp_servers
@@ -532,6 +544,17 @@ WHERE mcp_server_id = @mcp_server_id
   AND tool_name = @tool_name
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: ListMCPServerIDsByUserSessionIssuerID :many
+-- Every live MCP server in the project bound to one user session issuer.
+-- A user session issuer is not unique per MCP server, so an operation that
+-- mutates the issuer's client binding reaches every server listed here.
+SELECT id
+FROM mcp_servers
+WHERE project_id = @project_id
+  AND user_session_issuer_id = @user_session_issuer_id
+  AND deleted IS FALSE
+ORDER BY id;
 
 -- name: ResyncMCPServerRemoteSessionIssuers :execrows
 -- Recomputes mcp_servers.remote_session_issuer_id from the live client

@@ -9,7 +9,7 @@ import (
 func TestShadowInventoryToolsAreExternalOnlyWithStableUnavailableDescriptors(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 
 	external := registrar.For(AudienceExternal)
 	assistant := registrar.For(AudienceAssistant)

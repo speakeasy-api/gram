@@ -1,4 +1,3 @@
-//nolint:glint // Production delegation adapter regressions require tenant-scoped database fixtures.
 package remotesessions
 
 import (
@@ -7,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/delegation"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -76,16 +77,18 @@ func newDelegationUnitFixture(t *testing.T) (*delegationAdapterFixture, *delegat
 	require.NoError(t, err)
 	p := federatedFixture(t)
 	b := delegationBinding(p, "human-test")
-	_, err = db.Exec(ctx, `INSERT INTO organization_metadata (id,name,slug) VALUES ($1,'Test organization','delegation-adapter')`, b.OrganizationID)
-	require.NoError(t, err)
-	_, err = db.Exec(ctx, `INSERT INTO users (id,email,display_name) VALUES ($1,'delegation@example.test','Test user')`, b.HumanID)
-	require.NoError(t, err)
-	_, err = db.Exec(ctx, `INSERT INTO organization_user_relationships (organization_id,user_id) VALUES ($1,$2)`, b.OrganizationID, b.HumanID)
-	require.NoError(t, err)
-	_, err = db.Exec(ctx, `INSERT INTO remote_session_issuers (id,organization_id,slug,issuer) VALUES ($1,$2,'delegation-adapter',$3)`, b.IssuerID, b.OrganizationID, p.issuer.Issuer)
-	require.NoError(t, err)
-	_, err = db.Exec(ctx, `INSERT INTO remote_session_clients (id,organization_id,remote_session_issuer_id,client_id) VALUES ($1,$2,$3,'test-client')`, b.ClientID, b.OrganizationID, b.IssuerID)
-	require.NoError(t, err)
+	fixtures := testrepo.New(db)
+	require.NoError(t, fixtures.SeedDelegationLoaderOrganizationFixture(ctx, testrepo.SeedDelegationLoaderOrganizationFixtureParams{OrganizationID: b.OrganizationID, Name: "Test organization", Slug: "delegation-adapter"}))
+	require.NoError(t, fixtures.InsertUserFixture(ctx, testrepo.InsertUserFixtureParams{ID: b.HumanID, Email: "delegation@example.test", DisplayName: "Test user"}))
+	require.NoError(t, fixtures.CreateOrganizationUserRelationshipFixture(ctx, testrepo.CreateOrganizationUserRelationshipFixtureParams{OrganizationID: b.OrganizationID, UserID: pgtype.Text{String: b.HumanID, Valid: true}}))
+	require.NoError(t, fixtures.SeedDelegationLoaderIssuerFixture(ctx, testrepo.SeedDelegationLoaderIssuerFixtureParams{
+		ID: b.IssuerID, OrganizationID: pgtype.Text{String: b.OrganizationID, Valid: true}, Slug: "delegation-adapter", Issuer: p.issuer.Issuer,
+		AuthorizationEndpoint: pgtype.Text{}, TokenEndpoint: pgtype.Text{}, JwksUri: pgtype.Text{},
+	}))
+	require.NoError(t, fixtures.SeedDelegationLoaderClientFixture(ctx, testrepo.SeedDelegationLoaderClientFixtureParams{
+		ID: b.ClientID, OrganizationID: b.OrganizationID, RemoteSessionIssuerID: b.IssuerID, ClientID: "test-client", Scope: nil,
+	}))
+	//nolint:glint // notestingrawsql: tenant fixtures for the delegation adapter across owner domains; the fixtures need caller-chosen ids
 	_, err = db.Exec(ctx, `INSERT INTO user_session_issuers (organization_id,slug,authn_challenge_mode,session_duration,trusted_remote_session_issuer_id,trusted_remote_session_client_id) VALUES ($1,'delegation-adapter','interactive',interval '1 hour',$2,$3)`, b.OrganizationID, b.IssuerID, b.ClientID)
 	require.NoError(t, err)
 	enc, err := encryption.NewWithBytes(bytes.Repeat([]byte{0x42}, 32))

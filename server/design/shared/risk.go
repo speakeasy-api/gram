@@ -135,9 +135,7 @@ var RiskMCPServerScope = Type("RiskMCPServerScope", func() {
 	Attribute("mcp_server_id", String, "The selected MCP server or gateway ID.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("tools", ArrayOf(String), "Custom tool names for this server. Omit to follow the policy tool rule.", func() {
-		MinLength(1)
-	})
+	Attribute("tools", ArrayOf(String), "Custom tool names for this server. Omit to follow the policy tool rule; an empty list matches every tool on this server, unconditionally.")
 
 	Required("mcp_server_id")
 })
@@ -183,7 +181,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
 	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
-	Attribute("action", String, "Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session).", func() {
+	Attribute("action", String, "Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.", func() {
 		RiskPolicyActionEnum()
 		Default("flag")
 	})
@@ -192,7 +190,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 		Default("everyone")
 	})
 	Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs the policy applies to. Contains user:all when audience_type is everyone.")
-	Attribute("mcp_scope", RiskMCPScope, "Optional MCP server and tool restriction. Null applies the policy to every MCP server.")
+	Attribute("mcp_scope", RiskMCPScope, "Optional MCP server and tool restriction. Null applies the policy to every MCP server. When set, the action must be flag or block.")
 	Attribute("shadow_mcp_disposition", String, "Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.", func() {
 		RiskPolicyShadowMCPDispositionEnum()
 	})

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, Check, Copy, Loader2 } from "lucide-react";
+import { AlertCircle, Check, Copy, Download, Loader2 } from "lucide-react";
 import { codeToHtml, type BundledLanguage } from "shiki";
 import { Button } from "@/components/ui/Button";
 import { Link } from "@/components/ui/Link";
+import { useObservabilityPluginDownload } from "@/pages/plugins/useObservabilityPluginDownload";
 import type { PlatformSetupStep } from "../types";
 import { usePlatformPlaceholders } from "./platform-setup-values";
 
@@ -132,6 +133,35 @@ interface PlatformSetupStepBodyProps {
   apiKeyError?: string;
   onRetryApiKey: () => void;
   onEligibilityAnswer: (eligible: boolean) => void;
+  /** The plan-check answer so far; the picked button is highlighted. */
+  eligibleAnswer?: boolean | null;
+}
+
+function ObservabilityDownloadButton({
+  platform,
+  label,
+}: NonNullable<PlatformSetupStep["download"]>): JSX.Element {
+  const { isDownloading, download } = useObservabilityPluginDownload(
+    platform,
+    `observability-${platform}.zip`,
+  );
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      disabled={isDownloading}
+      onClick={() => void download()}
+    >
+      <Button.LeftIcon>
+        {isDownloading ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Download className="h-4 w-4" />
+        )}
+      </Button.LeftIcon>
+      <Button.Text>{label}</Button.Text>
+    </Button>
+  );
 }
 
 // One instruction in a platform's setup: the screenshot, prose, help link,
@@ -146,6 +176,7 @@ export function PlatformSetupStepBody({
   apiKeyError,
   onRetryApiKey,
   onEligibilityAnswer,
+  eligibleAnswer,
 }: PlatformSetupStepBodyProps): JSX.Element {
   const { snippetFor, linkFor } = usePlatformPlaceholders();
   const [copied, setCopied] = useState(false);
@@ -188,7 +219,13 @@ export function PlatformSetupStepBody({
                   title: step.title,
                   code: part.code,
                 });
-                return value ? <code key={index}>{value}</code> : part.fallback;
+                return value ? (
+                  <code key={index} className="bg-muted px-1 py-0.5 text-xs">
+                    {value}
+                  </code>
+                ) : (
+                  part.fallback
+                );
               })}
         </p>
       )}
@@ -214,6 +251,8 @@ export function PlatformSetupStepBody({
           );
         })()}
 
+      {step.download && <ObservabilityDownloadButton {...step.download} />}
+
       {step.eligibility && (
         <div className="bg-secondary/40 border-border !mt-6 space-y-4 border p-4">
           <p className="text-foreground text-sm font-medium">
@@ -221,17 +260,19 @@ export function PlatformSetupStepBody({
           </p>
           <div className="flex gap-2">
             <Button
-              variant="primary"
+              variant={eligibleAnswer === true ? "primary" : "secondary"}
               size="sm"
               className="flex-1"
+              aria-pressed={eligibleAnswer === true}
               onClick={() => onEligibilityAnswer(true)}
             >
               <Button.Text>{step.eligibility.yesLabel ?? "Yes"}</Button.Text>
             </Button>
             <Button
-              variant="secondary"
+              variant={eligibleAnswer === false ? "primary" : "secondary"}
               size="sm"
               className="flex-1"
+              aria-pressed={eligibleAnswer === false}
               onClick={() => onEligibilityAnswer(false)}
             >
               <Button.Text>{step.eligibility.noLabel ?? "No"}</Button.Text>

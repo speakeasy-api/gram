@@ -13,7 +13,7 @@ import type { IdentityProviderConnectionChecklistItem } from "@gram/client/model
 
 import { STEP_AFFORDANCES } from "./checklistAffordances";
 import { ConnectionChecklist } from "./ConnectionChecklist";
-import type { LiveConnection } from "../../connectionView";
+import type { ChecklistGroupId, LiveConnection } from "../../connectionView";
 import { makeChecklistItem, makeConnection } from "./testFixtures";
 
 const scrollIntoView = vi.fn();
@@ -25,6 +25,16 @@ vi.mock(
   "@gram/client/react-query/recordIdentityProviderConnectionAgent.js",
   () => ({
     useRecordIdentityProviderConnectionAgentMutation: () => ({
+      mutate: vi.fn(),
+      isPending: false,
+      error: null,
+    }),
+  }),
+);
+vi.mock(
+  "@gram/client/react-query/submitIdentityProviderConnectionClientId.js",
+  () => ({
+    useSubmitIdentityProviderConnectionClientIdMutation: () => ({
       mutate: vi.fn(),
       isPending: false,
       error: null,
@@ -62,17 +72,22 @@ const pendingChecklist = [
   item("record_ai_agent", "cross_app_access"),
 ];
 
-function renderChecklist(connection: LiveConnection, route = "/identity") {
+function renderChecklist(
+  connection: LiveConnection,
+  groups?: ChecklistGroupId[],
+  route = "/identity",
+) {
   return render(
     <MemoryRouter initialEntries={[route]}>
       <QueryClientProvider client={new QueryClient()}>
         <TooltipProvider>
-          <Link to="?tab=enterprise-managed-auth&provider=okta&view=setup#agent">
+          <Link to="?tab=identity-providers&provider=okta&view=setup#agent">
             Set up agent
           </Link>
           <ConnectionChecklist
             connection={connection}
             affordances={STEP_AFFORDANCES}
+            groups={groups}
           />
         </TooltipProvider>
       </QueryClientProvider>
@@ -192,7 +207,7 @@ describe("ConnectionChecklist", () => {
     ).toBeNull();
   });
 
-  it("links the first connection step to the Cross App Access tab", () => {
+  it("links the first connection step to the server readiness table on the same tab", () => {
     renderChecklist(
       connectionWith("verified", [
         ...pendingChecklist,
@@ -204,11 +219,53 @@ describe("ConnectionChecklist", () => {
       .closest("li")!;
     expect(
       within(step)
-        .getByRole("link", { name: "Configure Cross App Access" })
+        .getByRole("link", { name: "Review server readiness below" })
         .getAttribute("href"),
-    ).toBe(
-      "/identity?tab=enterprise-managed-auth&provider=okta&view=cross-app-access",
+    ).toBe("#readiness");
+  });
+
+  it("renders only the requested groups", () => {
+    renderChecklist(
+      connectionWith("verified", [
+        ...pendingChecklist,
+        item("first_resource_connection", "cross_app_access"),
+      ]),
+      ["connect"],
     );
+    expect(screen.queryByText("Step first_resource_connection")).toBeNull();
+    expect(screen.getByRole("button", { name: /^Connect, / })).toBeTruthy();
+  });
+
+  it("expands an incomplete Connect group when the active phase is not rendered", () => {
+    renderChecklist(
+      connectionWith("degraded", [
+        item("grant_scopes", "connect", false),
+        item("record_ai_agent", "cross_app_access"),
+      ]),
+      ["connect"],
+      "/identity#agent",
+    );
+    const connect = screen.getByRole("button", {
+      name: "Connect, 0 of 1 complete",
+    });
+    expect(connect.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("Step grant_scopes")).toBeTruthy();
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("keeps a complete Connect group collapsed when it is the only group", () => {
+    renderChecklist(
+      connectionWith("verified", [
+        item("submit_client_id", "connect", true),
+        item("record_ai_agent", "cross_app_access"),
+      ]),
+      ["connect"],
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Connect, 1 of 1 complete" })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
   });
 
   it("places the save form inside the agent checklist step and preserves drafts when collapsed", () => {
@@ -237,9 +294,40 @@ describe("ConnectionChecklist", () => {
     );
   });
 
+  it("places the client ID form inside its checklist step until the ID is submitted", () => {
+    const checklist = [
+      item("create_api_services_app", "connect"),
+      item("public_key_auth", "connect"),
+      item("submit_client_id", "connect"),
+      item("record_ai_agent", "cross_app_access"),
+    ];
+    const { unmount } = renderChecklist(
+      makeConnection({
+        status: "pending",
+        clientIdSubmitted: false,
+        checklist,
+      }),
+    );
+    const step = screen.getByText("Step submit_client_id").closest("li")!;
+    expect(within(step).getByLabelText("Client ID")).toBeTruthy();
+    expect(
+      within(step).getByRole("button", { name: "Submit and verify" }),
+    ).toBeTruthy();
+    unmount();
+
+    renderChecklist(
+      makeConnection({ status: "pending", clientIdSubmitted: true, checklist }),
+    );
+    expect(screen.queryByLabelText("Client ID")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Submit and verify" }),
+    ).toBeNull();
+  });
+
   it("opens the agent step for an initial hash link even while pending", () => {
     renderChecklist(
       connectionWith("pending", pendingChecklist),
+      undefined,
       "/identity#agent",
     );
     expect(

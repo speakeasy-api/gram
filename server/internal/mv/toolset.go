@@ -24,6 +24,8 @@ import (
 	externalmcpR "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	mcpmetadataR "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	mcpserversR "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	oauth "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	org "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -619,6 +621,14 @@ func DescribeToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset").LogError(ctx, logger)
 	}
 
+	mode := types.NetworkAccessMode(networkaccess.ModePublicOnly)
+	canonical, canonicalErr := mcpserversR.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversR.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: pid})
+	if canonicalErr == nil && canonical.ToolsetID.Valid && canonical.ToolsetID.UUID == toolset.ID {
+		mode = types.NetworkAccessMode(networkaccess.EffectiveForView(canonical.NetworkAccessMode))
+	} else if canonicalErr != nil && !errors.Is(canonicalErr, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("load hosted MCP network access mode: %w", canonicalErr)
+	}
+
 	// TODO: It would be better if every query below accepted a deployment ID as a parameter to guarantee cache consistency.
 	activeDeploymentID, err := deploymentRepo.GetActiveDeploymentID(ctx, pid)
 	switch {
@@ -801,6 +811,7 @@ func DescribeToolset(
 		PromptTemplates:              promptTemplates,
 		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
 		McpEnabled:                   &toolset.McpEnabled,
+		NetworkAccessMode:            &mode,
 		ToolSelectionMode:            toolset.ToolSelectionMode,
 		CustomDomainID:               conv.FromNullableUUID(toolset.CustomDomainID),
 		McpIsPublic:                  &toolset.McpIsPublic,

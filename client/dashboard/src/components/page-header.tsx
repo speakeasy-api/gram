@@ -190,10 +190,16 @@ type PageHeaderBreadcrumbsTrailProps = PageHeaderBreadcrumbsProps & {
 // The exceptions to the app-wide hiding above are the surfaces that nest: MCP
 // (S-853 made it the inventory and put the add flow, the catalog and sources
 // underneath it) and Identities (each person has their own page below the
-// roster). Those pages sit two and three levels deep with no way back up but
+// roster) and Remote Identity Providers (each session client sits below its
+// provider). Those pages sit two and three levels deep with no way back up but
 // browser back. Listed by first path segment; every caller still mounts
 // <PageHeader.Breadcrumbs>, so adding a surface here is all it takes.
-const BREADCRUMB_PAGE_SLUGS = new Set(["mcp", "identities", "shadow-ai"]);
+const BREADCRUMB_PAGE_SLUGS = new Set([
+  "mcp",
+  "identities",
+  "shadow-ai",
+  "remote-identity-providers",
+]);
 
 // Whether the current page shows a breadcrumb trail. Shared by the header (to
 // give the trail its own bar) and by the breadcrumbs themselves (to render

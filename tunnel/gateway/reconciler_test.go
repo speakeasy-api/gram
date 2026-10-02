@@ -258,7 +258,7 @@ func newGatewayHarnessWithResolver(
 ) *gatewayHarness {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	gw, err := New(Config{ForwardToken: testForwardToken, routeRefreshInterval: refreshInterval}, keys, store, logger)
+	gw, err := New(Config{AuthzPublicKeys: "", ForwardToken: testForwardToken, routeRefreshInterval: refreshInterval}, keys, store, logger)
 	require.NoError(t, err)
 	publicServer := httptest.NewServer(gw.PublicHandler())
 	forwardServer := httptest.NewServer(gw.ForwardHandler())

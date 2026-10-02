@@ -1,4 +1,3 @@
-//nolint:glint // Integration state transitions use isolated raw SQL to exercise deleted historical references.
 package killswitchapi
 
 import (
@@ -14,16 +13,21 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	goa "goa.design/goa/v3/pkg"
 	"gopkg.in/yaml.v3"
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/killswitches/server"
 	gen "github.com/speakeasy-api/gram/server/gen/killswitches"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	killswitchrepo "github.com/speakeasy-api/gram/server/internal/killswitches/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -32,13 +36,8 @@ func TestListMCPServersIncludesProjectNames(t *testing.T) {
 	service, db, orgID, userID, servers := newIntegrationService(t)
 	ctx := customerContext(t, orgID, userID)
 
-	var secondProjectID uuid.UUID
-	require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO projects (name, slug, organization_id) VALUES ('Second Project', $1, $2) RETURNING id`, "p-"+uuid.NewString()[:12], orgID).Scan(&secondProjectID))
-	slug := "ts-" + uuid.NewString()[:12]
-	var toolsetID uuid.UUID
-	require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO toolsets (organization_id, project_id, name, slug) VALUES ($1, $2, $3, $3) RETURNING id`, orgID, secondProjectID, slug).Scan(&toolsetID))
-	var secondServerID uuid.UUID
-	require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO mcp_servers (project_id, name, toolset_id, visibility) VALUES ($1, 'Second Server', $2, 'private') RETURNING id`, secondProjectID, toolsetID).Scan(&secondServerID))
+	secondProjectID, secondServers := seedProjectServers(t, db, orgID, "Second Project", "Second Server")
+	secondServerID := secondServers[0]
 
 	listed, err := service.ListMCPServers(ctx, &gen.ListMCPServersPayload{})
 	require.NoError(t, err)
@@ -62,10 +61,7 @@ func TestCustomerKillswitchLifecycleAndReadModels(t *testing.T) {
 	service, db, orgID, userID, servers := newIntegrationService(t)
 	ctx := customerContext(t, orgID, userID)
 	subjectUserID := "user_" + uuid.NewString()
-	_, err := db.Exec(t.Context(), `INSERT INTO users (id, email, display_name) VALUES ($1, $1 || '@example.test', 'Affected User')`, subjectUserID)
-	require.NoError(t, err)
-	_, err = db.Exec(t.Context(), `INSERT INTO organization_user_relationships (organization_id, user_id) VALUES ($1, $2)`, orgID, subjectUserID)
-	require.NoError(t, err)
+	seedOrganizationMember(t, db, orgID, subjectUserID, "Affected User")
 	endsAt := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339Nano)
 	payload := &gen.CreatePayload{
 		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: subjectUserID,
@@ -123,10 +119,17 @@ func TestCustomerKillswitchLifecycleAndReadModels(t *testing.T) {
 	require.Len(t, overlaps.Overlaps, 1)
 	require.False(t, overlaps.Truncated)
 
-	_, err = db.Exec(t.Context(), `UPDATE organization_user_relationships SET deleted_at = clock_timestamp() WHERE organization_id = $1 AND user_id = $2`, orgID, subjectUserID)
+	err = testrepo.New(db).ForceSoftDeleteOrganizationUserRelationship(t.Context(), testrepo.ForceSoftDeleteOrganizationUserRelationshipParams{
+		OrganizationID: orgID, UserID: pgtype.Text{String: subjectUserID, Valid: true},
+	})
 	require.NoError(t, err)
-	_, err = db.Exec(t.Context(), `UPDATE mcp_servers SET deleted_at = clock_timestamp() WHERE id = ANY($1::uuid[])`, servers)
-	require.NoError(t, err)
+	serverQueries := mcpserversrepo.New(db)
+	for _, serverID := range servers {
+		server, getErr := serverQueries.GetMCPServerByIDAndOrganizationID(t.Context(), mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: serverID, OrganizationID: orgID})
+		require.NoError(t, getErr)
+		_, deleteErr := serverQueries.DeleteMCPServer(t.Context(), mcpserversrepo.DeleteMCPServerParams{ID: serverID, ProjectID: server.ProjectID})
+		require.NoError(t, deleteErr)
+	}
 	_, err = service.Get(ctx, &gen.GetPayload{ID: created.ID})
 	require.NoError(t, err)
 	lifted, err := service.Lift(ctx, &gen.LiftPayload{OperationID: uuid.NewString(), ID: created.ID, ExpectedVersion: created.Version})
@@ -271,11 +274,11 @@ func TestCustomerCreateAndEditRequireScheduledStartAfterDatabaseTime(t *testing.
 	service, db, orgID, userID, _ := newIntegrationService(t)
 	ctx := customerContext(t, orgID, userID)
 
-	var databaseNow time.Time
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&databaseNow))
-	notFuture := databaseNow.UTC().Format(time.RFC3339Nano)
+	databaseNow, err := killswitchrepo.New(db).GetKillswitchDatabaseTime(t.Context())
+	require.NoError(t, err)
+	notFuture := databaseNow.Time.UTC().Format(time.RFC3339Nano)
 	schedule := &gen.KillswitchSchedule{Start: "scheduled", StartsAt: &notFuture, End: "until_lifted"}
-	_, err := service.Create(ctx, &gen.CreatePayload{
+	_, err = service.Create(ctx, &gen.CreatePayload{
 		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
 		Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: schedule,
 		ExternalNote: "message", InternalNote: "context",
@@ -289,8 +292,9 @@ func TestCustomerCreateAndEditRequireScheduledStartAfterDatabaseTime(t *testing.
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&databaseNow))
-	notFuture = databaseNow.UTC().Format(time.RFC3339Nano)
+	databaseNow, err = killswitchrepo.New(db).GetKillswitchDatabaseTime(t.Context())
+	require.NoError(t, err)
+	notFuture = databaseNow.Time.UTC().Format(time.RFC3339Nano)
 	_, err = service.Edit(ctx, &gen.EditPayload{
 		OperationID: uuid.NewString(), ID: created.ID, ExpectedVersion: created.Version,
 		Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: &gen.KillswitchSchedule{Start: "scheduled", StartsAt: &notFuture, End: "until_lifted"},
@@ -337,9 +341,11 @@ func TestCustomerAuthorizationUsesLiveOrgAdminGrant(t *testing.T) {
 	_, err = service.ListCapabilities(prepared, &gen.ListCapabilitiesPayload{})
 	require.NoError(t, err)
 
-	result, err := db.Exec(t.Context(), `DELETE FROM principal_grants WHERE organization_id = $1 AND principal_urn = $2`, orgID, urn.NewPrincipal(urn.PrincipalTypeUser, userID))
+	revoked, err := accessrepo.New(db).DeletePrincipalGrantsByPrincipal(t.Context(), accessrepo.DeletePrincipalGrantsByPrincipalParams{
+		OrganizationID: orgID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, userID),
+	})
 	require.NoError(t, err)
-	require.Equal(t, int64(1), result.RowsAffected())
+	require.Equal(t, int64(1), revoked)
 	// The request's prepared grants remain stale and permissive. The customer
 	// service must reload grants and observe the revocation.
 	require.NoError(t, engine.Require(prepared, check))
@@ -424,9 +430,10 @@ func TestCustomerHistoryUsesEventTimeStatus(t *testing.T) {
 	t.Parallel()
 	service, db, orgID, userID, _ := newIntegrationService(t)
 	ctx := customerContext(t, orgID, userID)
-	var transitionAt time.Time
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT clock_timestamp() + interval '2 seconds'`).Scan(&transitionAt))
-	transitionAt = transitionAt.UTC()
+	clock := killswitchrepo.New(db)
+	databaseNow, err := clock.GetKillswitchDatabaseTime(t.Context())
+	require.NoError(t, err)
+	transitionAt := databaseNow.Time.Add(2 * time.Second).UTC()
 	startText := transitionAt.Format(time.RFC3339Nano)
 	created, err := service.Create(ctx, &gen.CreatePayload{
 		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
@@ -444,9 +451,8 @@ func TestCustomerHistoryUsesEventTimeStatus(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(2), edited.Version)
 	require.Eventually(t, func() bool {
-		var transitioned bool
-		err := db.QueryRow(t.Context(), `SELECT clock_timestamp() > $1`, transitionAt).Scan(&transitioned)
-		return err == nil && transitioned
+		now, err := clock.GetKillswitchDatabaseTime(t.Context())
+		return err == nil && now.Time.After(transitionAt)
 	}, 5*time.Second, 20*time.Millisecond)
 
 	detail, err := service.Get(ctx, &gen.GetPayload{ID: created.ID})

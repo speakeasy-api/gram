@@ -3,6 +3,7 @@ package toolsets
 import (
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	. "goa.design/goa/v3/dsl"
 )
 
@@ -146,7 +147,11 @@ var _ = Service("toolsets", func() {
 
 		Payload(func() {
 			Required("slug")
-			Attribute("slug", shared.Slug, "The slug of the toolset")
+			// Toolset slugs are stored with a 60-character limit.
+			Attribute("slug", String, "The slug of the toolset", func() {
+				Pattern(constants.SlugPattern)
+				MaxLength(60)
+			})
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -457,6 +462,7 @@ var UpdateToolsetForm = Type("UpdateToolsetForm", func() {
 	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
 	Attribute("mcp_slug", shared.Slug, "The slug of the MCP to use for the toolset")
 	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")
+	Attribute("network_access_mode", shared.NetworkAccessMode, "Where the hosted MCP is accessible: public_only, dual, or private_only")
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
 	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
 	security.ProjectPayload()

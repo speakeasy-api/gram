@@ -846,6 +846,32 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-organization-publication-requested
+    name: gram-plugins-v1-organization-publication-requested
+    spec:
+      definition: |
+        edition = "2024";
+        message OrganizationPublicationRequested {
+          string organization_id = 1;
+          string created_by_user_id = 2;
+          string after_project_id = 3;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-publication-requested
+    name: gram-plugins-v1-publication-requested
+    spec:
+      definition: |
+        edition = "2024";
+        message PublicationRequested {
+          string organization_id = 1;
+          string project_id = 2;
+          string created_by_user_id = 3;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-custom-rules-analysis
     name: gram-risk-v1-custom-rules-analysis
     spec:
@@ -1266,6 +1292,21 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-role-distribution-v1-role-distribution-setup-requested-v1
+    name: gram-role-distribution-v1-role-distribution-setup-requested-v1
+    spec:
+      definition: |
+        edition = "2024";
+        message RoleDistributionSetupRequestedV1 {
+          string organization_id = 1;
+          string role_urn = 2;
+          string global_role_id = 3;
+          string bootstrap_organization_id = 4;
+          string cursor = 5;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-log-record
     name: gram-telemetry-v1-log-record
     spec:
@@ -1288,6 +1329,24 @@ pubsub:
           string service_name = 14;
           string service_version = 15;
           string gram_chat_id = 16;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-session-observed
+    name: gram-telemetry-v1-session-observed
+    spec:
+      definition: |
+        edition = "2024";
+        message SessionObserved {
+          string project_id = 1;
+          string message_id = 2;
+          reserved 3;
+          reserved user_email;
+          string provider = 4;
+          string hook_hostname = 5;
+          string account_type = 6;
+          string billing_mode = 7;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -1592,6 +1651,42 @@ pubsub:
         name: gram-ping-v2-message
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-organization-publication-scheduler
+      topic_proto_message: gram-plugins-v1-organization-publication-requested
+    name: gram-plugins-v1-organization-publication-scheduler
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-plugins-v1-organization-publication-scheduler-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-plugins-v1-organization-publication-requested
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-publication-scheduler
+      topic_proto_message: gram-plugins-v1-publication-requested
+    name: gram-plugins-v1-publication-scheduler
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-plugins-v1-publication-scheduler-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-plugins-v1-publication-requested
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-custom-rules-analyzer
       topic_proto_message: gram-risk-v1-custom-rules-analysis
     name: gram-risk-v1-custom-rules-analyzer
@@ -1762,6 +1857,24 @@ pubsub:
         name: gram-risk-v1-prompt-policy-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-role-distribution-v1-role-distribution-setup-handler
+      topic_proto_message: gram-role-distribution-v1-role-distribution-setup-requested-v1
+    name: gram-role-distribution-v1-role-distribution-setup-handler
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-role-distribution-v1-role-distribution-setup-handler-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-role-distribution-v1-role-distribution-setup-requested-v1
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-noop
       topic_proto_message: gram-telemetry-v1-log-record
     name: gram-telemetry-v1-noop
@@ -1774,6 +1887,24 @@ pubsub:
         minimumBackoff: 10s
       topicRef:
         name: gram-telemetry-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-session-observed-ch-writer
+      topic_proto_message: gram-telemetry-v1-session-observed
+    name: gram-telemetry-v1-session-observed-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-telemetry-v1-session-observed-ch-writer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-telemetry-v1-session-observed
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-tool-call-log-relay
@@ -2016,6 +2147,40 @@ pubsub:
       messageRetentionDuration: 3600s
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-organization-publication-requested
+    name: gram-plugins-v1-organization-publication-requested
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-plugins-v1-organization-publication-requested
+  - labels:
+      dlq_for: gram-plugins-v1-organization-publication-scheduler
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-organization-publication-scheduler
+    name: gram-plugins-v1-organization-publication-scheduler-dlq
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-publication-requested
+    name: gram-plugins-v1-publication-requested
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-plugins-v1-publication-requested
+  - labels:
+      dlq_for: gram-plugins-v1-publication-scheduler
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-publication-scheduler
+    name: gram-plugins-v1-publication-scheduler-dlq
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-custom-rules-analysis
     name: gram-risk-v1-custom-rules-analysis
     spec:
@@ -2143,6 +2308,23 @@ pubsub:
         schemaRef:
           name: gram-risk-v1-prompt-policy-analysis
   - labels:
+      dlq_for: gram-role-distribution-v1-role-distribution-setup-handler
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-role-distribution-v1-role-distribution-setup-handler
+    name: gram-role-distribution-v1-role-distribution-setup-handler-dlq
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-role-distribution-v1-role-distribution-setup-requested-v1
+    name: gram-role-distribution-v1-role-distribution-setup-requested-v1
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-role-distribution-v1-role-distribution-setup-requested-v1
+  - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-log-record
     name: gram-telemetry-v1-log-record
@@ -2152,6 +2334,23 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-telemetry-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-session-observed
+    name: gram-telemetry-v1-session-observed
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-telemetry-v1-session-observed
+  - labels:
+      dlq_for: gram-telemetry-v1-session-observed-ch-writer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-session-observed-ch-writer
+    name: gram-telemetry-v1-session-observed-ch-writer-dlq
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       dlq_for: gram-telemetry-v1-tool-call-log-relay
       managed_by: proto-pubsub-orchestrator

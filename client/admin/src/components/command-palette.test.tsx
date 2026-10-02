@@ -21,6 +21,9 @@ type Mounted = Awaited<ReturnType<typeof renderRouteTree>>;
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
+  listUsers: vi
+    .fn()
+    .mockResolvedValue({ users: [], total: 0, page: 1, limit: 50 }),
   listOrganizations: vi.fn(),
   getOrganization: vi.fn(),
   getOrganizationStats: vi.fn(),
@@ -33,6 +36,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   return {
     ...actual,
     getSession: mocks.getSession,
+    listUsers: mocks.listUsers,
     listOrganizations: mocks.listOrganizations,
     getOrganization: mocks.getOrganization,
     getOrganizationStats: mocks.getOrganizationStats,
@@ -515,7 +519,7 @@ describe("CommandPalette", () => {
     ).toBeTruthy();
   });
 
-  it("goes to a top-level page", async () => {
+  it.each(["Projects", "Users"])("goes to the %s page", async (destination) => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: "/organizations",
     });
@@ -524,11 +528,13 @@ describe("CommandPalette", () => {
     await screen.findByRole("dialog");
 
     fireEvent.click(
-      within(palette()).getByRole("option", { name: "Projects" }),
+      within(palette()).getByRole("option", { name: destination }),
     );
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe("/projects");
+      expect(router.state.location.pathname).toBe(
+        `/${destination.toLowerCase()}`,
+      );
     });
   });
 

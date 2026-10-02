@@ -17,13 +17,13 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/workos/workos-go/v6/pkg/events"
 	goahttp "goa.design/goa/v3/http"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -372,9 +372,7 @@ func TestCreateOrganization_SyncCommittingUnderTheSlugLockKeepsItsSlug(t *testin
 	// The competing writer takes the slug lock first and holds it in its own
 	// transaction, exactly as the sync activity does. The handler will park on
 	// that lock until this transaction commits.
-	blocker, err := conn.Begin(ctx) //nolint:glint // the raw-SQL rule catches tx.Exec with a query string; this transaction only ever runs SQLc-generated methods, and it exists to hold an advisory lock the handler must wait on
-	require.NoError(t, err)
-	defer func() { _ = blocker.Rollback(ctx) }()
+	blocker := testenv.BeginTx(t, ctx, conn)
 
 	blockerQueries := orgrepo.New(blocker)
 	require.NoError(t, blockerQueries.LockOrganizationSlug(ctx, "example"))
@@ -389,16 +387,9 @@ func TestCreateOrganization_SyncCommittingUnderTheSlugLockKeepsItsSlug(t *testin
 		done <- outcome{res: res, err: err}
 	}()
 
-	// The handler calls WorkOS before it opens its transaction, so a recorded
-	// name means it is at or past its first read of the organization and about
-	// to ask for the slug lock this test is holding. Committing earlier than
-	// that cannot fail the test, because the handler would then see the row in
-	// its first read and reach the same slug; it would only prove less.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, fake.names(), 1)
-	}, 10*time.Second, 10*time.Millisecond)
+	testenv.WaitForBackendsBlockedBy(t, ctx, conn, testenv.BackendPID(blocker), 1)
 
-	_, err = blockerQueries.UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+	_, err := blockerQueries.UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
 		ID:          orgid.FromWorkOSID(workosOrgID),
 		Name:        "Lock Race Co From The Sync",
 		Slug:        "lock-race-co",
@@ -482,12 +473,15 @@ func TestCreateOrganization_FailureAfterTheUpsertLeavesNothing(t *testing.T) {
 	fake := newFakeWorkOS(workosOrgID)
 	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
 
-	// Break the table the last write in the transaction touches. Data cannot
-	// make that write fail: EnableFeature inserts ON CONFLICT DO NOTHING,
-	// organization_features carries no foreign key, and its only CHECK is on a
-	// feature name the handler supplies as a constant. Each test holds its own
-	// database clone, dropped when the test ends, so this reaches nothing else.
-	_, err := conn.Exec(ctx, "DROP TABLE organization_features;") //nolint:glint // no generated query can drop a table, and this database is a per-test clone
+	// Reject writes to the table the last write in the transaction touches.
+	// Data cannot make that write fail: EnableFeature inserts ON CONFLICT DO
+	// NOTHING, organization_features carries no foreign key, and its only CHECK
+	// is on a feature name the handler supplies as a constant. Each test holds
+	// its own database clone, dropped when the test ends, so this reaches
+	// nothing else.
+	// The source upsert now seeds its onboarding gate. Allow that initial
+	// write so the injected failure still exercises the later entitlement step.
+	err := repo.New(conn).RejectOrganizationEntitlementsFixture(ctx)
 	require.NoError(t, err)
 
 	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "rollback.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
@@ -546,7 +540,7 @@ func TestCreateOrganization_PostCommitReadFailureIsUncertain(t *testing.T) {
 	fake := newFakeWorkOS(workosOrgID)
 	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
 	// Billing is read only by the response query, not the creation transaction.
-	_, err := conn.Exec(ctx, "ALTER TABLE billing_metadata RENAME TO unavailable_billing_metadata") //nolint:glint // DDL fault injection in an isolated per-test database; SQLc cannot rename a table.
+	_, err := conn.Exec(ctx, "ALTER TABLE billing_metadata RENAME TO unavailable_billing_metadata") //nolint:glint // notestingrawsql: DDL fault injection in an isolated per-test database; SQLc cannot rename a table.
 	require.NoError(t, err)
 	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 	require.Nil(t, res)

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Transactional Email"
+  short_description: "Build, send, test, and preview branded Loops transactional emails"
+  default_prompt: "Use $transactional-email to add a Loops transactional email end to end: Go template, manifest, LMX, tests, and preview."

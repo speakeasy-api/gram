@@ -113,22 +113,34 @@ func NormalizeMCPScope(input *MCPScopeInput) (*MCPScope, error) {
 		var tools []string
 		if server.Tools != nil {
 			if len(server.Tools) == 0 {
-				return nil, fmt.Errorf("custom MCP tool selection must include at least one tool")
-			}
-			tools = make([]string, 0, len(server.Tools))
-			seenTools := make(map[string]struct{}, len(server.Tools))
-			for _, rawTool := range server.Tools {
-				tool := strings.TrimSpace(rawTool)
-				if tool == "" {
-					return nil, fmt.Errorf("MCP tool name must not be empty")
+				if len(annotations) > 0 {
+					return nil, fmt.Errorf("custom MCP tool selection must include at least one tool when the policy has a tool-annotation rule")
 				}
-				if _, ok := seenTools[tool]; ok {
-					continue
+				// An explicit empty list means "every tool on this server",
+				// same as never selecting one — not "no tools". Normalize to
+				// the wildcard sentinel rather than storing an empty slice:
+				// see AllToolsWildcard's doc comment for why a bare empty
+				// slice can't represent this durably.
+				tools = []string{AllToolsWildcard}
+			} else {
+				tools = make([]string, 0, len(server.Tools))
+				seenTools := make(map[string]struct{}, len(server.Tools))
+				for _, rawTool := range server.Tools {
+					tool := strings.TrimSpace(rawTool)
+					if tool == "" {
+						return nil, fmt.Errorf("MCP tool name must not be empty")
+					}
+					if tool == AllToolsWildcard {
+						return nil, fmt.Errorf("MCP tool name %q is reserved for matching every tool; use an empty tool list instead", AllToolsWildcard)
+					}
+					if _, ok := seenTools[tool]; ok {
+						continue
+					}
+					seenTools[tool] = struct{}{}
+					tools = append(tools, tool)
 				}
-				seenTools[tool] = struct{}{}
-				tools = append(tools, tool)
+				slices.Sort(tools)
 			}
-			slices.Sort(tools)
 		}
 		if input.AllServers && tools == nil {
 			return nil, fmt.Errorf("all-servers scope entries must contain custom tools")
@@ -148,14 +160,17 @@ func isKnownMCPToolAnnotation(annotation string) bool {
 	return slices.Contains(knownMCPToolAnnotations, annotation)
 }
 
-// ValidateMCPScopeOwnership requires every selected server or gateway to
-// belong to the policy's project.
-func ValidateMCPScopeOwnership(scope *MCPScope, projectServerIDs []uuid.UUID) error {
+// ValidateMCPScopeOwnership requires every selected target to belong to the
+// policy's project or the code-owned Platform MCP registry.
+func ValidateMCPScopeOwnership(scope *MCPScope, projectServerIDs, platformToolsetIDs []uuid.UUID) error {
 	if scope == nil {
 		return nil
 	}
-	owned := make(map[uuid.UUID]struct{}, len(projectServerIDs))
+	owned := make(map[uuid.UUID]struct{}, len(projectServerIDs)+len(platformToolsetIDs))
 	for _, id := range projectServerIDs {
+		owned[id] = struct{}{}
+	}
+	for _, id := range platformToolsetIDs {
 		owned[id] = struct{}{}
 	}
 	for _, server := range scope.Servers {
@@ -178,6 +193,18 @@ func ValidateMCPScopeSources(scope *MCPScope, sources []string) error {
 		}
 	}
 	return nil
+}
+
+// ValidateMCPScope applies the source and action constraints for policies
+// evaluated against individual MCP calls.
+func ValidateMCPScope(scope *MCPScope, sources []string, action string) error {
+	if err := ValidateMCPScopeSources(scope, sources); err != nil {
+		return err
+	}
+	if scope == nil || action == "flag" || action == "block" {
+		return nil
+	}
+	return fmt.Errorf("action %q cannot be used by an MCP-scoped policy; use flag or block", action)
 }
 
 func ValidateAction(action string) error {

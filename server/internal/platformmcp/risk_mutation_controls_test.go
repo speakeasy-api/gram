@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -441,18 +440,21 @@ func TestRiskMutationHandlerSelectionDefaultsEveryWriteToStableRefusal(t *testin
 	registrar := newRegistrar(server)
 	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	registerRiskMutationHandlers(registrar, catalog, true, &RiskMutationHandlers{})
-	for _, name := range []string{operationCreateRiskPolicy, operationUpdateRiskPolicy, operationCreateRiskExclusion, operationUpdateRiskExclusion} {
+	for _, name := range []string{operationCreateRiskPolicy, operationUpdateRiskPolicy, operationCreateRiskExclusion, operationUpdateRiskExclusion, operationMarkRiskFindingsFalsePositive, operationUnmarkRiskFindingsFalsePositive} {
 		require.Contains(t, descriptorByName(t, registrar, name).Description, "not enabled")
 	}
 	arguments := map[string]json.RawMessage{
-		"create_risk_policy":    json.RawMessage(`{"project_slug":"default","policy_type":"standard","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key"}`),
-		"update_risk_policy":    json.RawMessage(`{"project_slug":"default","policy_id":"11111111-1111-4111-8111-111111111111","expected_version":"version","idempotency_key":"key","patch":{"enabled":true}}`),
-		"create_risk_exclusion": json.RawMessage(`{"project_slug":"default","match_type":"source","match_value":"gitleaks","enabled":true,"idempotency_key":"key"}`),
-		"update_risk_exclusion": json.RawMessage(`{"project_slug":"default","exclusion_id":"11111111-1111-4111-8111-111111111111","enabled":true,"expected_version":"version","idempotency_key":"key"}`),
+		"create_risk_policy":                     json.RawMessage(`{"project_slug":"default","policy_type":"standard","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key"}`),
+		"update_risk_policy":                     json.RawMessage(`{"project_slug":"default","policy_id":"11111111-1111-4111-8111-111111111111","expected_version":"version","idempotency_key":"key","patch":{"enabled":true}}`),
+		"create_risk_exclusion":                  json.RawMessage(`{"project_slug":"default","match_type":"source","match_value":"gitleaks","enabled":true,"idempotency_key":"key"}`),
+		"update_risk_exclusion":                  json.RawMessage(`{"project_slug":"default","exclusion_id":"11111111-1111-4111-8111-111111111111","enabled":true,"expected_version":"version","idempotency_key":"key"}`),
+		operationMarkRiskFindingsFalsePositive:   json.RawMessage(`{"project_slug":"default","finding_ids":["11111111-1111-4111-8111-111111111111"],"confirmed":true,"idempotency_key":"key"}`),
+		operationUnmarkRiskFindingsFalsePositive: json.RawMessage(`{"project_slug":"default","finding_ids":["11111111-1111-4111-8111-111111111111"],"confirmed":true,"idempotency_key":"key"}`),
 	}
+	require.Len(t, arguments, 6, "every risk write must be exercised against its stub")
 	for _, descriptor := range registrar.Descriptors() {
 		input, ok := arguments[descriptor.Name]
-		if !ok || (!strings.HasPrefix(descriptor.Name, "create_risk_") && !strings.HasPrefix(descriptor.Name, "update_risk_")) {
+		if !ok {
 			continue
 		}
 		_, err := descriptor.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), input)

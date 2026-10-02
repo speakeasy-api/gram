@@ -25,15 +25,24 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// JWTAuthenticator validates Platform MCP access tokens. A token is accepted
+// only on the platform origin it was minted for: its issuer and audience must
+// equal the resource of the origin the request arrived on (RFC 8707), so a
+// token minted on one platform host is rejected on another.
 type JWTAuthenticator struct {
 	signer      *sessiontokens.Signer
 	store       *platformrepo.Queries
 	credentials *CredentialCodec
-	issuer      string
-	audience    string
+
+	// baseURL is the configured server URL, whose resource applies to
+	// requests that carry no platform origin.
+	baseURL *url.URL
 }
 
-func NewJWTAuthenticator(signer *sessiontokens.Signer, db *pgxpool.Pool, encryptionClient *encryption.Client, issuer, audience string) (*JWTAuthenticator, error) {
+func NewJWTAuthenticator(signer *sessiontokens.Signer, db *pgxpool.Pool, encryptionClient *encryption.Client, baseURL *url.URL) (*JWTAuthenticator, error) {
+	if baseURL == nil || baseURL.Scheme == "" || baseURL.Host == "" {
+		return nil, errors.New("platform MCP authenticator requires a base URL")
+	}
 	credentials, err := NewCredentialCodec(encryptionClient)
 	if err != nil {
 		return nil, fmt.Errorf("create platform MCP credential codec: %w", err)
@@ -42,18 +51,18 @@ func NewJWTAuthenticator(signer *sessiontokens.Signer, db *pgxpool.Pool, encrypt
 		signer:      signer,
 		store:       platformrepo.New(db),
 		credentials: credentials,
-		issuer:      issuer,
-		audience:    audience,
+		baseURL:     baseURL,
 	}, nil
 }
 
 func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Principal, error) {
-	if a.signer == nil || a.store == nil || a.credentials == nil || a.issuer == "" || a.audience == "" {
+	if a.signer == nil || a.store == nil || a.credentials == nil || a.baseURL == nil {
 		return Principal{}, ErrUnavailable
 	}
 
-	claims, err := a.signer.ValidateExactAudience(token, a.audience)
-	if err != nil || claims.Issuer != a.issuer {
+	resource := platformResource(platformBaseURL(ctx, a.baseURL))
+	claims, err := a.signer.ValidateExactAudience(token, resource)
+	if err != nil || claims.Issuer != resource {
 		return Principal{}, ErrUnauthorized
 	}
 	subject, err := urn.ParseSessionSubject(claims.Subject)
@@ -90,6 +99,7 @@ type LiveOrgAdminAuthorizer struct {
 	db           *pgxpool.Pool
 	engine       *authz.Engine
 	dashboardURL *url.URL
+	serverURL    *url.URL
 }
 
 func jwtAuthenticationStoreError(err error) error {
@@ -100,13 +110,23 @@ func jwtAuthenticationStoreError(err error) error {
 }
 
 func NewLiveOrgAdminAuthorizer(db *pgxpool.Pool, engine *authz.Engine) *LiveOrgAdminAuthorizer {
-	return &LiveOrgAdminAuthorizer{db: db, engine: engine, dashboardURL: nil}
+	return &LiveOrgAdminAuthorizer{db: db, engine: engine, dashboardURL: nil, serverURL: nil}
 }
 
 func (a *LiveOrgAdminAuthorizer) WithDashboardURL(dashboardURL *url.URL) *LiveOrgAdminAuthorizer {
 	if a != nil && validDashboardURL(dashboardURL) {
 		copyURL := *dashboardURL
 		a.dashboardURL = &copyURL
+	}
+	return a
+}
+
+// WithServerURL sets the configured server URL, which tells an extra platform
+// host apart from the canonical one when building request-access links.
+func (a *LiveOrgAdminAuthorizer) WithServerURL(serverURL *url.URL) *LiveOrgAdminAuthorizer {
+	if a != nil && serverURL != nil && serverURL.Host != "" {
+		copyURL := *serverURL
+		a.serverURL = &copyURL
 	}
 	return a
 }
@@ -332,48 +352,60 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
-	logger              *slog.Logger
-	db                  *pgxpool.Pool
-	reader              *readmodel.Reader
-	inventory           *platformrepo.Queries
-	inventoryCursor     *inventoryCursorCodec
-	metadataVersionKey  []byte
-	riskReads           *RiskReadService
-	riskAnalysisStatus  *RiskAnalysisStatusService
-	riskFindings        riskFindingsLister
-	dataExports         *DataExportReadService
-	dataExportMutations *dataExportMutationService
-	recentToolCalls     *RecentToolCallReadService
-	eventFeed           *EventFeedReadService
-	authz               *authz.Engine
-	shadowInventory     *ShadowInventoryService
-	shadowDecisions     *ShadowDecisionService
-	shadowAI            *ShadowAIService
-	reviewRequests      MCPReviewRequestService
-	reviewRequestBudget OperationBudget
+	xaaReadiness              *xaaReadinessService
+	logger                    *slog.Logger
+	db                        *pgxpool.Pool
+	reader                    *readmodel.Reader
+	inventory                 *platformrepo.Queries
+	inventoryCursor           *inventoryCursorCodec
+	metadataVersionKey        []byte
+	riskReads                 *RiskReadService
+	riskAnalysisStatus        *RiskAnalysisStatusService
+	riskFindings              riskFindingsLister
+	riskFindingList           riskFindingListLister
+	chatMetadata              *ChatMetadataService
+	dataExports               *DataExportReadService
+	dataExportMutations       *dataExportMutationService
+	recentToolCalls           *RecentToolCallReadService
+	networkTraffic            MCPNetworkTrafficReader
+	networkTrafficLogsEnabled FeatureChecker
+	eventFeed                 *EventFeedReadService
+	networkIngress            *NetworkIngressStatusService
+	authz                     *authz.Engine
+	shadowInventory           *ShadowInventoryService
+	shadowDecisions           *ShadowDecisionService
+	shadowAI                  *ShadowAIService
+	reviewRequests            MCPReviewRequestService
+	reviewRequestBudget       OperationBudget
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 	return &PostgresReader{
-		logger:              logger.With(attr.SlogComponent("platformmcp")),
-		db:                  db,
-		reader:              readmodel.New(db),
-		inventory:           platformrepo.New(db),
-		inventoryCursor:     nil,
-		metadataVersionKey:  nil,
-		riskReads:           nil,
-		riskAnalysisStatus:  nil,
-		riskFindings:        nil,
-		dataExports:         nil,
-		dataExportMutations: nil,
-		recentToolCalls:     nil,
-		eventFeed:           nil,
-		authz:               nil,
-		shadowInventory:     nil,
-		shadowDecisions:     nil,
-		shadowAI:            nil,
-		reviewRequests:      nil,
-		reviewRequestBudget: OperationBudget{Connection: nil, Organization: nil},
+		logger:                    logger.With(attr.SlogComponent("platformmcp")),
+		db:                        db,
+		reader:                    readmodel.New(db),
+		inventory:                 platformrepo.New(db),
+		inventoryCursor:           nil,
+		metadataVersionKey:        nil,
+		riskReads:                 nil,
+		riskAnalysisStatus:        nil,
+		riskFindings:              nil,
+		riskFindingList:           nil,
+		chatMetadata:              nil,
+		dataExports:               nil,
+		dataExportMutations:       nil,
+		recentToolCalls:           nil,
+		networkTraffic:            nil,
+		networkTrafficLogsEnabled: nil,
+		eventFeed:                 nil,
+		networkIngress:            nil,
+		xaaReadiness:              nil,
+		authz:                     nil,
+		shadowInventory:           nil,
+		shadowDecisions:           nil,
+		shadowAI:                  nil,
+		reviewRequests:            nil,
+		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
 	}
 }
 
@@ -388,6 +420,38 @@ func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader
 // needs no admin or MCP-specific grant, but the explicit project must be one the
 // member may read. A failed organization or project boundary is deliberately
 // indistinguishable from a missing project.
+// pluginNamesVisible reports whether this caller may see plugin names and slugs
+// on an MCP's memberships. list_plugins shows a member only the plugins
+// assigned to them, so naming every plugin that carries a server would let a
+// member read past that boundary through the inventory instead.
+func (r *PostgresReader) pluginNamesVisible(ctx context.Context, principal Principal) bool {
+	if r.authz == nil || principal.OrganizationID == "" {
+		return false
+	}
+	// FindMatched asks which checks pass; Require asserts that they must. Asking
+	// records the org:admin check as a filter, where Require would record every
+	// ordinary member read as a denied requirement.
+	matched, err := r.authz.FindMatched(ctx, []authz.Check{{
+		Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil,
+	}})
+	if err != nil || len(matched) == 0 {
+		return false
+	}
+	return matched[0]
+}
+
+// redactPluginNames strips the human-readable plugin fields, leaving the
+// opaque id the inventory already exposed.
+func redactPluginNames(byMCPServer map[uuid.UUID][]MCPDistribution) {
+	for id, memberships := range byMCPServer {
+		for i := range memberships {
+			memberships[i].PluginName = ""
+			memberships[i].PluginSlug = ""
+		}
+		byMCPServer[id] = memberships
+	}
+}
+
 func (r *PostgresReader) ResolveReviewProject(ctx context.Context, principal Principal, rawProjectID string) (ResolvedProject, error) {
 	if r == nil || r.reader == nil || r.authz == nil || principal.OrganizationID == "" {
 		return ResolvedProject{}, ErrUnavailable
@@ -448,6 +512,25 @@ func (r *PostgresReader) WithRiskAnalysisStatus(service *RiskAnalysisStatusServi
 func (r *PostgresReader) WithRiskFindings(service *RiskFindingsService, budget OperationBudget) *PostgresReader {
 	if r != nil && service.valid() {
 		r.riskFindings = &budgetedRiskFindings{service: service, budget: budget}
+	}
+	return r
+}
+
+// WithRiskFindingList attaches the per-finding reads behind the same required
+// row-level budget as the Watchdog alerts. A missing budget leaves the tools
+// served as stubs.
+func (r *PostgresReader) WithRiskFindingList(service *RiskFindingListService, budget OperationBudget) *PostgresReader {
+	if r != nil && service.valid() {
+		r.riskFindingList = &budgetedRiskFindingList{service: service, budget: budget}
+	}
+	return r
+}
+
+// WithChatMetadata attaches the metadata-only chat listing. A nil or
+// incomplete service leaves list_chats served as a stub.
+func (r *PostgresReader) WithChatMetadata(service *ChatMetadataService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.chatMetadata = service
 	}
 	return r
 }
@@ -590,22 +673,25 @@ func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input
 		r.logger.ErrorContext(ctx, "list platform MCP inventory", attr.SlogError(err))
 		return FindMCPOutput{}, fmt.Errorf("%w: inventory could not be read", ErrUnavailable)
 	}
-	registrationIDs := inventoryRegistrationIDs(rows)
-	byRegistration := map[uuid.UUID][]MCPDistribution{}
-	if len(registrationIDs) > 0 {
-		distributions, err := r.inventory.ListPlatformMCPInventoryDistributions(ctx, platformrepo.ListPlatformMCPInventoryDistributionsParams{
+	mcpServerIDs := inventoryMCPServerIDs(rows)
+	byMCPServer := map[uuid.UUID][]MCPDistribution{}
+	if len(mcpServerIDs) > 0 {
+		memberships, err := r.inventory.ListPlatformMCPInventoryPluginMemberships(ctx, platformrepo.ListPlatformMCPInventoryPluginMembershipsParams{
 			OrganizationID: principal.OrganizationID,
-			ProjectID:      projectID, RegistrationIds: registrationIDs,
+			ProjectID:      projectID, McpServerIds: mcpServerIDs,
 		})
 		if err != nil {
-			r.logger.ErrorContext(ctx, "list platform MCP inventory distributions", attr.SlogError(err))
+			r.logger.ErrorContext(ctx, "list platform MCP inventory plugin memberships", attr.SlogError(err))
 			return FindMCPOutput{}, fmt.Errorf("%w: inventory could not be read", ErrUnavailable)
 		}
-		byRegistration = inventoryDistributions(distributions)
+		byMCPServer = inventoryDistributions(memberships)
+		if !r.pluginNamesVisible(ctx, principal) {
+			redactPluginNames(byMCPServer)
+		}
 	}
 	mcps := make([]MCP, 0, len(rows))
 	for _, row := range rows {
-		mcp := mcpFromInventoryRow(row, byRegistration)
+		mcp := mcpFromInventoryRow(row, byMCPServer)
 		r.setInventoryVersion(&mcp)
 		mcps = append(mcps, mcp)
 	}
@@ -648,7 +734,7 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 		}
 		return MCP{}, err
 	}
-	return r.getMCPInventory(ctx, principal, projectID, mcpID)
+	return r.getMCPInventory(ctx, principal, projectID, mcpID, true)
 }
 
 // GetMCPForDiagnostics reads one MCP after project:read has been enforced. The
@@ -664,10 +750,14 @@ func (r *PostgresReader) GetMCPForDiagnostics(ctx context.Context, principal Pri
 	if err != nil {
 		return MCP{}, fmt.Errorf("parse mcp id: %w", err)
 	}
-	return r.getMCPInventory(ctx, principal, project.ID, mcpID)
+	return r.getMCPInventory(ctx, principal, project.ID, mcpID, false)
 }
 
-func (r *PostgresReader) getMCPInventory(ctx context.Context, principal Principal, projectID, mcpID uuid.UUID) (MCP, error) {
+// getMCPInventory reads one MCP. withPluginMembership stays false for callers
+// admitted on project-read alone: which plugins carry a server is inventory
+// detail, and a caller who has not cleared the MCP-read boundary has no claim
+// on it.
+func (r *PostgresReader) getMCPInventory(ctx context.Context, principal Principal, projectID, mcpID uuid.UUID, withPluginMembership bool) (MCP, error) {
 	if r == nil || r.inventory == nil {
 		return MCP{}, ErrUnavailable
 	}
@@ -687,19 +777,22 @@ func (r *PostgresReader) getMCPInventory(ctx context.Context, principal Principa
 	if err != nil {
 		return MCP{}, fmt.Errorf("get platform MCP inventory item: %w", err)
 	}
-	byRegistration := map[uuid.UUID][]MCPDistribution{}
-	if row.RegistrationID != uuid.Nil {
-		distributions, err := r.inventory.ListPlatformMCPInventoryDistributions(ctx, platformrepo.ListPlatformMCPInventoryDistributionsParams{
-			OrganizationID:  principal.OrganizationID,
-			ProjectID:       uuid.NullUUID{UUID: projectID, Valid: true},
-			RegistrationIds: []uuid.UUID{row.RegistrationID},
+	byMCPServer := map[uuid.UUID][]MCPDistribution{}
+	if withPluginMembership && row.McpServerID != uuid.Nil {
+		memberships, err := r.inventory.ListPlatformMCPInventoryPluginMemberships(ctx, platformrepo.ListPlatformMCPInventoryPluginMembershipsParams{
+			OrganizationID: principal.OrganizationID,
+			ProjectID:      uuid.NullUUID{UUID: projectID, Valid: true},
+			McpServerIds:   []uuid.UUID{row.McpServerID},
 		})
 		if err != nil {
-			return MCP{}, fmt.Errorf("list platform MCP inventory distributions: %w", err)
+			return MCP{}, fmt.Errorf("list platform MCP inventory plugin memberships: %w", err)
 		}
-		byRegistration = inventoryDistributions(distributions)
+		byMCPServer = inventoryDistributions(memberships)
+		if !r.pluginNamesVisible(ctx, principal) {
+			redactPluginNames(byMCPServer)
+		}
 	}
-	mcp := mcpFromInventoryItem(row, byRegistration)
+	mcp := mcpFromInventoryItem(row, byMCPServer)
 	r.setInventoryVersion(&mcp)
 	return mcp, nil
 }

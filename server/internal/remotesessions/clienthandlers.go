@@ -122,6 +122,27 @@ func lockUserSessionIssuersForClientBinding(
 	organizationID string,
 	userIssuerIDs []uuid.UUID,
 ) error {
+	err := lockUserSessionIssuers(ctx, dbtx, txRepo, projectID, organizationID, userIssuerIDs)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock user session issuers for client binding").LogError(ctx, logger)
+	}
+	return nil
+}
+
+// lockUserSessionIssuers is lockUserSessionIssuersForClientBinding without the
+// oops mapping. A user session issuer outside the tenant, or deleted before or
+// while its lock was taken, is reported as a wrapped pgx.ErrNoRows.
+func lockUserSessionIssuers(
+	ctx context.Context,
+	dbtx pgx.Tx,
+	txRepo *repo.Queries,
+	projectID uuid.UUID,
+	organizationID string,
+	userIssuerIDs []uuid.UUID,
+) error {
 	params := make([]repo.GetUserSessionIssuerForProjectParams, 0, len(userIssuerIDs))
 	for _, userIssuerID := range userIssuerIDs {
 		param := repo.GetUserSessionIssuerForProjectParams{
@@ -130,10 +151,7 @@ func lockUserSessionIssuersForClientBinding(
 			OrganizationID: organizationID,
 		}
 		if _, err := txRepo.GetUserSessionIssuerForProject(ctx, param); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
-			}
-			return oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
+			return fmt.Errorf("get user session issuer: %w", err)
 		}
 		params = append(params, param)
 	}
@@ -141,13 +159,10 @@ func lockUserSessionIssuersForClientBinding(
 	userSessionRepo := usersessionsrepo.New(dbtx)
 	for _, param := range params {
 		if err := userSessionRepo.LockUserSessionIssuerForOwnerBinding(ctx, param.ID); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "lock user session issuer for client binding").LogError(ctx, logger)
+			return fmt.Errorf("lock user session issuer for client binding: %w", err)
 		}
 		if _, err := txRepo.GetUserSessionIssuerForProject(ctx, param); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
-			}
-			return oops.E(oops.CodeUnexpected, err, "recheck user session issuer").LogError(ctx, logger)
+			return fmt.Errorf("recheck user session issuer: %w", err)
 		}
 	}
 
@@ -440,6 +455,10 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
 	}
 
+	if payload.LegacyCallbackURL != nil && !authCtx.IsAdmin {
+		return nil, oops.E(oops.CodeForbidden, nil, "changing a client's legacy callback mode requires a platform admin").LogError(ctx, logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -506,6 +525,7 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
 		Scope:                           payload.Scope,
 		Audience:                        conv.PtrToPGText(payload.Audience),
+		LegacyCallbackUrl:               conv.PtrToPGBool(payload.LegacyCallbackURL),
 		ID:                              clientID,
 		ProjectID:                       conv.ToNullUUID(*authCtx.ProjectID),
 	})

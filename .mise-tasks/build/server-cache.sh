@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 
 #MISE dir="{{ config_root }}/server"
-#MISE description="Warm the Go build cache for the server/worker/streams daemons"
+#MISE description="Warm the Go build cache for the server/worker/streams/admin daemons"
 #MISE hide=true
+
+#USAGE flag "--out <file>" help="Also write the cached executable to this path" default="/dev/null"
 
 set -e
 
-# `start:server`, `start:worker` and `start:streams` are the SAME Go program --
-# `main.go` with a different subcommand -- and pitchfork launches all three at
-# once. On a cold cache that means three concurrent copies of one compile+link,
+# `start:server`, `start:worker`, `start:streams` and `start:admin` are the SAME
+# Go program -- `main.go` with a different subcommand -- launched concurrently
+# by pitchfork. On a cold cache that means concurrent copies of one compile+link,
 # each racing the others for cores: ~75s before any of them serves a request,
 # and the boot cannot proceed to seeding until they do.
 #
@@ -17,12 +19,12 @@ set -e
 # overlaps the Docker infra start and the migrations, which are IO-bound and
 # leave the CPU idle -- so it is close to free in wall-clock terms.
 #
-# The ldflags MUST stay byte-identical to the three start tasks: they feed the
-# link step's cache key, so any drift silently reintroduces the cold link.
-# -o /dev/null because only the cache entry is wanted, not the binary.
-GIT_SHA=$(git rev-parse HEAD)
-
-go build \
-    -ldflags="-X github.com/speakeasy-api/gram/server/cmd/gram.GitSHA=${GIT_SHA} -X goa.design/clue/health.Version=${GIT_SHA}" \
-    -o /dev/null \
-    ./main.go
+# The build flags MUST match the start tasks: they feed the compilation and
+# link cache keys, so any drift silently reintroduces cold builds.
+# go run omits debug information differently from go build. Use its build mode
+# and replace execution with true (warm only) or cp (export for local wrappers).
+if [ "${usage_out:-/dev/null}" = /dev/null ]; then
+    go run -exec true main.go
+else
+    go run -exec cp main.go "$usage_out"
+fi

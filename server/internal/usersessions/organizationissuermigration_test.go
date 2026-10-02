@@ -194,14 +194,14 @@ func TestOrganizationUserSessionIssuerMoveLocksTargetProject(t *testing.T) {
 		_, moveIssuerErr := ti.service.MoveIssuer(ctx, &orggen.MoveIssuerPayload{ID: issuer.ID, ProjectID: &target})
 		moveErr <- moveIssuerErr
 	}()
-	testenv.WaitForBlockedBackend(t, ctx, ti.conn)
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(clientLock), 1)
 
 	deleteErr := make(chan error, 1)
 	go func() {
 		_, deleteProjectErr := projectsrepo.New(ti.conn).DeleteProject(ctx, targetProjectID)
 		deleteErr <- deleteProjectErr
 	}()
-	require.Never(t, func() bool { return len(deleteErr) > 0 }, 250*time.Millisecond, 10*time.Millisecond, "target deletion must wait for the move transaction")
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(clientLock), 2)
 	require.NoError(t, clientLock.Commit(ctx))
 	require.Eventually(t, func() bool { return len(moveErr) > 0 }, 2*time.Second, 10*time.Millisecond)
 	require.NoError(t, <-moveErr)
@@ -652,7 +652,7 @@ func TestOrganizationUserSessionIssuerMigrateRejectsStaleClientRegistration(t *t
 		_, migrateIssuerErr := ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: target.ID, ConfirmedWarningsFingerprint: &preflight.WarningsFingerprint})
 		migrateErr <- migrateIssuerErr
 	}()
-	testenv.WaitForBlockedBackend(t, ctx, ti.conn)
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(clientLock), 1)
 
 	// The late registration already resolved the source issuer as live.
 	registerErr := make(chan error, 1)
@@ -660,7 +660,7 @@ func TestOrganizationUserSessionIssuerMigrateRejectsStaleClientRegistration(t *t
 		_, seedErr := seedUserSessionClient(t, ctx, ti.conn, sourceID, "stale-registration-late")
 		registerErr <- seedErr
 	}()
-	require.Never(t, func() bool { return len(registerErr) > 0 }, 250*time.Millisecond, 10*time.Millisecond, "registration must wait behind the migration's issuer lock")
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(clientLock), 2)
 
 	require.NoError(t, clientLock.Commit(ctx))
 	require.Eventually(t, func() bool { return len(migrateErr) > 0 }, 5*time.Second, 10*time.Millisecond)

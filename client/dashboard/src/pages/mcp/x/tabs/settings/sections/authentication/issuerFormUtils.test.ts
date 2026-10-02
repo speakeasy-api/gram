@@ -1,10 +1,42 @@
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod as AuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  availableClientTypes,
   clientSecretUpdateValue,
   dynamicClientRegistrationAvailability,
+  legacyCallbackURL,
+  remoteLoginCallbackURL,
 } from "./issuerFormUtils";
+
+const server = vi.hoisted(() => ({ url: "https://app.example.com" }));
+
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  getServerURL: () => server.url,
+}));
+
+afterEach(() => {
+  server.url = "https://app.example.com";
+});
+
+describe("callback URLs", () => {
+  it("appends the callback paths to the server URL", () => {
+    expect(remoteLoginCallbackURL()).toBe(
+      "https://app.example.com/mcp/remote_login_callback",
+    );
+    expect(legacyCallbackURL()).toBe("https://app.example.com/oauth/callback");
+  });
+
+  it("drops a trailing slash the way the server does", () => {
+    server.url = "https://app.example.com/";
+
+    expect(remoteLoginCallbackURL()).toBe(
+      "https://app.example.com/mcp/remote_login_callback",
+    );
+    expect(legacyCallbackURL()).toBe("https://app.example.com/oauth/callback");
+  });
+});
 
 describe("clientSecretUpdateValue", () => {
   it("does not rotate an unsaved secret for private_key_jwt", () => {
@@ -52,5 +84,28 @@ describe("dynamicClientRegistrationAvailability", () => {
         isPlatformAdmin: true,
       }),
     ).toEqual({ available: true, permissionRestricted: false });
+  });
+});
+
+describe("availableClientTypes", () => {
+  it.each([
+    {
+      capabilities: { cimdAvailable: true, dcrAvailable: true },
+      expected: ["cimd", "dcr", "manual"],
+    },
+    {
+      capabilities: { cimdAvailable: true, dcrAvailable: false },
+      expected: ["cimd", "manual"],
+    },
+    {
+      capabilities: { cimdAvailable: false, dcrAvailable: true },
+      expected: ["dcr", "manual"],
+    },
+    {
+      capabilities: { cimdAvailable: false, dcrAvailable: false },
+      expected: ["manual"],
+    },
+  ])("orders $expected for $capabilities", ({ capabilities, expected }) => {
+    expect(availableClientTypes(capabilities)).toEqual(expected);
   });
 });

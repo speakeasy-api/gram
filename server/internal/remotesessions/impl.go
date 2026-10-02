@@ -65,6 +65,7 @@ type Service struct {
 	tunnels      *tunnelrouting.HTTPClient
 	auditLogger  *audit.Logger
 	serverURL    *url.URL
+	identity     *IdentityCommitter
 	refresher    *RefreshService
 	revoker      *UpstreamRevoker
 	jwksResolver *jwks.Resolver
@@ -98,7 +99,7 @@ var (
 	_ adminrsgen.Auther      = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, auditLogger *audit.Logger, serverURL *url.URL, refresher *RefreshService, productFeatures *productfeatures.Client) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, auditLogger *audit.Logger, serverURL *url.URL, identity *IdentityCommitter, refresher *RefreshService, productFeatures *productfeatures.Client) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
 	revoker := NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy, tunnels, refresher.assertions)
 	registrationTelemetry := registration.NewMetrics(logger, meterProvider)
@@ -117,6 +118,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		tunnels:           tunnels,
 		auditLogger:       auditLogger,
 		serverURL:         serverURL,
+		identity:          identity,
 		refresher:         refresher,
 		jwksResolver:      jwks.NewResolver(policy, meterProvider, logger),
 		revoker:           revoker,

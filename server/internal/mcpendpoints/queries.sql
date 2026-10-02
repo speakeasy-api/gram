@@ -106,6 +106,16 @@ WHERE e.custom_domain_id = @custom_domain_id::uuid
   AND e.deleted IS FALSE
 ORDER BY p.slug, e.slug;
 
+-- name: UpdateMCPEndpointAddress :one
+UPDATE mcp_endpoints
+SET
+    custom_domain_id = @custom_domain_id,
+    slug = @slug,
+    is_domain_root = @is_domain_root,
+    updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;
+
 -- name: UpdateMCPEndpoint :one
 UPDATE mcp_endpoints
 SET

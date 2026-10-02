@@ -391,6 +391,33 @@ WHERE du.organization_id = @organization_id
 GROUP BY attribute.key, attribute.value
 ORDER BY attribute.key, attribute.value;
 
+-- name: ListMappableDirectoryAttributeValues :many
+-- Attribute values an admin can map to a role. Keys with more than
+-- @max_values_per_key distinct values are left out: those hold per-person
+-- data (emails, employee ids) that is no use as a mapping source.
+SELECT attribute_key, attribute_value, member_count
+FROM (
+  SELECT
+    attribute.key::text AS attribute_key,
+    attribute.value::text AS attribute_value,
+    COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))::bigint AS member_count,
+    COUNT(*) OVER (PARTITION BY attribute.key) AS values_per_key
+  FROM directory_users AS du
+  CROSS JOIN LATERAL jsonb_each_text(
+    CASE jsonb_typeof(du.attributes)
+      WHEN 'object' THEN du.attributes
+      ELSE '{}'::jsonb
+    END
+  ) AS attribute(key, value)
+  WHERE du.organization_id = @organization_id
+    AND du.deleted IS FALSE
+    AND du.workos_deleted IS FALSE
+    AND attribute.value IS NOT NULL
+  GROUP BY attribute.key, attribute.value
+) AS attribute_values
+WHERE values_per_key <= sqlc.arg(max_values_per_key)::bigint
+ORDER BY attribute_key, attribute_value;
+
 -- name: ClearOrganizationDirectoryUserLinksFixture :exec
 -- Test fixture: exercise email fallback without a direct Gram user link.
 UPDATE directory_users SET user_id = NULL WHERE organization_id = @organization_id;
@@ -404,3 +431,33 @@ WHERE organization_id = @organization_id;
 
 -- name: DeleteOrganizationDirectoryUsersFixture :exec
 DELETE FROM directory_users WHERE organization_id = @organization_id;
+
+-- name: UpsertListedDirectoryGroup :execrows
+-- Saves a group read from a live WorkOS listing. Events stay the source of
+-- truth: this never restores a group an event deleted, never overwrites a row
+-- with an older snapshot, and leaves the event cursor untouched.
+INSERT INTO directory_groups (
+  organization_id,
+  workos_directory_group_id,
+  name,
+  attributes,
+  workos_created_at,
+  workos_updated_at
+)
+VALUES (
+  @organization_id,
+  @workos_directory_group_id,
+  @name,
+  @attributes,
+  @workos_created_at,
+  @workos_updated_at
+)
+ON CONFLICT (workos_directory_group_id) DO UPDATE SET
+  name = EXCLUDED.name,
+  attributes = EXCLUDED.attributes,
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  updated_at = clock_timestamp()
+WHERE directory_groups.organization_id = EXCLUDED.organization_id
+  AND directory_groups.deleted IS FALSE
+  AND directory_groups.workos_deleted IS FALSE
+  AND directory_groups.workos_updated_at < EXCLUDED.workos_updated_at;

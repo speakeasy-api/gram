@@ -10,7 +10,7 @@ import (
 func TestAccessRoleMutationToolsAreStableExternalOnlyMutations(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	for _, name := range []string{operationCreateMCPAccessRole, operationUpdateMCPAccessRole, operationAssignMCPAccessRole} {
 		descriptor := descriptorByName(t, registrar, name)
 		require.Equal(t, externalOnly, descriptor.Meta.Audiences)

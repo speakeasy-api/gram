@@ -15,12 +15,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/speakeasy-api/gram/server/internal/adminmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
 var staffGrantTypes = []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}
-var staffAuthMethods = []string{oauthwire.AuthMethodClientSecretBasic}
+
+// staffAuthMethods covers confidential clients (HTTP Basic) and public PKCE
+// clients such as desktop MCP apps. A client's stored secret decides which
+// one the token endpoint enforces, so a confidential client cannot downgrade.
+var staffAuthMethods = []string{oauthwire.AuthMethodClientSecretBasic, oauthwire.AuthMethodNone}
 
 type staffOAuthClient struct {
 	ID              string
@@ -41,10 +46,12 @@ func (s postgresStaffClientStore) RegisterClient(ctx context.Context, client sta
 	if s.db == nil {
 		return errors.New("staff client store is unavailable")
 	}
-	_, err := s.db.Exec(ctx, `
-INSERT INTO admin_mcp_oauth_clients (client_id, client_name, client_secret_hash, redirect_uris)
-VALUES ($1, $2, NULLIF($3, ''), $4)
-`, client.ID, client.Name, client.SecretHash, client.RedirectURIs)
+	err := repo.New(s.db).RegisterOAuthClient(ctx, repo.RegisterOAuthClientParams{
+		ClientID:         client.ID,
+		ClientName:       client.Name,
+		ClientSecretHash: client.SecretHash,
+		RedirectUris:     client.RedirectURIs,
+	})
 	if err != nil {
 		return fmt.Errorf("register staff MCP client: %w", err)
 	}
@@ -55,23 +62,20 @@ func (s postgresStaffClientStore) GetClient(ctx context.Context, clientID string
 	if s.db == nil {
 		return staffOAuthClient{}, errors.New("staff client store is unavailable")
 	}
-	var client staffOAuthClient
-	var secretHash *string
-	err := s.db.QueryRow(ctx, `
-SELECT client_id, client_name, client_secret_hash, redirect_uris, client_secret_expires_at
-FROM admin_mcp_oauth_clients
-WHERE client_id = $1 AND revoked_at IS NULL
-`, clientID).Scan(&client.ID, &client.Name, &secretHash, &client.RedirectURIs, &client.SecretExpiresAt)
+	row, err := repo.New(s.db).GetLiveOAuthClient(ctx, clientID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return staffOAuthClient{}, fmt.Errorf("staff MCP client not found: %w", err)
 		}
 		return staffOAuthClient{}, fmt.Errorf("lookup staff MCP client: %w", err)
 	}
-	if secretHash != nil {
-		client.SecretHash = *secretHash
-	}
-	return client, nil
+	return staffOAuthClient{
+		ID:              row.ClientID,
+		Name:            row.ClientName,
+		SecretHash:      row.ClientSecretHash.String,
+		RedirectURIs:    row.RedirectUris,
+		SecretExpiresAt: optionalTime(row.ClientSecretExpiresAt),
+	}, nil
 }
 
 // StaffOAuthClients owns the registration endpoint; mounting it remains a separate decision.
@@ -124,17 +128,21 @@ func (s *StaffOAuthClients) RegisterHandler() http.Handler {
 			return
 		}
 		client := staffOAuthClient{ID: "client_" + uuid.NewString(), Name: request.ClientName, RedirectURIs: request.RedirectURIs, SecretHash: "", SecretExpiresAt: nil}
-		secret, err := staffOpaqueToken()
-		if err != nil {
-			staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not register client")
-			return
+		var secret string
+		if request.TokenEndpointAuthMethod != oauthwire.AuthMethodNone {
+			secret, err = staffOpaqueToken()
+			if err != nil {
+				staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not register client")
+				return
+			}
+			var hash []byte
+			hash, err = bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
+			if err != nil {
+				staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not register client")
+				return
+			}
+			client.SecretHash = string(hash)
 		}
-		hash, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
-		if err != nil {
-			staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not register client")
-			return
-		}
-		client.SecretHash = string(hash)
 		if err := s.store.RegisterClient(r.Context(), client); err != nil {
 			staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not register client")
 			return

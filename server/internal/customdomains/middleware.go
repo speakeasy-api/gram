@@ -3,6 +3,7 @@ package customdomains
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -18,7 +19,39 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/wide"
 )
 
-func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *url.URL) func(next http.Handler) http.Handler {
+// ParsePlatformHosts validates the first-party hosts (GRAM_PLATFORM_HOSTS) and
+// maps each canonical host to the base URL rendered for requests on it. The
+// server URL's own host is always first-party; if listed, it keeps the server
+// URL as its base URL. An empty value (GRAM_PLATFORM_HOSTS="", which the flag
+// parser yields as one empty entry) means none; an empty entry in a longer
+// list is a malformed value and fails.
+func ParsePlatformHosts(rawHosts []string) (map[string]string, error) {
+	if len(rawHosts) == 1 && strings.TrimSpace(rawHosts[0]) == "" {
+		rawHosts = nil
+	}
+	hosts := make(map[string]string, len(rawHosts))
+	for _, raw := range rawHosts {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			return nil, errors.New("platform host must not be empty")
+		}
+		host, err := requestorigin.CanonicalHost(raw)
+		if err != nil {
+			return nil, fmt.Errorf("platform host %q: %w", raw, err)
+		}
+		baseURL, err := requestorigin.HTTPSBaseURL(host)
+		if err != nil {
+			return nil, fmt.Errorf("platform host %q: %w", raw, err)
+		}
+		hosts[host] = baseURL
+	}
+	return hosts, nil
+}
+
+// Middleware classifies each request by host: the server URL's host and the
+// extra platformHosts (from ParsePlatformHosts) are first-party, and every
+// other host must be an active custom domain.
+func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *url.URL, platformHosts map[string]string) func(next http.Handler) http.Handler {
 	domainsRepo := domainsRepo.New(db)
 	logger = logger.With(attr.SlogComponent("custom_domains_middleware"))
 	platformBaseURL := strings.TrimSuffix(serverURL.String(), "/")
@@ -53,10 +86,14 @@ func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *ur
 				return
 			}
 
+			hostBaseURL, isPlatform := platformHosts[host]
 			if host == platformHost {
+				hostBaseURL, isPlatform = platformBaseURL, true
+			}
+			if isPlatform {
 				ctx = requestorigin.WithContext(ctx, requestorigin.Origin{
 					Surface:          requestorigin.SurfacePlatform,
-					BaseURL:          platformBaseURL,
+					BaseURL:          hostBaseURL,
 					OrganizationID:   "",
 					NetworkIngressID: uuid.Nil,
 					NetworkIdentity:  nil,

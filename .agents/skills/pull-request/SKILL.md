@@ -33,8 +33,37 @@ Derive the PR description from the diff, commits, and user intent. Do not merely
 - `## Summary`: the concrete, reviewer-relevant changes and their scope.
 - `## Motivation`: the problem being solved and why this approach was taken.
 - If the diff touches `server/internal/background/` or starts, signals, or schedules a Temporal workflow anywhere: a `Temporal actions/month ≈ N, scales with <fixed|projects|orgs|messages|tool calls>` line, computed as described in the `gram-temporal` skill.
+- If the diff changes UI or the PR carries the `preview` label: a `## Gutternote review steps` section, as described below.
 
-Do not add a `Testing` or `Verification` section or enumerate test commands and steps. Keep each included section concise but complete. If a Linear ticket was provided, include it at the top. Otherwise, tell the user after creating the PR; if they then provide one, amend the description.
+### Gutternote review steps
+
+CI adds the `preview` label and launches a preview app when a PR that changes `.tsx` or `.css` files under `client/dashboard/` or `client/admin/` is opened or marked ready for review (see `preview-ui` in `.github/filters.yaml`). Later commits leave the label alone, so removing it by hand sticks. Reviewers open that preview and need to find the new UI without reading the diff. Write this section for any PR that matches those paths or already has the label. Skip it only when no change is visible, such as a type-only refactor, and say so in one line.
+
+Write it as numbered steps a reviewer can follow in the preview app, from the first page after login:
+
+1. **Setup**, only when needed: the feature flag, role, product feature, or data the reviewer needs first. Say how to get it, for example "enable `<flag>` for the org" or "create one MCP server first". Say whether the seeded demo data already covers it.
+2. **Navigate**: the exact click path with the visible labels, plus the route. For example: "Sidebar → **Settings** → **Slack** (`/<org>/projects/<project>/settings/slack`)". Use `<org>` and `<project>` placeholders, never real slugs.
+3. **Act**: what to click, type, or submit to exercise the change.
+4. **Expect**: what the reviewer should see when it works. Name the new or changed element, where it sits on the page, and the text it shows.
+
+Add one numbered flow per distinct user-visible change. Also list the states worth checking, such as empty, loading, error, permission denied, narrow viewport, and dark mode, but only the ones this change affects. If shared components changed, name the other pages that use them so the reviewer can spot-check for regressions.
+
+Example:
+
+```md
+## Gutternote review steps
+
+1. Sidebar → **Settings** → **Slack** (`/<org>/projects/<project>/settings/slack`).
+2. Click **Connect workspace**. The new setup sheet opens on the right with three steps.
+3. Finish the flow. The workspace card now shows a green **Connected** badge and the member count.
+
+Also check: the empty state before connecting, and the error banner when you cancel the OAuth pop-up.
+Shared change: `StatusBadge` also renders on **MCP servers** → server detail header.
+```
+
+Keep the steps concrete. "Check the settings page" is not enough; the reviewer must reach the change without guessing.
+
+Do not add a `Testing` or `Verification` section or enumerate test commands. The one exception is [Gutternote review steps](#gutternote-review-steps) for UI changes. Keep each included section concise but complete. If a Linear ticket was provided, include it at the top. Otherwise, tell the user after creating the PR; if they then provide one, amend the description.
 
 ## Public metadata hygiene
 

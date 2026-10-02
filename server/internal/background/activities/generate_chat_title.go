@@ -188,6 +188,7 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID 
 		"If the conversation is a greeting, vague, or lacks a clear topic, return exactly: " + defaultChatTitle
 
 	response, err := g.chatClient.GetCompletion(titleCtx, openrouter.CompletionRequest{
+		MaxTokens: nil,
 		OrgID:     orgID,
 		ProjectID: projectID,
 		ChatID:    uuid.Nil,

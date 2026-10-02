@@ -22,6 +22,8 @@ import {
   listOrganizationMembers,
   listOrganizationProjects,
   listOrganizations,
+  listUsers,
+  listUserOrganizations,
   listProjectMcpServers,
   omitUnset,
   type AdminInferenceKey,
@@ -378,5 +380,32 @@ export function projectQuery(
       organizationIdOrSlug ?? null,
     ] as const,
     queryFn: () => getProject(idOrSlug, organizationIdOrSlug),
+  });
+}
+
+export function usersListQuery(
+  params: Parameters<typeof listUsers>[0],
+): AdminQuery<
+  Awaited<ReturnType<typeof listUsers>>,
+  readonly ["admin", "users", Parameters<typeof listUsers>[0]]
+> {
+  return queryOptions({
+    queryKey: ["admin", "users", params] as const,
+    queryFn: ({ signal }) => listUsers(params, signal),
+  });
+}
+export function userOrganizationsListQuery(
+  params: Parameters<typeof listUserOrganizations>[0],
+): AdminQuery<
+  Awaited<ReturnType<typeof listUserOrganizations>>,
+  readonly [
+    "admin",
+    "user-organizations",
+    Parameters<typeof listUserOrganizations>[0],
+  ]
+> {
+  return queryOptions({
+    queryKey: ["admin", "user-organizations", params] as const,
+    queryFn: ({ signal }) => listUserOrganizations(params, signal),
   });
 }

@@ -11,6 +11,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -103,8 +105,7 @@ func TestOwnerLossLatchIsDurableScopedAndIdempotent(t *testing.T) {
 	require.True(t, latchedTwo.OwnerReassignmentRequiredAt.Valid)
 	require.Equal(t, string(agentownership.OwnerReassignmentReasonOwnerDeleted), latchedTwo.OwnerReassignmentReason.String)
 
-	var ownerLossEvents int
-	err = conn.QueryRow(t.Context(), `SELECT count(*) FROM audit_logs WHERE action = 'agent:owner_loss'`).Scan(&ownerLossEvents) //nolint:glint // notestingrawsql: idempotent audit emission is the assertion
+	ownerLossEvents, err := audittest.AuditLogCountByAction(t.Context(), conn, audit.ActionAgentOwnerLoss)
 	require.NoError(t, err)
-	require.Equal(t, 2, ownerLossEvents)
+	require.EqualValues(t, 2, ownerLossEvents)
 }

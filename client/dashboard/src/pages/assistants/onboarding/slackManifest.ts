@@ -285,13 +285,13 @@ export type SlackManifestInput = {
   extraScopes?: readonly string[];
   extraBotEvents?: readonly string[];
   /**
-   * Hostname of the Gram dashboard (e.g. app.getgram.ai). When set alongside
-   * webhookUrl, it is registered as a Slack unfurl domain so link_shared
-   * events fire for dashboard links and the webhook can unfurl them with the
-   * Speakeasy logo. Hostnames without a dot (e.g. localhost) are skipped — Slack
-   * rejects them as unfurl domains.
+   * Hostnames of the Gram dashboard (e.g. app.getgram.ai, ai.speakeasy.com).
+   * When set alongside webhookUrl, they are registered as Slack unfurl domains
+   * so link_shared events fire for dashboard links and the webhook can unfurl
+   * them with the Speakeasy logo. Hostnames without a dot (e.g. localhost) are
+   * skipped — Slack rejects them as unfurl domains.
    */
-  unfurlDomain?: string | undefined;
+  unfurlDomains?: readonly string[] | undefined;
 };
 
 export type SlackManifestResult = {
@@ -342,9 +342,15 @@ export function buildSlackManifest(
   };
   // Unfurl domains only make sense when link_shared events can actually be
   // delivered, which requires the event_subscriptions webhook below.
-  const unfurlDomain = input.unfurlDomain?.trim().toLowerCase();
-  if (input.webhookUrl && unfurlDomain && unfurlDomain.includes(".")) {
-    features.unfurl_domains = [unfurlDomain];
+  const unfurlDomains = [
+    ...new Set(
+      (input.unfurlDomains ?? [])
+        .map((domain) => domain.trim().toLowerCase())
+        .filter((domain) => domain.includes(".")),
+    ),
+  ];
+  if (input.webhookUrl && unfurlDomains.length > 0) {
+    features.unfurl_domains = unfurlDomains;
   }
 
   const manifest: Record<string, unknown> = {

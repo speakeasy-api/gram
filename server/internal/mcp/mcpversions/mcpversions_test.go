@@ -98,12 +98,21 @@ func TestSupportedSetsExclude20260728(t *testing.T) {
 	require.NotContains(t, mcpversions.SupportedConsentToolset(), mcpversions.Version20260728)
 }
 
+// negotiate returns the answer for a supported set that defines initialize,
+// where negotiation always succeeds.
+func negotiate(t *testing.T, requested string, supported []string) string {
+	t.Helper()
+	got, ok := mcpversions.Negotiate(requested, supported)
+	require.True(t, ok)
+	return got
+}
+
 func TestNegotiateEchoesEverySupportedVersion(t *testing.T) {
 	t.Parallel()
 
 	supported := mcpversions.SupportedHostedToolset()
 	for _, v := range supported {
-		require.Equal(t, v, mcpversions.Negotiate(v, supported))
+		require.Equal(t, v, negotiate(t, v, supported))
 	}
 }
 
@@ -114,7 +123,7 @@ func TestNegotiateEchoesEverySupportedVersion(t *testing.T) {
 func TestNegotiateAnswersAbsentWithTheDefault(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, mcpversions.DefaultInEffect, mcpversions.Negotiate("", mcpversions.SupportedHostedToolset()))
+	require.Equal(t, mcpversions.DefaultInEffect, negotiate(t, "", mcpversions.SupportedHostedToolset()))
 }
 
 func TestNegotiateAnswersUnsupportedWithTheNewestSupported(t *testing.T) {
@@ -125,9 +134,9 @@ func TestNegotiateAnswersUnsupportedWithTheNewestSupported(t *testing.T) {
 	// The expected value is pinned rather than derived from the set, so
 	// raising the ceiling breaks this test and forces choosing new out-of-set
 	// inputs that keep the fallback arm exercised.
-	require.Equal(t, mcpversions.Version20251125, mcpversions.Negotiate(mcpversions.Version20260728, supported), "known but unsupported")
-	require.Equal(t, mcpversions.Version20251125, mcpversions.Negotiate("1999-12-31", supported), "well-formed but unrecognized")
-	require.Equal(t, mcpversions.Version20251125, mcpversions.Negotiate("garbage", supported), "not a version at all")
+	require.Equal(t, mcpversions.Version20251125, negotiate(t, mcpversions.Version20260728, supported), "known but unsupported")
+	require.Equal(t, mcpversions.Version20251125, negotiate(t, "1999-12-31", supported), "well-formed but unrecognized")
+	require.Equal(t, mcpversions.Version20251125, negotiate(t, "garbage", supported), "not a version at all")
 }
 
 func TestNegotiateSanitizesRawClientInput(t *testing.T) {
@@ -135,8 +144,8 @@ func TestNegotiateSanitizesRawClientInput(t *testing.T) {
 
 	supported := mcpversions.SupportedHostedToolset()
 
-	require.Equal(t, mcpversions.Version20250618, mcpversions.Negotiate("  2025-06-18\t", supported), "surrounding whitespace trims to a supported version")
-	require.Equal(t, mcpversions.DefaultInEffect, mcpversions.Negotiate("2025-06-18\x00", supported), "non-printable input sanitizes to absent, not to the ceiling")
+	require.Equal(t, mcpversions.Version20250618, negotiate(t, "  2025-06-18\t", supported), "surrounding whitespace trims to a supported version")
+	require.Equal(t, mcpversions.DefaultInEffect, negotiate(t, "2025-06-18\x00", supported), "non-printable input sanitizes to absent, not to the ceiling")
 }
 
 func TestResolveKeepsEverySupportedDeclarationInEffect(t *testing.T) {
@@ -346,4 +355,30 @@ func TestAtLeast_NoSupportedSetIsModernYet(t *testing.T) {
 					"coverage on every surface, then delete this test.", v)
 		}
 	}
+}
+
+func TestNegotiateSkipsRevisionsWithoutInitialize(t *testing.T) {
+	t.Parallel()
+	supported := append(mcpversions.SupportedHostedToolset(), mcpversions.Version20260728)
+	for _, tc := range []struct{ requested, want string }{
+		{"", mcpversions.DefaultInEffect},
+		{mcpversions.Version20241105, mcpversions.Version20241105},
+		{mcpversions.Version20251125, mcpversions.Version20251125},
+		{mcpversions.Version20260728, mcpversions.Version20251125},
+		{"2099-01-01", mcpversions.Version20251125},
+	} {
+		t.Run(tc.requested, func(t *testing.T) {
+			t.Parallel()
+			got, ok := mcpversions.Negotiate(tc.requested, supported)
+			require.True(t, ok)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestNegotiateWithoutInitializeRevision(t *testing.T) {
+	t.Parallel()
+	got, ok := mcpversions.Negotiate(mcpversions.Version20251125, []string{mcpversions.Version20260728})
+	require.False(t, ok)
+	require.Empty(t, got)
 }

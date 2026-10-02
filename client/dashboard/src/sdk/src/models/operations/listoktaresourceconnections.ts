@@ -11,7 +11,7 @@ export type ListOktaResourceConnectionsSecurity = {
 
 export type ListOktaResourceConnectionsRequest = {
   /**
-   * Include connected and not-applicable servers.
+   * Include connected, verified and not-applicable servers.
    */
   includeAll?: boolean | undefined;
   /**

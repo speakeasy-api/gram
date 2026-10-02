@@ -82,6 +82,50 @@ type AdminMcpSession struct {
 	UpdatedAt            pgtype.Timestamptz
 }
 
+type AdminMcpWriteEvent struct {
+	ID            uuid.UUID
+	ProposalID    uuid.NullUUID
+	SubjectUrn    string
+	OauthClientID uuid.NullUUID
+	Event         string
+	ReasonCode    pgtype.Text
+	RequestID     pgtype.Text
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
+type AdminMcpWriteProposal struct {
+	ID                     uuid.UUID
+	SubjectUrn             string
+	OauthClientID          uuid.UUID
+	ConnectionID           uuid.UUID
+	ConnectionGeneration   uuid.UUID
+	Operation              string
+	OperationSchemaVersion int32
+	PlatformGlobal         bool
+	OrganizationID         pgtype.Text
+	ProjectID              uuid.NullUUID
+	ResourceKind           pgtype.Text
+	ResourceID             pgtype.Text
+	IdempotencyKey         string
+	Arguments              []byte
+	ExpectedStateDigest    string
+	ProposalDigest         string
+	Preview                []byte
+	Status                 string
+	ExpiresAt              pgtype.Timestamptz
+	ApprovedBySubjectUrn   pgtype.Text
+	ApprovedAt             pgtype.Timestamptz
+	RejectedAt             pgtype.Timestamptz
+	InvalidatedAt          pgtype.Timestamptz
+	InvalidationReason     pgtype.Text
+	ExecutedAt             pgtype.Timestamptz
+	ResultCode             pgtype.Text
+	ResultPayload          []byte
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+}
+
 type Agent struct {
 	ID                          uuid.UUID
 	OrganizationID              string
@@ -858,6 +902,20 @@ type DirectoryGroup struct {
 	WorkosLastEventID      pgtype.Text
 }
 
+type DirectoryRoleMapping struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	SourceKind       string
+	DirectoryGroupID uuid.NullUUID
+	AttributeKey     pgtype.Text
+	AttributeValue   pgtype.Text
+	RoleUrn          string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
+}
+
 type DirectoryUser struct {
 	ID                    uuid.UUID
 	OrganizationID        string
@@ -1432,6 +1490,15 @@ type McpRegistry struct {
 	Deleted              bool
 }
 
+type McpRegistryEntry struct {
+	ID          uuid.UUID
+	Data        []byte
+	Published   bool
+	PublishedAt pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
 // Research-agent output for an approval request. Findings are gathered and cited, never adjudicated — the admin decides.
 type McpResearchReport struct {
 	ID                   uuid.UUID
@@ -1712,8 +1779,77 @@ type OktaResourceConnection struct {
 	Resource                     string
 	Audience                     string
 	OktaApplicationID            pgtype.Text
+	ObservedResult               pgtype.Text
+	ObservedAt                   pgtype.Timestamptz
 	CreatedAt                    pgtype.Timestamptz
 	UpdatedAt                    pgtype.Timestamptz
+}
+
+type OktaServerSuggestionDismissal struct {
+	OrganizationID  string
+	RegistryEntryID uuid.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+type OnboardingPlaybook struct {
+	ID             uuid.UUID
+	UseCaseID      uuid.NullUUID
+	OrganizationID pgtype.Text
+	Name           string
+	Description    string
+	IsDefault      bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+}
+
+type OnboardingPlaybookStep struct {
+	PlaybookID uuid.UUID
+	StepID     uuid.UUID
+	Position   int32
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
+// Onboarding steps mirrored from application code; deleted_at marks a step the code no longer defines.
+type OnboardingStep struct {
+	ID              uuid.UUID
+	Slug            string
+	Title           string
+	Description     string
+	ParentStepID    uuid.NullUUID
+	Completion      string
+	HiddenByDefault bool
+	SortOrder       int32
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+}
+
+type OnboardingStepDependency struct {
+	StepID         uuid.UUID
+	RequiresStepID uuid.UUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type OnboardingStepMethod struct {
+	StepID              uuid.UUID
+	IntegrationMethodID uuid.UUID
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+}
+
+type OnboardingUseCase struct {
+	ID          uuid.UUID
+	Slug        string
+	Name        string
+	Description string
+	SortOrder   int32
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
 }
 
 type OpenrouterApiKey struct {
@@ -1819,6 +1955,7 @@ type OrganizationMetadatum struct {
 	SsoEnabled         pgtype.Bool
 	VerifiedDomains    []string
 	CreationSource     pgtype.Text
+	DefaultHost        pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
@@ -1828,6 +1965,17 @@ type OrganizationOnboarding struct {
 	ID             uuid.UUID
 	OrganizationID string
 	Preset         pgtype.Text
+	MdmVendor      pgtype.Text
+	MdmVendorName  pgtype.Text
+	PlaybookID     uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type OrganizationOnboardingVendor struct {
+	OrganizationID string
+	Vendor         string
+	PlanID         uuid.NullUUID
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 }
@@ -2225,11 +2373,12 @@ type Plugin struct {
 	Slug           string
 	Description    pgtype.Text
 	// Marks the fallback plugin new servers land in when not explicitly routed to a named plugin. At most one true per project (see plugins_project_id_is_default_key).
-	IsDefault pgtype.Bool
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
-	DeletedAt pgtype.Timestamptz
-	Deleted   bool
+	IsDefault   pgtype.Bool
+	AutoCreated bool
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+	Deleted     bool
 }
 
 type PluginAssignment struct {
@@ -2414,20 +2563,6 @@ type PublishOutboxDeadLetter struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
-type Query struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	OrganizationID  string
-	CreatedByUserID pgtype.Text
-	Name            string
-	Dataset         string
-	Spec            []byte
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
-}
-
 type RemoteMcpServer struct {
 	ID            uuid.UUID
 	ProjectID     uuid.UUID
@@ -2504,6 +2639,7 @@ type RemoteSessionClient struct {
 	TokenEndpointAuthAudienceFormat pgtype.Text
 	ClientIDMetadataUri             pgtype.Text
 	LegacyCallbackUrl               bool
+	CallbackBaseUrl                 pgtype.Text
 	ResourceIdentifier              pgtype.Text
 	ResourceName                    pgtype.Text
 	ResourceDocumentation           pgtype.Text
@@ -2539,6 +2675,31 @@ type RemoteSessionEmaBinding struct {
 	ClaimedAt             pgtype.Timestamptz
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
+}
+
+type RemoteSessionEmaCredential struct {
+	ID                             uuid.UUID
+	OrganizationID                 pgtype.Text
+	ProjectID                      uuid.NullUUID
+	UserSessionIssuerID            uuid.NullUUID
+	RemoteSessionIssuerID          uuid.NullUUID
+	RemoteSessionClientID          uuid.NullUUID
+	Resource                       string
+	SubjectUrn                     string
+	ClientSelection                string
+	RemoteSessionEmaBindingID      uuid.NullUUID
+	EmaBindingGeneration           pgtype.Int8
+	TrustedIssuerSessionID         uuid.NullUUID
+	RequestedScopes                []string
+	GrantedScopes                  []string
+	AccessTokenEncrypted           pgtype.Text
+	AccessExpiresAt                pgtype.Timestamptz
+	DownstreamRefreshTokenObserved bool
+	LastUsedAt                     pgtype.Timestamptz
+	CreatedAt                      pgtype.Timestamptz
+	UpdatedAt                      pgtype.Timestamptz
+	DeletedAt                      pgtype.Timestamptz
+	Deleted                        bool
 }
 
 type RemoteSessionIssuer struct {
@@ -2626,6 +2787,16 @@ type RiskExclusion struct {
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 	Deleted        bool
+}
+
+type RiskFindingEvidence struct {
+	FindingID      uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	MatchEncrypted string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ExpiresAt      pgtype.Timestamptz
 }
 
 type RiskPolicy struct {
@@ -2999,6 +3170,54 @@ type SlackAppToolset struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type SlackDirectoryConnection struct {
+	ID                      uuid.UUID
+	OrganizationID          string
+	SlackTeamID             string
+	SlackTeamName           pgtype.Text
+	CredentialsEncrypted    pgtype.Text
+	GrantedScopes           []string
+	Generation              uuid.UUID
+	Health                  string
+	DisconnectedAt          pgtype.Timestamptz
+	LastSyncStartedAt       pgtype.Timestamptz
+	LastFullSyncGeneration  uuid.NullUUID
+	LastFullSyncSucceededAt pgtype.Timestamptz
+	LastSyncFailedAt        pgtype.Timestamptz
+	LastErrorCode           pgtype.Text
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+}
+
+type SlackDirectoryMembership struct {
+	ID                        uuid.UUID
+	OrganizationID            string
+	SlackTeamID               string
+	SlackUserID               string
+	DisplayName               pgtype.Text
+	Email                     pgtype.Text
+	Status                    string
+	MemberType                string
+	ProviderUpdatedAt         pgtype.Timestamptz
+	LastSeenAt                pgtype.Timestamptz
+	MappingRevision           int64
+	MappingConflictReason     pgtype.Text
+	MappingConflictDetectedAt pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+}
+
+type SlackIdentityMapping struct {
+	ID             uuid.UUID
+	OrganizationID string
+	SlackTeamID    string
+	SlackUserID    string
+	UserID         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	RevokedAt      pgtype.Timestamptz
+}
+
 type SlackRegistration struct {
 	ID             uuid.UUID
 	SlackAppID     uuid.UUID
@@ -3207,6 +3426,18 @@ type SupportMatrixMethodPlatform struct {
 	DeletedAt  pgtype.Timestamptz
 }
 
+// Plans each vendor sells, as the support matrix names them; an organization declares the one it is on per vendor.
+type SupportMatrixPlan struct {
+	ID        uuid.UUID
+	Slug      string
+	Vendor    string
+	Name      string
+	SortOrder int32
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+	DeletedAt pgtype.Timestamptz
+}
+
 // Global admin support catalog of upstream product surfaces, independent of customer installations.
 type SupportMatrixPlatform struct {
 	ID          uuid.UUID
@@ -3387,6 +3618,21 @@ type TriggerInstance struct {
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 	Deleted        bool
+}
+
+type TriggerThreadRoute struct {
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	TargetKind           string
+	TargetRef            string
+	CorrelationID        string
+	RouteToCorrelationID pgtype.Text
+	State                string
+	LastSeenCursor       pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
 }
 
 type TrustedIssuerSession struct {
@@ -3628,11 +3874,28 @@ type UserSessionIssuerCimdClient struct {
 	Deleted             bool
 }
 
+type Widget struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Description     pgtype.Text
+	Dataset         string
+	Query           []byte
+	Visualization   []byte
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
 type WorkloadAgentAssignment struct {
 	ID               uuid.UUID
 	OrganizationID   string
 	WorkloadIssuerID uuid.UUID
 	Subject          string
+	MatchKind        string
 	AgentID          uuid.UUID
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
@@ -3646,7 +3909,9 @@ type WorkloadIdentityAdmission struct {
 	ProjectID        uuid.NullUUID
 	WorkloadIssuerID uuid.UUID
 	Subject          string
+	MatchKind        string
 	Name             pgtype.Text
+	Tags             []string
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	DeletedAt        pgtype.Timestamptz
@@ -3654,18 +3919,20 @@ type WorkloadIdentityAdmission struct {
 }
 
 type WorkloadIssuer struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	Name           string
-	Tags           []string
-	Issuer         string
-	JwksUri        string
-	Metadata       []byte
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID                     uuid.UUID
+	OrganizationID         string
+	ProjectID              uuid.NullUUID
+	Name                   string
+	Description            pgtype.Text
+	Tags                   []string
+	Issuer                 string
+	JwksUri                string
+	AllowWildcardAdmission bool
+	Metadata               []byte
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
 }
 
 type WorkosOrganizationSync struct {

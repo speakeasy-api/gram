@@ -40,7 +40,7 @@ func TestStaffClientRegistration(t *testing.T) {
 	}{
 		{name: "confidential client", body: `{"client_name":"editor","redirect_uris":["http://localhost:5555/callback"],"token_endpoint_auth_method":"client_secret_basic"}`, status: http.StatusCreated},
 		{name: "omitted authentication method", body: `{"client_name":"editor","redirect_uris":["http://localhost:5555/callback"]}`, status: http.StatusBadRequest, expectError: "invalid_client_metadata"},
-		{name: "public client", body: `{"client_name":"editor","redirect_uris":["http://localhost:5555/callback"],"token_endpoint_auth_method":"none"}`, status: http.StatusBadRequest, expectError: "invalid_client_metadata"},
+
 		{name: "unsupported post authentication", body: `{"client_name":"editor","redirect_uris":["http://localhost:5555/callback"],"token_endpoint_auth_method":"client_secret_post"}`, status: http.StatusBadRequest, expectError: "invalid_client_metadata"},
 		{name: "invalid redirect", body: `{"client_name":"editor","redirect_uris":["http://example.com/callback"],"token_endpoint_auth_method":"client_secret_basic"}`, status: http.StatusBadRequest, expectError: "invalid_redirect_uri"},
 		{name: "unsupported grant", body: `{"client_name":"editor","redirect_uris":["http://localhost:5555/callback"],"token_endpoint_auth_method":"client_secret_basic","grant_types":["client_credentials"]}`, status: http.StatusBadRequest, expectError: "invalid_client_metadata"},
@@ -72,6 +72,24 @@ func TestStaffClientRegistration(t *testing.T) {
 			require.NoError(t, bcrypt.CompareHashAndPassword([]byte(store.client.SecretHash), []byte(secret)))
 		})
 	}
+}
+
+func TestStaffClientRegistrationPublicClientGetsNoSecret(t *testing.T) {
+	t.Parallel()
+	store := &recordingStaffClientStore{}
+	handler := (&StaffOAuthClients{store: store}).RegisterHandler()
+	request := httptest.NewRequest(http.MethodPost, "/admin-mcp/register", strings.NewReader(`{"client_name":"editor","redirect_uris":["http://127.0.0.1:5555/callback"],"grant_types":["authorization_code","refresh_token"],"token_endpoint_auth_method":"none"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	require.Equal(t, http.StatusCreated, response.Code)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &payload))
+	require.Equal(t, store.client.ID, payload["client_id"])
+	require.Equal(t, "none", payload["token_endpoint_auth_method"])
+	require.NotContains(t, payload, "client_secret")
+	require.NotContains(t, payload, "client_secret_expires_at")
+	require.Empty(t, store.client.SecretHash)
 }
 
 func TestStaffClientRegistrationRejectsUnavailableAndWrongMethod(t *testing.T) {

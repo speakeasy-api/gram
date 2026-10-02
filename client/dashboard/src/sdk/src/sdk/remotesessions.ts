@@ -3,17 +3,29 @@
  */
 
 import { remoteSessionsAttachBinding } from "../funcs/remoteSessionsAttachBinding.js";
+import { remoteSessionsCommitServerIdentityConfiguration } from "../funcs/remoteSessionsCommitServerIdentityConfiguration.js";
+import { remoteSessionsCount } from "../funcs/remoteSessionsCount.js";
 import { remoteSessionsDetachBinding } from "../funcs/remoteSessionsDetachBinding.js";
 import { remoteSessionsList } from "../funcs/remoteSessionsList.js";
 import { remoteSessionsListBindings } from "../funcs/remoteSessionsListBindings.js";
 import { remoteSessionsRevoke } from "../funcs/remoteSessionsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { CommitServerIdentityConfigurationResult } from "../models/components/commitserveridentityconfigurationresult.js";
+import { CountRemoteSessionsResult } from "../models/components/countremotesessionsresult.js";
 import { ListBindingsResponseBody } from "../models/components/listbindingsresponsebody.js";
 import { PrincipalRemoteSessionBinding } from "../models/components/principalremotesessionbinding.js";
 import {
   AttachBindingRequest,
   AttachBindingSecurity,
 } from "../models/operations/attachbinding.js";
+import {
+  CommitServerIdentityConfigurationRequest,
+  CommitServerIdentityConfigurationSecurity,
+} from "../models/operations/commitserveridentityconfiguration.js";
+import {
+  CountRemoteSessionsRequest,
+  CountRemoteSessionsSecurity,
+} from "../models/operations/countremotesessions.js";
 import {
   DetachBindingRequest,
   DetachBindingSecurity,
@@ -47,6 +59,44 @@ export class RemoteSessions extends ClientSDK {
     options?: RequestOptions,
   ): Promise<PrincipalRemoteSessionBinding> {
     return unwrapAsync(remoteSessionsAttachBinding(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * commitServerIdentityConfiguration remoteSessions
+   *
+   * @remarks
+   * Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.
+   */
+  async commitServerIdentityConfiguration(
+    request: CommitServerIdentityConfigurationRequest,
+    security?: CommitServerIdentityConfigurationSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<CommitServerIdentityConfigurationResult> {
+    return unwrapAsync(remoteSessionsCommitServerIdentityConfiguration(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * countRemoteSessions remoteSessions
+   *
+   * @remarks
+   * Count the distinct people (user subjects) holding a live remote_session minted through one remote_session_client. Scoped like listRemoteSessions: only sessions whose issuer, client and remote issuer are reachable from the caller's project count; API-key and anonymous subjects do not. A client shared by several MCP servers counts people across all of them.
+   */
+  async count(
+    request: CountRemoteSessionsRequest,
+    security?: CountRemoteSessionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<CountRemoteSessionsResult> {
+    return unwrapAsync(remoteSessionsCount(
       this,
       request,
       security,

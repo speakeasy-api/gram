@@ -3467,6 +3467,40 @@ func (q *Queries) ResolveThreadCorrelation(ctx context.Context, arg ResolveThrea
 	return i, err
 }
 
+const resolveThreadCorrelationByChat = `-- name: ResolveThreadCorrelationByChat :one
+SELECT id, project_id, assistant_id, correlation_id
+FROM assistant_threads
+WHERE chat_id = $1
+  AND assistant_id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+`
+
+type ResolveThreadCorrelationByChatParams struct {
+	ChatID      uuid.UUID
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type ResolveThreadCorrelationByChatRow struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	AssistantID   uuid.UUID
+	CorrelationID string
+}
+
+func (q *Queries) ResolveThreadCorrelationByChat(ctx context.Context, arg ResolveThreadCorrelationByChatParams) (ResolveThreadCorrelationByChatRow, error) {
+	row := q.db.QueryRow(ctx, resolveThreadCorrelationByChat, arg.ChatID, arg.AssistantID, arg.ProjectID)
+	var i ResolveThreadCorrelationByChatRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.AssistantID,
+		&i.CorrelationID,
+	)
+	return i, err
+}
+
 const resolveThreadProjectID = `-- name: ResolveThreadProjectID :one
 SELECT project_id
 FROM assistant_threads

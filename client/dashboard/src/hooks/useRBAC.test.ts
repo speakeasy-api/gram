@@ -57,6 +57,22 @@ describe("resourceKindForScope", () => {
     expect(resourceKindForScope("risk_policy:bypass")).toBe("risk_policy");
   });
 
+  // Regression: a scope family missing from this function falls through to "*",
+  // and a grant written with a concrete resource_kind then never matches the
+  // check — selectorMatches requires the GRANT value to be "*", not the check's.
+  // The page gate therefore denies a holder whose grant rows are correct, which
+  // reads as a broken feature rather than a missing branch here.
+  it("returns 'workload' for workload scopes", () => {
+    expect(resourceKindForScope("workload:read")).toBe("workload");
+    expect(resourceKindForScope("workload:write")).toBe("workload");
+  });
+
+  it("matches a wildcard workload grant against an unscoped check", () => {
+    const grant = { resourceKind: "workload", resourceId: "*" };
+    const check = { resourceKind: resourceKindForScope("workload:read") };
+    expect(selectorMatches(grant, check)).toBe(true);
+  });
+
   // Regression: chat scopes must map to "chat" so a restricted chat:read grant
   // (selector {resource_kind:"chat", resource_id:"*"}) matches the hasScope
   // check. When this returned "*" the check selector ({resource_kind:"*"}) never
@@ -370,6 +386,92 @@ describe("hasScopeInGrants", () => {
     ];
 
     expect(hasScopeInGrants(grants, "mcp:connect", "server_a")).toBe(true);
+  });
+});
+
+describe("hasScopeInGrants principal precedence", () => {
+  const lockedServer = { resourceKind: "mcp", resourceId: "server_locked" };
+  const roleConnect = {
+    scope: "mcp:connect",
+    selectors: [{ resourceKind: "mcp", resourceId: "*" }, lockedServer],
+    directSelectors: [lockedServer],
+  };
+  const roleBlock = {
+    scope: "mcp:blocked_connect",
+    selectors: [lockedServer],
+  };
+
+  it("lets a direct grant naming the server outrank a role block", () => {
+    expect(
+      hasScopeInGrants(
+        [roleConnect, roleBlock],
+        "mcp:connect",
+        "server_locked",
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps the role block without a direct grant", () => {
+    const grants = [{ ...roleConnect, directSelectors: undefined }, roleBlock];
+
+    expect(hasScopeInGrants(grants, "mcp:connect", "server_locked")).toBe(
+      false,
+    );
+  });
+
+  it("does not let a direct grant for another server outrank the block", () => {
+    const grants = [
+      {
+        ...roleConnect,
+        directSelectors: [{ resourceKind: "mcp", resourceId: "server_other" }],
+      },
+      roleBlock,
+    ];
+
+    expect(hasScopeInGrants(grants, "mcp:connect", "server_locked")).toBe(
+      false,
+    );
+  });
+
+  it("keeps the caller's own block", () => {
+    const grants = [
+      roleConnect,
+      { ...roleBlock, directSelectors: [lockedServer] },
+    ];
+
+    expect(hasScopeInGrants(grants, "mcp:connect", "server_locked")).toBe(
+      false,
+    );
+  });
+
+  it("lets a direct write grant outrank a connect block", () => {
+    const grants = [
+      {
+        scope: "mcp:write",
+        selectors: [lockedServer],
+        directSelectors: [lockedServer],
+        subScopes: ["mcp:read", "mcp:connect"],
+      },
+      roleBlock,
+    ];
+
+    expect(hasScopeInGrants(grants, "mcp:connect", "server_locked")).toBe(true);
+  });
+
+  it("never lets a direct grant outrank a risk policy bypass", () => {
+    const policy = { resourceKind: "risk_policy", resourceId: "policy_a" };
+    const grants = [
+      {
+        scope: "risk_policy:evaluate",
+        selectors: [policy],
+        directSelectors: [policy],
+      },
+      { scope: "risk_policy:bypass", selectors: [policy] },
+    ];
+
+    expect(hasScopeInGrants(grants, "risk_policy:evaluate", "policy_a")).toBe(
+      false,
+    );
   });
 });
 

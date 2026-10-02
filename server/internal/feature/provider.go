@@ -29,19 +29,24 @@ type Provider interface {
 
 type InMemory sync.Map
 
+// AnyDistinctID sets an InMemory boolean flag for every distinct ID that has
+// no entry of its own.
+const AnyDistinctID = "*"
+
+func (imp *InMemory) loadFlag(flag Flag, distinctID string) (enabled bool, ok bool) {
+	val, ok := (*sync.Map)(imp).Load(distinctID + ":" + string(flag))
+	if !ok {
+		val, ok = (*sync.Map)(imp).Load(AnyDistinctID + ":" + string(flag))
+	}
+	if !ok {
+		return false, false
+	}
+	enabled, ok = val.(bool)
+	return enabled, ok
+}
+
 func (imp *InMemory) IsFlagEnabled(ctx context.Context, flag Flag, distinctID string, groups map[string]string) (bool, error) {
-	key := distinctID + ":" + string(flag)
-
-	val, ok := (*sync.Map)(imp).Load(key)
-	if !ok {
-		return false, nil
-	}
-
-	enabled, ok := val.(bool)
-	if !ok {
-		return false, nil
-	}
-
+	enabled, _ := imp.loadFlag(flag, distinctID)
 	return enabled, nil
 }
 
@@ -169,12 +174,7 @@ func EvaluateFlag(ctx context.Context, provider Provider, flag Flag, distinctID 
 }
 
 func (imp *InMemory) EvaluateFlag(_ context.Context, flag Flag, distinctID string, _ map[string]string) (Evaluation, error) {
-	key := distinctID + ":" + string(flag)
-	value, ok := (*sync.Map)(imp).Load(key)
-	if !ok {
-		return EvaluationIndeterminate, nil
-	}
-	enabled, ok := value.(bool)
+	enabled, ok := imp.loadFlag(flag, distinctID)
 	if !ok {
 		return EvaluationIndeterminate, nil
 	}

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/organizations"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -36,10 +37,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
@@ -111,6 +114,16 @@ func newAdminCommand() *cli.Command {
 			Name:    "admin-mcp-signing-key",
 			Usage:   "Independent signing key for staff Admin MCP access tokens",
 			EnvVars: []string{"GRAM_ADMIN_MCP_SIGNING_KEY"},
+		},
+		&cli.BoolFlag{
+			Name:    "admin-mcp-writes-enabled",
+			Usage:   "Global switch for staff Admin MCP writes. Off by default; each operation also needs admin-mcp-write-operations",
+			EnvVars: []string{"GRAM_ADMIN_MCP_WRITES_ENABLED"},
+		},
+		&cli.StringFlag{
+			Name:    "admin-mcp-write-operations",
+			Usage:   "Comma-separated staff Admin MCP write operations to enable. Empty enables none",
+			EnvVars: []string{"GRAM_ADMIN_MCP_WRITE_OPERATIONS"},
 		},
 		&cli.StringFlag{
 			Name:     "environment",
@@ -257,6 +270,12 @@ func newAdminCommand() *cli.Command {
 			Name:     "workos-api-key",
 			Usage:    "WorkOS API key for user identity lookups and organization creation.",
 			EnvVars:  []string{"WORKOS_API_KEY"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "workos-environment-id",
+			Usage:    "WorkOS environment ID used to link organizations to the WorkOS dashboard. Leave unset to hide those links.",
+			EnvVars:  []string{"WORKOS_ENVIRONMENT_ID"},
 			Required: false,
 		},
 		&cli.StringFlag{
@@ -468,7 +487,18 @@ func newAdminCommand() *cli.Command {
 			if err := admin.SeedSupportMatrix(ctx, db); err != nil {
 				return fmt.Errorf("initialize support matrix: %w", err)
 			}
-			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, siteURL)
+			registryValidator, err := mcpregistry.LoadValidator()
+			if err != nil {
+				return fmt.Errorf("load registry validator: %w", err)
+			}
+			registryService := mcpregistry.New(db, registryValidator)
+			if err := registryService.Ready(ctx); err != nil {
+				return fmt.Errorf("registry readiness: %w", err)
+			}
+			if err := organizations.SyncOnboardingSteps(ctx, db); err != nil {
+				return fmt.Errorf("sync onboarding steps: %w", err)
+			}
+			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chDB), siteURL, registryService)
 			mcpServerURL := siteURL
 			if raw := c.String("server-url"); raw != "" {
 				mcpServerURL, err = url.Parse(raw)
@@ -480,6 +510,7 @@ func newAdminCommand() *cli.Command {
 				}
 			}
 			adminService.SetMCPServerURL(mcpServerURL)
+			adminService.SetWorkOSEnvironmentID(c.String("workos-environment-id"))
 			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
 			if err != nil {
 				return err
@@ -506,15 +537,23 @@ func newAdminCommand() *cli.Command {
 				if err := validateAdminMCPSigningKey(key, c.String("admin-encryption-key"), c.String("encryption-key")); err != nil {
 					return err
 				}
+				writeOperations, err := adminmcp.ParseWriteOperations(c.String("admin-mcp-write-operations"))
+				if err != nil {
+					return fmt.Errorf("configure staff Admin MCP writes: %w", err)
+				}
+				writes := adminmcp.WriteConfig{Enabled: c.Bool("admin-mcp-writes-enabled"), Operations: writeOperations}
 				signer := sessiontokens.NewSigner(key)
-				staffOAuth, err := adminmcp.NewStaffOAuth(adminServerURL, db, cache.NewRedisCacheAdapter(redisClient), adminService.Verifier(), adminEncryption, signer)
+				staffOAuth, err := adminmcp.NewStaffOAuth(adminServerURL, db, cache.NewRedisCacheAdapter(redisClient), adminService.Verifier(), adminEncryption, signer, writes, logger)
 				if err != nil {
 					return fmt.Errorf("initialize staff Admin MCP OAuth: %w", err)
 				}
 				staffOAuth.Attach(mux)
 				staffAuth := adminmcp.NewStaffAuthenticator(signer, db, adminEncryption, adminService.Verifier(), staffOAuth.Issuer(), staffOAuth.Resource())
-				staffHandler := adminmcp.NewRuntime(staffAuth, staffOAuth.ProtectedResourceURL(), adminService).Handler()
-				mux.Handle(http.MethodPost, adminmcp.Path, staffHandler.ServeHTTP)
+				staffRuntime := adminmcp.NewRuntime(staffAuth, staffOAuth.ProtectedResourceURL(), adminService)
+				if err := adminmcp.AttachWrites(staffRuntime, staffOAuth, productFeatures, writes); err != nil {
+					return fmt.Errorf("configure staff Admin MCP write tools: %w", err)
+				}
+				mux.Handle(http.MethodPost, adminmcp.Path, staffRuntime.Handler().ServeHTTP)
 			}
 
 			srv := &http.Server{

@@ -564,9 +564,6 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 			return RegisterRemoteMCPResult{}, fmt.Errorf("converge direct remote registration: %w", err)
 		}
 	}
-	if receipt.ResultCode == receiptResultActiveCap {
-		return RegisterRemoteMCPResult{}, ErrRegistrationCap
-	}
 	if !receipt.RegistrationID.Valid {
 		return RegisterRemoteMCPResult{}, ErrRegistrationUnavailable
 	}
@@ -644,9 +641,6 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 		if err != nil {
 			return RegisterCatalogMCPResult{}, fmt.Errorf("converge catalog registration: %w", err)
 		}
-	}
-	if receipt.ResultCode == receiptResultActiveCap {
-		return RegisterCatalogMCPResult{}, ErrRegistrationCap
 	}
 	if !receipt.RegistrationID.Valid {
 		return RegisterCatalogMCPResult{}, ErrRegistrationUnavailable

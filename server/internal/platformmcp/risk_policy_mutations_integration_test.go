@@ -343,8 +343,86 @@ func TestRiskPolicyUpdateRejectsSessionSourceOnMCPScopedPolicy(t *testing.T) {
 		"patch":            map[string]any{"sources": []string{"account_identity"}},
 	})
 	requireRiskMutationRefusal(t, err, "invalid_request")
+	_, _, err = handlers.UpdatePolicy(ctx, nil, map[string]any{
+		"project_slug":     project.Slug,
+		"policy_id":        policyID.String(),
+		"expected_version": read.Policy.Version,
+		"idempotency_key":  "update-scoped-policy-action-key",
+		"patch":            map[string]any{"action": "warn"},
+	})
+	var refusal *ToolRefusalError
+	require.ErrorAs(t, err, &refusal)
+	require.Contains(t, refusal.Payload, "MCP-scoped policy")
+	require.Contains(t, refusal.Payload, "use flag or block")
 
 	stored, err := queries.GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: policyID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Equal(t, []string{"gitleaks"}, stored.Sources)
+}
+
+func TestRiskPolicyAudienceReplacement(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_policy_audience")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	seedAccessMember(t, ctx, conn, principal.OrganizationID, principal.UserID, "audience-actor@example.test")
+	principal.ClientID = "test-client"
+	principal.Surface = SurfacePlatformMCP
+	ctx = ContextWithPrincipal(ctx, principal)
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPlatformMCPRiskMutations, principal.OrganizationID, true)
+	controls, err := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "audience-test-key")
+	require.NoError(t, err)
+	handlers, err := NewRiskPolicyMutationHandlers(conn, controls, risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil))
+	require.NoError(t, err)
+	_, created, err := handlers.CreatePolicy(ctx, nil, map[string]any{
+		"project_slug": project.Slug, "policy_type": "standard", "name": "Audience policy", "enabled": true,
+		"sources": []string{"gitleaks"}, "idempotency_key": "create-audience",
+	})
+	require.NoError(t, err)
+	target := urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID).String()
+	input := map[string]any{
+		"project_slug": project.Slug, "policy_id": created.Policy.ID, "expected_version": created.Version, "idempotency_key": "replace-audience",
+		"patch": map[string]any{"audience": map[string]any{"type": "targeted", "principal_urns": []string{target}, "confirm": true}},
+	}
+	_, updated, err := handlers.UpdatePolicy(ctx, nil, input)
+	require.NoError(t, err)
+	require.NotEqual(t, created.Version, updated.Version)
+	reads, err := newRiskReadService(conn, "audience-test-key")
+	require.NoError(t, err)
+	read, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: created.Policy.ID})
+	require.NoError(t, err)
+	require.Equal(t, "targeted", read.Policy.Audience.Type)
+	require.Equal(t, []string{target}, read.Policy.Audience.PrincipalURNs)
+	require.Equal(t, updated.Version, read.Policy.Version)
+	entry, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionRiskPolicyUpdate)
+	require.NoError(t, err)
+	require.Equal(t, created.Policy.ID, entry.SubjectID)
+	require.Equal(t, principal.UserID, entry.ActorID)
+	_, replay, err := handlers.UpdatePolicy(ctx, nil, input)
+	require.NoError(t, err)
+	require.True(t, replay.Receipt.Replayed)
+	require.Equal(t, updated.Receipt.ID, replay.Receipt.ID)
+	input["idempotency_key"] = "stale-audience"
+	_, _, err = handlers.UpdatePolicy(ctx, nil, input)
+	requireRiskMutationRefusal(t, err, "conflict")
+	input["expected_version"] = updated.Version
+	input["idempotency_key"] = "unknown-audience-user"
+	input["patch"] = map[string]any{"audience": map[string]any{"type": "targeted", "principal_urns": []string{"user:missing-audience-user"}, "confirm": true}}
+	_, _, err = handlers.UpdatePolicy(ctx, nil, input)
+	require.Error(t, err)
+	unchanged, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: created.Policy.ID})
+	require.NoError(t, err)
+	require.Equal(t, updated.Version, unchanged.Policy.Version)
+	input["idempotency_key"] = "restore-everyone"
+	input["patch"] = map[string]any{"audience": map[string]any{"type": "everyone", "principal_urns": []string{}, "confirm": true}}
+	_, restored, err := handlers.UpdatePolicy(ctx, nil, input)
+	require.NoError(t, err)
+	require.NotEqual(t, updated.Version, restored.Version)
+	restoredRead, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: created.Policy.ID})
+	require.NoError(t, err)
+	require.Equal(t, "everyone", restoredRead.Policy.Audience.Type)
+	require.Empty(t, restoredRead.Policy.Audience.PrincipalURNs)
+	require.Equal(t, restored.Version, restoredRead.Policy.Version)
 }

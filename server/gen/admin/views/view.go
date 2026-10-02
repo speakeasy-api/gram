@@ -70,6 +70,8 @@ type ProductFeaturesView struct {
 	// Whether the organization has the staff-managed private network ingress
 	// entitlement
 	NetworkIngressEnabled *bool
+	// Whether the staff rollout for automatic role plugin setup is enabled
+	AutomaticRoleDistribution *bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -100,6 +102,7 @@ var (
 			"consent_tool_filtering_enabled",
 			"session_portability_enabled",
 			"network_ingress_enabled",
+			"automatic_role_distribution",
 			"device_agent",
 		},
 	}
@@ -176,6 +179,9 @@ func ValidateProductFeaturesView(result *ProductFeaturesView) (err error) {
 	}
 	if result.NetworkIngressEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("network_ingress_enabled", "result"))
+	}
+	if result.AutomaticRoleDistribution == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("automatic_role_distribution", "result"))
 	}
 	if result.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "result"))

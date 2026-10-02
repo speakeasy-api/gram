@@ -7,7 +7,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsTab } from "./SettingsTab";
 
 const mutation = vi.hoisted(() => ({ mutate: vi.fn() }));
+const platform = vi.hoisted(() => ({ isAdmin: false }));
 
+vi.mock("@/contexts/Auth", () => ({
+  useIsPlatformAdmin: () => platform.isAdmin,
+}));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({ remoteIdentityProviders: { issuerDetail: {} } }),
 }));
@@ -31,6 +35,9 @@ vi.mock("@gram/client/react-query/organizationRemoteSessionIssuer.js", () => ({
   useOrganizationRemoteSessionIssuer: () => ({ data: undefined }),
 }));
 vi.mock("./KeySetField", () => ({ KeySetField: () => null }));
+vi.mock("../../clientAlerts", () => ({
+  IssuerScopeOverrideAlert: () => <div>scope override warning</div>,
+}));
 vi.mock("../../clientDialogs", () => ({ DeleteClientDialog: () => null }));
 vi.mock(
   "../../../mcp/x/tabs/settings/sections/authentication/IssuerFormFields",
@@ -81,6 +88,7 @@ vi.mock(
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  platform.isAdmin = false;
 });
 
 function client(
@@ -241,5 +249,71 @@ describe("organization client settings", () => {
         }),
       }),
     );
+  });
+
+  it("hides the legacy callback switch from everyone but platform admins", () => {
+    render(
+      <SettingsTab
+        client={client(AuthMethod.ClientSecretBasic)}
+        issuerId="issuer-1"
+      />,
+    );
+
+    expect(screen.queryByRole("switch")).toBeNull();
+  });
+
+  it("sends the legacy callback flag only when a platform admin changes it", () => {
+    platform.isAdmin = true;
+    const legacyClient = {
+      ...client(AuthMethod.ClientSecretBasic),
+      legacyCallbackUrl: true,
+    } as RemoteSessionClient;
+    render(<SettingsTab client={legacyClient} issuerId="issuer-1" />);
+
+    const toggle = screen.getByRole("switch");
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(mutation.mutate).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          updateRemoteSessionClientForm: expect.objectContaining({
+            legacyCallbackUrl: undefined,
+          }),
+        }),
+      }),
+    );
+
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(mutation.mutate).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          updateRemoteSessionClientForm: expect.objectContaining({
+            legacyCallbackUrl: false,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("warns about a scope override only once the scope field has text", () => {
+    const { container } = render(
+      <SettingsTab
+        client={client(AuthMethod.ClientSecretBasic)}
+        issuerId="issuer-1"
+      />,
+    );
+    const scopes = [...container.querySelectorAll("label")]
+      .find((label) => label.textContent === "Scopes (comma-separated)")!
+      .parentElement!.querySelector("input")!;
+
+    expect(screen.queryByText("scope override warning")).toBeNull();
+
+    fireEvent.change(scopes, { target: { value: "openid" } });
+    expect(screen.getByText("scope override warning")).toBeTruthy();
+
+    fireEvent.change(scopes, { target: { value: "  " } });
+    expect(screen.queryByText("scope override warning")).toBeNull();
   });
 });

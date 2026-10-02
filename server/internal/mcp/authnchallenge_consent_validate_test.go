@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -83,21 +84,23 @@ const (
 
 // validationMemberRequest is one request as it arrived at the fake member.
 type validationMemberRequest struct {
-	method    string
-	jsonrpc   string
-	rpcMethod string
-	auth      string
-	session   string
-	version   string
+	method      string
+	jsonrpc     string
+	rpcMethod   string
+	auth        string
+	session     string
+	version     string
+	metaVersion string
 }
 
 // validationMember is a scripted MCP upstream recording every request it receives on the wire.
 type validationMember struct {
-	url      string
-	mu       sync.Mutex
-	mode     validationMemberMode
-	requests []validationMemberRequest
-	sessions int
+	protocolVersion string
+	url             string
+	mu              sync.Mutex
+	mode            validationMemberMode
+	requests        []validationMemberRequest
+	sessions        int
 	// onInitialize runs before initialize is answered; its error is kept for the test goroutine.
 	onInitialize func() error
 	hookErr      error
@@ -105,7 +108,7 @@ type validationMember struct {
 
 func newValidationMember(t *testing.T) *validationMember {
 	t.Helper()
-	m := &validationMember{url: "", mu: sync.Mutex{}, mode: memberAccepts, requests: nil, sessions: 0, onInitialize: nil, hookErr: nil}
+	m := &validationMember{protocolVersion: "2025-06-18", url: "", mu: sync.Mutex{}, mode: memberAccepts, requests: nil, sessions: 0, onInitialize: nil, hookErr: nil}
 	srv := httptest.NewServer(http.HandlerFunc(m.serve))
 	t.Cleanup(srv.Close)
 	m.url = srv.URL
@@ -133,18 +136,25 @@ func (m *validationMember) serve(w http.ResponseWriter, r *http.Request) {
 		JSONRPC string          `json:"jsonrpc"`
 		ID      json.RawMessage `json:"id"`
 		Method  string          `json:"method"`
+		Params  struct {
+			Meta map[string]json.RawMessage `json:"_meta"`
+		} `json:"params"`
 	}
 	_ = json.Unmarshal(body, &rpc)
+	var metaVersion string
+	_ = json.Unmarshal(rpc.Params.Meta[sdk.MetaKeyProtocolVersion], &metaVersion)
 
 	m.mu.Lock()
 	m.requests = append(m.requests, validationMemberRequest{
-		method:    r.Method,
-		jsonrpc:   rpc.JSONRPC,
-		rpcMethod: rpc.Method,
-		auth:      r.Header.Get("Authorization"),
-		session:   r.Header.Get("Mcp-Session-Id"),
-		version:   r.Header.Get("MCP-Protocol-Version"),
+		method:      r.Method,
+		jsonrpc:     rpc.JSONRPC,
+		rpcMethod:   rpc.Method,
+		auth:        r.Header.Get("Authorization"),
+		session:     r.Header.Get("Mcp-Session-Id"),
+		version:     r.Header.Get("MCP-Protocol-Version"),
+		metaVersion: metaVersion,
 	})
+	version := m.protocolVersion
 	mode := m.mode
 	hook := m.onInitialize
 	m.mu.Unlock()
@@ -191,6 +201,10 @@ func (m *validationMember) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	switch rpc.Method {
 	case "server/discover":
+		if version == "2026-07-28" {
+			answer(http.StatusOK, `"result":{"supportedVersions":["2026-07-28"],"capabilities":{"tools":{}},"_meta":{"io.modelcontextprotocol/serverInfo":{"name":"validation-member","version":"1"}}}`)
+			return
+		}
 		// The client falls back to initialize when discovery is unavailable or forbidden.
 		switch mode {
 		case memberDiscoveryForbiddenAccepts, memberDiscoveryForbiddenListFails, memberDiscoveryForbiddenListHangs:
@@ -199,6 +213,10 @@ func (m *validationMember) serve(w http.ResponseWriter, r *http.Request) {
 			answer(http.StatusNotFound, `"error":{"code":-32601,"message":"method not found"}`)
 		}
 	case "initialize":
+		if version == "2026-07-28" {
+			answer(http.StatusNotFound, `"error":{"code":-32601,"message":"method not found"}`)
+			return
+		}
 		if hook != nil {
 			if err := hook(); err != nil {
 				m.mu.Lock()
@@ -208,7 +226,7 @@ func (m *validationMember) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		switch mode {
 		case memberStateless, memberStatelessRejectsAck:
-			answer(http.StatusOK, `"result":{"protocolVersion":"2025-06-18","capabilities":{},"serverInfo":{"name":"validation-member","version":"1"}}`)
+			answer(http.StatusOK, `"result":{"protocolVersion":"`+version+`","capabilities":{},"serverInfo":{"name":"validation-member","version":"1"}}`)
 			return
 		case memberMissingVersion, memberWrongVersion:
 			version := ""
@@ -247,7 +265,7 @@ func (m *validationMember) serve(w http.ResponseWriter, r *http.Request) {
 		session := m.sessions
 		m.mu.Unlock()
 		w.Header().Set("Mcp-Session-Id", "member-session-"+uuid.NewString()[:8]+"-"+strings.Repeat("x", session))
-		answer(http.StatusOK, `"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"validation-member","version":"1"}}`)
+		answer(http.StatusOK, `"result":{"protocolVersion":"`+version+`","capabilities":{"tools":{}},"serverInfo":{"name":"validation-member","version":"1"}}`)
 	case "notifications/initialized":
 		if mode == memberHangsAck {
 			<-r.Context().Done()
@@ -298,7 +316,7 @@ func mintFirstPartyConsentState(t *testing.T, ctx context.Context, ti *testInsta
 		UserSessionIssuerID:  shared,
 	}
 
-	subject := urn.NewUserSubject(uuid.NewString())
+	subject := createTestUser(t, ctx, ti, uuid.NewString())
 	stateID := uuid.NewString()
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  stateID,
@@ -733,7 +751,7 @@ func TestServeConsentAction_ValidateProtocolOutcomes(t *testing.T) {
 		{name: "tools/list forbidden", prefix: "aim204-list403", mode: memberForbidsList, status: "rejected_by_member", expectAck: true, close: true, reasonFormat: "Rejected by %s", reconnect: true, excludes: "secret upstream detail"},
 		{name: "tools/list errors", prefix: "aim204-listerr", mode: memberErrorsList, status: "unknown", expectAck: true, close: true, reasonFormat: "Unexpected answer from %s", excludes: "secret upstream detail"},
 		{name: "discovery forbidden then accepts", prefix: "discovery403-ok", mode: memberDiscoveryForbiddenAccepts, status: "valid", expectAck: true, close: true},
-		{name: "discovery forbidden then tools/list fails", prefix: "discovery403-list500", mode: memberDiscoveryForbiddenListFails, status: "unknown", expectAck: true, close: true, reasonFormat: "Unexpected answer from %s", excludes: "secret upstream detail"},
+		{name: "discovery forbidden then tools/list fails", prefix: "discovery403-list500", mode: memberDiscoveryForbiddenListFails, status: "unknown", expectAck: true, close: true, reasonFormat: "%s answered with status 500", excludes: "secret upstream detail"},
 		{name: "discovery forbidden then tools/list hangs", prefix: "discovery403-list-timeout", mode: memberDiscoveryForbiddenListHangs, status: "unknown", expectAck: true, close: true, reasonFormat: "%s did not answer in time"},
 	}
 	for _, tc := range cases {
@@ -1287,4 +1305,44 @@ func TestServeConsentAction_ValidateRejectedThenIntrospectedAsInactive(t *testin
 	fx.member.set(memberAccepts)
 	requireValidated(t, fx)
 	require.Equal(t, "valid", storedSession(t, ctx, fx).ValidationStatus.String)
+}
+
+func TestServeConsentAction_ValidateMemberProtocolRevisions(t *testing.T) {
+	t.Parallel()
+	for _, version := range []string{"2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25", "2026-07-28"} {
+		t.Run(version, func(t *testing.T) {
+			t.Parallel()
+			ctx, fx := seedMetaValidationFixture(t, "validate-revision-"+version)
+			fx.member.mu.Lock()
+			fx.member.protocolVersion = version
+			fx.member.mu.Unlock()
+			requireValidated(t, fx)
+			require.Equal(t, "valid", storedSession(t, ctx, fx).ValidationStatus.String)
+			requests := fx.member.drain()
+			require.NotEmpty(t, requests)
+			require.Equal(t, "server/discover", requests[0].rpcMethod)
+			lists, deletes := 0, 0
+			for _, req := range requests {
+				if req.method == http.MethodDelete {
+					deletes++
+				}
+				if req.rpcMethod == "tools/list" {
+					lists++
+					require.Equal(t, version, req.version)
+				}
+				if version == "2026-07-28" {
+					require.Equal(t, version, req.metaVersion)
+					require.NotEqual(t, "initialize", req.rpcMethod)
+					require.NotEqual(t, "notifications/initialized", req.rpcMethod)
+					require.Empty(t, req.session)
+				}
+			}
+			require.Equal(t, 1, lists)
+			if version == "2026-07-28" {
+				require.Zero(t, deletes)
+			} else {
+				require.Equal(t, 1, deletes)
+			}
+		})
+	}
 }

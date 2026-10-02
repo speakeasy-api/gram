@@ -141,6 +141,34 @@ DO UPDATE SET
   , updated_at = GREATEST(chats.updated_at, EXCLUDED.updated_at)
 RETURNING id, title;
 
+-- name: GetImportedSessionObservations :many
+-- Read current ownership at consumption time, so attribution repaired between
+-- capture and delivery is reflected in analytics. Never read transcript text.
+SELECT m.id, m.chat_id, m.created_at, m.source, m.model, c.external_chat_id,
+       COALESCE(m.external_user_id, c.external_user_id, '')::text AS external_user_id,
+       COALESCE(NULLIF(m.user_id, ''), c.user_id, '')::text AS user_id,
+       COALESCE(u.email,
+         CASE WHEN m.external_user_id LIKE '%@%' THEN m.external_user_id END,
+         CASE WHEN c.external_user_id LIKE '%@%' THEN c.external_user_id END, '')::text AS user_email,
+       c.organization_id
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+LEFT JOIN users u ON u.id = COALESCE(NULLIF(m.user_id, ''), c.user_id)
+WHERE m.project_id = @project_id
+  AND m.id = ANY(@message_ids::uuid[])
+  AND c.deleted IS FALSE;
+
+-- name: ListImportedSessionObservationReplay :many
+SELECT m.id, c.organization_id
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+WHERE m.project_id = @project_id AND c.deleted IS FALSE
+  AND m.external_message_id IS NOT NULL
+  AND m.created_at >= @from_time AND m.created_at < @to_time
+  AND m.id > @after_id
+ORDER BY m.id
+LIMIT @row_limit;
+
 -- name: LinkAIIntegrationConfigChat :one
 -- Links a chat to the AI integration config that imported it and returns the
 -- chat's persisted message pagination cursor so imports resume where the last
@@ -549,6 +577,7 @@ candidate_chats AS (
       OR EXISTS (
         SELECT 1 FROM assistant_threads at
         WHERE at.chat_id = c.id
+          AND at.project_id = @project_id
           AND at.assistant_id = @assistant_id::uuid
           AND at.deleted IS FALSE
           -- Optional source-kind dimension so setup/onboarding and runtime
@@ -689,6 +718,7 @@ candidate_chats AS (
       OR EXISTS (
         SELECT 1 FROM assistant_threads at
         WHERE at.chat_id = c.id
+          AND at.project_id = @project_id
           AND at.assistant_id = @assistant_id::uuid
           AND at.deleted IS FALSE
           -- Optional source-kind dimension so setup/onboarding and runtime
@@ -797,14 +827,33 @@ limited_chats AS (
     fc.last_message_timestamp,
     fc.account_type,
     fc.account_email,
-    at.assistant_id,
+    -- Both assistant columns come from the project-scoped assistants row, so a
+    -- thread here that points at another project's assistant reports neither
+    -- its id nor its name; assistant_threads has no composite (project_id,
+    -- assistant_id) key to rule that row out.
+    a.id AS assistant_id,
     a.name AS assistant_name,
     -- Window count runs before LIMIT/OFFSET, so every returned row carries the
     -- total number of filtered chats.
     COUNT(*) OVER ()::bigint AS total_count
   FROM filtered_chats fc
-  LEFT JOIN assistant_threads at ON at.chat_id = fc.id AND at.deleted IS FALSE
-  LEFT JOIN assistants a ON a.id = at.assistant_id AND a.deleted IS FALSE
+  -- One thread per chat, so a chat several assistants worked in is one row
+  -- and LIMIT/OFFSET, total_count and the page all count chats. The thread of
+  -- the assistant the listing was narrowed to wins; otherwise the most
+  -- recently active one. The lateral picks only the thread id: the columns
+  -- come from the base tables below so they stay nullable for a chat with no
+  -- assistant thread. Every step is scoped to the listed project, so a thread
+  -- or assistant recorded under another project can never be reported for a
+  -- chat here even if the chat/thread relationship is inconsistent.
+  LEFT JOIN LATERAL (
+    SELECT at.id AS thread_id
+    FROM assistant_threads at
+    WHERE at.chat_id = fc.id AND at.project_id = @project_id AND at.deleted IS FALSE
+    ORDER BY (@assistant_id <> '' AND at.assistant_id::text = @assistant_id) DESC, at.last_event_at DESC, at.id DESC
+    LIMIT 1
+  ) picked ON TRUE
+  LEFT JOIN assistant_threads thread ON thread.id = picked.thread_id AND thread.project_id = @project_id
+  LEFT JOIN assistants a ON a.id = thread.assistant_id AND a.project_id = @project_id AND a.deleted IS FALSE
   ORDER BY
     -- Recency is pure message time. Hook rows persist at their occurred_at,
     -- so a chat whose only new traffic is spool-replayed backlog keeps its
@@ -1008,6 +1057,17 @@ SELECT id, title FROM chats
 WHERE id = ANY(@ids::uuid[])
   AND project_id = ANY(@project_ids::uuid[])
   AND deleted IS FALSE;
+
+-- name: GetOldestChatCreatedAt :one
+-- Lowest chats.created_at for these ids in this project, including
+-- soft-deleted rows. Work-units verdicts outlive chat deletion, and
+-- GetChatMetricsByIDs still reads those ids, so dropping deleted created_at
+-- values would shift the ClickHouse bound later and omit earlier tokens.
+-- Tenancy only: project_id plus the caller-supplied id list.
+SELECT MIN(created_at)::timestamptz AS created_at
+FROM chats
+WHERE project_id = @project_id
+  AND id = ANY(@ids::uuid[]);
 
 -- name: SumMessageTokenStatsByDay :many
 -- Daily message-level token stats for the billing details table
