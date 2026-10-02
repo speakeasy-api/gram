@@ -6,7 +6,6 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -50,7 +49,7 @@ import (
 // chatSessionsCORS and can observe the trust marker it sets. Non-MCP routes
 // are untouched; OPTIONS preflights never reach here for /mcp because
 // chatSessionsCORS answers them itself.
-func MCPSecurity(logger *slog.Logger, trustedOrigins []string) (func(http.Handler) http.Handler, error) {
+func MCPSecurity(logger *slog.Logger, trustedOrigins []string, safeNavigation func(*http.Request) bool) (func(http.Handler) http.Handler, error) {
 	protection := http.NewCrossOriginProtection()
 	for _, origin := range trustedOrigins {
 		if origin == "" {
@@ -75,7 +74,7 @@ func MCPSecurity(logger *slog.Logger, trustedOrigins []string) (func(http.Handle
 			}
 
 			if !chatSessionOriginTrusted(r.Context()) {
-				if err := protection.Check(originCheckProbe(r)); err != nil {
+				if err := protection.Check(originCheckProbe(r, safeNavigation)); err != nil {
 					logMCPSecurityRejection(r, logger, "cross_origin", err.Error())
 					http.Error(w, "forbidden: cross-origin request rejected", http.StatusForbidden)
 					return
@@ -109,24 +108,12 @@ func MCPSecurity(logger *slog.Logger, trustedOrigins []string) (func(http.Handle
 // reaches this middleware anyway because CORSMiddleware and chatSessionsCORS
 // both answer OPTIONS before calling next.
 //
-// The one exception is a GET to /mcp/{slug} that accepts HTML: HandleGetServer
-// serves the install page for it ahead of any SSE branch, so it keeps
-// safe-method semantics and a link from another site still opens the page.
-// The Accept parsing mirrors HandleGetServer, including its q=0 exclusion.
-func originCheckProbe(r *http.Request) *http.Request {
-	if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/mcp/") {
-		for value := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
-			mediaType, params, err := mime.ParseMediaType(value)
-			if err != nil {
-				continue
-			}
-			if q, err := strconv.ParseFloat(params["q"], 64); err == nil && q == 0 {
-				continue
-			}
-			if mediaType == "text/html" || mediaType == "application/xhtml+xml" {
-				return r
-			}
-		}
+// safeNavigation names requests that keep safe-method semantics anyway: GETs
+// the route's own handler answers with a page rather than a stream, so a link
+// from another site can still open them.
+func originCheckProbe(r *http.Request, safeNavigation func(*http.Request) bool) *http.Request {
+	if safeNavigation != nil && safeNavigation(r) {
+		return r
 	}
 
 	switch r.Method {

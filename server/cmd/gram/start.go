@@ -1382,7 +1382,7 @@ func newStartCommand() *cli.Command {
 			// onto the platform host (mcp_endpoint rows resolve by slug + custom
 			// domain). site-url and server-url are the same origin in production and
 			// differ only in local development.
-			mcpSecurity, err := middleware.MCPSecurity(logger, append([]string{c.String("server-url"), c.String("site-url")}, platformOrigins(platformHosts)...))
+			mcpSecurity, err := middleware.MCPSecurity(logger, append([]string{c.String("server-url"), c.String("site-url")}, platformOrigins(platformHosts)...), mcp.ServesInstallPage)
 			if err != nil {
 				return fmt.Errorf("configure mcp security middleware: %w", err)
 			}
