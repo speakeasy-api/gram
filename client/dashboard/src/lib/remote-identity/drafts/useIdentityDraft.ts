@@ -708,11 +708,14 @@ export function useUserIdentityDraft({
   const methodChoiceAvailable = support.cimd && support.dcr;
   const existingAvailable = reusableClientOptions.length > 0;
 
-  // Reusing a client beats registering another, and registering beats asking
-  // for credentials by hand. A pick the provider no longer allows falls back.
+  // Slack starts with a new app; reusing a client is an explicit choice.
+  // Other providers prefer reuse, then automatic registration. A pick the
+  // provider no longer allows falls back.
   let defaultChoice: RegistrationChoice = "manual";
-  if (existingAvailable) defaultChoice = "existing";
-  else if (automaticAvailable) defaultChoice = "auto";
+  if (!slackEndpoint) {
+    if (existingAvailable) defaultChoice = "existing";
+    else if (automaticAvailable) defaultChoice = "auto";
+  }
   let choice: RegistrationChoice = choicePick ?? defaultChoice;
   if (choice === "existing" && !existingAvailable) choice = defaultChoice;
   if (choice === "auto" && !automaticAvailable) choice = defaultChoice;
@@ -797,7 +800,7 @@ export function useUserIdentityDraft({
     mutationFn: async () => {
       if (!selected) throw new Error("choose an identity provider");
       if (
-        guidedManual &&
+        slackEndpoint &&
         manualNeeded &&
         (!slackCompatible ||
           !hasSlackReadScopes(scopes) ||
@@ -992,7 +995,7 @@ export function useUserIdentityDraft({
   if (choice === "existing")
     choiceComplete = !!existingClient && !sameAsConnected;
   if (choice === "manual") choiceComplete = clientId.trim() !== "";
-  if (guidedManual && manualNeeded)
+  if (slackEndpoint && manualNeeded)
     choiceComplete =
       choiceComplete &&
       slackCompatible &&
@@ -1020,18 +1023,14 @@ export function useUserIdentityDraft({
           canApplyDefaults:
             slackCompatible &&
             !connected &&
-            !clientId &&
-            !clientSecret &&
-            scopes.length === 0 &&
+            (scopes.length === 0 || hasSlackReadScopes(scopes)) &&
             !isPending,
           applyDefaults: (selectedScopes: string[]) => {
             if (
               !slackCompatible ||
               !hasSlackReadScopes(selectedScopes) ||
               connected ||
-              clientId ||
-              clientSecret ||
-              scopes.length > 0 ||
+              (scopes.length > 0 && !hasSlackReadScopes(scopes)) ||
               isPending
             )
               return;

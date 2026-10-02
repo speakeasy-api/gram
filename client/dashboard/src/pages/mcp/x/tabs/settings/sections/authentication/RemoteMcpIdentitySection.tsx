@@ -509,21 +509,35 @@ export function RemoteMcpIdentitySectionBody({
               {isSlackMcpUrl(sourceQuery.data?.url) && sourceQuery.data?.url ? (
                 <SlackSetup
                   serverUrl={sourceQuery.data.url}
+                  connectHref={routes.mcp.x.inspect.href(target.slug)}
                   draft={userDraft}
                   disabled={identityReadOnly || userDraft.saving}
+                >
+                  <UserIdentityRow
+                    draft={userDraft}
+                    disabled={identityReadOnly || userDraft.saving}
+                    createHref={routes.remoteIdentityProviders.href()}
+                    clientHref={(issuerId, clientId) =>
+                      routes.remoteIdentityProviders.clientDetail.href(
+                        issuerId,
+                        clientId,
+                      )
+                    }
+                  />
+                </SlackSetup>
+              ) : (
+                <UserIdentityRow
+                  draft={userDraft}
+                  disabled={identityReadOnly || userDraft.saving}
+                  createHref={routes.remoteIdentityProviders.href()}
+                  clientHref={(issuerId, clientId) =>
+                    routes.remoteIdentityProviders.clientDetail.href(
+                      issuerId,
+                      clientId,
+                    )
+                  }
                 />
-              ) : null}
-              <UserIdentityRow
-                draft={userDraft}
-                disabled={identityReadOnly || userDraft.saving}
-                createHref={routes.remoteIdentityProviders.href()}
-                clientHref={(issuerId, clientId) =>
-                  routes.remoteIdentityProviders.clientDetail.href(
-                    issuerId,
-                    clientId,
-                  )
-                }
-              />
+              )}
             </div>
           ) : null}
 

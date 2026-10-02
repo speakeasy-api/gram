@@ -1,9 +1,9 @@
-import { SetupGuideCallout } from "@/components/setup-guide/SetupGuideCallout";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Text } from "@/components/ui/Text";
 import { useGetMCPSetupDocs } from "@gram/client/react-query/getMCPSetupDocs.js";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
+import { Link } from "react-router";
 import type { UserIdentityDraft } from "../drafts/useIdentityDraft";
 import {
   SLACK_DEFAULT_SCOPES,
@@ -15,33 +15,55 @@ export function SlackSetup({
   serverUrl,
   draft,
   disabled,
+  children,
+  connectHref,
 }: {
   serverUrl: string;
   draft: UserIdentityDraft;
   disabled: boolean;
+  children: ReactNode;
+  connectHref: string;
 }): JSX.Element | null {
   const descriptionId = useId();
   const { data, isPending } = useGetMCPSetupDocs({ serverUrl }, undefined, {
     throwOnError: false,
   });
-  const [newApp, setNewApp] = useState(false);
+  const [openedManifest, setOpenedManifest] = useState<string | null>(null);
   const [selectedChoices, setSelectedChoices] = useState<string[]>(
     SLACK_SCOPE_CHOICES.filter((choice) => choice.defaultSelected).map(
       (choice) => choice.label,
     ),
   );
   const setup = draft.slackSetup;
-  const manualActive = setup?.manualActive ?? false;
   useEffect(() => {
-    if (!manualActive) setNewApp(false);
-  }, [manualActive]);
+    if (
+      setup?.canApplyDefaults &&
+      !setup.manualActive &&
+      draft.status.kind !== "done" &&
+      draft.choice === "manual" &&
+      draft.scopes.length === 0
+    ) {
+      setup.applyDefaults(
+        SLACK_SCOPE_CHOICES.filter((choice) =>
+          selectedChoices.includes(choice.label),
+        ).flatMap((choice) => [...choice.scopes]),
+      );
+    }
+  }, [
+    setup,
+    draft.choice,
+    draft.scopes.length,
+    draft.status.kind,
+    selectedChoices,
+  ]);
   if (!setup) return null;
   const callback = data?.oauthCallbackUrl;
-  const selected = setup.manualActive
-    ? SLACK_SCOPE_CHOICES.filter((choice) =>
-        choice.scopes.every((scope) => draft.scopes.includes(scope)),
-      ).map((choice) => choice.label)
-    : selectedChoices;
+  const selected =
+    setup.manualActive || draft.scopes.length > 0
+      ? SLACK_SCOPE_CHOICES.filter((choice) =>
+          choice.scopes.every((scope) => draft.scopes.includes(scope)),
+        ).map((choice) => choice.label)
+      : selectedChoices;
   const scopes = SLACK_SCOPE_CHOICES.filter((choice) =>
     selected.includes(choice.label),
   ).flatMap((choice) => [...choice.scopes]);
@@ -51,14 +73,14 @@ export function SlackSetup({
     const next = checked
       ? [...selected, label]
       : selected.filter((value) => value !== label);
+    const nextScopes = SLACK_SCOPE_CHOICES.filter((choice) =>
+      next.includes(choice.label),
+    ).flatMap((choice) => [...choice.scopes]);
     if (setup.manualActive) {
-      draft.setScopes(
-        SLACK_SCOPE_CHOICES.filter((choice) =>
-          next.includes(choice.label),
-        ).flatMap((choice) => [...choice.scopes]),
-      );
+      draft.setScopes(nextScopes);
     } else {
       setSelectedChoices(next);
+      if (setup.canApplyDefaults) setup.applyDefaults(nextScopes);
     }
   };
   const canChooseApp =
@@ -68,31 +90,66 @@ export function SlackSetup({
       (setup.manualActive &&
         setup.providerCompatible &&
         setup.scopesCompatible));
-  const createApp = (): void => {
-    if (!canChooseApp) return;
+  const openApp = (): void => {
+    if (!canChooseApp || !configuration) return;
     if (setup.canApplyDefaults) setup.applyDefaults(scopes);
-    setNewApp(true);
+    setOpenedManifest(configuration.json);
   };
+  if (draft.connected || draft.status.kind === "done")
+    return (
+      <div className="space-y-3">
+        {children}
+        <Text small muted className="block">
+          Slack app configured. To authorize your personal account, open Inspect
+          and choose Connect. If this server is disabled, enable Availability
+          first.
+        </Text>
+        <Button variant="secondary" asChild>
+          <Link to={connectHref}>Connect your Slack account</Link>
+        </Button>
+      </div>
+    );
+  const reusing = draft.choice === "existing";
   return (
     <div className="mb-6 space-y-3 rounded border p-4">
-      <Text className="font-medium">Slack Setup</Text>
+      <div className="flex items-center justify-between gap-3">
+        <Text className="font-medium">Slack Setup</Text>
+        {draft.cleared && (
+          <Button
+            variant="tertiary"
+            size="sm"
+            disabled={disabled}
+            onClick={draft.cancelClear}
+          >
+            <Button.Text>Cancel</Button.Text>
+          </Button>
+        )}
+      </div>
       <Text small muted className="block">
-        Choose the information each authorizing user can access. Two public
-        channel options are selected by default. No message sending access is
-        requested. See the{" "}
-        <a
-          href="https://docs.slack.dev/ai/slack-mcp-server/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline"
-        >
-          Slack MCP permission guide
-        </a>
-        .
+        Create a Slack app, then save its credentials here. Connecting your
+        personal Slack account is a separate step after configuration.
       </Text>
+      {draft.existingAvailable && (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            disabled={disabled || !reusing}
+            onClick={() => draft.selectChoice("manual")}
+          >
+            <Button.Text>Set up a new Slack app</Button.Text>
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={disabled || reusing}
+            onClick={() => draft.selectChoice("existing")}
+          >
+            <Button.Text>Use a saved Slack app</Button.Text>
+          </Button>
+        </div>
+      )}
       {!draft.connected && draft.choice !== "existing" && (
         <fieldset className="grid gap-2 sm:grid-cols-2" disabled={disabled}>
-          <legend className="mb-2 text-sm font-medium">Slack access</legend>
+          <legend className="mb-2 text-sm font-medium">1. Choose access</legend>
           {SLACK_SCOPE_CHOICES.map((choice, index) => (
             <label
               key={choice.label}
@@ -136,71 +193,105 @@ export function SlackSetup({
         <Text small warning className="block">
           The selected provider does not match Slack's reviewed user-token
           endpoints and Post authentication. It will not be changed
-          automatically. Choose a compatible provider below, or configure one
-          through Create a custom identity provider.
+          automatically. Choose a compatible provider in Advanced, or configure
+          one through Create a custom identity provider.
         </Text>
       )}
-      {setup.manualActive && !setup.scopesCompatible && (
-        <Text small warning className="block">
-          Choose a supported set of read/search access options before saving.
-        </Text>
-      )}
-      <SetupGuideCallout serverUrl={serverUrl} />
-      {draft.connected && (
-        <Text small muted className="block">
-          A saved identity is already configured. Use Clear connection below
-          only if you intend to replace it.
-        </Text>
-      )}
-      {!draft.connected && draft.choice === "existing" && (
-        <Text small muted className="block">
-          A stored client keeps the permissions already saved with it. Choose an
-          app option to select different access.
-        </Text>
-      )}
-      {!draft.connected &&
-        !setup.manualActive &&
-        (draft.clientId || draft.clientSecret || draft.scopeText) && (
-          <Text small muted className="block">
-            Guided defaults will not overwrite your unsaved edits. Keep editing
-            below, or clear the client ID, secret, and scope fields before
-            applying defaults.
+      {!reusing &&
+        (setup.manualActive || draft.scopes.length > 0) &&
+        !setup.scopesCompatible && (
+          <Text small warning className="block">
+            Choose a supported set of read/search access options before saving.
           </Text>
         )}
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant="secondary"
-          className="h-auto min-h-9 max-w-full whitespace-normal"
-          disabled={!canChooseApp || (setup.manualActive && newApp)}
-          onClick={createApp}
-        >
-          <Button.Text>Create a new Slack app</Button.Text>
-        </Button>
-        {draft.existingAvailable && (
-          <Button
-            variant="secondary"
-            className="h-auto min-h-9 max-w-full whitespace-normal"
-            disabled={disabled || draft.connected}
-            onClick={() => draft.selectChoice("existing")}
-          >
-            <Button.Text>Reuse a compatible stored client</Button.Text>
-          </Button>
-        )}
-      </div>
-      {newApp && setup.manualActive && configuration && !draft.connected && (
-        <SlackAppManifest configuration={configuration} disabled={disabled} />
+      {!reusing && (
+        <div className="space-y-3 border-t pt-3">
+          <Text className="block font-medium">2. Create your Slack app</Text>
+          <Text small muted className="block">
+            The manifest includes MCP enablement, the selected permissions, and
+            the callback URL. In Slack, select your workspace and create the
+            app.
+          </Text>
+          {canChooseApp && configuration ? (
+            <Button variant="primary" asChild>
+              <a
+                href={configuration.creationUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={openApp}
+              >
+                Create app in Slack ↗
+              </a>
+            </Button>
+          ) : (
+            <Button disabled>Create app in Slack ↗</Button>
+          )}
+          {openedManifest &&
+            configuration &&
+            openedManifest !== configuration.json && (
+              <Text small warning className="block">
+                Access changed after opening Slack. If you already created the
+                app, update its permissions in Slack or create it again with
+                this manifest.
+              </Text>
+            )}
+          {configuration && (
+            <details>
+              <summary className="cursor-pointer text-sm">Manual setup</summary>
+              <SlackAppManifest
+                configuration={configuration}
+                disabled={disabled}
+              />
+            </details>
+          )}
+        </div>
       )}
+      {reusing ? (
+        <div className="space-y-2">
+          <Text small muted className="block">
+            This app keeps its saved permissions. Choose it below, then Save.
+          </Text>
+          <ul
+            aria-label="Saved Slack app access"
+            className="list-inside list-disc text-sm"
+          >
+            {SLACK_SCOPE_CHOICES.filter((choice) =>
+              choice.scopes.every((scope) =>
+                draft.existingOptions
+                  .find((client) => client.id === draft.existingClientId)
+                  ?.scopes.includes(scope),
+              ),
+            ).map((choice) => (
+              <li key={choice.label}>{choice.label}</li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <div className="space-y-1 border-t pt-3">
+          <Text className="block font-medium">3. Add app credentials</Text>
+          <Text small muted className="block">
+            In your Slack app, open Basic Information → App Credentials. Copy
+            the Client ID and Client Secret into the fields below, then Save
+            configuration.
+          </Text>
+        </div>
+      )}
+      {children}
+      <div className="space-y-1 border-t pt-3">
+        <Text className="block font-medium">
+          {reusing ? "Save configuration" : "4. Save configuration"}
+        </Text>
+        <Text small muted className="block">
+          Use Save below to store the app configuration. Then connect your
+          personal Slack account from Inspect. Saving does not authorize Slack
+          access.
+        </Text>
+      </div>
       {setup.incompatibleClients.map((client) => (
         <Text key={client.id} small muted className="block">
           Client {client.hint}: {client.reason}. Left unchanged.
         </Text>
       ))}
-      <Text small muted className="block">
-        Local configuration compatibility does not verify the app's settings in
-        Slack. Enter its client ID and secret in the existing form, then Save.
-        Saving configures identity only; use Availability if disabled, then
-        Inspect / Connect for personal consent.
-      </Text>
     </div>
   );
 }
@@ -223,28 +314,7 @@ function SlackAppManifest({
   };
   return (
     <div className="space-y-3 border-t pt-3">
-      <Text small className="block">
-        Create a new internal app in Slack: select your workspace, review these
-        read/search permissions, and create the app. Then return here and enter
-        its client ID and secret below. App creation does not approve workspace
-        access or complete personal consent.
-      </Text>
       <div className="flex flex-wrap gap-2">
-        {!disabled && (
-          <Button
-            variant="secondary"
-            className="h-auto min-h-9 max-w-full whitespace-normal"
-            asChild
-          >
-            <a
-              href={configuration.creationUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Open Slack app creation
-            </a>
-          </Button>
-        )}
         <Button
           variant="secondary"
           className="h-auto min-h-9 max-w-full whitespace-normal"
