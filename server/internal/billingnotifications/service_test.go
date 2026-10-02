@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
@@ -58,9 +59,28 @@ func newNotificationTestService(t *testing.T, accountType string, whitelisted bo
 	}))
 	sender := &captureSender{}
 	flags := new(feature.InMemory)
-	siteURL, err := url.Parse("https://app.example.test")
+	return NewService(testenv.NewLogger(t), db, sender, flags, testOrgHosts(t)), sender, organizationID
+}
+
+// testOrgHosts serves the dashboard on ai.example.test, keeps organizations
+// without a default host on the legacy app.example.test, and accepts
+// platform.example.test as a recorded default host.
+func testOrgHosts(t *testing.T) *orghost.Resolver {
+	t.Helper()
+	serverURL, err := url.Parse("https://ai.example.test")
 	require.NoError(t, err)
-	return NewService(testenv.NewLogger(t), db, sender, flags, siteURL), sender, organizationID
+	legacyURL, err := url.Parse("https://app.example.test")
+	require.NoError(t, err)
+	return orghost.New(orghost.Config{
+		ServerURL: serverURL,
+		SiteURL:   serverURL,
+		PlatformHosts: map[string]string{
+			"app.example.test":      "https://app.example.test",
+			"platform.example.test": "https://platform.example.test",
+		},
+		LegacyDefaultHost:          legacyURL,
+		NewOrganizationDefaultHost: nil,
+	})
 }
 
 func TestSendTrialEndingSoonUsesConfiguredBillingEmailAndStableTrialIdentity(t *testing.T) {
@@ -257,6 +277,30 @@ func TestSendPaygActivatedRequiresActivePaygSubscription(t *testing.T) {
 	require.NoError(t, service.SendPaygActivated(t.Context(), SendPaygActivatedInput{EventID: "later-event-placeholder", OrganizationID: organizationID}))
 	require.Len(t, sender.sends, 2)
 	require.NotEqual(t, sender.sends[0].key, sender.sends[1].key)
+}
+
+func TestSendAccessPausedLinksToOrganizationDefaultHost(t *testing.T) {
+	t.Parallel()
+	service, sender, organizationID := newNotificationTestService(t, "free", false)
+	require.NoError(t, orgrepo.New(service.db).SetOrganizationDefaultHostForTest(t.Context(), orgrepo.SetOrganizationDefaultHostForTestParams{
+		DefaultHost: pgtype.Text{String: "https://platform.example.test", Valid: true},
+		ID:          organizationID,
+	}))
+	_, err := usagerepo.New(service.db).UpsertBillingEmail(t.Context(), usagerepo.UpsertBillingEmailParams{
+		OrganizationID: organizationID,
+		AlertEmail:     pgtype.Text{String: "billing@example.test", Valid: true},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, service.SendAccessPaused(t.Context(), SendAccessPausedInput{
+		EventID:        "event-placeholder",
+		OrganizationID: organizationID,
+		Kind:           AccessPausedSubscriptionLoss,
+	}))
+	require.Len(t, sender.sends, 1)
+	template, ok := sender.sends[0].template.(email.AccessPaused)
+	require.True(t, ok)
+	require.Equal(t, "https://platform.example.test/example-org", template.ActionURL)
 }
 
 func TestSendPaygActivatedSkipsOrganizationsOffPayg(t *testing.T) {

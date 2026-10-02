@@ -222,6 +222,11 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return err
 	}
+	orgHosts, err := orgHostResolverFromCLI(c, serverURL, siteURL, serviceEnv, platformHosts)
+	if err != nil {
+		return err
+	}
+	identityResolver.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 
 	enc, err := encryption.New(c.String("encryption-key"))
 	if err != nil {

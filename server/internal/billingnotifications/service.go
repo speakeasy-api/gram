@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -17,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
@@ -32,17 +32,17 @@ type Service struct {
 	db                *pgxpool.Pool
 	sender            Sender
 	features          feature.Provider
-	siteURL           *url.URL
+	orgHosts          *orghost.Resolver
 	resolveRecipients func(context.Context, accessrepo.DBTX, string, string, *string) ([]string, error)
 }
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sender Sender, features feature.Provider, siteURL *url.URL) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sender Sender, features feature.Provider, orgHosts *orghost.Resolver) *Service {
 	return &Service{
 		logger:            logger.With(attr.SlogComponent("billing-notifications")),
 		db:                db,
 		sender:            sender,
 		features:          features,
-		siteURL:           siteURL,
+		orgHosts:          orgHosts,
 		resolveRecipients: ResolveRecipients,
 	}
 }
@@ -111,7 +111,7 @@ func (s *Service) SendTrialEndingSoon(ctx context.Context, input SendTrialEnding
 	template := email.TrialEndingSoon{
 		OrganizationName: organization.Name,
 		TrialEndDate:     state.TrialEndsAt.UTC().Format("January 2, 2006"),
-		ActionURL:        s.siteURL.JoinPath(organization.Slug, "billing").String(),
+		ActionURL:        s.orgHosts.SiteURL(organization.DefaultHost).JoinPath(organization.Slug, "billing").String(),
 	}
 	return SendTrialEndingSoonResult{}, s.deliver(ctx, input.OrganizationID, "", recipients, resolutionErr, template,
 		"trial-ending-soon", input.OrganizationID, state.TrialCreatedAt.UTC().Format(time.RFC3339Nano), state.TrialEndsAt.UTC().Format(time.RFC3339Nano))
@@ -185,7 +185,7 @@ func (s *Service) SendAccessPaused(ctx context.Context, input SendAccessPausedIn
 	recipients, resolutionErr := s.resolveRecipients(ctx, s.db, input.OrganizationID, string(billing.TierPayg), configuredEmail)
 	template := email.AccessPaused{
 		OrganizationName: organization.Name,
-		ActionURL:        s.siteURL.JoinPath(organization.Slug).String(),
+		ActionURL:        s.orgHosts.SiteURL(organization.DefaultHost).JoinPath(organization.Slug).String(),
 	}
 	return s.deliver(ctx, input.OrganizationID, input.EventID, recipients, resolutionErr, template, "access-paused", input.EventID)
 }
@@ -227,7 +227,7 @@ func (s *Service) SendPaygActivated(ctx context.Context, input SendPaygActivated
 	template := email.PaygActivated{
 		OrganizationName:      organization.Name,
 		TumPricePerMillionUsd: billing.TUMPricePerMillionUSD,
-		ActionURL:             s.siteURL.JoinPath(organization.Slug, "billing").String(),
+		ActionURL:             s.orgHosts.SiteURL(organization.DefaultHost).JoinPath(organization.Slug, "billing").String(),
 	}
 	return s.deliver(ctx, input.OrganizationID, input.EventID, recipients, resolutionErr, template, "payg-activated", input.EventID)
 }
