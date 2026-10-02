@@ -55,16 +55,17 @@ func TestRecordedIDPCallbackOrigin(t *testing.T) {
 	endpoint := &ResolvedMcpEndpoint{RouteBase: "mcp"}
 	for _, test := range []struct {
 		callback, want string
+		wantErr        bool
 	}{
 		{callback: "https://reg.example/mcp/idp_callback", want: "https://reg.example"},
 		{callback: "https://app.example/mcp/idp_callback", want: "https://app.example"},
-		{callback: "http://reg.example/mcp/idp_callback"},
-		{callback: "https://reg.example/x/mcp/idp_callback"},
-		{callback: "https://reg.example/mcp/idp_callback?x=1"},
-		{callback: ""},
+		{callback: "http://reg.example/mcp/idp_callback", wantErr: true},
+		{callback: "https://reg.example/x/mcp/idp_callback", wantErr: true},
+		{callback: "https://reg.example/mcp/idp_callback?x=1", wantErr: true},
+		{callback: "", wantErr: true},
 	} {
 		origin, err := recordedIDPCallbackOrigin(endpoint, test.callback)
-		if test.want == "" {
+		if test.wantErr {
 			require.Error(t, err, test.callback)
 			continue
 		}
