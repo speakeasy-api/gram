@@ -74,6 +74,12 @@ func (r *recordingToolCallSearchReader) ListToolUsageTraces(_ context.Context, a
 	}
 	page := make([]telemetryrepo.ToolUsageTraceSummary, 0, arg.Limit)
 	for _, row := range r.rows {
+		// The window is honoured the way the repository honours it, so a test
+		// about window drift observes which rows are reachable rather than only
+		// which bounds were asked for.
+		if row.StartTimeUnixNano < arg.TimeStart || row.StartTimeUnixNano > arg.TimeEnd {
+			continue
+		}
 		if arg.CursorID != "" && (row.StartTimeUnixNano > arg.CursorTimeUnixNano || (row.StartTimeUnixNano == arg.CursorTimeUnixNano && row.ID >= arg.CursorID)) {
 			continue
 		}
@@ -482,17 +488,50 @@ func TestSearchToolCalls_CursorResumesOnlyTheQueryThatMintedIt(t *testing.T) {
 	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
 }
 
-func TestToolCallCursor_CarriesThePageKeyAndTraversal(t *testing.T) {
+func TestToolCallCursor_CarriesThePageKeyTraversalAndWindow(t *testing.T) {
 	t.Parallel()
 
-	position, id, traversed, err := parseToolCallCursor(formatToolCallCursor(1_700_000_000_000_000_000, "summary-1", 40))
+	window, err := resolveWindow("24h", toolCallSearchTestNow, toolCallSearchWindowSpec)
 	require.NoError(t, err)
-	require.Equal(t, int64(1_700_000_000_000_000_000), position)
-	require.Equal(t, "summary-1", id)
-	require.Equal(t, 40, traversed)
 
-	for _, value := range []string{"", "t:1:0:x", "s:", "s:abc", "s:-1:0:x", "s:0:0:x", "s:1700000000", "s:1700000000:x", "s:1700000000:0:", "s:1700000000:-1:x", formatToolCallCursor(1, "x", maxToolCallSearchTraversal+1)} {
-		_, _, _, err := parseToolCallCursor(value)
+	position, err := parseToolCallCursor(formatToolCallCursor(1_700_000_000_000_000_000, "summary-1", 40, window))
+	require.NoError(t, err)
+	require.Equal(t, int64(1_700_000_000_000_000_000), position.timeUnixNano)
+	require.Equal(t, "summary-1", position.id)
+	require.Equal(t, 40, position.traversed)
+	require.Equal(t, window.start, position.windowStart)
+	require.Equal(t, window.end, position.windowEnd)
+
+	for _, value := range []string{
+		"",
+		"t:1:0:x",
+		"s2:",
+		"s2:abc",
+		"s2:-1:0:1:2:x",
+		"s2:0:0:1:2:x",
+		"s2:1700000000",
+		"s2:1700000000:x",
+		"s2:1700000000:0:1:2:",
+		"s2:1700000000:-1:1:2:x",
+		// Window bounds that are absent, unparseable, non-positive, or not an
+		// interval leave nothing to anchor to.
+		"s2:1700000000:0:x",
+		"s2:1700000000:0:1:x",
+		"s2:1700000000:0:abc:2:x",
+		"s2:1700000000:0:1:abc:x",
+		"s2:1700000000:0:0:2:x",
+		"s2:1700000000:0:2:2:x",
+		"s2:1700000000:0:3:2:x",
+		// A cursor minted before the window was anchored carries no interval, and
+		// is refused rather than resumed against a window recomputed from now.
+		// The second is the case the prefix itself has to catch: a pre-anchor
+		// payload whose summary id happens to contain colons has the arity of an
+		// anchored one, so only the shape tag tells them apart.
+		"s:1700000000000000000:0:summary-1",
+		"s:1700000000000000000:0:1:2:summary-1",
+		formatToolCallCursor(1, "x", maxToolCallSearchTraversal+1, window),
+	} {
+		_, err := parseToolCallCursor(value)
 		require.ErrorIs(t, err, ErrSubjectReferenceNotFound, value)
 	}
 }
@@ -603,6 +642,161 @@ func TestListAttributeKeys_WithholdsIdentityKeys(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"gram.hook.source"}, output.SystemKeys)
 	require.Equal(t, []string{"@region"}, output.CustomKeys)
+}
+
+// TestToolCallSearch_RefusesHeaderAttributesAndWithholdsThemFromDiscovery pins
+// both halves of the header boundary. Withholding a header value from the
+// result does not protect it while a caller can still test a guess against it:
+// eq or in over http.request.headers.Cookie answers whether the guess was right
+// by which calls come back, which is the oracle the tool-content refusal exists
+// to close. So a header filter is refused before any read, and key discovery
+// never offers one either.
+func TestToolCallSearch_RefusesHeaderAttributesAndWithholdsThemFromDiscovery(t *testing.T) {
+	t.Parallel()
+
+	headerKeys := []string{
+		// The header maps, whose own keys are whatever the wire carried.
+		"http.request.headers.Cookie",
+		"http.request.headers.Authorization",
+		"http.response.headers.Location",
+		"http.response.headers.Set_Cookie",
+		"http.request.headers",
+		"http.response.headers",
+		// The individual headers the server stamps.
+		"http.request.header.user_agent",
+		"http.request.header.origin",
+		"http.response.header.www_authenticate",
+		// A header map nested under another producer's namespace.
+		"gram.mcp.request.headers.X_Api_Key",
+	}
+
+	reader := &recordingToolCallSearchReader{rows: []telemetryrepo.ToolUsageTraceSummary{
+		toolCallSearchRow("row-1", toolCallSearchTestNow.Add(-time.Minute), "email", "person@example.test", 200),
+	}}
+	service := newToolCallSearchService(t, reader, &recordingDrilldownAuditor{})
+	principal := testPrincipal()
+
+	for _, key := range headerKeys {
+		for _, op := range []string{"eq", "in", "not_eq", "exists", "not_exists"} {
+			filter := ToolCallAttributeFilter{Key: key, Op: op, Values: []string{"guess"}}
+			if op == "exists" || op == "not_exists" {
+				filter.Values = nil
+			}
+			_, err := service.SearchToolCalls(t.Context(), principal, SearchToolCallsInput{
+				ProjectID:  toolCallSearchTestProject,
+				Attributes: []ToolCallAttributeFilter{filter},
+			})
+			require.ErrorIs(t, err, ErrToolCallSearchInvalid, key+" "+op)
+			require.ErrorContains(t, err, "HTTP header", key+" "+op)
+		}
+	}
+	require.Zero(t, reader.calls, "a refused header filter must not reach the tool-call read")
+
+	// The http.* attributes that are not headers keep working, so the rule is a
+	// header rule and not an http rule.
+	for _, key := range []string{
+		"http.request.method",
+		"http.route",
+		"http.response.status_code",
+		"http.server.request.duration",
+		"http.request.body",
+	} {
+		_, err := service.SearchToolCalls(t.Context(), principal, SearchToolCallsInput{
+			ProjectID:  toolCallSearchTestProject,
+			Attributes: []ToolCallAttributeFilter{{Key: key, Op: "exists"}},
+		})
+		require.NoError(t, err, key)
+	}
+	require.Equal(t, 5, reader.calls)
+
+	// The other half: discovery never names a key the search refuses, so an
+	// agent is not led to build a header predicate and told it is malformed
+	// only afterwards.
+	keysReader := &recordingToolCallSearchReader{keys: append(append([]string{}, headerKeys...), "gram.hook.source", "http.response.status_code", "app.region")}
+	keysService := newToolCallSearchService(t, keysReader, &recordingDrilldownAuditor{})
+
+	output, err := keysService.ListAttributeKeys(t.Context(), principal, ListAttributeKeysInput{ProjectID: toolCallSearchTestProject})
+	require.NoError(t, err)
+	require.Equal(t, []string{"gram.hook.source", "http.response.status_code"}, output.SystemKeys)
+	require.Equal(t, []string{"@region"}, output.CustomKeys)
+}
+
+// TestSearchToolCalls_CursorAnchorsTheWindowAcrossPages pins that paging reads
+// the interval the first page read, not one recomputed from the clock. The
+// clock advances between pages here, which is what a real investigation does
+// while it reads: without the anchor, a relative window slides forward and the
+// oldest calls in it silently stop being reachable part-way through a walk.
+//
+// Each hop advances the clock by less than SubjectReferenceTTL, so the cursor
+// is still live and the only thing under test is the window it resumes against.
+func TestSearchToolCalls_CursorAnchorsTheWindowAcrossPages(t *testing.T) {
+	t.Parallel()
+
+	const hop = 9 * time.Minute
+
+	// Newest first. The oldest row sits near the start of the 1h window, so a
+	// window recomputed one hop later no longer contains it: resolving from a
+	// clock at +9m reads from -51m, and this row is at -55m.
+	rows := []telemetryrepo.ToolUsageTraceSummary{
+		toolCallSearchRow("row-new", toolCallSearchTestNow.Add(-time.Minute), "email", "person@example.test", 200),
+		toolCallSearchRow("row-old", toolCallSearchTestNow.Add(-55*time.Minute), "email", "other@example.test", 200),
+	}
+	reader := &recordingToolCallSearchReader{rows: rows, paged: true}
+	service := newToolCallSearchService(t, reader, &recordingDrilldownAuditor{})
+	clock := toolCallSearchTestNow
+	service.now = func() time.Time { return clock }
+	principal := testPrincipal()
+	input := SearchToolCallsInput{ProjectID: toolCallSearchTestProject, Window: "1h", Limit: 1}
+
+	first, err := service.SearchToolCalls(t.Context(), principal, input)
+	require.NoError(t, err)
+	require.Len(t, first.Calls, 1)
+	require.NotEmpty(t, first.NextCursor)
+	firstStart, firstEnd := reader.traceParams.TimeStart, reader.traceParams.TimeEnd
+
+	// Time passes between the two requests.
+	clock = toolCallSearchTestNow.Add(hop)
+
+	next := input
+	next.Cursor = first.NextCursor
+	second, err := service.SearchToolCalls(t.Context(), principal, next)
+	require.NoError(t, err)
+	require.Equal(t, firstStart, reader.traceParams.TimeStart, "the second page must read the window the first page read")
+	require.Equal(t, firstEnd, reader.traceParams.TimeEnd, "the second page must read the window the first page read")
+	require.Equal(t, first.Envelope.ResolvedWindow.From, second.Envelope.ResolvedWindow.From)
+	require.Equal(t, first.Envelope.ResolvedWindow.To, second.Envelope.ResolvedWindow.To)
+
+	// The call near the original window start is still reachable, which is the
+	// result the caller actually cares about.
+	require.Len(t, second.Calls, 1)
+	require.Equal(t, time.Unix(0, rows[1].StartTimeUnixNano).UTC().Format(time.RFC3339Nano), second.Calls[0].OccurredAt)
+	require.Empty(t, second.NextCursor, "the exhausted fixture yields no further cursor")
+
+	// Three pages, two hops: the anchor has to be carried forward by the second
+	// page's own cursor, not re-minted from the clock, or the drift reappears
+	// one page later.
+	mid := toolCallSearchRow("row-mid", toolCallSearchTestNow.Add(-30*time.Minute), "email", "third@example.test", 200)
+	reader.rows = []telemetryrepo.ToolUsageTraceSummary{rows[0], mid, rows[1]}
+	clock = toolCallSearchTestNow
+	first, err = service.SearchToolCalls(t.Context(), principal, input)
+	require.NoError(t, err)
+	require.NotEmpty(t, first.NextCursor)
+
+	clock = toolCallSearchTestNow.Add(hop)
+	next.Cursor = first.NextCursor
+	second, err = service.SearchToolCalls(t.Context(), principal, next)
+	require.NoError(t, err)
+	require.NotEmpty(t, second.NextCursor)
+
+	clock = toolCallSearchTestNow.Add(2 * hop)
+	third := input
+	third.Cursor = second.NextCursor
+	page, err := service.SearchToolCalls(t.Context(), principal, third)
+	require.NoError(t, err)
+	require.Equal(t, firstStart, reader.traceParams.TimeStart, "the anchor must survive every hop, not just the first")
+	require.Equal(t, firstEnd, reader.traceParams.TimeEnd, "the anchor must survive every hop, not just the first")
+	require.Len(t, page.Calls, 1)
+	require.Equal(t, time.Unix(0, rows[1].StartTimeUnixNano).UTC().Format(time.RFC3339Nano), page.Calls[0].OccurredAt)
 }
 
 // TestSearchToolCalls_FoldsThePersonReferenceLikeItsProducer pins that a person
@@ -774,8 +968,10 @@ func TestSearchToolCalls_TraversalBudgetEndsPaging(t *testing.T) {
 		require.NoError(t, err)
 		return search.cursorScope()
 	}()
+	window, err := resolveWindow(input.Window, toolCallSearchTestNow, toolCallSearchWindowSpec)
+	require.NoError(t, err)
 	mintCursor := func(traversed int) string {
-		cursor, err := service.references.EncodeScoped(principal, subjectKindCursor, scope, formatToolCallCursor(toolCallSearchTestNow.UnixNano(), "row-000", traversed), toolCallSearchTestNow)
+		cursor, err := service.references.EncodeScoped(principal, subjectKindCursor, scope, formatToolCallCursor(toolCallSearchTestNow.UnixNano(), "row-000", traversed, window), toolCallSearchTestNow)
 		require.NoError(t, err)
 		return cursor
 	}

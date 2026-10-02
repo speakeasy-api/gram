@@ -11,7 +11,7 @@ func registerToolCallSearchTools(reg *Registrar, diagnostics *DiagnosticsService
 	addTool(reg, &mcp.Tool{
 		Name:        "search_tool_calls",
 		Title:       "Search Tool Calls",
-		Description: "Search one project's tool calls across every MCP server over up to 30 days, newest first. Narrow by tool name text, error text, outcome, one configured MCP server, a person reference, and attribute filters discovered with list_attribute_keys. Each call is reduced to when it happened, the tool and configured server, how it ended, the calling app, a masked identity, and a short-lived person reference that narrows a follow-up search. Constraints: this is not a log reader; no arguments, results, bodies, headers, URLs, trace IDs, or raw identities are returned, pages are bounded, and cursors and references expire and are bound to this session.",
+		Description: "Search one project's tool calls across every MCP server over up to 30 days, newest first. Narrow by tool name text, error text, outcome, one configured MCP server, a person reference, and attribute filters discovered with list_attribute_keys. Each call is reduced to when it happened, the tool and configured server, how it ended, the calling app, a masked identity, and a short-lived person reference that narrows a follow-up search. Paging with the returned cursor keeps the same observation window the first page read, so a relative window does not drift as time passes. Constraints: this is not a log reader; no arguments, results, bodies, headers, URLs, trace IDs, or raw identities are returned, attribute filters over tool content or HTTP headers are refused, pages are bounded, and cursors and references expire and are bound to this session.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input SearchToolCallsInput) (*mcp.CallToolResult, SearchToolCallsOutput, error) {
 		principal, err := principalFromToolContext(ctx)
@@ -31,7 +31,7 @@ func registerToolCallSearchTools(reg *Registrar, diagnostics *DiagnosticsService
 	addTool(reg, &mcp.Tool{
 		Name:        "list_attribute_keys",
 		Title:       "List Attribute Keys",
-		Description: "List the attribute keys present on one project's telemetry over a window, split into the custom @-prefixed keys its integrations attached and the system keys the platform recorded. Call this before search_tool_calls to learn which attribute filters exist. Constraints: keys only, never values; keys that carry tool content are withheld because a search refuses them.",
+		Description: "List the attribute keys present on one project's telemetry over a window, split into the custom @-prefixed keys its integrations attached and the system keys the platform recorded. Call this before search_tool_calls to learn which attribute filters exist. Constraints: keys only, never values; keys that carry tool content, an HTTP header, or a person's identity are withheld because a search refuses them.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListAttributeKeysInput) (*mcp.CallToolResult, ListAttributeKeysOutput, error) {
 		principal, err := principalFromToolContext(ctx)

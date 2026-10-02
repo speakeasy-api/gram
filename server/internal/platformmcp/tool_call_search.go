@@ -74,7 +74,9 @@ var toolCallIdentityAttributeSegments = []string{"email", "user_id", "userid", "
 // toolCallContentAttributePrefixes name system attributes that carry tool
 // inputs, outputs, or conversation content. They are refused as filters and
 // withheld from key discovery, because a predicate over them is an oracle for
-// the very content search_tool_calls promises never to return.
+// the very content search_tool_calls promises never to return. HTTP headers are
+// the same class and are handled by isHeaderAttribute, which needs a segment
+// rule rather than a prefix list because header names are open-ended.
 var toolCallContentAttributePrefixes = []string{
 	"gen_ai.tool.call.",
 	"gen_ai.prompt",
@@ -84,6 +86,15 @@ var toolCallContentAttributePrefixes = []string{
 	"gen_ai.content",
 	"gen_ai.system_instructions",
 }
+
+// toolCallHeaderAttributeSegment is the path segment an HTTP header hangs off.
+// The platform stores request and response headers as map attributes —
+// http.request.headers and http.response.headers, one entry per header name —
+// and stamps a few individual headers under http.request.header.* and
+// http.response.header.*. Header names are whatever the wire carried, so a
+// segment is what a rule can be written against; a list of names could not stay
+// complete.
+const toolCallHeaderAttributeSegment = "header"
 
 // validAttributeKey mirrors the path grammar the telemetry repository accepts.
 // The repository silently drops a path that fails it; this surface refuses the
@@ -139,9 +150,9 @@ type SearchToolCallsInput struct {
 	Outcome          string                    `json:"outcome,omitempty" jsonschema:"optional outcome filter: success, failure, blocked, or pending"`
 	MCPID            string                    `json:"mcp_id,omitempty" jsonschema:"optional configured MCP ID, as returned by find_mcp or get_mcp, to narrow to one server; matches only calls the platform tied to that server, never calls an app merely reported under a matching name"`
 	UserReference    string                    `json:"user_reference,omitempty" jsonschema:"optional person reference from a previous search_tool_calls row in this project, or from list_mcp_usage_users when the same mcp_id and window are supplied"`
-	Attributes       []ToolCallAttributeFilter `json:"attributes,omitempty" jsonschema:"optional attribute filters, at most 5, combined with AND; discover keys with list_attribute_keys. Attributes that identify a person are refused: narrow to one person with user_reference"`
+	Attributes       []ToolCallAttributeFilter `json:"attributes,omitempty" jsonschema:"optional attribute filters, at most 5, combined with AND; discover keys with list_attribute_keys. Attributes that identify a person are refused: narrow to one person with user_reference. Attributes that carry tool content or an HTTP header are refused outright"`
 	Limit            int                       `json:"limit,omitempty" jsonschema:"maximum calls to return; defaults to 20 and is capped at 50"`
-	Cursor           string                    `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous search_tool_calls result"`
+	Cursor           string                    `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous search_tool_calls result; it pins the observation window to the interval the first page read, so paging a relative window does not drift as time passes"`
 }
 
 // ToolCallMatch is one tool call reduced to what an investigation needs. It
@@ -251,12 +262,14 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 
 	// The cursor resolves only against the query that minted it, so a position
 	// cannot be replayed with different filters, another window, or a different
-	// person.
+	// person. Decoding it also pins the window to the interval the first page
+	// read, which is why it happens before the read below.
 	scope := search.cursorScope()
-	cursorTime, cursorID, traversed, err := s.decodeToolCallCursor(input.Cursor, principal, scope, search.now)
+	position, err := s.decodeToolCallCursor(input.Cursor, principal, scope, &search)
 	if err != nil {
 		return SearchToolCallsOutput{}, err
 	}
+	traversed := position.traversed
 	// Charged for the page it may return, before the read rather than after: a
 	// caller that cannot afford the rows should not spend the scan either.
 	if err := s.volume.AllowRows(ctx, principal, search.limit); err != nil {
@@ -299,8 +312,8 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 		Query:                "",
 		Filters:              search.repoFilters(),
 		SortOrder:            "desc",
-		CursorTimeUnixNano:   cursorTime,
-		CursorID:             cursorID,
+		CursorTimeUnixNano:   position.timeUnixNano,
+		CursorID:             position.id,
 		// One extra row decides whether another page exists without a second
 		// round trip, and is dropped before anything is projected.
 		Limit: search.limit + 1,
@@ -343,7 +356,10 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 	traversed += len(rows)
 	if more && len(rows) > 0 && traversed < maxToolCallSearchTraversal {
 		last := rows[len(rows)-1]
-		cursor, err := s.references.EncodeScoped(principal, subjectKindCursor, scope, formatToolCallCursor(last.StartTimeUnixNano, last.ID, traversed), search.now)
+		// search.window is the anchored interval, from the incoming cursor when
+		// there was one, so the anchor is carried forward rather than re-minted
+		// from the clock on every page.
+		cursor, err := s.references.EncodeScoped(principal, subjectKindCursor, scope, formatToolCallCursor(last.StartTimeUnixNano, last.ID, traversed, search.window), search.now)
 		if err != nil {
 			return SearchToolCallsOutput{}, fmt.Errorf("mint tool call search cursor: %w", err)
 		}
@@ -404,6 +420,14 @@ func normalizeToolCallAttributeFilter(filter ToolCallAttributeFilter) (telemetry
 	if !custom && isContentAttribute(key) {
 		return telemetryrepo.AttributeFilter{}, fmt.Errorf("%w: attribute %q carries tool content and cannot be filtered on", ErrToolCallSearchInvalid, key)
 	}
+	// Refused for the same reason tool content is. Withholding a header value
+	// from the result does not protect it while a caller can still test a guess
+	// against it: eq or in over http.request.headers.Cookie answers whether the
+	// guess was right by which calls come back. That is the oracle the content
+	// refusal exists to close, so it closes here too.
+	if !custom && isHeaderAttribute(key) {
+		return telemetryrepo.AttributeFilter{}, fmt.Errorf("%w: attribute %q carries an HTTP header and cannot be filtered on: a predicate over a header value tests a guess against content this surface never returns", ErrToolCallSearchInvalid, key)
+	}
 	// Refused, not routed. Narrowing to one named person is an attribution read
 	// that RecordUsageAttributionRead has to record first, and user_reference is
 	// where that happens: it resolves a bound, expiring handle, records the read,
@@ -455,6 +479,34 @@ func normalizeToolCallAttributeFilter(filter ToolCallAttributeFilter) (telemetry
 func isContentAttribute(key string) bool {
 	for _, prefix := range toolCallContentAttributePrefixes {
 		if strings.HasPrefix(key, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// isHeaderAttribute reports whether a system attribute path descends through an
+// HTTP header. Any segment beginning with "header" counts, which covers both the
+// http.request.headers / http.response.headers maps, whose own keys are header
+// names, and the individual http.request.header.* and http.response.header.*
+// attributes the server stamps.
+//
+// The boundary is deliberate and narrow. It refuses two platform attributes an
+// investigation might otherwise have reached: http.request.header.user_agent and
+// http.response.header.www_authenticate. The calling app is still reported on
+// every result row and remains filterable through gram.mcp.client.name, and an
+// upstream's rejection is still reachable through error_contains, the outcome
+// filter, and get_mcp_diagnostics. The http.* attributes that are not headers —
+// http.request.method, http.route, http.response.status_code,
+// http.server.request.duration, http.request.body — carry no header segment and
+// are untouched.
+//
+// Custom "@" keys are out of scope here exactly as they are for identity and
+// content: they hold whatever a project's own integrations attached, and every
+// operator is documented as allowed on them.
+func isHeaderAttribute(key string) bool {
+	for segment := range strings.SplitSeq(key, ".") {
+		if strings.HasPrefix(strings.ToLower(segment), toolCallHeaderAttributeSegment) {
 			return true
 		}
 	}
@@ -709,52 +761,111 @@ func toolCallOutcome(row telemetryrepo.ToolUsageTraceSummary) string {
 	}
 }
 
-// A search cursor carries the page key the repository orders by, event time and
-// summary id, and how far the traversal has already reached, minted through the
-// same bound, expiring reference codec as everything else a caller holds
-// between calls. The count travels inside the sealed token so a caller cannot
-// reset its own traversal budget by editing what it was handed.
-func formatToolCallCursor(unixNano int64, id string, traversed int) string {
-	return "s:" + strconv.FormatInt(unixNano, 10) + ":" + strconv.Itoa(traversed) + ":" + id
+// toolCallCursorPrefix tags the cursor payload's shape. It was bumped when the
+// window bounds were added: a cursor minted before then carries no interval to
+// resume against, and resuming it would silently recompute the window from the
+// clock — exactly the drift the bounds exist to prevent. These tools are
+// unreleased, so such a cursor is refused rather than supported as a second
+// shape.
+const toolCallCursorPrefix = "s2:"
+
+// toolCallCursor is the position a later page resumes from: the page key the
+// repository orders by (event time and summary id), how far the traversal has
+// already reached, and the absolute interval the first page read.
+type toolCallCursor struct {
+	timeUnixNano int64
+	id           string
+	traversed    int
+	windowStart  time.Time
+	windowEnd    time.Time
 }
 
-func parseToolCallCursor(value string) (int64, string, int, error) {
-	rest, ok := strings.CutPrefix(value, "s:")
+// A search cursor is minted through the same bound, expiring reference codec as
+// everything else a caller holds between calls. Both the traversal count and
+// the window bounds travel inside the sealed token, so a caller can neither
+// reset its own traversal budget nor slide the window by editing what it was
+// handed. The bounds are what keep paging a relative window stable: without
+// them, "the last 24h" is recomputed from the clock on every page, and a call
+// near the original start silently falls out of range between requests.
+func formatToolCallCursor(unixNano int64, id string, traversed int, window ResolvedWindow) string {
+	return toolCallCursorPrefix + strconv.FormatInt(unixNano, 10) +
+		":" + strconv.Itoa(traversed) +
+		":" + strconv.FormatInt(window.start.Unix(), 10) +
+		":" + strconv.FormatInt(window.end.Unix(), 10) +
+		":" + id
+}
+
+func parseToolCallCursor(value string) (toolCallCursor, error) {
+	rest, ok := strings.CutPrefix(value, toolCallCursorPrefix)
 	if !ok {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+		return toolCallCursor{}, ErrSubjectReferenceNotFound
 	}
 	timestamp, rest, ok := strings.Cut(rest, ":")
 	if !ok {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+		return toolCallCursor{}, ErrSubjectReferenceNotFound
 	}
-	count, id, ok := strings.Cut(rest, ":")
+	count, rest, ok := strings.Cut(rest, ":")
+	if !ok {
+		return toolCallCursor{}, ErrSubjectReferenceNotFound
+	}
+	from, rest, ok := strings.Cut(rest, ":")
+	if !ok {
+		return toolCallCursor{}, ErrSubjectReferenceNotFound
+	}
+	to, id, ok := strings.Cut(rest, ":")
 	if !ok || id == "" {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+		return toolCallCursor{}, ErrSubjectReferenceNotFound
 	}
 	position, err := strconv.ParseInt(timestamp, 10, 64)
 	if err != nil || position <= 0 {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+		return toolCallCursor{}, ErrSubjectReferenceNotFound
 	}
 	traversed, err := strconv.Atoi(count)
 	if err != nil || traversed < 0 || traversed > maxToolCallSearchTraversal {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+		return toolCallCursor{}, ErrSubjectReferenceNotFound
 	}
-	return position, id, traversed, nil
+	start, err := strconv.ParseInt(from, 10, 64)
+	if err != nil || start <= 0 {
+		return toolCallCursor{}, ErrSubjectReferenceNotFound
+	}
+	end, err := strconv.ParseInt(to, 10, 64)
+	if err != nil || end <= start {
+		return toolCallCursor{}, ErrSubjectReferenceNotFound
+	}
+	return toolCallCursor{
+		timeUnixNano: position,
+		id:           id,
+		traversed:    traversed,
+		windowStart:  time.Unix(start, 0).UTC(),
+		windowEnd:    time.Unix(end, 0).UTC(),
+	}, nil
 }
 
-func (s *DiagnosticsService) decodeToolCallCursor(cursor string, principal Principal, scope string, now time.Time) (int64, string, int, error) {
+// decodeToolCallCursor resolves a cursor against the query that minted it and
+// pins the search to the interval that query read, so every later page reads
+// the same window rather than one recomputed from the clock. Without a cursor
+// the window resolved from the clock stands. A cursor that carries no interval
+// is refused by parseToolCallCursor, so there is no path back to recomputing it.
+func (s *DiagnosticsService) decodeToolCallCursor(cursor string, principal Principal, scope string, search *toolCallSearch) (toolCallCursor, error) {
 	if cursor == "" {
-		return 0, "", 0, nil
+		return toolCallCursor{}, nil
 	}
-	value, err := s.references.DecodeScoped(cursor, principal, subjectKindCursor, scope, now)
+	value, err := s.references.DecodeScoped(cursor, principal, subjectKindCursor, scope, search.now)
 	if err != nil {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+		return toolCallCursor{}, ErrSubjectReferenceNotFound
 	}
-	position, id, traversed, err := parseToolCallCursor(value)
+	position, err := parseToolCallCursor(value)
 	if err != nil {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+		return toolCallCursor{}, ErrSubjectReferenceNotFound
 	}
-	return position, id, traversed, nil
+	search.window = ResolvedWindow{
+		Window: search.window.Window,
+		From:   position.windowStart.Format(time.RFC3339),
+		To:     position.windowEnd.Format(time.RFC3339),
+		start:  position.windowStart,
+		end:    position.windowEnd,
+	}
+	return position, nil
 }
 
 // ListAttributeKeysInput asks which attribute keys one project's telemetry
@@ -771,9 +882,10 @@ type ListAttributeKeysOutput struct {
 	// attached; every operator is allowed on them.
 	CustomKeys []string `json:"custom_keys"`
 	// SystemKeys are the platform-recorded attributes that may be filtered on.
-	// Keys that carry tool content, and keys that identify a person, are
-	// withheld here because a search refuses them: one person's calls are
-	// narrowed to with user_reference, which records the attribution read.
+	// Keys that carry tool content, keys that carry an HTTP header, and keys
+	// that identify a person are withheld here because a search refuses them:
+	// one person's calls are narrowed to with user_reference, which records the
+	// attribution read.
 	SystemKeys []string `json:"system_keys"`
 	Truncated  bool     `json:"truncated"`
 }
@@ -835,11 +947,11 @@ func splitAttributeKeys(keys []string) ([]string, []string) {
 			custom = append(custom, customAttributePrefix+suffix)
 			continue
 		}
-		// Content and identity keys are withheld rather than listed: a search
-		// refuses both, so offering one would advertise a filter that cannot be
-		// used, and listing the identity keys would suggest the audited person
-		// filter can be sidestepped.
-		if key == "" || isContentAttribute(key) || isIdentityAttribute(key) {
+		// Content, header, and identity keys are withheld rather than listed: a
+		// search refuses all three, so offering one would advertise a filter that
+		// cannot be used, and listing the identity keys would suggest the audited
+		// person filter can be sidestepped.
+		if key == "" || isContentAttribute(key) || isHeaderAttribute(key) || isIdentityAttribute(key) {
 			continue
 		}
 		system = append(system, key)
