@@ -119,6 +119,12 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: ListDashboardTriggerInstances :many
+SELECT * FROM trigger_instances
+WHERE project_id = @project_id AND target_ref = @target_ref
+  AND definition_slug = 'dashboard' AND target_kind = 'assistant'
+  AND deleted IS FALSE;
+
 -- name: ListActiveTriggerInstancesByTarget :many
 SELECT *
 FROM trigger_instances ti

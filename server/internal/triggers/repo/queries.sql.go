@@ -470,6 +470,54 @@ func (q *Queries) ListActiveTriggerInstancesByTarget(ctx context.Context, arg Li
 	return items, nil
 }
 
+const listDashboardTriggerInstances = `-- name: ListDashboardTriggerInstances :many
+SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted FROM trigger_instances
+WHERE project_id = $1 AND target_ref = $2
+  AND definition_slug = 'dashboard' AND target_kind = 'assistant'
+  AND deleted IS FALSE
+`
+
+type ListDashboardTriggerInstancesParams struct {
+	ProjectID uuid.UUID
+	TargetRef string
+}
+
+func (q *Queries) ListDashboardTriggerInstances(ctx context.Context, arg ListDashboardTriggerInstancesParams) ([]TriggerInstance, error) {
+	rows, err := q.db.Query(ctx, listDashboardTriggerInstances, arg.ProjectID, arg.TargetRef)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TriggerInstance
+	for rows.Next() {
+		var i TriggerInstance
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.DefinitionSlug,
+			&i.Name,
+			&i.EnvironmentID,
+			&i.TargetKind,
+			&i.TargetRef,
+			&i.TargetDisplay,
+			&i.ConfigJson,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTriggerEvents = `-- name: ListTriggerEvents :many
 SELECT
     e.id,

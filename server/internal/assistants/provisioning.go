@@ -270,20 +270,31 @@ func (s *ServiceCore) ensureDashboardRootTx(ctx context.Context, tx pgx.Tx, orga
 		return uuid.Nil, pgx.ErrNoRows
 	}
 	queries := triggerrepo.New(tx)
-	_, err = queries.CreateDashboardTriggerInstance(ctx, triggerrepo.CreateDashboardTriggerInstanceParams{
-		OrganizationID: organizationID, ProjectID: projectID, DefinitionSlug: sourceKindDashboard,
-		Name: name, EnvironmentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, TargetKind: bgtriggers.TargetKindAssistant,
-		TargetRef: assistantID.String(), TargetDisplay: name, ConfigJson: []byte("{}"), Status: StatusActive,
-	})
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return uuid.Nil, fmt.Errorf("create dashboard trigger instance: %w", err)
-	}
-	roots, err := queries.ListActiveTriggerInstancesByTarget(ctx, dashboardTriggerTarget(projectID, assistantID))
+	target := triggerrepo.ListDashboardTriggerInstancesParams{ProjectID: projectID, TargetRef: assistantID.String()}
+	roots, err := queries.ListDashboardTriggerInstances(ctx, target)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("read canonical dashboard trigger: %w", err)
 	}
+	if len(roots) == 0 {
+		_, err = queries.CreateDashboardTriggerInstance(ctx, triggerrepo.CreateDashboardTriggerInstanceParams{
+			OrganizationID: organizationID, ProjectID: projectID, DefinitionSlug: sourceKindDashboard,
+			Name: name, EnvironmentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, TargetKind: bgtriggers.TargetKindAssistant,
+			TargetRef: assistantID.String(), TargetDisplay: name, ConfigJson: []byte("{}"), Status: StatusActive,
+		})
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, fmt.Errorf("create dashboard trigger instance: %w", err)
+		}
+		roots, err = queries.ListDashboardTriggerInstances(ctx, target)
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("read canonical dashboard trigger: %w", err)
+		}
+	}
 	if len(roots) != 1 {
 		return uuid.Nil, fmt.Errorf("expected one canonical dashboard trigger, got %d", len(roots))
+	}
+	// A paused ingress exists: preserve its status and binding without healing it.
+	if roots[0].Status != StatusActive {
+		return roots[0].ID, nil
 	}
 	if err = s.identities.BindRootTrigger(ctx, tx, organizationID, projectID, roots[0].ID); err != nil {
 		return uuid.Nil, fmt.Errorf("assistant identity BindRootTrigger: %w", err)
@@ -561,11 +572,14 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 func (s *ServiceCore) resolveDashboardTriggerInstance(ctx context.Context, organizationID string, projectID, assistantID uuid.UUID, name string) (uuid.UUID, error) {
 	// Existing ingress is a read path: binding creation belongs to management,
 	// not to each message. Missing canonical triggers are healed atomically.
-	roots, err := triggerrepo.New(s.db).ListActiveTriggerInstancesByTarget(ctx, dashboardTriggerTarget(projectID, assistantID))
+	roots, err := triggerrepo.New(s.db).ListDashboardTriggerInstances(ctx, triggerrepo.ListDashboardTriggerInstancesParams{ProjectID: projectID, TargetRef: assistantID.String()})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("read dashboard ingress: %w", err)
 	}
 	if len(roots) == 1 {
+		if roots[0].Status != StatusActive {
+			return uuid.Nil, fmt.Errorf("dashboard ingress is not active")
+		}
 		return roots[0].ID, nil
 	}
 	if len(roots) > 1 {
