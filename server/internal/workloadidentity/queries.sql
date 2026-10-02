@@ -206,3 +206,7 @@ WHERE si.id = s.user_session_issuer_id
             AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
     ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
     LIMIT 1) = @agent_id::uuid;
+
+-- name: FixtureMoveWorkloadSessionProject :exec
+-- Simulate a legacy persisted credential to exercise serve-path tenant checks.
+UPDATE user_sessions SET project_id = @project_id WHERE id = @session_id;

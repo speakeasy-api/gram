@@ -40,7 +40,7 @@ func (s *Service) bindRoot(ctx context.Context, tx pgx.Tx, org string, project, 
 	if root.DefinitionSlug == "wake" {
 		return ErrInvalidIdentity
 	}
-	if root.Deleted || (root.Status != "active" && !(retarget && root.Status == "paused")) {
+	if root.Deleted || (root.Status != "active" && (!retarget || root.Status != "paused")) {
 		return ErrTombstoned
 	}
 	old, historyErr := q.GetTriggerBinding(ctx, repo.GetTriggerBindingParams{PlatformIssuer: s.issuer, PlatformJwksUri: s.jwksURI, OrganizationID: org, ProjectID: project, TriggerID: trigger})

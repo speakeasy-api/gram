@@ -11,6 +11,21 @@ import (
 	"github.com/google/uuid"
 )
 
+const fixtureMoveWorkloadSessionProject = `-- name: FixtureMoveWorkloadSessionProject :exec
+UPDATE user_sessions SET project_id = $1 WHERE id = $2
+`
+
+type FixtureMoveWorkloadSessionProjectParams struct {
+	ProjectID uuid.NullUUID
+	SessionID uuid.UUID
+}
+
+// Simulate a legacy persisted credential to exercise serve-path tenant checks.
+func (q *Queries) FixtureMoveWorkloadSessionProject(ctx context.Context, arg FixtureMoveWorkloadSessionProjectParams) error {
+	_, err := q.db.Exec(ctx, fixtureMoveWorkloadSessionProject, arg.ProjectID, arg.SessionID)
+	return err
+}
+
 const listWorkloadIssuersByIssuerURL = `-- name: ListWorkloadIssuersByIssuerURL :many
 SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers

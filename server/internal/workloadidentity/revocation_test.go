@@ -248,7 +248,7 @@ func TestWorkloadSessionsRequireIssuerProject(t *testing.T) {
 	_, err = q.CreateUserSession(t.Context(), params)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	// Simulate a credential persisted before the stricter tenant predicate.
-	_, err = conn.Exec(t.Context(), "UPDATE user_sessions SET project_id = $1 WHERE id = $2", sibling, session.ID)
+	err = identityrepo.New(conn).FixtureMoveWorkloadSessionProject(t.Context(), identityrepo.FixtureMoveWorkloadSessionProjectParams{ProjectID: uuid.NullUUID{UUID: sibling, Valid: true}, SessionID: session.ID})
 	require.NoError(t, err)
 	_, err = q.GetUserSessionPrincipalCredentialByJTI(t.Context(), sessionsrepo.GetUserSessionPrincipalCredentialByJTIParams{UserSessionIssuerID: issuer, Jti: session.Jti})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
