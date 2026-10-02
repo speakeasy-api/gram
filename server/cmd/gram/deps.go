@@ -381,7 +381,7 @@ func newAssetStorage(ctx context.Context, logger *slog.Logger, opts assetStorage
 	switch opts.assetsBackend {
 	case "fs":
 		assetsURI := filepath.Clean(opts.assetsURI)
-		if err := os.MkdirAll(assetsURI, 0750); err != nil && !errors.Is(err, fs.ErrExist) {
+		if err := os.MkdirAll(assetsURI, 0o750); err != nil && !errors.Is(err, fs.ErrExist) {
 			return nil, shutdown, fmt.Errorf("create assets directory: %w", err)
 		}
 
@@ -451,7 +451,7 @@ type temporalClientOptions struct {
 }
 
 func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, opts temporalClientOptions) (*temporal.Environment, func(context.Context) error, error) {
-	var nilShutdownFunc = noopShutdown
+	nilShutdownFunc := noopShutdown
 	if opts.address == "" || opts.namespace == "" {
 		return nil, nilShutdownFunc, nil
 	}
@@ -887,7 +887,6 @@ func newAdminOpenRouter(
 		db,
 		env,
 		provisioningKey,
-		nil,
 		productfeatures.NewClient(logger, tracerProvider, db, redisClient),
 		nil,
 		encryptionClient,
@@ -1018,7 +1017,7 @@ func newFunctionOrchestrator(
 			return nil, nilShutdown, fmt.Errorf("--functions-local-runner-root must be set in local environment")
 		}
 
-		if err := os.MkdirAll(codeRootDir, 0750); err != nil && !errors.Is(err, fs.ErrExist) {
+		if err := os.MkdirAll(codeRootDir, 0o750); err != nil && !errors.Is(err, fs.ErrExist) {
 			return nil, nilShutdown, fmt.Errorf("create local functions root directory: %w", err)
 		}
 
