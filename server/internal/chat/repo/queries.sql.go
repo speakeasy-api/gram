@@ -2570,24 +2570,30 @@ candidate_chats AS (
     )
 ),
 chat_stats AS (
-  -- Per-chat probe on chat_messages_chat_id_project_id_created_at_idx
-  -- (index-only count + max) instead of aggregating every candidate chat's
-  -- full message history. project_id keeps a sibling-project stamp on the
-  -- same chat_id from inflating num_messages or last_message_timestamp.
+  -- Last-message time is a single backward probe per candidate chat on
+  -- chat_messages_chat_id_project_id_created_at_idx. The message count walks
+  -- the chat's whole index range, so it only runs before LIMIT when the
+  -- listing sorts by it; otherwise page_chats counts the returned rows only.
+  -- project_id keeps a sibling-project stamp on the same chat_id from
+  -- inflating either value.
   SELECT
     cc.id,
-    stats.num_messages,
-    COALESCE(stats.max_created_at, cc.created_at)::timestamptz AS last_message_timestamp
+    CASE WHEN $13 = 'num_messages' THEN (
+      -- COUNT(*) rather than COUNT(cm.id) so the probe stays index-only.
+      SELECT COUNT(*)::integer
+      FROM chat_messages cm
+      WHERE cm.chat_id = cc.id
+        AND cm.project_id = $1::uuid
+    ) END AS sort_num_messages,
+    COALESCE((
+      SELECT cm.created_at
+      FROM chat_messages cm
+      WHERE cm.chat_id = cc.id
+        AND cm.project_id = $1::uuid
+      ORDER BY cm.created_at DESC
+      LIMIT 1
+    ), cc.created_at)::timestamptz AS last_message_timestamp
   FROM candidate_chats cc
-  CROSS JOIN LATERAL (
-    -- COUNT(*) rather than COUNT(cm.id) so the probe stays index-only.
-    SELECT
-      COUNT(*)::integer AS num_messages,
-      MAX(cm.created_at) AS max_created_at
-    FROM chat_messages cm
-    WHERE cm.chat_id = cc.id
-      AND cm.project_id = $1::uuid
-  ) stats
 ),
 filtered_chats AS (
   SELECT
@@ -2599,7 +2605,7 @@ filtered_chats AS (
     cc.updated_at,
     cc.pinned_at,
     cc.litellm_proxied,
-    cs.num_messages,
+    cs.sort_num_messages,
     cs.last_message_timestamp,
     cc.account_type,
     cc.account_email
@@ -2611,10 +2617,12 @@ filtered_chats AS (
   -- would evict an actively-writing chat the moment a new message lands past
   -- the caller's @to — the dashboard freezes @to when a range is picked, so
   -- running sessions would flicker out of the list until the next reload.
-  WHERE ($13::timestamptz IS NULL OR cs.last_message_timestamp >= $13)
-    AND ($14::timestamptz IS NULL OR cc.created_at <= $14)
+  WHERE ($14::timestamptz IS NULL OR cs.last_message_timestamp >= $14)
+    AND ($15::timestamptz IS NULL OR cc.created_at <= $15)
 ),
 limited_chats AS (
+  -- Only ordering, paging and the total run over every filtered chat; the
+  -- per-chat lookups for display columns run for the page rows in page_chats.
   SELECT
     fc.id,
     fc.title,
@@ -2624,57 +2632,83 @@ limited_chats AS (
     fc.updated_at,
     fc.pinned_at,
     fc.litellm_proxied,
-    fc.num_messages,
-    (SELECT source FROM chat_messages WHERE chat_id = fc.id AND project_id = $1::uuid AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
+    fc.sort_num_messages,
     fc.last_message_timestamp,
     fc.account_type,
     fc.account_email,
+    -- Window count runs before LIMIT/OFFSET, so every returned row carries the
+    -- total number of filtered chats.
+    COUNT(*) OVER ()::bigint AS total_count,
+    -- Carries the page order through the joins in page_chats.
+    ROW_NUMBER() OVER (
+      ORDER BY
+        -- Recency is pure message time. Hook rows persist at their occurred_at,
+        -- so a chat whose only new traffic is spool-replayed backlog keeps its
+        -- occurred-time position rather than jumping to the top on arrival —
+        -- deliberate: listings are a timeline of when conversations happened,
+        -- and folding in updated_at would let title renames and pin toggles
+        -- reorder recency.
+        CASE WHEN $13 = 'last_message_timestamp' AND $16 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
+        CASE WHEN $13 = 'last_message_timestamp' AND $16 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+        CASE WHEN $13 = 'num_messages' AND $16 = 'desc' THEN fc.sort_num_messages END DESC NULLS LAST,
+        CASE WHEN $13 = 'num_messages' AND $16 = 'asc' THEN fc.sort_num_messages END ASC NULLS LAST,
+        fc.last_message_timestamp DESC,
+        fc.id DESC
+    ) AS page_position
+  FROM filtered_chats fc
+  ORDER BY page_position
+  LIMIT $18
+  OFFSET $17
+),
+page_chats AS (
+  SELECT
+    lc.id,
+    lc.title,
+    lc.user_id,
+    lc.external_user_id,
+    lc.created_at,
+    lc.updated_at,
+    lc.pinned_at,
+    lc.litellm_proxied,
+    COALESCE(lc.sort_num_messages, (
+      SELECT COUNT(*)::integer
+      FROM chat_messages cm
+      WHERE cm.chat_id = lc.id
+        AND cm.project_id = $1::uuid
+    ))::integer AS num_messages,
+    (SELECT source FROM chat_messages WHERE chat_id = lc.id AND project_id = $1::uuid AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
+    lc.last_message_timestamp,
+    lc.account_type,
+    lc.account_email,
     -- Both assistant columns come from the project-scoped assistants row, so a
     -- thread here that points at another project's assistant reports neither
     -- its id nor its name; assistant_threads has no composite (project_id,
     -- assistant_id) key to rule that row out.
     a.id AS assistant_id,
     a.name AS assistant_name,
-    -- Window count runs before LIMIT/OFFSET, so every returned row carries the
-    -- total number of filtered chats.
-    COUNT(*) OVER ()::bigint AS total_count
-  FROM filtered_chats fc
-  -- One thread per chat, so a chat several assistants worked in is one row
-  -- and LIMIT/OFFSET, total_count and the page all count chats. The thread of
-  -- the assistant the listing was narrowed to wins; otherwise the most
-  -- recently active one. The lateral picks only the thread id: the columns
-  -- come from the base tables below so they stay nullable for a chat with no
-  -- assistant thread. Every step is scoped to the listed project, so a thread
-  -- or assistant recorded under another project can never be reported for a
-  -- chat here even if the chat/thread relationship is inconsistent.
+    lc.total_count,
+    lc.page_position
+  FROM limited_chats lc
+  -- One thread per chat. The thread of the assistant the listing was narrowed
+  -- to wins; otherwise the most recently active one. The lateral picks only
+  -- the thread id: the columns come from the base tables below so they stay
+  -- nullable for a chat with no assistant thread. Every step is scoped to the
+  -- listed project, so a thread or assistant recorded under another project
+  -- can never be reported for a chat here even if the chat/thread
+  -- relationship is inconsistent.
   LEFT JOIN LATERAL (
     SELECT at.id AS thread_id
     FROM assistant_threads at
-    WHERE at.chat_id = fc.id AND at.project_id = $1 AND at.deleted IS FALSE
+    WHERE at.chat_id = lc.id AND at.project_id = $1 AND at.deleted IS FALSE
     ORDER BY ($8 <> '' AND at.assistant_id::text = $8) DESC, at.last_event_at DESC, at.id DESC
     LIMIT 1
   ) picked ON TRUE
   LEFT JOIN assistant_threads thread ON thread.id = picked.thread_id AND thread.project_id = $1
   LEFT JOIN assistants a ON a.id = thread.assistant_id AND a.project_id = $1 AND a.deleted IS FALSE
-  ORDER BY
-    -- Recency is pure message time. Hook rows persist at their occurred_at,
-    -- so a chat whose only new traffic is spool-replayed backlog keeps its
-    -- occurred-time position rather than jumping to the top on arrival —
-    -- deliberate: listings are a timeline of when conversations happened,
-    -- and folding in updated_at would let title renames and pin toggles
-    -- reorder recency.
-    CASE WHEN $15 = 'last_message_timestamp' AND $16 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
-    CASE WHEN $15 = 'last_message_timestamp' AND $16 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
-    CASE WHEN $15 = 'num_messages' AND $16 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
-    CASE WHEN $15 = 'num_messages' AND $16 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
-    fc.last_message_timestamp DESC,
-    fc.id DESC
-  LIMIT $18
-  OFFSET $17
 ),
 chat_attribution AS (
   SELECT
-    lc.id, lc.title, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.litellm_proxied, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.total_count,
+    lc.id, lc.title, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.litellm_proxied, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.total_count, lc.page_position,
     COALESCE(CASE WHEN lc.source = 'litellm' THEN (
       SELECT CASE
         WHEN user_agent = ANY (ARRAY['claude-code', 'codex', 'opencode']::text[]) THEN user_agent
@@ -2687,7 +2721,7 @@ chat_attribution AS (
       ORDER BY created_at DESC
       LIMIT 1
     ) END, '')::text AS originating_client
-  FROM limited_chats lc
+  FROM page_chats lc
 )
 SELECT
   lc.id,
@@ -2721,6 +2755,7 @@ SELECT
   lc.assistant_name,
   lc.total_count
 FROM chat_attribution lc
+ORDER BY lc.page_position
 `
 
 type ListChatsParams struct {
@@ -2736,9 +2771,9 @@ type ListChatsParams struct {
 	ExcludeSourceKind string
 	AccountType       string
 	Sources           []string
+	SortBy            interface{}
 	FromTime          pgtype.Timestamptz
 	ToTime            pgtype.Timestamptz
-	SortBy            interface{}
 	SortOrder         interface{}
 	PageOffset        int32
 	PageLimit         int32
@@ -2788,9 +2823,9 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		arg.ExcludeSourceKind,
 		arg.AccountType,
 		arg.Sources,
+		arg.SortBy,
 		arg.FromTime,
 		arg.ToTime,
-		arg.SortBy,
 		arg.SortOrder,
 		arg.PageOffset,
 		arg.PageLimit,
