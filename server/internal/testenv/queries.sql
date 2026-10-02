@@ -1737,3 +1737,8 @@ WHERE locks.locktype = 'advisory' AND locks.granted
 -- name: BackendPIDFixture :one
 -- Identify a holder exposed only through a transaction-enlisted query interface.
 SELECT pg_backend_pid();
+-- name: DeleteRetainedCatalogSourcesFixture :exec
+DELETE FROM mcp_registries;
+
+-- name: InsertRetainedLegacyCatalogSourceFixture :exec
+INSERT INTO mcp_registries (id,name,url,source_type,auth_profile,enabled,certification_state,source_key) VALUES ($1,'Legacy catalog','https://legacy.example.test','pulse_v0_1','pulse_server_credentials',true,'certified','pulse');

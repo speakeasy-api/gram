@@ -720,7 +720,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 
 	catalog := platformmcp.NewDynamicRegistryCatalogSources(func(ctx context.Context) ([]platformmcp.RegistryCatalogSource, error) {
 		return loadBrowserPlatformMCPCatalogDescriptors(ctx, config.Catalog)
-	})
+	}).WithIdentityService(config.Catalog)
 	store, err := platformmcp.NewRegistrationStore(config.DB)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create Platform MCP registration store: %w", err)
