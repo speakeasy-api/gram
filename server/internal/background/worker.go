@@ -137,6 +137,10 @@ type WorkerOptions struct {
 	// authenticate with private_key_jwt.
 	RemoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner
 
+	// StartupSeeds is the reference data this worker keeps applied. The
+	// worker kicks one run per seed version when it starts.
+	StartupSeeds []activitiespkg.StartupSeed
+
 	// TrialEmailsService synchronizes trial lifecycle changes with Loops.
 	TrialEmailsService *trialemails.Service
 
@@ -194,6 +198,7 @@ func ForDeploymentProcessing(
 		MCPRegistryClient:            mcpRegistryClient,
 		AuditLogger:                  auditLogger,
 		RemoteSessionAssertionSigner: nil,
+		StartupSeeds:                 nil,
 		SlackClient:                  nil,
 		SlackDirectoryTokenRefresher: nil,
 		ChatMessageWriter:            nil,
@@ -311,6 +316,7 @@ func NewTemporalWorker(
 		CacheAdapter:                 nil,
 		IssuerMetadataRefresher:      nil,
 		RemoteSessionAssertionSigner: nil,
+		StartupSeeds:                 nil,
 		EmailService:                 nil,
 		AssistantsCore:               nil,
 		TemporalEnv:                  env,
@@ -367,6 +373,7 @@ func NewTemporalWorker(
 			CacheAdapter:                 conv.Default(o.CacheAdapter, opts.CacheAdapter),
 			IssuerMetadataRefresher:      conv.Default(o.IssuerMetadataRefresher, opts.IssuerMetadataRefresher),
 			RemoteSessionAssertionSigner: conv.Default(o.RemoteSessionAssertionSigner, opts.RemoteSessionAssertionSigner),
+			StartupSeeds:                 conv.DefaultSlice(o.StartupSeeds, opts.StartupSeeds),
 			EmailService:                 conv.Default(o.EmailService, opts.EmailService),
 			AssistantsCore:               conv.Default(o.AssistantsCore, opts.AssistantsCore),
 			TemporalEnv:                  conv.Default(o.TemporalEnv, opts.TemporalEnv),
@@ -502,6 +509,7 @@ func NewTemporalWorker(
 		opts.IssuerMetadataRefresher,
 		remoteSessionEnricher,
 		opts.RemoteSessionAssertionSigner,
+		opts.StartupSeeds,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -575,6 +583,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ReapInactiveAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.ReapStoppedAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.RecycleAssistantRuntimeImages)
+	temporalWorker.RegisterActivity(activities.ApplyStartupSeed)
 	temporalWorker.RegisterActivity(activities.ReapSoftDeletedAssistantMemories)
 	temporalWorker.RegisterActivity(activities.SignalAssistantCoordinator)
 	temporalWorker.RegisterActivity(activities.SignalAssistantThread)
@@ -752,6 +761,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(RemoteSessionRefreshWorkflow)
 	// Trial expiry workflows
 	temporalWorker.RegisterWorkflow(DemoteExpiredTrialsWorkflow)
+	temporalWorker.RegisterWorkflow(StartupSeedWorkflow)
 	temporalWorker.RegisterWorkflow(TrialLifecycleEmailWorkflow)
 	temporalWorker.RegisterWorkflow(AccessPausedEmailWorkflow)
 	temporalWorker.RegisterWorkflow(PaygActivatedEmailWorkflow)
@@ -803,6 +813,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddIndexToolsetSweepSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add index toolset sweep schedule", attr.SlogError(err))
+	}
+
+	// Each queue seeds its own database, so PR previews get the reference
+	// data too. A run per seed version, not per start.
+	if err := KickStartupSeeds(ctx, env, opts.StartupSeeds); err != nil {
+		logger.ErrorContext(ctx, "failed to kick startup seeds", attr.SlogError(err))
 	}
 
 	// Everything below is registered under a fixed ID and belongs to the
