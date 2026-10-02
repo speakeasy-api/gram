@@ -1198,10 +1198,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	var rollout admission.RolloutConfig
 	var rolloutErr error
 	rollout, rolloutErr = s.distributionRollout(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID)
-	ctx, err = roledelivery.PrepareAdmission(ctx, s.db, s.distributionAdmission, ac.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "prepare role audience admission").LogError(ctx, s.logger)
-	}
+	ctx = roledelivery.WithProjectAdmission(ctx, ac.ActiveOrganizationID, *ac.ProjectID, rollout, rolloutErr)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
