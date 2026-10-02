@@ -53943,6 +53943,104 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: RemoteSessionClients
+    /rpc/remoteSessionClients.newClientCallbackUrl:
+        get:
+            description: Get the redirect URI a remote_session_client created now in the caller's project registers with its upstream provider.
+            operationId: getNewRemoteSessionClientCallbackUrl
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/NewClientCallbackURLResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getNewClientCallbackUrl remoteSessionClients
+            tags:
+                - remoteSessionClients
+            x-speakeasy-name-override: getNewClientCallbackUrl
+            x-speakeasy-react-hook:
+                name: NewRemoteSessionClientCallbackUrl
     /rpc/remoteSessionClients.prepareEMA:
         post:
             description: Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.
@@ -98006,6 +98104,16 @@ components:
                 ingress:
                     $ref: '#/components/schemas/NetworkIngress'
             description: The organization's active private network ingress, when configured.
+        NewClientCallbackURLResult:
+            type: object
+            properties:
+                callback_url:
+                    type: string
+                    description: The redirect URI to register on the upstream provider's OAuth app.
+                    format: uri
+            description: The redirect URI a newly created remote_session_client registers.
+            required:
+                - callback_url
         NotModified:
             type: object
             properties:
@@ -101638,6 +101746,10 @@ components:
                 audience:
                     type: string
                     description: Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.
+                callback_url:
+                    type: string
+                    description: The redirect URI this client registers with its upstream provider. It never changes after the client is created. Absent on global clients.
+                    format: uri
                 client_id:
                     type: string
                     description: The client_id used to identify this client at the issuer's token and authorization endpoints.

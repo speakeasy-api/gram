@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/managedrows"
-	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -310,7 +309,7 @@ func (s *Service) settleClientKeySet(
 	// did not happen is a false record, and a dashboard replaying its own
 	// optimistic state should not inflate the log.
 	if sameKeySet(existing.JsonWebKeySetID, target) {
-		view, err := mv.BuildRemoteSessionClientView(existing, userSessionIssuerIDs)
+		view, err := s.clientView(existing, userSessionIssuerIDs)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
 		}
@@ -344,7 +343,7 @@ func (s *Service) settleClientKeySet(
 		return nil, oops.E(oops.CodeUnexpected, err, "set remote session client json web key set").LogError(ctx, logger)
 	}
 
-	view, err := mv.BuildRemoteSessionClientView(updated, userSessionIssuerIDs)
+	view, err := s.clientView(updated, userSessionIssuerIDs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
 	}

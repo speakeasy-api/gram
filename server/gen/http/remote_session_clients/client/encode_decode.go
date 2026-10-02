@@ -2731,6 +2731,246 @@ func DecodeListRemoteSessionClientsResponse(decoder func(*http.Response) goahttp
 	}
 }
 
+// BuildGetNewClientCallbackURLRequest instantiates a HTTP request object with
+// method and path set to call the "remoteSessionClients" service
+// "getNewClientCallbackUrl" endpoint
+func (c *Client) BuildGetNewClientCallbackURLRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetNewClientCallbackURLRemoteSessionClientsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteSessionClients", "getNewClientCallbackUrl", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetNewClientCallbackURLRequest returns an encoder for requests sent to
+// the remoteSessionClients getNewClientCallbackUrl server.
+func EncodeGetNewClientCallbackURLRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotesessionclients.GetNewClientCallbackURLPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteSessionClients", "getNewClientCallbackUrl", "*remotesessionclients.GetNewClientCallbackURLPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetNewClientCallbackURLResponse returns a decoder for responses
+// returned by the remoteSessionClients getNewClientCallbackUrl endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeGetNewClientCallbackURLResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetNewClientCallbackURLResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetNewClientCallbackURLResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "getNewClientCallbackUrl", err)
+			}
+			err = ValidateGetNewClientCallbackURLResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "getNewClientCallbackUrl", err)
+			}
+			res := NewGetNewClientCallbackURLNewClientCallbackURLResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetNewClientCallbackURLUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "getNewClientCallbackUrl", err)
+			}
+			err = ValidateGetNewClientCallbackURLUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "getNewClientCallbackUrl", err)
+			}
+			return nil, NewGetNewClientCallbackURLUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetNewClientCallbackURLForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "getNewClientCallbackUrl", err)
+			}
+			err = ValidateGetNewClientCallbackURLForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "getNewClientCallbackUrl", err)
+			}
+			return nil, NewGetNewClientCallbackURLForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetNewClientCallbackURLBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "getNewClientCallbackUrl", err)
+			}
+			err = ValidateGetNewClientCallbackURLBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "getNewClientCallbackUrl", err)
+			}
+			return nil, NewGetNewClientCallbackURLBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetNewClientCallbackURLNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "getNewClientCallbackUrl", err)
+			}
+			err = ValidateGetNewClientCallbackURLNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "getNewClientCallbackUrl", err)
+			}
+			return nil, NewGetNewClientCallbackURLNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetNewClientCallbackURLConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "getNewClientCallbackUrl", err)
+			}
+			err = ValidateGetNewClientCallbackURLConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "getNewClientCallbackUrl", err)
+			}
+			return nil, NewGetNewClientCallbackURLConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetNewClientCallbackURLUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "getNewClientCallbackUrl", err)
+			}
+			err = ValidateGetNewClientCallbackURLUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "getNewClientCallbackUrl", err)
+			}
+			return nil, NewGetNewClientCallbackURLUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetNewClientCallbackURLInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "getNewClientCallbackUrl", err)
+			}
+			err = ValidateGetNewClientCallbackURLInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "getNewClientCallbackUrl", err)
+			}
+			return nil, NewGetNewClientCallbackURLInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetNewClientCallbackURLInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "getNewClientCallbackUrl", err)
+				}
+				err = ValidateGetNewClientCallbackURLInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "getNewClientCallbackUrl", err)
+				}
+				return nil, NewGetNewClientCallbackURLInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetNewClientCallbackURLUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "getNewClientCallbackUrl", err)
+				}
+				err = ValidateGetNewClientCallbackURLUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "getNewClientCallbackUrl", err)
+				}
+				return nil, NewGetNewClientCallbackURLUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "getNewClientCallbackUrl", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetNewClientCallbackURLGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "getNewClientCallbackUrl", err)
+			}
+			err = ValidateGetNewClientCallbackURLGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "getNewClientCallbackUrl", err)
+			}
+			return nil, NewGetNewClientCallbackURLGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "getNewClientCallbackUrl", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetRemoteSessionClientRequest instantiates a HTTP request object with
 // method and path set to call the "remoteSessionClients" service
 // "getRemoteSessionClient" endpoint
@@ -3223,6 +3463,7 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		JSONWebKeySetID:                 v.JSONWebKeySetID,
 		Audience:                        v.Audience,
 		LegacyCallbackURL:               *v.LegacyCallbackURL,
+		CallbackURL:                     v.CallbackURL,
 		CreatedAt:                       *v.CreatedAt,
 		UpdatedAt:                       *v.UpdatedAt,
 	}

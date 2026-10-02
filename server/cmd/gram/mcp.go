@@ -218,6 +218,10 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return err
 	}
+	callbackOrigins, err := callbackOriginsFromCLI(c, serverURL, serviceEnv, platformHosts)
+	if err != nil {
+		return err
+	}
 
 	enc, err := encryption.New(c.String("encryption-key"))
 	if err != nil {
@@ -340,7 +344,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return fmt.Errorf("build tunnel http client: %w", err)
 	}
-	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, auditLogger, clientAssertionSigner)
+	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner)
 	if err != nil {
 		return err
 	}
@@ -363,12 +367,14 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// service and transactional owner authorizer as gram start, without mounting
 	// its dashboard RPC routes or introducing a Temporal client.
 	identityCommitter := remotesessions.NewIdentityCommitter(logger, db, enc, auditLogger, serverURL, guardianPolicy, tunnelHTTPClient, oauthregistration.NewMetrics(logger, meterProvider))
+	identityCommitter.SetCallbackOrigins(callbackOrigins)
 	remoteSessionsRefresher := remotesessions.NewRefreshService(logger, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, cacheImpl,
 		remotesessions.WithRefreshIDTokenVerifier(remoteSessionDeps.Verifier),
 		remotesessions.WithRefreshIssuerMetadataRefresher(remoteSessionDeps.Refresher),
 		remotesessions.WithRefreshSessionEnricher(remoteSessionDeps.Enricher),
 		remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner))
 	remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, enc, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remoteSessionsRefresher, productFeatures)
+	remoteSessionsService.SetCallbackOrigins(callbackOrigins)
 	remoteSessionsService.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		if !ok || authCtx == nil {

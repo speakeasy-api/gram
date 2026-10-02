@@ -625,6 +625,7 @@ func mcpRuntimeFlags() []cli.Flag {
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, gcpFlags()...)
 	flags = append(flags, identityProviderConnectionFlags()...)
+	flags = append(flags, callbackOriginFlags()...)
 	return flags
 }
 
@@ -876,6 +877,10 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			callbackOrigins, err := callbackOriginsFromCLI(c, serverURL, c.String("environment"), platformHosts)
+			if err != nil {
+				return err
+			}
 
 			trialEmailNotifier := &background.TemporalTrialEmailNotifier{TemporalEnv: temporalEnv}
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
@@ -1110,7 +1115,7 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 
-			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, auditLogger, clientAssertionSigner)
+			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner)
 			if err != nil {
 				return err
 			}
@@ -1642,7 +1647,7 @@ func newStartCommand() *cli.Command {
 			externalcredentials.Attach(mux, externalcredentials.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, productFeatures, ratelimit.NewRedisStore(redisClient)))
 			externalkeys.Attach(mux, externalkeys.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, kmsSigningClients, productFeatures, ratelimit.NewRedisStore(redisClient)))
 			jsonwebkeysets.Attach(mux, jsonwebkeysets.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, kmsSigningClients, productFeatures, ratelimit.NewRedisStore(redisClient)))
-			identityProviderProvisioner, err := newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, serverURL)
+			identityProviderProvisioner, err := newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, callbackOrigins.Outbound)
 			if err != nil {
 				return err
 			}
@@ -1680,9 +1685,11 @@ func newStartCommand() *cli.Command {
 				WithDistributionAdmission(distributionAdmission).WithPluginPublisher(pluginsPublishSignaler).WithPublicationRequests(publicationEmit))
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
 			identityCommitter := remotesessions.NewIdentityCommitter(logger, db, encryptionClient, auditLogger, serverURL, guardianPolicy, tunnelHTTPClient, oauthregistration.NewMetrics(logger, meterProvider))
+			identityCommitter.SetCallbackOrigins(callbackOrigins)
 			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher), remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher), remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner)), productFeatures)
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, tunnelHTTPClient, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), ratelimit.NewRedisStore(redisClient), clientAssertionSigner))
 			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))
+			remoteSessionsService.SetCallbackOrigins(callbackOrigins)
 			remoteSessionsService.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
 				authCtx, ok := contextvalues.GetAuthContext(ctx)
 				if !ok || authCtx == nil {
@@ -1757,7 +1764,7 @@ func newStartCommand() *cli.Command {
 				}
 			}
 			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, nil)
-			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, mcpCatalog, authzEngine, serverURL))
+			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, mcpCatalog, authzEngine, callbackOrigins.ForNewClient(true)))
 			riskSignaler := background.NewThrottledSignaler(
 				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
 				analysisstatus.SignalCooldown,
@@ -1779,6 +1786,7 @@ func newStartCommand() *cli.Command {
 				DB:                       db,
 				Redis:                    redisClient,
 				ServerURL:                serverURL,
+				CallbackOrigin:           callbackOrigins.ForNewClient(true),
 				DashboardURL:             siteURL,
 				Environment:              c.String("environment"),
 				JWTSigningKey:            c.String(usersessions.JWTSigningKeyFlag),

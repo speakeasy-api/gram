@@ -116,5 +116,10 @@ func (s *Service) validateRemoteLoginBrowser(r *http.Request) error {
 	if parent.Subject == nil || remote.Subject == nil || parent.Subject.String() != remote.Subject.String() || parent.UserSessionIssuerID != remote.UserSessionIssuerID {
 		return errors.New("remote login parent mismatch")
 	}
+	// A login on another callback host carries its own browser binding, set
+	// there by the bind stop of the remote login browser hop.
+	if remote.BrowserHash != "" {
+		return s.validateRemoteLoginHopBrowser(r, parent, remote)
+	}
 	return validateChallengeBrowser(r, parent, true)
 }
