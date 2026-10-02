@@ -2621,3 +2621,30 @@ func seedTurnUser(t *testing.T, db *pgxpool.Pool, org, user string) {
 	_, err = orgrepo.New(db).UpsertOrganizationUserRelationship(t.Context(), orgrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: org, UserID: pgtype.Text{String: user, Valid: true}})
 	require.NoError(t, err)
 }
+
+func TestEnqueueTriggerTaskRejectsNonObjectPayload(t *testing.T) {
+	t.Parallel()
+	for _, payload := range []string{"null", "[]", "123", "true", `"text"`} {
+		t.Run(payload, func(t *testing.T) {
+			t.Parallel()
+			db, err := assistantsInfra.CloneTestDatabase(t, "enqueue_nonobject_payload")
+			require.NoError(t, err)
+			_, assistant, _, _ := insertAssistantFixture(t, db)
+			core := newProvisioningCore(t, db)
+			var result EnqueueResult
+			require.NotPanics(t, func() {
+				result, err = core.EnqueueTriggerTask(t.Context(), bgtriggers.Task{
+					DefinitionSlug: sourceKindDashboard, TargetKind: bgtriggers.TargetKindAssistant,
+					TargetRef: assistant.String(), EventID: "malformed-event", CorrelationID: "malformed-event",
+					EventJSON: []byte(payload),
+				})
+			})
+			require.Error(t, err)
+			if payload == "null" {
+				require.ErrorContains(t, err, "must be a JSON object")
+			}
+			require.False(t, result.ShouldSignal)
+			require.Equal(t, uuid.Nil, result.ThreadID)
+		})
+	}
+}

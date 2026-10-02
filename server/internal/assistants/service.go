@@ -2024,6 +2024,9 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	if err := json.Unmarshal(normalizedPayloadJSON, &payload); err != nil {
 		return EnqueueResult{}, fmt.Errorf("encode trigger event source: %w", err)
 	}
+	if payload == nil {
+		return EnqueueResult{}, fmt.Errorf("trigger event payload must be a JSON object")
+	}
 	payload["_gram_source_kind"], err = json.Marshal(sourceKind)
 	if err != nil {
 		return EnqueueResult{}, fmt.Errorf("encode trigger event source: %w", err)
