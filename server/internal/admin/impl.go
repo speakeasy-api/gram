@@ -99,6 +99,7 @@ type Service struct {
 	billing BillingOperations
 
 	supportCoverage SupportCoverageReader
+	mcpServerHealth MCPServerHealthReader
 }
 
 type BillingOperations interface {
@@ -205,6 +206,7 @@ func NewService(
 	openRouterSpendCap OpenRouterSpendCapScheduler,
 	billing BillingOperations,
 	supportCoverage SupportCoverageReader,
+	mcpServerHealth MCPServerHealthReader,
 	dashboardURL *url.URL,
 	registry *mcpregistry.Service,
 ) *Service {
@@ -251,6 +253,7 @@ func NewService(
 		trial:           trialNotifier,
 		billing:         billing,
 		supportCoverage: supportCoverage,
+		mcpServerHealth: mcpServerHealth,
 	}
 }
 

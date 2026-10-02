@@ -121,6 +121,7 @@ func isReservedGlobalPath(method, requestPath string) bool {
 	for _, callback := range []string{
 		"/mcp/idp_callback",
 		"/mcp/remote_login_callback",
+		"/mcp/remote_login_bind",
 		"/x/mcp/idp_callback",
 		"/x/mcp/remote_login_callback",
 	} {

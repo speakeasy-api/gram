@@ -327,6 +327,7 @@ func TestAuthenticationHost_NonAuthorizationServerRoutesNotFound(t *testing.T) {
 		{http.MethodGet, "/.well-known/oauth-protected-resource/mcp/" + slug},
 		{http.MethodGet, "/mcp/idp_callback"},
 		{http.MethodGet, "/mcp/remote_login_callback"},
+		{http.MethodGet, "/mcp/remote_login_bind"},
 		{http.MethodPost, "/rpc/auth.info"},
 		{http.MethodGet, "/"},
 	} {

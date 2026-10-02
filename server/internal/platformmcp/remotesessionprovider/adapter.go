@@ -173,6 +173,8 @@ func (a *Adapter) BeginSetup(ctx context.Context, request platformmcp.ProviderSe
 			NamespaceKind:    "",
 			CustomDomainID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		},
+		BrowserCookieID: "",
+		BrowserHash:     "",
 	}, client)
 	if err != nil {
 		return platformmcp.ProviderSetupResult{}, fmt.Errorf("build reviewed provider authorization URL: %w", err)

@@ -378,6 +378,7 @@ type PostgresReader struct {
 	shadowAI                  *ShadowAIService
 	reviewRequests            MCPReviewRequestService
 	reviewRequestBudget       OperationBudget
+	toolExposure              *MCPToolExposureService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool, management AssistantIdentityManagement) *PostgresReader {
@@ -408,6 +409,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool, management Assista
 		shadowAI:                  nil,
 		reviewRequests:            nil,
 		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
+		toolExposure:              nil,
 	}
 	if management != nil {
 		r.assistantIdentity = &assistantIdentityService{management: management, resolveProject: r.resolveInventoryProject}
@@ -418,6 +420,16 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool, management Assista
 func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader {
 	if r != nil {
 		r.authz = engine
+	}
+	return r
+}
+
+// WithToolExposure composes the reads and writes that decide which tools a
+// hosted MCP server exposes. Without it the tools stay in the catalogue as
+// stable refusals rather than disappearing from it.
+func (r *PostgresReader) WithToolExposure(service *MCPToolExposureService) *PostgresReader {
+	if r != nil {
+		r.toolExposure = service
 	}
 	return r
 }
@@ -800,6 +812,21 @@ func (r *PostgresReader) getMCPInventory(ctx context.Context, principal Principa
 	}
 	mcp := mcpFromInventoryItem(row, byMCPServer)
 	r.setInventoryVersion(&mcp)
+	// The exposure read rides the same mcp:read boundary as the rest of the
+	// detail, so it is filled in only where plugin membership is: a caller
+	// admitted on project read alone gets the operational projection, not the
+	// server's configuration.
+	if withPluginMembership && r.toolExposure.valid() && row.McpServerID != uuid.Nil {
+		exposure, err := r.toolExposure.Exposure(ctx, principal, projectID, row.McpServerID)
+		switch {
+		case err == nil:
+			mcp.ToolExposure = &exposure
+		case errors.Is(err, ErrMCPToolExposureMissing):
+			// Not a hosted toolset-backed server: its tools are its upstream's.
+		default:
+			return MCP{}, fmt.Errorf("read platform MCP tool exposure: %w", err)
+		}
+	}
 	return mcp, nil
 }
 

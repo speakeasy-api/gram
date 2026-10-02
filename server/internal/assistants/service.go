@@ -434,6 +434,10 @@ type ServiceCore struct {
 	dashboardIngestor DashboardIngestor
 	featureFlags      feature.Provider
 	turnClassified    metric.Int64Counter
+	// outboundOrigin is the pinned origin of the MCP auth CIMD client_id and
+	// redirect_uri. Authorization servers store both, so it stays fixed when
+	// the server URL moves. Set by SetOutboundCallbackOrigin.
+	outboundOrigin *url.URL
 }
 
 func NewServiceCore(
@@ -486,6 +490,7 @@ func NewServiceCore(
 		dashboardIngestor: nil,
 		featureFlags:      nil,
 		turnClassified:    turnClassified,
+		outboundOrigin:    nil,
 	}
 }
 
@@ -532,6 +537,27 @@ func (s *ServiceCore) SetFeatureProvider(p feature.Provider) {
 // from served documents.
 func (s *ServiceCore) SetSiteURL(u *url.URL) {
 	s.siteURL = u
+}
+
+// SetOutboundCallbackOrigin pins the MCP auth CIMD client_id and redirect_uri
+// to origin instead of the server URL. A nil origin keeps the server URL.
+func (s *ServiceCore) SetOutboundCallbackOrigin(origin *url.URL) {
+	if origin != nil {
+		s.outboundOrigin = origin
+	}
+}
+
+// mcpAuthOrigin is the origin of the MCP auth CIMD client_id and redirect_uri.
+func (s *ServiceCore) mcpAuthOrigin() *url.URL {
+	if s.outboundOrigin != nil {
+		return s.outboundOrigin
+	}
+	return s.serverURL
+}
+
+// mcpAuthRedirectURI is the redirect_uri of an assistant's MCP auth client.
+func (s *ServiceCore) mcpAuthRedirectURI(assistantID uuid.UUID) string {
+	return s.mcpAuthOrigin().JoinPath("rpc", "assistantMcpAuth", assistantID.String(), "oauth", "callback").String()
 }
 
 // resolveAssistantContextWindow returns the smallest context_length the gram

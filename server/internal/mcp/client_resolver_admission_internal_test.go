@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
@@ -125,5 +126,41 @@ func TestAdmitCIMDClient_PlatformAssistant(t *testing.T) {
 		ProjectID:   project.ID,
 	}))
 	require.ErrorAs(t, svc.admitCIMDClient(ctx, svc.logger, endpoint(admission.ModePresets), clientID), &denial)
+	require.Equal(t, admission.DenialNotListed, denial.Reason)
+}
+
+// TestAdmitCIMDClient_PlatformAssistantOnPinnedOrigin: assistants publish
+// their client_id on the pinned outbound origin, so that is the origin
+// admitted as first party when the server URL has moved elsewhere.
+func TestAdmitCIMDClient_PlatformAssistantOnPinnedOrigin(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := TestInfra.CloneTestDatabase(t, "mcp_cimd_platform_assistant_pinned")
+	require.NoError(t, err)
+	require.NoError(t, orgsrepo.New(conn).CreateOrganizationMetadata(ctx, orgsrepo.CreateOrganizationMetadataParams{ID: "org-cimd", Name: "CIMD Org", Slug: "cimd-org"}))
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Project", Slug: "project", OrganizationID: "org-cimd"})
+	require.NoError(t, err)
+	assistant, err := assistantrepo.New(conn).CreateAssistant(ctx, assistantrepo.CreateAssistantParams{
+		ProjectID: project.ID, OrganizationID: "org-cimd", CreatedByUserID: pgtype.Text{}, Name: "Assistant",
+		Model: "openai/gpt-4o-mini", Instructions: "", WarmTtlSeconds: 300, MaxConcurrency: 1, Status: assistants.StatusActive,
+	})
+	require.NoError(t, err)
+
+	serverURL, err := url.Parse("https://ai.example.test")
+	require.NoError(t, err)
+	outbound, err := url.Parse("https://app.example.test")
+	require.NoError(t, err)
+	svc := &Service{logger: testenv.NewLogger(t), db: conn, serverURL: serverURL, cimdAdmissionMetrics: nil}
+	svc.SetCallbackOrigins(remotesessions.CallbackOrigins{Outbound: outbound, Registration: nil})
+	endpoint := &ResolvedMcpEndpoint{
+		AudienceURN: "toolset:test", CIMDAdmissionModeRaw: conv.ToPGText(string(admission.ModePresets)), CustomDomainID: uuid.NullUUID{},
+		IsPublic: true, McpServerID: uuid.NullUUID{}, OrganizationID: "org-cimd", ProjectID: project.ID, RouteBase: "mcp", Slug: "test",
+		ToolsetID: uuid.NullUUID{}, UpstreamResource: "", UserSessionIssuerID: uuid.New(),
+	}
+
+	require.NoError(t, svc.admitCIMDClient(ctx, svc.logger, endpoint, assistants.AssistantClientMetadataDocumentURL(outbound, assistant.ID)))
+	var denial *admission.DenialError
+	require.ErrorAs(t, svc.admitCIMDClient(ctx, svc.logger, endpoint, assistants.AssistantClientMetadataDocumentURL(serverURL, assistant.ID)), &denial)
 	require.Equal(t, admission.DenialNotListed, denial.Reason)
 }

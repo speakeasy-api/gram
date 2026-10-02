@@ -2039,6 +2039,120 @@ func BuildGetSupportCoveragePayload(adminGetSupportCoverageOrganizationID string
 	return v, nil
 }
 
+// BuildDescribeMcpServerHealthPayload builds the payload for the admin
+// describeMcpServerHealth endpoint from CLI flags.
+func BuildDescribeMcpServerHealthPayload(adminDescribeMcpServerHealthOrganizationID string, adminDescribeMcpServerHealthProjectID string, adminDescribeMcpServerHealthMcpServerID string, adminDescribeMcpServerHealthWindowDays string, adminDescribeMcpServerHealthAdminSessionToken string) (*admin.DescribeMcpServerHealthPayload, error) {
+	var err error
+	var organizationID string
+	{
+		organizationID = adminDescribeMcpServerHealthOrganizationID
+	}
+	var projectID string
+	{
+		projectID = adminDescribeMcpServerHealthProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var mcpServerID string
+	{
+		mcpServerID = adminDescribeMcpServerHealthMcpServerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var windowDays int
+	{
+		if adminDescribeMcpServerHealthWindowDays != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminDescribeMcpServerHealthWindowDays, 10, strconv.IntSize)
+			windowDays = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for windowDays, must be INT")
+			}
+			if !(windowDays == 14 || windowDays == 30 || windowDays == 90) {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("window_days", windowDays, []any{14, 30, 90}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminDescribeMcpServerHealthAdminSessionToken != "" {
+			adminSessionToken = &adminDescribeMcpServerHealthAdminSessionToken
+		}
+	}
+	v := &admin.DescribeMcpServerHealthPayload{}
+	v.OrganizationID = organizationID
+	v.ProjectID = projectID
+	v.McpServerID = mcpServerID
+	v.WindowDays = windowDays
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetMcpServerToolCallsPayload builds the payload for the admin
+// getMcpServerToolCalls endpoint from CLI flags.
+func BuildGetMcpServerToolCallsPayload(adminGetMcpServerToolCallsOrganizationID string, adminGetMcpServerToolCallsProjectID string, adminGetMcpServerToolCallsMcpServerID string, adminGetMcpServerToolCallsWindowDays string, adminGetMcpServerToolCallsAdminSessionToken string) (*admin.GetMcpServerToolCallsPayload, error) {
+	var err error
+	var organizationID string
+	{
+		organizationID = adminGetMcpServerToolCallsOrganizationID
+	}
+	var projectID string
+	{
+		projectID = adminGetMcpServerToolCallsProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var mcpServerID string
+	{
+		mcpServerID = adminGetMcpServerToolCallsMcpServerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var windowDays int
+	{
+		if adminGetMcpServerToolCallsWindowDays != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminGetMcpServerToolCallsWindowDays, 10, strconv.IntSize)
+			windowDays = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for windowDays, must be INT")
+			}
+			if !(windowDays == 14 || windowDays == 30 || windowDays == 90) {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("window_days", windowDays, []any{14, 30, 90}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetMcpServerToolCallsAdminSessionToken != "" {
+			adminSessionToken = &adminGetMcpServerToolCallsAdminSessionToken
+		}
+	}
+	v := &admin.GetMcpServerToolCallsPayload{}
+	v.OrganizationID = organizationID
+	v.ProjectID = projectID
+	v.McpServerID = mcpServerID
+	v.WindowDays = windowDays
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetRegistryOktaCandidatesPayload builds the payload for the admin
 // getRegistryOktaCandidates endpoint from CLI flags.
 func BuildGetRegistryOktaCandidatesPayload(adminGetRegistryOktaCandidatesID string, adminGetRegistryOktaCandidatesAdminSessionToken string) (*admin.GetRegistryOktaCandidatesPayload, error) {

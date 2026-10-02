@@ -29,14 +29,6 @@ vi.mock("@/hooks/useRBAC", () => ({
 vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => rbac.isPlatformAdmin,
 }));
-vi.mock(
-  "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils",
-  () => ({
-    remoteLoginCallbackURL: () =>
-      "https://app.example.com/mcp/remote_login_callback",
-    legacyCallbackURL: () => "https://app.example.com/oauth/callback",
-  }),
-);
 vi.mock("react-router", () => ({
   Link: ({ to, children }: { to: string; children: ReactNode }) => (
     <a href={to}>{children}</a>
@@ -119,6 +111,7 @@ describe("LegacyCallbackAlert", () => {
     const { rerender, container } = render(
       <LegacyCallbackAlert
         legacyCallbackUrl={false}
+        callbackUrl="https://app.example.com/mcp/remote_login_callback"
         onMigrate={vi.fn<() => void>()}
         canMigrate
       />,
@@ -129,6 +122,7 @@ describe("LegacyCallbackAlert", () => {
     rerender(
       <LegacyCallbackAlert
         legacyCallbackUrl
+        callbackUrl="https://app.example.com/mcp/remote_login_callback"
         onMigrate={vi.fn<() => void>()}
         canMigrate
       />,
@@ -140,6 +134,7 @@ describe("LegacyCallbackAlert", () => {
     render(
       <LegacyCallbackAlert
         legacyCallbackUrl
+        callbackUrl="https://app.example.com/mcp/remote_login_callback"
         onMigrate={vi.fn<() => void>()}
         canMigrate={false}
       />,
@@ -154,6 +149,7 @@ describe("LegacyCallbackAlert", () => {
     render(
       <LegacyCallbackAlert
         legacyCallbackUrl
+        callbackUrl="https://app.example.com/mcp/remote_login_callback"
         onMigrate={onMigrate}
         canMigrate
       />,

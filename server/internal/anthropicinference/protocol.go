@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
@@ -43,6 +44,15 @@ type Frame struct {
 
 	// Model is the optional public model identifier.
 	Model string `json:"model"`
+
+	// conversation is the stored chat this frame resolved to. Service.Process
+	// sets it once per request so the store does not repeat the lookup; the
+	// zero value makes the store resolve it on demand. It never travels on the
+	// wire.
+	conversation uuid.UUID
+	// conversationOutcome is how conversation was resolved (see
+	// conversationOutcome* constants). Empty when conversation is unset.
+	conversationOutcome string
 }
 
 // Actor describes the principal asserted by the signed request.

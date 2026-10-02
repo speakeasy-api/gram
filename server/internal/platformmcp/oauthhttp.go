@@ -136,8 +136,8 @@ var _ cache.CacheableObject[oauthChallenge] = (*oauthChallenge)(nil)
 // platform host is its own RFC 8707 resource with its own authorization
 // server metadata. Requests from any other surface use baseURL.
 type OAuthHTTP struct {
-	// baseURL is the configured server URL. It hosts the identity provider
-	// callback and is the origin for requests not stamped as a platform host.
+	// baseURL is the configured server URL. It is the origin for requests not
+	// stamped as a platform host.
 	baseURL       *url.URL
 	environment   string
 	cache         cache.TypedCacheObject[oauthChallenge]
@@ -157,6 +157,10 @@ type OAuthHTTP struct {
 	// unknown, and the AS metadata stops advertising support.
 	cimd          clientMetadataResolver
 	cimdAdmission *admission.Metrics
+	// idpCallbackBaseURL hosts the identity provider callback. The identity
+	// provider stores the callback URL, so it stays pinned when the server
+	// URL moves.
+	idpCallbackBaseURL *url.URL
 }
 
 type OAuthHTTPConfig struct {
@@ -176,6 +180,9 @@ type OAuthHTTPConfig struct {
 	// Nil leaves inbound CIMD disabled.
 	GuardianPolicy *guardian.Policy
 	MeterProvider  metric.MeterProvider
+	// IDPCallbackBaseURL is the pinned origin of the identity provider
+	// callback. Nil uses BaseURL.
+	IDPCallbackBaseURL *url.URL
 }
 
 func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
@@ -201,6 +208,10 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 		resolver = cimd.NewResolver(config.GuardianPolicy, meterProvider, logger)
 	}
 	baseURL := *config.BaseURL
+	idpCallbackBaseURL := baseURL
+	if config.IDPCallbackBaseURL != nil {
+		idpCallbackBaseURL = *config.IDPCallbackBaseURL
+	}
 	return &OAuthHTTP{
 		baseURL:       &baseURL,
 		environment:   config.Environment,
@@ -217,6 +228,8 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 		logger:        logger,
 		cimd:          resolver,
 		cimdAdmission: admission.NewMetrics(meterProvider, logger),
+
+		idpCallbackBaseURL: &idpCallbackBaseURL,
 	}, nil
 }
 
@@ -370,9 +383,9 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 			return
 		}
 		// The identity provider only accepts registered redirect URIs, so the
-		// callback stays on the configured base URL for every platform host;
+		// callback stays on the pinned callback origin for every platform host;
 		// the challenge carries the origin to return to afterwards.
-		callback := endpointURL(s.baseURL, "idp_callback")
+		callback := endpointURL(s.idpCallbackBaseURL, "idp_callback")
 		idpURL, err := s.identity.BuildAuthorizationURL(r.Context(), identity.AuthorizationURLParams{CallbackURL: callback, State: challenge.ID, Scope: "", ScopesSupported: nil})
 		if err != nil {
 			writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not start login")

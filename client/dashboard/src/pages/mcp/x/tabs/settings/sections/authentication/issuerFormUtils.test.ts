@@ -1,40 +1,21 @@
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod as AuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   availableClientTypes,
   clientSecretUpdateValue,
   dynamicClientRegistrationAvailability,
   legacyCallbackURL,
-  remoteLoginCallbackURL,
 } from "./issuerFormUtils";
 
-const server = vi.hoisted(() => ({ url: "https://app.example.com" }));
-
-vi.mock("@/lib/utils", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/utils")>()),
-  getServerURL: () => server.url,
-}));
-
-afterEach(() => {
-  server.url = "https://app.example.com";
-});
-
-describe("callback URLs", () => {
-  it("appends the callback paths to the server URL", () => {
-    expect(remoteLoginCallbackURL()).toBe(
-      "https://app.example.com/mcp/remote_login_callback",
-    );
-    expect(legacyCallbackURL()).toBe("https://app.example.com/oauth/callback");
-  });
-
-  it("drops a trailing slash the way the server does", () => {
-    server.url = "https://app.example.com/";
-
-    expect(remoteLoginCallbackURL()).toBe(
-      "https://app.example.com/mcp/remote_login_callback",
-    );
-    expect(legacyCallbackURL()).toBe("https://app.example.com/oauth/callback");
+describe("legacyCallbackURL", () => {
+  it("shares the origin of the client's current callback", () => {
+    expect(
+      legacyCallbackURL("https://app.example.com/mcp/remote_login_callback"),
+    ).toBe("https://app.example.com/oauth/callback");
+    expect(
+      legacyCallbackURL("https://ai.example.com/mcp/remote_login_callback"),
+    ).toBe("https://ai.example.com/oauth/callback");
   });
 });
 

@@ -151,10 +151,10 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 	}
 
 	attemptID := uuid.NewString()
-	if s.core.serverURL == nil {
+	if s.core.mcpAuthOrigin() == nil {
 		return oops.E(oops.CodeUnexpected, nil, "assistant mcp auth callback base url not configured").LogError(ctx, s.logger)
 	}
-	redirectURI := s.core.serverURL.JoinPath("rpc", "assistantMcpAuth", principal.AssistantID.String(), "oauth", "callback").String()
+	redirectURI := s.core.mcpAuthRedirectURI(principal.AssistantID)
 	codeVerifier, codeChallenge, err := newPKCEPair()
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "generate PKCE verifier").LogError(ctx, s.logger)
@@ -625,10 +625,10 @@ func (s *Service) upsertMCPAuthCIMDClient(
 	usableAfter pgtype.Timestamptz,
 	claimLease pgtype.Interval,
 ) (mcpAuthClientCredentials, error) {
-	if s.core.serverURL == nil {
+	if s.core.mcpAuthOrigin() == nil {
 		return mcpAuthClientCredentials{}, fmt.Errorf("assistant mcp auth callback base url not configured")
 	}
-	clientID := AssistantClientMetadataDocumentURL(s.core.serverURL, assistantID)
+	clientID := AssistantClientMetadataDocumentURL(s.core.mcpAuthOrigin(), assistantID)
 	persistenceCtx, persistenceCancel := context.WithTimeout(context.WithoutCancel(ctx), mcpOAuthPersistenceMax)
 	defer persistenceCancel()
 	row, err := queries.UpsertAssistantMCPOAuthClientCIMD(persistenceCtx, assistantrepo.UpsertAssistantMCPOAuthClientCIMDParams{
