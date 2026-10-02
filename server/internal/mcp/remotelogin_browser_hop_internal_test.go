@@ -248,6 +248,34 @@ func TestRemoteLoginHop_ServerURLClientHopsToPinnedCallbackHost(t *testing.T) {
 	require.NoError(t, f.s.validateRemoteLoginBrowser(f.owner.request(remoteCallback(remote, "gram.example"))))
 }
 
+// The hop follows the callback origin the challenge was minted with, not this
+// replica's outbound origin: a trusted client's recorded callback host holds
+// the cookie even though the outbound origin is app.example.
+func TestRemoteLoginHop_FollowsRecordedCallbackOrigin(t *testing.T) {
+	t.Parallel()
+	f := newPinnedHopFixture(t)
+	f.parent.Browser.CallbackOrigin = "https://reg.example"
+	require.NoError(t, f.s.authnChallengeCache.Store(t.Context(), f.parent))
+	f.owner = hopBrowser{"reg.example": {federatedBrowserCookie(f.parent.Browser.CookieID, "owner-browser", 600)}}
+
+	target, hop, remote := f.start(t, "https://reg.example")
+	require.False(t, hop, "a client on the recorded callback host shares its cookie")
+	require.Equal(t, "https://idp.example/authorize?state="+remote.ID, target)
+	require.NoError(t, f.s.validateRemoteLoginBrowser(f.owner.request(remoteCallback(remote, "reg.example"))))
+
+	bind, hop, remote := f.start(t, "https://app.example")
+	require.True(t, hop, "the outbound origin does not hold this challenge's cookie")
+	confirm, err := f.owner.get(t, f.s, bind)
+	require.NoError(t, err)
+	confirmURL, err := url.Parse(confirm)
+	require.NoError(t, err)
+	require.Equal(t, "reg.example", confirmURL.Host)
+	upstream, err := f.owner.get(t, f.s, confirm)
+	require.NoError(t, err)
+	require.Equal(t, "https://idp.example/authorize?state="+remote.ID, upstream)
+	require.NoError(t, f.s.validateRemoteLoginBrowser(f.owner.request(remoteCallback(remote, "app.example"))))
+}
+
 func TestRemoteLoginHop_RefusedOnCustomDomain(t *testing.T) {
 	t.Parallel()
 	f := newHopFixture(t)

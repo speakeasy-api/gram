@@ -65,6 +65,7 @@ func (s *Service) federatedProvider(ctx context.Context, endpoint *ResolvedMcpEn
 	}
 	// Reject an unusable callback before discovery or any provider traffic. This
 	// check is deliberately after the unlinked branch, preserving WorkOS HTTP dev.
+	// The trusted client's own callback origin is checked once it is loaded.
 	callback, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
 	if err != nil {
 		return nil, uuid.Nil, uuid.Nil, "", remotesessions.ErrFederatedConfiguration
@@ -100,7 +101,9 @@ func (s *Service) prepareBoundFederatedLogin(w http.ResponseWriter, r *http.Requ
 	if retryHuman != "" && !state.FederatedBinding.matches(issuerID, clientID, provider) {
 		return nil, remotesessions.ErrFederatedConfiguration
 	}
-	callback, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
+	// The callback shares the trusted client's recorded callback origin, so the
+	// customer IdP app allowlists the same host as its remote_login_callback.
+	callback, err := endpoint.IDPCallbackURL(s.federatedCallbackOrigin(provider).String())
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +128,7 @@ func (s *Service) prepareBoundFederatedLogin(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return nil, err
 	}
-	state.Browser = &ChallengeBrowserBinding{CookieID: state.ID, OriginHash: sha256Hex(browser), CallbackHash: ""}
+	state.Browser = &ChallengeBrowserBinding{CookieID: state.ID, OriginHash: sha256Hex(browser), CallbackHash: "", CallbackOrigin: target.Scheme + "://" + target.Host}
 	phase, callbackHash := "bootstrap", ""
 	if origin.Scheme == target.Scheme && origin.Host == target.Host {
 		phase, callbackHash = "ready", state.Browser.OriginHash
@@ -141,6 +144,23 @@ func (s *Service) prepareBoundFederatedLogin(w http.ResponseWriter, r *http.Requ
 	http.SetCookie(w, federatedBrowserCookie(state.Browser.CookieID, browser, int(state.TTL().Seconds())))
 	target.RawQuery = url.Values{"state": {state.ID}, "federated_start": {"1"}}.Encode()
 	return target, nil
+}
+
+// recordedIDPCallbackOrigin validates the IdP callback a federated challenge
+// was minted with and returns its origin. The challenge is the source of truth:
+// a replica configured with another outbound origin still completes the login,
+// as long as the URL is this endpoint's callback.
+func recordedIDPCallbackOrigin(endpoint *ResolvedMcpEndpoint, callback string) (*url.URL, error) {
+	target, err := federatedCallbackURL(callback)
+	if err != nil {
+		return nil, err
+	}
+	origin := &url.URL{Scheme: target.Scheme, Host: target.Host}
+	expected, err := endpoint.IDPCallbackURL(origin.String())
+	if err != nil || expected != callback {
+		return nil, remotesessions.ErrFederatedConfiguration
+	}
+	return origin, nil
 }
 
 func federationCookieName(id string) string { return "__Host-gram-federation-" + id }

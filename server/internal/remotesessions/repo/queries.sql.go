@@ -10738,6 +10738,24 @@ func (q *Queries) SetEMAClientGrants(ctx context.Context, arg SetEMAClientGrants
 	return i, err
 }
 
+const setOrganizationRemoteSessionClientCallbackBaseURLFixture = `-- name: SetOrganizationRemoteSessionClientCallbackBaseURLFixture :exec
+UPDATE remote_session_clients
+SET callback_base_url = $1
+WHERE id = $2 AND organization_id = $3 AND project_id IS NULL
+`
+
+type SetOrganizationRemoteSessionClientCallbackBaseURLFixtureParams struct {
+	CallbackBaseUrl pgtype.Text
+	ID              uuid.UUID
+	OrganizationID  pgtype.Text
+}
+
+// Test fixture: record a callback origin on an organization-level login client.
+func (q *Queries) SetOrganizationRemoteSessionClientCallbackBaseURLFixture(ctx context.Context, arg SetOrganizationRemoteSessionClientCallbackBaseURLFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationRemoteSessionClientCallbackBaseURLFixture, arg.CallbackBaseUrl, arg.ID, arg.OrganizationID)
+	return err
+}
+
 const setOrganizationRemoteSessionClientCredentialsFixture = `-- name: SetOrganizationRemoteSessionClientCredentialsFixture :exec
 UPDATE remote_session_clients
 SET client_id = coalesce($1::text, client_id),

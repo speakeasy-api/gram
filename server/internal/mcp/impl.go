@@ -125,11 +125,11 @@ type Service struct {
 	auth                      *auth.Auth
 	env                       toolconfig.EnvironmentLoader
 	serverURL                 *url.URL
-	// outboundCallbackOrigin is the pinned origin of URLs that external systems
-	// store: the IdP callback sent to WorkOS and to federated customer IdPs, and
-	// assistants' CIMD client IDs. It stays fixed when the server URL moves.
-	// Set by SetCallbackOrigins.
-	outboundCallbackOrigin *url.URL
+	// callbackOrigins pin URLs that external systems store: the IdP callback
+	// sent to WorkOS and to federated customer IdPs, and assistants' CIMD
+	// client IDs. They stay fixed when the server URL moves. Set by
+	// SetCallbackOrigins; a nil Outbound falls back to the server URL.
+	callbackOrigins remotesessions.CallbackOrigins
 	// authenticationHostBaseURL is the authentication host's base URL, empty
 	// when none is configured. Set by AttachAuthenticationHost.
 	authenticationHostBaseURL string
@@ -473,7 +473,7 @@ func NewService(
 		auth:                      auth.New(logger, db, sessions, authzEngine),
 		env:                       env,
 		serverURL:                 serverURL,
-		outboundCallbackOrigin:    nil,
+		callbackOrigins:           remotesessions.CallbackOrigins{Outbound: nil, Registration: nil},
 		authenticationHostBaseURL: "",
 		siteURL:                   siteURL,
 		posthog:                   posthog,
@@ -557,23 +557,31 @@ func NewService(
 }
 
 // SetCallbackOrigins pins the IdP callback URLs and assistants' CIMD client
-// IDs to origins.Outbound, the origin remote session clients are pinned to.
+// IDs to the origins remote session clients are pinned to: origins.Outbound,
+// or a federated trusted client's recorded callback origin.
 func (s *Service) SetCallbackOrigins(origins remotesessions.CallbackOrigins) {
-	if origins.Outbound != nil {
-		s.outboundCallbackOrigin = origins.Outbound
-	}
+	s.callbackOrigins = origins
 }
 
-// outboundOrigin is the pinned outbound origin. The IdP callback is served
-// there, so it also holds a federated browser's callback cookie. It falls back
+// outboundOrigin is the pinned outbound origin of the WorkOS IdP callback and
+// of federated trusted clients with no recorded callback origin. It falls back
 // to the server URL. It pins only URLs Gram sends to external systems, never
 // an authorization server issuer: shared-mode issuers carry their own pinned
 // issuer (<host>/oauth/usi/{id}) and must not be routed through it.
 func (s *Service) outboundOrigin() *url.URL {
-	if s.outboundCallbackOrigin != nil {
-		return s.outboundCallbackOrigin
+	if s.callbackOrigins.Outbound != nil {
+		return s.callbackOrigins.Outbound
 	}
 	return s.serverURL
+}
+
+// federatedCallbackOrigin is the origin of the federated IdP callback for a
+// trusted client: its recorded callback_base_url, so it shares a host with
+// the client's remote_login_callback, or outboundOrigin when none is recorded.
+func (s *Service) federatedCallbackOrigin(provider *remotesessions.FederatedProvider) *url.URL {
+	origins := s.callbackOrigins
+	origins.Outbound = s.outboundOrigin()
+	return origins.ForClient(provider.CallbackBaseURL())
 }
 
 func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverName string) string {
