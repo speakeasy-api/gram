@@ -382,15 +382,22 @@ func TriggerToolsetIndex(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	if logger == nil || db == nil || toolset == nil {
 		return ErrToolsetIndexUnavailable
 	}
-	if temporalEnv == nil {
-		logger.ErrorContext(ctx, "no temporal environment to schedule toolset indexing; a dynamic-mode server cannot list its tools until the periodic sweep reaches it")
-		return ErrToolsetIndexUnavailable
-	}
+	// Whether an index is needed is asked BEFORE whether one could be
+	// scheduled, and the order is load-bearing. These two errors mean opposite
+	// things to a caller: "not_required" is a success, while "unavailable"
+	// tells an agent a dynamic-mode server may be unable to list its tools.
+	// Reporting unavailable for a version that needed no index in the first
+	// place sends that agent chasing a failure that did not happen.
+	//
 	// A version with no tools needs no index, and dynamic mode serves it
 	// without one — see ErrToolsetIndexNotRequired. Same for a toolset that is
 	// not MCP-enabled: nothing serves it.
 	if !conv.PtrValOr(toolset.McpEnabled, false) || len(toolset.Tools) == 0 {
 		return ErrToolsetIndexNotRequired
+	}
+	if temporalEnv == nil {
+		logger.ErrorContext(ctx, "no temporal environment to schedule toolset indexing; a dynamic-mode server cannot list its tools until the periodic sweep reaches it")
+		return ErrToolsetIndexUnavailable
 	}
 
 	projectID, err := uuid.Parse(toolset.ProjectID)
