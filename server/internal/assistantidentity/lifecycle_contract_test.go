@@ -35,7 +35,7 @@ func TestAgentSuspensionIsTemporaryAndPreservesBinding(t *testing.T) {
 	_, err = q.ResumeAgent(t.Context(), agentrepo.ResumeAgentParams{OrganizationID: f.org, ID: id.AgentID})
 	require.NoError(t, err)
 	require.NoError(t, testIdentityService.Validate(t.Context(), f.db, id))
-	_, err = sessionsrepo.New(f.db).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{OrganizationID: f.org, ID: session})
+	_, err = sessionsrepo.New(f.db).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ProjectID: f.project, OrganizationID: f.org, ID: session})
 	require.NoError(t, err, "suspension must not retire credentials or change binding generations")
 }
 
@@ -54,7 +54,7 @@ func TestAssignmentAwayAndBackCannotReviveBinding(t *testing.T) {
 	resolved, err := testIdentityService.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, f.trigger)
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Tombstoned, resolved.State)
-	_, err = sessionsrepo.New(f.db).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{OrganizationID: f.org, ID: session})
+	_, err = sessionsrepo.New(f.db).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ProjectID: f.project, OrganizationID: f.org, ID: session})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
@@ -73,7 +73,7 @@ func TestIssuerKeyChangeAndRestorationCannotReviveBinding(t *testing.T) {
 		require.NoError(t, err)
 		require.ErrorIs(t, testIdentityService.Validate(t.Context(), f.db, id), assistantidentity.ErrInvalidIdentity)
 	}
-	_, err = sessionsrepo.New(f.db).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{OrganizationID: f.org, ID: session})
+	_, err = sessionsrepo.New(f.db).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ProjectID: f.project, OrganizationID: f.org, ID: session})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
@@ -93,7 +93,7 @@ func TestOwnerTransferAwayAndBackCannotReviveBinding(t *testing.T) {
 	resolved, err := testIdentityService.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, f.trigger)
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Tombstoned, resolved.State)
-	_, err = sessionsrepo.New(f.db).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{OrganizationID: f.org, ID: session})
+	_, err = sessionsrepo.New(f.db).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ProjectID: f.project, OrganizationID: f.org, ID: session})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
@@ -163,13 +163,13 @@ func TestCapabilityEditsRevokeSessionsWithoutChangingBinding(t *testing.T) {
 	require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
 		return assistantidentity.RevokeIfCapabilitiesChanged(t.Context(), tx, f.org, f.project, f.assistant, before)
 	}))
-	_, err := sessionsrepo.New(f.db).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{OrganizationID: f.org, ID: session})
+	_, err := sessionsrepo.New(f.db).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ProjectID: f.project, OrganizationID: f.org, ID: session})
 	require.NoError(t, err, "unchanged configuration is not revocation")
 	f.attachMCP(t)
 	require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
 		return assistantidentity.RevokeIfCapabilitiesChanged(t.Context(), tx, f.org, f.project, f.assistant, before)
 	}))
-	_, err = sessionsrepo.New(f.db).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{OrganizationID: f.org, ID: session})
+	_, err = sessionsrepo.New(f.db).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ProjectID: f.project, OrganizationID: f.org, ID: session})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	require.NoError(t, testIdentityService.Validate(t.Context(), f.db, id), "configuration edits do not change identity generations")
 }

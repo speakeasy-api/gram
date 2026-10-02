@@ -1334,6 +1334,21 @@ func (q *Queries) DeleteUserSessionIssuerCimdClient(ctx context.Context, arg Del
 	return i, err
 }
 
+const fixtureSetHistoricalSessionSubject = `-- name: FixtureSetHistoricalSessionSubject :exec
+UPDATE user_sessions SET subject_urn = $1 WHERE id = $2
+`
+
+type FixtureSetHistoricalSessionSubjectParams struct {
+	SubjectUrn urn.SessionSubject
+	SessionID  uuid.UUID
+}
+
+// Simulate pre-validation persisted credentials for management-display tests.
+func (q *Queries) FixtureSetHistoricalSessionSubject(ctx context.Context, arg FixtureSetHistoricalSessionSubjectParams) error {
+	_, err := q.db.Exec(ctx, fixtureSetHistoricalSessionSubject, arg.SubjectUrn, arg.SessionID)
+	return err
+}
+
 const getLatestLiveUserSessionToolSelection = `-- name: GetLatestLiveUserSessionToolSelection :one
 SELECT tool_selection
 FROM user_sessions

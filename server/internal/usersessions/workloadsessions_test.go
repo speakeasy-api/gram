@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	sessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	workloadpolicyrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
@@ -255,8 +257,14 @@ func TestListUserSessions_WorkloadIssuerOfSiblingProjectIsUnnamed(t *testing.T) 
 	agent := seedWorkloadAgent(t, ctx, ti.conn, "Sibling workload bot")
 	seedWorkloadAssignment(t, ctx, ti.conn, siblingIssuer, workloadTestSubject, agent.ID)
 
-	session, err := seedUserSession(t, ctx, ti.conn, issuerID, urn.NewWorkloadSubject(siblingIssuer, workloadTestSubject))
+	// Admission now refuses sibling-project trust. Seed historical display state
+	// explicitly instead of bypassing the hardened production creation path.
+	subject := urn.NewWorkloadSubject(siblingIssuer, workloadTestSubject)
+	_, err := seedUserSession(t, ctx, ti.conn, issuerID, subject)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	session, err := seedUserSession(t, ctx, ti.conn, issuerID, urn.NewUserSubject("historical-user"))
 	require.NoError(t, err)
+	require.NoError(t, sessionsrepo.New(ti.conn).FixtureSetHistoricalSessionSubject(ctx, sessionsrepo.FixtureSetHistoricalSessionSubjectParams{SessionID: session.ID, SubjectUrn: subject}))
 
 	got := sessionByID(t, listAllSessions(t, ctx, ti, nil), session.ID).Workload
 	require.NotNil(t, got, "the identity parsed from the subject is always reported")

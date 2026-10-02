@@ -81,7 +81,9 @@ func TestProvisionRollsBackEveryAuthorityWrite(t *testing.T) {
 			f := newFixture(t)
 			server := f.attachMCP(t)
 			f.grant(t, urn.NewPrincipal(urn.PrincipalTypeUser, f.actor), authz.ScopeMCPRead, server.String())
-			err := inTx(t, f.db, func(tx pgx.Tx) error {
+			before, err := repo.New(f.db).FixtureAuthorityCounts(t.Context(), f.org)
+			require.NoError(t, err)
+			err = inTx(t, f.db, func(tx pgx.Tx) error {
 				_, err := testIdentityService.Provision(t.Context(), failureTx{Tx: tx, table: table}, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
 				if err != nil {
 					return fmt.Errorf("fixture operation: %w", err)
@@ -91,7 +93,7 @@ func TestProvisionRollsBackEveryAuthorityWrite(t *testing.T) {
 			require.ErrorContains(t, err, "injected identity write failure")
 			counts, err := repo.New(f.db).FixtureAuthorityCounts(t.Context(), f.org)
 			require.NoError(t, err)
-			require.Equal(t, repo.FixtureAuthorityCountsRow{}, counts)
+			require.Equal(t, before, counts)
 		})
 	}
 }

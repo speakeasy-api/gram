@@ -2152,3 +2152,7 @@ WHERE wia.organization_id = @organization_id::text
   AND (wia.project_id = @project_id::uuid OR wia.project_id IS NULL)
   AND wia.deleted IS FALSE
 ORDER BY wia.project_id NULLS LAST, wia.created_at ASC, wia.id ASC;
+
+-- name: FixtureSetHistoricalSessionSubject :exec
+-- Simulate pre-validation persisted credentials for management-display tests.
+UPDATE user_sessions SET subject_urn = @subject_urn WHERE id = @session_id;
