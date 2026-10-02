@@ -577,9 +577,9 @@ var SummarizeToolCallResult = Type("SummarizeToolCallResult", func() {
 })
 
 var ChatOverview = Type("ChatOverview", func() {
- Attribute("slack_team_id", String, "Observed Slack workspace associated with this session.")
- Attribute("slack_channel_id", String, "Observed Slack channel associated with this session.")
- Attribute("slack_channel_name", String, "Observed Slack channel name, without the leading hash.")
+	Attribute("slack_team_id", String, "Observed Slack workspace associated with this session.")
+	Attribute("slack_channel_id", String, "Observed Slack channel associated with this session.")
+	Attribute("slack_channel_name", String, "Observed Slack channel name, without the leading hash.")
 	Attribute("participants", ArrayOf(ChatParticipant), "Distinct observed conversation participants across the session.")
 	Attribute("id", String, "The ID of the chat")
 	Attribute("title", String, "The title of the chat")
