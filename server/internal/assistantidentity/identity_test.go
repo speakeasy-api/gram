@@ -36,7 +36,10 @@ func TestLegacyUpgradeAndConcurrentRetries(t *testing.T) {
 			err := inTx(t, f.db, func(tx pgx.Tx) error {
 				var err error
 				binding, err = testIdentityService.Upgrade(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
-				return fmt.Errorf("fixture operation: %w", err)
+				if err != nil {
+					return fmt.Errorf("fixture operation: %w", err)
+				}
+				return nil
 			})
 			if err != nil {
 				failures <- err
@@ -265,10 +268,7 @@ func TestAssistantPauseResumePreservesIdentityAndPausedProvisioning(t *testing.T
 	for _, status := range []string{"paused", "active"} {
 		require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
 			if err := repo.New(tx).FixtureSetAssistantStatus(t.Context(), repo.FixtureSetAssistantStatusParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, Status: status}); err != nil {
-				if err != nil {
-					return fmt.Errorf("fixture operation: %w", err)
-				}
-				return nil
+				return fmt.Errorf("fixture operation: %w", err)
 			}
 			return nil
 		}))
