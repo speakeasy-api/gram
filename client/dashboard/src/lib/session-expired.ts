@@ -1,7 +1,4 @@
-import {
-  clearStorageForLogout,
-  noteOwnLoggedOutSession,
-} from "@/lib/logout-storage";
+import { clearStorageForLogout } from "@/lib/logout-storage";
 import { getApiBaseURL } from "@/lib/utils";
 
 /**
@@ -93,11 +90,6 @@ export function redirectToLoginOnUnauthorized(): Promise<void> {
       if (response?.status !== 401) return;
 
       redirecting = true;
-      // auth.info just confirmed there is no session. Classify before the
-      // clear so theme and project favorites are snapshotted; a logged-out
-      // document otherwise never classifies, and the unclassified clear
-      // deletes them on the way to /login.
-      noteOwnLoggedOutSession();
       clearStorageForLogout();
       const target = safeRedirectPath(pathname + search + hash);
       if (!target) {

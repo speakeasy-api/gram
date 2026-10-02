@@ -93,15 +93,14 @@ export function setPreservedStorageImpersonating(value: boolean): void {
 }
 
 /**
- * Mark this document as the viewer's own logged-out session.
+ * Mark this document as the viewer's own session when it is not impersonation.
  *
  * Storage cleanup refuses to read localStorage until the document is
  * classified, so an impersonation load cannot snapshot the customer org.
  * A logged-out visit never receives a session, so it never classifies, and
- * the cleanup that bounces the browser to /login deletes theme and project
- * favorites. Call this only after auth.info has confirmed there is no
- * session. A document already marked as impersonation is left alone — its
- * snapshot has to stay the admin's.
+ * a clear would delete theme and project favorites. Called from
+ * clearStorageForLogout so every caller keeps those keys. A document already
+ * marked as impersonation is left alone — its snapshot has to stay the admin's.
  */
 export function noteOwnLoggedOutSession(): void {
   if (sessionIsImpersonating) return;
@@ -196,8 +195,8 @@ function snapshotForRestore(preserved?: PreservedStorage): PreservedStorage {
 
   if (hasPreservedStorageBackup()) return readPreservedStorageBackup();
 
-  // Impersonated or not-yet-classified: do not live-capture. Session-expiry
-  // cleanup can run on an impersonation document before auth.info returns.
+  // Impersonation still refuses a live read. clearStorageForLogout classifies
+  // every other document first, so a logged-out visit keeps theme and favorites.
   if (sessionIsImpersonating || !sessionClassified) return [];
   return capturePreservedStorage();
 }
@@ -302,6 +301,9 @@ export function restorePreservedStorage(preserved: PreservedStorage): void {
 export function clearStorageForLogout(preserved?: PreservedStorage): void {
   if (typeof window === "undefined") return;
 
+  // A logged-out document never classifies on its own. Without this, the
+  // clear that bounces the browser to /login deletes theme and favorites.
+  noteOwnLoggedOutSession();
   const toRestore = snapshotForRestore(preserved);
 
   try {

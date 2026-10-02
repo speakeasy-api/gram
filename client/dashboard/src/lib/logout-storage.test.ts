@@ -463,20 +463,24 @@ describe("clearStorageForLogout", () => {
     ).toBeNull();
   });
 
-  it("does not live-capture while the session is unclassified", () => {
+  it("keeps theme and favorites when the session is unclassified", () => {
     resetPreservedStorageCapture();
     window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "light");
     window.localStorage.setItem(
-      "gram:org-favorites:<CUSTOMER_ORG_ID>",
-      '["<CUSTOMER_PROJECT_ID>"]',
+      "gram:org-favorites:<ORG_ID>",
+      '["<PROJECT_ID>"]',
     );
+    window.localStorage.setItem("gram:recents:<USER_ID>", '["/recent-page"]');
 
     clearStorageForLogout();
 
-    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBeNull();
-    expect(
-      window.localStorage.getItem("gram:org-favorites:<CUSTOMER_ORG_ID>"),
-    ).toBeNull();
+    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
+      "light",
+    );
+    expect(window.localStorage.getItem("gram:org-favorites:<ORG_ID>")).toBe(
+      '["<PROJECT_ID>"]',
+    );
+    expect(window.localStorage.getItem("gram:recents:<USER_ID>")).toBeNull();
   });
 
   // A logged-out visit never classifies on its own. The session-expiry
