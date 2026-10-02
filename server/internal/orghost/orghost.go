@@ -102,7 +102,9 @@ func (r *Resolver) resolve(defaultHost pgtype.Text, configured *url.URL) *url.UR
 }
 
 // storedHost returns the canonical host of a stored default_host. The column
-// holds an origin, but a bare host is accepted too.
+// holds an origin, but a bare host is accepted too. Anything more than an
+// origin (userinfo, a path, a query, or a fragment) is rejected rather than
+// trimmed, so a malformed value falls back to the legacy host.
 func storedHost(defaultHost pgtype.Text) (string, bool) {
 	if !defaultHost.Valid || defaultHost.String == "" {
 		return "", false
@@ -110,7 +112,9 @@ func storedHost(defaultHost pgtype.Text) (string, bool) {
 	raw := defaultHost.String
 	if strings.Contains(raw, "://") {
 		parsed, err := url.Parse(raw)
-		if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || strings.Trim(parsed.Path, "/") != "" {
+		if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") ||
+			parsed.User != nil || (parsed.Path != "" && parsed.Path != "/") ||
+			parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || strings.Contains(raw, "#") {
 			return "", false
 		}
 		raw = parsed.Host
