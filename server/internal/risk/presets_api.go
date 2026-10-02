@@ -175,6 +175,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		UserEmail:              userEmail,
 		HTTPMetadata:           nil,
 		JSONSchema:             &jsonSchema,
+		MaxTokens:              nil,
 		Reasoning:              nil,
 		DisableResponseHealing: false,
 	})
