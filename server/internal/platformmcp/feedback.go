@@ -394,6 +394,8 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	"list_recent_tool_calls":                {},
 	"search_users":                          {},
 	"get_user_metrics_summary":              {},
+	"search_tool_calls":                     {},
+	"list_attribute_keys":                   {},
 	"list_organization_events":              {},
 	toolUsageSummaryToolName:                {},
 	"search_mcp_catalog":                    {},

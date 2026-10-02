@@ -73,6 +73,11 @@ var (
 	// month: both are bounded per page and per traversal rather than by
 	// window, and a question about one person's month is a normal one.
 	userSearchWindowSpec = windowSpec{Fallback: DiagnosticWindowLastWeek, Max: DiagnosticWindowLastMonth}
+	// A project-wide search may look back a month: it is bounded per page and
+	// per traversal rather than by window, and an investigation into a slow
+	// regression needs more than a week.
+	toolCallSearchWindowSpec = windowSpec{Fallback: DiagnosticWindowLastDay, Max: DiagnosticWindowLastMonth}
+	attributeKeysWindowSpec  = windowSpec{Fallback: DiagnosticWindowLastWeek, Max: DiagnosticWindowLastMonth}
 )
 
 // ErrDiagnosticWindowInvalid is returned for a window outside the closed set.

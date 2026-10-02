@@ -1177,7 +1177,7 @@ func newStartCommand() *cli.Command {
 				RAG: ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager,
 				ShadowMCP: shadowMCPClient, MCPRisk: mcpPolicyEvaluator, Audit: auditLogger, PlatformExtras: assistantPlatformExtras,
 				PlatformFeatureChecker: platformFeatureChecker, PlatformToolsets: platformToolsets,
-				Identity: identityResolver, Challenges: remoteChallengeManager,
+				Identity: identityResolver, Challenges: remoteChallengeManager, CallbackOrigins: callbackOrigins,
 			})
 			if err != nil {
 				return err
@@ -1198,6 +1198,7 @@ func newStartCommand() *cli.Command {
 			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
 			assistantsCore.SetFeatureProvider(featureFlags)
 			assistantsCore.SetSiteURL(siteURL)
+			assistantsCore.SetOutboundCallbackOrigin(callbackOrigins.Outbound)
 			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
@@ -1787,6 +1788,7 @@ func newStartCommand() *cli.Command {
 				Redis:                    redisClient,
 				ServerURL:                serverURL,
 				CallbackOrigin:           callbackOrigins.ForNewClient(true),
+				OutboundCallbackOrigin:   callbackOrigins.Outbound,
 				DashboardURL:             siteURL,
 				Environment:              c.String("environment"),
 				JWTSigningKey:            c.String(usersessions.JWTSigningKeyFlag),
@@ -1821,6 +1823,7 @@ func newStartCommand() *cli.Command {
 				UserSearch:               telemetryrepo.New(chDB),
 				Telemetry:                telemetryrepo.New(chDB),
 				ToolUsage:                telemetryrepo.New(chDB),
+				ToolCallSearch:           telemetryrepo.New(chDB),
 				TelemetryDrilldown:       telemetryrepo.New(chDB),
 				WorkflowRun:              posthogClient,
 				CanonicalIdentity:        telemSvc,

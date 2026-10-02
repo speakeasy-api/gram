@@ -3757,6 +3757,10 @@ CREATE TABLE IF NOT EXISTS chats (
   -- Versioned hashes of the last successfully evaluated inference frame.
   -- Archival alone must never advance this checkpoint.
   inference_accepted_checkpoint bytea,
+  -- Hash of (tenant, actor type, actor id) for Anthropic inference conversations.
+  -- Lets a transcript delivered without a session id be adopted by the chat
+  -- that already holds its prefix, scoped to the same actor.
+  inference_actor_key bytea,
 
   -- Personal-account tracking: the external AI account (user_accounts row) this
   -- session belongs to. Join to user_accounts for provider, account_type
@@ -4212,6 +4216,13 @@ WHERE project_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS chat_messages_chat_id_external_message_id_key
 ON chat_messages (chat_id, external_message_id)
 WHERE external_message_id IS NOT NULL;
+
+-- Cross-chat lookup of an Anthropic inference message identity (chain hash)
+-- so a transcript delivered without a session id can find the chat that
+-- already stores its prefix.
+CREATE INDEX IF NOT EXISTS chat_messages_inference_identity_idx
+ON chat_messages (project_id, external_message_id)
+WHERE origin = 'anthropic-inference' AND external_message_id IS NOT NULL;
 
 -- Partial index over unanalyzed messages only. Shrinks toward zero at steady
 -- state, making FetchUnanalyzedMessageIDs an index-only scan on a tiny set.

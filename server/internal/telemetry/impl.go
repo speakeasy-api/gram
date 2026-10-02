@@ -3831,19 +3831,25 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		MetaMCPMatchers:    metaMCPMatchers,
 		TargetTypes:        targetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerTargetIDs: nil,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMCPServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        userFilters,
-		HookSources:        payload.HookSources,
-		ClientKeys:         payload.ClientKeys,
-		AccountType:        conv.PtrValOr(payload.AccountType, ""),
-		Statuses:           statuses,
-		Query:              conv.PtrValOr(payload.Query, ""),
-		Filters:            toRepoAttributeFilters(payload.Filters),
-		SortOrder:          params.sortOrder,
-		CursorTimeUnixNano: cursorTimeUnixNano,
-		CursorID:           cursorID,
-		Limit:              params.limit + 1,
+		// Left literal: the Tool Logs page offers the user filter values this
+		// list produces (GetToolUsageFilterOptions), and those are unfolded, so
+		// folding only one side of that pair would make the page's own chips
+		// select rows it never listed.
+		CanonicalIdentityOrg: "",
+		HookSources:          payload.HookSources,
+		ClientKeys:           payload.ClientKeys,
+		AccountType:          conv.PtrValOr(payload.AccountType, ""),
+		Statuses:             statuses,
+		Query:                conv.PtrValOr(payload.Query, ""),
+		Filters:              toRepoAttributeFilters(payload.Filters),
+		SortOrder:            params.sortOrder,
+		CursorTimeUnixNano:   cursorTimeUnixNano,
+		CursorID:             cursorID,
+		Limit:                params.limit + 1,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage traces").LogError(ctx, logger)

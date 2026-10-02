@@ -165,6 +165,10 @@ const RISK_FILTERS = defineFilters([
     kind: "text",
     placeholder: "User contains...",
   },
+  // Whole external user ids, set by an identity's "Open in Risk Events" so a
+  // person known by several ids lands on all of their events and nobody
+  // else's. Not offered for picking: its only options are the ids it holds.
+  { id: "identifier", label: "Identifier", kind: "multiselect" },
   {
     id: "unique",
     label: "Unique matches only",
@@ -204,6 +208,10 @@ export default function RiskEvents(): JSX.Element {
   const mcpServerFilter = values.mcp_server_id ?? "";
   const ruleFilter = values.rule_id;
   const userFilter = values.user_id;
+  const identifierFilter = values.identifier;
+  // A stable dependency: the array is rebuilt whenever any param changes,
+  // including opening a row.
+  const identifierKey = identifierFilter.join(",");
   const uniqueOnly = values.unique;
   // "No assistant" pre-selects the non-assistant events (the API's
   // non_assistant flag); any other value scopes to that assistant's chats.
@@ -407,6 +415,7 @@ export default function RiskEvents(): JSX.Element {
         })),
       ],
       rule_id: ruleSuggestions.map((r) => ({ label: r, value: r })),
+      identifier: identifierFilter.map((id) => ({ label: id, value: id })),
       assistant: [
         { label: "No assistant", value: NO_ASSISTANT },
         ...assistants.map((a) => ({ label: a.name, value: a.id })),
@@ -420,6 +429,7 @@ export default function RiskEvents(): JSX.Element {
       findingsByServer,
       ruleSuggestions,
       assistants,
+      identifierFilter,
     ],
   );
 
@@ -435,6 +445,7 @@ export default function RiskEvents(): JSX.Element {
     mcpServerFilter,
     ruleFilter,
     userFilter,
+    identifierKey,
     uniqueOnly,
     assistantFilter,
     fromIso,
@@ -450,6 +461,7 @@ export default function RiskEvents(): JSX.Element {
       mcpServerFilter,
       ruleFilter,
       userFilter,
+      identifierKey,
       uniqueOnly,
       assistantFilter,
       fromIso,
@@ -463,6 +475,8 @@ export default function RiskEvents(): JSX.Element {
         mcpServerId: mcpServerFilter || undefined,
         ruleId: ruleFilter || undefined,
         userId: userFilter || undefined,
+        externalUserIds:
+          identifierFilter.length > 0 ? identifierFilter : undefined,
         uniqueMatch: uniqueOnly || undefined,
         nonAssistant: nonAssistantOnly || undefined,
         assistantId,

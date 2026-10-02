@@ -231,7 +231,7 @@ func (s *Service) admitCIMDClient(ctx context.Context, logger *slog.Logger, endp
 		)
 	}
 
-	if assistantID, ok := assistants.ParseAssistantClientMetadataDocumentURL(s.serverURL, clientID); ok && mode != admission.ModeDisabled {
+	if assistantID, ok := assistants.ParseAssistantClientMetadataDocumentURL(s.outboundOrigin(), clientID); ok && mode != admission.ModeDisabled {
 		// Gram's own assistants are first-party clients of every Gram-hosted
 		// issuer. Their document URL is never a catalog preset (the host is
 		// the deployment's own) and must not depend on an operator adding
