@@ -280,6 +280,7 @@ func TestUpdateSubject_ReassignsTheAgent(t *testing.T) {
 func TestUpdateSubject_ReassigningOneTierReassignsTheSharedAssignment(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
+	ctx = asAPIKey(t, ctx)
 
 	registerAnthropic(t, ctx, ti, true)
 	firstAgent := newAgent(t, ctx, ti, "claude-tag-poc")
