@@ -253,4 +253,6 @@ Shared Explore Demo is read-only for Slack connections, syncing and mappings. Th
 
 The Default project contains its Everyone Default plugin and an empty role-only plugin for each active organization/global role. Same-name roles share a plugin. These are completed one-time setup results, not continuously managed mappings: later audience/content edits or plugin deletion are not repaired. Database isolation and repeat-seed checks are automated; browser verification remains pending.
 
+### [~] Assistants: workload identity bindings
+
 AIM-409 assistant fixtures use one ordinary project-pinned trust registration (nonempty illustrative platform issuer/JWKS URLs, no wildcard admission), exact root admission/assignment, and complete generation-1 binding mirror tuples. The fifth managed agent belongs only to the bound assistant and has no grants or upstream credentials. Dashboard roots are durable, not per-wake. The demo trust URLs are inert display fixtures; runtime creation instead uses the deployment's configured Gram issuer and existing JWKS. Browser verification pending.

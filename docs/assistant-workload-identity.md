@@ -30,8 +30,10 @@ exact admission and assignment, and configured issuer/JWKS must still match.
 Retargeting explicitly retires the previous trigger binding. Assignment changes,
 owner transfers, trust-key changes, and withdrawals retire affected bindings and
 sessions transactionally; changing them back cannot revive old authority.
-Suspending an agent or pausing an assistant temporarily denies identity resolution
-without permanently retiring the binding or changing its generations.
+Suspending an agent or pausing an assistant or root trigger temporarily denies
+identity resolution without permanently retiring the binding or changing its
+generations. Retargeting a paused trigger still retires its old authority; resume
+alone does not.
 
 Only `NEVER_CONFIGURED` may enter a legacy fallback. Unavailable, inconsistent,
 revoked, hard-deleted, and tombstoned mappings must never fall back to a creator.

@@ -30,10 +30,10 @@ func TestMain(m *testing.M) {
 	})
 	code := m.Run()
 	if err := chContainer.Terminate(ctx); err != nil {
-		log.Fatalf("terminate clickhouse container: %v", err)
+		log.Printf("terminate clickhouse container: %v", err)
 	}
 	if err := pgContainer.Terminate(ctx); err != nil {
-		log.Fatalf("terminate postgres container: %v", err)
+		log.Printf("terminate postgres container: %v", err)
 	}
 	os.Exit(code)
 }

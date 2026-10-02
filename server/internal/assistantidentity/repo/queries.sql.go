@@ -189,7 +189,9 @@ SELECT
  (SELECT count(*) FROM workload_issuers AS c2 WHERE c2.organization_id = $1)::bigint AS issuers,
  (SELECT count(*) FROM workload_identity_admissions AS c3 WHERE c3.organization_id = $1)::bigint AS admissions,
  (SELECT count(*) FROM workload_agent_assignments AS c4 WHERE c4.organization_id = $1)::bigint AS assignments,
- (SELECT count(*) FROM trigger_workload_bindings AS c5 WHERE c5.organization_id = $1)::bigint AS triggers
+ (SELECT count(*) FROM trigger_workload_bindings AS c5 WHERE c5.organization_id = $1)::bigint AS triggers,
+ (SELECT count(*) FROM principal_grants c6 WHERE c6.organization_id = $1)::bigint AS grants,
+ (SELECT count(*) FROM audit_logs c7 WHERE c7.organization_id = $1)::bigint AS audits
 `
 
 type FixtureAuthorityCountsRow struct {
@@ -199,6 +201,8 @@ type FixtureAuthorityCountsRow struct {
 	Admissions  int64
 	Assignments int64
 	Triggers    int64
+	Grants      int64
+	Audits      int64
 }
 
 func (q *Queries) FixtureAuthorityCounts(ctx context.Context, organizationID string) (FixtureAuthorityCountsRow, error) {
@@ -211,6 +215,8 @@ func (q *Queries) FixtureAuthorityCounts(ctx context.Context, organizationID str
 		&i.Admissions,
 		&i.Assignments,
 		&i.Triggers,
+		&i.Grants,
+		&i.Audits,
 	)
 	return i, err
 }
@@ -571,7 +577,7 @@ func (q *Queries) FixtureSuspendAgent(ctx context.Context, arg FixtureSuspendAge
 
 const fixtureWithdrawAssignment = `-- name: FixtureWithdrawAssignment :exec
 UPDATE workload_agent_assignments SET deleted_at = clock_timestamp()
-WHERE organization_id = $1 AND workload_issuer_id = $2 AND subject = $3 AND NOT deleted
+WHERE organization_id = $1 AND workload_issuer_id = $2 AND subject = $3 AND match_kind = 'exact' AND NOT deleted
 `
 
 type FixtureWithdrawAssignmentParams struct {
@@ -697,10 +703,10 @@ func (q *Queries) GetAssistantBinding(ctx context.Context, arg GetAssistantBindi
 	return i, err
 }
 
-const getPlatformIssuer = `-- name: GetPlatformIssuer :one
+const getPlatformIssuer = `-- name: GetPlatformIssuer :many
 SELECT id, deleted, jwks_uri, allow_wildcard_admission FROM workload_issuers
 WHERE organization_id = $1 AND project_id = $2 AND issuer = $3 AND NOT deleted
-ORDER BY created_at, id LIMIT 1 FOR UPDATE
+ORDER BY created_at, id FOR UPDATE
 `
 
 type GetPlatformIssuerParams struct {
@@ -716,16 +722,29 @@ type GetPlatformIssuerRow struct {
 	AllowWildcardAdmission bool
 }
 
-func (q *Queries) GetPlatformIssuer(ctx context.Context, arg GetPlatformIssuerParams) (GetPlatformIssuerRow, error) {
-	row := q.db.QueryRow(ctx, getPlatformIssuer, arg.OrganizationID, arg.ProjectID, arg.PlatformIssuer)
-	var i GetPlatformIssuerRow
-	err := row.Scan(
-		&i.ID,
-		&i.Deleted,
-		&i.JwksUri,
-		&i.AllowWildcardAdmission,
-	)
-	return i, err
+func (q *Queries) GetPlatformIssuer(ctx context.Context, arg GetPlatformIssuerParams) ([]GetPlatformIssuerRow, error) {
+	rows, err := q.db.Query(ctx, getPlatformIssuer, arg.OrganizationID, arg.ProjectID, arg.PlatformIssuer)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetPlatformIssuerRow
+	for rows.Next() {
+		var i GetPlatformIssuerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Deleted,
+			&i.JwksUri,
+			&i.AllowWildcardAdmission,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getTrigger = `-- name: GetTrigger :one
@@ -769,7 +788,7 @@ SELECT b.id, b.original_trigger_id, b.original_assistant_binding_id, b.original_
  COALESCE(NOT b.deleted AND b.project_ref_id IS NOT NULL AND b.trigger_id IS NOT NULL
    AND b.assistant_binding_id = b.original_assistant_binding_id AND b.workload_issuer_id = b.original_workload_issuer_id
    AND b.trigger_id = b.original_trigger_id AND b.project_ref_id = b.project_id
-   AND NOT p.deleted AND NOT t.deleted AND t.status = 'active'
+   AND NOT p.deleted AND NOT t.deleted
    AND b.subject = 'assistant-trigger:' || b.original_trigger_id::text
    AND t.definition_slug <> 'wake' AND t.target_kind = 'assistant' AND t.target_ref = ab.original_assistant_id::text
    AND NOT i.deleted AND NOT i.allow_wildcard_admission
@@ -1002,23 +1021,14 @@ func (q *Queries) LockActor(ctx context.Context, arg LockActorParams) (string, e
 
 const lockAssistantIssuers = `-- name: LockAssistantIssuers :exec
 SELECT i.id FROM workload_issuers i
-WHERE i.organization_id = $1 AND i.project_id = $2
-AND EXISTS (SELECT 1 FROM trigger_workload_bindings tb
- JOIN assistant_agent_bindings ab ON ab.id = tb.original_assistant_binding_id
-  AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id
- WHERE tb.organization_id = i.organization_id AND tb.original_workload_issuer_id = i.id
- AND ab.original_assistant_id = $3)
+WHERE i.organization_id = $1
 ORDER BY i.id FOR UPDATE
 `
 
-type LockAssistantIssuersParams struct {
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	AssistantID    uuid.UUID
-}
-
-func (q *Queries) LockAssistantIssuers(ctx context.Context, arg LockAssistantIssuersParams) error {
-	_, err := q.db.Exec(ctx, lockAssistantIssuers, arg.OrganizationID, arg.ProjectID, arg.AssistantID)
+// Lock all tenant issuers before the agent. This covers non-root assignments
+// and prevents an admission on another existing issuer racing the sweep.
+func (q *Queries) LockAssistantIssuers(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockAssistantIssuers, organizationID)
 	return err
 }
 
@@ -1091,7 +1101,7 @@ func (q *Queries) RecordProvisioning(ctx context.Context, arg RecordProvisioning
 
 const revokeAdmission = `-- name: RevokeAdmission :exec
 UPDATE workload_identity_admissions SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = $1 AND project_id = $2 AND workload_issuer_id = $3 AND subject = $4 AND NOT deleted
+WHERE organization_id = $1 AND project_id = $2 AND workload_issuer_id = $3 AND subject = $4 AND match_kind = 'exact' AND NOT deleted
 `
 
 type RevokeAdmissionParams struct {
@@ -1113,7 +1123,7 @@ func (q *Queries) RevokeAdmission(ctx context.Context, arg RevokeAdmissionParams
 
 const revokeAssignment = `-- name: RevokeAssignment :exec
 UPDATE workload_agent_assignments wa SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE wa.organization_id = $1 AND wa.workload_issuer_id = $2 AND wa.subject = $3 AND NOT wa.deleted
+WHERE wa.organization_id = $1 AND wa.workload_issuer_id = $2 AND wa.subject = $3 AND wa.match_kind = 'exact' AND NOT wa.deleted
  AND NOT EXISTS (SELECT 1 FROM workload_identity_admissions adm WHERE adm.organization_id = wa.organization_id AND adm.workload_issuer_id = wa.workload_issuer_id AND adm.subject = wa.subject AND adm.match_kind = wa.match_kind AND NOT adm.deleted)
 `
 
@@ -1133,7 +1143,7 @@ UPDATE workload_identity_admissions adm SET deleted_at = clock_timestamp(), upda
 WHERE adm.organization_id = $1 AND adm.project_id = $2 AND NOT adm.deleted
  AND EXISTS (SELECT 1 FROM workload_agent_assignments wa
  WHERE wa.organization_id = adm.organization_id AND wa.workload_issuer_id = adm.workload_issuer_id
- AND wa.subject = adm.subject AND wa.agent_id = $3 AND NOT wa.deleted)
+ AND wa.subject = adm.subject AND wa.match_kind = adm.match_kind AND wa.agent_id = $3 AND NOT wa.deleted)
 `
 
 type RevokeDedicatedAdmissionsParams struct {

@@ -22,7 +22,7 @@ UPDATE workload_identity_admissions adm SET deleted_at = clock_timestamp(), upda
 WHERE adm.organization_id = @organization_id AND adm.project_id = @project_id AND NOT adm.deleted
  AND EXISTS (SELECT 1 FROM workload_agent_assignments wa
  WHERE wa.organization_id = adm.organization_id AND wa.workload_issuer_id = adm.workload_issuer_id
- AND wa.subject = adm.subject AND wa.agent_id = @agent_id AND NOT wa.deleted);
+ AND wa.subject = adm.subject AND wa.match_kind = adm.match_kind AND wa.agent_id = @agent_id AND NOT wa.deleted);
 
 -- name: RevokeDedicatedAssignments :exec
 UPDATE workload_agent_assignments wa SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
@@ -66,7 +66,7 @@ SELECT b.id, b.original_trigger_id, b.original_assistant_binding_id, b.original_
  COALESCE(NOT b.deleted AND b.project_ref_id IS NOT NULL AND b.trigger_id IS NOT NULL
    AND b.assistant_binding_id = b.original_assistant_binding_id AND b.workload_issuer_id = b.original_workload_issuer_id
    AND b.trigger_id = b.original_trigger_id AND b.project_ref_id = b.project_id
-   AND NOT p.deleted AND NOT t.deleted AND t.status = 'active'
+   AND NOT p.deleted AND NOT t.deleted
    AND b.subject = 'assistant-trigger:' || b.original_trigger_id::text
    AND t.definition_slug <> 'wake' AND t.target_kind = 'assistant' AND t.target_ref = ab.original_assistant_id::text
    AND NOT i.deleted AND NOT i.allow_wildcard_admission
@@ -97,10 +97,10 @@ INSERT INTO assistant_agent_bindings (
  @agent_id, @organization_id, @project_id, @agent_id, 1)
 RETURNING id;
 
--- name: GetPlatformIssuer :one
+-- name: GetPlatformIssuer :many
 SELECT id, deleted, jwks_uri, allow_wildcard_admission FROM workload_issuers
 WHERE organization_id = @organization_id AND project_id = @project_id AND issuer = @platform_issuer AND NOT deleted
-ORDER BY created_at, id LIMIT 1 FOR UPDATE;
+ORDER BY created_at, id FOR UPDATE;
 
 -- name: CreatePlatformIssuer :one
 INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission)
@@ -146,11 +146,11 @@ ORDER BY tb.original_trigger_id;
 
 -- name: RevokeAdmission :exec
 UPDATE workload_identity_admissions SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = @organization_id AND project_id = @project_id AND workload_issuer_id = @issuer_id AND subject = @subject AND NOT deleted;
+WHERE organization_id = @organization_id AND project_id = @project_id AND workload_issuer_id = @issuer_id AND subject = @subject AND match_kind = 'exact' AND NOT deleted;
 
 -- name: RevokeAssignment :exec
 UPDATE workload_agent_assignments wa SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE wa.organization_id = @organization_id AND wa.workload_issuer_id = @issuer_id AND wa.subject = @subject AND NOT wa.deleted
+WHERE wa.organization_id = @organization_id AND wa.workload_issuer_id = @issuer_id AND wa.subject = @subject AND wa.match_kind = 'exact' AND NOT wa.deleted
  AND NOT EXISTS (SELECT 1 FROM workload_identity_admissions adm WHERE adm.organization_id = wa.organization_id AND adm.workload_issuer_id = wa.workload_issuer_id AND adm.subject = wa.subject AND adm.match_kind = wa.match_kind AND NOT adm.deleted);
 
 -- name: RevokeDedicatedAgent :exec
@@ -232,7 +232,9 @@ SELECT
  (SELECT count(*) FROM workload_issuers AS c2 WHERE c2.organization_id = @organization_id)::bigint AS issuers,
  (SELECT count(*) FROM workload_identity_admissions AS c3 WHERE c3.organization_id = @organization_id)::bigint AS admissions,
  (SELECT count(*) FROM workload_agent_assignments AS c4 WHERE c4.organization_id = @organization_id)::bigint AS assignments,
- (SELECT count(*) FROM trigger_workload_bindings AS c5 WHERE c5.organization_id = @organization_id)::bigint AS triggers;
+ (SELECT count(*) FROM trigger_workload_bindings AS c5 WHERE c5.organization_id = @organization_id)::bigint AS triggers,
+ (SELECT count(*) FROM principal_grants c6 WHERE c6.organization_id = @organization_id)::bigint AS grants,
+ (SELECT count(*) FROM audit_logs c7 WHERE c7.organization_id = @organization_id)::bigint AS audits;
 
 -- name: FixtureProvisioningMetadata :one
 SELECT metadata FROM audit_logs WHERE organization_id = @organization_id AND action='assistant:identity_provision' AND subject_id = @subject_id;
@@ -286,16 +288,13 @@ DELETE FROM projects WHERE organization_id = @organization_id AND id = @project_
 UPDATE trigger_instances SET definition_slug = @definition_slug
 WHERE organization_id = @organization_id AND project_id = @project_id AND id = @trigger_id;
 
+-- Lock all tenant issuers before the agent. This covers non-root assignments
+-- and prevents an admission on another existing issuer racing the sweep.
 -- name: LockAssistantIssuers :exec
 SELECT i.id FROM workload_issuers i
-WHERE i.organization_id = @organization_id AND i.project_id = @project_id
-AND EXISTS (SELECT 1 FROM trigger_workload_bindings tb
- JOIN assistant_agent_bindings ab ON ab.id = tb.original_assistant_binding_id
-  AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id
- WHERE tb.organization_id = i.organization_id AND tb.original_workload_issuer_id = i.id
- AND ab.original_assistant_id = @assistant_id)
+WHERE i.organization_id = @organization_id
 ORDER BY i.id FOR UPDATE;
 
 -- name: FixtureWithdrawAssignment :exec
 UPDATE workload_agent_assignments SET deleted_at = clock_timestamp()
-WHERE organization_id = @organization_id AND workload_issuer_id = @issuer_id AND subject = @subject AND NOT deleted;
+WHERE organization_id = @organization_id AND workload_issuer_id = @issuer_id AND subject = @subject AND match_kind = 'exact' AND NOT deleted;

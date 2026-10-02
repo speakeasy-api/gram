@@ -385,12 +385,6 @@ func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...Instance
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("trigger %s is %q, expected %q", existing.ID.String(), existing.DefinitionSlug, params.DefinitionSlug)
 	}
 
-	if params.Status != StatusActive && (existing.Status != params.Status || existing.TargetKind != params.TargetKind || existing.TargetRef != params.TargetRef) {
-		if err := assistantidentity.TombstoneTrigger(ctx, tx, existing.OrganizationID, existing.ProjectID, existing.ID); err != nil {
-			return triggerrepo.TriggerInstance{}, fmt.Errorf("invalidate inactive root trigger identity: %w", err)
-		}
-	}
-
 	item, err := triggerrepo.New(tx).UpdateTriggerInstance(ctx, triggerrepo.UpdateTriggerInstanceParams{
 		Name:                conv.ToPGText(params.Name),
 		UpdateEnvironmentID: true,
@@ -407,7 +401,7 @@ func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...Instance
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("update trigger instance: %w", err)
 	}
 
-	if item.Status == StatusActive && (existing.TargetKind != item.TargetKind || existing.TargetRef != item.TargetRef || existing.Status != item.Status) {
+	if existing.TargetKind != item.TargetKind || existing.TargetRef != item.TargetRef {
 		if err := a.identities.RetargetRootTrigger(ctx, tx, item.OrganizationID, item.ProjectID, item.ID); err != nil {
 			return triggerrepo.TriggerInstance{}, fmt.Errorf("rebind updated root trigger identity: %w", err)
 		}
@@ -506,15 +500,9 @@ func (a *App) SetStatus(ctx context.Context, projectID uuid.UUID, id uuid.UUID, 
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("lock trigger project: %w", err)
 	}
 
-	existing, err := triggerrepo.New(tx).GetTriggerInstanceByIDForUpdate(ctx, triggerrepo.GetTriggerInstanceByIDForUpdateParams{ID: id, ProjectID: projectID})
+	_, err = triggerrepo.New(tx).GetTriggerInstanceByIDForUpdate(ctx, triggerrepo.GetTriggerInstanceByIDForUpdateParams{ID: id, ProjectID: projectID})
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("lock trigger before status change: %w", err)
-	}
-
-	if existing.Status != status && status != StatusActive && existing.DefinitionSlug != DefinitionSlugWake {
-		if err := assistantidentity.TombstoneTrigger(ctx, tx, existing.OrganizationID, existing.ProjectID, existing.ID); err != nil {
-			return triggerrepo.TriggerInstance{}, fmt.Errorf("invalidate root trigger identity before pause: %w", err)
-		}
 	}
 
 	item, err := triggerrepo.New(tx).SetTriggerInstanceStatus(ctx, triggerrepo.SetTriggerInstanceStatusParams{
@@ -526,11 +514,7 @@ func (a *App) SetStatus(ctx context.Context, projectID uuid.UUID, id uuid.UUID, 
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("set trigger status: %w", err)
 	}
 
-	if existing.Status != item.Status && item.Status == StatusActive && item.DefinitionSlug != DefinitionSlugWake {
-		if err := a.identities.RetargetRootTrigger(ctx, tx, item.OrganizationID, item.ProjectID, item.ID); err != nil {
-			return triggerrepo.TriggerInstance{}, fmt.Errorf("rebind root trigger identity after status change: %w", err)
-		}
-	} else if err := a.bindRootIdentity(ctx, tx, item); err != nil {
+	if err := a.bindRootIdentity(ctx, tx, item); err != nil {
 		return triggerrepo.TriggerInstance{}, err
 	}
 

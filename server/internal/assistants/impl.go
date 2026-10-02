@@ -536,11 +536,15 @@ func requireAssistantProvisioningActor(ctx context.Context) error {
 	if _, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
 		return oops.C(oops.CodeForbidden)
 	}
-	if _, ok := contextvalues.GetOAuthClientID(ctx); ok {
+	clientID, oauth := contextvalues.GetOAuthClientID(ctx)
+	if oauth {
 		surface, trusted := contextvalues.GetActingSurface(ctx)
-		if !trusted || surface != contextvalues.ActingSurfacePlatformMCP {
+		if clientID == "" || !trusted || surface != contextvalues.ActingSurfacePlatformMCP {
 			return oops.C(oops.CodeForbidden)
 		}
+	}
+	if !oauth && (!contextvalues.HasValidatedGramSession(ctx) || actor.SessionID == nil || *actor.SessionID == "") {
+		return oops.C(oops.CodeForbidden)
 	}
 	if _, ok := contextvalues.GetRBACScopeOverride(ctx); ok {
 		return oops.C(oops.CodeForbidden)

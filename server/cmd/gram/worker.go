@@ -137,6 +137,7 @@ func newWorkerCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
 
 	flags := append(workerRuntimeFlags(),
+		&cli.StringFlag{Name: "authz-issuer-url", EnvVars: []string{"GRAM_AUTHZ_ISSUER_URL"}, Usage: "Gram platform signing issuer origin"},
 		&cli.StringFlag{
 			Name:     "server-url",
 			Usage:    "The public URL of the server",
@@ -357,7 +358,7 @@ func newWorkerCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "worker",
 		Usage: "Start the temporal worker",
-		Flags: append(flags, &cli.StringFlag{Name: "authz-issuer-url", EnvVars: []string{"GRAM_AUTHZ_ISSUER_URL"}, Usage: "Gram platform signing issuer origin"}),
+		Flags: flags,
 		Action: func(c *cli.Context) error {
 			customDomainARecords, err := customDomainARecordsFromCLI(c)
 			if err != nil {

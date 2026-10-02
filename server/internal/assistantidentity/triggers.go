@@ -40,7 +40,7 @@ func (s *Service) bindRoot(ctx context.Context, tx pgx.Tx, org string, project, 
 	if root.DefinitionSlug == "wake" {
 		return ErrInvalidIdentity
 	}
-	if root.Deleted || root.Status != "active" {
+	if root.Deleted || (root.Status != "active" && !(retarget && root.Status == "paused")) {
 		return ErrTombstoned
 	}
 	old, historyErr := q.GetTriggerBinding(ctx, repo.GetTriggerBindingParams{PlatformIssuer: s.issuer, PlatformJwksUri: s.jwksURI, OrganizationID: org, ProjectID: project, TriggerID: trigger})
@@ -142,15 +142,19 @@ func (s *Service) bindRoot(ctx context.Context, tx pgx.Tx, org string, project, 
 }
 
 func (s *Service) platformIssuer(ctx context.Context, q *repo.Queries, org string, project uuid.UUID) (uuid.UUID, error) {
-	issuer, err := q.GetPlatformIssuer(ctx, repo.GetPlatformIssuerParams{PlatformIssuer: s.issuer, OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}})
-	if err == nil {
+	issuers, err := q.GetPlatformIssuer(ctx, repo.GetPlatformIssuerParams{PlatformIssuer: s.issuer, OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("load platform trust registration: %w", err)
+	}
+	if len(issuers) > 1 {
+		return uuid.Nil, ErrBrokenMapping
+	}
+	if len(issuers) == 1 {
+		issuer := issuers[0]
 		if issuer.Deleted || issuer.JwksUri != s.jwksURI || issuer.AllowWildcardAdmission {
 			return uuid.Nil, ErrTombstoned
 		}
 		return issuer.ID, nil
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return uuid.Nil, fmt.Errorf("load platform trust registration: %w", err)
 	}
 	id, err := q.CreatePlatformIssuer(ctx, repo.CreatePlatformIssuerParams{
 		OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true},
@@ -211,7 +215,7 @@ func TombstoneAssistant(ctx context.Context, tx pgx.Tx, org string, project, ass
 	}
 	// Session issuance locks issuer before agent. Preserve that order even when
 	// withdrawing all roots at once; missing hard-deleted issuer is harmless.
-	if err := q.LockAssistantIssuers(ctx, repo.LockAssistantIssuersParams{OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}, AssistantID: assistant}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if err := q.LockAssistantIssuers(ctx, org); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("lock assistant issuer for withdrawal: %w", err)
 	}
 	if err := q.RevokeDedicatedAgent(ctx, repo.RevokeDedicatedAgentParams{OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}, AgentID: b.OriginalAgentID}); err != nil {

@@ -94,7 +94,8 @@ func TestRetargetPreservesSubjectAndRetiresOldGeneration(t *testing.T) {
 func sessionForIdentity(t *testing.T, f fixture, id assistantidentity.Identity) uuid.UUID {
 	t.Helper()
 	q := sessionsrepo.New(f.db)
-	issuer, err := q.CreateOrganizationUserSessionIssuer(t.Context(), sessionsrepo.CreateOrganizationUserSessionIssuerParams{
+	issuer, err := q.CreateUserSessionIssuer(t.Context(), sessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:      f.project,
 		OrganizationID: conv.ToPGText(f.org), Slug: "identity-sessions-" + uuid.NewString(), AuthnChallengeMode: "interactive",
 		SessionDuration: pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
 	})

@@ -185,7 +185,7 @@ func TestIdentityCreationPauseResumePreservesBindingAndDeleteTombstones(t *testi
 	before, err := testIdentityService.Resolve(t.Context(), db, "org-test", project, record.ID, root)
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Active, before.State)
-	paused := "paused"
+	paused := StatusPaused
 	_, err = core.UpdateAssistant(t.Context(), project, record.ID, nil, nil, nil, nil, nil, nil, nil, &paused)
 	require.NoError(t, err)
 	require.Error(t, testIdentityService.Validate(t.Context(), db, *before.Identity))

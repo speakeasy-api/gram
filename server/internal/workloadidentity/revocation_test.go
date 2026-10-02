@@ -223,3 +223,33 @@ func TestWorkloadSessionIssuance_WithdrawalCannotExposeOlderWildcard(t *testing.
 		})
 	}
 }
+
+func TestWorkloadSessionsRequireIssuerProject(t *testing.T) {
+	t.Parallel()
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	f := newAssignmentFixture(t, conn)
+	projectIssuer := seedIssuer(t, conn, f.tenant.organizationID, uuid.NullUUID{UUID: f.tenant.projectID, Valid: true}, "project-trust", testIssuerURL, epoch)
+	seedAssignment(t, conn, f.tenant.organizationID, projectIssuer, testSubject, f.agentID)
+	issuerRow, err := sessionsrepo.New(conn).CreateUserSessionIssuer(t.Context(), sessionsrepo.CreateUserSessionIssuerParams{ProjectID: f.tenant.projectID, OrganizationID: conv.ToPGText(f.tenant.organizationID), Slug: "project-sessions", AuthnChallengeMode: "interactive", SessionDuration: pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true}})
+	require.NoError(t, err)
+	issuer := issuerRow.ID
+	q := sessionsrepo.New(conn)
+	params := workloadSessionParams(issuer, projectIssuer, testSubject)
+	session, err := q.CreateUserSession(t.Context(), params)
+	require.NoError(t, err)
+	_, err = q.GetUserSessionPrincipalCredentialByJTI(t.Context(), sessionsrepo.GetUserSessionPrincipalCredentialByJTIParams{UserSessionIssuerID: issuer, Jti: session.Jti})
+	require.NoError(t, err)
+	sibling := newProject(t, conn, f.tenant.organizationID)
+	siblingIssuer, err := q.CreateUserSessionIssuer(t.Context(), sessionsrepo.CreateUserSessionIssuerParams{ProjectID: sibling, OrganizationID: conv.ToPGText(f.tenant.organizationID), Slug: "sibling-sessions", AuthnChallengeMode: "interactive", SessionDuration: pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true}})
+	require.NoError(t, err)
+	params.UserSessionIssuerID = siblingIssuer.ID
+	params.Jti = uuid.NewString()
+	_, err = q.CreateUserSession(t.Context(), params)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	// Simulate a credential persisted before the stricter tenant predicate.
+	_, err = conn.Exec(t.Context(), "UPDATE user_sessions SET project_id = $1 WHERE id = $2", sibling, session.ID)
+	require.NoError(t, err)
+	_, err = q.GetUserSessionPrincipalCredentialByJTI(t.Context(), sessionsrepo.GetUserSessionPrincipalCredentialByJTIParams{UserSessionIssuerID: issuer, Jti: session.Jti})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}

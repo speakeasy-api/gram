@@ -1478,6 +1478,10 @@ WHERE user_session_issuer_id = @user_session_issuer_id
          WHERE si.id = user_sessions.user_session_issuer_id),
         (SELECT organization_id FROM projects WHERE id = user_sessions.project_id))
       AND wa.deleted IS FALSE AND wi.deleted IS FALSE
+      AND (wi.project_id IS NULL OR wi.project_id = COALESCE(user_sessions.project_id,
+        (SELECT si.project_id FROM user_session_issuers si WHERE si.id = user_sessions.user_session_issuer_id)))
+      AND (wi.project_id IS NULL OR NOT EXISTS (SELECT 1 FROM user_session_issuers si
+        WHERE si.id = user_sessions.user_session_issuer_id AND si.project_id IS NOT NULL AND si.project_id <> wi.project_id))
 
       AND (
         (wa.match_kind = 'exact' AND user_sessions.subject_urn = 'workload:' || wi.id::text || ':' || wa.subject)
@@ -1799,6 +1803,7 @@ WITH issuer AS (
     SELECT wi.id, wi.organization_id, wi.allow_wildcard_admission
     FROM workload_issuers wi, issuer
     WHERE wi.organization_id = issuer.organization_id
+      AND (wi.project_id IS NULL OR wi.project_id = issuer.project_id)
       AND starts_with(@subject_urn::text, 'workload:' || wi.id::text || ':')
 
       AND wi.deleted IS FALSE

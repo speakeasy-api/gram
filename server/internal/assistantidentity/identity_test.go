@@ -368,3 +368,26 @@ func TestUnrepresentableToolExclusionDropsBroadCapability(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{"requested":[],"effective":[]}`, string(ceiling.Policy))
 }
+
+func TestProvisionRejectsAmbiguousPlatformTrust(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	q := repo.New(f.db)
+	for _, keys := range []string{"https://platform.example.invalid/.well-known/jwks.json", "https://other.example.invalid/keys"} {
+		_, err := q.CreatePlatformIssuer(t.Context(), repo.CreatePlatformIssuerParams{OrganizationID: f.org, ProjectID: uuid.NullUUID{UUID: f.project, Valid: true}, Name: keys, Issuer: "https://platform.example.invalid", JwksUri: keys})
+		require.NoError(t, err)
+	}
+	before, err := q.FixtureAuthorityCounts(t.Context(), f.org)
+	require.NoError(t, err)
+	err = inTx(t, f.db, func(tx pgx.Tx) error {
+		_, err := testIdentityService.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
+		if err != nil {
+			return fmt.Errorf("provision ambiguous fixture: %w", err)
+		}
+		return nil
+	})
+	require.ErrorIs(t, err, assistantidentity.ErrBrokenMapping)
+	after, err := q.FixtureAuthorityCounts(t.Context(), f.org)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+}

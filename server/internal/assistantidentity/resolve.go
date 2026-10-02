@@ -65,7 +65,11 @@ func (s *Service) resolve(ctx context.Context, tx pgx.Tx, org string, project, a
 		if err != nil {
 			return Resolution{}, resourceError("resolve bound assistant lifecycle", err)
 		}
-		if a.Status != "active" {
+		root, err := q.GetTrigger(ctx, repo.GetTriggerParams{OrganizationID: org, ProjectID: project, TriggerID: trigger})
+		if err != nil {
+			return Resolution{}, resourceError("resolve bound trigger lifecycle", err)
+		}
+		if root.Status != "active" || a.Status != "active" {
 			return Resolution{State: Unavailable, Identity: nil}, nil
 		}
 		if tb.OriginalAssistantBindingID != ab.ID || tb.AssistantBindingGeneration != ab.Generation {
