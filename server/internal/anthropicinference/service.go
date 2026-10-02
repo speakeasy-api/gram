@@ -1,7 +1,6 @@
 package anthropicinference
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -106,25 +105,29 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 	}
 	budget, cancel := context.WithTimeout(ctx, duration)
 	defer cancel()
+	messages := conversationMessages(frame.Messages)
+	if _, err := policyInputs(messages); err != nil {
+		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
+	}
 	conversation, outcome, err := s.store.ResolveConversation(budget, config, frame)
 	if err != nil {
 		return Verdict{}, fmt.Errorf("resolve inference conversation: %w", err)
 	}
 	frame.conversation, frame.conversationOutcome = conversation, outcome
-	s.metrics.RecordConversation(ctx, frame, outcome)
-	s.logger.DebugContext(ctx, "resolved inference conversation",
-		attr.SlogOrganizationID(config.OrganizationID), attr.SlogProjectID(config.ProjectID.String()),
-		attr.SlogChatID(conversation.String()), attr.SlogInferenceConversationOutcome(outcome),
-		attr.SlogInferenceApplication(inferenceSource(frame.Source.Application)),
-		attr.SlogInferenceHasSessionID(frame.SessionID != ""),
-		attr.SlogInferenceMessageCount(len(conversationMessages(frame.Messages))))
+	// A frame with no conversation messages (Anthropic's connection probe)
+	// stores nothing, so it is not a conversation to count.
+	if len(messages) > 0 {
+		s.metrics.RecordConversation(ctx, frame, outcome)
+		s.logger.DebugContext(ctx, "resolved inference conversation",
+			attr.SlogOrganizationID(config.OrganizationID), attr.SlogProjectID(config.ProjectID.String()),
+			attr.SlogChatID(conversation.String()), attr.SlogInferenceConversationOutcome(outcome),
+			attr.SlogInferenceApplication(inferenceSource(frame.Source.Application)),
+			attr.SlogInferenceHasSessionID(frame.SessionID != ""),
+			attr.SlogInferenceMessageCount(len(messages)))
+	}
 	userID, err := s.store.ResolveActor(budget, config, frame)
 	if err != nil {
 		return Verdict{}, fmt.Errorf("resolve inference hook actor: %w", err)
-	}
-	messages := conversationMessages(frame.Messages)
-	if _, err := policyInputs(messages); err != nil {
-		return Verdict{}, fmt.Errorf("decode inference transcript: %w", err)
 	}
 	_, err = s.store.Save(budget, config, frame, userID)
 	if err != nil {
@@ -394,12 +397,13 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	if err != nil {
 		return 0, fmt.Errorf("upsert inference conversation: %w", err)
 	}
-	// An adopted chat already carries its actor key. Any other chat gets it
-	// now; the query keeps an existing value, so redeliveries and chats that
-	// predate the key are both safe.
-	if frame.conversationOutcome != conversationOutcomeAdoptedPrefix {
+	// Only a chat this frame created can lack the key: an adopted chat was
+	// matched on it and a chat continued by session was keyed when created.
+	// The update keeps an existing key, so a redelivery is harmless.
+	// Anonymous frames have no key to record.
+	if key := actorKey(config, frame); key != nil && frame.conversationOutcome != conversationOutcomeAdoptedPrefix && frame.conversationOutcome != conversationOutcomeSession {
 		if err := chatrepo.New(s.db).SetInferenceActorKey(ctx, chatrepo.SetInferenceActorKeyParams{
-			InferenceActorKey: actorKey(config, frame), ID: chatID, ProjectID: config.ProjectID,
+			InferenceActorKey: key, ID: chatID, ProjectID: config.ProjectID,
 		}); err != nil {
 			return 0, fmt.Errorf("record inference actor key: %w", err)
 		}
@@ -556,12 +560,20 @@ func (s *postgresStore) alignFrame(ctx context.Context, config Config, chatID uu
 	return min(int(storedCount), len(messages)), nil, nil
 }
 
+// actorIdentity is the stable provider actor id a frame asserts, preferring
+// the account id over the email, and whether it has one at all.
+func actorIdentity(frame Frame) (string, bool) {
+	actorID := conv.Default(frame.Actor.ID, conv.NormalizeEmail(frame.Actor.EmailAddress))
+	return actorID, actorID != ""
+}
+
 // Include the actor because Claude Code session ids can be client asserted.
 // Neither another actor nor another project can append to this conversation.
+// A frame with no actor is request-scoped.
 func conversationID(config Config, frame Frame) uuid.UUID {
-	actorID := conv.Default(frame.Actor.ID, conv.NormalizeEmail(frame.Actor.EmailAddress))
+	actorID, hasActor := actorIdentity(frame)
 	sessionID := conv.Default(frame.SessionID, frame.RequestID)
-	if actorID == "" {
+	if !hasActor {
 		sessionID = frame.RequestID
 	}
 	identity, _ := json.Marshal([]string{config.TenantID, frame.Actor.Type, actorID, sessionID})
@@ -571,8 +583,13 @@ func conversationID(config Config, frame Frame) uuid.UUID {
 // actorKey fingerprints the provider actor a conversation belongs to: the
 // same tuple conversationID hashes, minus the session. It is stored on the
 // chat so a transcript prefix match can refuse another actor's conversation.
+// A frame with no actor has no key: it can neither be adopted into nor
+// adopt an archived conversation.
 func actorKey(config Config, frame Frame) []byte {
-	actorID := conv.Default(frame.Actor.ID, conv.NormalizeEmail(frame.Actor.EmailAddress))
+	actorID, hasActor := actorIdentity(frame)
+	if !hasActor {
+		return nil
+	}
 	identity, _ := json.Marshal([]string{config.TenantID, frame.Actor.Type, actorID})
 	sum := sha256.Sum256(identity)
 	return sum[:]
@@ -588,65 +605,96 @@ func (s *postgresStore) conversation(ctx context.Context, config Config, frame F
 	return id, err
 }
 
-// ResolveConversation maps a frame onto a stored chat. A frame whose session
-// id names an existing chat continues it. Otherwise the frame may be a
-// continuation delivered without a stable session id (the protocol allows
-// an absent session, and some products send none): the identities its own
-// newest prefixes would carry are looked up, and the chat whose newest
-// stored message is one of them is adopted, provided it belongs to the same
-// actor. A chat whose history merely starts like the frame is never adopted,
-// so two conversations sharing an opening stay apart. Anything else is a new
-// chat keyed as conversationID does.
+// ResolveConversation maps a frame onto a stored chat. A frame with a session
+// id continues the chat that id names, or starts it: a sessioned product
+// that forks a conversation under a new session id must not be folded into
+// the original, so content matching is reserved for frames that carry no
+// session id at all (the protocol allows that, and some products send none).
+// For those, the identities the frame's own newest prefixes would carry are
+// looked up, and the actor's chat whose newest stored message is one of them
+// is adopted. A chat whose history merely starts like the frame is never
+// adopted, so two conversations sharing an opening stay apart, and when two
+// of the actor's chats end in the same prefix none is chosen. Anything else
+// is a new chat keyed as conversationID does.
 func (s *postgresStore) ResolveConversation(ctx context.Context, config Config, frame Frame) (uuid.UUID, string, error) {
 	candidate := conversationID(config, frame)
 	queries := chatrepo.New(s.db)
 	if frame.SessionID != "" {
-		_, err := queries.GetChat(ctx, chatrepo.GetChatParams{ID: candidate, ProjectID: config.ProjectID})
-		switch {
-		case err == nil:
-			return candidate, conversationOutcomeSession, nil
-		case !errors.Is(err, pgx.ErrNoRows):
+		exists, err := queries.InferenceChatExists(ctx, chatrepo.InferenceChatExistsParams{ID: candidate, ProjectID: config.ProjectID})
+		if err != nil {
 			return uuid.Nil, "", fmt.Errorf("load inference conversation: %w", err)
 		}
-	}
-	messages := conversationMessages(frame.Messages)
-	if len(messages) < 2 {
-		// A single message has no stored prefix to continue.
+		if exists {
+			return candidate, conversationOutcomeSession, nil
+		}
 		return candidate, conversationOutcomeNew, nil
 	}
+	messages := conversationMessages(frame.Messages)
 	key := actorKey(config, frame)
-	chains := prefixIdentities(messages)
+	if len(messages) < 2 || key == nil {
+		// A single message has no stored prefix to continue, and an anonymous
+		// frame has no actor to continue it as.
+		return candidate, conversationOutcomeNew, nil
+	}
 	// Newest prefix first: a continuation normally appends a few messages,
-	// and the longest stored prefix is the chat to continue.
+	// and the longest stored prefix is the chat to continue. One query takes
+	// every candidate identity and returns the longest match.
+	chains := prefixIdentities(messages)
+	identities := make([]string, 0, alignmentAnchors)
 	for k := len(messages); k >= max(1, len(messages)-alignmentAnchors+1); k-- {
-		row, err := queries.FindInferenceChatByNewestMessageIdentity(ctx, chatrepo.FindInferenceChatByNewestMessageIdentityParams{
-			ProjectID: uuid.NullUUID{UUID: config.ProjectID, Valid: true}, ExternalMessageID: conv.ToPGText(messageIdentityID(chains[k-1])),
-		})
-		if errors.Is(err, pgx.ErrNoRows) {
+		identities = append(identities, messageIdentityID(chains[k-1]))
+	}
+	rows, err := queries.FindInferenceChatsByNewestMessageIdentity(ctx, chatrepo.FindInferenceChatsByNewestMessageIdentityParams{
+		ProjectID:          uuid.NullUUID{UUID: config.ProjectID, Valid: true},
+		ExternalMessageIds: identities,
+		InferenceActorKey:  key,
+	})
+	if err != nil {
+		return uuid.Nil, "", fmt.Errorf("find inference conversation by transcript prefix: %w", err)
+	}
+	// The first identity any chat ends in is the longest stored prefix. Two
+	// chats ending in it are two conversations that so far read the same
+	// (the same opening prompt twice), and neither may be guessed.
+	for _, identity := range identities {
+		var matches []uuid.UUID
+		for _, row := range rows {
+			if row.ExternalMessageID.String == identity {
+				matches = append(matches, row.ChatID)
+			}
+		}
+		switch len(matches) {
+		case 0:
 			continue
+		case 1:
+			return matches[0], conversationOutcomeAdoptedPrefix, nil
+		default:
+			return candidate, conversationOutcomeAmbiguousPrefix, nil
 		}
-		if err != nil {
-			return uuid.Nil, "", fmt.Errorf("find inference conversation by transcript prefix: %w", err)
-		}
-		if row.Deleted || !bytes.Equal(row.InferenceActorKey, key) {
-			continue
-		}
-		return row.ChatID, conversationOutcomeAdoptedPrefix, nil
 	}
 	return candidate, conversationOutcomeNew, nil
 }
 
-// inferenceSource maps Anthropic's application names to product surfaces. In
-// this protocol claude-code identifies the web product, not the local CLI.
-func inferenceSource(application string) string {
+// productSource maps Anthropic's application names to product surfaces and
+// reports whether the name is one it knows. In this protocol claude-code
+// identifies the web product, not the local CLI. Unknown names pass through
+// unchanged, so storage keeps whatever the client sent.
+func productSource(application string) (string, bool) {
 	switch source := strings.TrimSpace(application); source {
 	case "claude-ai":
-		return "claude-chat-web"
+		return "claude-chat-web", true
 	case "claude-code":
-		return "claude-code-web"
+		return "claude-code-web", true
+	case "claude-design":
+		return source, true
 	case "":
-		return "anthropic-inference"
+		return "anthropic-inference", true
 	default:
-		return source
+		return source, false
 	}
+}
+
+// inferenceSource is the product surface recorded on stored messages.
+func inferenceSource(application string) string {
+	source, _ := productSource(application)
+	return source
 }

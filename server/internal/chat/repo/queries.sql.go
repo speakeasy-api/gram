@@ -679,13 +679,16 @@ func (q *Queries) DeleteChatResolutionsAfterMessage(ctx context.Context, arg Del
 	return err
 }
 
-const findInferenceChatByNewestMessageIdentity = `-- name: FindInferenceChatByNewestMessageIdentity :one
-SELECT cm.chat_id, c.inference_actor_key, c.deleted
+const findInferenceChatsByNewestMessageIdentity = `-- name: FindInferenceChatsByNewestMessageIdentity :many
+SELECT cm.chat_id, cm.external_message_id
 FROM chat_messages cm
 JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id
 WHERE cm.project_id = $1
-  AND cm.external_message_id = $2
+  AND cm.external_message_id = ANY($2::text[])
+  AND cm.external_message_id IS NOT NULL
   AND cm.origin = 'anthropic-inference'
+  AND c.inference_actor_key = $3
+  AND c.deleted IS FALSE
   AND NOT EXISTS (
     SELECT 1 FROM chat_messages newer
     WHERE newer.chat_id = cm.chat_id AND newer.project_id = cm.project_id
@@ -694,34 +697,42 @@ WHERE cm.project_id = $1
       AND newer.external_message_id NOT LIKE '%/block:%'
       AND (newer.created_at, newer.seq) > (cm.created_at, cm.seq)
   )
-ORDER BY cm.created_at DESC, cm.seq DESC
-LIMIT 1
 `
 
-type FindInferenceChatByNewestMessageIdentityParams struct {
-	ProjectID         uuid.NullUUID
+type FindInferenceChatsByNewestMessageIdentityParams struct {
+	ProjectID          uuid.NullUUID
+	ExternalMessageIds []string
+	InferenceActorKey  []byte
+}
+
+type FindInferenceChatsByNewestMessageIdentityRow struct {
+	ChatID            uuid.UUID
 	ExternalMessageID pgtype.Text
 }
 
-type FindInferenceChatByNewestMessageIdentityRow struct {
-	ChatID            uuid.UUID
-	InferenceActorKey []byte
-	Deleted           bool
-}
-
-// Locates the chat whose newest stored Anthropic inference message carries
-// this chain identity, meaning the chat's history is exactly the transcript
-// prefix the identity was derived from. A transcript delivered without a
-// stable session id derives the identities of its own newest prefixes and
-// adopts the chat holding one, so history is archived once. Matching a
-// message that is not the chat's newest is not enough: two conversations can
-// share an opening message and must stay apart. The actor key is returned so
-// the caller can refuse another actor's conversation.
-func (q *Queries) FindInferenceChatByNewestMessageIdentity(ctx context.Context, arg FindInferenceChatByNewestMessageIdentityParams) (FindInferenceChatByNewestMessageIdentityRow, error) {
-	row := q.db.QueryRow(ctx, findInferenceChatByNewestMessageIdentity, arg.ProjectID, arg.ExternalMessageID)
-	var i FindInferenceChatByNewestMessageIdentityRow
-	err := row.Scan(&i.ChatID, &i.InferenceActorKey, &i.Deleted)
-	return i, err
+// The actor's live chats whose newest stored Anthropic inference message
+// carries one of these chain identities, with the identity each matched. A
+// match on a message that is not the chat's newest does not count. The
+// caller ranks identities and treats several chats on one identity as
+// ambiguous.
+func (q *Queries) FindInferenceChatsByNewestMessageIdentity(ctx context.Context, arg FindInferenceChatsByNewestMessageIdentityParams) ([]FindInferenceChatsByNewestMessageIdentityRow, error) {
+	rows, err := q.db.Query(ctx, findInferenceChatsByNewestMessageIdentity, arg.ProjectID, arg.ExternalMessageIds, arg.InferenceActorKey)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindInferenceChatsByNewestMessageIdentityRow
+	for rows.Next() {
+		var i FindInferenceChatsByNewestMessageIdentityRow
+		if err := rows.Scan(&i.ChatID, &i.ExternalMessageID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getActiveUserCountByMessages = `-- name: GetActiveUserCountByMessages :one
@@ -1460,6 +1471,27 @@ func (q *Queries) GetTopUsersByMessages(ctx context.Context, arg GetTopUsersByMe
 		return nil, err
 	}
 	return items, nil
+}
+
+const inferenceChatExists = `-- name: InferenceChatExists :one
+SELECT EXISTS (
+  SELECT 1 FROM chats
+  WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+)
+`
+
+type InferenceChatExistsParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Whether the live chat a session id names already exists, with the same
+// visibility rule as GetChat and none of its joins.
+func (q *Queries) InferenceChatExists(ctx context.Context, arg InferenceChatExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, inferenceChatExists, arg.ID, arg.ProjectID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const inferencePolicyRevision = `-- name: InferencePolicyRevision :one

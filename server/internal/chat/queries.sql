@@ -2002,21 +2002,21 @@ UPDATE chats SET inference_accepted_checkpoint = @checkpoint
 WHERE project_id = @project_id AND external_chat_id = @external_chat_id
   AND inference_accepted_checkpoint IS NOT DISTINCT FROM sqlc.narg('expected_checkpoint')::bytea;
 
--- name: FindInferenceChatByNewestMessageIdentity :one
--- Locates the chat whose newest stored Anthropic inference message carries
--- this chain identity, meaning the chat's history is exactly the transcript
--- prefix the identity was derived from. A transcript delivered without a
--- stable session id derives the identities of its own newest prefixes and
--- adopts the chat holding one, so history is archived once. Matching a
--- message that is not the chat's newest is not enough: two conversations can
--- share an opening message and must stay apart. The actor key is returned so
--- the caller can refuse another actor's conversation.
-SELECT cm.chat_id, c.inference_actor_key, c.deleted
+-- name: FindInferenceChatsByNewestMessageIdentity :many
+-- The actor's live chats whose newest stored Anthropic inference message
+-- carries one of these chain identities, with the identity each matched. A
+-- match on a message that is not the chat's newest does not count. The
+-- caller ranks identities and treats several chats on one identity as
+-- ambiguous.
+SELECT cm.chat_id, cm.external_message_id
 FROM chat_messages cm
 JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id
 WHERE cm.project_id = @project_id
-  AND cm.external_message_id = @external_message_id
+  AND cm.external_message_id = ANY(@external_message_ids::text[])
+  AND cm.external_message_id IS NOT NULL
   AND cm.origin = 'anthropic-inference'
+  AND c.inference_actor_key = @inference_actor_key
+  AND c.deleted IS FALSE
   AND NOT EXISTS (
     SELECT 1 FROM chat_messages newer
     WHERE newer.chat_id = cm.chat_id AND newer.project_id = cm.project_id
@@ -2024,9 +2024,15 @@ WHERE cm.project_id = @project_id
       AND newer.external_message_id IS NOT NULL
       AND newer.external_message_id NOT LIKE '%/block:%'
       AND (newer.created_at, newer.seq) > (cm.created_at, cm.seq)
-  )
-ORDER BY cm.created_at DESC, cm.seq DESC
-LIMIT 1;
+  );
+
+-- name: InferenceChatExists :one
+-- Whether the live chat a session id names already exists, with the same
+-- visibility rule as GetChat and none of its joins.
+SELECT EXISTS (
+  SELECT 1 FROM chats
+  WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+);
 
 -- name: SetInferenceActorKey :exec
 -- Records the actor key on a conversation the first time it is seen. The

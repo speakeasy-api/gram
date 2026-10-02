@@ -532,7 +532,7 @@ func TestStoreAdoptsRedeliveredTranscriptWithoutSessionID(t *testing.T) {
 func TestStoreNeverAdoptsAnotherActorsTranscript(t *testing.T) {
 	t.Parallel()
 	store, db, config := newTestStore(t)
-	u1, a1, u2 := textMessage("user", "turn 1"), textMessage("assistant", "reply 1"), textMessage("user", "turn 2")
+	u1, a1, u2, a2, u3 := textMessage("user", "turn 1"), textMessage("assistant", "reply 1"), textMessage("user", "turn 2"), textMessage("assistant", "reply 2"), textMessage("user", "turn 3")
 	first, _, _ := archiveFrame(t, store, config, sessionlessFrame("request-1", u1, a1, u2))
 	other := sessionlessFrame("request-2", u1, a1, u2)
 	other.Actor.ID = "other-actor"
@@ -541,13 +541,38 @@ func TestStoreNeverAdoptsAnotherActorsTranscript(t *testing.T) {
 	require.Equal(t, conversationOutcomeNew, outcome)
 	require.NotEqual(t, first, second)
 	require.Equal(t, 0, start)
-	for _, chatID := range []uuid.UUID{first, second} {
+
+	// The other actor's chat is the newer holder of the same prefix identity;
+	// the first actor's continuation still lands in the first actor's chat.
+	adopted, outcome, start := archiveFrame(t, store, config, sessionlessFrame("request-3", u1, a1, u2, a2, u3))
+	require.Equal(t, conversationOutcomeAdoptedPrefix, outcome)
+	require.Equal(t, first, adopted)
+	require.Equal(t, 3, start)
+	for chatID, want := range map[uuid.UUID]int{first: 5, second: 3} {
 		messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: config.ProjectID})
 		require.NoError(t, err)
-		require.Len(t, messages, 3)
+		require.Len(t, messages, want)
 	}
 }
 
+func TestStoreNeverAdoptsForAnonymousActor(t *testing.T) {
+	t.Parallel()
+	store, _, config := newTestStore(t)
+	u1, a1, u2 := textMessage("user", "turn 1"), textMessage("assistant", "reply 1"), textMessage("user", "turn 2")
+	anonymous := func(requestID string, messages ...Message) Frame {
+		frame := sessionlessFrame(requestID, messages...)
+		frame.Actor.ID = ""
+		frame.Actor.EmailAddress = ""
+		return frame
+	}
+	first, outcome, _ := archiveFrame(t, store, config, anonymous("request-1", u1, a1, u2))
+	require.Equal(t, conversationOutcomeNew, outcome)
+	// With no actor to scope the match to, an identical transcript from an
+	// anonymous frame is a new, request-scoped conversation.
+	second, outcome, _ := archiveFrame(t, store, config, anonymous("request-2", u1, a1, u2))
+	require.Equal(t, conversationOutcomeNew, outcome)
+	require.NotEqual(t, first, second)
+}
 func TestStoreKeepsConversationsWithSharedOpeningApart(t *testing.T) {
 	t.Parallel()
 	store, db, config := newTestStore(t)
@@ -606,4 +631,59 @@ func TestStoreCheckpointFollowsAdoptedConversation(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, accepted, 3)
 	require.Equal(t, 3, acceptedPrefix(accepted, transcriptHashes(conversationMessages(third.Messages))))
+}
+
+func TestStoreStartsNewChatForUnknownSessionID(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	u1, a1, u2, a2, u3 := textMessage("user", "turn 1"), textMessage("assistant", "reply 1"), textMessage("user", "turn 2"), textMessage("assistant", "reply 2"), textMessage("user", "turn 3")
+	original := exampleFrame()
+	original.Messages = []Message{u1, a1, u2}
+	first, _, _ := archiveFrame(t, store, config, original)
+
+	// The same actor forks the conversation under a new session id. The
+	// history is identical, but a session id that names no chat starts one
+	// rather than folding the fork into the original.
+	fork := exampleFrame()
+	fork.SessionID = "session-fork"
+	fork.RequestID = "request-fork"
+	fork.Messages = []Message{u1, a1, u2, a2, u3}
+	second, outcome, start := archiveFrame(t, store, config, fork)
+	require.Equal(t, conversationOutcomeNew, outcome)
+	require.NotEqual(t, first, second)
+	require.Equal(t, 0, start)
+	messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: first, ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, messages, 3)
+}
+
+func TestStoreStartsNewChatWhenSharedPrefixIsAmbiguous(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	u1 := textMessage("user", "build a landing page")
+	// The same actor opens two conversations with the identical prompt. Each
+	// first frame is a single message, so each starts its own chat, and both
+	// chats end in the same identity.
+	first, _, _ := archiveFrame(t, store, config, sessionlessFrame("request-a1", u1))
+	second, _, _ := archiveFrame(t, store, config, sessionlessFrame("request-b1", u1))
+	require.NotEqual(t, first, second)
+
+	// Neither chat can be told apart as the one this continuation belongs to,
+	// so it starts a third rather than landing in the wrong one.
+	third, outcome, start := archiveFrame(t, store, config, sessionlessFrame("request-a2", u1, textMessage("assistant", "reply A"), textMessage("user", "turn 2A")))
+	require.Equal(t, conversationOutcomeAmbiguousPrefix, outcome)
+	require.NotEqual(t, first, third)
+	require.NotEqual(t, second, third)
+	require.Equal(t, 0, start)
+	for _, chatID := range []uuid.UUID{first, second} {
+		messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: config.ProjectID})
+		require.NoError(t, err)
+		require.Len(t, messages, 1)
+	}
+
+	// From here the continuation is unambiguous and follows the third chat.
+	fourth, outcome, start := archiveFrame(t, store, config, sessionlessFrame("request-a3", u1, textMessage("assistant", "reply A"), textMessage("user", "turn 2A"), textMessage("assistant", "reply 2A"), textMessage("user", "turn 3A")))
+	require.Equal(t, conversationOutcomeAdoptedPrefix, outcome)
+	require.Equal(t, third, fourth)
+	require.Equal(t, 3, start)
 }

@@ -760,8 +760,10 @@ const (
 	// named an existing chat), "adopted_prefix" (the chat already holding the
 	// transcript's prefix was reused) or "new".
 	InferenceConversationOutcomeKey = attribute.Key("gram.inference.conversation_outcome")
-	// InferenceApplicationKey is the advisory source.application of an
-	// Anthropic inference frame (claude-ai, claude-code, claude-design, ...).
+	// InferenceApplicationKey is the product surface an Anthropic inference
+	// frame's advisory source.application maps to (claude-chat-web,
+	// claude-code-web, claude-design, anthropic-inference). Metrics fold any
+	// other value to "other"; logs carry the mapped value as stored.
 	InferenceApplicationKey = attribute.Key("gram.inference.application")
 	// InferenceHasSessionIDKey reports whether an Anthropic inference frame
 	// carried a session id.

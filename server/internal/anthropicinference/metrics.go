@@ -16,7 +16,11 @@ const (
 	// resolution log line.
 	conversationOutcomeSession       = "session"
 	conversationOutcomeAdoptedPrefix = "adopted_prefix"
-	conversationOutcomeNew           = "new"
+	// conversationOutcomeAmbiguousPrefix: more than one of the actor's chats
+	// ends in the transcript's longest stored prefix, so none can be chosen and
+	// the frame starts a new chat like conversationOutcomeNew.
+	conversationOutcomeAmbiguousPrefix = "ambiguous_prefix"
+	conversationOutcomeNew             = "new"
 )
 
 // metrics counts how inference frames map onto stored conversations. A nil
@@ -44,8 +48,19 @@ func (m *metrics) RecordConversation(ctx context.Context, frame Frame, outcome s
 		return
 	}
 	m.conversations.Add(ctx, 1, metric.WithAttributes(
-		attr.InferenceApplication(inferenceSource(frame.Source.Application)),
+		attr.InferenceApplication(metricApplication(frame.Source.Application)),
 		attr.InferenceHasSessionID(frame.SessionID != ""),
 		attr.InferenceConversationOutcome(outcome),
 	))
+}
+
+// metricApplication folds the advisory source.application into a bounded
+// label: a product surface productSource knows, or "other". The raw value is
+// client-controlled and would otherwise mint a metric series per distinct
+// string; it still reaches logs and stored messages unchanged.
+func metricApplication(application string) string {
+	if source, known := productSource(application); known {
+		return source
+	}
+	return "other"
 }

@@ -57,16 +57,18 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   not deliver a final-response event.
 - Conversation identity is scoped to the project, Anthropic tenant, and actor.
   Client-asserted session identifiers cannot join another actor's conversation.
-  A frame whose session identifier names an existing conversation continues
-  it. A frame without one (the protocol allows an absent session, and some
-  products send none) is matched by content instead: the identities its own
-  newest transcript prefixes would carry are looked up, and the conversation
-  whose newest archived message is one of them is adopted, provided it belongs
-  to the same actor. A conversation that merely starts like the frame is never
-  adopted, so two conversations with the same opening stay apart. Without a
-  match the frame starts a new conversation keyed by its request identifier.
+  A frame with a session identifier continues the conversation that
+  identifier names, or starts it. A frame with no session identifier (the
+  protocol allows that, and some products send none) continues the actor's
+  archived conversation when its transcript extends that conversation's
+  history; a conversation that merely starts the same way is never continued,
+  two conversations that so far read the same are never chosen between, and a
+  frame with no actor never continues one. Otherwise it starts a new
+  conversation keyed by its request identifier. See `ResolveConversation` for
+  the matching rule.
   Each frame's resolution is counted on `anthropic_inference.conversations`
-  (`session`, `adopted_prefix`, `new`) by application and whether a session
+  (`session`, `adopted_prefix`, `ambiguous_prefix`, `new`) by application and
+  whether a session
   identifier was present.
 - Archival deduplication is separate from acceptance. Storage uses message hashes
   to align a delivery with the eight newest archived message identities. It tries
