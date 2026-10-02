@@ -405,6 +405,7 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	"attach_platform_mcp_identity_provider": {},
 	"distribute_mcp_to_plugin":              {},
 	"remove_mcp_from_plugin":                {},
+	"remove_plugin_server":                  {},
 	"update_mcp_metadata":                   {},
 	"disable_mcp":                           {},
 	"enable_mcp":                            {},

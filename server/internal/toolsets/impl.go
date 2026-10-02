@@ -309,13 +309,13 @@ func (s *Service) ensureGeneratedMcpSlug(ctx context.Context, dbtx pgx.Tx, logge
 }
 
 func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (bool, error) {
-	pluginCreated, err := plugins.AttachToDefaultPluginAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
+	pluginCreated, err := plugins.AttachToDefaultAndRolePluginsAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
 		McpServerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		DisplayName:    displayName,
-	})
+	}, nil)
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "attach toolset to default plugin").LogError(ctx, s.logger)
 	}

@@ -106,6 +106,7 @@ type UpdateMCPAccessRoleOutput struct {
 // AccessRoleMutationBackend matches the transaction-scoped access manager API.
 type AccessRoleMutationBackend interface {
 	MutationReady() bool
+	PrepareRoleUpdate(context.Context, string) (context.Context, error)
 	GetRoleByIDTx(context.Context, pgx.Tx, string, string) (*accessgen.Role, error)
 	CreateRoleTx(context.Context, pgx.Tx, string, string, access.RoleAuditActor, *accessgen.CreateRolePayload) (access.RoleCreateResult, access.RoleReconciliation, error)
 	UpdateRoleTx(context.Context, pgx.Tx, string, string, access.RoleAuditActor, *accessgen.UpdateRolePayload) (access.RoleUpdateResult, access.RoleReconciliation, error)
@@ -248,6 +249,10 @@ func (s *AccessRoleMutationService) Update(ctx context.Context, principal Princi
 	normalized := normalizedUpdateMCPAccessRole{
 		ProjectID: project.ID.String(), RoleID: roleID, ExpectedVersion: input.ExpectedVersion,
 		AddRules: addRules, RemoveRules: removeRules,
+	}
+	ctx, err = s.backend.PrepareRoleUpdate(ctx, principal.OrganizationID)
+	if err != nil {
+		return UpdateMCPAccessRoleOutput{}, classifyAccessRoleBackendError(err)
 	}
 	receipt, err := s.receipts.ExecuteUpdate(ctx, principal, project, input.IdempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (AccessRoleMutationReceiptResult, error) {
 		roleUUID, parseErr := uuid.Parse(roleID)
