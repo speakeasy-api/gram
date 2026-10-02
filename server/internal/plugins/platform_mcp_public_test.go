@@ -112,6 +112,30 @@ func TestPublicPlatformMCPFilesCarriesNoSecrets(t *testing.T) {
 	}
 }
 
+func TestPublicPlatformMCPFilesCatalogWorkflowUsesGuidedIdentityHandoff(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://dashboard.example.test", "17")
+	require.NoError(t, err)
+	content := files["speakeasy/skills/add-mcp-from-catalog/SKILL.md"]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/skills/add-mcp-from-catalog/SKILL.md"])
+	for _, required := range []string{
+		"`get_setup_handoff`", "exact project, registration ID, provider key, and catalog reference",
+		"**Settings > Identity**", "`#authentication`", "**User Identity**",
+		"stored client", "existing eligible app", "new internal app",
+		"never automate it", "Enter credentials only in the dashboard, not chat",
+		"**Save** configures identity only", "**Availability** only if disabled",
+		"**Inspect / Connect**", "Do not disable or re-enable an already-private server",
+		"dynamic registration unsupported", "without `force`", "blocked/unverified",
+		"Reopen the same server", "unsaved choices and credentials are not restored",
+	} {
+		require.Contains(t, string(content), required)
+	}
+	for _, forbidden := range []string{"Gram", "gram_", "manifest_json=", "client_secret=", "hooks.json", "speakeasy-skill-feedback"} {
+		require.NotContains(t, string(content), forbidden)
+	}
+}
+
 // The published .mcp.json is what every installed client dials, so a plaintext
 // deployment URL would reach every install at once.
 func TestPublicPlatformMCPFilesRejectsInsecureServerURL(t *testing.T) {

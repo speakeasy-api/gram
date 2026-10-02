@@ -318,7 +318,9 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       policy grants are reset, and no visitor-created API keys survive the
       shared SQL. Local-only developer keys may be restored by
       `RunLocalFixtures`; do not mistake those for managed-agent seed keys.
-19. **Remote MCP identity settings** — open the settings page for each seeded
+19. **Remote MCP identity settings** — also open **Slack Setup Example** at `mcp/x/slack-setup/settings#authentication`: it is disabled and has No Identity, no credential/header, and no upstream client or session. In a writable local session, select **User Identity** without saving to see read/search disclosure, existing-app/new-app choices, and the deployment callback; stored-client reuse is offered only when a compatible client exists. Leave availability unchanged. Shared demo visitors must remain read-only; do not enter real Slack credentials or automate Slack administration. The original Slack Service Account example, gateway membership, and session inventory must remain unchanged. These fixtures do not prove live consent or a permitted read.
+
+    Open the settings page for each seeded
     Remote MCP server. Linear shows the **User** identity pill, the Example
     Workspace Identity provider, and the Session length / Client access controls
     in Sessions. Slack shows **Service Account** with the inert demo

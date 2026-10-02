@@ -30,7 +30,7 @@ func registerSetupHandoffTool(reg *Registrar, registrations *RegistrationService
 	addTool(reg, &mcp.Tool{
 		Name:        "get_setup_handoff",
 		Title:       "Open Setup in the Dashboard",
-		Description: "Open the dashboard where the rest of an MCP server's setup is finished — its source and its authentication. Catalogue entries and user-supplied remote MCP servers return a dashboard settings URL; the local test fixture returns a single-use link instead. Constraints: never persist, log, or share the returned link.",
+		Description: "Open this exact MCP server's Settings > Identity in the authenticated dashboard. Catalogue entries and user-supplied remote MCP servers return a settings URL ending in #authentication; the local test fixture returns a single-use link instead. For Slack, select User Identity to reuse a compatible stored client, configure an existing eligible app, or generate a new internal app's configuration. Enter credentials only in the dashboard. Save configures identity, not availability or connectivity; use Availability only if disabled, then Inspect / Connect for personal consent. Present the exact returned URL to the user; never persist or log it, or share a single-use link with another user.",
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
 		// The handoff carries the caller to the dashboard, which completes setup

@@ -348,6 +348,34 @@ func TestRegistrationServiceReturnsDashboardSetupURLForDirectRemote(t *testing.T
 	require.Equal(t, 1, store.resolveCalls)
 }
 
+func TestRegistrationServiceRejectsMismatchedDashboardHandoffTarget(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		providerKey string
+		catalogRef  string
+	}{
+		{"provider", directRemoteProviderKey, "reviewed/slack"},
+		{"reference", "browser-catalog-registry-7e966bfa-4df0-43ef-a54c-9c8c2e5f1b0d", "reviewed/other"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			store := &recordingRegistrationStore{
+				project:   ResolvedProject{ID: uuid.New(), Slug: "project"},
+				candidate: CatalogCandidate{ProviderKey: "browser-catalog-registry-7e966bfa-4df0-43ef-a54c-9c8c2e5f1b0d", CatalogRef: "reviewed/slack"},
+			}
+			service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).
+				WithDashboardURL(&url.URL{Scheme: "https", Host: "dashboard.example.test"})
+			setupURL, err := service.DashboardSetupURL(t.Context(), registrationServicePrincipal(), IssueSetupHandoffInput{
+				ProjectSlug: "project", RegistrationID: uuid.NewString(), ProviderKey: tc.providerKey, CatalogRef: tc.catalogRef,
+			})
+			require.ErrorIs(t, err, ErrCatalogRejected)
+			require.Empty(t, setupURL)
+			require.Zero(t, store.handoffCalls)
+		})
+	}
+}
+
 func TestRegistrationServiceBuildsInspectAuthorizationURLOnlyAfterAttachment(t *testing.T) {
 	t.Parallel()
 

@@ -1378,6 +1378,8 @@ BEGIN
      'streamable-http', 'https://mcp.linear.app/mcp'),
     (demo.det_uuid('gram-demo-remotemcp-slack'), proj_a, 'Slack', 'slack',
      'streamable-http', 'https://mcp.slack.com/mcp'),
+    (demo.det_uuid('gram-demo-remotemcp-slack-setup'), proj_a, 'Slack Setup Example', 'slack-setup',
+     'streamable-http', 'https://mcp.slack.com/mcp'),
     (demo.det_uuid('gram-demo-remotemcp-github'), proj_a, 'GitHub', 'github',
      'streamable-http', 'https://api.githubcopilot.com/mcp/');
 
@@ -1393,6 +1395,8 @@ BEGIN
     (demo.det_uuid('gram-demo-issuer-linear'), proj_a, demo_org, 'linear',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
     (demo.det_uuid('gram-demo-issuer-slack'), proj_a, demo_org, 'slack',
+     'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
+    (demo.det_uuid('gram-demo-issuer-slack-setup'), proj_a, demo_org, 'slack-setup',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
     (demo.det_uuid('gram-demo-issuer-gateway'), proj_a, demo_org, 'acme-agent-gateway',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60));
@@ -1410,6 +1414,9 @@ BEGIN
     (demo.det_uuid('gram-demo-mcpserver-slack'), proj_a, 'Slack', 'slack',
      NULL, demo.det_uuid('gram-demo-remotemcp-slack'),
      demo.det_uuid('gram-demo-issuer-slack'), 'private'),
+    (demo.det_uuid('gram-demo-mcpserver-slack-setup'), proj_a, 'Slack Setup Example', 'slack-setup',
+     NULL, demo.det_uuid('gram-demo-remotemcp-slack-setup'),
+     demo.det_uuid('gram-demo-issuer-slack-setup'), 'disabled'),
     (demo.det_uuid('gram-demo-mcpserver-github'), proj_a, 'GitHub', 'github',
      NULL, demo.det_uuid('gram-demo-remotemcp-github'),
      demo.det_uuid('gram-demo-issuer-workforce'), 'private');
@@ -3300,12 +3307,12 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   -- duplicated any of them would leave the badges telling a different story
   -- than the one they were seeded to tell.
   -- One issuer per Connections credential story (acme-partner-gateway), three
-  -- project MCP issuers, and the organization-wide workforce issuer used by
+  -- project MCP issuers plus the unconfigured setup example, and the workforce issuer used by
   -- GitHub.
   SELECT count(*) INTO stray FROM user_session_issuers
   WHERE project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 4 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 4 project user session issuers, found %', stray;
+  IF stray <> 5 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 5 project user session issuers, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_session_issuers
@@ -3371,6 +3378,22 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     AND lower(header.name) = 'authorization' AND header.value IS NOT NULL;
   IF stray <> 1 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 1 Remote MCP Service Account header, found %', stray;
+  END IF;
+
+  -- Setup is unconfigured and disabled, not an authorized Slack connection.
+  SELECT count(*) INTO stray FROM mcp_servers server
+  JOIN remote_mcp_servers remote ON remote.id = server.remote_mcp_server_id
+  WHERE server.project_id = proj_a AND remote.project_id = proj_a
+    AND server.id = demo.det_uuid('gram-demo-mcpserver-slack-setup')
+    AND server.user_session_issuer_id = demo.det_uuid('gram-demo-issuer-slack-setup')
+    AND server.visibility = 'disabled' AND server.remote_session_issuer_id IS NULL
+    AND remote.url = 'https://mcp.slack.com/mcp'
+    AND NOT EXISTS (SELECT 1 FROM remote_mcp_server_headers h WHERE h.remote_mcp_server_id = remote.id)
+    AND NOT EXISTS (SELECT 1 FROM remote_session_client_user_session_issuers b
+                    WHERE b.user_session_issuer_id = server.user_session_issuer_id)
+    AND NOT EXISTS (SELECT 1 FROM user_sessions s WHERE s.user_session_issuer_id = server.user_session_issuer_id);
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 disabled credential-free Slack setup example, found %', stray;
   END IF;
 
   -- Managed-agent credentials are a separate surface from ordinary MCP
