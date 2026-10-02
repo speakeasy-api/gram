@@ -17,6 +17,7 @@ export function resourceKindForScope(scope: string): string {
   if (scope.startsWith("risk_policy:")) return "risk_policy";
   if (scope.startsWith("chat:")) return "chat";
   if (scope.startsWith("agent:")) return "agent";
+  if (scope.startsWith("workload:")) return "workload";
   return "*";
 }
 
@@ -85,6 +86,12 @@ export function exclusionScopesForScope(scope: Scope): readonly string[] {
 interface EffectiveGrant {
   scope?: string;
   selectors?: Array<Record<string, string>>;
+  /**
+   * Selectors granted to the caller by name. For allow scopes these name a
+   * concrete resource and outrank blocks inherited from a role or everyone;
+   * for blocked scopes they are the caller's own blocks, which always apply.
+   */
+  directSelectors?: Array<Record<string, string>>;
   subScopes?: string[];
   effect?: string;
 }
@@ -99,9 +106,32 @@ function grantSelectorsMatch(
   return grant.selectors.some((selector) => matches(selector, check));
 }
 
+function directSelectorsMatch(
+  grant: EffectiveGrant,
+  check: Record<string, string>,
+  strict: boolean,
+): boolean {
+  const matches = strict ? selectorMatchesStrict : selectorMatches;
+  return (grant.directSelectors ?? []).some((selector) =>
+    matches(selector, check),
+  );
+}
+
+/**
+ * Blocklist exclusions (`*:blocked_*`) yield to a direct grant naming the
+ * resource. Other exclusions such as risk_policy:bypass never do. Mirrors
+ * ExclusionYieldsToDirectGrants in server/internal/authz/precedence.go.
+ */
+function exclusionYieldsToDirectGrants(exclusionScope: string): boolean {
+  return exclusionScope.includes(":blocked_");
+}
+
 /**
  * Pure equivalent of hasScope for loaded effective grants. Multiple resource IDs
  * accept any allow, but an exclusion on ANY alternative wins (RequireAnyUnblocked).
+ * A block inherited from a role or everyone does not win on an alternative
+ * that a direct grant naming the resource satisfies; the caller's own block
+ * always does.
  */
 export function hasScopeInGrants(
   grants: EffectiveGrant[],
@@ -129,6 +159,12 @@ export function hasScopeInGrants(
 
   const exclusionScopes = exclusionScopesForScope(scope);
   let hasAllow = false;
+  // Per alternative: whether a block that cannot be outranked matched, whether
+  // a block inherited from a role or everyone matched, and whether a direct
+  // grant naming the resource satisfies it.
+  const absoluteBlock = allowChecks.map(() => false);
+  const inheritedBlock = allowChecks.map(() => false);
+  const directAllow = allowChecks.map(() => false);
 
   for (const grant of grants) {
     const effect = grant.effect || "allow";
@@ -138,25 +174,33 @@ export function hasScopeInGrants(
       effect === "allow" &&
       grant.scope !== undefined &&
       exclusionScopes.includes(grant.scope);
-    if (
-      (isLegacyDeny || isExclusion) &&
-      exclusionChecks.some((check) => grantSelectorsMatch(grant, check, true))
-    ) {
-      return false;
+    if (isLegacyDeny || isExclusion) {
+      const yields =
+        isExclusion && exclusionYieldsToDirectGrants(grant.scope ?? "");
+      exclusionChecks.forEach((check, i) => {
+        if (!grantSelectorsMatch(grant, check, true)) return;
+        if (yields && !directSelectorsMatch(grant, check, true)) {
+          inheritedBlock[i] = true;
+        } else {
+          absoluteBlock[i] = true;
+        }
+      });
     }
 
     const scopeMatches =
       grant.scope === scope || grant.subScopes?.includes(scope);
-    if (
-      effect === "allow" &&
-      scopeMatches &&
-      allowChecks.some((check) => grantSelectorsMatch(grant, check, false))
-    ) {
-      hasAllow = true;
+    if (effect === "allow" && scopeMatches) {
+      allowChecks.forEach((check, i) => {
+        if (grantSelectorsMatch(grant, check, false)) hasAllow = true;
+        if (directSelectorsMatch(grant, check, false)) directAllow[i] = true;
+      });
     }
   }
 
-  return hasAllow;
+  const blocked = allowChecks.some(
+    (_, i) => absoluteBlock[i] || (inheritedBlock[i] && !directAllow[i]),
+  );
+  return hasAllow && !blocked;
 }
 
 /** Any allow is sufficient, but an exclusion on any alternative wins. */

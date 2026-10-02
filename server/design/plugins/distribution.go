@@ -10,8 +10,9 @@ var DistributionPlugin = Type("DistributionPlugin", func() {
 	Attribute("id", String, func() { Format(FormatUUID) })
 	Attribute("name", String)
 	Attribute("description", String)
+	Attribute("auto_created", Boolean, "Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.")
 	Attribute("is_default", Boolean)
-	Required("id", "name", "is_default")
+	Required("id", "name", "is_default", "auto_created")
 })
 
 var ListDistributionPluginsResult = Type("ListDistributionPluginsResult", func() {

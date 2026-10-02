@@ -101,16 +101,17 @@ export function OrgSidebar({
     (route) => route.active,
   );
 
-  const secureActive = [orgRoutes.auditLogs, orgRoutes.deviceAgent].some(
-    (r) => r.active,
-  );
+  const secureActive = [
+    orgRoutes.workloadIssuers,
+    orgRoutes.auditLogs,
+    orgRoutes.deviceAgent,
+  ].some((r) => r.active);
 
   const platformAdminActive = [
     orgRoutes.platformAdminOverview,
     orgRoutes.platformAdminRbac,
     orgRoutes.platformAdminOnboarding,
     orgRoutes.platformAdminOpenRouterKeys,
-    orgRoutes.platformAdminSupportMatrix,
   ].some((r) => r.active);
 
   const groupActivations: Array<[string, boolean]> = [
@@ -136,6 +137,7 @@ export function OrgSidebar({
     orgRoutes.encryptionKeys,
     orgRoutes.data,
     orgRoutes.dataExports,
+    orgRoutes.workloadIssuers,
     orgRoutes.auditLogs,
     orgRoutes.deviceAgent,
     orgRoutes.access,
@@ -144,7 +146,6 @@ export function OrgSidebar({
     orgRoutes.platformAdminRbac,
     orgRoutes.platformAdminOnboarding,
     orgRoutes.platformAdminOpenRouterKeys,
-    orgRoutes.platformAdminSupportMatrix,
   ];
   const activeRoute = allOrgNavRoutes.find((r) => r.active);
   const activeItem = activeRoute?.title;
@@ -228,6 +229,10 @@ export function OrgSidebar({
                 Icon={(p) => <Icon {...p} name="shield-check" />}
                 items={[
                   { item: orgRoutes.auditLogs, scope: orgReadOrAdmin },
+                  {
+                    item: orgRoutes.workloadIssuers,
+                    scope: ["workload:read", "workload:write"],
+                  },
                   ...(isDeviceAgentEnabled
                     ? [{ item: orgRoutes.deviceAgent, scope: orgReadOrAdmin }]
                     : []),
@@ -271,10 +276,6 @@ export function OrgSidebar({
                         {
                           item: orgRoutes.platformAdminOnboarding,
                           label: "Onboarding",
-                        },
-                        {
-                          item: orgRoutes.platformAdminSupportMatrix,
-                          label: "Support Coverage",
                         },
                       ]
                     : []),

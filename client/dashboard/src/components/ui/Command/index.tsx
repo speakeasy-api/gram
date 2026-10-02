@@ -25,19 +25,38 @@ function CommandDialog({
   title = "Command Palette",
   description = "Search for a command to run...",
   children,
+  shouldFilter,
+  value,
+  onValueChange,
+  onEscapeKeyDown,
   ...props
 }: React.ComponentProps<typeof Dialog> & {
   title?: string;
   description?: string;
-}): React.JSX.Element {
+} & Pick<
+    React.ComponentProps<typeof Command>,
+    "shouldFilter" | "value" | "onValueChange"
+  > &
+  Pick<
+    React.ComponentProps<typeof Dialog.Content>,
+    "onEscapeKeyDown"
+  >): React.JSX.Element {
   return (
     <Dialog {...props}>
-      <Dialog.Content className="max-w-2xl overflow-hidden p-0">
+      <Dialog.Content
+        className="max-w-2xl overflow-hidden p-0"
+        onEscapeKeyDown={onEscapeKeyDown}
+      >
         <Dialog.Header className="sr-only">
           <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Description>{description}</Dialog.Description>
         </Dialog.Header>
-        <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-14 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-1.5 [&_[cmdk-item]_svg]:h-4 [&_[cmdk-item]_svg]:w-4">
+        <Command
+          shouldFilter={shouldFilter}
+          value={value}
+          onValueChange={onValueChange}
+          className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-14 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-1.5 [&_[cmdk-item]_svg]:h-4 [&_[cmdk-item]_svg]:w-4"
+        >
           {children}
         </Command>
       </Dialog.Content>

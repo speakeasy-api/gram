@@ -16,7 +16,6 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   updatePending: false,
   invalidate: vi.fn(),
-  goToBoard: vi.fn(),
   showPylonChat: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
@@ -32,7 +31,7 @@ vi.mock("react-router", () => ({
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
-    setup: { goTo: mocks.goToBoard, href: () => "/org/setup" },
+    setup: { href: () => "/org/setup" },
   }),
 }));
 vi.mock("@/components/require-scope", () => ({
@@ -86,7 +85,9 @@ vi.mock("@gram/client/react-query/_context.js", () => ({
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-one" }),
 }));
-vi.mock("@tanstack/react-query", () => ({
+// setup-cards pulls in every step, which needs the real module's exports.
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
   useQueryClient: () => ({}),
   useQuery: (query: unknown) => query,
 }));
@@ -105,6 +106,7 @@ function task(
   key: string,
   title: string,
   status: SetupTask["status"] = "todo",
+  extra: Partial<SetupTask> = {},
 ): SetupTask {
   return {
     key,
@@ -114,13 +116,22 @@ function task(
     completedByFact: false,
     blockedBy: [],
     hidden: false,
+    group: false,
+    ...extra,
   };
 }
 
+// The agent observability group precedes its card, as the server lists them.
+// The wizard walks the cards and shows the group as a section label.
 const tasks: SetupTask[] = [
   task("identity-provider", "Set up identity provider", "done"),
   task("anthropic-observability", "Set up Anthropic observability"),
-  task("instrument-agents", "Set up observability in other platforms"),
+  task("agent-observability", "Set up agent observability", "todo", {
+    group: true,
+  }),
+  task("instrument-agents", "Set up observability in other platforms", "todo", {
+    parentKey: "agent-observability",
+  }),
 ];
 
 function loaded(list: SetupTask[] = tasks) {
@@ -153,13 +164,52 @@ beforeEach(() => {
   mocks.setupQuery.mockReset().mockReturnValue(loaded());
   mocks.update.mockReset().mockResolvedValue(tasks[1]);
   mocks.invalidate.mockReset();
-  mocks.goToBoard.mockReset();
   mocks.showPylonChat.mockReset();
   mocks.toastSuccess.mockReset();
   mocks.toastError.mockReset();
 });
 
 describe("SetupWizard", () => {
+  it.each(["Complete", "Get support"])(
+    "guards %s when prerequisites are unmet and explains what to finish",
+    async (action) => {
+      mocks.setupQuery.mockReturnValue(
+        loaded(
+          tasks.map((t) =>
+            t.key === "anthropic-observability"
+              ? { ...t, blockedBy: ["identity-provider"] }
+              : { ...t, status: "todo" },
+          ),
+        ),
+      );
+      mocks.searchParams = new URLSearchParams("task=anthropic-observability");
+      render(<SetupWizard />);
+
+      fireEvent.click(screen.getByRole("button", { name: action }));
+
+      await waitFor(() =>
+        expect(mocks.toastError).toHaveBeenCalledWith(
+          "Complete these prerequisites first: Set up identity provider.",
+        ),
+      );
+      expect(
+        screen.getByText(
+          "Complete these prerequisites first: Set up identity provider.",
+        ),
+      ).toBeTruthy();
+      expect(mocks.update).not.toHaveBeenCalled();
+      expect(mocks.invalidate).not.toHaveBeenCalled();
+      expect(mocks.toastSuccess).not.toHaveBeenCalled();
+      expect(mocks.showPylonChat).not.toHaveBeenCalled();
+      expect(mocks.setSearchParams).not.toHaveBeenCalled();
+      expect(mocks.navigate).not.toHaveBeenCalled();
+
+      // Prerequisites restrict status changes, not navigation through setup.
+      fireEvent.click(screen.getByRole("button", { name: "Skip task" }));
+      expect(lastParams().get("task")).toBe("other-platforms");
+    },
+  );
+
   it("lists every card in the rail and opens on the first one still open", () => {
     render(<SetupWizard />);
 
@@ -174,7 +224,7 @@ describe("SetupWizard", () => {
     ).toBeTruthy();
   });
 
-  it("walks the board's default list, without hidden cards", () => {
+  it("walks the selected cards, without hidden ones", () => {
     render(<SetupWizard />);
 
     expect(mocks.setupQuery).toHaveBeenCalledWith("client", "org-one", false, {
@@ -226,12 +276,13 @@ describe("SetupWizard", () => {
   it("moves between cards from the rail, dropping the outgoing card's step", () => {
     render(<SetupWizard />);
 
+    // A group's row opens its first open card.
     fireEvent.click(
-      screen.getByRole("button", { name: /Set up identity provider/ }),
+      screen.getByRole("button", { name: /Set up agent observability/ }),
     );
 
     const params = lastParams();
-    expect(params.get("task")).toBe("idp");
+    expect(params.get("task")).toBe("other-platforms");
     expect(params.get("step")).toBeNull();
     const [, options] = mocks.setSearchParams.mock.calls.at(-1)!;
     expect(options).toEqual({ replace: true });
@@ -286,7 +337,7 @@ describe("SetupWizard", () => {
     );
     expect(mocks.invalidate).toHaveBeenCalled();
     expect(mocks.toastSuccess).toHaveBeenCalled();
-    expect(mocks.goToBoard).not.toHaveBeenCalled();
+    expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
   it("completes the last card and leaves for the dashboard", async () => {
@@ -413,13 +464,13 @@ describe("SetupWizard", () => {
     expect(mocks.setSearchParams).not.toHaveBeenCalled();
   });
 
-  it("points at the board when every card is hidden", () => {
+  it("leaves for the dashboard when no card is selected", () => {
     mocks.setupQuery.mockReturnValue(loaded([]));
     render(<SetupWizard />);
 
     expect(screen.getByText("Nothing to set up")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Setup board" }));
-    expect(mocks.goToBoard).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "Go to dashboard" }));
+    expect(mocks.navigate).toHaveBeenCalledWith("/org");
   });
 
   it("offers a retry when the list fails to load", () => {

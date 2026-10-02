@@ -334,19 +334,19 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 	switch payload.HookEventName {
 	case "PreToolUse":
 		if err := s.writeCodexToolCallRequestToPG(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "failed to persist Codex tool call request", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Codex tool call request", err)
 		}
 	case "PostToolUse":
 		if err := s.writeCodexToolCallResultToPG(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "failed to persist Codex tool call result", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Codex tool call result", err)
 		}
 	case "UserPromptSubmit":
 		if err := s.writeCodexUserPromptToPG(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "failed to persist Codex user prompt", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Codex user prompt", err)
 		}
 	case "Stop":
 		if err := s.writeCodexAssistantResponseToPG(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "failed to persist Codex assistant response", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Codex assistant response", err)
 		}
 	}
 }

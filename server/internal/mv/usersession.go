@@ -7,6 +7,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/clientcred"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -195,6 +196,13 @@ func BuildUserSessionView(row repo.ListUserSessionsByProjectIDRow, upstreams []*
 		row.ClientHasSecret,
 	)
 
+	// A dashboard mint has no registration. The list query flags those rows
+	// so Connections names them instead of filing them under an unknown client.
+	clientName := conv.FromPGText[string](row.ClientName)
+	if clientName == nil && row.DashboardMint {
+		clientName = new(sessiontokens.FirstPartyClientName)
+	}
+
 	return &types.UserSession{
 		ID:                            row.ID.String(),
 		UserSessionIssuerID:           row.UserSessionIssuerID.String(),
@@ -206,7 +214,7 @@ func BuildUserSessionView(row repo.ListUserSessionsByProjectIDRow, upstreams []*
 		UpdatedAt:                     row.UpdatedAt.Time.Format(time.RFC3339),
 		IssuerSlug:                    row.IssuerSlug,
 		UserSessionClientID:           clientID,
-		ClientName:                    conv.FromPGText[string](row.ClientName),
+		ClientName:                    clientName,
 		ClientIDMetadataURI:           conv.FromPGText[string](row.ClientIDMetadataUri),
 		ClientCredentialKind:          credentialKind,
 		ClientTokenEndpointAuthMethod: declaredAuthMethod,

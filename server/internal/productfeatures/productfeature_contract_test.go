@@ -1,6 +1,7 @@
 package productfeatures_test
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -36,7 +37,7 @@ func TestProductFeatureNameContract(t *testing.T) {
 		productfeatures.FeaturePlatformMCP, productfeatures.FeatureCustomerManagedEncryptionKeys,
 		productfeatures.FeatureRemoteSessionAutoRefresh, productfeatures.FeatureRemoteSessionAutoRefreshEnforced,
 		productfeatures.FeatureConsentToolFiltering, productfeatures.FeatureSessionPortability,
-		productfeatures.FeatureNetworkIngress,
+		productfeatures.FeatureNetworkIngress, productfeatures.FeatureAutomaticRoleDistribution,
 	}, document.Components.Schemas["SetOrganizationFeatureRequestBody"].Properties["feature_name"].Enum)
 }
 
@@ -76,5 +77,41 @@ func TestClientSnapshot_ReturnsCompleteProductFeatureState(t *testing.T) {
 		SessionPortabilityEnabled:               false,
 		NetworkIngressEnabled:                   false,
 		DeviceAgent:                             true,
+		AutomaticRoleDistribution:               false,
 	}, ti.client.Snapshot(ctx, orgID))
+}
+
+func TestClientSnapshotStrictRejectsUnavailableFeatures(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+
+	ctx, cancel := context.WithCancel(ctx)
+	cancel()
+	snapshot, err := ti.client.SnapshotStrict(ctx, orgID)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, productfeatures.ProductFeaturesSnapshot{}, snapshot)
+}
+
+func TestClientSnapshotStrictReturnsFlagsWithoutDeviceActivity(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+	require.NoError(t, ti.client.SetFeatureEnabled(ctx, orgID, productfeatures.FeatureSSO, true))
+	require.NoError(t, agentrepo.New(ti.conn).UpsertDeviceAgentSync(ctx, agentrepo.UpsertDeviceAgentSyncParams{
+		OrganizationID: orgID, Email: "dev@example.com",
+	}))
+
+	snapshot, err := ti.client.SnapshotStrict(ctx, orgID)
+	require.NoError(t, err)
+	require.True(t, snapshot.SsoEnabled)
+	require.True(t, snapshot.SkillsEnabled)
+	require.False(t, snapshot.DeviceAgent)
+	require.True(t, ti.client.Snapshot(ctx, orgID).DeviceAgent)
 }

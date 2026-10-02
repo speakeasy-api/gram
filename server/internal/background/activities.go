@@ -112,6 +112,7 @@ type expiredTrialDemoter interface {
 }
 
 type Activities struct {
+	trialFixtureHandler              activities.TrialFixtureHandler
 	db                               *pgxpool.Pool
 	temporalEnv                      *tenv.Environment
 	collectOpenRouterCreditsMetrics  *activities.CollectOpenRouterCreditsMetrics
@@ -168,6 +169,7 @@ type Activities struct {
 	reapInactiveAssistantRuntimes    *activities.ReapInactiveAssistantRuntimes
 	reapStoppedAssistantRuntimes     *activities.ReapStoppedAssistantRuntimes
 	recycleAssistantRuntimeImages    *activities.RecycleAssistantRuntimeImages
+	applyStartupSeed                 *activities.ApplyStartupSeed
 	reapSoftDeletedAssistantMems     *activities.ReapSoftDeletedAssistantMemories
 	signalAssistantCoordinator       *activities.SignalAssistantCoordinator
 	signalAssistantThread            *activities.SignalAssistantThread
@@ -241,6 +243,7 @@ func NewActivities(
 	judgeRateLimiter *ratelimit.Limiter,
 	builtinPresets *presetlib.Library,
 	trialEmailsService *trialemails.Service,
+	trialFixtureHandler activities.TrialFixtureHandler,
 	githubEvidenceToken string,
 	riskFingerprinter risk.Fingerprinter,
 	disableRiskRetroReconcile bool,
@@ -249,22 +252,10 @@ func NewActivities(
 	issuerMetadataRefresher *remotesessions.IssuerMetadataRefresher,
 	remoteSessionEnricher *remotesessions.SessionEnricher,
 	remoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner,
+	startupSeeds []activities.StartupSeed,
 ) *Activities {
-	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
-	// connection get a nil repo and the activity fails loudly if scheduled.
-	var spendRulesCH *spendrulesch.Queries
-	if chConn != nil {
-		spendRulesCH = spendrulesch.New(chConn)
-	}
-
-	// The exclusion reconcile propagates flag changes into ClickHouse;
-	// workers without a ClickHouse connection — or with the kill switch set —
-	// get a nil repo and the activity degrades to its Postgres phases with a
-	// loud log.
-	var riskFindingsCH *riskchrepo.Queries
-	if chConn != nil && !disableRiskRetroReconcile {
-		riskFindingsCH = riskchrepo.New(chConn)
-	}
+	spendRulesCH := spendrulesch.New(chConn)
+	riskFindingsCH := riskchrepo.New(chConn)
 
 	riskRecorder := metering.NewRiskRecorder(publishers.MeterReadings)
 
@@ -365,7 +356,7 @@ func NewActivities(
 	// worker's own clients; workers wired without the full ingredient set
 	// (test workers) get a nil activity and no schedule.
 	var mcpApprovalRecheck *activities.McpApprovalRecheck
-	if db != nil && guardianPolicy != nil && telemetryRepo != nil && mcpRegistryClient != nil && features != nil && auditLogger != nil {
+	if db != nil && guardianPolicy != nil && mcpRegistryClient != nil && features != nil && auditLogger != nil {
 		recheckProber := remoteprobe.New(logger, guardianPolicy)
 		mcpApprovalRecheck = activities.NewMcpApprovalRecheck(logger, db, mcpapprovalevidence.NewAssembler(
 			packagemeta.NewClient(guardianPolicy.PooledClient()),
@@ -385,7 +376,7 @@ func NewActivities(
 	}
 
 	var skillSuggestionAnalyzer *activities.SkillSuggestionAnalyzer
-	if db != nil && telemetryRepo != nil && chatClient != nil && skillSuggestionSignaler != nil && judgeRateLimiter != nil {
+	if db != nil && chatClient != nil && skillSuggestionSignaler != nil && judgeRateLimiter != nil {
 		engine, err := suggest.NewEngine(suggest.DefaultConfig(), logger, db, telemetryRepo, chatrepo.New(db), chatClient, judgeRateLimiter)
 		if err != nil {
 			panic(fmt.Errorf("new skill suggestion engine: %w", err))
@@ -455,7 +446,7 @@ func NewActivities(
 		fetchUnanalyzedMessages:          risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
 		analyzeBatch:                     analyzeBatch,
 		markMessagesAnalyzed:             risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
-		reconcileExclusion:               risk_exclusion.NewReconcile(logger, tracerProvider, meterProvider, db, riskFindingsCH, riskFingerprinter, assetStorage),
+		reconcileExclusion:               risk_exclusion.NewReconcile(logger, tracerProvider, meterProvider, db, riskFindingsCH, riskFingerprinter, assetStorage, disableRiskRetroReconcile),
 		skillObservationReconciler:       activities.NewSkillObservationReconciler(db, telemetryRepo),
 		cleanRiskPolicyResults:           risk_policy.NewCleanup(logger, tracerProvider, db),
 		admitAssistantThreads:            activities.NewAdmitAssistantThreads(assistantsCore),
@@ -465,6 +456,7 @@ func NewActivities(
 		reapInactiveAssistantRuntimes:    activities.NewReapInactiveAssistantRuntimes(logger, assistantsCore),
 		reapStoppedAssistantRuntimes:     activities.NewReapStoppedAssistantRuntimes(logger, assistantsCore),
 		recycleAssistantRuntimeImages:    activities.NewRecycleAssistantRuntimeImages(logger, assistantsCore),
+		applyStartupSeed:                 activities.NewApplyStartupSeed(startupSeeds),
 		reapSoftDeletedAssistantMems:     activities.NewReapSoftDeletedAssistantMemories(logger, db),
 		signalAssistantCoordinator:       activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		signalAssistantThread:            activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
@@ -484,6 +476,7 @@ func NewActivities(
 			auditLogger,
 			&TemporalTrialEmailNotifier{TemporalEnv: temporalEnv},
 			productFeatures,
+			trialFixtureHandler,
 		),
 		evaluateOrgSpendRules: spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
 		// The judge draws on the same per-(org, model) bucket and the same
@@ -500,6 +493,7 @@ func NewActivities(
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
 		remoteSessionRefresh:    remoteSessionRefresh,
 		trialEmails:             trialEmailsService,
+		trialFixtureHandler:     trialFixtureHandler,
 		mcpResearch:             mcpResearch,
 		mcpApprovalRecheck:      mcpApprovalRecheck,
 		billingNotifications:    billingnotifications.NewService(logger, db, emailService, features, siteURL),
@@ -516,6 +510,12 @@ func NewActivities(
 }
 
 func (a *Activities) SendTrialLifecycleEmail(ctx context.Context, input TrialLifecycleEmailInput) error {
+	if a.trialFixtureHandler != nil {
+		handled, err := a.trialFixtureHandler(ctx, input.OrganizationID)
+		if err != nil || handled {
+			return err
+		}
+	}
 	if a.trialEmails == nil {
 		return fmt.Errorf("trial email service is not configured")
 	}
@@ -542,6 +542,12 @@ func (a *Activities) SendTrialLifecycleEmail(ctx context.Context, input TrialLif
 }
 
 func (a *Activities) ResolveTrialEndingReminder(ctx context.Context, organizationID string) (billingnotifications.TrialReminderState, error) {
+	if a.trialFixtureHandler != nil {
+		handled, err := a.trialFixtureHandler(ctx, organizationID)
+		if err != nil || handled {
+			return billingnotifications.TrialReminderState{}, err
+		}
+	}
 	if a.billingNotifications == nil {
 		return billingnotifications.TrialReminderState{}, fmt.Errorf("billing notification service is not configured")
 	}
@@ -553,6 +559,12 @@ func (a *Activities) ResolveTrialEndingReminder(ctx context.Context, organizatio
 }
 
 func (a *Activities) SendTrialEndingSoonEmail(ctx context.Context, input billingnotifications.SendTrialEndingSoonInput) (billingnotifications.SendTrialEndingSoonResult, error) {
+	if a.trialFixtureHandler != nil {
+		handled, err := a.trialFixtureHandler(ctx, input.OrganizationID)
+		if err != nil || handled {
+			return billingnotifications.SendTrialEndingSoonResult{}, err
+		}
+	}
 	if a.billingNotifications == nil {
 		return billingnotifications.SendTrialEndingSoonResult{}, fmt.Errorf("billing notification service is not configured")
 	}
@@ -942,6 +954,10 @@ func (a *Activities) ReapStoppedAssistantRuntimes(ctx context.Context, req activ
 
 func (a *Activities) RecycleAssistantRuntimeImages(ctx context.Context) (*activities.RecycleAssistantRuntimeImagesResult, error) {
 	return a.recycleAssistantRuntimeImages.Do(ctx)
+}
+
+func (a *Activities) ApplyStartupSeed(ctx context.Context, args activities.ApplyStartupSeedArgs) error {
+	return a.applyStartupSeed.Do(ctx, args)
 }
 
 func (a *Activities) ReapSoftDeletedAssistantMemories(ctx context.Context, cutoff time.Time) (int64, error) {

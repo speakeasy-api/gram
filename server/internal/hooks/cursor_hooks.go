@@ -407,12 +407,12 @@ func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayl
 			return
 		}
 		if err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist Cursor conversation event", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Cursor conversation event", err)
 		}
 	} else {
 		// Tool call events: ClickHouse + PG
 		if err := s.persistCursorToolCallEvent(ctx, payload, metadata, blockReason, hookEvent); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist Cursor tool call event", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Cursor tool call event", err)
 		}
 	}
 }

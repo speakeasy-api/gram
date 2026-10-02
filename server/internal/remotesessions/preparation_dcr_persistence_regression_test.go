@@ -38,7 +38,7 @@ func TestPreparationDCRPersistenceFailureRecordsIndeterminate(t *testing.T) {
 			case "binding completion":
 				ddl = `ALTER TABLE remote_session_ema_bindings ADD CONSTRAINT test_completion_failure CHECK (state <> 'ready')`
 			}
-			_, err := ti.conn.Exec(ctx, ddl) //nolint:glint // DDL fault injection in an isolated per-test database; SQLc cannot add test-only constraints.
+			_, err := ti.conn.Exec(ctx, ddl) //nolint:glint // notestingrawsql: DDL fault injection in an isolated per-test database; SQLc cannot add test-only constraints.
 			require.NoError(t, err)
 			result, err := ti.service.PrepareIdentityChaining(ctx, in)
 			require.Error(t, err)

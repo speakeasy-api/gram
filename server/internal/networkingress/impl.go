@@ -43,34 +43,42 @@ const ProviderTailscale = "tailscale"
 var hostnamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 type Service struct {
-	tracer    trace.Tracer
-	logger    *slog.Logger
-	db        *pgxpool.Pool
-	auth      *auth.Auth
-	authz     *authz.Engine
-	enc       *encryption.Client
-	audit     *audit.Logger
-	admission *ExpansionAdmission
-	requester ReconcileRequester
-	health    HealthRefresher
+	tracer               trace.Tracer
+	logger               *slog.Logger
+	db                   *pgxpool.Pool
+	auth                 *auth.Auth
+	authz                *authz.Engine
+	enc                  *encryption.Client
+	audit                *audit.Logger
+	admission            *ExpansionAdmission
+	requester            ReconcileRequester
+	publicationRequester PublicationRequester
+	health               HealthRefresher
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, health HealthRefresher) *Service {
+	return NewServiceWithPublication(logger, tracerProvider, db, sessions, authzEngine, enc, auditLogger, admission, requester, nil, health)
+}
+
+// NewServiceWithPublication configures the optional durable publication invalidator.
+// A nil requester preserves the dormant producer behavior.
+func NewServiceWithPublication(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, publicationRequester PublicationRequester, health HealthRefresher) *Service {
 	logger = logger.With(attr.SlogComponent("network_ingress"))
 	return &Service{
-		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/networkingress"),
-		logger:    logger,
-		db:        db,
-		auth:      auth.New(logger, db, sessions, authzEngine),
-		authz:     authzEngine,
-		enc:       enc,
-		audit:     auditLogger,
-		admission: admission,
-		requester: requester,
-		health:    health,
+		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/networkingress"),
+		logger:               logger,
+		db:                   db,
+		auth:                 auth.New(logger, db, sessions, authzEngine),
+		authz:                authzEngine,
+		enc:                  enc,
+		audit:                auditLogger,
+		admission:            admission,
+		requester:            requester,
+		publicationRequester: publicationRequester,
+		health:               health,
 	}
 }
 
@@ -248,6 +256,9 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 	if err := s.enqueue(ctx, dbtx, ingress); err != nil {
 		return nil, err
 	}
+	if err := s.invalidateOrganization(ctx, dbtx, ingress.OrganizationID, authCtx.UserID); err != nil {
+		return nil, err
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit network ingress creation").LogError(ctx, s.logger)
 	}
@@ -306,6 +317,11 @@ func (s *Service) UpdateIngress(ctx context.Context, payload *gen.UpdateIngressP
 	}
 	if err := s.enqueue(ctx, dbtx, after); err != nil {
 		return nil, err
+	}
+	if ingressAuthorityChanged(before, after) {
+		if err := s.invalidateOrganization(ctx, dbtx, after.OrganizationID, authCtx.UserID); err != nil {
+			return nil, err
+		}
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit network ingress update").LogError(ctx, s.logger)
@@ -416,6 +432,9 @@ func (s *Service) DeleteIngress(ctx context.Context, _ *gen.DeleteIngressPayload
 	if err := s.enqueue(ctx, dbtx, deleted); err != nil {
 		return err
 	}
+	if err := s.invalidateOrganization(ctx, dbtx, deleted.OrganizationID, authCtx.UserID); err != nil {
+		return err
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit network ingress deletion").LogError(ctx, s.logger)
 	}
@@ -452,6 +471,20 @@ func (s *Service) CheckHealth(ctx context.Context, _ *gen.CheckHealthPayload) (*
 
 func (s *Service) auditBase(authCtx *contextvalues.AuthContext, ingress repo.NetworkIngress) audit.NetworkIngressEventBase {
 	return audit.NetworkIngressEventBase{OrganizationID: authCtx.ActiveOrganizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ActorDisplayName: authCtx.Email, NetworkIngressURN: urn.NewNetworkIngress(ingress.ID), Hostname: ingress.Hostname}
+}
+
+func ingressAuthorityChanged(before, after repo.NetworkIngress) bool {
+	return before.Hostname != after.Hostname || before.Enabled != after.Enabled || before.Deleted != after.Deleted
+}
+
+func (s *Service) invalidateOrganization(ctx context.Context, tx pgx.Tx, organizationID, actorID string) error {
+	if s.publicationRequester == nil {
+		return nil
+	}
+	if err := s.publicationRequester.Organization(ctx, tx, organizationID, actorID); err != nil {
+		return oops.E(oops.CodeUnavailable, err, "enqueue network ingress publication invalidation").LogError(ctx, s.logger)
+	}
+	return nil
 }
 
 func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, ingress repo.NetworkIngress) error {

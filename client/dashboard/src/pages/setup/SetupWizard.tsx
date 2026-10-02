@@ -20,26 +20,22 @@ import {
 } from "@/hooks/useOrganizationSetupTasks";
 import { showPylonChat } from "@/lib/pylon";
 import { cn } from "@/lib/utils";
-import { useOrgRoutes } from "@/routes";
 import { JourneyLayout } from "./components/journey-layout";
 import { JourneyStepsProvider } from "./components/journey-steps-provider";
 import { useJourneyView } from "./components/journey-steps";
 import { OnboardingStepper, type Step } from "./components/onboarding-stepper";
 import { SetupShell } from "./components/setup-shell";
 import { SetupTaskContent } from "./components/setup-task-content";
-import { setupTaskKeyForSlug, setupTaskSlug } from "./task-slugs";
+import { setupTaskKeyForSlug, setupTaskSlug } from "./setup-cards";
 
 /** Query parameter naming the card on screen, e.g. ?task=idp. */
 const TASK_PARAM = "task";
 /** The card's own sub-step parameter, owned by JourneyStepsProvider. */
 const STEP_PARAM = "step";
 
-// The linear way through setup: every board card in order, one on screen at
-// a time, for the single owner who wants to do it all in a sitting. The board
-// at /setup stays the default and the map; this page is the same cards walked
-// front to back. Nothing here is a second copy of a card — each one renders
-// through SetupTaskContent exactly as it does on its own page, and only what
-// "done" leads to changes: the next card rather than the board.
+// The way through setup: every selected card in order, one on screen at a
+// time. Which cards appear is the organization's setup task selection, set by
+// staff or by the onboarding survey through submitOnboardingSurvey.
 export default function SetupWizard(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
@@ -101,26 +97,38 @@ function CurrentTaskSteps({
 
 function WizardRail({
   tasks,
+  groups,
   currentKey,
   disabled,
   onPick,
 }: {
+  /** The cards to walk, in order. */
   tasks: SetupTask[];
+  /** The groups those cards may sit under, by key. */
+  groups: Map<string, SetupTask>;
   currentKey: string | undefined;
   /** Mirrors WizardNav: no moves while a completion is settling. */
   disabled: boolean;
   onPick: (task: SetupTask) => void;
 }): JSX.Element {
-  const railSteps: Step[] = tasks.map((task) => ({
-    id: task.key,
-    title: task.title,
-    description: task.description,
-    status: task.status === "done" ? "done" : undefined,
-    detail:
-      task.key === currentKey ? (
-        <CurrentTaskSteps disabled={disabled} />
-      ) : undefined,
-  }));
+  // Groups are not rows of their own: the first card under a group carries
+  // the group's title as a section label, so the rail reads as one outline.
+  const railSteps: Step[] = tasks.map((task, index) => {
+    const group = task.parentKey ? groups.get(task.parentKey) : undefined;
+    const firstOfGroup =
+      group !== undefined && tasks[index - 1]?.parentKey !== task.parentKey;
+    return {
+      id: task.key,
+      title: task.title,
+      description: task.description,
+      section: firstOfGroup ? group.title : undefined,
+      status: task.status === "done" ? "done" : undefined,
+      detail:
+        task.key === currentKey ? (
+          <CurrentTaskSteps disabled={disabled} />
+        ) : undefined,
+    };
+  });
   const currentStep = tasks.findIndex((task) => task.key === currentKey);
   const doneCount = tasks.filter((task) => task.status === "done").length;
 
@@ -143,8 +151,8 @@ function WizardRail({
 }
 
 // Previous / Skip sit above the card rather than in its footer: the footer
-// belongs to the card (Next step, Mark done, Get support) and is shared with
-// the task page, so the wizard's own moves stay out of it.
+// belongs to the card (Next step, Mark done, Get support), so the wizard's own
+// moves stay out of it.
 function WizardNav({
   previous,
   isLast,
@@ -193,10 +201,9 @@ function SetupWizardInner(): JSX.Element {
   const { orgSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const orgRoutes = useOrgRoutes();
   const organization = useOrganization();
   const queryClient = useQueryClient();
-  // Same list the board shows by default: hidden cards stay out of the walk.
+  // Hidden cards stay out of the walk.
   const client = useGramContext();
   const setupTasks = useQuery(
     buildOrganizationSetupTasksQuery(client, organization.id, false, {
@@ -212,16 +219,31 @@ function SetupWizardInner(): JSX.Element {
   const actionInFlight = useRef(false);
   const [actionSettling, setActionSettling] = useState(false);
 
-  const tasks = setupTasks.data?.tasks ?? [];
+  // The walk is over cards. A group has no card of its own: it names the
+  // section its cards sit in, and its status follows theirs.
+  const listed = setupTasks.data?.tasks ?? [];
+  const tasks = listed.filter((task) => !task.group);
+  const groups = new Map(
+    listed.filter((task) => task.group).map((task) => [task.key, task]),
+  );
 
-  // ?task= names the card on screen, as a URL slug so the address bar reads
-  // like the card's own page. Without one — or with one that names nothing
-  // here — resume at the first card still open; every card done lands on the
-  // last so the reader can see they are finished.
+  // ?task= names the card on screen, as a URL slug. Without one — or with one
+  // that names nothing here — resume at the first card still open; every card
+  // done lands on the last so the reader can see they are finished. A group's
+  // name opens its first open card.
   const requestedKey = setupTaskKeyForSlug(searchParams.get(TASK_PARAM) ?? "");
-  const requested = tasks.find((task) => task.key === requestedKey);
+  const requestedCards = groups.has(requestedKey ?? "")
+    ? tasks.filter((task) => task.parentKey === requestedKey)
+    : tasks.filter((task) => task.key === requestedKey);
+  const requested =
+    requestedCards.find((task) => task.status !== "done") ?? requestedCards[0];
   const firstOpen = tasks.find((task) => task.status !== "done");
   const current = requested ?? firstOpen ?? tasks[tasks.length - 1];
+  const prerequisiteMessage = current?.blockedBy.length
+    ? `Complete these prerequisites first: ${current.blockedBy
+        .map((key) => tasks.find((task) => task.key === key)?.title ?? key)
+        .join(", ")}.`
+    : undefined;
   const currentIndex = current
     ? tasks.findIndex((task) => task.key === current.key)
     : -1;
@@ -272,6 +294,10 @@ function SetupWizardInner(): JSX.Element {
 
   const guarded = async (action: () => Promise<void>) => {
     if (updateTask.isPending || actionInFlight.current) return;
+    if (prerequisiteMessage) {
+      toast.error(prerequisiteMessage);
+      return;
+    }
     actionInFlight.current = true;
     setActionSettling(true);
     try {
@@ -320,20 +346,14 @@ function SetupWizardInner(): JSX.Element {
       <Alert variant="error">
         <div>
           <AlertTitle>Could not load setup tasks</AlertTitle>
-          <AlertDescription>
-            Try again, or return to the board.
-          </AlertDescription>
-          <div className="mt-3 flex gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => void setupTasks.refetch()}
-            >
-              Retry
-            </Button>
-            <Button variant="tertiary" onClick={() => orgRoutes.setup.goTo()}>
-              Setup board
-            </Button>
-          </div>
+          <AlertDescription>Try again in a moment.</AlertDescription>
+          <Button
+            className="mt-3"
+            variant="secondary"
+            onClick={() => void setupTasks.refetch()}
+          >
+            Retry
+          </Button>
         </div>
       </Alert>
     );
@@ -343,15 +363,10 @@ function SetupWizardInner(): JSX.Element {
         <div>
           <AlertTitle>Nothing to set up</AlertTitle>
           <AlertDescription>
-            Every setup task is hidden. Restore one from the board to walk it
-            here.
+            No setup tasks are selected for this organization.
           </AlertDescription>
-          <Button
-            className="mt-3"
-            variant="secondary"
-            onClick={() => orgRoutes.setup.goTo()}
-          >
-            Setup board
+          <Button className="mt-3" variant="secondary" onClick={leave}>
+            Go to dashboard
           </Button>
         </div>
       </Alert>
@@ -371,9 +386,16 @@ function SetupWizardInner(): JSX.Element {
             advance();
           }}
         />
+        {prerequisiteMessage && (
+          <Alert variant="info" className="mb-6">
+            <div>
+              <AlertTitle>Prerequisites incomplete</AlertTitle>
+              <AlertDescription>{prerequisiteMessage}</AlertDescription>
+            </div>
+          </Alert>
+        )}
         <SetupTaskContent
           taskKey={current.key}
-          projectSlug="default"
           onComplete={() => void complete()}
           onSupport={() => void requestSupport()}
           onClose={() => {
@@ -385,7 +407,7 @@ function SetupWizardInner(): JSX.Element {
   }
 
   return (
-    <SetupShell view="wizard">
+    <SetupShell>
       {/* Keyed by the card: each one has its own sub-steps, so carrying the
           previous card's active step into the next would land the reader on
           an unrelated section. The rail lives inside the provider too, so it
@@ -394,6 +416,7 @@ function SetupWizardInner(): JSX.Element {
         <JourneyLayout
           rail={
             <WizardRail
+              groups={groups}
               tasks={tasks}
               currentKey={current?.key}
               disabled={settling}

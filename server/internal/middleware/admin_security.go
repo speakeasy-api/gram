@@ -64,6 +64,12 @@ func AdminOriginCheck(allowedOrigins []string) func(http.Handler) http.Handler {
 			}
 
 			origin := r.Header.Get("Origin")
+			if r.Method == http.MethodPost && origin == "" && r.Referer() == "" && (r.URL.Path == "/admin-mcp" || r.URL.Path == "/admin-mcp/token" || r.URL.Path == "/admin-mcp/register") {
+				// These endpoints authenticate through MCP bearer tokens or OAuth
+				// client credentials, not browser cookies. Consent is never exempt.
+				next.ServeHTTP(w, r)
+				return
+			}
 			if origin == "" {
 				if ref := r.Header.Get("Referer"); ref != "" {
 					if u, err := url.Parse(ref); err == nil && u.Scheme != "" && u.Host != "" {

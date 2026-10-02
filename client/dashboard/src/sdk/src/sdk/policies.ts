@@ -6,10 +6,13 @@ import { riskPoliciesCreate } from "../funcs/riskPoliciesCreate.js";
 import { riskPoliciesDelete } from "../funcs/riskPoliciesDelete.js";
 import { riskPoliciesGet } from "../funcs/riskPoliciesGet.js";
 import { riskPoliciesList } from "../funcs/riskPoliciesList.js";
+import { riskPoliciesListForMcpServer } from "../funcs/riskPoliciesListForMcpServer.js";
+import { riskPoliciesListMcpPlatformToolsets } from "../funcs/riskPoliciesListMcpPlatformToolsets.js";
 import { riskPoliciesStatus } from "../funcs/riskPoliciesStatus.js";
 import { riskPoliciesTrigger } from "../funcs/riskPoliciesTrigger.js";
 import { riskPoliciesUpdate } from "../funcs/riskPoliciesUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { ListMCPPlatformToolsetsResult } from "../models/components/listmcpplatformtoolsetsresult.js";
 import { ListRiskPoliciesResult } from "../models/components/listriskpoliciesresult.js";
 import { RiskPolicy } from "../models/components/riskpolicy.js";
 import { RiskPolicyStatus } from "../models/components/riskpolicystatus.js";
@@ -30,9 +33,17 @@ import {
   GetRiskPolicyStatusSecurity,
 } from "../models/operations/getriskpolicystatus.js";
 import {
+  ListMCPPlatformToolsetsRequest,
+  ListMCPPlatformToolsetsSecurity,
+} from "../models/operations/listmcpplatformtoolsets.js";
+import {
   ListRiskPoliciesRequest,
   ListRiskPoliciesSecurity,
 } from "../models/operations/listriskpolicies.js";
+import {
+  ListRiskPoliciesForMcpServerRequest,
+  ListRiskPoliciesForMcpServerSecurity,
+} from "../models/operations/listriskpoliciesformcpserver.js";
 import {
   TriggerRiskAnalysisRequest,
   TriggerRiskAnalysisSecurity,
@@ -121,6 +132,25 @@ export class Policies extends ClientSDK {
   }
 
   /**
+   * listMCPPlatformToolsets risk
+   *
+   * @remarks
+   * List code-owned Platform MCP toolsets available as risk policy scope targets.
+   */
+  async listMcpPlatformToolsets(
+    request?: ListMCPPlatformToolsetsRequest | undefined,
+    security?: ListMCPPlatformToolsetsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListMCPPlatformToolsetsResult> {
+    return unwrapAsync(riskPoliciesListMcpPlatformToolsets(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listRiskPolicies risk
    *
    * @remarks
@@ -132,6 +162,25 @@ export class Policies extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListRiskPoliciesResult> {
     return unwrapAsync(riskPoliciesList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listRiskPoliciesForMcpServer risk
+   *
+   * @remarks
+   * List enabled MCP-scoped risk policies that apply to an MCP server and optional tool. Policies without an MCP scope are excluded.
+   */
+  async listForMcpServer(
+    request: ListRiskPoliciesForMcpServerRequest,
+    security?: ListRiskPoliciesForMcpServerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListRiskPoliciesResult> {
+    return unwrapAsync(riskPoliciesListForMcpServer(
       this,
       request,
       security,

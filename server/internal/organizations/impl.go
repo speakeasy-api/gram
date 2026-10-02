@@ -1121,7 +1121,7 @@ func (s *Service) VerifyOnboardingHooksSetup(ctx context.Context, payload *gen.V
 
 // handleSetupCallback is the backend handler that WorkOS's success_url redirects to
 // after portal completion. It authenticates the session, verifies the setup
-// state with WorkOS, and 302-redirects to the appropriate wizard step.
+// state with WorkOS, and redirects to a visible configured wizard task.
 //
 // Query params:
 //   - intent: "domain_verification", "sso", or "dsync"
@@ -1138,8 +1138,7 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	originTask := r.URL.Query().Get("task")
 	validOrigin := originTask == "" ||
-		(intent == "sso" && (originTask == "connect-idp" || originTask == "identity-provider")) ||
-		(intent == "dsync" && (originTask == "directory-sync" || originTask == "identity-provider"))
+		((intent == "domain_verification" || intent == "sso" || intent == "dsync") && originTask == "identity-provider")
 	if !validOrigin {
 		span.SetStatus(codes.Error, "invalid originating task")
 		http.Error(w, "invalid originating task", http.StatusBadRequest)
@@ -1172,6 +1171,12 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		span.SetStatus(codes.Error, "forbidden")
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "setup callback: read org", attr.SlogError(err))
@@ -1183,44 +1188,32 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
 	orgSlug := org.Slug
 
-	// Determine the next step based on what was just completed and what's verified.
-	var nextStepSlug string
-	switch intent {
-	case "domain_verification":
-		// Single sign-on unlocks once a domain is verified. WorkOS may still
-		// be checking DNS, so stay on this step until it reports verified.
-		nextStepSlug = "domain-verification"
-		if workosOrgID != "" {
-			verified, err := s.refreshVerifiedDomains(ctx, org.ID, workosOrgID, org.VerifiedDomains)
-			if err != nil {
-				s.logger.ErrorContext(ctx, "setup callback: check domain verification", attr.SlogError(err))
-			}
-			if len(verified) > 0 {
-				nextStepSlug = "identity-provider"
-			}
+	tasks, err := projectSetupTasks(ctx, orgrepo.New(s.db), org.ID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "setup callback: project setup tasks", attr.SlogError(err))
+		span.SetStatus(codes.Error, "project setup tasks failed")
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	visible := make(map[string]bool, len(tasks))
+	for _, task := range tasks {
+		visible[task.Key] = !task.Hidden
+	}
+	// All identity setup steps belong to the combined card. Refresh domains even
+	// when DNS is still pending, but never navigate to a hidden or absent task.
+	if intent == "domain_verification" && workosOrgID != "" {
+		if _, err := s.refreshVerifiedDomains(ctx, org.ID, workosOrgID, org.VerifiedDomains); err != nil {
+			s.logger.ErrorContext(ctx, "setup callback: check domain verification", attr.SlogError(err))
 		}
-	case "sso":
-		if workosOrgID != "" {
-			connections, err := s.orgs.ListConnections(ctx, workosOrgID)
-			if err != nil {
-				s.logger.ErrorContext(ctx, "setup callback: list connections", attr.SlogError(err))
-			}
-			if workos.HasActiveConnection(connections) {
-				// Directory sync lives on the same card as single sign-on.
-				nextStepSlug = "identity-provider"
-			}
-		}
-	case "dsync":
-		// Directory sync may take time to become "linked" after portal setup.
-		// Completing the portal is sufficient to advance — DSYNC is also skippable.
-		nextStepSlug = "anthropic-observability"
+	}
+	nextTask := ""
+	if visible["identity-provider"] {
+		nextTask = "identity-provider"
 	}
 
 	redirectURL := fmt.Sprintf("%s/%s/setup", s.siteURL, orgSlug)
-	if originTask != "" {
-		redirectURL += fmt.Sprintf("?task=%s", originTask)
-	} else if nextStepSlug != "" {
-		redirectURL += fmt.Sprintf("?step=%s", nextStepSlug)
+	if nextTask != "" {
+		redirectURL += fmt.Sprintf("?task=%s", nextTask)
 	}
 
 	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)

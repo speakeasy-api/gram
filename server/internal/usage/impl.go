@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -395,6 +396,17 @@ func (s *Service) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 	return tiers, nil
 }
 
+// platformHostBaseURL returns the base URL of the extra platform host the
+// request arrived on, or fallback. Browser redirects must stay on that host
+// because the session cookie is host-only.
+func (s *Service) platformHostBaseURL(ctx context.Context, fallback *url.URL) string {
+	serverURL := ""
+	if s.serverURL != nil {
+		serverURL = s.serverURL.String()
+	}
+	return requestorigin.PlatformHostBaseURL(ctx, serverURL, fallback.String())
+}
+
 func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckoutPayload) (res string, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
@@ -404,9 +416,10 @@ func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckou
 		return "", err
 	}
 
-	successURL := fmt.Sprintf("%s/%s/billing", s.serverURL.String(), authCtx.OrganizationSlug)
+	baseURL := s.platformHostBaseURL(ctx, s.serverURL)
+	successURL := fmt.Sprintf("%s/%s/billing", baseURL, authCtx.OrganizationSlug)
 
-	checkoutURL, err := s.billingRepo.CreateCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String(), successURL)
+	checkoutURL, err := s.billingRepo.CreateCheckout(ctx, authCtx.ActiveOrganizationID, baseURL, successURL)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to create checkout").LogError(ctx, s.logger)
 	}
@@ -422,9 +435,10 @@ func (s *Service) CreateTopUpCheckout(ctx context.Context, payload *gen.CreateTo
 		return "", err
 	}
 
-	successURL := fmt.Sprintf("%s/%s/billing", s.serverURL.String(), authCtx.OrganizationSlug)
+	baseURL := s.platformHostBaseURL(ctx, s.serverURL)
+	successURL := fmt.Sprintf("%s/%s/billing", baseURL, authCtx.OrganizationSlug)
 
-	checkoutURL, err := s.billingRepo.CreateTopUpCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String(), successURL)
+	checkoutURL, err := s.billingRepo.CreateTopUpCheckout(ctx, authCtx.ActiveOrganizationID, baseURL, successURL)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to create top-up checkout").LogError(ctx, s.logger)
 	}

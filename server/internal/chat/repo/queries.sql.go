@@ -160,6 +160,7 @@ candidate_chats AS (
       OR EXISTS (
         SELECT 1 FROM assistant_threads at
         WHERE at.chat_id = c.id
+          AND at.project_id = $5
           AND at.assistant_id = $10::uuid
           AND at.deleted IS FALSE
           -- Optional source-kind dimension so setup/onboarding and runtime
@@ -200,6 +201,7 @@ candidate_chats AS (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
         WHERE cmsrc.chat_id = c.id
+          AND cmsrc.project_id = $5::uuid
           AND cmsrc.source IS NOT NULL
           AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
@@ -208,8 +210,10 @@ candidate_chats AS (
     )
 ),
 chat_activity AS (
-  -- Per-chat backward probe on chat_messages_chat_id_created_at_idx instead of
-  -- aggregating every candidate chat's full message history.
+  -- Per-chat backward probe on chat_messages_chat_id_project_id_created_at_idx
+  -- instead of aggregating every candidate chat's full message history.
+  -- project_id keeps a sibling-project stamp on the same chat_id from moving
+  -- the chat in the date-range filter.
   SELECT
     cc.id,
     cc.created_at,
@@ -219,6 +223,7 @@ chat_activity AS (
     SELECT MAX(cm.created_at) AS ts
     FROM chat_messages cm
     WHERE cm.chat_id = cc.id
+      AND cm.project_id = $5::uuid
   ) last_msg
 )
 SELECT COUNT(*) AS total
@@ -653,7 +658,7 @@ WHERE id IN (
     JOIN chat_messages cm ON crm.message_id = cm.id
     WHERE cr.chat_id = $1
       AND cr.project_id = $2
-      AND cm.project_id = $2
+      AND cm.project_id = $2::uuid
       AND (cm.created_at, cm.seq) > (
         SELECT created_at, seq FROM chat_messages
         WHERE chat_messages.id = $3
@@ -1099,6 +1104,73 @@ func (q *Queries) GetChatTitlesByIDs(ctx context.Context, arg GetChatTitlesByIDs
 	return items, nil
 }
 
+const getImportedSessionObservations = `-- name: GetImportedSessionObservations :many
+SELECT m.id, m.chat_id, m.created_at, m.source, m.model, c.external_chat_id,
+       COALESCE(m.external_user_id, c.external_user_id, '')::text AS external_user_id,
+       COALESCE(NULLIF(m.user_id, ''), c.user_id, '')::text AS user_id,
+       COALESCE(u.email,
+         CASE WHEN m.external_user_id LIKE '%@%' THEN m.external_user_id END,
+         CASE WHEN c.external_user_id LIKE '%@%' THEN c.external_user_id END, '')::text AS user_email,
+       c.organization_id
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+LEFT JOIN users u ON u.id = COALESCE(NULLIF(m.user_id, ''), c.user_id)
+WHERE m.project_id = $1
+  AND m.id = ANY($2::uuid[])
+  AND c.deleted IS FALSE
+`
+
+type GetImportedSessionObservationsParams struct {
+	ProjectID  uuid.NullUUID
+	MessageIds []uuid.UUID
+}
+
+type GetImportedSessionObservationsRow struct {
+	ID             uuid.UUID
+	ChatID         uuid.UUID
+	CreatedAt      pgtype.Timestamptz
+	Source         pgtype.Text
+	Model          pgtype.Text
+	ExternalChatID pgtype.Text
+	ExternalUserID string
+	UserID         string
+	UserEmail      string
+	OrganizationID string
+}
+
+// Read current ownership at consumption time, so attribution repaired between
+// capture and delivery is reflected in analytics. Never read transcript text.
+func (q *Queries) GetImportedSessionObservations(ctx context.Context, arg GetImportedSessionObservationsParams) ([]GetImportedSessionObservationsRow, error) {
+	rows, err := q.db.Query(ctx, getImportedSessionObservations, arg.ProjectID, arg.MessageIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetImportedSessionObservationsRow
+	for rows.Next() {
+		var i GetImportedSessionObservationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.CreatedAt,
+			&i.Source,
+			&i.Model,
+			&i.ExternalChatID,
+			&i.ExternalUserID,
+			&i.UserID,
+			&i.UserEmail,
+			&i.OrganizationID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getInferenceAcceptedCheckpoint = `-- name: GetInferenceAcceptedCheckpoint :one
 SELECT inference_accepted_checkpoint FROM chats
 WHERE project_id = $1 AND external_chat_id = $2
@@ -1201,6 +1273,30 @@ func (q *Queries) GetMaxGenerationForChat(ctx context.Context, arg GetMaxGenerat
 	var generation int32
 	err := row.Scan(&generation)
 	return generation, err
+}
+
+const getOldestChatCreatedAt = `-- name: GetOldestChatCreatedAt :one
+SELECT MIN(created_at)::timestamptz AS created_at
+FROM chats
+WHERE project_id = $1
+  AND id = ANY($2::uuid[])
+`
+
+type GetOldestChatCreatedAtParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+// Lowest chats.created_at for these ids in this project, including
+// soft-deleted rows. Work-units verdicts outlive chat deletion, and
+// GetChatMetricsByIDs still reads those ids, so dropping deleted created_at
+// values would shift the ClickHouse bound later and omit earlier tokens.
+// Tenancy only: project_id plus the caller-supplied id list.
+func (q *Queries) GetOldestChatCreatedAt(ctx context.Context, arg GetOldestChatCreatedAtParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getOldestChatCreatedAt, arg.ProjectID, arg.Ids)
+	var created_at pgtype.Timestamptz
+	err := row.Scan(&created_at)
+	return created_at, err
 }
 
 const getProjectOrganizationID = `-- name: GetProjectOrganizationID :one
@@ -2201,6 +2297,7 @@ CROSS JOIN LATERAL (
   SELECT cm.source
   FROM chat_messages cm
   WHERE cm.chat_id = c.id
+    AND cm.project_id = $1::uuid
     AND cm.source IS NOT NULL
     AND cm.source <> ''
   ORDER BY cm.created_at DESC
@@ -2235,10 +2332,11 @@ type ListChatSourcesParams struct {
 // agent-type filter options on the Agent Sessions page so the list reflects the
 // sources actually present in the data rather than a hardcoded catalog.
 // Driven from chats with a per-chat probe on
-// chat_messages_chat_id_created_at_source_idx for the latest non-empty source,
-// instead of sorting the project's entire message history. The lateral join
-// drops chats with no sourced messages, matching the previous inner-join
-// semantics.
+// chat_messages_chat_id_project_id_created_at_source_idx for the latest
+// non-empty source, instead of sorting the project's entire message history.
+// The lateral join drops chats with no sourced messages, matching the previous
+// inner-join semantics. project_id keeps a sibling-project stamp from
+// advertising a source this project cannot load.
 // Natively captured proxied sessions carry no litellm message rows (they are
 // suppressed as duplicates), so the LiteLLM filter option must also be offered
 // when any visible chat carries the chat-level proxied marker.
@@ -2422,6 +2520,7 @@ candidate_chats AS (
       OR EXISTS (
         SELECT 1 FROM assistant_threads at
         WHERE at.chat_id = c.id
+          AND at.project_id = $1
           AND at.assistant_id = $8::uuid
           AND at.deleted IS FALSE
           -- Optional source-kind dimension so setup/onboarding and runtime
@@ -2462,6 +2561,7 @@ candidate_chats AS (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
         WHERE cmsrc.chat_id = c.id
+          AND cmsrc.project_id = $1::uuid
           AND cmsrc.source IS NOT NULL
           AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
@@ -2470,8 +2570,10 @@ candidate_chats AS (
     )
 ),
 chat_stats AS (
-  -- Per-chat probe on chat_messages_chat_id_created_at_idx (index-only count +
-  -- max) instead of aggregating every candidate chat's full message history.
+  -- Per-chat probe on chat_messages_chat_id_project_id_created_at_idx
+  -- (index-only count + max) instead of aggregating every candidate chat's
+  -- full message history. project_id keeps a sibling-project stamp on the
+  -- same chat_id from inflating num_messages or last_message_timestamp.
   SELECT
     cc.id,
     stats.num_messages,
@@ -2484,6 +2586,7 @@ chat_stats AS (
       MAX(cm.created_at) AS max_created_at
     FROM chat_messages cm
     WHERE cm.chat_id = cc.id
+      AND cm.project_id = $1::uuid
   ) stats
 ),
 filtered_chats AS (
@@ -2522,18 +2625,37 @@ limited_chats AS (
     fc.pinned_at,
     fc.litellm_proxied,
     fc.num_messages,
-    (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
+    (SELECT source FROM chat_messages WHERE chat_id = fc.id AND project_id = $1::uuid AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
     fc.last_message_timestamp,
     fc.account_type,
     fc.account_email,
-    at.assistant_id,
+    -- Both assistant columns come from the project-scoped assistants row, so a
+    -- thread here that points at another project's assistant reports neither
+    -- its id nor its name; assistant_threads has no composite (project_id,
+    -- assistant_id) key to rule that row out.
+    a.id AS assistant_id,
     a.name AS assistant_name,
     -- Window count runs before LIMIT/OFFSET, so every returned row carries the
     -- total number of filtered chats.
     COUNT(*) OVER ()::bigint AS total_count
   FROM filtered_chats fc
-  LEFT JOIN assistant_threads at ON at.chat_id = fc.id AND at.deleted IS FALSE
-  LEFT JOIN assistants a ON a.id = at.assistant_id AND a.deleted IS FALSE
+  -- One thread per chat, so a chat several assistants worked in is one row
+  -- and LIMIT/OFFSET, total_count and the page all count chats. The thread of
+  -- the assistant the listing was narrowed to wins; otherwise the most
+  -- recently active one. The lateral picks only the thread id: the columns
+  -- come from the base tables below so they stay nullable for a chat with no
+  -- assistant thread. Every step is scoped to the listed project, so a thread
+  -- or assistant recorded under another project can never be reported for a
+  -- chat here even if the chat/thread relationship is inconsistent.
+  LEFT JOIN LATERAL (
+    SELECT at.id AS thread_id
+    FROM assistant_threads at
+    WHERE at.chat_id = fc.id AND at.project_id = $1 AND at.deleted IS FALSE
+    ORDER BY ($8 <> '' AND at.assistant_id::text = $8) DESC, at.last_event_at DESC, at.id DESC
+    LIMIT 1
+  ) picked ON TRUE
+  LEFT JOIN assistant_threads thread ON thread.id = picked.thread_id AND thread.project_id = $1
+  LEFT JOIN assistants a ON a.id = thread.assistant_id AND a.project_id = $1 AND a.deleted IS FALSE
   ORDER BY
     -- Recency is pure message time. Hook rows persist at their occurred_at,
     -- so a chat whose only new traffic is spool-replayed backlog keeps its
@@ -2560,6 +2682,7 @@ chat_attribution AS (
       END
       FROM chat_messages
       WHERE chat_id = lc.id
+        AND project_id = $1::uuid
         AND source = 'litellm'
       ORDER BY created_at DESC
       LIMIT 1
@@ -2739,6 +2862,57 @@ func (q *Queries) ListClaudeUserMessagesForPromptAttachmentParent(ctx context.Co
 	for rows.Next() {
 		var i ListClaudeUserMessagesForPromptAttachmentParentRow
 		if err := rows.Scan(&i.ID, &i.Content); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listImportedSessionObservationReplay = `-- name: ListImportedSessionObservationReplay :many
+SELECT m.id, c.organization_id
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+WHERE m.project_id = $1 AND c.deleted IS FALSE
+  AND m.external_message_id IS NOT NULL
+  AND m.created_at >= $2 AND m.created_at < $3
+  AND m.id > $4
+ORDER BY m.id
+LIMIT $5
+`
+
+type ListImportedSessionObservationReplayParams struct {
+	ProjectID uuid.NullUUID
+	FromTime  pgtype.Timestamptz
+	ToTime    pgtype.Timestamptz
+	AfterID   uuid.UUID
+	RowLimit  int32
+}
+
+type ListImportedSessionObservationReplayRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) ListImportedSessionObservationReplay(ctx context.Context, arg ListImportedSessionObservationReplayParams) ([]ListImportedSessionObservationReplayRow, error) {
+	rows, err := q.db.Query(ctx, listImportedSessionObservationReplay,
+		arg.ProjectID,
+		arg.FromTime,
+		arg.ToTime,
+		arg.AfterID,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListImportedSessionObservationReplayRow
+	for rows.Next() {
+		var i ListImportedSessionObservationReplayRow
+		if err := rows.Scan(&i.ID, &i.OrganizationID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -197,6 +198,14 @@ func (s *Service) resolveValidationTarget(
 		return ctx, none, fmt.Errorf("stamp consent subject context: %w", err)
 	}
 
+	// Discovery identity belongs to the user who authenticated this challenge.
+	ctx = mcpidentity.WithoutIdentity(ctx)
+	if subject.Kind == urn.SessionSubjectKindUser &&
+		challengeState.AuthorizerImpersonated != nil && !*challengeState.AuthorizerImpersonated &&
+		challengeState.AuthorizerUserID != "" && subject.ID == challengeState.AuthorizerUserID &&
+		challengeState.Federation == nil && !challengeState.CreatedAt.IsZero() && !challengeState.CreatedAt.After(time.Now().Add(time.Minute)) {
+		ctx = s.identityValidator.StampConsentDiscovery(ctx, subject.ID, challengeState.CreatedAt.Add(challengeState.TTL()))
+	}
 	switch {
 	case endpoint.MetaMcpServerID.Valid:
 		return s.metaValidationTarget(ctx, logger, endpoint, client, tokens, sessionID, subject)
@@ -263,21 +272,25 @@ func (s *Service) metaValidationTarget(
 	selectedTokens := map[uuid.UUID]remotesessions.UpstreamToken{
 		client.RemoteSessionIssuerID: entry,
 	}
+	// No inbound negotiation occurred; the SDK chooses the outbound revision.
 	gate := metaGateContext{
 		projectID:    endpoint.ProjectID,
 		metaServerID: endpoint.MetaMcpServerID.UUID,
 		// Consent probes a stored gateway; agent keys reach no consent page.
-		agentID:         uuid.Nil,
-		organizationID:  endpoint.OrganizationID,
-		tokens:          selectedTokens,
-		toolSelection:   nil,
-		authenticated:   subject.Kind != urn.SessionSubjectKindAnonymous,
-		sessionID:       sessionID,
-		chatID:          "",
-		userID:          "",
-		externalUserID:  "",
-		apiKeyID:        "",
-		protocolVersion: mcpversions.Resolution{Declared: "", InEffect: metaMemberUpstreamProtocolVersion},
+		agentID:        uuid.Nil,
+		organizationID: endpoint.OrganizationID,
+		tokens:         selectedTokens,
+		// Consent probes never acquire credentials by identity chaining.
+		userSessionIssuerID: uuid.Nil,
+		chainUpstream:       nil,
+		toolSelection:       nil,
+		authenticated:       subject.Kind != urn.SessionSubjectKindAnonymous,
+		sessionID:           sessionID,
+		chatID:              "",
+		userID:              "",
+		externalUserID:      "",
+		apiKeyID:            "",
+		protocolVersion:     mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
 	}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
@@ -334,7 +347,7 @@ func (s *Service) standaloneValidationTarget(
 
 	selected := tokens[client.RemoteSessionIssuerID]
 	selectedTokens := map[uuid.UUID]remotesessions.UpstreamToken{client.RemoteSessionIssuerID: selected}
-	selectedToken, err := routeUpstreamToken(ctx, logger, selectedTokens, endpoint.UpstreamResource, tunneledBackendIssuer(&server))
+	selectedToken, err := routeUpstreamToken(ctx, logger, selectedTokens, endpoint.UpstreamResource, server.TunneledMcpServerID.Valid, tunneledBackendIssuer(&server))
 	var routeErr *upstreamRoutingError
 	switch {
 	case errors.As(err, &routeErr), selectedToken == "":
@@ -343,7 +356,7 @@ func (s *Service) standaloneValidationTarget(
 		return ctx, none, fmt.Errorf("route selected upstream token for validation: %w", err)
 	}
 
-	token, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, tunneledBackendIssuer(&server))
+	token, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, server.TunneledMcpServerID.Valid, tunneledBackendIssuer(&server))
 	switch {
 	case errors.As(err, &routeErr):
 		return ctx, none, errRemoteSessionUnroutable
@@ -371,7 +384,16 @@ func (s *Service) standaloneValidationTarget(
 	// One state-derived affinity key pins the handshake and its close to a single gateway.
 	affinity := tunnelrouting.HashedClientAffinityKey("consent-validate", challengeState.ID)
 	return ctx, validationTarget{name: name, build: probeProxyBuilder(func(ctx context.Context) (*proxy.Proxy, error) {
-		p, berr := s.tunnelManager.buildProxy(ctx, affinity, logger, endpoint.ProjectID, endpoint.OrganizationID, &server, token, "", nil, remotemcp.WithoutToolsCallIdentityCoverage())
+		p, berr := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
+			ClientAffinityKey:  affinity,
+			ProjectID:          endpoint.ProjectID,
+			OrganizationID:     endpoint.OrganizationID,
+			MCPServer:          &server,
+			ResourceIdentifier: endpoint.UpstreamResource,
+			UpstreamAuth:       token,
+			WWWAuthenticate:    "",
+			Selection:          nil,
+		}, remotemcp.WithoutToolsCallIdentityCoverage())
 		if berr != nil {
 			return nil, fmt.Errorf("build tunnel proxy: %w", berr)
 		}

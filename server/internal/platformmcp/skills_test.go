@@ -14,6 +14,7 @@ import (
 
 	genskills "github.com/speakeasy-api/gram/server/gen/skills"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -33,6 +34,10 @@ type recordingSkillsManagement struct {
 	addedVersion              *genskills.AddVersionPayload
 	updated                   *genskills.UpdatePayload
 	distributed               *genskills.DistributePayload
+	undistributed             []*genskills.UndistributePayload
+	revokedNow                []bool
+	revokedTargets            map[string]bool
+	listedDistributions       *genskills.ListDistributionsPayload
 	skill                     *types.Skill
 	latestVersion             *types.SkillVersion
 	recordResult              *genskills.RecordSkillResult
@@ -120,7 +125,8 @@ func (s *recordingSkillsManagement) ListSuggestionFeedback(_ context.Context, _ 
 	return s.listSuggestionFeedbackOut, nil
 }
 
-func (s *recordingSkillsManagement) ListDistributions(_ context.Context, _ *genskills.ListDistributionsPayload) (*genskills.ListSkillDistributionsResult, error) {
+func (s *recordingSkillsManagement) ListDistributions(_ context.Context, payload *genskills.ListDistributionsPayload) (*genskills.ListSkillDistributionsResult, error) {
+	s.listedDistributions = payload
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -133,6 +139,23 @@ func (s *recordingSkillsManagement) Distribute(_ context.Context, payload *gensk
 		return nil, s.err
 	}
 	return s.distribution, nil
+}
+
+// Undistribute models the skills service's convergence: the first revocation
+// of a target finds an active distribution and ends it; a repeat finds it
+// already gone and returns success without doing anything.
+func (s *recordingSkillsManagement) Undistribute(_ context.Context, payload *genskills.UndistributePayload) error {
+	s.undistributed = append(s.undistributed, payload)
+	if s.err != nil {
+		return s.err
+	}
+	key := payload.ID + "/" + stringOrEmpty(payload.PluginID) + "/" + stringOrEmpty(payload.AssistantID)
+	if s.revokedTargets == nil {
+		s.revokedTargets = map[string]bool{}
+	}
+	s.revokedNow = append(s.revokedNow, !s.revokedTargets[key])
+	s.revokedTargets[key] = true
+	return nil
 }
 
 type stubSkillTargets struct{ targets []SkillTarget }
@@ -160,6 +183,32 @@ type passthroughGrants struct{}
 
 func (passthroughGrants) PrepareContext(ctx context.Context) (context.Context, error) {
 	return ctx, nil
+}
+
+func (passthroughGrants) RequireAnyUnblocked(context.Context, ...authz.Check) error {
+	return nil
+}
+
+// denyingGrants is an RBAC engine that finds no skill grant for the caller.
+type denyingGrants struct{}
+
+func (denyingGrants) PrepareContext(ctx context.Context) (context.Context, error) {
+	return ctx, nil
+}
+
+func (denyingGrants) RequireAnyUnblocked(context.Context, ...authz.Check) error {
+	return oops.C(oops.CodeForbidden)
+}
+
+// countingSkillTargets records whether target resolution was ever consulted.
+type countingSkillTargets struct {
+	targets []SkillTarget
+	calls   int
+}
+
+func (s *countingSkillTargets) SkillTargets(_ context.Context, _ string, _ uuid.UUID, _ int) ([]SkillTarget, error) {
+	s.calls++
+	return s.targets, nil
 }
 
 type stubSkillsGate struct {
@@ -664,7 +713,7 @@ func TestSkillsToolResultLeavesUnexpectedFailuresAsErrors(t *testing.T) {
 func TestSkillsToolsAreDeclaredWithAndWithoutTheirDependencies(t *testing.T) {
 	t.Parallel()
 
-	wanted := []string{"list_skills", "get_skill", "list_skill_versions", "create_skill", "add_skill_version", "update_skill_metadata", "distribute_skill"}
+	wanted := []string{"list_skills", "get_skill", "list_skill_versions", "create_skill", "add_skill_version", "update_skill_metadata", "distribute_skill", "list_skill_distributions", "undistribute_skill", "list_skill_insights", "compare_skill_versions"}
 
 	for _, test := range []struct {
 		name  string
@@ -679,7 +728,7 @@ func TestSkillsToolsAreDeclaredWithAndWithoutTheirDependencies(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, test.build(), nil, nil, nil, CatalogDescriptor{})
+			_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, test.build(), nil, nil, nil, nil, CatalogDescriptor{})
 
 			registered := make(map[string]Descriptor, len(wanted))
 			for _, descriptor := range registrar.Descriptors() {
@@ -850,4 +899,296 @@ func TestAuthoringAdviceNeverExceedsTheCap(t *testing.T) {
 	for _, limit := range []int{1, 2, 3} {
 		require.LessOrEqual(t, len(adviceTargets(targets, limit)), limit)
 	}
+}
+
+func TestListSkillDistributionsResolvesThePluginFilterAndReportsVersionTracking(t *testing.T) {
+	t.Parallel()
+
+	pinned := testSkillVersionID
+	skills := &recordingSkillsManagement{
+		skill: testSkill(),
+		pluginDistributions: []*types.PluginSkillDistribution{
+			{ID: "d1", SkillID: testSkillID, SkillName: "add-mcp", SkillDisplayName: "Add MCP", PluginID: testMarketingPlugin, PluginName: "Marketing", PinnedVersionID: nil, ResolvedVersionID: testSkillVersionID, Channel: "plugin", CreatedAt: "2026-08-20T00:00:00Z", UpdatedAt: "2026-08-21T00:00:00Z"},
+			{ID: "d2", SkillID: testSkillID, SkillName: "add-mcp", SkillDisplayName: "Add MCP", PluginID: testDefaultPluginID, PluginName: "Default", PinnedVersionID: &pinned, ResolvedVersionID: testSkillVersionID, Channel: "plugin", CreatedAt: "2026-08-20T00:00:00Z", UpdatedAt: "2026-08-20T00:00:00Z"},
+		},
+	}
+	service := testSkillsService(t, skills)
+
+	result, err := service.ListSkillDistributions(t.Context(), testPrincipal(), ListSkillDistributionsInput{
+		ProjectSlug: testSkillProjectSlug,
+		SkillID:     testSkillID,
+		Plugin:      "Marketing",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, testSkillProjectSlug, result.ProjectSlug)
+	require.NotNil(t, skills.listedDistributions.SkillID)
+	require.Equal(t, testSkillID, *skills.listedDistributions.SkillID)
+	require.NotNil(t, skills.listedDistributions.PluginID, "a plugin named by display name is resolved to its id before the read")
+	require.Equal(t, testMarketingPlugin, *skills.listedDistributions.PluginID)
+	require.Equal(t, 20, skills.listedDistributions.Limit, "the default page size is the skills service's own default")
+	require.Len(t, result.Distributions, 2)
+
+	following := result.Distributions[0]
+	require.Equal(t, SkillTarget{Kind: SkillTargetPlugin, ID: testMarketingPlugin, Name: "Marketing"}, following.Target)
+	require.True(t, following.FollowsLatest)
+	require.Empty(t, following.PinnedVersionID)
+	require.Equal(t, testSkillVersionID, following.ResolvedVersionID)
+
+	held := result.Distributions[1]
+	require.False(t, held.FollowsLatest)
+	require.Equal(t, testSkillVersionID, held.PinnedVersionID)
+	require.Equal(t, "Default", held.Target.Name)
+}
+
+func TestListSkillDistributionsReadsTheWholeProjectWhenNothingIsNamed(t *testing.T) {
+	t.Parallel()
+
+	skills := &recordingSkillsManagement{skill: testSkill()}
+	service := testSkillsService(t, skills)
+
+	result, err := service.ListSkillDistributions(t.Context(), testPrincipal(), ListSkillDistributionsInput{ProjectSlug: testSkillProjectSlug, Limit: 500})
+
+	require.NoError(t, err)
+	require.Empty(t, result.Distributions)
+	require.Empty(t, result.NextCursor)
+	require.Nil(t, skills.listedDistributions.SkillID)
+	require.Nil(t, skills.listedDistributions.PluginID)
+	require.Equal(t, 50, skills.listedDistributions.Limit, "the page size is capped at what the skills service accepts")
+}
+
+func TestListSkillDistributionsRefusesAPluginFilterItCannotResolveExactly(t *testing.T) {
+	t.Parallel()
+
+	skills := &recordingSkillsManagement{skill: testSkill()}
+	service := testSkillsService(t, skills)
+
+	_, err := service.ListSkillDistributions(t.Context(), testPrincipal(), ListSkillDistributionsInput{ProjectSlug: testSkillProjectSlug, Plugin: "markting"})
+	require.ErrorIs(t, err, ErrSkillTargetNotFound)
+
+	_, err = service.ListSkillDistributions(t.Context(), testPrincipal(), ListSkillDistributionsInput{ProjectSlug: testSkillProjectSlug, SkillID: "not-a-uuid"})
+	require.ErrorIs(t, err, ErrRegistrationInvalid)
+
+	require.Nil(t, skills.listedDistributions, "a filter that is refused reads nothing")
+}
+
+func TestUndistributeSkillResolvesAnExactTargetAndEchoesIt(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name   string
+		input  UndistributeSkillInput
+		wantID string
+		kind   SkillTargetKind
+	}{
+		{name: "plugin by slug", input: UndistributeSkillInput{Plugin: "marketing"}, wantID: testMarketingPlugin, kind: SkillTargetPlugin},
+		{name: "plugin by id", input: UndistributeSkillInput{Plugin: testMarketingPlugin}, wantID: testMarketingPlugin, kind: SkillTargetPlugin},
+		{name: "assistant by name", input: UndistributeSkillInput{Assistant: "support"}, wantID: testAssistantID, kind: SkillTargetAssistant},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			skills := &recordingSkillsManagement{skill: testSkill()}
+			service := testSkillsService(t, skills)
+			input := test.input
+			input.ProjectSlug = testSkillProjectSlug
+			input.SkillID = testSkillID
+			input.IdempotencyKey = "revoke-1"
+
+			result, err := service.UndistributeSkill(t.Context(), testPrincipal(), input)
+
+			require.NoError(t, err)
+			require.Equal(t, testSkillProjectSlug, result.ProjectSlug)
+			require.Equal(t, testSkillID, result.SkillID)
+			require.Equal(t, "add-mcp", result.SkillName)
+			require.Equal(t, test.wantID, result.Target.ID)
+			require.Equal(t, test.kind, result.Target.Kind)
+			require.Contains(t, result.Message, "no longer part of the "+string(test.kind))
+			require.Len(t, skills.undistributed, 1)
+			require.Equal(t, testSkillID, skills.undistributed[0].ID)
+			if test.kind == SkillTargetPlugin {
+				require.NotNil(t, skills.undistributed[0].PluginID)
+				require.Equal(t, test.wantID, *skills.undistributed[0].PluginID)
+				require.Nil(t, skills.undistributed[0].AssistantID)
+			} else {
+				require.NotNil(t, skills.undistributed[0].AssistantID)
+				require.Equal(t, test.wantID, *skills.undistributed[0].AssistantID)
+				require.Nil(t, skills.undistributed[0].PluginID)
+			}
+		})
+	}
+}
+
+func TestUndistributeSkillRequiresExactlyOneTargetAndAnIdempotencyKey(t *testing.T) {
+	t.Parallel()
+
+	skills := &recordingSkillsManagement{skill: testSkill()}
+	service := testSkillsService(t, skills)
+
+	for _, input := range []UndistributeSkillInput{
+		{ProjectSlug: testSkillProjectSlug, SkillID: testSkillID, IdempotencyKey: "k"},
+		{ProjectSlug: testSkillProjectSlug, SkillID: testSkillID, Plugin: "default", Assistant: "Support", IdempotencyKey: "k"},
+		{ProjectSlug: testSkillProjectSlug, SkillID: testSkillID, Plugin: "default"},
+		{ProjectSlug: testSkillProjectSlug, SkillID: testSkillID, Plugin: "default", IdempotencyKey: strings.Repeat("k", maxSkillIdempotencyKeyLength+1)},
+		{ProjectSlug: testSkillProjectSlug, SkillID: "not-a-uuid", Plugin: "default", IdempotencyKey: "k"},
+	} {
+		_, err := service.UndistributeSkill(t.Context(), testPrincipal(), input)
+		require.ErrorIs(t, err, ErrRegistrationInvalid)
+	}
+	require.Empty(t, skills.undistributed, "invalid input revokes nothing")
+}
+
+func TestUndistributeSkillRefusesAnUnmatchedOrAmbiguousTargetRatherThanGuessing(t *testing.T) {
+	t.Parallel()
+
+	skills := &recordingSkillsManagement{skill: testSkill()}
+	service := NewSkillsService(
+		skills,
+		stubSkillTargets{targets: []SkillTarget{
+			{Kind: SkillTargetPlugin, ID: testDefaultPluginID, Name: "Marketing", Slug: "marketing-one", IsDefault: true},
+			{Kind: SkillTargetPlugin, ID: testMarketingPlugin, Name: "marketing", Slug: "marketing-two", IsDefault: false},
+		}},
+		stubSkillProjects{},
+		passthroughGrants{},
+		stubSkillsGate{enabled: true},
+		OperationBudget{
+			Connection:   &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
+			Organization: &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
+		},
+	)
+
+	_, err := service.UndistributeSkill(t.Context(), testPrincipal(), UndistributeSkillInput{ProjectSlug: testSkillProjectSlug, SkillID: testSkillID, Plugin: "Marketing", IdempotencyKey: "k"})
+	require.ErrorIs(t, err, ErrSkillTargetAmbiguous)
+
+	_, err = service.UndistributeSkill(t.Context(), testPrincipal(), UndistributeSkillInput{ProjectSlug: testSkillProjectSlug, SkillID: testSkillID, Plugin: "sales", IdempotencyKey: "k"})
+	require.ErrorIs(t, err, ErrSkillTargetNotFound)
+
+	require.Empty(t, skills.undistributed, "a target that cannot be named exactly revokes nothing, least of all from the default plugin")
+}
+
+func TestUndistributeSkillRefusesAMissingSkillBeforeRevoking(t *testing.T) {
+	t.Parallel()
+
+	skills := &recordingSkillsManagement{skill: testSkill(), err: oops.E(oops.CodeNotFound, nil, "skill not found")}
+	service := testSkillsService(t, skills)
+
+	_, err := service.UndistributeSkill(t.Context(), testPrincipal(), UndistributeSkillInput{ProjectSlug: testSkillProjectSlug, SkillID: testSkillID, Plugin: "marketing", IdempotencyKey: "k"})
+
+	code, _, ok := skillsRefusalCode(err)
+	require.True(t, ok)
+	require.Equal(t, "not_found", code)
+	require.Empty(t, skills.undistributed)
+}
+
+// Revocation converges: the first call ends the distribution, the second finds
+// it already gone and revokes nothing, and both report the same end state, so
+// a retry with the same key is harmless.
+func TestUndistributeSkillIsANoOpOnRepeat(t *testing.T) {
+	t.Parallel()
+
+	skills := &recordingSkillsManagement{skill: testSkill()}
+	service := testSkillsService(t, skills)
+	input := UndistributeSkillInput{ProjectSlug: testSkillProjectSlug, SkillID: testSkillID, Plugin: "marketing", IdempotencyKey: "revoke-once"}
+
+	first, err := service.UndistributeSkill(t.Context(), testPrincipal(), input)
+	require.NoError(t, err)
+	second, err := service.UndistributeSkill(t.Context(), testPrincipal(), input)
+	require.NoError(t, err)
+
+	require.Equal(t, first, second)
+	require.Len(t, skills.undistributed, 2)
+	require.Equal(t, skills.undistributed[0], skills.undistributed[1])
+	require.Equal(t, []bool{true, false}, skills.revokedNow, "only the first call finds a distribution to end; the repeat is the already-gone path")
+}
+
+// A caller without skill access must get the same refusal whether or not the
+// plugin it named exists: authorization runs before any target is resolved,
+// so the refusal cannot be used to probe plugin names.
+func TestUngrantedCallerCannotProbePluginNamesThroughSkillDistributionTools(t *testing.T) {
+	t.Parallel()
+
+	for _, plugin := range []string{"marketing", "sales"} {
+		listTargets := &countingSkillTargets{targets: testTargets()}
+		listing := NewSkillsService(
+			&recordingSkillsManagement{skill: testSkill()},
+			listTargets,
+			stubSkillProjects{},
+			denyingGrants{},
+			stubSkillsGate{enabled: true},
+			OperationBudget{
+				Connection:   &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
+				Organization: &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
+			},
+		)
+		_, err := listing.ListSkillDistributions(t.Context(), testPrincipal(), ListSkillDistributionsInput{ProjectSlug: testSkillProjectSlug, Plugin: plugin})
+		code, _, ok := skillsRefusalCode(err)
+		require.True(t, ok, plugin)
+		require.Equal(t, "forbidden", code, plugin)
+		require.Zero(t, listTargets.calls, "no plugin is looked up for a caller the read policy refuses")
+
+		revokeTargets := &countingSkillTargets{targets: testTargets()}
+		denied := &recordingSkillsManagement{skill: testSkill(), err: oops.C(oops.CodeForbidden)}
+		revoking := NewSkillsService(
+			denied,
+			revokeTargets,
+			stubSkillProjects{},
+			passthroughGrants{},
+			stubSkillsGate{enabled: true},
+			OperationBudget{
+				Connection:   &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
+				Organization: &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
+			},
+		)
+		_, err = revoking.UndistributeSkill(t.Context(), testPrincipal(), UndistributeSkillInput{ProjectSlug: testSkillProjectSlug, SkillID: testSkillID, Plugin: plugin, IdempotencyKey: "k"})
+		code, _, ok = skillsRefusalCode(err)
+		require.True(t, ok, plugin)
+		require.Equal(t, "forbidden", code, plugin)
+		require.Zero(t, revokeTargets.calls, "the skill read refuses before any target is looked up")
+		require.Empty(t, denied.undistributed)
+	}
+}
+
+// The revocation is gated on explicit confirmation at the tool boundary, before
+// the principal is even read: an unconfirmed call must never reach the service.
+func TestUndistributeSkillToolRefusesWithoutConfirmation(t *testing.T) {
+	t.Parallel()
+
+	skills := &recordingSkillsManagement{skill: testSkill()}
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, testSkillsService(t, skills), nil, nil, nil, nil, CatalogDescriptor{})
+	var descriptor Descriptor
+	for _, candidate := range registrar.Descriptors() {
+		if candidate.Name == "undistribute_skill" {
+			descriptor = candidate
+		}
+	}
+	require.Equal(t, "undistribute_skill", descriptor.Name)
+	require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization)
+	require.Nil(t, descriptor.Annotations, "a revocation is not a read-only tool")
+
+	_, err := descriptor.Invoke(t.Context(), json.RawMessage(fmt.Sprintf(`{"project_slug":%q,"skill_id":%q,"plugin":"marketing","confirmed":false,"idempotency_key":"k"}`, testSkillProjectSlug, testSkillID)))
+
+	var refusal *ToolRefusalError
+	require.ErrorAs(t, err, &refusal)
+	var body skillsRefusalResult
+	require.NoError(t, json.Unmarshal([]byte(refusal.Payload), &body))
+	require.Equal(t, "confirmation_required", body.Code)
+	require.Contains(t, body.Message, "confirmed: true")
+	require.Empty(t, skills.undistributed)
+}
+
+func TestListSkillDistributionsToolIsAReadForMembers(t *testing.T) {
+	t.Parallel()
+
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, testSkillsService(t, &recordingSkillsManagement{skill: testSkill()}), nil, nil, nil, nil, CatalogDescriptor{})
+	for _, descriptor := range registrar.Descriptors() {
+		if descriptor.Name != "list_skill_distributions" {
+			continue
+		}
+		require.Equal(t, ExternalAuthorizationMember, descriptor.Meta.Authorization)
+		require.Equal(t, discoverySkillRead, descriptor.Meta.DiscoveryScopes)
+		require.NotNil(t, descriptor.Annotations)
+		require.True(t, descriptor.Annotations.ReadOnlyHint)
+		return
+	}
+	require.Fail(t, "list_skill_distributions is not registered")
 }

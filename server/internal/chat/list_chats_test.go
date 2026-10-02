@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -290,6 +291,107 @@ func TestListChats_RegularUser_SeesOnlyOwnChats(t *testing.T) {
 	require.Equal(t, 1, result.Total)
 	require.Len(t, result.Chats, 1)
 	require.Equal(t, authCtx.UserID, conv.PtrValOr(result.Chats[0].UserID, ""))
+}
+
+// A chat is one row however many assistant threads it carries, and the
+// assistant reported for it is always one recorded under the listed project.
+// A thread whose project_id points elsewhere while its chat_id points here is
+// an inconsistent relationship, and it must neither surface its assistant nor
+// add a row.
+func TestListChats_OneRowPerChat_ReportsOnlyThisProjectsAssistant(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	queries := repo.New(ti.conn)
+
+	foreignProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Foreign Project",
+		Slug:           "foreign-" + uuid.NewString()[:8],
+		OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+	foreignAssistant, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      foreignProject.ID,
+		OrganizationID: ti.orgID,
+		Name:           "Foreign Assistant",
+	})
+	require.NoError(t, err)
+	localAssistant, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Name:           "Local Assistant",
+	})
+	require.NoError(t, err)
+
+	// One chat in the listed project with a thread from each project on it.
+	sharedChat := seedChat(t, ctx, ti, "", "ext-shared", "shared chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   foreignAssistant,
+		ProjectID:     foreignProject.ID,
+		CorrelationID: "foreign-on-shared",
+		ChatID:        sharedChat,
+	}))
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   localAssistant,
+		ProjectID:     ti.projectID,
+		CorrelationID: "local-on-shared",
+		ChatID:        sharedChat,
+	}))
+	// And one chat whose only thread is the foreign one.
+	foreignOnlyChat := seedChat(t, ctx, ti, "", "ext-foreign-only", "foreign only chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   foreignAssistant,
+		ProjectID:     foreignProject.ID,
+		CorrelationID: "foreign-on-foreign-only",
+		ChatID:        foreignOnlyChat,
+	}))
+	// And one chat whose thread is recorded under this project but points at
+	// the foreign project's assistant: assistant_threads has no composite
+	// (project_id, assistant_id) key, so the row is insertable.
+	crossAssistantChat := seedChat(t, ctx, ti, "", "ext-cross-assistant", "cross assistant chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   foreignAssistant,
+		ProjectID:     ti.projectID,
+		CorrelationID: "local-thread-foreign-assistant",
+		ChatID:        crossAssistantChat,
+	}))
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 3, result.Total, "total counts chats, not assistant threads")
+	require.Len(t, result.Chats, 3, "one row per chat however many threads it carries")
+	byID := map[string]*gen.ChatOverview{}
+	for _, chat := range result.Chats {
+		byID[chat.ID] = chat
+	}
+	shared, ok := byID[sharedChat.String()]
+	require.True(t, ok)
+	require.NotNil(t, shared.AssistantID)
+	require.Equal(t, localAssistant.String(), *shared.AssistantID, "the assistant recorded under this project is the one reported")
+	require.NotNil(t, shared.AssistantName)
+	require.Equal(t, "Local Assistant", *shared.AssistantName)
+	foreignOnly, ok := byID[foreignOnlyChat.String()]
+	require.True(t, ok)
+	require.Nil(t, foreignOnly.AssistantID, "a thread from another project never surfaces its assistant")
+	require.Nil(t, foreignOnly.AssistantName)
+	crossAssistant, ok := byID[crossAssistantChat.String()]
+	require.True(t, ok)
+	require.Nil(t, crossAssistant.AssistantID, "a thread here pointing at another project's assistant surfaces neither its id nor its name")
+	require.Nil(t, crossAssistant.AssistantName)
+
+	// Narrowing to the foreign assistant admits only the chat whose thread is
+	// recorded here (the admission filter is project-scoped), and even that row
+	// reports no assistant because the assistant itself is not this project's.
+	payload := defaultPayload()
+	foreignAssistantID := foreignAssistant.String()
+	payload.AssistantID = &foreignAssistantID
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, crossAssistantChat.String(), result.Chats[0].ID)
+	require.Nil(t, result.Chats[0].AssistantID)
+	require.Nil(t, result.Chats[0].AssistantName)
 }
 
 // TestListChats_ChatRead_SeesAllChats verifies that a caller holding an
@@ -1106,4 +1208,49 @@ func TestListChats_Filter_Source_ExpandsAliases(t *testing.T) {
 	}
 	require.True(t, got[newStyle.String()], "expected claude-code chat in results")
 	require.True(t, got[legacy.String()], "expected legacy ClaudeCode chat in results")
+}
+
+func TestListChats_NumMessagesIgnoresOtherProjectRows(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	r := repo.New(ti.conn)
+
+	chatID := seedChat(t, ctx, ti, "", "ext-drift", "drifted stamp chat")
+	early := time.Date(2026, 7, 16, 16, 20, 0, 0, time.UTC)
+	late := time.Date(2026, 7, 16, 21, 41, 0, 0, time.UTC)
+	_, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: early, Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: early.Add(time.Minute), Valid: true},
+	})
+	require.NoError(t, err)
+
+	otherProject := createProjectInSameOrg(t, ti)
+	_, err = r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: otherProject, Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: late, Valid: true},
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, chatID.String(), result.Chats[0].ID)
+	require.Equal(t, 2, result.Chats[0].NumMessages,
+		"list count must match the transcript, which filters project_id")
+	// Compare instants, not strings: the driver renders the timestamp in the
+	// local zone, so a formatted comparison only passes when TZ=UTC.
+	lastMessageAt, err := time.Parse(time.RFC3339, result.Chats[0].LastMessageTimestamp)
+	require.NoError(t, err)
+	require.WithinDuration(t, early.Add(time.Minute), lastMessageAt, 0,
+		"a later sibling-project stamp must not move last_message_timestamp")
 }

@@ -3,6 +3,9 @@ package feature
 type Flag string
 
 const (
+	// FlagGramMCPCatalog temporarily selects the Gram MCP catalog per organization.
+	FlagGramMCPCatalog Flag = "gram-mcp-catalog"
+
 	FlagSpeakeasyOpenAPIParserV0 Flag = "speakeasy-openapi-parser-v0"
 	FlagClickhouseToolMetrics    Flag = "clickhouse-tool-metrics"
 	FlagAssistants               Flag = "assistants"
@@ -56,6 +59,8 @@ const (
 	// replacing a plugin's complete audience assignment set through Platform MCP.
 	// It is evaluated at invocation time and fails closed.
 	FlagPlatformMCPPluginAssignmentMutations Flag = "platform-mcp-plugin-assignment-mutations"
+	// FlagGatewayPluginMembership gates new gateway attachments to plugins.
+	FlagGatewayPluginMembership Flag = "gateway-plugin-membership"
 	// FlagPlatformMCPAccessRoleMutations is the exact-project kill switch for
 	// creating and updating custom MCP-only access roles through Platform MCP.
 	// It is evaluated at invocation time and fails closed.
@@ -85,12 +90,6 @@ const (
 	// ClickHouse risk_findings instead of Postgres risk_results. Per-org
 	// rollout gate; removed once the ClickHouse read path is GA.
 	FlagRiskOverviewFromClickHouse Flag = "risk-overview-from-clickhouse"
-	// FlagRiskListFromClickHouse serves the project-wide risk events listing
-	// (ListRiskResults without a chat_id) from ClickHouse risk_findings
-	// instead of Postgres risk_results. The chat-scoped listing stays on
-	// Postgres, which is the only store holding raw match content. Per-org
-	// rollout gate; removed once the ClickHouse read path is GA.
-	FlagRiskListFromClickHouse Flag = "risk-list-from-clickhouse"
 	// FlagRiskWatchdog gates the Watchdog signals endpoint (risk.getSignals).
 	// Key matches the dashboard's page-level flag so a single PostHog flag
 	// controls both the UI and the API surface.
@@ -183,7 +182,8 @@ const (
 	// can't strand it on stale hooks.
 	FlagHooksRollout Flag = "hooks-rollout"
 
-	// FlagOktaConnections gates creating Okta connections while the integration is dogfooded.
+	// FlagOktaConnections gates the Okta integration while it is dogfooded:
+	// creating connections, resource connections and server suggestions.
 	FlagOktaConnections Flag = "okta-connections"
 )
 

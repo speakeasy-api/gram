@@ -107,6 +107,10 @@ type Descriptor struct {
 	InputSchema []byte
 
 	invoke func(ctx context.Context, arguments json.RawMessage) (any, error)
+
+	// output is the handler's result type, the type the advertised output
+	// schema is inferred from.
+	output reflect.Type
 }
 
 // ToolRefusalError is a tool's own refusal — a rate limit, a disabled feature, an
@@ -250,7 +254,12 @@ func externalToolDiscoverable(grants []authz.Grant, grantsLoaded bool, principal
 			return true
 		}
 	case ExternalAuthorizationOrgAdmin:
-		scopes = []authz.Scope{authz.ScopeOrgAdmin}
+		if !grantsAuthorizeAnyScope(grants, principal.OrganizationID, []authz.Scope{authz.ScopeOrgAdmin}) {
+			return false
+		}
+		if len(scopes) == 0 {
+			return true
+		}
 	default:
 		return false
 	}
@@ -423,6 +432,7 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 			}
 			return output, nil
 		},
+		output: reflect.TypeFor[Out](),
 	})
 }
 
@@ -501,8 +511,9 @@ var wireTypeSchemas = map[reflect.Type]*jsonschema.Schema{
 }
 
 // inferOutputSchema derives the schema the tool advertises for its result,
-// honouring wireTypeSchemas. A tool with an untyped result gets no schema at
-// all, which is what the SDK would have done for it.
+// honouring wireTypeSchemas and leaving every object open to properties it does
+// not name. A tool with an untyped result gets no schema at all, which is what
+// the SDK would have done for it.
 func inferOutputSchema[Out any](name string) *jsonschema.Schema {
 	target := reflect.TypeFor[Out]()
 	if target == reflect.TypeFor[any]() {
@@ -520,7 +531,56 @@ func inferOutputSchema[Out any](name string) *jsonschema.Schema {
 	if err != nil {
 		panic(fmt.Sprintf("platformmcp: infer output schema for %q: %v", name, err))
 	}
+	openInferredObjects(schema, map[*jsonschema.Schema]bool{})
 	return schema
+}
+
+// openInferredObjects drops the `additionalProperties: false` that inference
+// puts on every struct-derived object, so a result may carry properties the
+// schema does not name.
+//
+// An output schema is a promise about what a result contains, not a bound on
+// what it may contain. A client keeps the schema it fetched when it connected,
+// and validates every later result against it; with objects closed, a field
+// added to a result after that point fails the whole result, and the client
+// reports the tool as broken. Schemas for maps are untouched: their
+// additionalProperties is the value schema, not a closure. Input schemas keep
+// the closed form, where an unrecognised argument is a caller mistake worth
+// rejecting.
+func openInferredObjects(schema *jsonschema.Schema, seen map[*jsonschema.Schema]bool) {
+	if schema == nil || seen[schema] {
+		return
+	}
+	seen[schema] = true
+	if isFalseSchema(schema.AdditionalProperties) {
+		schema.AdditionalProperties = nil
+	}
+	for _, child := range []*jsonschema.Schema{
+		schema.AdditionalProperties, schema.Items, schema.AdditionalItems, schema.Contains,
+		schema.UnevaluatedItems, schema.PropertyNames, schema.UnevaluatedProperties,
+		schema.Not, schema.If, schema.Then, schema.Else, schema.ContentSchema,
+	} {
+		openInferredObjects(child, seen)
+	}
+	for _, children := range [][]*jsonschema.Schema{schema.PrefixItems, schema.ItemsArray, schema.AllOf, schema.AnyOf, schema.OneOf} {
+		for _, child := range children {
+			openInferredObjects(child, seen)
+		}
+	}
+	for _, children := range []map[string]*jsonschema.Schema{
+		schema.Defs, schema.Definitions, schema.Properties, schema.PatternProperties,
+		schema.DependentSchemas, schema.DependencySchemas,
+	} {
+		for _, child := range children {
+			openInferredObjects(child, seen)
+		}
+	}
+}
+
+// isFalseSchema reports whether schema is the `false` schema, which
+// jsonschema-go represents as {"not": {}}.
+func isFalseSchema(schema *jsonschema.Schema) bool {
+	return schema != nil && schema.Not != nil && reflect.ValueOf(*schema.Not).IsZero()
 }
 
 // normalizeAgainstSchema applies defaults and validation from the tool's

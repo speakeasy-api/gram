@@ -35,6 +35,13 @@ where a value is expected.
    mutation section. Confirm there is no ingress row, credential, or related
    console/network error.
 
+0a. **Inbound MCP network traffic seed**: after `mise run seed:demo`, confirm
+`mcp_network_traffic_hourly_summaries` has public and private rows for both
+`mcp` and `meta` server kinds in the demo project, with non-zero request
+counts and recent `last_seen` timestamps. This is a data check only: the
+demo org has no `network_ingress` entitlement, so the Network access panel
+remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
+
 1. **Agent sessions list** — sessions list shows ~180 sessions with varied
    titles ("Incident triage… #10xx"), spread over the last ~2 weeks, owners
    `*@demo.getgram.ai`.
@@ -164,14 +171,27 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     Gateway (not Shadow MCP) and link back to the gateway, and each member
     dispatch carries a "via Acme Agent Gateway" marker. Back on the MCP
     listing, the gateway card shows no "never used" marker.
-17. **Organization setup board** — with the `gram-setup-board` flag enabled,
-    open `/acme-demo/setup/board`. Confirm all four columns render, Priya owns
-    Set up observability in other platforms, `security-owner@demo.getgram.ai` owns Configure
-    integrations in Awaiting Support, and Set up identity provider and Set up
-    Anthropic observability sit in To Do. Distribute MCP servers, Configure
-    policies, and Set up Platform MCP are hidden by default, so the board shows
-    four tasks. As a platform admin, enable **Show hidden tasks** and confirm
-    all three appear with a Hidden badge.
+17. **Organization setup wizard** — open `/acme-demo/setup` (no setup feature
+    flag required). Confirm the task rail shows the 9 visible seeded tasks.
+    **Set up identity provider** contains the nested **Verify domain**,
+    **Single sign-on**, and **Directory sync** steps.
+    **Distribute MCP servers** and **Configure policies** are included;
+    **Set up Anthropic admin controls**,
+    **Set up Platform MCP**, and the default-hidden **Set up LiteLLM** are absent.
+    The wizard has no hidden-task toggle or assignment/status columns.
+    - Confirm **Configure policies** is marked complete. Other completion marks
+      also reflect organization facts (for example, configured SSO or a
+      published marketplace), not only the saved task statuses.
+    - Without a `?task=` selection, the wizard opens the first unfinished task.
+      Select a task in the rail and confirm `?task=` changes; tasks with multiple
+      steps show nested step navigation for the current task.
+    - Use **Previous task** and **Skip task** to navigate without marking a task
+      complete. The last task offers **Skip to dashboard**.
+    - Seeded ownership and non-done statuses remain backend data: Priya owns
+      Set up observability in other platforms (`in_progress`), and
+      `security-owner@demo.getgram.ai` owns Configure integrations
+      (`awaiting_support`). Do not expect assignee labels or those statuses
+      in the rail; it marks completed tasks and highlights the current task.
 
 18. **Managed agents (local rewritten seed only)** — run `mise run seed` and
     use an ordinary human session in the local organization, with permission to
@@ -298,8 +318,21 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       policy grants are reset, and no visitor-created API keys survive the
       shared SQL. Local-only developer keys may be restored by
       `RunLocalFixtures`; do not mistake those for managed-agent seed keys.
+19. **Remote MCP identity settings** — open the settings page for each seeded
+    Remote MCP server. Linear shows the **User** identity pill, the Example
+    Workspace Identity provider, and the Session length / Client access controls
+    in Sessions. Slack shows **Service Account** with the inert demo
+    Authorization credential managed under Identity. GitHub shows **None** with
+    no provider or static Authorization header. All three use the Display,
+    Identity, Server URL, Sessions, Tool Filtering, Danger Zone order, with
+    Custom Headers directly after the Identity controls. In Postgres, only the
+    Linear row in `mcp_servers` has `remote_session_issuer_id` set, to the
+    Example Workspace Identity provider, and every client bound to Linear's
+    user session issuer (the identity client and the attachment fixture's
+    client) sits under that same provider, so the stamp matches what
+    `ResyncMCPServerRemoteSessionIssuers` would derive.
 
-19. **Billing meter usage** — select a custom trailing 14-day window. Storage
+20. **Billing meter usage** — select a custom trailing 14-day window. Storage
     shows s-tokens of stored content, bandwidth shows ingress and egress bytes,
     and risk content shows all six scanners. Department breakdown includes
     missing attribution and a remainder. Chart series and table totals sum to
@@ -313,7 +346,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     must not increase API usage, while the incremental summary records all 873
     deliveries. Run the seed twice and repeat.
 
-20. **Billing spend availability** — in the enterprise demo organization, open
+21. **Billing spend availability** — in the enterprise demo organization, open
     Billing. The spend heading, controls, chart, and product table must be absent,
     while the ordinary usage explorer stays visible. `usage.getSpendBreakdown`
     must return `availability: "unsupported_plan"`, `products: []`, and
@@ -337,7 +370,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     Repeat after reseeding. Local rewritten-seed checks alone do not qualify
     this shared-demo row for `[x]`.
 
-21. **Admin billing spend by product** — sign in to the admin dashboard and open
+22. **Admin billing spend by product** — sign in to the admin dashboard and open
     the enterprise demo organization's **Billing** page without impersonation or
     changing its account type. Select a trailing 14-day window. The spend section
     and `/admin/organization.spendBreakdown` must report non-zero storage,
@@ -373,7 +406,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     recovered on retry.
     [Visual evidence on PR #6602](https://github.com/speakeasy-api/gram/pull/6602#issuecomment-5742380327).
 
-22. **Exact remote-session attachments (local only)**
+23. **Exact remote-session attachments (local only)**
     - With the feature enabled, inspect Linear session 6 for the fictional
       account and the two active release agents owned by the same human.
       Both attachments must show the same upstream session, with no token
@@ -390,7 +423,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       usable upstream credentials. This
       fixture proves display and identity relationships, not live execution.
 
-23. **Identity-chaining registration evidence**
+24. **Identity-chaining registration evidence**
     - Run `mise run seed` twice in an isolated local stack. In its `default`
       project, open **Remote Identity Providers → Identity chaining example**.
       The Overview must render `https://authorization.example.com` and
@@ -419,6 +452,32 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       `[~]` to `[x]`; API-only checks and the separate synthetic consolidation
       blocker demo do not complete this fixture's display verification.
 
+25. **Access Hub** — open `/<org>/access-hub` (organization sidebar, under
+    **Secure**; the old `/<org>/projects/default/access-hub` URL redirects
+    there) and click **Custom (2)**.
+    Two platform cards: `Acme Agent Platform` and `Acme CI`, each with tags
+    and sharing one. The page shows the organization tier only, so `Acme CI`
+    lists two machines (`Docs publish` and `Payments deploy (all projects)`);
+    the project-tier `Payments deploy` admission stays off this page. Open
+    `Acme Agent Platform`: its machines each resolve to
+    a named agent with no row showing "None assigned", and one is the wildcard
+    rule `wimse://agents.example.com/org/acme/agent/*`. `Acme CI` must keep
+    wildcard admission off, because its subjects encode a branch ref where a
+    wildcard would admit anyone able to push a branch. On `Acme CI`, open
+    **+ Allow a machine** and type a subject ending in `*`: the warning appears
+    in destructive red under the field and **Allow machine** stays disabled.
+
+26. **Explore widgets** — open `/<org>/projects/default/explore` and click
+    the **Widgets** tab, which shows a count of 5. Five widgets, most
+    recently updated first, starting with Amara Okafor's "Sessions by
+    surface" with its description beneath; Hana Sato's widget of the same
+    name sits further down with her name beside it. Each row shows its
+    dataset and chart type, and none carries the broken-widget warning.
+    Clicking "Slowest MCP tools" switches to the Explore tab with the
+    tool_calls dataset, a 7-day window and a table ordered by p95 duration,
+    runs it, and returns rows; the bar names the widget with Priya Raman as
+    its creator and **Save** stays disabled until something is edited.
+
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
@@ -428,3 +487,19 @@ and exact remote-session attachment checks, or
 and commit the SQL change once green.
 Screenshots of failures go to `.playwright-cli/` (ignored) — reference them in
 the PR, don't commit them.
+
+## Slack workspaces
+
+With an ordinary `org:admin` session, open Organization Identity > Slack workspaces. The seed shows Acme Engineering and Acme Operations as requiring authorization. Neither has usable credentials. Disconnected workspaces are hidden. In the retargeted local organization, when the matching Slack app credentials (`SLACK_CLIENT_ID` and the existing `SLACK_CLIENT_SECRET`) are unconfigured, Connect Slack is disabled. Shared Explore Demo always shows a read-only explanation and disables Connect Slack and Disconnect, even with valid app credentials. Its server refuses mutation requests before OAuth state or credentials can be used. In the retargeted local organization, disconnecting Acme Operations requires confirmation and removes it from the list. Reseeding restores the two history rows with fresh connection generations.
+
+The mutation check runs only in the local organization. Support sessions cannot use these endpoints. Live Slack authorization requires matching Slack app credentials and a registered callback; the seeded rows do not demonstrate an OAuth exchange.
+
+## Work identities
+
+For the shared demo check, enter through `/explore-demo` with an ordinary browser session. Support impersonation is refused by these endpoints. The visitor must not need a membership in the demo organization.
+
+Open Amara Okafor's identity and select Accounts & devices. Work identities should show three memberships across Acme Engineering and Acme Operations, including two accounts in Engineering. The guest account shows Deactivated, Needs review and the source finding; directory freshness stays visible separately. Each Open in Slack members link opens the member table filtered to that workspace and Slack ID without changing the mapping.
+
+Repeat in the seeded local organization. An employee can read their own mapped accounts and sees contact-admin guidance, without a link to the members table. Another employee's profile must not request these accounts. Verify the empty state for a person without mappings and retry after a failed read. Following Open in Slack members must not create a mapping or change its revision. Seed data demonstrates navigation and retained mappings; live OAuth requires the configured Slack app.
+
+In shared Explore Demo, verify the mapping dialog shows its read-only notice and disables Personnel selection and Confirm. Verify Sync members is disabled. In the retargeted local organization, personnel changes remain available.

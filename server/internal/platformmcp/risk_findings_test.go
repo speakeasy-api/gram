@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
@@ -74,9 +75,31 @@ func findingsFixture(t *testing.T) (*RiskFindingsService, *findingReader, *findi
 		{ID: uuid.New(), ProjectID: uuid.New(), OrganizationID: "other", Enabled: true, Score: 10},
 	}}
 	reader := &findingReader{rows: []chrepo.WatchdogAlert{{RuleID: "test-rule", Category: "pii", PolicyIDs: []string{policies.rows[0].ID.String()}, FindingCount: 12, UsersAffected: 2, Clients: []string{"browser"}, SampleEvidence: "sensitive@example.invalid", FirstSeen: riskAnalysisTestNow.Add(-48 * time.Hour), LastSeen: riskAnalysisTestNow.Add(-time.Hour)}}, buckets: []chrepo.WatchdogAlertGroup{{RuleID: "test-rule", Value: "", Count: 4}, {RuleID: "test-rule", Value: "test-user", Count: 8}}}
-	codec, err := newRiskCursorCodec("test-key")
-	require.NoError(t, err)
+	codec := newRiskCursorCodec("test-key")
 	return &RiskFindingsService{projects: &findingProjects{project: project}, organizations: riskMutationOrganizationResolver{slug: "org"}, flags: &riskMutationFlagProvider{evaluation: feature.EvaluationEnabled}, policies: policies, findings: reader, cursor: codec, now: func() time.Time { return riskAnalysisTestNow }}, reader, policies
+}
+
+func TestNewRiskFindingsService(t *testing.T) {
+	t.Parallel()
+	for _, key := range []string{"test-key", ""} {
+		t.Run("key="+key, func(t *testing.T) {
+			t.Parallel()
+			reader := &findingReader{}
+			if key == "" {
+				require.Panics(t, func() {
+					NewRiskFindingsService(&pgxpool.Pool{}, reader, &riskMutationFlagProvider{evaluation: feature.EvaluationEnabled}, riskMutationOrganizationResolver{slug: "org"}, key)
+				})
+				return
+			}
+			service := NewRiskFindingsService(&pgxpool.Pool{}, reader, &riskMutationFlagProvider{evaluation: feature.EvaluationEnabled}, riskMutationOrganizationResolver{slug: "org"}, key)
+			require.True(t, service.valid())
+			require.Same(t, reader, service.findings)
+			require.NotNil(t, service.projects)
+			require.NotNil(t, service.policies)
+			require.NotNil(t, service.cursor)
+			require.NotNil(t, service.now)
+		})
+	}
 }
 
 func TestRiskFindingsDefaultsAndGroups(t *testing.T) {
@@ -105,7 +128,7 @@ func TestRiskFindingsDefaultsAndGroups(t *testing.T) {
 		require.Equal(t, p.rows[0].ProjectID.String(), params.ProjectID)
 		require.Equal(t, riskAnalysisTestNow.Add(-24*time.Hour), params.From)
 	}
-	require.NotEqual(t, s.userReference("other", "test-user"), s.userReference("<ORG_ID>", "test-user"))
+	require.NotEqual(t, riskUserReference(s.cursor.key, "other", "test-user"), riskUserReference(s.cursor.key, "<ORG_ID>", "test-user"))
 }
 
 func TestRiskFindingsSignalScores(t *testing.T) {
@@ -335,32 +358,21 @@ func TestRiskFindingsMCPInProcess(t *testing.T) {
 	require.Len(t, reader.params, calls, "authorization denial must not reach storage")
 }
 
-type findingFlagGate struct {
-	riskMutationFlagProvider
-	disabled feature.Flag
-}
-
-func (f *findingFlagGate) EvaluateFlag(_ context.Context, flag feature.Flag, _ string, _ map[string]string) (feature.Evaluation, error) {
-	if flag == f.disabled {
-		return feature.EvaluationDisabled, nil
-	}
-	return feature.EvaluationEnabled, nil
-}
-
-func TestRiskFindingsIndependentFeatureGates(t *testing.T) {
+func TestRiskFindingsWatchdogGate(t *testing.T) {
 	t.Parallel()
 
-	for _, flag := range []feature.Flag{feature.FlagRiskWatchdog, feature.FlagRiskListFromClickHouse} {
-		s, r, p := findingsFixture(t)
-		s.flags = &findingFlagGate{disabled: flag}
-		_, err := s.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingsInput{})
-		require.ErrorIs(t, err, ErrRiskFeatureNotEnabled)
-		require.Empty(t, r.params)
-		require.Zero(t, p.calls)
-	}
-	s, r, _ := findingsFixture(t)
-	s.flags = &riskMutationFlagProvider{err: errors.New("flag unavailable")}
+	s, r, p := findingsFixture(t)
+	flags := &riskMutationFlagProvider{evaluation: feature.EvaluationDisabled}
+	s.flags = flags
 	_, err := s.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingsInput{})
+	require.ErrorIs(t, err, ErrRiskFeatureNotEnabled)
+	require.Equal(t, feature.FlagRiskWatchdog, flags.flag)
+	require.Empty(t, r.params)
+	require.Zero(t, p.calls)
+
+	s, r, _ = findingsFixture(t)
+	s.flags = &riskMutationFlagProvider{err: errors.New("flag unavailable")}
+	_, err = s.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingsInput{})
 	require.ErrorIs(t, err, ErrUnavailable)
 	require.Empty(t, r.params)
 }

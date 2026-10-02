@@ -12,6 +12,7 @@ import {
   FolderIcon,
   HistoryIcon,
   SearchIcon,
+  ServerIcon,
   SlidersHorizontalIcon,
   UsersIcon,
 } from "lucide-react";
@@ -66,6 +67,11 @@ const RECORD_PAGES = [
     to: "/organizations/$idOrSlug/projects",
     label: "Projects",
     icon: FolderIcon,
+  },
+  {
+    to: "/organizations/$idOrSlug/mcp-servers",
+    label: "MCP Servers",
+    icon: ServerIcon,
   },
   {
     to: "/organizations/$idOrSlug/billing",

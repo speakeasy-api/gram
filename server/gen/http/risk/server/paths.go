@@ -17,6 +17,16 @@ func ListRiskPoliciesRiskPath() string {
 	return "/rpc/risk.listPolicies"
 }
 
+// ListMCPPlatformToolsetsRiskPath returns the URL path to the risk service listMCPPlatformToolsets HTTP endpoint.
+func ListMCPPlatformToolsetsRiskPath() string {
+	return "/rpc/risk.listMCPPlatformToolsets"
+}
+
+// ListRiskPoliciesForMcpServerRiskPath returns the URL path to the risk service listRiskPoliciesForMcpServer HTTP endpoint.
+func ListRiskPoliciesForMcpServerRiskPath() string {
+	return "/rpc/risk.listRiskPoliciesForMcpServer"
+}
+
 // ListBuiltinExclusionsRiskPath returns the URL path to the risk service listBuiltinExclusions HTTP endpoint.
 func ListBuiltinExclusionsRiskPath() string {
 	return "/rpc/risk.listBuiltinExclusions"
@@ -110,6 +120,11 @@ func GetRiskRuleBreakdownRiskPath() string {
 // GetRiskSignalsRiskPath returns the URL path to the risk service getRiskSignals HTTP endpoint.
 func GetRiskSignalsRiskPath() string {
 	return "/rpc/risk.getSignals"
+}
+
+// GetRiskMcpServerCountsRiskPath returns the URL path to the risk service getRiskMcpServerCounts HTTP endpoint.
+func GetRiskMcpServerCountsRiskPath() string {
+	return "/rpc/risk.getMcpServerCounts"
 }
 
 // GetRiskAnalysisStatusRiskPath returns the URL path to the risk service getRiskAnalysisStatus HTTP endpoint.

@@ -28,6 +28,7 @@ UPDATE network_ingresses
 SET
     credentials_encrypted = NULL,
     provider_resources = '{}'::jsonb,
+    last_error = NULL,
     updated_at = clock_timestamp()
 WHERE id = $1
   AND organization_id = $2
@@ -689,6 +690,37 @@ func (q *Queries) LockNetworkIngressRowsByOrganization(ctx context.Context, orga
 	return items, nil
 }
 
+const recordDeletedNetworkIngressCleanupError = `-- name: RecordDeletedNetworkIngressCleanupError :execrows
+UPDATE network_ingresses
+SET last_error = $1
+WHERE id = $2
+  AND organization_id = $3
+  AND updated_at = $4
+  AND deleted IS TRUE
+`
+
+type RecordDeletedNetworkIngressCleanupErrorParams struct {
+	LastError         pgtype.Text
+	ID                uuid.UUID
+	OrganizationID    string
+	ExpectedUpdatedAt pgtype.Timestamptz
+}
+
+// Records why cleanup of a tombstone is blocked. NULL means cleanup is
+// progressing normally. updated_at stays the desired-state version.
+func (q *Queries) RecordDeletedNetworkIngressCleanupError(ctx context.Context, arg RecordDeletedNetworkIngressCleanupErrorParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordDeletedNetworkIngressCleanupError,
+		arg.LastError,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ExpectedUpdatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const recordNetworkIngressObservation = `-- name: RecordNetworkIngressObservation :execrows
 UPDATE network_ingresses
 SET
@@ -814,6 +846,7 @@ UPDATE network_ingresses
 SET
     enabled = FALSE,
     status = 'deleting',
+    last_error = NULL,
     deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE organization_id = $1

@@ -505,6 +505,9 @@ func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, 
 
 func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath string) *feature.InMemory {
 	inmem := &feature.InMemory{}
+	// Local dev has no Presidio HTTP analyzer, so realtime scans must take the
+	// Pub/Sub lanes to pystreams. A CSV row can still turn this off.
+	inmem.SetFlag(feature.FlagRiskEnforcementPubsub, feature.AnyDistinctID, true)
 
 	if csvPath == "" {
 		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")
@@ -576,6 +579,7 @@ func newBillingProvider(
 	redisClient *redis.Client,
 	posthogClient *posthog.Posthog,
 	stripeClient stripeclient.Client,
+	db *pgxpool.Pool,
 	c *cli.Context,
 ) (billing.Repository, billing.Tracker, error) {
 	switch {
@@ -615,6 +619,9 @@ func newBillingProvider(
 	case c.String("environment") == "local":
 		logger.WarnContext(ctx, "using stub billing client: polar not configured")
 		stub := billing.NewStubClient(logger, tracerProvider)
+		if db != nil {
+			stub = billing.NewStubClientWithLocalProfiles(logger, tracerProvider, db)
+		}
 		return stub, stub, nil
 	case stripeClient != nil:
 		logger.InfoContext(ctx, "using Stripe billing provider with legacy billing operations disabled")
@@ -1142,7 +1149,9 @@ func newTriggersApp(
 	auditLogger *audit.Logger,
 	serverURL *url.URL,
 	siteURL *url.URL,
+	platformHosts map[string]string,
 	slackClient *slack_client.SlackClient,
+	cacheImpl cache.Cache,
 ) *bgtriggers.App {
 	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)
 	return bgtriggers.NewApp(
@@ -1174,7 +1183,9 @@ func newTriggersApp(
 		auditLogger,
 		serverURL,
 		siteURL,
+		platformHosts,
 		slackClient,
+		cacheImpl,
 		bgtriggers.NewNoopDispatcher(logger),
 	)
 }

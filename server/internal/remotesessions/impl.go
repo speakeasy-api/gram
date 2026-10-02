@@ -64,7 +64,7 @@ type Service struct {
 	policy       *guardian.Policy
 	tunnels      *tunnelrouting.HTTPClient
 	auditLogger  *audit.Logger
-	serverURL    *url.URL
+	identity     *IdentityCommitter
 	refresher    *RefreshService
 	revoker      *UpstreamRevoker
 	jwksResolver *jwks.Resolver
@@ -73,6 +73,10 @@ type Service struct {
 	rotator *ClientRotator
 
 	registrationTelemetry registration.Recorder
+
+	// origins decides the callback origin each client registers and records.
+	origins CallbackOrigins
+
 	// Only the JSON Web Key Set attach and detach paths consult this. The rest
 	// of remote_session_client management is not entitlement-gated, and must
 	// not become so: a set is always backed by a customer-provisioned KMS key,
@@ -98,7 +102,7 @@ var (
 	_ adminrsgen.Auther      = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, auditLogger *audit.Logger, serverURL *url.URL, refresher *RefreshService, productFeatures *productfeatures.Client) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, auditLogger *audit.Logger, serverURL *url.URL, identity *IdentityCommitter, refresher *RefreshService, productFeatures *productfeatures.Client) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
 	revoker := NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy, tunnels, refresher.assertions)
 	registrationTelemetry := registration.NewMetrics(logger, meterProvider)
@@ -116,7 +120,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		policy:            policy,
 		tunnels:           tunnels,
 		auditLogger:       auditLogger,
-		serverURL:         serverURL,
+		identity:          identity,
 		refresher:         refresher,
 		jwksResolver:      jwks.NewResolver(policy, meterProvider, logger),
 		revoker:           revoker,
@@ -125,9 +129,17 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		rotator: NewClientRotator(logger, db, enc, policy, tunnels, refresher.locks, serverURL, revoker, auditLogger, registrationTelemetry),
 
 		registrationTelemetry: registrationTelemetry,
+		origins:               DefaultCallbackOrigins(serverURL),
 
 		productFeatures: productFeatures,
 	}
+}
+
+// SetCallbackOrigins replaces the default origins, which pin every client to
+// the server URL. Call it during wiring, before the service handles requests.
+func (s *Service) SetCallbackOrigins(origins CallbackOrigins) {
+	s.origins = origins
+	s.rotator.origins = origins
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {

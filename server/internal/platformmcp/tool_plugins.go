@@ -16,10 +16,16 @@ type pluginRefusalResult struct {
 	Message string `json:"message"`
 }
 
-// Plugin inventory is externalOnly: the managed assistant already reads a
-// project's plugins through platform_list_plugins in its own tool catalog, and
-// admitting a second name for the same capability would make the assistant
-// choose between two tools that answer the same question.
+// Plugin reads serve both audiences: the managed assistant resolves a plugin by
+// name before distributing a skill to it, and this catalogue is the rollout
+// replacement for the legacy toolset that carried platform_list_plugins, so an
+// assistant reaches one of the two and never sees both names. The assistant
+// adapter admits calls only from a live organization admin, so an assistant
+// read always takes the administrative branch below.
+//
+// Plugin mutations stay externalOnly. Changing who receives a plugin is a
+// confirmed, version-protected dashboard workflow that the assistant surface
+// has not been reviewed to carry.
 func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 	setDescription := "Replace the complete assignment set of one exact plugin when assignment changes are enabled for its project. First read the plugin and current assignments. If this capability is available, explain the complete replacement and publication state, ask the user to confirm it, then call this with confirmed: true. Constraints: pass the assignment version from get_plugin, only opaque assignment references from get_plugin or list_plugin_assignments, and a stable idempotency key. An empty set removes every assignment and reaches nobody. This changes who can discover an already-published package; it does not publish package bytes. If the project is not enabled, this returns feature_unavailable without changing anything."
 	addTool(reg, &mcp.Tool{
@@ -37,7 +43,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 		Title:       "List Plugin Assignments",
 		Description: "List up to 100 existing roles and directory assignment targets that can receive plugins in an explicit project. Each assignment has a short-lived opaque reference and, where available, a privacy-safe member count; Everyone has no member count. Raw principal identifiers are never returned. If truncated is true, use the dashboard to choose from the complete assignment set.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginAssignmentsInput) (*mcp.CallToolResult, ListPluginAssignmentsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginAssignmentsInput) (*mcp.CallToolResult, ListPluginAssignmentsOutput, error) {
 		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (ListPluginAssignmentsOutput, error) {
 			return plugins.ListPluginAssignments(ctx, principal, input)
 		})
@@ -48,7 +54,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 		Title:       "List Plugins",
 		Description: "List plugins in an explicit project. Organization administrators see the administrative inventory. Other members see only published plugins currently assigned to their own user, role, directory audiences, email, or everyone; recipient counts and assignment details are withheld.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryOrgRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginsInput) (*mcp.CallToolResult, ListPluginsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryOrgRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginsInput) (*mcp.CallToolResult, ListPluginsOutput, error) {
 		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (ListPluginsOutput, error) {
 			admin, err := plugins.IsOrganizationAdmin(ctx, principal)
 			if err != nil {
@@ -64,9 +70,9 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_plugin",
 		Title:       "Get One Plugin",
-		Description: "Get one exact plugin in an explicit project. Organization administrators see its administrative inventory and assignment controls. Other members can read only a published plugin assigned to them, with its MCP servers and skills but no recipient identities, counts, assignment references, package location, repository details, or credentials.",
+		Description: "Get one exact plugin in an explicit project. Organization administrators see its administrative inventory, exact typed MCP membership IDs and targets, assignment controls, and publication evidence when configured. Admin membership results are cursor-paginated and complete beyond 100 entries, and a changed membership set requires restarting pagination. Publication evidence shows the addresses a package would contain now and compares its stored MCP fingerprints: fresh=true means matching stored inputs, fresh=false means different inputs, null means unknown. If unavailable=true, package inputs could not be resolved; do not treat an empty packages list as a package with no MCPs. This does not verify installed clients or live marketplace contents; publication=published alone does not mean addresses are current. Other members can read only a published plugin assigned to them, with its MCP servers and skills but no recipient identities, counts, assignment references, membership IDs, backend target IDs, package location, repository details, or credentials.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryOrgRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetPluginInput) (*mcp.CallToolResult, GetPluginOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryOrgRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetPluginInput) (*mcp.CallToolResult, GetPluginOutput, error) {
 		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (GetPluginOutput, error) {
 			admin, err := plugins.IsOrganizationAdmin(ctx, principal)
 			if err != nil {
@@ -145,7 +151,14 @@ func registerUnavailablePluginTools(reg *Registrar) {
 		case "get_my_mcp_access", "get_my_mcp_connection_status":
 			discoveryScopes = discoveryMCPReadOrConnect
 		}
-		addTool(reg, manifest, ToolMeta{Authorization: authority, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryScopes}, unavailableTool("plugins"))
+		// Audiences match the live registration so an assistant in an
+		// organization without plugins sees a readable refusal rather than a
+		// tool that appears only once the feature is switched on.
+		audiences := externalOnly
+		if tool.name == "list_plugins" || tool.name == "get_plugin" || tool.name == "list_plugin_assignments" {
+			audiences = bothAudiences
+		}
+		addTool(reg, manifest, ToolMeta{Authorization: authority, Audiences: audiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryScopes}, unavailableTool("plugins"))
 	}
 }
 

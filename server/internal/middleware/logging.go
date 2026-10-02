@@ -88,6 +88,10 @@ func (rw *responseWriter) Unwrap() http.ResponseWriter {
 var redactedQueryParams = map[string]bool{
 	// Live capability token on public share and signed-asset URLs.
 	"token":           true,
+	"code":            true,
+	"state":           true,
+	"code_verifier":   true,
+	"return_to":       true,
 	"support_handoff": true,
 
 	// Email address on auth.login, and on agent.getPlugins polls from legacy

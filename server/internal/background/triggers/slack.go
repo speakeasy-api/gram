@@ -9,22 +9,46 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/google/cel-go/cel"
-	"slices"
 )
 
 // slackTriggerConfig is the instance config for the Slack trigger. It exposes
 // the shared webhook filter knobs — a CEL filter expression and an event-type
-// allowlist that narrows the default-deny supportedSlackEventTypes set.
+// allowlist that narrows the default-deny supportedSlackEventTypes set — and
+// the reply preset that decides which conversation events reach the target.
 type slackTriggerConfig struct {
 	FilterExpr string   `json:"filter,omitempty"`
-	EventTypes []string `json:"event_types,omitempty"`
+	EventTypes []string `json:"event_types,omitempty" jsonschema:"Slack event types that wake the target. When routing is set, these are the extra events besides messages, mentions, direct messages, and button clicks, which routing decides."`
+
+	// Routing is the reply preset. Empty leaves every event, conversation
+	// events included, to EventTypes, and delivers the ones that pass.
+	Routing RoutingPolicy `json:"routing,omitempty" jsonschema:"When the target replies. 'mentions': when it is mentioned. 'threads': when it is mentioned, and then to every later message in that thread until it leaves the thread. 'channels': to every message in channels it is in. Direct messages and button clicks always reach the target."`
 
 	// compiledFilter is set during DecodeConfig when FilterExpr is non-empty.
 	compiledFilter cel.Program
+}
+
+var slackRoutingPolicies = []RoutingPolicy{RoutingPolicyMentions, RoutingPolicyThreads, RoutingPolicyChannels}
+
+// slackMessageSubtypes are the message subtypes that carry a user's post, as
+// opposed to edits, deletions, and channel notices.
+var slackMessageSubtypes = []string{"", "file_share", "thread_broadcast"}
+
+// isSlackConversationEvent reports whether routing, rather than EventTypes,
+// decides the event: posted messages, mentions, and button clicks.
+func isSlackConversationEvent(evt slackTriggerEvent) bool {
+	switch evt.EventType {
+	case "app_mention", "block_actions":
+		return true
+	case "message":
+		return slices.Contains(slackMessageSubtypes, evt.Subtype)
+	default:
+		return false
+	}
 }
 
 func (c slackTriggerConfig) Filter(event any) (bool, error) {
@@ -32,7 +56,77 @@ func (c slackTriggerConfig) Filter(event any) (bool, error) {
 	if !ok {
 		return false, fmt.Errorf("expected slackTriggerEvent, got %T", event)
 	}
-	return evalWebhookFilter(c.compiledFilter, c.EventTypes, event, slackEvent.EventType, supportedSlackEventTypes)
+	if c.Routing == "" {
+		return evalWebhookFilter(c.compiledFilter, c.EventTypes, event, slackEvent.EventType, supportedSlackEventTypes)
+	}
+
+	switch {
+	case isSlackConversationEvent(slackEvent):
+		return evalWebhookFilter(c.compiledFilter, []string{slackEvent.EventType}, event, slackEvent.EventType, supportedSlackEventTypes)
+	case slackEvent.EventType == "message":
+		// Edits, deletions, and channel notices are not posts to reply to.
+		return false, nil
+	case len(c.EventTypes) == 0:
+		// With routing set, event_types lists extras only, so an empty list
+		// means none rather than every supported type.
+		return false, nil
+	default:
+		return evalWebhookFilter(c.compiledFilter, c.EventTypes, event, slackEvent.EventType, supportedSlackEventTypes)
+	}
+}
+
+func (c slackTriggerConfig) RoutingPolicy() RoutingPolicy {
+	if c.Routing == "" {
+		return RoutingPolicyChannels
+	}
+	return c.Routing
+}
+
+// slackAddressed reports whether a Slack event is directed at the app: a
+// mention, a direct message, or a click on one of its buttons.
+func slackAddressed(evt slackTriggerEvent) bool {
+	mentionsBot := evt.BotUserID != "" && evt.EventType == "message" &&
+		slices.Contains(slackMessageSubtypes, evt.Subtype) &&
+		strings.Contains(evt.Text, "<@"+evt.BotUserID+">")
+	return evt.EventType == "app_mention" ||
+		evt.EnvelopeType == "interactive" ||
+		strings.HasPrefix(evt.ChannelID, "D") ||
+		mentionsBot
+}
+
+// slackSelfAuthored reports whether the app itself produced a Slack event or
+// thread message. When the app's bot could not be resolved, every
+// bot-authored event counts as its own, so a failed lookup cannot start a
+// reply loop.
+func slackSelfAuthored(userID, botID string, evt slackTriggerEvent) bool {
+	ownUser := evt.BotUserID != "" && userID == evt.BotUserID
+	if evt.SelfBotID == "" {
+		return ownUser || botID != ""
+	}
+	return ownUser || botID == evt.SelfBotID
+}
+
+func (c slackTriggerConfig) RoutingFacts(event any) (RoutingFacts, bool) {
+	evt, ok := event.(slackTriggerEvent)
+	if !ok || evt.ChannelID == "" || evt.Timestamp == "" {
+		return RoutingFacts{Addressed: false, SelfAuthored: false, InThread: false, Cursor: "", Conversation: false, DedupKey: ""}, false
+	}
+
+	// Slack delivers a mention as both a message and an app_mention event.
+	// Under a reply preset both carry one key so the post is delivered once.
+	dedupKey := ""
+	if c.Routing != "" && evt.EventType != "block_actions" && isSlackConversationEvent(evt) {
+		dedupKey = "slack-message:" + evt.ChannelID + ":" + evt.Timestamp
+	}
+
+	return RoutingFacts{
+		Addressed:    slackAddressed(evt),
+		SelfAuthored: slackSelfAuthored(evt.UserID, evt.BotID, evt),
+		InThread:     evt.ThreadID != "" && evt.ThreadID != evt.Timestamp,
+		Cursor:       evt.Timestamp,
+		Conversation: isSlackConversationEvent(evt),
+		DedupKey:     dedupKey,
+	}, true
 }
 
 type slackEventRequest struct {
@@ -435,6 +529,8 @@ func handleSlackInteraction(body []byte) (*WebhookIngest, error) {
 		ActionValue:  action.Value,
 		BlockID:      action.BlockID,
 		Files:        nil,
+		BotUserID:    "",
+		SelfBotID:    "",
 	}
 
 	// A block_actions interaction anchored to a channel message folds onto that
@@ -496,6 +592,32 @@ type slackTriggerEvent struct {
 	// Files carries attachment metadata for message events that share files
 	// (e.g. the file_share subtype). Empty for all other events.
 	Files []slackEventFile `json:"files,omitempty" cel:"files"`
+
+	// BotUserID and SelfBotID identify the app's own bot user and bot in the
+	// receiving workspace. Set at ingest from the trigger's bot token; empty
+	// when the token cannot be resolved.
+	BotUserID string `json:"bot_user_id,omitempty" cel:"bot_user_id"`
+	SelfBotID string `json:"self_bot_id,omitempty" cel:"self_bot_id"`
+}
+
+// slackThreadContext is the backfill of a Slack thread that Dispatch adds to
+// an event's JSON under slackThreadContextKey.
+type slackThreadContext struct {
+	Messages []slackThreadContextMessage `json:"messages,omitempty"`
+
+	// Truncated reports that later messages exist between the last entry of
+	// Messages and the event.
+	Truncated bool `json:"truncated,omitempty"`
+
+	// Unavailable reports that the thread could not be read.
+	Unavailable bool `json:"unavailable,omitempty"`
+}
+
+type slackThreadContextMessage struct {
+	Ts     string `json:"ts"`
+	UserID string `json:"user_id,omitempty"`
+	BotID  string `json:"bot_id,omitempty"`
+	Text   string `json:"text,omitempty"`
 }
 
 var supportedSlackEventTypes = []string{
@@ -539,19 +661,13 @@ var supportedSlackEventTypes = []string{
 }
 
 // slackEventExpectsReply reports whether a slack event is one the assistant
-// always replies to: an explicit @-mention, a DM (channel IDs start with "D"),
-// or a Block Kit interaction. Ambient channel events (plain messages,
-// reactions, joins) may legitimately end in a silent turn, so the ingress
-// loading indicator is suppressed for them — a silent turn would otherwise
-// strand the indicator until Slack's two-minute timeout.
+// always replies to: one directed at it (see slackAddressed). Ambient channel
+// events (plain messages, reactions, joins) may legitimately end in a silent
+// turn, so the ingress loading indicator is suppressed for them — a silent
+// turn would otherwise strand the indicator until Slack's two-minute timeout.
 func slackEventExpectsReply(event EventEnvelope) bool {
 	evt, isSlack := event.Event.(slackTriggerEvent)
-	if !isSlack {
-		return false
-	}
-	return evt.EventType == "app_mention" ||
-		evt.EnvelopeType == "interactive" ||
-		strings.HasPrefix(evt.ChannelID, "D")
+	return isSlack && slackAddressed(evt)
 }
 
 // slackThreadStatusTarget extracts the channel + thread to anchor a loading
@@ -589,6 +705,7 @@ const slackSigningSecretEnv = "SLACK_SIGNING_SECRET" //nolint:gosec // env var n
 func newSlackDefinition() Definition {
 	schema := buildInputSchema[slackTriggerConfig](
 		withArrayItemsEnum("event_types", toAnySlice(supportedSlackEventTypes)...),
+		withPropertyEnum("routing", toAnySlice(slackRoutingPolicies)...),
 	)
 	compiled := mustCompileSchema(schema)
 	vendor := WebhookVendor{
@@ -717,6 +834,8 @@ func slackIngest(body []byte, headers http.Header) (*WebhookIngest, error) {
 		ActionValue:  "",
 		BlockID:      "",
 		Files:        event.Files,
+		BotUserID:    "",
+		SelfBotID:    "",
 	}
 
 	return &WebhookIngest{

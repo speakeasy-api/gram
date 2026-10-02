@@ -3,15 +3,13 @@ package admin
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx/v5/pgconn"
+	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
+
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
@@ -81,9 +79,7 @@ func TestMarkEnterpriseTrialConverted_LocksLifecycleThenAllKeysBeforeRowReads(t 
 
 	waitCtx, cancelWait := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelWait()
-	requireAdminCondition(t, waitCtx, conn, func(check context.Context) (bool, error) {
-		return testrepo.New(conn).IsQueryBlockedOnLockFixture(check, "%SELECT tier, ends_at, converted_at, demoted_at%")
-	}, "conversion did not block on the lifecycle row")
+	testenv.WaitForQueryBlockedBy(t, waitCtx, conn, testenv.BackendPID(lifecycleBlocker), "%SELECT tier, ends_at, converted_at, demoted_at%")
 
 	probe, err := conn.Acquire(ctx)
 	require.NoError(t, err)
@@ -106,20 +102,13 @@ func TestMarkEnterpriseTrialConverted_LocksLifecycleThenAllKeysBeforeRowReads(t 
 
 	chatWait, cancelChat := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelChat()
-	requireAdminCondition(t, chatWait, conn, func(check context.Context) (bool, error) {
-		acquired, lockErr := testrepo.New(probe).TryAcquireOpenRouterKeyBillingLockFixture(check, testrepo.TryAcquireOpenRouterKeyBillingLockFixtureParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat)})
-		if lockErr != nil {
-			return false, fmt.Errorf("probe chat advisory lock: %w", lockErr)
-		}
-		if !acquired {
-			return true, nil
-		}
-		_, unlockErr := activitiesrepo.New(probe).ReleaseOpenRouterKeyBillingLock(check, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat)})
-		if unlockErr != nil {
-			return false, fmt.Errorf("release chat advisory lock probe: %w", unlockErr)
-		}
-		return false, nil
-	}, "chat advisory lock was not acquired before internal")
+	testenv.WaitForBackendsBlockedBy(t, chatWait, conn, internalLock.Conn().PgConn().PID(), 1)
+	chatProbe := testenv.BeginTx(t, ctx, conn)
+	// probeTimeout bounds the server's wait on the chat advisory lock.
+	const probeTimeout = 100 * time.Millisecond
+	testenv.SetLockTimeout(t, ctx, chatProbe, probeTimeout)
+	testenv.RequireLockNotAvailable(t, usagerepo.New(chatProbe).AcquireOpenRouterBillingLock(ctx, usagerepo.AcquireOpenRouterBillingLockParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat)}))
+	require.NoError(t, chatProbe.Rollback(ctx))
 
 	contender := testenv.BeginTx(t, ctx, conn)
 	contenderDone := make(chan error, 1)
@@ -129,9 +118,7 @@ func TestMarkEnterpriseTrialConverted_LocksLifecycleThenAllKeysBeforeRowReads(t 
 	}()
 	contenderWait, cancelContender := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelContender()
-	requireAdminCondition(t, contenderWait, conn, func(check context.Context) (bool, error) {
-		return testrepo.New(conn).IsQueryBlockedOnLockFixture(check, "%SELECT tier, ends_at, converted_at, demoted_at%")
-	}, "concurrent lifecycle contender was not blocked by conversion")
+	testenv.WaitForQueryBlockedBy(t, contenderWait, conn, internalLock.Conn().PgConn().PID(), "%SELECT tier, ends_at, converted_at, demoted_at%")
 
 	rowProbe := testenv.BeginTx(t, ctx, conn)
 	_, err = testrepo.New(rowProbe).LockOrganizationMetadataForUpdateNowaitFixture(ctx, orgID)
@@ -151,17 +138,9 @@ func TestMarkEnterpriseTrialConverted_LocksLifecycleThenAllKeysBeforeRowReads(t 
 
 	orgLockWait, cancelOrgLock := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelOrgLock()
-	requireAdminCondition(t, orgLockWait, conn, func(check context.Context) (bool, error) {
-		_, lockErr := testrepo.New(probe).LockOrganizationMetadataForUpdateNowaitFixture(check, orgID)
-		if lockErr == nil {
-			return false, nil
-		}
-		var pgErr *pgconn.PgError
-		if errors.As(lockErr, &pgErr) && pgErr.Code == pgerrcode.LockNotAvailable {
-			return true, nil
-		}
-		return false, fmt.Errorf("probe conversion organization lock: %w", lockErr)
-	}, "conversion did not lock organization row after advisory locks")
+	testenv.WaitForBackendsBlockedBy(t, orgLockWait, conn, testenv.BackendPID(keyBlocker), 1)
+	_, lockErr := testrepo.New(probe).LockOrganizationMetadataForUpdateNowaitFixture(ctx, orgID)
+	testenv.RequireLockNotAvailable(t, lockErr)
 
 	updateDone := make(chan error, 1)
 	whitelisted := false
@@ -171,9 +150,7 @@ func TestMarkEnterpriseTrialConverted_LocksLifecycleThenAllKeysBeforeRowReads(t 
 	}()
 	updateWait, cancelUpdate := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelUpdate()
-	requireAdminCondition(t, updateWait, conn, func(check context.Context) (bool, error) {
-		return testrepo.New(conn).IsQueryBlockedOnLockFixture(check, "%UPDATE organization_metadata%")
-	}, "concurrent organization update was not blocked by conversion snapshot lock")
+	testenv.WaitForQueryBlockedBy(t, updateWait, conn, testenv.BackendPID(keyBlocker), "%SELECT id, name, slug, whitelisted, gram_account_type, disabled_at, updated_at%")
 
 	require.NoError(t, keyBlocker.Rollback(ctx))
 	select {
@@ -331,9 +308,7 @@ func TestMarkEnterpriseTrialConverted_MissingKeyWaitsForProvisioningAndReReads(t
 
 	waitCtx, cancelWait := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelWait()
-	requireAdminCondition(t, waitCtx, conn, func(check context.Context) (bool, error) {
-		return testrepo.New(conn).IsQueryBlockedOnLockFixture(check, "%LockOpenRouterKeyProvisioning%")
-	}, "conversion did not wait for in-flight first-time key provisioning")
+	testenv.WaitForQueryBlockedBy(t, waitCtx, conn, testenv.BackendPID(provisioning), "%LockOpenRouterKeyProvisioning%")
 
 	ciphertext, err := testenv.NewEncryptionClient(t).Encrypt([]byte("sk-test-racing-provisioner"))
 	require.NoError(t, err)
@@ -387,9 +362,7 @@ func TestMarkEnterpriseTrialConverted_SerializesRuntimeFeatureWritesThroughCache
 	}()
 	waitCtx, cancelWait := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelWait()
-	requireAdminCondition(t, waitCtx, conn, func(check context.Context) (bool, error) {
-		return testrepo.New(conn).IsQueryBlockedOnLockFixture(check, "%AcquireOpenRouterBillingLock%")
-	}, "conversion did not reach the key lock after acquiring feature locks")
+	testenv.WaitForQueryBlockedBy(t, waitCtx, conn, keyBlocker.Conn().PgConn().PID(), "%AcquireOpenRouterBillingLock%")
 
 	require.NotEmpty(t, productfeatures.TrialRuntimeFeatures)
 	feature := productfeatures.TrialRuntimeFeatures[0]
@@ -420,9 +393,7 @@ func TestMarkEnterpriseTrialConverted_SerializesRuntimeFeatureWritesThroughCache
 
 	featureWait, cancelFeatureWait := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelFeatureWait()
-	requireAdminCondition(t, featureWait, conn, func(check context.Context) (bool, error) {
-		return testrepo.New(conn).IsQueryBlockedOnLockFixture(check, "%AcquireFeatureCacheLock%")
-	}, "overlapping feature disable was not serialized behind conversion")
+	testenv.WaitForQueryBlockedBy(t, featureWait, conn, keyBlocker.Conn().PgConn().PID(), "%AcquireFeatureCacheLock%")
 
 	unlocked, err := activitiesrepo.New(keyBlocker).ReleaseOpenRouterKeyBillingLock(ctx, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams(internalLock))
 	require.NoError(t, err)

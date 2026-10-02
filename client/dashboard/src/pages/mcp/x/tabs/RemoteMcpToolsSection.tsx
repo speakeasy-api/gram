@@ -15,7 +15,13 @@ import {
 } from "@/hooks/useProxiedMcpTools";
 import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import { handleError, toError } from "@/lib/errors";
-import { cn, firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
+import {
+  cn,
+  firstPartyConnectUrl,
+  getServerURL,
+  mcpConnectionUrl,
+  supportsFirstPartyConnect,
+} from "@/lib/utils";
 import type { ToolMetadata } from "@gram/client/models/components/toolmetadata.js";
 import { ToolAnnotationIndicators } from "./ToolAnnotationIndicators";
 import { ToolMetadataDriftPanel } from "./ToolMetadataDriftPanel";
@@ -58,6 +64,14 @@ type RemoteMcpToolsSectionProps = {
    * server with no authentication configured fails to list its tools.
    */
   authSettingsHref?: string;
+  /**
+   * Gram-origin endpoint slug. Custom-domain slugs are a different namespace
+   * and must not be used to build the first-party connect URL.
+   */
+  platformSlug?: string;
+  /** Set when the backend is a tunnel. Public tunnels have no Connect route. */
+  tunneledMcpServerId?: string;
+  visibility?: string;
 };
 
 /**
@@ -66,8 +80,10 @@ type RemoteMcpToolsSectionProps = {
  *
  * For issuer-gated servers we mint a user-session JWT scoped to the mcp_server
  * and connect with it. When no upstream remote_session exists yet the gateway
- * 401s into `needsAuth`, and we surface an Authenticate button that opens the
+ * 401s into `needsAuth`, and we surface a Connect button that opens the
  * first-party connect page in a new tab; returning focus re-attempts the list.
+ * That page 404s unless the server is issuer-gated on a Gram-hosted address, so
+ * a 401 from any other server points at authentication settings instead.
  *
  * Expected fetch failures are rendered inline (see RemoteMcpToolsBody). The
  * surrounding ErrorBoundary is the defensive layer for unexpected render-time
@@ -140,18 +156,11 @@ function RemoteMcpToolsErrorFallback({
   if (!isIssuerGated) {
     return (
       <ToolsSectionShell>
-        <EmptyState
-          message="This server has no authentication configured yet. Set up an identity provider so its tools can be listed."
+        <ConfigureAuthenticationState
+          message={unconfiguredAuthMessage}
+          authSettingsHref={authSettingsHref}
           onRetry={resetErrorBoundary}
-        >
-          {authSettingsHref ? (
-            <Button variant="secondary" asChild>
-              <Link to={authSettingsHref}>
-                <Button.Text>Configure authentication</Button.Text>
-              </Link>
-            </Button>
-          ) : null}
-        </EmptyState>
+        />
       </ToolsSectionShell>
     );
   }
@@ -166,14 +175,30 @@ function RemoteMcpToolsErrorFallback({
   );
 }
 
+const unconfiguredAuthMessage =
+  "This server has no authentication configured yet. Set up an identity provider so its tools can be listed.";
+
+const unavailableConnectMessage =
+  "Connect isn't available for this server. Review its authentication settings.";
+
 function RemoteMcpToolsSectionInner({
   mcpUrl,
   isResolvingUrl,
   mcpServerId,
   userSessionIssuerId,
   remoteMcpServerId,
+  authSettingsHref,
+  platformSlug,
+  tunneledMcpServerId,
+  visibility,
 }: RemoteMcpToolsSectionProps): JSX.Element {
   const isIssuerGated = !!userSessionIssuerId;
+  const canFirstPartyConnect = supportsFirstPartyConnect({
+    userSessionIssuerId,
+    platformSlug,
+    visibility,
+    tunneledMcpServerId,
+  });
 
   const { accessToken, isLoading: isTokenLoading } = useUserSessionToken({
     target: { kind: "mcpServer", id: mcpServerId },
@@ -212,8 +237,12 @@ function RemoteMcpToolsSectionInner({
   );
 
   // The first-party connect page is opened as a top-level new tab, so it rides
-  // the gram_session cookie on the backend origin (not the dev proxy).
-  const authUrl = useMemo(() => firstPartyConnectUrl(mcpUrl), [mcpUrl]);
+  // the gram_session cookie on the backend origin (not the dev proxy). Built
+  // from the platform slug only — the display URL may be a custom domain.
+  const authUrl = useMemo(() => {
+    if (!canFirstPartyConnect || !platformSlug) return undefined;
+    return firstPartyConnectUrl(`${getServerURL()}/mcp/${platformSlug}`);
+  }, [canFirstPartyConnect, platformSlug]);
 
   // When the user comes back from the connect tab, re-attempt the listing so a
   // freshly linked session surfaces without a manual refresh.
@@ -260,6 +289,8 @@ function RemoteMcpToolsSectionInner({
         loading={loading}
         needsAuth={needsAuth}
         isError={isError}
+        isIssuerGated={isIssuerGated}
+        authSettingsHref={authSettingsHref}
         toolEntries={toolEntries}
         metadataByTool={metadataByTool}
         onRetry={refetch}
@@ -273,6 +304,8 @@ function RemoteMcpToolsBody({
   loading,
   needsAuth,
   isError,
+  isIssuerGated,
+  authSettingsHref,
   toolEntries,
   metadataByTool,
   onRetry,
@@ -281,6 +314,8 @@ function RemoteMcpToolsBody({
   loading: boolean;
   needsAuth: boolean;
   isError: boolean;
+  isIssuerGated: boolean;
+  authSettingsHref?: string;
   toolEntries: Array<[string, ProxiedMcpTool]>;
   metadataByTool: ToolMetadataByName;
   onRetry: () => void;
@@ -290,8 +325,22 @@ function RemoteMcpToolsBody({
     return <ToolsListSkeleton />;
   }
 
-  if (needsAuth) {
+  if (needsAuth && onConnect) {
     return <RemoteMcpToolsConnectPrompt onConnect={onConnect} />;
+  }
+
+  // A 401 with no connect target used to open /x/mcp/<slug>/connect/first-party
+  // anyway, which returns a bare not_found document. Point at settings instead.
+  if (needsAuth) {
+    return (
+      <ConfigureAuthenticationState
+        message={
+          isIssuerGated ? unavailableConnectMessage : unconfiguredAuthMessage
+        }
+        authSettingsHref={authSettingsHref}
+        onRetry={onRetry}
+      />
+    );
   }
 
   if (isError) {
@@ -504,6 +553,28 @@ function ToolParameterRow({
         </Text>
       ) : null}
     </li>
+  );
+}
+
+function ConfigureAuthenticationState({
+  message,
+  authSettingsHref,
+  onRetry,
+}: {
+  message: string;
+  authSettingsHref?: string;
+  onRetry?: () => void;
+}): JSX.Element {
+  return (
+    <EmptyState message={message} onRetry={onRetry}>
+      {authSettingsHref ? (
+        <Button variant="secondary" asChild>
+          <Link to={authSettingsHref}>
+            <Button.Text>Configure authentication</Button.Text>
+          </Link>
+        </Button>
+      ) : null}
+    </EmptyState>
   );
 }
 

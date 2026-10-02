@@ -33,10 +33,10 @@ func TestIdentityCoverageCheckpoint_RevalidatesEachCall(t *testing.T) {
 
 	conn, orgID := newTestDatabase(t, "ks_coverage_checkpoint")
 	userID := "user_" + uuid.NewString()
-	insertUser(t, conn, userID, nil)
-	insertMembership(t, conn, orgID, userID, nil)
-	projectID := insertProject(t, conn, orgID, "coverage-"+uuid.NewString()[:8], nil)
-	serverID := insertMCPServer(t, conn, orgID, projectID, nil)
+	insertUser(t, conn, userID, false)
+	insertMembership(t, conn, orgID, userID, false)
+	projectID := insertProject(t, conn, orgID, "coverage-"+uuid.NewString()[:8], false)
+	serverID := insertMCPServer(t, conn, orgID, projectID, false)
 
 	recorder := &coverageRecorder{}
 	checkpoint := NewIdentityCoverageCheckpoint(conn, recorder)
@@ -72,8 +72,8 @@ func TestIdentityCoverageCheckpoint_UsesOnlyStampedProvenance(t *testing.T) {
 	t.Parallel()
 
 	conn, orgID := newTestDatabase(t, "ks_coverage_provenance")
-	projectID := insertProject(t, conn, orgID, "coverage-"+uuid.NewString()[:8], nil)
-	serverID := insertMCPServer(t, conn, orgID, projectID, nil)
+	projectID := insertProject(t, conn, orgID, "coverage-"+uuid.NewString()[:8], false)
+	serverID := insertMCPServer(t, conn, orgID, projectID, false)
 	source := ServerSource{FrontingServerID: uuid.NullUUID{UUID: serverID, Valid: true}}
 	recorder := &coverageRecorder{}
 	checkpoint := NewIdentityCoverageCheckpoint(conn, recorder)

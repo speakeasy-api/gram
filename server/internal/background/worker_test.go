@@ -17,7 +17,7 @@ import (
 func TestWorkers_Run_RegistersSchedules(t *testing.T) {
 	t.Parallel()
 
-	env, _ := infra.NewTemporalEnv(t)
+	env := newSharedQueueTemporalEnv(t)
 	workers := newSchedulingWorkers(t, env)
 
 	interrupt := make(chan any)
@@ -60,6 +60,15 @@ func TestWorkers_Start_DoesNotRegisterSchedules(t *testing.T) {
 	require.Empty(t, ids, "Start is the entrypoint test suites use, and it must stay schedule-free: they build a namespace per test case, and ~20 scheduler workflows in each one swamps the shared dev server")
 }
 
+// newSharedQueueTemporalEnv returns a fresh test namespace whose worker polls
+// the shared queue, which is the only queue that registers the fleet-wide
+// schedules. The namespace is per test, so sharing the queue name is safe.
+func newSharedQueueTemporalEnv(t *testing.T) *tenv.Environment {
+	t.Helper()
+	env, _ := infra.NewTemporalEnv(t)
+	return tenv.NewEnvironment(env.Client(), env.Namespace(), sharedTaskQueue)
+}
+
 // newSchedulingWorkers builds a worker set whose only exercised behaviour is
 // schedule registration. Every dependency is nil because the sweeps those
 // schedules fire are not under test; ForDeploymentProcessing is here solely for
@@ -95,9 +104,33 @@ func scheduleIDs(ctx context.Context, c client.Client) ([]string, error) {
 	return ids, nil
 }
 
-func TestWorkers_RegisterSchedulesPreservesManualPauses(t *testing.T) {
+// PR previews poll their own queue in the dev namespace. They must register
+// only the schedules whose ID names their queue, never the fixed-ID ones that
+// dev owns, or they re-point dev's schedules at the preview queue.
+func TestWorkers_RegisterSchedulesSkipsFleetWideOnPreviewQueue(t *testing.T) {
 	t.Parallel()
 	env, _ := infra.NewTemporalEnv(t)
+	ctx := t.Context()
+	newSchedulingWorkers(t, env).registerSchedules(ctx)
+
+	queue := string(env.Queue())
+	want := []string{
+		slackDirectorySweepScheduleID(env.Queue()),
+		oktaApplicationSyncCoordinatorScheduleID(queue),
+		fmt.Sprintf("v1:trusted-delegation-cleanup:%s", queue),
+		fmt.Sprintf("v1:tenant-dimensions-sync:%s", queue),
+		indexToolsetSweepScheduleID(queue),
+	}
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		ids, err := scheduleIDs(ctx, env.Client())
+		assert.NoError(c, err)
+		assert.ElementsMatch(c, want, ids)
+	}, 30*time.Second, 250*time.Millisecond)
+}
+
+func TestWorkers_RegisterSchedulesPreservesManualPauses(t *testing.T) {
+	t.Parallel()
+	env := newSharedQueueTemporalEnv(t)
 	workers := newSchedulingWorkers(t, env)
 	ctx := t.Context()
 	workers.registerSchedules(ctx)
@@ -106,8 +139,9 @@ func TestWorkers_RegisterSchedulesPreservesManualPauses(t *testing.T) {
 		var err error
 		ids, err = scheduleIDs(ctx, env.Client())
 		assert.NoError(c, err)
-		assert.Len(c, ids, 25, "all unconditional schedules should be registered")
+		assert.Len(c, ids, 27, "all unconditional schedules should be registered")
 		assert.Contains(c, ids, fmt.Sprintf("v1:trusted-delegation-cleanup:%s", env.Queue()), "delegation cleanup is an unconditional schedule")
+		assert.Contains(c, ids, fmt.Sprintf("v1:mcp-finding-evidence-cleanup:%s", env.Queue()), "MCP finding evidence cleanup is an unconditional schedule")
 	}, 30*time.Second, 250*time.Millisecond)
 	sc := env.Client().ScheduleClient()
 	windows := make(map[string]time.Duration, len(ids))

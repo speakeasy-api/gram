@@ -3,6 +3,7 @@ package plugins
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -37,53 +38,60 @@ func testToolCallEnv() toolconfig.ToolCallEnv {
 func TestListPluginsToolReturnsSummariesWithoutServers(t *testing.T) {
 	t.Parallel()
 
-	description := "Everything bundle."
-	isDefault := false
-	serverCount := int64(4)
-	skillCount := int64(2)
-	assignmentCount := int64(9)
+	for _, autoCreated := range []bool{false, true} {
+		t.Run(fmt.Sprint(autoCreated), func(t *testing.T) {
+			t.Parallel()
+			description := "Everything bundle."
+			isDefault := false
+			serverCount := int64(4)
+			skillCount := int64(2)
+			assignmentCount := int64(9)
 
-	svc := &stubPluginsService{
-		payload: nil,
-		result: &genplugins.ListPluginsResult{Plugins: []*genplugins.Plugin{
-			{
-				ID:              "plugin-id",
-				Name:            "Kitchen Sink",
-				Slug:            "kitchen-sink",
-				Description:     &description,
-				IsDefault:       &isDefault,
-				ServerCount:     &serverCount,
-				SkillCount:      &skillCount,
-				AssignmentCount: &assignmentCount,
-				Servers: []*genplugins.PluginServer{{
-					ID:          "server-id",
-					ToolsetID:   nil,
-					McpServerID: nil,
-					DisplayName: "Some server",
-					Policy:      "required",
-					SortOrder:   0,
-					CreatedAt:   "2026-08-03T00:00:00Z",
+			svc := &stubPluginsService{
+				payload: nil,
+				result: &genplugins.ListPluginsResult{Plugins: []*genplugins.Plugin{
+					{
+						ID:              "plugin-id",
+						AutoCreated:     autoCreated,
+						Name:            "Kitchen Sink",
+						Slug:            "kitchen-sink",
+						Description:     &description,
+						IsDefault:       &isDefault,
+						ServerCount:     &serverCount,
+						SkillCount:      &skillCount,
+						AssignmentCount: &assignmentCount,
+						Servers: []*genplugins.PluginServer{{
+							ID:          "server-id",
+							ToolsetID:   nil,
+							McpServerID: nil,
+							DisplayName: "Some server",
+							Policy:      "required",
+							SortOrder:   0,
+							CreatedAt:   "2026-08-03T00:00:00Z",
+						}},
+						Assignments: nil,
+						CreatedAt:   "2026-08-03T00:00:00Z",
+						UpdatedAt:   "2026-08-03T00:00:00Z",
+					},
 				}},
-				Assignments: nil,
-				CreatedAt:   "2026-08-03T00:00:00Z",
-				UpdatedAt:   "2026-08-03T00:00:00Z",
-			},
-		}},
-	}
+			}
 
-	var out bytes.Buffer
-	require.NoError(t, NewListPluginsTool(svc).Call(t.Context(), testToolCallEnv(), bytes.NewBufferString(`{}`), &out))
-	require.Nil(t, svc.payload.SessionToken)
-	require.Nil(t, svc.payload.ProjectSlugInput)
-	require.JSONEq(t, `{"Plugins":[{
+			var out bytes.Buffer
+			require.NoError(t, NewListPluginsTool(svc).Call(t.Context(), testToolCallEnv(), bytes.NewBufferString(`{}`), &out))
+			require.Nil(t, svc.payload.SessionToken)
+			require.Nil(t, svc.payload.ProjectSlugInput)
+			require.JSONEq(t, fmt.Sprintf(`{"Plugins":[{
 		"ID":"plugin-id",
 		"Name":"Kitchen Sink",
 		"Slug":"kitchen-sink",
 		"Description":"Everything bundle.",
 		"IsDefault":false,
+ "AutoCreated":%t,
 		"ServerCount":4,
 		"SkillCount":2
-	}]}`, out.String())
+	}]}`, autoCreated), out.String())
+		})
+	}
 }
 
 func TestListPluginsToolRequiresService(t *testing.T) {

@@ -134,7 +134,10 @@ func TestCreate_ProvisionsPendingConnection(t *testing.T) {
 	for _, item := range created.Checklist {
 		switch item.Key {
 		case "public_key_auth":
-			require.Contains(t, item.Details, "Enter this URL: "+created.JwksURL)
+			require.Len(t, item.Details, 3)
+			require.Contains(t, item.Details[0], "Public keys")
+			require.Contains(t, item.Details[1], "Use a URL to fetch keys dynamically")
+			require.Contains(t, item.Details[2], "Client Credentials")
 			require.Nil(t, item.Completed, "nothing observed before the first verification")
 		case "assign_admin_roles":
 			require.Contains(t, item.Description, "multi-factor authentication")
@@ -754,7 +757,7 @@ func TestCreate_ProvisionFailureLeavesOrgRetryable(t *testing.T) {
 	empty, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: nil})
 	require.NoError(t, err)
 	require.Nil(t, empty.Connection)
-	issuers, err := remotesessionsrepo.New(si.conn.conn).ListOrganizationRemoteSessionIssuers(ctx, remotesessionsrepo.ListOrganizationRemoteSessionIssuersParams{OrganizationID: conv.ToPGText(si.orgID), IncludeGlobal: false, Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, LimitValue: 10})
+	issuers, err := remotesessionsrepo.New(si.conn.conn).ListOrganizationRemoteSessionIssuers(ctx, remotesessionsrepo.ListOrganizationRemoteSessionIssuersParams{OrganizationID: conv.ToPGText(si.orgID), IncludeOrganizational: true, IncludeProjectSpecific: true, IncludeGlobal: false, Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, LimitValue: 10})
 	require.NoError(t, err)
 	require.Empty(t, issuers, "the abandoned issuer was tombstoned")
 

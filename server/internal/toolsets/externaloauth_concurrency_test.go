@@ -3,16 +3,17 @@ package toolsets_test
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"testing"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 func TestToolsetsService_PrivateMCPNeverRetainsExternalOAuthDuringConcurrentUpdates(t *testing.T) {
@@ -27,13 +28,11 @@ func TestToolsetsService_PrivateMCPNeverRetainsExternalOAuthDuringConcurrentUpda
 
 			blocker := testenv.BeginTx(t, ctx, ti.conn)
 			t.Cleanup(func() { _ = blocker.Rollback(context.WithoutCancel(ctx)) })
-			var blockerPID int32
-			//nolint:glint // notestingrawsql: backend identity is a PostgreSQL test synchronization primitive
-			require.NoError(t, blocker.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&blockerPID))
-			//nolint:glint // notestingrawsql: intentionally holds the row lock shared by the two service operations
-			_, err := blocker.Exec(ctx, `
-SELECT id FROM toolsets WHERE project_id = $1 AND slug = $2 FOR UPDATE
-`, toolset.ProjectID, toolset.Slug)
+			blockerPID := testenv.BackendPID(blocker)
+			_, err := toolsetsrepo.New(blocker).GetToolsetForUpdate(ctx, toolsetsrepo.GetToolsetForUpdateParams{
+				Slug:      string(toolset.Slug),
+				ProjectID: uuid.MustParse(toolset.ProjectID),
+			})
 			require.NoError(t, err)
 
 			add := func() error {
@@ -67,9 +66,9 @@ SELECT id FROM toolsets WHERE project_id = $1 AND slug = $2 FOR UPDATE
 			firstResult := make(chan error, 1)
 			secondResult := make(chan error, 1)
 			go func() { firstResult <- first() }()
-			waitForLockWaiters(t, ctx, ti, blockerPID, 1)
+			testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, blockerPID, 1)
 			go func() { secondResult <- second() }()
-			waitForLockWaiters(t, ctx, ti, blockerPID, 2)
+			testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, blockerPID, 2)
 
 			require.NoError(t, blocker.Commit(ctx))
 			firstErr, secondErr := <-firstResult, <-secondResult
@@ -83,7 +82,7 @@ SELECT id FROM toolsets WHERE project_id = $1 AND slug = $2 FOR UPDATE
 				require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 			}
 
-			got, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: toolset.Slug})
+			got, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(toolset.Slug)})
 			require.NoError(t, err)
 			require.False(t, *got.McpIsPublic)
 			require.Nil(t, got.ExternalOauthServer)
@@ -111,13 +110,11 @@ func TestToolsetsService_ExternalOAuthWritersTakeToolsetLock(t *testing.T) {
 
 			blocker := testenv.BeginTx(t, ctx, ti.conn)
 			t.Cleanup(func() { _ = blocker.Rollback(context.WithoutCancel(ctx)) })
-			var blockerPID int32
-			//nolint:glint // notestingrawsql: backend identity is a PostgreSQL test synchronization primitive
-			require.NoError(t, blocker.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&blockerPID))
-			//nolint:glint // notestingrawsql: intentionally holds the row lock shared by external OAuth writers
-			_, err = blocker.Exec(ctx, `
-SELECT id FROM toolsets WHERE project_id = $1 AND slug = $2 FOR UPDATE
-`, toolset.ProjectID, toolset.Slug)
+			blockerPID := testenv.BackendPID(blocker)
+			_, err = toolsetsrepo.New(blocker).GetToolsetForUpdate(ctx, toolsetsrepo.GetToolsetForUpdateParams{
+				Slug:      string(toolset.Slug),
+				ProjectID: uuid.MustParse(toolset.ProjectID),
+			})
 			require.NoError(t, err)
 
 			result := make(chan error, 1)
@@ -133,49 +130,19 @@ SELECT id FROM toolsets WHERE project_id = $1 AND slug = $2 FOR UPDATE
 				result <- err
 			}()
 
-			waitForLockWaiters(t, ctx, ti, blockerPID, 1)
-			requireMetadataUnlocked(t, ctx, ti, attached.ExternalOauthServer.ID)
+			testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, blockerPID, 1)
+			requireMetadataUnlocked(t, ctx, ti, uuid.MustParse(toolset.ProjectID), attached.ExternalOauthServer.ID)
 			require.NoError(t, blocker.Commit(ctx))
 			require.NoError(t, <-result)
 		})
 	}
 }
 
-func requireMetadataUnlocked(t *testing.T, ctx context.Context, ti *testInstance, externalOAuthServerID string) {
+func requireMetadataUnlocked(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, externalOAuthServerID string) {
 	t.Helper()
 	probe := testenv.BeginTx(t, ctx, ti.conn)
 	defer func() { require.NoError(t, probe.Rollback(ctx)) }()
 
-	var id string
-	//nolint:glint // notestingrawsql: NOWAIT verifies that the blocked writer has not mutated metadata before locking the toolset
-	require.NoError(t, probe.QueryRow(ctx, `
-SELECT id FROM external_oauth_server_metadata WHERE id = $1 FOR UPDATE NOWAIT
-`, externalOAuthServerID).Scan(&id))
-}
-
-func waitForLockWaiters(t *testing.T, ctx context.Context, ti *testInstance, blockerPID int32, want int) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		var got int
-		//nolint:glint // notestingrawsql: pg_blocking_pids is a PostgreSQL test synchronization primitive
-		require.NoError(t, ti.conn.QueryRow(ctx, `
-WITH RECURSIVE blocked(pid) AS (
-  SELECT pid
-  FROM pg_stat_activity
-  WHERE datname = current_database() AND $1 = ANY(pg_blocking_pids(pid))
-  UNION
-  SELECT activity.pid
-  FROM pg_stat_activity AS activity
-  JOIN blocked AS blocker ON blocker.pid = ANY(pg_blocking_pids(activity.pid))
-  WHERE activity.datname = current_database()
-)
-SELECT count(*) FROM blocked
-`, blockerPID).Scan(&got))
-		if got >= want {
-			return
-		}
-		runtime.Gosched()
-	}
-	t.Fatalf("timed out waiting for %d blocked database operations", want)
+	_, err := testrepo.New(probe).LockExternalOAuthMetadataNowaitFixture(ctx, testrepo.LockExternalOAuthMetadataNowaitFixtureParams{ID: uuid.MustParse(externalOAuthServerID), ProjectID: projectID})
+	require.NoError(t, err)
 }

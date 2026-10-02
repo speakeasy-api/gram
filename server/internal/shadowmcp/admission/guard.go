@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -26,6 +29,9 @@ var (
 	// ErrDistributionDisabled means the direct-remote distribution kill switch is
 	// active for this project.
 	ErrDistributionDisabled = errors.New("direct-remote distribution disabled")
+	// ErrPrivateGatewayAudience prevents a private-only gateway address from
+	// being advertised to an unrestricted plugin audience.
+	ErrPrivateGatewayAudience = errors.New("private-only gateway cannot be distributed to Everyone")
 )
 
 // Guard applies one rollout decision to every direct-remote exposure mutation.
@@ -132,9 +138,104 @@ func (g *Guard) CheckProspectiveDefaultAttachment(ctx context.Context, tx pgx.Tx
 	return g.CheckAttachmentWithSeededAudience(ctx, tx, rollout, rolloutErr, organizationID, projectID, mcpServerID, desired)
 }
 
+// CheckGatewayAttachment validates adding one gateway to an exact existing
+// plugin against every direct-remote member reached by that gateway. The
+// gateway's immediate member set is resolved transactionally by the query, and
+// nested gateways are not traversed.
+func (g *Guard) CheckGatewayAttachment(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, rolloutErr error, organizationID string, projectID, pluginID, gatewayID uuid.UUID) error {
+	assignments, err := listPluginAssignments(ctx, tx, organizationID, projectID, pluginID)
+	if err != nil {
+		return unavailable(err)
+	}
+	if err := checkPrivateGatewayAudience(ctx, tx, organizationID, projectID, pluginID, gatewayID, assignments); err != nil {
+		return err
+	}
+	targets, err := platformrepo.New(tx).ListDirectRemoteAdmissionTargetsForGateway(ctx, platformrepo.ListDirectRemoteAdmissionTargetsForGatewayParams{
+		PluginID:       pluginID,
+		GatewayID:      gatewayID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return unavailable(fmt.Errorf("list direct-remote gateway targets: %w", err))
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+	if g == nil {
+		return unavailable(errors.New("distribution admission guard is missing"))
+	}
+	if err := requireUsableRollout(rollout, rolloutErr); err != nil {
+		return err
+	}
+
+	for _, target := range targets {
+		if !target.RemoteUrl.Valid || target.RemoteUrl.String == "" {
+			return unavailable(errors.New("direct-remote gateway target has no live remote URL"))
+		}
+		if err := g.checkURL(ctx, tx, rollout, organizationID, projectID, target.RemoteUrl.String, assignments); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// CheckGatewayMemberAddition checks a new member against every live plugin
+// carrying its gateway. The query preserves plugins with no assignments so
+// the complete audience, including an empty one, is evaluated.
+func (g *Guard) CheckGatewayMemberAddition(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, rolloutErr error, organizationID string, projectID, gatewayID, mcpServerID uuid.UUID) error {
+	target, scoped, err := directRemoteTarget(ctx, tx, organizationID, projectID, mcpServerID)
+	if err != nil {
+		return unavailable(err)
+	}
+	if !scoped {
+		return nil
+	}
+
+	rows, err := platformrepo.New(tx).ListDirectRemoteAdmissionAudiencesForGateway(ctx, platformrepo.ListDirectRemoteAdmissionAudiencesForGatewayParams{
+		GatewayID:      gatewayID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return unavailable(fmt.Errorf("list direct-remote gateway audiences: %w", err))
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	if target == "" {
+		return unavailable(errors.New("direct-remote gateway member has no live remote URL"))
+	}
+	if g == nil {
+		return unavailable(errors.New("distribution admission guard is missing"))
+	}
+	if err := requireUsableRollout(rollout, rolloutErr); err != nil {
+		return err
+	}
+
+	audiences := make(map[uuid.UUID][]string)
+	for _, row := range rows {
+		if _, ok := audiences[row.PluginID]; !ok {
+			audiences[row.PluginID] = nil
+		}
+		if row.PrincipalUrn.Valid {
+			audiences[row.PluginID] = append(audiences[row.PluginID], row.PrincipalUrn.String)
+		}
+	}
+	for _, audience := range audiences {
+		if err := g.checkURL(ctx, tx, rollout, organizationID, projectID, target, audience); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // CheckPluginAudience validates the complete desired assignment set against
 // every in-scope MCP currently attached to one exact plugin.
 func (g *Guard) CheckPluginAudience(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, rolloutErr error, organizationID string, projectID, pluginID uuid.UUID, desired []string) error {
+	if err := checkPluginPrivateGateways(ctx, tx, organizationID, projectID, pluginID, desired); err != nil {
+		return err
+	}
 	targets, err := platformrepo.New(tx).ListDirectRemoteAdmissionTargetsForPlugin(ctx, platformrepo.ListDirectRemoteAdmissionTargetsForPluginParams{
 		PluginID:       pluginID,
 		OrganizationID: organizationID,
@@ -324,6 +425,89 @@ func directRemoteTarget(ctx context.Context, tx pgx.Tx, organizationID string, p
 		return "", true, nil
 	}
 	return row.RemoteUrl.String, true, nil
+}
+
+// CheckGatewayNetworkMode prevents an existing Everyone assignment from
+// becoming incompatible when its attached gateway switches to private-only.
+func CheckGatewayNetworkMode(ctx context.Context, tx pgx.Tx, organizationID string, projectID, gatewayID uuid.UUID, mode networkaccess.Mode) error {
+	if mode != networkaccess.ModePrivateOnly {
+		return nil
+	}
+	var distributed bool
+	err := tx.QueryRow(ctx, `
+SELECT EXISTS (
+  SELECT 1 FROM plugin_servers ps
+  JOIN plugins p ON p.id = ps.plugin_id AND p.organization_id = $1 AND p.project_id = $2 AND p.deleted IS FALSE
+  JOIN plugin_assignments pa ON pa.plugin_id = p.id AND pa.organization_id = p.organization_id AND pa.principal_urn = $4
+  WHERE ps.meta_mcp_server_id = $3 AND ps.deleted IS FALSE
+)`, organizationID, projectID, gatewayID, urn.PrincipalWildcard).Scan(&distributed)
+	if err != nil {
+		return unavailable(fmt.Errorf("check gateway plugin audience: %w", err))
+	}
+	if distributed {
+		return ErrPrivateGatewayAudience
+	}
+	return nil
+}
+
+func checkPrivateGatewayAudience(ctx context.Context, tx pgx.Tx, organizationID string, projectID, pluginID, gatewayID uuid.UUID, desired []string) error {
+	if !containsEveryone(desired) {
+		return nil
+	}
+	var storedMode pgtype.Text
+	err := tx.QueryRow(ctx, `
+SELECT g.network_access_mode
+FROM meta_mcp_servers g
+JOIN plugins p ON p.organization_id = g.organization_id AND p.project_id = g.project_id AND p.deleted IS FALSE
+WHERE p.id = $1 AND g.id = $2 AND g.organization_id = $3 AND g.project_id = $4 AND g.deleted IS FALSE`, pluginID, gatewayID, organizationID, projectID).Scan(&storedMode)
+	if err != nil {
+		return unavailable(fmt.Errorf("resolve plugin gateway network access: %w", err))
+	}
+	mode, err := networkaccess.Effective(storedMode)
+	if err != nil {
+		return unavailable(fmt.Errorf("resolve plugin gateway network access: %w", err))
+	}
+	if mode == networkaccess.ModePrivateOnly {
+		return ErrPrivateGatewayAudience
+	}
+	return nil
+}
+
+func checkPluginPrivateGateways(ctx context.Context, tx pgx.Tx, organizationID string, projectID, pluginID uuid.UUID, desired []string) error {
+	if !containsEveryone(desired) {
+		return nil
+	}
+	rows, err := tx.Query(ctx, `
+SELECT g.network_access_mode
+FROM plugin_servers ps
+JOIN plugins p ON p.id = ps.plugin_id AND p.organization_id = $1 AND p.project_id = $2 AND p.deleted IS FALSE
+JOIN meta_mcp_servers g ON g.id = ps.meta_mcp_server_id AND g.organization_id = p.organization_id AND g.project_id = p.project_id AND g.deleted IS FALSE
+WHERE ps.plugin_id = $3 AND ps.deleted IS FALSE AND g.visibility <> 'disabled'`, organizationID, projectID, pluginID)
+	if err != nil {
+		return unavailable(fmt.Errorf("list plugin gateway network access: %w", err))
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var storedMode pgtype.Text
+		if err := rows.Scan(&storedMode); err != nil {
+			return unavailable(fmt.Errorf("scan plugin gateway network access: %w", err))
+		}
+		mode, err := networkaccess.Effective(storedMode)
+		if err != nil {
+			return unavailable(fmt.Errorf("resolve plugin gateway network access: %w", err))
+		}
+		if mode == networkaccess.ModePrivateOnly {
+			return ErrPrivateGatewayAudience
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return unavailable(fmt.Errorf("iterate plugin gateway network access: %w", err))
+	}
+	return nil
+}
+
+func containsEveryone(principals []string) bool {
+	return slices.Contains(principals, urn.PrincipalWildcard)
 }
 
 func listPluginAssignments(ctx context.Context, tx pgx.Tx, organizationID string, projectID, pluginID uuid.UUID) ([]string, error) {

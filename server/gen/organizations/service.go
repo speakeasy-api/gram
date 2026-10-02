@@ -59,6 +59,10 @@ type Service interface {
 	// update: status, assignee, hidden, or clear_assignee=true. Assignee is
 	// mutually exclusive with clear_assignee=true.
 	UpdateSetupTask(context.Context, *UpdateSetupTaskPayload) (res *SetupTask, err error)
+	// Record the onboarding survey result. The server picks the use case's default
+	// playbook, which decides the setup tasks the wizard walks; progress and
+	// assignments are kept.
+	SubmitOnboardingSurvey(context.Context, *SubmitOnboardingSurveyPayload) (res *ListSetupTasksResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -81,7 +85,7 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [16]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "updateSetupTask"}
+var MethodNames = [17]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "updateSetupTask", "submitOnboardingSurvey"}
 
 // CreatePortalSessionPayload is the payload type of the organizations service
 // createPortalSession method.
@@ -171,7 +175,7 @@ type ListSetupTasksPayload struct {
 // ListSetupTasksResult is the result type of the organizations service
 // listSetupTasks method.
 type ListSetupTasksResult struct {
-	// Setup tasks in catalog order.
+	// Setup tasks in catalog order. A group precedes the cards under it.
 	Tasks []*SetupTask
 }
 
@@ -351,6 +355,13 @@ type SetupTask struct {
 	BlockedBy []string
 	// Whether a platform administrator hid the task.
 	Hidden bool
+	// Key of the group this card sits under. Absent for a top-level card or a
+	// group.
+	ParentKey *string
+	// True for a group that nests cards. A group has no card of its own: it is
+	// hidden when every card under it is, done when every visible card is, and
+	// cannot be assigned or marked by hand.
+	Group bool
 }
 
 type SetupTaskAssignee struct {
@@ -372,6 +383,14 @@ type SetupTaskAssigneeInput struct {
 	// Email address to assign before membership exists. Mutually exclusive with
 	// user_id.
 	Email *string
+}
+
+// SubmitOnboardingSurveyPayload is the payload type of the organizations
+// service submitOnboardingSurvey method.
+type SubmitOnboardingSurveyPayload struct {
+	// Use case the survey answers resolved to.
+	UseCase      string
+	SessionToken *string
 }
 
 // UpdateInviteRolePayload is the payload type of the organizations service

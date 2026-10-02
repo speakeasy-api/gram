@@ -36,6 +36,8 @@ var expectedFullAccessScopes = []string{
 	string(authz.ScopeAgentWrite),
 	string(authz.ScopeAgentAuthorize),
 	string(authz.ScopeAgentTransfer),
+	string(authz.ScopeWorkloadRead),
+	string(authz.ScopeWorkloadWrite),
 	string(authz.ScopeOrgDeviceAgentSync),
 	string(authz.ScopeOrgHooksIngest),
 }
@@ -89,6 +91,40 @@ func TestService_ListGrants(t *testing.T) {
 	require.Equal(t, "tool_456", byScope["mcp:connect"].Selectors[0].ResourceID)
 	require.Len(t, byScope["risk_policy:evaluate"].Selectors, 1)
 	require.Equal(t, "policy_123", byScope["risk_policy:evaluate"].Selectors[0].ResourceID)
+}
+
+func TestService_ListGrants_DirectSelectors(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "member@example.com", "Member User", "workos_user_member", "membership_1")
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", ""))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, mockMember("", "membership_1", "workos_user_member", "custom-builder"))
+	rolePrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "custom-builder")
+	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, rolePrincipal, authz.ScopeMCPConnect, authz.WildcardResource)
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, rolePrincipal, authz.ScopeMCPBlockedConnect, "server_locked")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userPrincipal, authz.ScopeMCPConnect, "server_locked")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userPrincipal, authz.ScopeMCPRead, authz.WildcardResource)
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userPrincipal, authz.ScopeMCPBlockedRead, "server_hidden")
+
+	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
+	require.NoError(t, err)
+	byScope := make(map[string]*gen.ListRoleGrant, len(result.Grants))
+	for _, grant := range result.Grants {
+		byScope[grant.Scope] = grant
+	}
+
+	require.Len(t, byScope["mcp:connect"].Selectors, 2, "selectors still report every principal's grants")
+	require.Len(t, byScope["mcp:connect"].DirectSelectors, 1, "the direct grant naming a server is reported for precedence")
+	require.Equal(t, "server_locked", byScope["mcp:connect"].DirectSelectors[0].ResourceID)
+	require.Empty(t, byScope["mcp:blocked_connect"].DirectSelectors, "a role's block is not direct")
+	require.Empty(t, byScope["mcp:read"].DirectSelectors, "a direct wildcard grant cannot outrank a block")
+	require.Len(t, byScope["mcp:blocked_read"].DirectSelectors, 1, "the caller's own block is reported")
 }
 
 func TestService_ListGrants_RoleGrants(t *testing.T) {

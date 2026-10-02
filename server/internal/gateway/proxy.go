@@ -955,6 +955,12 @@ func (tp *ToolProxy) doExternalMCP(
 	// Connect to the external MCP server
 	client, err := externalmcp.NewClient(ctx, logger, tp.policy, plan.RemoteURL, plan.TransportType, opts)
 	if err != nil {
+		if authErr, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
+			upstreamReportedError = true
+			responseStatusCode = http.StatusOK
+			logger.WarnContext(ctx, "external MCP authentication rejected", attr.SlogHTTPResponseStatusCode(authErr.StatusCode))
+			return writeExternalMCPAuthRejection(w, plan.RequiresOAuth)
+		}
 		return oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").LogError(ctx, logger)
 	}
 	defer o11y.LogDefer(ctx, logger, "failed to close external mcp client", client.Close)
@@ -962,6 +968,12 @@ func (tp *ToolProxy) doExternalMCP(
 	// Call the tool on the external MCP server
 	callResult, err := client.CallTool(ctx, toolName, arguments, plan.InputSchema)
 	if err != nil {
+		if authErr, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
+			upstreamReportedError = true
+			responseStatusCode = http.StatusOK
+			logger.WarnContext(ctx, "external MCP authentication rejected", attr.SlogHTTPResponseStatusCode(authErr.StatusCode))
+			return writeExternalMCPAuthRejection(w, plan.RequiresOAuth)
+		}
 		return oops.E(oops.CodeUnexpected, err, "failed to call external MCP tool").LogError(ctx, logger)
 	}
 
@@ -999,6 +1011,29 @@ func (tp *ToolProxy) doExternalMCP(
 		return oops.E(oops.CodeUnexpected, err, "failed to write external MCP tool result").LogError(ctx, logger)
 	}
 
+	return nil
+}
+
+// An upstream rejection is a tool error, not a rejection of the caller's Gram
+// bearer. Never relay its WWW-Authenticate challenge: it names a different
+// audience and may contain sensitive, upstream-controlled values.
+func writeExternalMCPAuthRejection(w http.ResponseWriter, requiresOAuth bool) error {
+	message := "The upstream MCP server rejected authentication. Ask the MCP server administrator to check its configured credentials and permissions."
+	if requiresOAuth {
+		message = "The upstream MCP server rejected authentication. Reauthorize this MCP server to reconnect your upstream account. If the problem persists, check that your account has the required permissions."
+	}
+	response := struct {
+		Content []map[string]string `json:"content"`
+		IsError bool                `json:"isError"`
+	}{
+		Content: []map[string]string{{"type": "text", "text": message}},
+		IsError: true,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to write external MCP tool result")
+	}
 	return nil
 }
 

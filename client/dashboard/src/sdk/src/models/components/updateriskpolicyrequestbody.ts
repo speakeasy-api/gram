@@ -11,13 +11,18 @@ import {
   RiskDetectionScope$outboundSchema,
 } from "./riskdetectionscope.js";
 import {
+  RiskMCPScope,
+  RiskMCPScope$Outbound,
+  RiskMCPScope$outboundSchema,
+} from "./riskmcpscope.js";
+import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$Outbound,
   RiskPolicyModelConfig$outboundSchema,
 } from "./riskpolicymodelconfig.js";
 
 /**
- * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
+ * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
  */
 export const UpdateRiskPolicyRequestBodyAction = {
   Flag: "flag",
@@ -26,7 +31,7 @@ export const UpdateRiskPolicyRequestBodyAction = {
   Quarantine: "quarantine",
 } as const;
 /**
- * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
+ * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
  */
 export type UpdateRiskPolicyRequestBodyAction = ClosedEnum<
   typeof UpdateRiskPolicyRequestBodyAction
@@ -62,7 +67,7 @@ export type UpdateRiskPolicyRequestBodyShadowMcpDisposition = ClosedEnum<
 
 export type UpdateRiskPolicyRequestBody = {
   /**
-   * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
+   * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
    */
   action?: UpdateRiskPolicyRequestBodyAction | undefined;
   /**
@@ -101,6 +106,7 @@ export type UpdateRiskPolicyRequestBody = {
    * The policy ID.
    */
   id: string;
+  mcpScope?: RiskMCPScope | undefined;
   modelConfig?: RiskPolicyModelConfig | undefined;
   /**
    * The policy name.
@@ -182,6 +188,7 @@ export type UpdateRiskPolicyRequestBody$Outbound = {
   disabled_rules?: Array<string> | undefined;
   enabled?: boolean | undefined;
   id: string;
+  mcp_scope?: RiskMCPScope$Outbound | undefined;
   model_config?: RiskPolicyModelConfig$Outbound | undefined;
   name: string;
   presidio_entities?: Array<string> | undefined;
@@ -215,6 +222,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     disabledRules: z.optional(z.array(z.string())),
     enabled: z.optional(z.boolean()),
     id: z.string(),
+    mcpScope: z.optional(RiskMCPScope$outboundSchema),
     modelConfig: z.optional(RiskPolicyModelConfig$outboundSchema),
     name: z.string(),
     presidioEntities: z.optional(z.array(z.string())),
@@ -240,6 +248,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       customRuleIds: "custom_rule_ids",
       detectionScopes: "detection_scopes",
       disabledRules: "disabled_rules",
+      mcpScope: "mcp_scope",
       modelConfig: "model_config",
       presidioEntities: "presidio_entities",
       presidioScoreThreshold: "presidio_score_threshold",

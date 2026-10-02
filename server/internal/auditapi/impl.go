@@ -159,11 +159,14 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving audit actor identities").LogError(ctx, s.logger)
 	}
 	for _, log := range logs {
-		isAdminActor := log.ActingSurface == string(audit.SurfaceAdmin)
+		isAdminActor := audit.IsStaffAdminSurface(audit.Surface(log.ActingSurface))
 		isSpeakeasyActor := log.ActorType == "user" && speakeasyActors[log.ActorID]
 		if shouldMaskCustomerActor(isAdminActor, isSpeakeasyActor) {
 			log.ActorDisplayName = conv.PtrEmpty(audit.SpeakeasyTeamActorLabel)
 			log.ActorSlug = nil
+		}
+		if isAdminActor {
+			log.ActorID = ""
 		}
 	}
 
@@ -240,23 +243,26 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit surface facets").LogError(ctx, s.logger)
 	}
 
-	actors := toAuditActorFacetOptions(actorRows)
-
-	// Facet values are actor IDs, so mask their display names the same way the
-	// log feed does. Only user actors are candidates — other actor types keep
-	// their labels even if their id collides with a staff user id.
+	// Staff actor IDs are not usable as customer-facing filters. Omit those
+	// facets instead of returning repeated empty IDs that match every log.
+	visibleRows := make([]repo.ListAuditActorFacetsRow, 0, len(actorRows))
 	actorIDs := make([]string, 0, len(actorRows))
 	for _, row := range actorRows {
+		if row.IsAdminActor {
+			continue
+		}
+		visibleRows = append(visibleRows, row)
 		if row.IsUserActor {
 			actorIDs = append(actorIDs, row.Value)
 		}
 	}
+	actors := toAuditActorFacetOptions(visibleRows)
 	speakeasyActors, err := s.speakeasyActorIDs(ctx, authCtx.ActiveOrganizationID, actorIDs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving audit actor identities").LogError(ctx, s.logger)
 	}
-	for i, actor := range actors {
-		if shouldMaskCustomerActor(actorRows[i].IsAdminActor, speakeasyActors[actor.Value]) {
+	for _, actor := range actors {
+		if speakeasyActors[actor.Value] {
 			actor.DisplayName = audit.SpeakeasyTeamActorLabel
 		}
 	}
@@ -320,9 +326,18 @@ func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
 		AfterSnapshot:      row.AfterSnapshot,
 		Metadata:           metadata,
 		ActingSurface:      actingSurfaceOrUnknown(row.ActingSurface),
-		ActingClientID:     conv.FromPGText[string](row.ActingClientID),
+		ActingClientID:     customerFacingActingClientID(row.ActingSurface, row.ActingClientID),
 		CreatedAt:          row.CreatedAt.Time.Format(time.RFC3339),
 	}, nil
+}
+
+// customerFacingActingClientID omits the registered OAuth client identifier
+// for staff-only surfaces while preserving customer surface attribution.
+func customerFacingActingClientID(surface pgtype.Text, clientID pgtype.Text) *string {
+	if surface.Valid && audit.IsStaffAdminSurface(audit.Surface(surface.String)) {
+		return nil
+	}
+	return conv.FromPGText[string](clientID)
 }
 
 // actingSurfaceOrUnknown resolves the stored surface for display.

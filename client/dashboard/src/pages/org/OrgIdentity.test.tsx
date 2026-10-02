@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   admin: true,
   enabled: true,
   ema: vi.fn(),
+  slack: vi.fn(),
   features: vi.fn(() => ({ data: {} as Record<string, boolean> })),
   onboarding: {
     domainVerified: false,
@@ -33,10 +34,24 @@ vi.mock("nuqs", async (importOriginal) => ({
   useQueryState: (await import("./identity-provider/nuqsRouterMock"))
     .useRouterQueryState,
 }));
-vi.mock("./identity-provider/EnterpriseManagedAuth", () => ({
-  EnterpriseManagedAuth: () => {
+vi.mock("./identity-provider/DirectoryRoleMappings", () => ({
+  DirectoryRoleMappings: ({ footerAction }: { footerAction?: ReactNode }) => (
+    <div>
+      Role mappings panel
+      {footerAction}
+    </div>
+  ),
+}));
+vi.mock("./identity-provider/IdentityProviders", () => ({
+  IdentityProviders: () => {
     mocks.ema();
     return <div>EMA workspace</div>;
+  },
+}));
+vi.mock("./slack-workspaces/SlackWorkspaces", () => ({
+  SlackWorkspaces: () => {
+    mocks.slack();
+    return <div>Slack workspace connections</div>;
   },
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
@@ -63,9 +78,9 @@ vi.mock("@/contexts/Telemetry", () => ({
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
-    setupTask: {
+    setup: {
       Link: ({ children }: { children: ReactNode }) => (
-        <a href="/example/setup/idp">{children}</a>
+        <a href="/example/setup?task=identity-provider">{children}</a>
       ),
     },
   }),
@@ -147,23 +162,23 @@ function section(name: string) {
 }
 
 describe("identity top-level tabs", () => {
-  it("shows only employee SSO and preview EMA without mounting EMA on SSO", () => {
+  it("shows SSO and preview connection tabs without mounting them on SSO", () => {
     show();
     expect(screen.getByRole("heading", { name: "IDP and SSO" })).toBeTruthy();
     const nav = screen.getByRole("navigation");
-    expect(nav.querySelectorAll("a")).toHaveLength(2);
+    expect(nav.querySelectorAll("a")).toHaveLength(3);
     expect(
       screen.getByRole("link", { name: "Single sign-on" }).getAttribute("href"),
     ).toBe("?tab=sso");
-    const ema = screen.getByRole("link", { name: "Enterprise Managed Auth" });
-    expect(ema.getAttribute("href")).toBe("?tab=enterprise-managed-auth");
+    const ema = screen.getByRole("link", { name: "Identity providers" });
+    expect(ema.getAttribute("href")).toBe("?tab=identity-providers");
     expect(ema.getAttribute("data-stage")).toBe("preview");
     expect(mocks.ema).not.toHaveBeenCalled();
     expect(mocks.features).toHaveBeenCalled();
   });
 
   it("mounts EMA without fetching employee SSO features", () => {
-    show("?tab=enterprise-managed-auth");
+    show("?tab=identity-providers");
     expect(screen.getByText("EMA workspace")).toBeTruthy();
     expect(mocks.features).not.toHaveBeenCalled();
   });
@@ -172,9 +187,9 @@ describe("identity top-level tabs", () => {
     "requires %s before mounting EMA",
     (gate) => {
       mocks[gate] = false;
-      show("?tab=enterprise-managed-auth&provider=okta&view=setup");
+      show("?tab=identity-providers&provider=okta&view=setup");
       expect(
-        screen.queryByRole("link", { name: "Enterprise Managed Auth" }),
+        screen.queryByRole("link", { name: "Identity providers" }),
       ).toBeNull();
       expect(mocks.ema).not.toHaveBeenCalled();
       expect(mocks.features).toHaveBeenCalled();
@@ -317,7 +332,27 @@ describe("directory sync domain gate", () => {
     show();
     const dsync = directorySyncSection();
     expect(dsync.queryByText("Verify a domain first.")).toBeNull();
-    expect(configureButton().disabled).toBe(false);
+    expect(
+      dsync.getByRole<HTMLButtonElement>("button", {
+        name: "Manage connection",
+      }).disabled,
+    ).toBe(false);
+    expect(dsync.getByText("Role mappings panel")).toBeTruthy();
+  });
+
+  it("keeps role mappings from non-admins and shows them the SCIM card", () => {
+    mocks.features.mockImplementation(() => ({ data: { scimEnabled: true } }));
+    mocks.scimActive = true;
+    mocks.admin = false;
+    show();
+    const dsync = directorySyncSection();
+    expect(dsync.queryByText("Role mappings panel")).toBeNull();
+    expect(
+      dsync.queryByRole("button", { name: "Manage connection" }),
+    ).toBeNull();
+    expect(
+      dsync.getByText("Your directory provider is connected."),
+    ).toBeTruthy();
   });
 });
 
@@ -352,5 +387,62 @@ describe("domain verification portal", () => {
       mocks.portal.mutate.mock.calls[0]?.[0].request
         .generateWorkOSAdminPortalLinkRequestBody.intent,
     ).toBe("domain_verification");
+  });
+
+  it("opens the WorkOS portal to set up SSO", () => {
+    mocks.features.mockImplementation(() => ({ data: { ssoEnabled: true } }));
+    mocks.onboarding = {
+      domainVerified: true,
+      ssoConfigured: false,
+      verifiedDomains: ["example.com"],
+    };
+    show();
+    fireEvent.click(
+      section("Single Sign-On").getByRole("button", { name: "Configure" }),
+    );
+    expect(mocks.portal.mutate).toHaveBeenCalledOnce();
+    expect(
+      mocks.portal.mutate.mock.calls[0]?.[0].request
+        .generateWorkOSAdminPortalLinkRequestBody.intent,
+    ).toBe("sso");
+  });
+
+  it("opens the WorkOS portal to set up Directory Sync", () => {
+    mocks.features.mockImplementation(() => ({ data: { scimEnabled: true } }));
+    mocks.onboarding = {
+      domainVerified: true,
+      ssoConfigured: false,
+      verifiedDomains: ["example.com"],
+    };
+    show();
+    fireEvent.click(
+      section("Directory Sync").getByRole("button", { name: "Configure" }),
+    );
+    expect(mocks.portal.mutate).toHaveBeenCalledOnce();
+    expect(
+      mocks.portal.mutate.mock.calls[0]?.[0].request
+        .generateWorkOSAdminPortalLinkRequestBody.intent,
+    ).toBe("dsync");
+  });
+});
+
+describe("Slack workspaces tab", () => {
+  it("opens for organization admins independently of rollout flags", () => {
+    mocks.enabled = false;
+    show("?tab=slack-workspaces");
+    expect(screen.getByText("Slack workspace connections")).toBeTruthy();
+    expect(mocks.slack).toHaveBeenCalled();
+  });
+
+  it("is hidden from non-admins", () => {
+    mocks.admin = false;
+    show("?tab=slack-workspaces");
+    expect(screen.queryByRole("link", { name: "Slack workspaces" })).toBeNull();
+    expect(mocks.slack).not.toHaveBeenCalled();
+    expect(
+      screen
+        .getByRole("link", { name: "Single sign-on" })
+        .getAttribute("aria-current"),
+    ).toBe("page");
   });
 });

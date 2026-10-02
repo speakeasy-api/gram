@@ -24,7 +24,8 @@ func browserTestService(t *testing.T) *Service {
 	require.NoError(t, err)
 	return &Service{logger: logger, serverURL: serverURL,
 		authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](logger, store, cache.SuffixNone),
-		remoteLoginCache:    cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger, store, cache.SuffixNone)}
+		remoteLoginCache:    cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger, store, cache.SuffixNone),
+		remoteLoginHopCache: cache.NewTypedObjectCache[remoteLoginHop](logger, store, cache.SuffixNone)}
 }
 
 func browserTestState() AuthnChallengeState {

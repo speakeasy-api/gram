@@ -22,6 +22,9 @@ import {
   listOrganizationMembers,
   listOrganizationProjects,
   listOrganizations,
+  listUsers,
+  listUserOrganizations,
+  listProjectMcpServers,
   omitUnset,
   type AdminInferenceKey,
   type AdminInferenceSpendMonth,
@@ -34,6 +37,7 @@ import {
   type ListOrganizationProjectsResult,
   type ListOrganizationsParams,
   type ListOrganizationsResult,
+  type ListProjectMcpServersResult,
 } from "@/lib/gramAdminApi";
 import { organizationActivityQuery } from "@/lib/gramAdminClient";
 
@@ -127,6 +131,23 @@ export function organizationProjectsQuery(
   return queryOptions({
     queryKey: ["gram-admin-organization-projects", organizationID] as const,
     queryFn: () => listOrganizationProjects(organizationID),
+  });
+}
+
+export function projectMcpServersQuery(
+  organizationID: string,
+  projectID: string,
+): AdminQuery<
+  ListProjectMcpServersResult,
+  readonly ["gram-admin-project-mcp-servers", string, string]
+> {
+  return queryOptions({
+    queryKey: [
+      "gram-admin-project-mcp-servers",
+      organizationID,
+      projectID,
+    ] as const,
+    queryFn: () => listProjectMcpServers(organizationID, projectID),
   });
 }
 
@@ -359,5 +380,32 @@ export function projectQuery(
       organizationIdOrSlug ?? null,
     ] as const,
     queryFn: () => getProject(idOrSlug, organizationIdOrSlug),
+  });
+}
+
+export function usersListQuery(
+  params: Parameters<typeof listUsers>[0],
+): AdminQuery<
+  Awaited<ReturnType<typeof listUsers>>,
+  readonly ["admin", "users", Parameters<typeof listUsers>[0]]
+> {
+  return queryOptions({
+    queryKey: ["admin", "users", params] as const,
+    queryFn: ({ signal }) => listUsers(params, signal),
+  });
+}
+export function userOrganizationsListQuery(
+  params: Parameters<typeof listUserOrganizations>[0],
+): AdminQuery<
+  Awaited<ReturnType<typeof listUserOrganizations>>,
+  readonly [
+    "admin",
+    "user-organizations",
+    Parameters<typeof listUserOrganizations>[0],
+  ]
+> {
+  return queryOptions({
+    queryKey: ["admin", "user-organizations", params] as const,
+    queryFn: ({ signal }) => listUserOrganizations(params, signal),
   });
 }

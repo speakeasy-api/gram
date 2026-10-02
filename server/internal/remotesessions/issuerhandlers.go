@@ -381,6 +381,18 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 	if strings.TrimSpace(payload.Issuer) == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer is required").LogError(ctx, logger)
 	}
+	trimmedIssuer := strings.TrimSpace(payload.Issuer)
+	if err := validateRemoteSessionProviderURLs(trimmedIssuer, remoteSessionProviderEndpoints{
+		authorizationEndpoint: payload.AuthorizationEndpoint,
+		tokenEndpoint:         payload.TokenEndpoint,
+		revocationEndpoint:    payload.RevocationEndpoint,
+		registrationEndpoint:  payload.RegistrationEndpoint,
+		jwksURI:               payload.JwksURI,
+		userinfoEndpoint:      payload.UserinfoEndpoint,
+		introspectionEndpoint: payload.IntrospectionEndpoint,
+	}); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid provider URL").LogError(ctx, logger)
+	}
 
 	// Operator-supplied and later rendered as a link, so it is validated here.
 	// An empty value stays legal: the create query stores it as NULL.
@@ -396,21 +408,6 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 	tunnelID, err := resolveIssuerTunnelBinding(ctx, logger, repo.New(s.db), authCtx, uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}, payload.TunneledMcpServerID)
 	if err != nil {
 		return nil, err
-	}
-
-	// Revocation endpoint must be HTTPS, or HTTP on loopback where a token
-	// never crosses a network: tokens are sensitive credentials that must not
-	// be transmitted in plaintext. An empty value stays legal.
-	if v := conv.PtrValOr(payload.RevocationEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "revocation_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
-	}
-	// The userinfo and introspection endpoints receive access tokens, so they
-	// are held to the same transport rule as the revocation endpoint.
-	if v := conv.PtrValOr(payload.UserinfoEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "userinfo_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
-	}
-	if v := conv.PtrValOr(payload.IntrospectionEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "introspection_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
 	}
 
 	// Discovery drops malformed documentation URLs, but a caller holding the write
@@ -439,7 +436,7 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		ProjectID:                           uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		OrganizationID:                      conv.ToPGText(authCtx.ActiveOrganizationID),
 		Slug:                                payload.Slug,
-		Issuer:                              payload.Issuer,
+		Issuer:                              trimmedIssuer,
 		Name:                                conv.PtrToPGTextTrimmed(payload.Name),
 		LogoAssetID:                         logoAssetID,
 		ClientSetupDocumentationUrl:         conv.PtrToPGTextEmpty(payload.ClientSetupDocumentationURL),
@@ -451,10 +448,10 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		ServiceDocumentation:                conv.PtrToPGTextEmpty(payload.ServiceDocumentation),
 		OpPolicyUri:                         conv.PtrToPGTextEmpty(payload.OpPolicyURI),
 		OpTosUri:                            conv.PtrToPGTextEmpty(payload.OpTosURI),
-		ScopesSupported:                     payload.ScopesSupported,
-		GrantTypesSupported:                 payload.GrantTypesSupported,
-		ResponseTypesSupported:              payload.ResponseTypesSupported,
-		TokenEndpointAuthMethodsSupported:   payload.TokenEndpointAuthMethodsSupported,
+		ScopesSupported:                     orEmptySlice(payload.ScopesSupported),
+		GrantTypesSupported:                 orEmptySlice(payload.GrantTypesSupported),
+		ResponseTypesSupported:              orEmptySlice(payload.ResponseTypesSupported),
+		TokenEndpointAuthMethodsSupported:   orEmptySlice(payload.TokenEndpointAuthMethodsSupported),
 		CodeChallengeMethodsSupported:       payload.CodeChallengeMethodsSupported,
 		ClientIDMetadataDocumentSupported:   conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                                conv.PtrValOr(payload.Oidc, false),
@@ -553,10 +550,10 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 	// documentation columns, but applying that to slug/issuer would violate the
 	// constraint, so reject empty here with an actionable error before the
 	// query runs.
-	if payload.Slug != nil && *payload.Slug == "" {
+	if payload.Slug != nil && strings.TrimSpace(*payload.Slug) == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "slug cannot be set to empty").LogError(ctx, logger)
 	}
-	if payload.Issuer != nil && *payload.Issuer == "" {
+	if payload.Issuer != nil && strings.TrimSpace(*payload.Issuer) == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer cannot be set to empty").LogError(ctx, logger)
 	}
 	tunneledMcpServerID := normalizeOptionalTunnelBinding(payload.TunneledMcpServerID)
@@ -590,19 +587,6 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		}
 	}
 
-	// Revocation endpoint must be HTTPS, or HTTP on loopback where a token
-	// never crosses a network: tokens are sensitive credentials that must not
-	// be transmitted in plaintext. An empty value stays legal.
-	if v := conv.PtrValOr(payload.RevocationEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "revocation_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
-	}
-	if v := conv.PtrValOr(payload.UserinfoEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "userinfo_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
-	}
-	if v := conv.PtrValOr(payload.IntrospectionEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "introspection_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
-	}
-
 	// Discovery drops malformed documentation URLs, but a caller holding the write
 	// scope can POST them without ever calling discover, and they are persisted
 	// and later rendered as links. An empty value stays legal: the update queries
@@ -615,6 +599,18 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 	}
 	if v := conv.PtrValOr(payload.OpTosURI, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "op_tos_uri must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+
+	if err := validateRemoteSessionProviderURLChanges(payload.Issuer, remoteSessionProviderEndpoints{
+		authorizationEndpoint: payload.AuthorizationEndpoint,
+		tokenEndpoint:         payload.TokenEndpoint,
+		revocationEndpoint:    payload.RevocationEndpoint,
+		registrationEndpoint:  payload.RegistrationEndpoint,
+		jwksURI:               payload.JwksURI,
+		userinfoEndpoint:      payload.UserinfoEndpoint,
+		introspectionEndpoint: payload.IntrospectionEndpoint,
+	}); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid provider URL").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -633,12 +629,9 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 	// platform issuers only by platform admins, and the project-scoped
 	// UpdateRemoteSessionIssuer below cannot modify either. Both inherited arms
 	// stay off (IncludeOrganizational and IncludeGlobal false).
-	existing, err := txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
-		ID:                    issuerID,
-		ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
-		IncludeOrganizational: false,
-		IncludeGlobal:         false,
+	existing, err := txRepo.GetRemoteSessionIssuerByIDForUpdate(ctx, repo.GetRemoteSessionIssuerByIDForUpdateParams{
+		ID:        issuerID,
+		ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -651,7 +644,7 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 
 	updated, err := txRepo.UpdateRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionIssuerParams{
 		Slug:                                conv.PtrToPGText(payload.Slug),
-		Issuer:                              conv.PtrToPGText(payload.Issuer),
+		Issuer:                              conv.PtrToPGTextTrimmed(payload.Issuer),
 		Name:                                conv.PtrToPGText(payload.Name),
 		LogoAssetID:                         conv.PtrToPGText(payload.LogoAssetID),
 		ClientSetupDocumentationUrl:         conv.PtrToPGText(payload.ClientSetupDocumentationURL),
@@ -738,12 +731,21 @@ func (s *Service) ListRemoteSessionIssuers(ctx context.Context, payload *gen.Lis
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 	}
+	hosts, err := upstreamHostCandidates(conv.PtrValOr(payload.UpstreamHost, ""))
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid upstream_host")
+	}
+	// Goa validates the enum; empty means every tier.
+	tier := conv.PtrValOr(payload.Tier, "")
 
 	rows, err := repo.New(s.db).ListRemoteSessionIssuersByProjectID(ctx, repo.ListRemoteSessionIssuersByProjectIDParams{
 		ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
-		IncludeOrganizational: true,
-		IncludeGlobal:         true,
+		IncludeProject:        tier == "" || tier == "project",
+		IncludeOrganizational: tier == "" || tier == "organization",
+		IncludeGlobal:         tier == "" || tier == "platform",
+		Search:                containsPattern(conv.PtrValOr(payload.Search, "")),
+		Hosts:                 hosts,
 		Cursor:                cursor,
 		LimitValue:            limit,
 	})
@@ -1783,9 +1785,9 @@ func collectDiscoveryWarnings(requestedIssuer string, doc rfc8414Document) []str
 	return warnings
 }
 
-// issuerURLsEqual compares issuer identifiers byte-for-byte, as discovery and
+// IssuerURLsEqual compares issuer identifiers byte-for-byte, as discovery and
 // token validation require. A trailing slash is significant, not URL decoration.
-func issuerURLsEqual(a, b string) bool {
+func IssuerURLsEqual(a, b string) bool {
 	return a == b
 }
 
@@ -1821,6 +1823,61 @@ func pageLimit(in *int) int32 {
 		limit = constants.MaxPageLimit
 	}
 	return int32(limit)
+}
+
+// containsPattern turns free text into a LIKE pattern matching it anywhere,
+// with LIKE's own wildcards escaped so "50%" or "my_idp" match literally. Blank
+// text is NULL: no filter.
+func containsPattern(text string) pgtype.Text {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return pgtype.Text{String: "", Valid: false}
+	}
+	escaped := strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(text)
+	return pgtype.Text{String: "%" + escaped + "%", Valid: true}
+}
+
+// upstreamHostCandidates expands an upstream host into the issuer hosts that
+// may sign users in to it: the host itself and each parent domain of at least
+// two labels, so mcp.linear.app yields mcp.linear.app and linear.app but never
+// the bare "app". A port other than 443 or 80 is kept on every candidate; those
+// two are dropped, matching the listing query's normalization of stored issuer
+// URLs. IP addresses have no parent domains. Blank input yields no candidates,
+// which the query reads as no filter.
+func upstreamHostCandidates(raw string) ([]string, error) {
+	host := strings.ToLower(strings.TrimSpace(raw))
+	if host == "" {
+		return []string{}, nil
+	}
+	if strings.ContainsAny(host, "/?#@ ") {
+		return nil, fmt.Errorf("upstream host %q must be a bare host, without scheme, path or credentials", raw)
+	}
+
+	port := ""
+	if h, p, err := net.SplitHostPort(host); err == nil {
+		host = h
+		if p != "443" && p != "80" {
+			port = ":" + p
+		}
+	}
+	host = strings.TrimSuffix(host, ".")
+	if host == "" {
+		return nil, fmt.Errorf("upstream host %q has no host name", raw)
+	}
+
+	if net.ParseIP(host) != nil {
+		if strings.Contains(host, ":") {
+			host = "[" + host + "]"
+		}
+		return []string{host + port}, nil
+	}
+
+	labels := strings.Split(host, ".")
+	candidates := []string{host + port}
+	for i := 1; i < len(labels)-1; i++ {
+		candidates = append(candidates, strings.Join(labels[i:], ".")+port)
+	}
+	return candidates, nil
 }
 
 // parseCursor decodes a list cursor. Cursors are the id of the last row

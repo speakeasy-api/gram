@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
@@ -12,6 +13,120 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
+
+func TestNormalizeAndValidateMCPScope(t *testing.T) {
+	t.Parallel()
+
+	serverID := uuid.New()
+	scope, err := NormalizeMCPScope(&MCPScopeInput{
+		ToolAnnotations: []string{" readOnlyHint ", "destructiveHint", "readOnlyHint"},
+		Servers: []*MCPServerScopeInput{{
+			MCPServerID: serverID.String(),
+			Tools:       []string{" write ", "read", "read"},
+		}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"destructiveHint", "readOnlyHint"}, scope.ToolAnnotations)
+	require.Equal(t, []MCPServerScope{{
+		MCPServerID: serverID,
+		Tools:       []string{"read", "write"},
+	}}, scope.Servers)
+	require.NoError(t, ValidateMCPScopeOwnership(scope, []uuid.UUID{serverID}, nil))
+	require.NoError(t, ValidateMCPScopeOwnership(scope, nil, []uuid.UUID{serverID}))
+	require.Error(t, ValidateMCPScopeOwnership(scope, nil, nil))
+
+	allServers, err := NormalizeMCPScope(&MCPScopeInput{
+		AllServers:      true,
+		ToolAnnotations: []string{"openWorldHint"},
+	})
+	require.NoError(t, err)
+	require.True(t, allServers.AllServers)
+	require.Empty(t, allServers.Servers)
+
+	cleared, err := NormalizeMCPScope(&MCPScopeInput{Servers: []*MCPServerScopeInput{}})
+	require.NoError(t, err)
+	require.Nil(t, cleared)
+
+	_, err = NormalizeMCPScope(&MCPScopeInput{ToolAnnotations: []string{"unknownHint"}})
+	require.ErrorContains(t, err, "not recognized")
+
+	wildcard, err := NormalizeMCPScope(&MCPScopeInput{Servers: []*MCPServerScopeInput{{
+		MCPServerID: serverID.String(),
+		Tools:       []string{},
+	}}})
+	require.NoError(t, err)
+	require.Equal(t, []MCPServerScope{{
+		MCPServerID: serverID,
+		Tools:       []string{AllToolsWildcard},
+	}}, wildcard.Servers)
+
+	allServersWildcard, err := NormalizeMCPScope(&MCPScopeInput{
+		AllServers: true,
+		Servers: []*MCPServerScopeInput{{
+			MCPServerID: serverID.String(),
+			Tools:       []string{},
+		}},
+	})
+	require.NoError(t, err, "an empty tool list also satisfies the all-servers custom-tools requirement")
+	require.Equal(t, []string{AllToolsWildcard}, allServersWildcard.Servers[0].Tools)
+
+	_, err = NormalizeMCPScope(&MCPScopeInput{Servers: []*MCPServerScopeInput{
+		{MCPServerID: serverID.String()},
+		{MCPServerID: serverID.String()},
+	}})
+	require.Error(t, err)
+
+	_, err = NormalizeMCPScope(&MCPScopeInput{Servers: []*MCPServerScopeInput{{
+		MCPServerID: serverID.String(),
+		Tools:       []string{AllToolsWildcard},
+	}}})
+	require.ErrorContains(t, err, "reserved")
+
+	_, err = NormalizeMCPScope(&MCPScopeInput{
+		ToolAnnotations: []string{"readOnlyHint"},
+		Servers: []*MCPServerScopeInput{{
+			MCPServerID: serverID.String(),
+			Tools:       []string{},
+		}},
+	})
+	require.Error(t, err, "an empty tool list must not silently override a tool-annotation rule")
+}
+
+func TestValidateMCPScopeSources(t *testing.T) {
+	t.Parallel()
+
+	scope := &MCPScope{Servers: []MCPServerScope{{MCPServerID: uuid.New()}}}
+	require.NoError(t, ValidateMCPScopeSources(nil, []string{ra.SourceAccountIdentity}))
+	require.NoError(t, ValidateMCPScopeSources(scope, []string{ra.SourceGitleaks}))
+	require.EqualError(
+		t,
+		ValidateMCPScopeSources(scope, []string{ra.SourceAccountIdentity}),
+		`source "account_identity" cannot be used by an MCP-scoped policy`,
+	)
+	require.EqualError(
+		t,
+		ValidateMCPScopeSources(scope, []string{shadowmcp.SourceShadowMCP}),
+		`source "shadow_mcp" cannot be used by an MCP-scoped policy`,
+	)
+}
+func TestValidateMCPScopeAction(t *testing.T) {
+	t.Parallel()
+
+	scope := &MCPScope{AllServers: true}
+	require.NoError(t, ValidateMCPScope(nil, nil, "warn"))
+	require.NoError(t, ValidateMCPScope(scope, nil, "flag"))
+	require.NoError(t, ValidateMCPScope(scope, nil, "block"))
+	require.EqualError(
+		t,
+		ValidateMCPScope(scope, nil, "warn"),
+		`action "warn" cannot be used by an MCP-scoped policy; use flag or block`,
+	)
+	require.EqualError(
+		t,
+		ValidateMCPScope(scope, nil, "quarantine"),
+		`action "quarantine" cannot be used by an MCP-scoped policy; use flag or block`,
+	)
+}
 
 func TestValidateActionAndSourceCompatibility(t *testing.T) {
 	t.Parallel()

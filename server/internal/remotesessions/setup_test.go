@@ -104,6 +104,7 @@ type testInstance struct {
 type testServiceConfig struct {
 	tunnelRouting bool
 	maxDBConns    int32
+	lockTimeout   time.Duration
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -130,6 +131,10 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 		conn, err = pgxpool.NewWithConfig(ctx, poolConfig)
 		require.NoError(t, err)
 		t.Cleanup(conn.Close)
+	}
+
+	if cfg.lockTimeout > 0 {
+		conn = testenv.NewLockTimeoutPool(t, conn, cfg.lockTimeout)
 	}
 
 	redisClient, err := infra.NewRedisClient(t, 0)
@@ -168,6 +173,7 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 		tunnels,
 		audit.NewLogger(),
 		serverURL,
+		remotesessions.NewIdentityCommitter(logger, conn, enc, audit.NewLogger(), serverURL, guardianPolicy, tunnels, nil),
 		remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), conn, enc, guardianPolicy, tunnels, redisCache),
 		features,
 	)

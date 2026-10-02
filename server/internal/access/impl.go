@@ -315,6 +315,8 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeAgentWrite, description: "Create, configure, and manage agents.", resourceType: "agent"},
 		{scope: authz.ScopeAgentAuthorize, description: "Authorize and manage agent credentials.", resourceType: "agent"},
 		{scope: authz.ScopeAgentTransfer, description: "Transfer agent ownership.", resourceType: "agent"},
+		{scope: authz.ScopeWorkloadRead, description: "View workload identity trust policy: issuers, admitted subjects, and assigned agents.", resourceType: "workload"},
+		{scope: authz.ScopeWorkloadWrite, description: "Register workload issuers, admit and withdraw subjects, and assign agents to workloads.", resourceType: "workload"},
 		{scope: authz.ScopeOrgDeviceAgentSync, description: "Let an agent's device agent sync the plugins assigned to it.", resourceType: "org"},
 		{scope: authz.ScopeOrgHooksIngest, description: "Let an agent send AI-tool hook events and telemetry.", resourceType: "org"},
 	}
@@ -526,7 +528,28 @@ func (s *Service) UpdateMemberRoles(ctx context.Context, payload *gen.UpdateMemb
 		attr.UserID(ac.UserID),
 	)
 
-	return memberUpdate.After, nil
+	// The update's After is also the audit snapshot, which leaves out
+	// directory-owned data, so the response gets the member's mapped roles on a
+	// copy. The roles are already committed, so a failed read only leaves the
+	// mapped roles out of the response.
+	result := *memberUpdate.After
+	principals, err := repo.New(s.db).ListUserRolePrincipals(ctx, repo.ListUserRolePrincipalsParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		UserID:         result.ID,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "load directory mapped roles for member role update response", attr.SlogError(err))
+		return &result, nil
+	}
+	for _, principal := range principals {
+		if !principal.FromDirectoryMapping {
+			continue
+		}
+		// A role principal URN ends in the role ID: role:<kind>:<id>.
+		roleID := principal.PrincipalUrn[strings.LastIndex(principal.PrincipalUrn, ":")+1:]
+		result.DirectoryRoleIds = append(result.DirectoryRoleIds, roleID)
+	}
+	return &result, nil
 }
 
 func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
@@ -694,6 +717,8 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeAgentWrite), Selectors: nil},
 		{Scope: string(authz.ScopeAgentAuthorize), Selectors: nil},
 		{Scope: string(authz.ScopeAgentTransfer), Selectors: nil},
+		{Scope: string(authz.ScopeWorkloadRead), Selectors: nil},
+		{Scope: string(authz.ScopeWorkloadWrite), Selectors: nil},
 		{Scope: string(authz.ScopeOrgDeviceAgentSync), Selectors: nil},
 		{Scope: string(authz.ScopeOrgHooksIngest), Selectors: nil},
 	}
@@ -701,13 +726,19 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 
 func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 	scoped := authz.GrantsToScopedGrants(grants)
+	// Direct selectors let clients apply principal precedence: a direct grant
+	// naming a resource outranks a block inherited from a role or everyone.
+	direct := make(map[string][]*gen.Selector)
+	for _, grant := range authz.DirectOverrideGrants(grants) {
+		direct[string(grant.Scope)] = append(direct[string(grant.Scope)], authzSelectorToGen(grant.Selector))
+	}
 	out := make([]*gen.ListRoleGrant, 0, len(scoped))
 	for _, g := range scoped {
 		var selectors []*gen.Selector
 		for _, sel := range g.Selectors {
 			selectors = append(selectors, authzSelectorToGen(sel))
 		}
-		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, SubScopes: g.SubScopes, Selectors: selectors})
+		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, SubScopes: g.SubScopes, Selectors: selectors, DirectSelectors: direct[g.Scope]})
 	}
 	return out
 }

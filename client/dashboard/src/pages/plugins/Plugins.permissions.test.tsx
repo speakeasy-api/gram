@@ -130,6 +130,7 @@ beforeEach(() => {
           serverCount: 1,
           skillCount: 0,
           agentPluginsV1Compatible: true,
+          autoCreated: false,
         } satisfies Plugin,
       ],
     },

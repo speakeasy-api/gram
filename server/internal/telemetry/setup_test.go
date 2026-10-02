@@ -52,6 +52,7 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
+	coverage           *telemetry.SupportCoverage
 	telemLogger        *telemetry.Logger
 	service            *telemetry.Service
 	logger             *slog.Logger
@@ -127,10 +128,12 @@ func newTestLogsServiceWithSessionCapture(t *testing.T, sessionCapture bool) (co
 	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient)), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	featureFlags := &feature.InMemory{}
+	coverage := telemetry.NewSupportCoverage(conn, chConn)
 	svc := telemetry.NewService(logger, tracerProvider, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine, featureFlags)
 
 	return ctx, &testInstance{
 		service:            svc,
+		coverage:           coverage,
 		telemLogger:        telemLogger,
 		logger:             logger,
 		conn:               conn,

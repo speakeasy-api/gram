@@ -980,11 +980,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 
 	if privateNetworkInstall && (authCtx == nil || authCtx.ActiveOrganizationID == "") {
 		if s.serverURL != nil {
-			loginURL := s.serverURL.JoinPath("login")
-			query := loginURL.Query()
-			query.Set("redirect", r.URL.RequestURI())
-			loginURL.RawQuery = query.Encode()
-			http.Redirect(w, r, loginURL.String(), http.StatusFound)
+			http.Redirect(w, r, s.loginRedirectURL(r), http.StatusFound)
 			return nil
 		}
 		return s.serveNotFoundPage(w, mcpSlug)
@@ -1011,8 +1007,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		// If no auth context, redirect to login page
 		if authCtx == nil {
 			if s.serverURL != nil {
-				loginURL := s.serverURL.String() + "/login"
-				http.Redirect(w, r, loginURL, http.StatusFound)
+				http.Redirect(w, r, s.loginRedirectURL(r), http.StatusFound)
 				return nil
 			}
 			// Fallback if serverURL is nil
@@ -1068,6 +1063,23 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	default:
 		return s.renderRemoteMcpInstallPage(ctx, w, ic, metadataRecord)
 	}
+}
+
+// loginRedirectURL returns the dashboard login URL that brings the visitor back
+// to this install page afterwards. It stays on the platform host the request
+// arrived on, because the session cookie is host-only. The return target is
+// the request's own path and query, never an absolute URL, so it cannot send
+// the visitor to another origin.
+func (s *Service) loginRedirectURL(r *http.Request) string {
+	loginURL := s.serverURL.JoinPath("login")
+	serverBase := s.serverURL.String()
+	if base, err := url.Parse(requestorigin.PlatformHostBaseURL(r.Context(), serverBase, serverBase)); err == nil {
+		loginURL = base.JoinPath("login")
+	}
+	query := loginURL.Query()
+	query.Set("redirect", r.URL.RequestURI())
+	loginURL.RawQuery = query.Encode()
+	return loginURL.String()
 }
 
 // resolveInstallContext tries the mcp_endpoints → mcp_server resolution path
@@ -1196,6 +1208,14 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	toolset, err := s.loadToolsetFromContextAndSlug(ctx, mcpSlug)
 	if err != nil {
 		return nil, err
+	}
+	if server, serverErr := s.mcpServersRepo.GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID}); serverErr == nil {
+		mode, modeErr := networkaccess.Effective(server.NetworkAccessMode)
+		if modeErr != nil || !mode.Allows(networkaccess.SurfacePublic) {
+			return nil, fmt.Errorf("%w: endpoint is not available on this network surface", errToolsetNotFound)
+		}
+	} else if !errors.Is(serverErr, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("load canonical mcp server: %w", serverErr)
 	}
 	s.legacyFallback.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackInstallPage)
 	org, err := s.orgsRepo.GetOrganizationMetadata(ctx, toolset.OrganizationID)
@@ -1870,6 +1890,15 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 
 	if !toolset.McpEnabled {
 		return nil, fmt.Errorf("%w: mcp disabled", errToolsetNotFound)
+	}
+	server, err := s.mcpServersRepo.GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
+	if err == nil {
+		mode, modeErr := networkaccess.Effective(server.NetworkAccessMode)
+		if modeErr != nil || !server.ToolsetID.Valid || server.ToolsetID.UUID != toolset.ID || server.Visibility == "disabled" || !mode.Allows(networkaccess.SurfacePublic) || server.UserSessionIssuerID != toolset.UserSessionIssuerID || (server.Visibility == "public") != toolset.McpIsPublic {
+			return nil, fmt.Errorf("%w: hosted MCP policy denies public access", errToolsetNotFound)
+		}
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("load hosted MCP network policy: %w", err)
 	}
 
 	return &toolset, nil

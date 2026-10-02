@@ -2,9 +2,9 @@ package agentmanagement
 
 import (
 	"context"
-	"github.com/google/uuid"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -50,9 +51,14 @@ func TestLoadAgentPolicyUsesOnlyExactSafeAgentGrants(t *testing.T) {
 	seedGrant(t, ctx, conn, "org-agent-policy", authz.AllUsersPrincipal(), authz.ScopeProjectRead, "all-users-project")
 	seedGrant(t, ctx, conn, "org-agent-policy", urn.NewPrincipal(urn.PrincipalTypeRole, "global:00000000-0000-0000-0000-000000000001"), authz.ScopeProjectRead, "role-project")
 
-	//nolint:glint // notestingrawsql: seeds rows that the narrow runtime resolver must reject
-	_, err = conn.Exec(ctx, `INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors) VALUES ($1, $2, $3, 'deny', $4), ($1, $2, $5, NULL, $6)`,
-		"org-agent-policy", principal.String(), string(authz.ScopeSkillRead), []byte(`{"resource_kind":"skill","resource_id":"*"}`), string(authz.ScopeMCPRead), []byte(`{"resource_kind":"project","resource_id":"*"}`))
+	// Rows the narrow runtime resolver must reject: a legacy deny, and an allow
+	// whose selector names the wrong resource kind for its scope.
+	require.NoError(t, testrepo.New(conn).InsertLegacyDenyPrincipalGrantFixture(ctx, testrepo.InsertLegacyDenyPrincipalGrantFixtureParams{
+		OrganizationID: "org-agent-policy", PrincipalUrn: principal, Scope: string(authz.ScopeSkillRead), Selectors: []byte(`{"resource_kind":"skill","resource_id":"*"}`),
+	}))
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: "org-agent-policy", PrincipalUrn: principal, Scope: string(authz.ScopeMCPRead), Selectors: []byte(`{"resource_kind":"project","resource_id":"*"}`),
+	})
 	require.NoError(t, err)
 
 	grants, err := runtimepolicy.LoadAgentPolicy(ctx, conn, "org-agent-policy", principal)

@@ -190,10 +190,9 @@ func TestCreateAgentSerializesWithConcurrentProjectDeletion(t *testing.T) {
 	ctx := validatedHumanContext(t, organizationID, "owner")
 	projectID := project.ID.String()
 
-	deletion, err := conn.Begin(t.Context()) //nolint:glint // notestingrawsql: hold the deletion transaction open to verify concurrent creation blocks
-	require.NoError(t, err)
-	defer func() { _ = deletion.Rollback(t.Context()) }()
-	_, err = projectsrepo.New(deletion).DeleteProject(t.Context(), project.ID)
+	// Hold the deletion transaction open to verify concurrent creation blocks.
+	deletion := testenv.BeginTx(t, t.Context(), conn)
+	_, err := projectsrepo.New(deletion).DeleteProject(t.Context(), project.ID)
 	require.NoError(t, err)
 	deletingPID := deletion.Conn().PgConn().PID()
 
@@ -203,11 +202,7 @@ func TestCreateAgentSerializesWithConcurrentProjectDeletion(t *testing.T) {
 		created <- err
 	}()
 	// Observe the actual database wait rather than relying on a scheduling sleep.
-	require.Eventually(t, func() bool {
-		var blocked bool
-		err := conn.QueryRow(t.Context(), `SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid)))`, deletingPID).Scan(&blocked) //nolint:glint // notestingrawsql: observes concurrent transaction serialization
-		return err == nil && blocked
-	}, 5*time.Second, 10*time.Millisecond)
+	testenv.WaitForBackendsBlockedBy(t, ctx, conn, deletingPID, 1)
 	require.NoError(t, deletion.Commit(t.Context()))
 	select {
 	case err := <-created:

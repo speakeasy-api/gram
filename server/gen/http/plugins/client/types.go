@@ -39,14 +39,15 @@ type UpdatePluginRequestBody struct {
 // "addPluginServer" endpoint HTTP request body.
 type AddPluginServerRequestBody struct {
 	PluginID string `form:"plugin_id" json:"plugin_id" xml:"plugin_id"`
-	// Gram toolset ID for a toolset-backed MCP server. Provide exactly one of
-	// toolset_id or mcp_server_id.
+	// Gram toolset ID. Provide exactly one of toolset_id, mcp_server_id, or
+	// meta_mcp_server_id.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID for a Remote MCP-backed server. Provide exactly one of
-	// toolset_id or mcp_server_id.
+	// Gram MCP server ID. Provide exactly one backend ID.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	// Display name for the server. Defaults to the backing toolset or mcp_server
-	// name when omitted.
+	// MCP gateway ID. Provide exactly one backend ID.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// Display name for the server. Defaults to the backing server name when
+	// omitted.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	Policy      string  `form:"policy" json:"policy" xml:"policy"`
 	SortOrder   int32   `form:"sort_order" json:"sort_order" xml:"sort_order"`
@@ -68,6 +69,14 @@ type SetPluginAssignmentsRequestBody struct {
 	PluginID string `form:"plugin_id" json:"plugin_id" xml:"plugin_id"`
 	// List of principal URNs to assign.
 	PrincipalUrns []string `form:"principal_urns" json:"principal_urns" xml:"principal_urns"`
+}
+
+// RotateObservabilityCredentialRequestBody is the type of the "plugins"
+// service "rotateObservabilityCredential" endpoint HTTP request body.
+type RotateObservabilityCredentialRequestBody struct {
+	// What happens to existing observability plugin hooks keys after the
+	// replacement is minted.
+	PreviousKeyFate string `form:"previous_key_fate" json:"previous_key_fate" xml:"previous_key_fate"`
 }
 
 // PublishPluginsRequestBody is the type of the "plugins" service
@@ -102,7 +111,10 @@ type GetDistributionPluginResponseBody struct {
 	ID          *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	Name        *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	IsDefault   *bool   `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
+	IsDefault   *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 }
 
 // ListPluginsResponseBody is the type of the "plugins" service "listPlugins"
@@ -125,6 +137,9 @@ type GetPluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -155,6 +170,9 @@ type CreatePluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -185,6 +203,9 @@ type UpdatePluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -207,12 +228,12 @@ type UpdatePluginResponseBody struct {
 type AddPluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Gram toolset ID. Set when this server is toolset-backed (exactly one of
-	// toolset_id / mcp_server_id is set).
+	// Gram toolset ID. Exactly one backend ID is set.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one
-	// of toolset_id / mcp_server_id is set).
+	// Gram MCP server ID. Exactly one backend ID is set.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// MCP gateway ID. Exactly one backend ID is set.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
 	// Display name shown in generated plugin config.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// Whether this server is required or optional.
@@ -227,12 +248,12 @@ type AddPluginServerResponseBody struct {
 type UpdatePluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Gram toolset ID. Set when this server is toolset-backed (exactly one of
-	// toolset_id / mcp_server_id is set).
+	// Gram toolset ID. Exactly one backend ID is set.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one
-	// of toolset_id / mcp_server_id is set).
+	// Gram MCP server ID. Exactly one backend ID is set.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// MCP gateway ID. Exactly one backend ID is set.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
 	// Display name shown in generated plugin config.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// Whether this server is required or optional.
@@ -254,6 +275,35 @@ type SetPluginAssignmentsResponseBody struct {
 type ListAudiencesResponseBody struct {
 	// Audiences that can be assigned to plugins.
 	Audiences []*PluginAudienceResponseBody `form:"audiences,omitempty" json:"audiences,omitempty" xml:"audiences,omitempty"`
+}
+
+// RotateObservabilityCredentialResponseBody is the type of the "plugins"
+// service "rotateObservabilityCredential" endpoint HTTP response body.
+type RotateObservabilityCredentialResponseBody struct {
+	// The newly minted hooks-scoped API key. Returned only on this response.
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+	// The recognizable prefix of the new key.
+	KeyPrefix *string `form:"key_prefix,omitempty" json:"key_prefix,omitempty" xml:"key_prefix,omitempty"`
+	// What happened to previous observability plugin hooks keys.
+	PreviousKeyFate *string `form:"previous_key_fate,omitempty" json:"previous_key_fate,omitempty" xml:"previous_key_fate,omitempty"`
+	// Previous observability plugin hooks keys that were revoked or scheduled to
+	// expire.
+	PreviousKeys []*RotatedObservabilityKeyResponseBody `form:"previous_keys,omitempty" json:"previous_keys,omitempty" xml:"previous_keys,omitempty"`
+	// The latest deadline among previous keys when previous_key_fate is grace.
+	// Individual keys can expire earlier, so this is an upper bound rather than a
+	// shared deadline; per-key deadlines are on previous_keys.
+	PreviousKeysExpireAt *string `form:"previous_keys_expire_at,omitempty" json:"previous_keys_expire_at,omitempty" xml:"previous_keys_expire_at,omitempty"`
+	// Whether the chosen fate was applied to the previous keys. False means the
+	// replacement was created and published but retiring the previous keys failed,
+	// so they are still valid and the rotation should be retried.
+	PreviousKeysRetired *bool `form:"previous_keys_retired,omitempty" json:"previous_keys_retired,omitempty" xml:"previous_keys_retired,omitempty"`
+	// Whether the published marketplace was updated with the new credential.
+	MarketplaceRepublished *bool `form:"marketplace_republished,omitempty" json:"marketplace_republished,omitempty" xml:"marketplace_republished,omitempty"`
+	// True when a marketplace exists but could not be updated yet (for example the
+	// organization is not approved for the latest hooks version, or GitHub
+	// publishing is unavailable). Existing marketplace installs keep the previous
+	// credential until the marketplace is republished.
+	MarketplaceUpdateDeferred *bool `form:"marketplace_update_deferred,omitempty" json:"marketplace_update_deferred,omitempty" xml:"marketplace_update_deferred,omitempty"`
 }
 
 // GetPublishStatusResponseBody is the type of the "plugins" service
@@ -3001,6 +3051,215 @@ type DownloadPluginPackageUnavailableResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// RotateObservabilityCredentialUnauthorizedResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "unauthorized" error.
+type RotateObservabilityCredentialUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialForbiddenResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "forbidden" error.
+type RotateObservabilityCredentialForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialBadRequestResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "bad_request" error.
+type RotateObservabilityCredentialBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialNotFoundResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "not_found" error.
+type RotateObservabilityCredentialNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialConflictResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "conflict" error.
+type RotateObservabilityCredentialConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialUnsupportedMediaResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "unsupported_media" error.
+type RotateObservabilityCredentialUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialInvalidResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "invalid" error.
+type RotateObservabilityCredentialInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialInvariantViolationResponseBody is the type of
+// the "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "invariant_violation" error.
+type RotateObservabilityCredentialInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialUnexpectedResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "unexpected" error.
+type RotateObservabilityCredentialUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialGatewayErrorResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "gateway_error" error.
+type RotateObservabilityCredentialGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RotateObservabilityCredentialUnavailableResponseBody is the type of the
+// "plugins" service "rotateObservabilityCredential" endpoint HTTP response
+// body for the "unavailable" error.
+type RotateObservabilityCredentialUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // DownloadObservabilityPluginUnauthorizedResponseBody is the type of the
 // "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -4245,7 +4504,10 @@ type DistributionPluginResponseBody struct {
 	ID          *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	Name        *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	IsDefault   *bool   `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
+	IsDefault   *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 }
 
 // PluginResponseBody is used to define fields on response body types.
@@ -4260,6 +4522,9 @@ type PluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -4281,12 +4546,12 @@ type PluginResponseBody struct {
 type PluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Gram toolset ID. Set when this server is toolset-backed (exactly one of
-	// toolset_id / mcp_server_id is set).
+	// Gram toolset ID. Exactly one backend ID is set.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one
-	// of toolset_id / mcp_server_id is set).
+	// Gram MCP server ID. Exactly one backend ID is set.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// MCP gateway ID. Exactly one backend ID is set.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
 	// Display name shown in generated plugin config.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// Whether this server is required or optional.
@@ -4315,6 +4580,21 @@ type PluginAudienceResponseBody struct {
 	MemberCount *int64 `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// Principal URN used to assign the audience to a plugin.
 	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+}
+
+// RotatedObservabilityKeyResponseBody is used to define fields on response
+// body types.
+type RotatedObservabilityKeyResponseBody struct {
+	// The API key ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The API key name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The recognizable prefix of the previous key.
+	KeyPrefix *string `form:"key_prefix,omitempty" json:"key_prefix,omitempty" xml:"key_prefix,omitempty"`
+	// When this key stops authenticating. A key already inside a shorter grace
+	// window keeps its earlier deadline, so this can precede the rotation's own
+	// deadline. Absent when the key was revoked immediately.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 
 // MarketplaceSettingsResultResponseBody is used to define fields on response
@@ -4360,12 +4640,13 @@ func NewUpdatePluginRequestBody(p *plugins.UpdatePluginPayload) *UpdatePluginReq
 // of the "addPluginServer" endpoint of the "plugins" service.
 func NewAddPluginServerRequestBody(p *plugins.AddPluginServerPayload) *AddPluginServerRequestBody {
 	body := &AddPluginServerRequestBody{
-		PluginID:    p.PluginID,
-		ToolsetID:   p.ToolsetID,
-		McpServerID: p.McpServerID,
-		DisplayName: p.DisplayName,
-		Policy:      p.Policy,
-		SortOrder:   p.SortOrder,
+		PluginID:        p.PluginID,
+		ToolsetID:       p.ToolsetID,
+		McpServerID:     p.McpServerID,
+		MetaMcpServerID: p.MetaMcpServerID,
+		DisplayName:     p.DisplayName,
+		Policy:          p.Policy,
+		SortOrder:       p.SortOrder,
 	}
 	{
 		var zero string
@@ -4420,6 +4701,16 @@ func NewSetPluginAssignmentsRequestBody(p *plugins.SetPluginAssignmentsPayload) 
 		}
 	} else {
 		body.PrincipalUrns = []string{}
+	}
+	return body
+}
+
+// NewRotateObservabilityCredentialRequestBody builds the HTTP request body
+// from the payload of the "rotateObservabilityCredential" endpoint of the
+// "plugins" service.
+func NewRotateObservabilityCredentialRequestBody(p *plugins.RotateObservabilityCredentialPayload) *RotateObservabilityCredentialRequestBody {
+	body := &RotateObservabilityCredentialRequestBody{
+		PreviousKeyFate: p.PreviousKeyFate,
 	}
 	return body
 }
@@ -4636,6 +4927,7 @@ func NewGetDistributionPluginDistributionPluginOK(body *GetDistributionPluginRes
 		ID:          *body.ID,
 		Name:        *body.Name,
 		Description: body.Description,
+		AutoCreated: *body.AutoCreated,
 		IsDefault:   *body.IsDefault,
 	}
 
@@ -4997,6 +5289,7 @@ func NewGetPluginPluginOK(body *GetPluginResponseBody) *plugins.Plugin {
 		Slug:                     *body.Slug,
 		Description:              body.Description,
 		IsDefault:                body.IsDefault,
+		AutoCreated:              *body.AutoCreated,
 		ServerCount:              body.ServerCount,
 		SkillCount:               body.SkillCount,
 		AssignmentCount:          body.AssignmentCount,
@@ -5202,6 +5495,7 @@ func NewCreatePluginPluginCreated(body *CreatePluginResponseBody) *plugins.Plugi
 		Slug:                     *body.Slug,
 		Description:              body.Description,
 		IsDefault:                body.IsDefault,
+		AutoCreated:              *body.AutoCreated,
 		ServerCount:              body.ServerCount,
 		SkillCount:               body.SkillCount,
 		AssignmentCount:          body.AssignmentCount,
@@ -5407,6 +5701,7 @@ func NewUpdatePluginPluginOK(body *UpdatePluginResponseBody) *plugins.Plugin {
 		Slug:                     *body.Slug,
 		Description:              body.Description,
 		IsDefault:                body.IsDefault,
+		AutoCreated:              *body.AutoCreated,
 		ServerCount:              body.ServerCount,
 		SkillCount:               body.SkillCount,
 		AssignmentCount:          body.AssignmentCount,
@@ -5772,13 +6067,14 @@ func NewDeletePluginUnavailable(body *DeletePluginUnavailableResponseBody) *goa.
 // "addPluginServer" endpoint result from a HTTP "Created" response.
 func NewAddPluginServerPluginServerCreated(body *AddPluginServerResponseBody) *plugins.PluginServer {
 	v := &plugins.PluginServer{
-		ID:          *body.ID,
-		ToolsetID:   body.ToolsetID,
-		McpServerID: body.McpServerID,
-		DisplayName: *body.DisplayName,
-		Policy:      *body.Policy,
-		SortOrder:   *body.SortOrder,
-		CreatedAt:   *body.CreatedAt,
+		ID:              *body.ID,
+		ToolsetID:       body.ToolsetID,
+		McpServerID:     body.McpServerID,
+		MetaMcpServerID: body.MetaMcpServerID,
+		DisplayName:     *body.DisplayName,
+		Policy:          *body.Policy,
+		SortOrder:       *body.SortOrder,
+		CreatedAt:       *body.CreatedAt,
 	}
 
 	return v
@@ -5953,13 +6249,14 @@ func NewAddPluginServerUnavailable(body *AddPluginServerUnavailableResponseBody)
 // "updatePluginServer" endpoint result from a HTTP "OK" response.
 func NewUpdatePluginServerPluginServerOK(body *UpdatePluginServerResponseBody) *plugins.PluginServer {
 	v := &plugins.PluginServer{
-		ID:          *body.ID,
-		ToolsetID:   body.ToolsetID,
-		McpServerID: body.McpServerID,
-		DisplayName: *body.DisplayName,
-		Policy:      *body.Policy,
-		SortOrder:   *body.SortOrder,
-		CreatedAt:   *body.CreatedAt,
+		ID:              *body.ID,
+		ToolsetID:       body.ToolsetID,
+		McpServerID:     body.McpServerID,
+		MetaMcpServerID: body.MetaMcpServerID,
+		DisplayName:     *body.DisplayName,
+		Policy:          *body.Policy,
+		SortOrder:       *body.SortOrder,
+		CreatedAt:       *body.CreatedAt,
 	}
 
 	return v
@@ -6835,6 +7132,195 @@ func NewDownloadPluginPackageGatewayError(body *DownloadPluginPackageGatewayErro
 // NewDownloadPluginPackageUnavailable builds a plugins service
 // downloadPluginPackage endpoint unavailable error.
 func NewDownloadPluginPackageUnavailable(body *DownloadPluginPackageUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialResultOK builds a "plugins" service
+// "rotateObservabilityCredential" endpoint result from a HTTP "OK" response.
+func NewRotateObservabilityCredentialResultOK(body *RotateObservabilityCredentialResponseBody) *plugins.RotateObservabilityCredentialResult {
+	v := &plugins.RotateObservabilityCredentialResult{
+		Key:                       *body.Key,
+		KeyPrefix:                 *body.KeyPrefix,
+		PreviousKeyFate:           *body.PreviousKeyFate,
+		PreviousKeysExpireAt:      body.PreviousKeysExpireAt,
+		PreviousKeysRetired:       *body.PreviousKeysRetired,
+		MarketplaceRepublished:    *body.MarketplaceRepublished,
+		MarketplaceUpdateDeferred: body.MarketplaceUpdateDeferred,
+	}
+	v.PreviousKeys = make([]*plugins.RotatedObservabilityKey, len(body.PreviousKeys))
+	for i, val := range body.PreviousKeys {
+		if val == nil {
+			v.PreviousKeys[i] = nil
+			continue
+		}
+		v.PreviousKeys[i] = unmarshalRotatedObservabilityKeyResponseBodyToPluginsRotatedObservabilityKey(val)
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialUnauthorized builds a plugins service
+// rotateObservabilityCredential endpoint unauthorized error.
+func NewRotateObservabilityCredentialUnauthorized(body *RotateObservabilityCredentialUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialForbidden builds a plugins service
+// rotateObservabilityCredential endpoint forbidden error.
+func NewRotateObservabilityCredentialForbidden(body *RotateObservabilityCredentialForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialBadRequest builds a plugins service
+// rotateObservabilityCredential endpoint bad_request error.
+func NewRotateObservabilityCredentialBadRequest(body *RotateObservabilityCredentialBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialNotFound builds a plugins service
+// rotateObservabilityCredential endpoint not_found error.
+func NewRotateObservabilityCredentialNotFound(body *RotateObservabilityCredentialNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialConflict builds a plugins service
+// rotateObservabilityCredential endpoint conflict error.
+func NewRotateObservabilityCredentialConflict(body *RotateObservabilityCredentialConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialUnsupportedMedia builds a plugins service
+// rotateObservabilityCredential endpoint unsupported_media error.
+func NewRotateObservabilityCredentialUnsupportedMedia(body *RotateObservabilityCredentialUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialInvalid builds a plugins service
+// rotateObservabilityCredential endpoint invalid error.
+func NewRotateObservabilityCredentialInvalid(body *RotateObservabilityCredentialInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialInvariantViolation builds a plugins service
+// rotateObservabilityCredential endpoint invariant_violation error.
+func NewRotateObservabilityCredentialInvariantViolation(body *RotateObservabilityCredentialInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialUnexpected builds a plugins service
+// rotateObservabilityCredential endpoint unexpected error.
+func NewRotateObservabilityCredentialUnexpected(body *RotateObservabilityCredentialUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialGatewayError builds a plugins service
+// rotateObservabilityCredential endpoint gateway_error error.
+func NewRotateObservabilityCredentialGatewayError(body *RotateObservabilityCredentialGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRotateObservabilityCredentialUnavailable builds a plugins service
+// rotateObservabilityCredential endpoint unavailable error.
+func NewRotateObservabilityCredentialUnavailable(body *RotateObservabilityCredentialUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -7942,6 +8428,9 @@ func ValidateGetDistributionPluginResponseBody(body *GetDistributionPluginRespon
 	if body.IsDefault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
 	}
+	if body.AutoCreated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
+	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
@@ -7975,6 +8464,9 @@ func ValidateGetPluginResponseBody(body *GetPluginResponseBody) (err error) {
 	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.AutoCreated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
 	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))
@@ -8023,6 +8515,9 @@ func ValidateCreatePluginResponseBody(body *CreatePluginResponseBody) (err error
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
+	if body.AutoCreated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
+	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))
 	}
@@ -8069,6 +8564,9 @@ func ValidateUpdatePluginResponseBody(body *UpdatePluginResponseBody) (err error
 	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.AutoCreated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
 	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))
@@ -8132,6 +8630,9 @@ func ValidateAddPluginServerResponseBody(body *AddPluginServerResponseBody) (err
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+	}
 	if body.Policy != nil {
 		if !(*body.Policy == "required" || *body.Policy == "optional") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy", *body.Policy, []any{"required", "optional"}))
@@ -8169,6 +8670,9 @@ func ValidateUpdatePluginServerResponseBody(body *UpdatePluginServerResponseBody
 	}
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
 	}
 	if body.Policy != nil {
 		if !(*body.Policy == "required" || *body.Policy == "optional") {
@@ -8209,6 +8713,45 @@ func ValidateListAudiencesResponseBody(body *ListAudiencesResponseBody) (err err
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialResponseBody runs the validations
+// defined on RotateObservabilityCredentialResponseBody
+func ValidateRotateObservabilityCredentialResponseBody(body *RotateObservabilityCredentialResponseBody) (err error) {
+	if body.Key == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
+	}
+	if body.KeyPrefix == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key_prefix", "body"))
+	}
+	if body.PreviousKeyFate == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("previous_key_fate", "body"))
+	}
+	if body.PreviousKeys == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("previous_keys", "body"))
+	}
+	if body.PreviousKeysRetired == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("previous_keys_retired", "body"))
+	}
+	if body.MarketplaceRepublished == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("marketplace_republished", "body"))
+	}
+	if body.PreviousKeyFate != nil {
+		if !(*body.PreviousKeyFate == "revoke_immediately" || *body.PreviousKeyFate == "grace") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.previous_key_fate", *body.PreviousKeyFate, []any{"revoke_immediately", "grace"}))
+		}
+	}
+	for _, e := range body.PreviousKeys {
+		if e != nil {
+			if err2 := ValidateRotatedObservabilityKeyResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.PreviousKeysExpireAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.previous_keys_expire_at", *body.PreviousKeysExpireAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -11730,6 +12273,276 @@ func ValidateDownloadPluginPackageUnavailableResponseBody(body *DownloadPluginPa
 	return
 }
 
+// ValidateRotateObservabilityCredentialUnauthorizedResponseBody runs the
+// validations defined on
+// rotateObservabilityCredential_unauthorized_response_body
+func ValidateRotateObservabilityCredentialUnauthorizedResponseBody(body *RotateObservabilityCredentialUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialForbiddenResponseBody runs the
+// validations defined on rotateObservabilityCredential_forbidden_response_body
+func ValidateRotateObservabilityCredentialForbiddenResponseBody(body *RotateObservabilityCredentialForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialBadRequestResponseBody runs the
+// validations defined on
+// rotateObservabilityCredential_bad_request_response_body
+func ValidateRotateObservabilityCredentialBadRequestResponseBody(body *RotateObservabilityCredentialBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialNotFoundResponseBody runs the
+// validations defined on rotateObservabilityCredential_not_found_response_body
+func ValidateRotateObservabilityCredentialNotFoundResponseBody(body *RotateObservabilityCredentialNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialConflictResponseBody runs the
+// validations defined on rotateObservabilityCredential_conflict_response_body
+func ValidateRotateObservabilityCredentialConflictResponseBody(body *RotateObservabilityCredentialConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialUnsupportedMediaResponseBody runs the
+// validations defined on
+// rotateObservabilityCredential_unsupported_media_response_body
+func ValidateRotateObservabilityCredentialUnsupportedMediaResponseBody(body *RotateObservabilityCredentialUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialInvalidResponseBody runs the
+// validations defined on rotateObservabilityCredential_invalid_response_body
+func ValidateRotateObservabilityCredentialInvalidResponseBody(body *RotateObservabilityCredentialInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialInvariantViolationResponseBody runs the
+// validations defined on
+// rotateObservabilityCredential_invariant_violation_response_body
+func ValidateRotateObservabilityCredentialInvariantViolationResponseBody(body *RotateObservabilityCredentialInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialUnexpectedResponseBody runs the
+// validations defined on rotateObservabilityCredential_unexpected_response_body
+func ValidateRotateObservabilityCredentialUnexpectedResponseBody(body *RotateObservabilityCredentialUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialGatewayErrorResponseBody runs the
+// validations defined on
+// rotateObservabilityCredential_gateway_error_response_body
+func ValidateRotateObservabilityCredentialGatewayErrorResponseBody(body *RotateObservabilityCredentialGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRotateObservabilityCredentialUnavailableResponseBody runs the
+// validations defined on
+// rotateObservabilityCredential_unavailable_response_body
+func ValidateRotateObservabilityCredentialUnavailableResponseBody(body *RotateObservabilityCredentialUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateDownloadObservabilityPluginUnauthorizedResponseBody runs the
 // validations defined on downloadObservabilityPlugin_unauthorized_response_body
 func ValidateDownloadObservabilityPluginUnauthorizedResponseBody(body *DownloadObservabilityPluginUnauthorizedResponseBody) (err error) {
@@ -13334,6 +14147,9 @@ func ValidateDistributionPluginResponseBody(body *DistributionPluginResponseBody
 	if body.IsDefault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
 	}
+	if body.AutoCreated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
+	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
@@ -13350,6 +14166,9 @@ func ValidatePluginResponseBody(body *PluginResponseBody) (err error) {
 	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.AutoCreated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
 	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))
@@ -13413,6 +14232,9 @@ func ValidatePluginServerResponseBody(body *PluginServerResponseBody) (err error
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+	}
 	if body.Policy != nil {
 		if !(*body.Policy == "required" || *body.Policy == "optional") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy", *body.Policy, []any{"required", "optional"}))
@@ -13461,6 +14283,27 @@ func ValidatePluginAudienceResponseBody(body *PluginAudienceResponseBody) (err e
 		if !(*body.Kind == "everyone" || *body.Kind == "role" || *body.Kind == "directory_group" || *body.Kind == "directory_attribute") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"everyone", "role", "directory_group", "directory_attribute"}))
 		}
+	}
+	return
+}
+
+// ValidateRotatedObservabilityKeyResponseBody runs the validations defined on
+// RotatedObservabilityKeyResponseBody
+func ValidateRotatedObservabilityKeyResponseBody(body *RotatedObservabilityKeyResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.KeyPrefix == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key_prefix", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
 	}
 	return
 }

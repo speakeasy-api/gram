@@ -92,6 +92,11 @@ func NewAuthenticationHost(rawURL string, serverURL *url.URL, environment string
 	return authenticationHost, nil
 }
 
+// Host returns the canonical authentication host, or "" when it is disabled.
+func (h *AuthenticationHost) Host() string {
+	return h.host
+}
+
 // Middleware diverts requests whose Host is the authentication host to the
 // host's own router and passes every other request to next.
 //

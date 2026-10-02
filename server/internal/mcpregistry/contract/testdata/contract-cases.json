@@ -1,0 +1,1300 @@
+[
+  {
+    "name": "valid URL template",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "invalid name",
+    "record": {
+      "server": {
+        "name": "missing-slash",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "valid name",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "nonstring version",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": 1,
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "empty server version",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "255 Unicode code points",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "256 Unicode code points",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "six ordered remotes",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://example.invalid/0"
+          },
+          {
+            "type": "sse",
+            "url": "https://example.invalid/1"
+          },
+          {
+            "type": "streamable-http",
+            "url": "https://example.invalid/2"
+          },
+          {
+            "type": "sse",
+            "url": "https://example.invalid/3"
+          },
+          {
+            "type": "streamable-http",
+            "url": "https://example.invalid/4"
+          },
+          {
+            "type": "sse",
+            "url": "https://example.invalid/5"
+          }
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "invalid remote transport",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "stdio",
+            "url": "https://example.invalid"
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "missing remote URL",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "sse"
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "whitespace in remote URL",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "sse",
+            "url": "https://has space"
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "URN",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "websiteUrl": "urn:example:fixture"
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "relative URI",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "websiteUrl": "/relative"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid percent escape",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "websiteUrl": "https://example.invalid/%ZZ"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid IPv6 literal",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "websiteUrl": "https://[:::]/"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "valid leap second",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "publishedAt": "2016-12-31T23:59:60Z"
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "mid-month leap second",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "publishedAt": "2016-12-15T23:59:60Z"
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "invalid calendar day",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "publishedAt": "2023-02-29T00:00:00Z"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "offset leap second",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "publishedAt": "2017-01-01T00:59:60+01:00"
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "fractional timestamp",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "publishedAt": "2024-02-29t12:30:00.123456789+05:30"
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "unknown official property",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "unknown": true
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "open extension JSON",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "_meta": {
+          "io.modelcontextprotocol.registry/publisher-provided": {
+            "example.invalid": {
+              "array": [
+                null,
+                true,
+                9007199254740993,
+                {
+                  "nested": []
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "package version 'latest'",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "packages": [
+          {
+            "registryType": "custom",
+            "identifier": "fixture",
+            "version": "latest",
+            "transport": {
+              "type": "stdio"
+            }
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "package version 'LATEST'",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "packages": [
+          {
+            "registryType": "custom",
+            "identifier": "fixture",
+            "version": "LATEST",
+            "transport": {
+              "type": "stdio"
+            }
+          }
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "package version ''",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "packages": [
+          {
+            "registryType": "custom",
+            "identifier": "fixture",
+            "version": "",
+            "transport": {
+              "type": "stdio"
+            }
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "bracketed IPv4",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "websiteUrl": "https://[127.0.0.1]/"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "IPv6",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "websiteUrl": "https://[2001:db8::1]/"
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "IPvFuture",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Public conformance fixture",
+        "version": "1.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://{tenant}.example.invalid/mcp"
+          }
+        ],
+        "websiteUrl": "https://[v1.test]/"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "probe:package version 256",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1",
+        "packages": [
+          {
+            "registryType": "custom",
+            "identifier": "a",
+            "transport": {
+              "type": "stdio"
+            },
+            "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "probe:input numeric description",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1",
+        "remotes": [
+          {
+            "type": "sse",
+            "url": "https://example.invalid",
+            "variables": {
+              "x": {
+                "description": 5
+              }
+            }
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "probe:input numeric default",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1",
+        "remotes": [
+          {
+            "type": "sse",
+            "url": "https://example.invalid",
+            "variables": {
+              "x": {
+                "default": 5
+              }
+            }
+          }
+        ]
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "probe:publisher metadata primitive",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1",
+        "_meta": {
+          "io.modelcontextprotocol.registry/publisher-provided": 5
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "probe:misplaced official metadata",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1",
+        "_meta": {
+          "io.modelcontextprotocol.registry/official": {}
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "probe:misplaced publisher metadata",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1"
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/publisher-provided": {}
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "probe:whole origin URL template",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1",
+        "remotes": [
+          {
+            "type": "sse",
+            "url": "{base_url}/mcp"
+          }
+        ]
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "required name",
+    "record": {
+      "server": {
+        "description": "Fixture",
+        "version": "1.0"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "required description",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "version": "1.0"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "required version",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "required server",
+    "record": {},
+    "valid": false
+  },
+  {
+    "name": "exact case server key",
+    "record": {
+      "Server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["integrator-4080826_fixture_1", "fixture"],
+          "oinIntegrationId": "4080826",
+          "xaaSignOnModes": ["SAML_2_0", "OPENID_CONNECT"],
+          "xaaIssuer": "https://auth.example.test"
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "okta mapping names only",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture"]
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "okta mapping without names",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinIntegrationId": "4080826"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping empty names",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": []
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping duplicate names",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture", "fixture"]
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping whitespace name",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture 1"]
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping non-numeric integration id",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture"],
+          "oinIntegrationId": "abc"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping unknown sign-on mode",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture"],
+          "xaaSignOnModes": ["SWA"]
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping http issuer",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture"],
+          "xaaIssuer": "http://auth.example.test"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping issuer with query",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture"],
+          "xaaIssuer": "https://auth.example.test/?x=1"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping issuer with path",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture"],
+          "xaaIssuer": "https://auth.example.test/oauth"
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "okta mapping unknown property",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture"],
+          "mcpUrl": "https://mcp.example.test"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping snake_case field",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oin_names": ["fixture"]
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping issuer with fragment",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture"],
+          "xaaIssuer": "https://auth.example.test#frag"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping issuer with userinfo",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture"],
+          "xaaIssuer": "https://user@auth.example.test"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping null namespace",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": null
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping issuer with port",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["linear"],
+          "xaaIssuer": "https://auth.example.test:8443/"
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "okta mapping issuer with port and no host",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["linear"],
+          "xaaIssuer": "https://:443"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping issuer at max length",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["linear"],
+          "xaaIssuer": "https://auth.example.test/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "okta mapping issuer over max length",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["linear"],
+          "xaaIssuer": "https://auth.example.test/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping names at max items",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": [
+            "app-0",
+            "app-1",
+            "app-2",
+            "app-3",
+            "app-4",
+            "app-5",
+            "app-6",
+            "app-7",
+            "app-8",
+            "app-9",
+            "app-10",
+            "app-11",
+            "app-12",
+            "app-13",
+            "app-14",
+            "app-15",
+            "app-16",
+            "app-17",
+            "app-18",
+            "app-19",
+            "app-20",
+            "app-21",
+            "app-22",
+            "app-23",
+            "app-24",
+            "app-25",
+            "app-26",
+            "app-27",
+            "app-28",
+            "app-29",
+            "app-30",
+            "app-31"
+          ]
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "okta mapping names over max items",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": [
+            "app-0",
+            "app-1",
+            "app-2",
+            "app-3",
+            "app-4",
+            "app-5",
+            "app-6",
+            "app-7",
+            "app-8",
+            "app-9",
+            "app-10",
+            "app-11",
+            "app-12",
+            "app-13",
+            "app-14",
+            "app-15",
+            "app-16",
+            "app-17",
+            "app-18",
+            "app-19",
+            "app-20",
+            "app-21",
+            "app-22",
+            "app-23",
+            "app-24",
+            "app-25",
+            "app-26",
+            "app-27",
+            "app-28",
+            "app-29",
+            "app-30",
+            "app-31",
+            "app-32"
+          ]
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping empty name",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": [""]
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping name at max length",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": [
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "okta mapping name over max length",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": [
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping integration id at max length",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["linear"],
+          "oinIntegrationId": "11111111111111111111111111111111"
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "okta mapping integration id over max length",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["linear"],
+          "oinIntegrationId": "111111111111111111111111111111111"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping both sign-on modes",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["linear"],
+          "xaaSignOnModes": ["SAML_2_0", "OPENID_CONNECT"]
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "okta mapping duplicate sign-on modes",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["linear"],
+          "xaaSignOnModes": ["SAML_2_0", "SAML_2_0"]
+        }
+      }
+    },
+    "valid": false
+  }
+]

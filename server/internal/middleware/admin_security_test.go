@@ -136,6 +136,42 @@ func TestAdminOriginCheck_FallsBackToReferer(t *testing.T) {
 	require.True(t, called)
 }
 
+func TestAdminOriginCheck_NativeMCPWithoutOriginOnly(t *testing.T) {
+	t.Parallel()
+	handler := AdminOriginCheck(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	for _, path := range []string{"/admin-mcp", "/admin-mcp/token", "/admin-mcp/register"} {
+		req := httptest.NewRequest(http.MethodPost, "https://staff.example.test"+path, nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusNoContent, rec.Code, path)
+	}
+	for _, path := range []string{"/admin-mcp/connect", "/admin-mcp/authorize", "/admin-mcp/unknown", "/admin/organization.create"} {
+		req := httptest.NewRequest(http.MethodPost, "https://staff.example.test"+path, nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusForbidden, rec.Code, path)
+	}
+	req := httptest.NewRequest(http.MethodPost, "https://staff.example.test/admin-mcp/token", nil)
+	req.Header.Set("Origin", "https://other.example.test")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	for _, path := range []string{"/admin-mcp/token", "/admin-mcp/register"} {
+		req := httptest.NewRequest(http.MethodPost, "https://staff.example.test"+path, nil)
+		req.Header.Set("Origin", "null")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusForbidden, rec.Code, path)
+	}
+	req.Header.Del("Origin")
+	req.Header.Set("Referer", "https://other.example.test/authorization")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+}
+
 func TestAdminOriginCheck_RejectsMissingOriginAndReferer(t *testing.T) {
 	t.Parallel()
 

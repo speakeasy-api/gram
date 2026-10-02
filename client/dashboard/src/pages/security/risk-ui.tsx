@@ -217,7 +217,9 @@ export function MaskedMatch({
   const generation = ctx?.generation;
   const revealAll = ctx?.revealAll ?? false;
   const [revealed, setRevealed] = useState(revealAll);
-  const { value, isLoading, reveal } = useUnmaskedMatch(resultId ?? "");
+  const { value, evidenceNotStored, isLoading, reveal } = useUnmaskedMatch(
+    resultId ?? "",
+  );
   // Only sync when the global toggle actually fires (generation changes).
   // Depending on the context object would clobber per-row clicks on every
   // render. Starts at `undefined` (never equal to a real generation number)
@@ -231,8 +233,8 @@ export function MaskedMatch({
     if (lastSyncedGeneration.current === generation) return;
     lastSyncedGeneration.current = generation;
     setRevealed(revealAll);
-    if (revealAll) reveal();
-  }, [generation, revealAll, reveal]);
+    if (revealAll && canReveal) reveal();
+  }, [generation, revealAll, canReveal, reveal]);
 
   if (!resultId || !matchRedacted) return <span>-</span>;
 
@@ -246,6 +248,10 @@ export function MaskedMatch({
         wrap={wrap}
       />
     );
+  }
+
+  if (evidenceNotStored) {
+    return <EvidenceNotStored contrast={contrast} />;
   }
 
   if (!revealed || value === null) {
@@ -332,8 +338,27 @@ function prettyJSON(s: string): string {
   }
 }
 
-// Without chat:read: the permission needed, with the fingerprint in the tooltip
-// so reviewers can still compare findings.
+// Shown for MCP findings recorded before evidence storage existed.
+function EvidenceNotStored({
+  contrast = false,
+}: {
+  contrast?: boolean;
+}): JSX.Element {
+  return (
+    <span
+      className={cn(
+        "text-xs font-medium",
+        contrast ? "text-background/70" : "text-muted-foreground",
+      )}
+    >
+      Evidence not stored
+    </span>
+  );
+}
+
+// Static fingerprint for callers who lack chat:read. The lock explains why
+// the plaintext stays withheld; the fingerprint itself is the reviewable
+// token the list endpoints already ship as match_redacted.
 function LockedRedactedMatch({
   matchRedacted,
   contrast = false,
@@ -411,7 +436,9 @@ export function EventMatchDialog({
   const { hasScope } = useRBAC();
   const canReveal = hasScope(REVEAL_SCOPE);
   const [open, setOpen] = useState(false);
-  const { value, isLoading, reveal } = useUnmaskedMatch(resultId ?? "");
+  const { value, evidenceNotStored, isLoading, reveal } = useUnmaskedMatch(
+    resultId ?? "",
+  );
 
   const summary = rationale?.trim() ? rationale.trim() : null;
 
@@ -484,7 +511,11 @@ export function EventMatchDialog({
             <p className="text-sm">{summary}</p>
           </div>
         ) : null}
-        {value === null ? (
+        {evidenceNotStored ? (
+          <div className="text-muted-foreground py-8 text-sm">
+            Evidence not stored
+          </div>
+        ) : value === null ? (
           <div className="text-muted-foreground flex items-center gap-2 py-8 text-sm">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span>{isLoading ? "Revealing…" : "No event content."}</span>

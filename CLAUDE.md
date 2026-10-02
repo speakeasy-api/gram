@@ -120,6 +120,10 @@ Background-work rules live in the `gram-temporal` skill (`.agents/skills/gram-te
 
 The Platform MCP is a first-party product surface under `server/internal/platformmcp/`. When adding or changing backend APIs, dashboard workflows, permissions, or user-facing product capabilities, explicitly assess whether an existing Platform MCP tool must change or a new outcome-oriented tool should be added. Keep tool schemas, descriptions, authorization, audiences, server instructions, tests, and shipped Platform MCP skills in sync with the product behavior. Activate the `maintaining-platform-mcp` skill (`.agents/skills/maintaining-platform-mcp/SKILL.md`) for this assessment and any Platform MCP implementation. Use `authoring-platform-mcp-skills` as well when changing workflows under `server/internal/plugins/platform_mcp_skills/`.
 
+### Staff Admin MCP
+
+When adding, removing, or changing an admin dashboard workflow, backend admin API, or staff permission, assess whether the staff-only Admin MCP needs a tool added or updated. Record an explicit reason when MCP parity is not appropriate. Keep staff-only authorization, exact target selection, safe results, tool contracts, and tests aligned with the dashboard. Activate `maintaining-admin-mcp` (`.agents/skills/maintaining-admin-mcp/SKILL.md`) for this assessment and any changes under `server/internal/adminmcp/`.
+
 ## Mise CLI
 
 The `mise` tasks listed in this guide should be used where building, testing or linting is needed. The commands can take arguments directly and don't need a `--` separator. For example, to run the server in development mode, use:
@@ -147,9 +151,9 @@ mise run start
 
 ## Cursor Cloud specific instructions
 
-Full environment setup is handled by `./zero --agent` (idempotent — re-run any time to reconcile): it installs tools/deps, generates keys/TLS + the dev-idp RSA key, starts the Docker infra, and runs the Postgres + ClickHouse migrations and finally starts all local services. Run it per session after starting the Docker daemon. It is deliberately NOT the startup update script — that stays minimal (`mise install` / `mise run install`), because starting infra and running migrations are too heavy and failure-prone for pod boot. Non-obvious caveats:
+Full environment setup is handled by `./zero --agent` (idempotent — re-run any time to reconcile): it installs tools/deps, generates keys/TLS + the dev-idp RSA key, starts the Docker infra, and runs the Postgres + ClickHouse migrations and finally starts all local services. Cloud boot does not run it. `.cursor/install.sh` only installs Docker packages and the `mise` toolchain; `.cursor/start.sh` only brings up the Docker daemon and logs in to Atlas. Run `./zero --agent` yourself when a task needs the local stack — dependencies, infra, migrations, and services are too heavy for every pod boot and most tasks never need them. Non-obvious caveats:
 
-- **Docker daemon must be running first.** There is no systemd auto-start, so run `sudo service docker start` before `./zero --agent`. Docker is configured with the `fuse-overlayfs` storage driver and `iptables-legacy`.
+- **Docker daemon must be running first.** Cloud start brings it up. Elsewhere there is no systemd auto-start, so run `sudo service docker start` before `./zero --agent`. Docker is configured with the `fuse-overlayfs` storage driver and `iptables-legacy`.
 - **`mise` provides all tooling** (`~/.local/bin/mise`). Resolution is automatic inside `mise run` / `mise exec` and mise tasks (including `.mts` Node scripts) — no PATH hacks needed. For bare tool calls, shims are on `PATH` via `mise activate` in `~/.bashrc` (interactive) and via `~/.bash_env` referenced by `BASH_ENV` (non-interactive _script_ shells). Bash does NOT source `BASH_ENV` for `bash -c`, so in that context prefer `mise exec` / `mise run` (or `export PATH="$HOME/.local/bin:$PATH"`).
 - **Login is credential-less** (`GRAM_DEVIDP_BACKEND=local`): click "Login", no username/password.
 - **Pitchfork manages services**: Either use the pitchfork mcp if running or fall back to the `pitchfork` CLI. These both give you access to service health and logs.

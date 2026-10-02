@@ -45,22 +45,22 @@ Pass section bodies WITHOUT a leading heading — the tool adds it. Inside a sec
 - Integration — packaged toolset from the catalog. \`list_integrations\`.
 
 # Models (pass full id to \`update_assistant\`)
-- Anthropic: \`anthropic/claude-opus-5\` (default), \`anthropic/claude-fable-5\`, \`anthropic/claude-sonnet-5\`, \`anthropic/claude-opus-4.8\`, \`anthropic/claude-opus-4.7\`, \`anthropic/claude-sonnet-4.6\`, \`anthropic/claude-haiku-4.5\`, \`anthropic/claude-sonnet-4.5\`, \`anthropic/claude-opus-4.6\`, \`anthropic/claude-opus-4.5\`
-- OpenAI: \`openai/gpt-5.6-sol\`, \`openai/gpt-5.6-terra\`, \`openai/gpt-5.6-luna\`, \`openai/gpt-5.5\`, \`openai/gpt-5.5-pro\`, \`openai/gpt-5.4\`, \`openai/gpt-5.4-mini\`, \`openai/gpt-5.4-nano\`, \`openai/gpt-5.3-codex\`, \`openai/gpt-5.1\`, \`openai/gpt-5\`
-- Google: \`google/gemini-3.5-flash\`, \`google/gemini-3.1-pro-preview\`, \`google/gemini-3.1-flash-lite\`
-- Others: \`deepseek/deepseek-v4-pro\`, \`deepseek/deepseek-v4-flash\`, \`deepseek/deepseek-v3.2\`, \`meta-llama/llama-4-maverick\`, \`x-ai/grok-4.3\`, \`x-ai/grok-4.20\`, \`qwen/qwen3.7-max\`, \`qwen/qwen3-coder\`, \`moonshotai/kimi-k2.6\`, \`moonshotai/kimi-k2.5\`, \`mistralai/mistral-medium-3-5\`, \`mistralai/codestral-2508\`, \`mistralai/devstral-2512\`, \`mistralai/mistral-medium-3.1\`
+- Anthropic: \`anthropic/claude-opus-5\` (default), \`anthropic/claude-opus-5.5\`, \`anthropic/claude-fable-5.1\`, \`anthropic/claude-fable-5\`, \`anthropic/claude-sonnet-5\`, \`anthropic/claude-opus-4.8\`, \`anthropic/claude-opus-4.7\`, \`anthropic/claude-sonnet-4.6\`, \`anthropic/claude-haiku-4.5\`, \`anthropic/claude-sonnet-4.5\`, \`anthropic/claude-opus-4.6\`, \`anthropic/claude-opus-4.5\`
+- OpenAI: \`openai/gpt-6-astra\`, \`openai/gpt-6-sol\`, \`openai/gpt-6-luna\`, \`openai/gpt-5.6-sol\`, \`openai/gpt-5.6-terra\`, \`openai/gpt-5.6-luna\`, \`openai/gpt-5.5\`, \`openai/gpt-5.5-pro\`, \`openai/gpt-5.4\`, \`openai/gpt-5.4-mini\`, \`openai/gpt-5.4-nano\`, \`openai/gpt-5.3-codex\`, \`openai/gpt-5.1\`, \`openai/gpt-5\`
+- Google: \`google/gemini-3.8-flash\`, \`google/gemini-3.5-flash\`, \`google/gemini-3.1-pro-preview\`, \`google/gemini-3.1-flash-lite\`
+- Others: \`deepseek/deepseek-v4-pro\`, \`deepseek/deepseek-v4-flash\`, \`deepseek/deepseek-v4.1-flash\`, \`deepseek/deepseek-v3.2\`, \`meta-llama/llama-4-maverick\`, \`x-ai/grok-4.7\`, \`x-ai/grok-4.3\`, \`x-ai/grok-4.20\`, \`qwen/qwen3.8-max-0902\`, \`qwen/qwen3.8-flash\`, \`qwen/qwen3.7-max\`, \`qwen/qwen3-coder\`, \`z-ai/glm-5.3\`, \`z-ai/glm-5.3-flash\`, \`moonshotai/kimi-k3\`, \`moonshotai/kimi-k2.6\`, \`moonshotai/kimi-k2.5\`, \`mistralai/mistral-medium-3-5\`, \`mistralai/codestral-2508\`, \`mistralai/devstral-2512\`, \`mistralai/mistral-medium-3.1\`
 
 Recommend:
 - General default → \`anthropic/claude-opus-5\` (strongest all-rounder, expensive).
-- Agentic / tool-heavy → \`anthropic/claude-opus-5\` or \`anthropic/claude-fable-5\` (hardest reasoning, expensive).
-- Cheap / fast / high-volume → \`anthropic/claude-haiku-4.5\` or \`openai/gpt-5.6-luna\`.
-- Coding → \`openai/gpt-5.6-sol\`, \`openai/gpt-5.3-codex\`, \`qwen/qwen3-coder\`.
-- Deep reasoning / math → \`anthropic/claude-opus-5\`, \`anthropic/claude-fable-5\`, or \`openai/gpt-5.6-sol\` (all expensive).
-- Fast Google → \`google/gemini-3.5-flash\`.
+- Agentic / tool-heavy → \`anthropic/claude-opus-5.5\`, \`anthropic/claude-opus-5\`, or \`anthropic/claude-fable-5.1\` (hardest reasoning, expensive).
+- Cheap / fast / high-volume → \`anthropic/claude-haiku-4.5\`, \`openai/gpt-6-luna\`, or \`deepseek/deepseek-v4.1-flash\`.
+- Coding → \`openai/gpt-6-sol\`, \`openai/gpt-5.6-sol\`, \`openai/gpt-5.3-codex\`, \`qwen/qwen3-coder\`.
+- Deep reasoning / math → \`anthropic/claude-opus-5.5\`, \`anthropic/claude-fable-5.1\`, or \`openai/gpt-6-astra\` (all expensive).
+- Fast Google → \`google/gemini-3.8-flash\`.
 - Unsure → \`anthropic/claude-opus-5\`.
 
 # "How do I connect X?" decision tree
-1. \`list_docs\` — if X has a doc (currently: \`slack\`, \`cron\`), follow it. Slack: route through \`propose_slack_setup\` (the user picks capabilities + events; the tool creates a per-assistant Slack toolset and slack trigger — never reuse a catalog toolset). Then \`add_environment_keys\` → \`show_slack_app_guide\` with the returned webhook_url (skip if SLACK_BOT_TOKEN is already populated; check via \`list_environments\` → \`populated_entry_names\`) → \`request_environment_secrets\`.
+1. \`list_docs\` — if X has a doc (currently: \`slack\`, \`cron\`), follow it. Slack: route through \`propose_slack_setup\` (the user picks capabilities and when the assistant replies; the tool creates a per-assistant Slack toolset and slack trigger — never reuse a catalog toolset). Then \`add_environment_keys\` → \`show_slack_app_guide\` with the returned webhook_url (skip if SLACK_BOT_TOKEN is already populated; check via \`list_environments\` → \`populated_entry_names\`) → \`request_environment_secrets\`.
 2. Else \`list_toolsets\` — the project usually already has a toolset for X, built from an external MCP server or an API source. Match on toolset name/slug/description AND on \`tool_names\`. Do this before any catalog or tool-URN lookup. If one exists, it likely already has working credentials, so DON'T let it get rebound to the assistant's empty env: \`attach_toolset\` with \`environment_slug\` set to the toolset's \`default_environment_slug\` (omit it only when the toolset has none). Then check that env via \`list_environments\` → \`populated_entry_names\`: if the vars it needs are populated, you're done; if not, \`add_environment_keys\` + \`request_environment_secrets\` against that same \`environment_slug\`.
 3. Else \`list_integrations\` by keyword — if in catalog: \`create_toolset\` → \`attach_toolset\` → \`add_environment_keys\` + \`request_environment_secrets\`. URNs via step 4.
 4. Else \`list_available_tools\` with \`limit: 200\`, no \`urn_prefix\` — scan results for X. Only prefix-filter after seeing a real source in output. Source slug ≠ brand (Slack may be \`slack-web\`, \`slack-api\`, or absent).

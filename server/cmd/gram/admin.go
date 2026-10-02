@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/assets"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"log/slog"
 	"net"
 	"net/http"
@@ -14,6 +12,10 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/organizations"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -25,17 +27,22 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/admin"
+	"github.com/speakeasy-api/gram/server/internal/adminmcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
@@ -98,6 +105,26 @@ func newAdminCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_ADMIN_SERVER_URL"},
 			Required: true,
 		},
+		&cli.BoolFlag{
+			Name:    "admin-mcp-enabled",
+			Usage:   "Enable the staff Admin MCP on the private admin ingress",
+			EnvVars: []string{"GRAM_ADMIN_MCP_ENABLED"},
+		},
+		&cli.StringFlag{
+			Name:    "admin-mcp-signing-key",
+			Usage:   "Independent signing key for staff Admin MCP access tokens",
+			EnvVars: []string{"GRAM_ADMIN_MCP_SIGNING_KEY"},
+		},
+		&cli.BoolFlag{
+			Name:    "admin-mcp-writes-enabled",
+			Usage:   "Global switch for staff Admin MCP writes. Off by default; each operation also needs admin-mcp-write-operations",
+			EnvVars: []string{"GRAM_ADMIN_MCP_WRITES_ENABLED"},
+		},
+		&cli.StringFlag{
+			Name:    "admin-mcp-write-operations",
+			Usage:   "Comma-separated staff Admin MCP write operations to enable. Empty enables none",
+			EnvVars: []string{"GRAM_ADMIN_MCP_WRITE_OPERATIONS"},
+		},
 		&cli.StringFlag{
 			Name:     "environment",
 			Usage:    "The current server environment", // local, dev, prod
@@ -147,6 +174,11 @@ func newAdminCommand() *cli.Command {
 			Usage:    "The URL of the site",
 			EnvVars:  []string{"GRAM_SITE_URL"},
 			Required: true,
+		},
+		&cli.StringFlag{
+			Name:    "server-url",
+			Usage:   "The public URL of the Gram server, used to build MCP server URLs. Defaults to site-url.",
+			EnvVars: []string{"GRAM_SERVER_URL"},
 		},
 		&cli.StringFlag{
 			Name:     "database-url",
@@ -238,6 +270,12 @@ func newAdminCommand() *cli.Command {
 			Name:     "workos-api-key",
 			Usage:    "WorkOS API key for user identity lookups and organization creation.",
 			EnvVars:  []string{"WORKOS_API_KEY"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "workos-environment-id",
+			Usage:    "WorkOS environment ID used to link organizations to the WorkOS dashboard. Leave unset to hide those links.",
+			EnvVars:  []string{"WORKOS_ENVIRONMENT_ID"},
 			Required: false,
 		},
 		&cli.StringFlag{
@@ -449,7 +487,30 @@ func newAdminCommand() *cli.Command {
 			if err := admin.SeedSupportMatrix(ctx, db); err != nil {
 				return fmt.Errorf("initialize support matrix: %w", err)
 			}
-			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, siteURL)
+			registryValidator, err := mcpregistry.LoadValidator()
+			if err != nil {
+				return fmt.Errorf("load registry validator: %w", err)
+			}
+			registryService := mcpregistry.New(db, registryValidator)
+			if err := registryService.Ready(ctx); err != nil {
+				return fmt.Errorf("registry readiness: %w", err)
+			}
+			if err := organizations.SyncOnboardingSteps(ctx, db); err != nil {
+				return fmt.Errorf("sync onboarding steps: %w", err)
+			}
+			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chDB), siteURL, registryService)
+			mcpServerURL := siteURL
+			if raw := c.String("server-url"); raw != "" {
+				mcpServerURL, err = url.Parse(raw)
+				if err != nil {
+					return fmt.Errorf("invalid server-url: %w", err)
+				}
+				if err := validateServerURL(mcpServerURL, c.String("environment")); err != nil {
+					return fmt.Errorf("invalid server-url: %w", err)
+				}
+			}
+			adminService.SetMCPServerURL(mcpServerURL)
+			adminService.SetWorkOSEnvironmentID(c.String("workos-environment-id"))
 			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
 			if err != nil {
 				return err
@@ -471,6 +532,29 @@ func newAdminCommand() *cli.Command {
 				adminService.SetAssetService(assets.NewPlatformService(logger, tracerProvider, guardianPolicy, db, assetStorage))
 			}
 			admin.Attach(mux, adminService)
+			if c.Bool("admin-mcp-enabled") {
+				key := c.String("admin-mcp-signing-key")
+				if err := validateAdminMCPSigningKey(key, c.String("admin-encryption-key"), c.String("encryption-key")); err != nil {
+					return err
+				}
+				writeOperations, err := adminmcp.ParseWriteOperations(c.String("admin-mcp-write-operations"))
+				if err != nil {
+					return fmt.Errorf("configure staff Admin MCP writes: %w", err)
+				}
+				writes := adminmcp.WriteConfig{Enabled: c.Bool("admin-mcp-writes-enabled"), Operations: writeOperations}
+				signer := sessiontokens.NewSigner(key)
+				staffOAuth, err := adminmcp.NewStaffOAuth(adminServerURL, db, cache.NewRedisCacheAdapter(redisClient), adminService.Verifier(), adminEncryption, signer, writes, logger)
+				if err != nil {
+					return fmt.Errorf("initialize staff Admin MCP OAuth: %w", err)
+				}
+				staffOAuth.Attach(mux)
+				staffAuth := adminmcp.NewStaffAuthenticator(signer, db, adminEncryption, adminService.Verifier(), staffOAuth.Issuer(), staffOAuth.Resource())
+				staffRuntime := adminmcp.NewRuntime(staffAuth, staffOAuth.ProtectedResourceURL(), adminService)
+				if err := adminmcp.AttachWrites(staffRuntime, staffOAuth, productFeatures, writes); err != nil {
+					return fmt.Errorf("configure staff Admin MCP write tools: %w", err)
+				}
+				mux.Handle(http.MethodPost, adminmcp.Path, staffRuntime.Handler().ServeHTTP)
+			}
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
@@ -567,6 +651,13 @@ func newAdminCommand() *cli.Command {
 			return runShutdown(PullLogger(c.Context), c.Context, shutdownFuncs)
 		},
 	}
+}
+
+func validateAdminMCPSigningKey(key, adminEncryptionKey, applicationEncryptionKey string) error {
+	if len(key) < 32 || key == adminEncryptionKey || key == applicationEncryptionKey {
+		return errors.New("staff Admin MCP requires an independent signing key of at least 32 bytes")
+	}
+	return nil
 }
 
 // newAdminIssuerEncryption preserves optional issuer setup without accepting a malformed configured key.

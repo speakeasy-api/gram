@@ -33,6 +33,11 @@ const (
 	// JudgeTimeout bounds a single inline completion and is shared with the
 	// offline evaluator.
 	JudgeTimeout = 10 * time.Second
+	// MaxVerdictTokens caps generated tokens, reasoning included. Uncapped,
+	// OpenRouter reserves the model's full 65,536-token ceiling against the
+	// key's remaining monthly limit and refuses the call. Generous on purpose:
+	// truncating a verdict costs a detection, over-reserving costs nothing.
+	MaxVerdictTokens = 8192
 	// Model, ReasoningEffort, and SamplesPerEvent define the production judge.
 	// SamplesPerEvent is one: production makes a single physical call per event
 	// and the offline evaluator uses this as its sweep default.
@@ -68,6 +73,7 @@ const (
 	spanAttrOperational     = "pi_judge.operational"
 	spanAttrFindingSurfaced = "pi_judge.finding_surfaced"
 	spanAttrFailOpen        = "pi_judge.fail_open"
+	spanAttrFailOpenReason  = "pi_judge.fail_open_reason"
 )
 
 // SystemPrompt is the typed prompt shared by production and the
@@ -142,6 +148,7 @@ var (
 	safeResult          = promptinjection.Result{Label: promptinjection.LabelSafe, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false, STokens: 0, Completed: false, Model: Model, Provider: "openrouter"}
 	errTypedRateLimit   = errors.New("typed pi judge rate limited")
 	errMalformedVerdict = errors.New("malformed typed pi verdict")
+	errTruncatedVerdict = errors.New("truncated typed pi verdict")
 )
 
 // unavailableResult is every path where the judge never rendered a verdict.
@@ -310,7 +317,7 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 	defer cancel()
 
 	start := time.Now()
-	verdict, err := c.judge(decisionCtx, req, prepared, userID)
+	verdict, failureReason, err := c.judge(decisionCtx, req, prepared, userID)
 	failOpen := err != nil
 	stabilized := StabilizeSingle(verdict)
 
@@ -342,6 +349,7 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 		attribute.Bool(spanAttrOperational, stabilized.Operational),
 		attribute.Bool(spanAttrFindingSurfaced, stabilized.IsInjection),
 		attribute.Bool(spanAttrFailOpen, failOpen),
+		attribute.String(spanAttrFailOpenReason, failureReason),
 	)
 	result := promptinjection.Result{
 		Label:         promptinjection.LabelSafe,
@@ -409,8 +417,9 @@ func observeTrajectoryField(value string) (present bool, length int, truncated b
 }
 
 // judge makes the physical call and records its telemetry. A failed or
-// malformed call returns the zero Verdict and an error.
-func (c *Engine) judge(ctx context.Context, req promptinjection.Request, prepared []byte, userID string) (Verdict, error) {
+// malformed call returns the zero Verdict and an error. The bounded failure
+// reason is "none" on success.
+func (c *Engine) judge(ctx context.Context, req promptinjection.Request, prepared []byte, userID string) (Verdict, string, error) {
 	start := time.Now()
 	verdict, err := c.call(ctx, req, prepared, userID)
 	outcome := o11y.OutcomeFromErrorWithTimeout(err)
@@ -428,7 +437,7 @@ func (c *Engine) judge(ctx context.Context, req promptinjection.Request, prepare
 			)
 		}
 	}
-	return verdict, err
+	return verdict, reason, err
 }
 
 func typedFailureReason(err error, outcome o11y.Outcome) string {
@@ -443,6 +452,14 @@ func typedFailureReason(err error, outcome o11y.Outcome) string {
 	}
 	if outcome == o11y.OutcomeTimeout {
 		return "timeout"
+	}
+	// A credit or key-limit refusal does not clear on its own, so it stays out
+	// of the transient-error bucket and can be alerted on.
+	if gramopenrouter.IsInsufficientCredits(err) {
+		return "insufficient_credits"
+	}
+	if errors.Is(err, errTruncatedVerdict) {
+		return "truncated"
 	}
 	if errors.Is(err, errMalformedVerdict) {
 		return "malformed"
@@ -519,6 +536,7 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, payload 
 		Tools:                     nil,
 		ToolChoice:                nil,
 		Temperature:               &c.temperature,
+		MaxTokens:                 new(MaxVerdictTokens),
 		Model:                     c.model,
 		Stream:                    false,
 		UsageSource:               billing.ModelUsageSourceRiskAnalysis,
@@ -542,6 +560,18 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, payload 
 	}
 	if response == nil || response.Message == nil {
 		return Verdict{}, fmt.Errorf("%w: empty completion response", errMalformedVerdict)
+	}
+	// A truncated completion often still parses, so reject it on the finish
+	// reason rather than the body. Recorded either way: truncated calls are
+	// what size the cap.
+	truncated := response.FinishReason != nil && *response.FinishReason == gramopenrouter.FinishReasonLength
+	// An omitted usage payload is indistinguishable from zero tokens, and a
+	// zero sample would make the cap look safer to tighten than it is.
+	if response.Usage.HasSignal() {
+		c.metrics.RecordCompletionTokens(ctx, req.OrgID, c.model, c.reasoning, response.Usage.CompletionTokens, truncated)
+	}
+	if truncated {
+		return Verdict{}, fmt.Errorf("%w: completion hit the %d-token cap", errTruncatedVerdict, MaxVerdictTokens)
 	}
 	raw := strings.TrimSpace(gramopenrouter.GetText(*response.Message))
 	if raw == "" {

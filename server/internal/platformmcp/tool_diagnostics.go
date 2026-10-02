@@ -11,7 +11,7 @@ func registerDiagnosticsTools(reg *Registrar, diagnostics *DiagnosticsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_project_overview",
 		Title:       "Project Health Overview",
-		Description: "Summarize how one project's MCP servers have been behaving, and what has been failing, over a recent window. Start here for any question about how a project or its MCP servers are doing; only look further once this names a specific server or failure to investigate. Constraints: results are aggregated server-side and carry the window they cover, how fresh the underlying observations are, and whether there were any observations at all.",
+		Description: "Summarize how one project's MCP servers have been behaving, and what has been failing, over a recent window. Start here for any question about how a project or its MCP servers are doing; only look further once this names a specific server or failure to investigate. Top servers are attributed to the configured MCP server whenever the name the calling app used can be resolved to one, and then carry its mcp_id for use with get_mcp and the diagnostics tools; a name that cannot be resolved is reported as the app used it, with no mcp_id. Constraints: results are aggregated server-side and carry the window they cover, how fresh the underlying observations are, and whether there were any observations at all.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetProjectOverviewInput) (*mcp.CallToolResult, GetProjectOverviewOutput, error) {
 		principal, err := principalFromToolContext(ctx)

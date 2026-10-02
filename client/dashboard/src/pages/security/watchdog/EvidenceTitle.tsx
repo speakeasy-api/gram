@@ -1,5 +1,6 @@
 import { Icon } from "@/components/ui/Icon";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { agentSessionHref } from "@/pages/chatLogs/agentSessionLink";
 import {
@@ -23,10 +24,10 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useLoadChat } from "@gram/client/react-query/loadChat.js";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Loader2 } from "lucide-react";
+import { Loader2, TriangleAlert } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { useCanReadFindingChat } from "../unmask";
+import { TRANSCRIPT_DENIED_REASON, useCanReadFindingChat } from "../unmask";
 import { collectChatFindings } from "./collect-findings";
 
 /**
@@ -51,8 +52,11 @@ export function EvidenceTitle({
 }): JSX.Element {
   const routes = useRoutes();
   const canReadChat = useCanReadFindingChat();
+  const { isLoading: scopesLoading } = useRBAC();
   // Without chat:read on this chat, the chat is never requested.
   const chatId = canReadChat(findingChatId) ? findingChatId : undefined;
+  // Grants read as missing while they load, so wait before saying so.
+  const transcriptDenied = Boolean(findingChatId) && !chatId && !scopesLoading;
   const [expanded, setExpanded] = useState(false);
   const [clipped, setClipped] = useState(false);
   const titleRef = useRef<HTMLElement>(null);
@@ -124,6 +128,12 @@ export function EvidenceTitle({
             </Link>
           )}
         </div>
+        {transcriptDenied && (
+          <p className="text-warning flex items-start gap-1 text-xs">
+            <TriangleAlert aria-hidden className="mt-0.5 size-3 shrink-0" />
+            <span>{TRANSCRIPT_DENIED_REASON}</span>
+          </p>
+        )}
         {/* Outside the title button so the text can be selected. */}
         {expanded && (
           <FlaggedMessageBody message={flaggedMessage} chatId={chatId} />

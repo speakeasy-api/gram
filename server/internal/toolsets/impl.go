@@ -40,11 +40,14 @@ import (
 	mcpmetadataRepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	networkingressRepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	oauthRepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -53,23 +56,24 @@ import (
 )
 
 type Service struct {
-	tracer               trace.Tracer
-	logger               *slog.Logger
-	db                   *pgxpool.Pool
-	policy               *guardian.Policy
-	repo                 *repo.Queries
-	environmentRepo      *environmentsRepo.Queries
-	auth                 *auth.Auth
-	authz                *authz.Engine
-	toolsets             *Toolsets
-	domainsRepo          *domainsRepo.Queries
-	usageRepo            *usageRepo.Queries
-	oauthRepo            *oauthRepo.Queries
-	mcpmetadataRepo      *mcpmetadataRepo.Queries
-	toolsetCache         cache.TypedCacheObject[mv.ToolsetBaseContents]
-	audit                *audit.Logger
-	temporalEnv          *tenv.Environment
-	pluginsGitHubEnabled bool
+	tracer                   trace.Tracer
+	logger                   *slog.Logger
+	db                       *pgxpool.Pool
+	policy                   *guardian.Policy
+	repo                     *repo.Queries
+	environmentRepo          *environmentsRepo.Queries
+	auth                     *auth.Auth
+	authz                    *authz.Engine
+	toolsets                 *Toolsets
+	domainsRepo              *domainsRepo.Queries
+	usageRepo                *usageRepo.Queries
+	oauthRepo                *oauthRepo.Queries
+	mcpmetadataRepo          *mcpmetadataRepo.Queries
+	toolsetCache             cache.TypedCacheObject[mv.ToolsetBaseContents]
+	audit                    *audit.Logger
+	temporalEnv              *tenv.Environment
+	pluginsGitHubEnabled     bool
+	networkAccessEligibility networkaccess.EligibilityChecker
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -89,24 +93,30 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("toolsets"))
 
 	return &Service{
-		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/toolsets"),
-		logger:               logger,
-		db:                   db,
-		policy:               policy,
-		repo:                 repo.New(db),
-		auth:                 auth.New(logger, db, sessions, authzEngine),
-		authz:                authzEngine,
-		environmentRepo:      environmentsRepo.New(db),
-		toolsets:             NewToolsets(db),
-		domainsRepo:          domainsRepo.New(db),
-		usageRepo:            usageRepo.New(db),
-		oauthRepo:            oauthRepo.New(db),
-		mcpmetadataRepo:      mcpmetadataRepo.New(db),
-		toolsetCache:         cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
-		audit:                auditLogger,
-		temporalEnv:          temporalEnv,
-		pluginsGitHubEnabled: pluginsGitHubEnabled,
+		tracer:                   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/toolsets"),
+		logger:                   logger,
+		db:                       db,
+		policy:                   policy,
+		repo:                     repo.New(db),
+		auth:                     auth.New(logger, db, sessions, authzEngine),
+		authz:                    authzEngine,
+		environmentRepo:          environmentsRepo.New(db),
+		toolsets:                 NewToolsets(db),
+		domainsRepo:              domainsRepo.New(db),
+		usageRepo:                usageRepo.New(db),
+		oauthRepo:                oauthRepo.New(db),
+		mcpmetadataRepo:          mcpmetadataRepo.New(db),
+		toolsetCache:             cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
+		audit:                    auditLogger,
+		temporalEnv:              temporalEnv,
+		pluginsGitHubEnabled:     pluginsGitHubEnabled,
+		networkAccessEligibility: networkaccess.DenyAllChecker{},
 	}
+}
+
+func (s *Service) WithNetworkAccessEligibility(checker networkaccess.EligibilityChecker) *Service {
+	s.networkAccessEligibility = checker
+	return s
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -456,11 +466,46 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetSlug(string(payload.Slug)))
 
+	candidate, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{Slug: conv.ToLower(payload.Slug), ProjectID: *authCtx.ProjectID})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, logger)
+	}
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, candidate.ID.String(), authCtx.ProjectID.String())); err != nil {
+		return nil, err
+	}
+
+	var requestedMode *networkaccess.Mode
+	var finalizeNetworkAccess networkaccess.AdmissionFinalizer
+	if payload.NetworkAccessMode != nil {
+		mode, parseErr := networkaccess.Parse(string(*payload.NetworkAccessMode))
+		if parseErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid network access mode")
+		}
+		requestedMode = &mode
+		if !mode.IsPublicOnly() {
+			finalizeNetworkAccess, parseErr = s.networkAccessEligibility.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: authCtx.ActiveOrganizationID, Mode: mode})
+			if parseErr != nil {
+				return nil, oops.E(oops.CodeInvalid, parseErr, "private network access is unavailable")
+			}
+		}
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing toolsets").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	if requestedMode != nil && !requestedMode.IsPublicOnly() {
+		if err := finalizeNetworkAccess.Finalize(ctx, dbtx); err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "private network access is unavailable")
+		}
+	} else if err := networkingressRepo.New(dbtx).AcquireNetworkIngressOrganizationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock network ingress lifecycle")
+	}
+	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock project admission")
+	}
 
 	tr := s.repo.WithTx(dbtx)
 	clearedOAuth := false
@@ -474,8 +519,8 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, existingToolset.ID.String(), authCtx.ProjectID.String())); err != nil {
-		return nil, err
+	if existingToolset.ID != candidate.ID {
+		return nil, oops.E(oops.CodeConflict, nil, "toolset changed concurrently; retry the request")
 	}
 	existingView, err := mv.DescribeToolset(ctx, logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(existingToolset.Slug), new(s.toolsetCache.SkipCache()), nil)
 	if err != nil {
@@ -609,6 +654,9 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating toolset").LogError(ctx, logger)
 	}
+	if err := s.reconcileHostedNetworkAccess(ctx, dbtx, authCtx, updatedToolset, requestedMode); err != nil {
+		return nil, err
+	}
 
 	var pluginCreated bool
 	if !existingToolset.McpEnabled && updatedToolset.McpEnabled {
@@ -689,6 +737,16 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	}
 
 	logger := s.logger
+	candidate, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{Slug: conv.ToLower(payload.Slug), ProjectID: *authCtx.ProjectID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to get toolset").LogError(ctx, logger)
+	}
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, candidate.ID.String(), authCtx.ProjectID.String())); err != nil {
+		return err
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -696,6 +754,12 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := networkingressRepo.New(dbtx).AcquireNetworkIngressOrganizationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock network ingress lifecycle")
+	}
+	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock project admission")
+	}
 	tr := s.repo.WithTx(dbtx)
 
 	toDelete, err := tr.GetToolset(ctx, repo.GetToolsetParams{
@@ -709,8 +773,8 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		return oops.E(oops.CodeUnexpected, err, "failed to get toolset").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, toDelete.ID.String(), authCtx.ProjectID.String())); err != nil {
-		return err
+	if toDelete.ID != candidate.ID {
+		return oops.E(oops.CodeConflict, nil, "toolset changed concurrently; retry the request")
 	}
 
 	deleted, err := tr.DeleteToolset(ctx, repo.DeleteToolsetParams{
@@ -729,6 +793,9 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		ProjectID: *authCtx.ProjectID,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to detach assistant toolsets").LogError(ctx, logger)
+	}
+	if err := s.deleteHostedNetworkAccess(ctx, dbtx, authCtx, toDelete); err != nil {
+		return err
 	}
 
 	if err := s.audit.LogToolsetDelete(ctx, dbtx, audit.LogToolsetDeleteEvent{

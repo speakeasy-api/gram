@@ -6,18 +6,22 @@ import type { AccessRow } from "./accessRows";
 /**
  * Confirms taking a principal off one server, for the case where the button
  * does not do what it appears to: the access comes from a rule covering every
- * server, so this writes an exception instead — and an exception wins over
- * access given to someone individually. Both are worth saying before it lands
- * rather than after, in terms of who ends up able to do what.
+ * server, so this writes an exception instead. An exception against a role or
+ * everyone does not reach people given this server by name, whose own rule
+ * outranks it. Both are worth saying before it lands rather than
+ * after, in terms of who ends up able to do what.
  */
 export function RemoveAudienceDialog({
   row,
+  keptBy,
   serverName,
   pending,
   onConfirm,
   onClose,
 }: {
   row: AccessRow;
+  /** People who keep access through their own rule here. */
+  keptBy: string[];
   serverName?: string;
   pending: boolean;
   onConfirm: () => void;
@@ -25,11 +29,17 @@ export function RemoveAudienceDialog({
 }): JSX.Element {
   const server = serverName ?? "this server";
   const isRole = row.kind === "role";
-  // A block beats a grant, so removing a group takes the server from anyone
-  // it covers — including someone who was given it on their own.
+  // Removing a group takes the server from anyone it covers, except the
+  // people given it here by name.
   const isGroup = isRole || row.kind === "everyone";
   // "Everyone in Everyone" is not a sentence: the everyone row already names
   // the group, so it takes the verb directly.
+  // Anyone kept individually is named below, so the summary must not claim
+  // the whole group loses the server.
+  const loses =
+    isGroup && keptBy.length > 0
+      ? "loses this server: connecting, viewing and managing, except anyone given it individually."
+      : "loses this server: connecting, viewing and managing.";
   const groupPhrase = (rest: string) =>
     row.kind === "everyone"
       ? `Everyone ${rest}`
@@ -49,23 +59,15 @@ export function RemoveAudienceDialog({
           <Dialog.Title>
             Remove {row.displayName} from {server}?
           </Dialog.Title>
-          <Dialog.Description>
-            {groupPhrase(
-              "loses this server: connecting, viewing and managing.",
-            )}
-          </Dialog.Description>
+          <Dialog.Description>{groupPhrase(loses)}</Dialog.Description>
         </Dialog.Header>
 
         <ul className="text-muted-foreground list-disc space-y-1 py-2 pl-5 text-sm">
           <li>Other servers are unaffected.</li>
           {isGroup && (
-            // The surprise worth naming: this beats access someone was given
-            // on their own, so it can take more than the row suggests.
-            <li>
-              {row.kind === "everyone"
-                ? "Everyone loses this server even if they were also given it individually."
-                : `Anyone in ${row.displayName} loses this server even if they were also given it individually.`}
-            </li>
+            // The preflight worth naming: access given to someone by name
+            // outranks this block, so it takes less than the row suggests.
+            <li>{keptSentence(keptBy)}</li>
           )}
         </ul>
 
@@ -84,4 +86,27 @@ export function RemoveAudienceDialog({
       </Dialog.Content>
     </Dialog>
   );
+}
+
+/** Most names listed before the rest are counted instead. */
+const KEPT_NAMES_SHOWN = 3;
+
+/** Who keeps this server through access given to them by name. */
+function keptSentence(keptBy: string[]): string {
+  if (keptBy.length === 0) {
+    return "People given this server individually keep that access.";
+  }
+  const verb = keptBy.length === 1 ? "keeps" : "keep";
+  return `${listNames(keptBy)} ${verb} the access given to them individually.`;
+}
+
+/** "A", "A and B", "A, B and C", or "A, B, C and 2 others". */
+function listNames(names: string[]): string {
+  const shown = names.slice(0, KEPT_NAMES_SHOWN);
+  const rest = names.length - shown.length;
+  if (rest > 0) {
+    return `${shown.join(", ")} and ${rest} ${rest === 1 ? "other" : "others"}`;
+  }
+  if (shown.length === 1) return shown[0]!;
+  return `${shown.slice(0, -1).join(", ")} and ${shown.at(-1)}`;
 }
