@@ -209,6 +209,25 @@ describe("rule labels", () => {
     ).toBe("Blocked by Contractors.");
   });
 
+  it("names an overridden block that still blocks other grants", () => {
+    expect(
+      effectNote(
+        engineerBlocked,
+        level({
+          level: "use",
+          allowed: true,
+          rules: [
+            rule({ displayName: "Priya", kind: "user", effect: "overrides" }),
+            { ...contractorsBlock, effect: "overridden" },
+            engineerBlocked,
+          ],
+        }),
+        "Priya",
+        "GitHub",
+      ),
+    ).toBe("Blocked by Contractors.");
+  });
+
   it("names the directory group a role came from", () => {
     expect(
       directorySourceLabel({
@@ -219,6 +238,26 @@ describe("rule labels", () => {
         ],
       }),
     ).toBe("Mapped from directory group okta/contractors");
+  });
+
+  it("names the mapping behind a role also held directly", () => {
+    expect(
+      directorySourceLabel({
+        ...contractorsBlock,
+        viaDirectoryMapping: false,
+        directorySources: [
+          {
+            sourceKind: "attribute",
+            attributeKey: "employee_type",
+            attributeValue: "contractor",
+          },
+        ],
+      }),
+    ).toBe("Also mapped from employee_type = contractor");
+  });
+
+  it("says nothing of a directly held role without mapping sources", () => {
+    expect(directorySourceLabel(contractorsBlock)).toBeUndefined();
   });
 
   it("keeps the mapping private without its sources", () => {

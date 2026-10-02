@@ -104,8 +104,8 @@ export function CheckAccessResult({
           </Text>
         </div>
         <div
-          role="tablist"
-          aria-label="Access level"
+          role="group"
+          aria-label="Access level to explain"
           className="divide-border flex divide-x border-t md:border-t-0 md:border-l"
         >
           {LEVELS.map((name) => {
@@ -153,8 +153,7 @@ function LevelTab({
   return (
     <button
       type="button"
-      role="tab"
-      aria-selected={active}
+      aria-pressed={active}
       onClick={onSelect}
       className={cn(
         "flex min-w-36 flex-col items-start gap-2 border-b-2 px-5 py-5 text-left transition-colors",

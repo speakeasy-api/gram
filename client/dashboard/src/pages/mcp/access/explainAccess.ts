@@ -316,25 +316,39 @@ export function effectNote(
   }
 }
 
-/** Names the blocks that kept a matching grant from counting. */
+/**
+ * Names the blocks that kept a matching grant from counting. When a direct
+ * grant overrides them, they still block every other grant, so an overridden
+ * block is named the same way.
+ */
 function blockedByNote(level: ExplainedAccessLevel): string {
-  const blocks = rulesWith(level, "blocks");
+  const blocks = level.rules.filter(
+    (rule) => rule.effect === "blocks" || rule.effect === "overridden",
+  );
   if (blocks.length === 0) return "Blocked by a block on this access.";
   return `Blocked by ${listNames(blocks)}.`;
 }
 
-/** How a role reached this person through the directory, when it did. */
+/**
+ * How a role reached this person through the directory, when it did. A role
+ * held directly and through a mapping says so, since taking it away means
+ * undoing both.
+ */
 export function directorySourceLabel(
   rule: ExplainedAccessRule,
 ): string | undefined {
-  if (!rule.viaDirectoryMapping) return undefined;
   const sources = rule.directorySources ?? [];
+  const described = sources
+    .map((source) => {
+      if (source.sourceKind === "group") {
+        return `directory group ${source.directoryGroupName ?? "(unnamed)"}`;
+      }
+      return `${source.attributeKey ?? "attribute"} = ${source.attributeValue ?? ""}`;
+    })
+    .join(", ");
+  if (!rule.viaDirectoryMapping) {
+    return sources.length > 0 ? `Also mapped from ${described}` : undefined;
+  }
   if (sources.length === 0) return "Mapped from the directory";
-  const described = sources.map((source) => {
-    if (source.sourceKind === "group") {
-      return `directory group ${source.directoryGroupName ?? "(unnamed)"}`;
-    }
-    return `${source.attributeKey ?? "attribute"} = ${source.attributeValue ?? ""}`;
-  });
-  return `Mapped from ${described.join(", ")}`;
+  return `Mapped from ${described}`;
 }

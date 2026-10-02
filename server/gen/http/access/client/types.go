@@ -6926,9 +6926,9 @@ type ExplainedAccessRuleResponseBody struct {
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 	// Whether the member holds this role only through a directory role mapping.
 	ViaDirectoryMapping *bool `form:"via_directory_mapping,omitempty" json:"via_directory_mapping,omitempty" xml:"via_directory_mapping,omitempty"`
-	// The directory role mappings giving the member this role. Returned only to
-	// organization administrators, and never to legacy API keys, because attribute
-	// values can carry personal data.
+	// The directory role mappings giving the member this role, including when they
+	// also hold it directly. Returned only to organization administrators, and
+	// never to legacy API keys, because attribute values can carry personal data.
 	DirectorySources []*ExplainedAccessDirectorySourceResponseBody `form:"directory_sources,omitempty" json:"directory_sources,omitempty" xml:"directory_sources,omitempty"`
 }
 

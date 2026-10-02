@@ -90288,7 +90288,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/ExplainedAccessDirectorySource'
-                    description: The directory role mappings giving the member this role. Returned only to organization administrators, and never to legacy API keys, because attribute values can carry personal data.
+                    description: The directory role mappings giving the member this role, including when they also hold it directly. Returned only to organization administrators, and never to legacy API keys, because attribute values can carry personal data.
                 display_name:
                     type: string
                     description: Human-readable name for the principal.

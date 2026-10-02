@@ -1246,7 +1246,7 @@ var ExplainedAccessRuleModel = Type("ExplainedAccessRule", func() {
 		Enum("wildcard_direct_grant", "narrower_direct_grant", "own_exclusion")
 	})
 	Attribute("via_directory_mapping", Boolean, "Whether the member holds this role only through a directory role mapping.")
-	Attribute("directory_sources", ArrayOf(ExplainedAccessDirectorySourceModel), "The directory role mappings giving the member this role. Returned only to organization administrators, and never to legacy API keys, because attribute values can carry personal data.")
+	Attribute("directory_sources", ArrayOf(ExplainedAccessDirectorySourceModel), "The directory role mappings giving the member this role, including when they also hold it directly. Returned only to organization administrators, and never to legacy API keys, because attribute values can carry personal data.")
 })
 
 var ExplainedAccessLevelModel = Type("ExplainedAccessLevel", func() {

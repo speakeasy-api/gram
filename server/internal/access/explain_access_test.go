@@ -445,3 +445,33 @@ func TestService_ExplainResourceAccess_HidesDirectorySourcesFromLegacyAPIKeys(t 
 	require.True(t, contractors.ViaDirectoryMapping)
 	require.Empty(t, contractors.DirectorySources)
 }
+
+func TestService_ExplainResourceAccess_KeepsMappingForDirectlyHeldRole(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	fixture := seedExplainAccessFixture(t, ctx, ti)
+	seedRoleAssignment(t, ctx, ti.conn, fixture.orgID, fixture.userID, mockMember("", "membership_mateo", "user_mateo", "contractors"))
+
+	use := explainedLevel(t, explainAccess(t, ctx, ti, fixture.serverID, fixture.userID), audienceLevelUse)
+	contractors := explainedRule(t, use.Rules, "Contractors")
+	require.False(t, contractors.ViaDirectoryMapping, "the role is also held directly")
+	require.Len(t, contractors.DirectorySources, 1, "taking the role away means undoing the mapping too")
+	require.Equal(t, "okta/contractors", *contractors.DirectorySources[0].DirectoryGroupName)
+}
+
+func TestService_ExplainResourceAccess_WildcardToolRuleCoversEveryTool(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
+	serverID := seedRemoteMCPServer(t, ctx, ti.conn, orgID)
+	everyTool := authz.NewSelector(authz.ScopeMCPConnect, serverID)
+	everyTool[authz.SelectorKeyTool] = authz.WildcardResource
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_hana", "hana@test.com", "Hana", "user_hana", "membership_hana")
+	seedGrantWithSelector(t, ctx, ti.conn, orgID, urn.NewPrincipal(urn.PrincipalTypeUser, "local_hana"), authz.ScopeMCPConnect, everyTool)
+
+	use := explainedLevel(t, explainAccess(t, ctx, ti, serverID, "local_hana"), audienceLevelUse)
+	require.True(t, use.Allowed)
+	require.Equal(t, explainedToolAccessAll, *use.ToolAccess)
+}

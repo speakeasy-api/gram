@@ -348,8 +348,10 @@ func toolProbes(grants []authz.Grant, check authz.Check) []authz.Check {
 }
 
 // isNarrowedGrant reports whether grant covers only some of a resource's tools.
+// A "*" value matches every tool, so it narrows nothing.
 func isNarrowedGrant(grant authz.Grant) bool {
-	return grant.Selector[authz.SelectorKeyTool] != "" || grant.Selector[authz.SelectorKeyDisposition] != ""
+	narrows := func(value string) bool { return value != "" && value != authz.WildcardResource }
+	return narrows(grant.Selector[authz.SelectorKeyTool]) || narrows(grant.Selector[authz.SelectorKeyDisposition])
 }
 
 // explainedGrantKey identifies one loaded grant across several explanations.
@@ -381,12 +383,15 @@ type explainedRoleSource struct {
 	// role mappings.
 	mappedOnly bool
 
-	// mappings are the directory role mappings giving the member the role.
+	// mappings are the directory role mappings giving the member the role,
+	// including when they also hold it directly: taking the role away means
+	// undoing every source.
 	mappings []*gen.ExplainedAccessDirectorySource
 }
 
-// explainedRoleSources reports, per role principal, whether the member holds
-// it only through directory role mappings and which mappings those are.
+// explainedRoleSources reports, per role principal reached through directory
+// role mappings, whether the member holds it only that way and which mappings
+// give it to them.
 func (s *Service) explainedRoleSources(ctx context.Context, organizationID, userID string) (map[string]explainedRoleSource, error) {
 	repo := accessrepo.New(s.db)
 	roles, err := repo.ListUserRolePrincipals(ctx, accessrepo.ListUserRolePrincipalsParams{
@@ -396,6 +401,8 @@ func (s *Service) explainedRoleSources(ctx context.Context, organizationID, user
 	if err != nil {
 		return nil, fmt.Errorf("list member roles: %w", err)
 	}
+	// Direct assignments come first, so a mapped role already seen directly is
+	// held both ways.
 	direct := make(map[string]struct{})
 	sources := make(map[string]explainedRoleSource)
 	for _, role := range roles {
@@ -403,9 +410,8 @@ func (s *Service) explainedRoleSources(ctx context.Context, organizationID, user
 			direct[role.PrincipalUrn] = struct{}{}
 			continue
 		}
-		if _, ok := direct[role.PrincipalUrn]; !ok {
-			sources[role.PrincipalUrn] = explainedRoleSource{mappedOnly: true, mappings: nil}
-		}
+		_, alsoDirect := direct[role.PrincipalUrn]
+		sources[role.PrincipalUrn] = explainedRoleSource{mappedOnly: !alsoDirect, mappings: nil}
 	}
 
 	mappings, err := repo.ListUserDirectoryRoleMappingSources(ctx, accessrepo.ListUserDirectoryRoleMappingSourcesParams{

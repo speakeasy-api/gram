@@ -2,6 +2,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Combobox, type DropdownItem } from "@/components/ui/Combobox";
 import { Text } from "@/components/ui/Text";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { Search, X } from "lucide-react";
 import { useMemo, useState, type JSX } from "react";
@@ -19,7 +20,11 @@ export function CheckAccess({
   resourceId: string;
   serverName: string;
 }): JSX.Element {
-  const { data: membersData, isLoading } = useMembers(undefined, undefined, {
+  const {
+    data: membersData,
+    isLoading,
+    isError,
+  } = useMembers(undefined, undefined, {
     throwOnError: false,
   });
   const [userId, setUserId] = useState<string>();
@@ -69,21 +74,13 @@ export function CheckAccess({
           variant="secondary"
           className="h-auto w-full justify-start py-2 text-left"
           contentClassName="w-[var(--radix-popover-trigger-width)]"
-          disabledMessage={isLoading ? "Loading people" : undefined}
+          disabledMessage={membersUnavailable(isLoading, isError)}
         >
-          {selected ? (
-            <span className="flex items-baseline gap-3">
-              <span>{selected.name}</span>
-              <Text as="span" muted small>
-                {selected.email}
-              </Text>
-            </span>
-          ) : (
-            <span className="text-muted-foreground flex items-center gap-2 font-normal">
-              <Search className="h-4 w-4" />
-              Check a person: can they use {serverName}, and why?
-            </span>
-          )}
+          <PickerLabel
+            failed={isError}
+            selected={selected}
+            serverName={serverName}
+          />
         </Combobox>
       </div>
       {selected && (
@@ -98,5 +95,50 @@ export function CheckAccess({
         />
       )}
     </Card.Dashboard>
+  );
+}
+
+/** Why the picker cannot be used yet, when it cannot. */
+function membersUnavailable(
+  isLoading: boolean,
+  isError: boolean,
+): string | undefined {
+  if (isError) return "People could not be loaded";
+  if (isLoading) return "Loading people";
+  return undefined;
+}
+
+/** What the picker shows when closed: a failure, the chosen person, or a prompt. */
+function PickerLabel({
+  failed,
+  selected,
+  serverName,
+}: {
+  failed: boolean;
+  selected: AccessMember | undefined;
+  serverName: string;
+}): JSX.Element {
+  if (failed) {
+    return (
+      <span className="text-muted-foreground font-normal">
+        People could not be loaded. Reload the page to try again.
+      </span>
+    );
+  }
+  if (selected) {
+    return (
+      <span className="flex items-baseline gap-3">
+        <span>{selected.name}</span>
+        <Text as="span" muted small>
+          {selected.email}
+        </Text>
+      </span>
+    );
+  }
+  return (
+    <span className="text-muted-foreground flex items-center gap-2 font-normal">
+      <Search className="h-4 w-4" />
+      Check a person: can they use {serverName}, and why?
+    </span>
   );
 }
