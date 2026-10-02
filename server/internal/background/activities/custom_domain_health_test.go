@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
@@ -290,11 +291,9 @@ func TestCustomDomainNotifyOrgAdminsSendsIdempotentEmail(t *testing.T) {
 	adminEmail := seedCustomDomainAdminRecipient(t, conn, organizationID)
 
 	captured := &captureLoopsClient{sent: nil, failNext: 0}
-	siteURL, err := url.Parse("https://app.example.com")
-	require.NoError(t, err)
 	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", nil, email.NewService(testenv.NewLogger(t), captured, email.NewTemplateIDs(map[string]string{
 		"custom_domain_unhealthy": "domain-unhealthy-test-id",
-	}), true), siteURL, nil)
+	}), true), customDomainTestOrgHosts(t), nil)
 
 	err = checker.NotifyOrgAdmins(t.Context(), activities.NotifyCustomDomainUnhealthyArgs{
 		CustomDomainID: uuid.New(),
@@ -309,6 +308,53 @@ func TestCustomDomainNotifyOrgAdminsSendsIdempotentEmail(t *testing.T) {
 	require.Len(t, sent, 1)
 	require.Equal(t, adminEmail, sent[0].Email)
 	require.NotEmpty(t, sent[0].IdempotencyKey)
+	require.Equal(t, "https://app.example.com/"+organizationID+"/domains", sent[0].DataVariables["domain_link"])
+}
+
+func TestCustomDomainNotifyOrgAdminsLinksToOrganizationDefaultHost(t *testing.T) {
+	t.Parallel()
+
+	conn, err := infra.CloneTestDatabase(t, "custom_domain_notify_default_host")
+	require.NoError(t, err)
+	organizationID := "org-custom-domain-health-default-host"
+	seedCustomDomainAdminRecipient(t, conn, organizationID)
+	require.NoError(t, orgrepo.New(conn).SetOrganizationDefaultHostForTest(t.Context(), orgrepo.SetOrganizationDefaultHostForTestParams{
+		DefaultHost: conv.ToPGText("https://platform.example.com"),
+		ID:          organizationID,
+	}))
+
+	captured := &captureLoopsClient{sent: nil, failNext: 0}
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", nil, email.NewService(testenv.NewLogger(t), captured, email.NewTemplateIDs(map[string]string{
+		"custom_domain_unhealthy": "domain-unhealthy-test-id",
+	}), true), customDomainTestOrgHosts(t), nil)
+
+	err = checker.NotifyOrgAdmins(t.Context(), activities.NotifyCustomDomainUnhealthyArgs{
+		CustomDomainID: uuid.New(),
+		OrganizationID: organizationID,
+		Domain:         "live.example.com",
+		Issue:          customdomains.HealthIssueDNSNotFound,
+		CheckedAt:      time.Now().UTC().Truncate(time.Microsecond),
+	})
+	require.NoError(t, err)
+
+	sent := captured.Sent()
+	require.Len(t, sent, 1)
+	require.Equal(t, "https://platform.example.com/"+organizationID+"/domains", sent[0].DataVariables["domain_link"])
+}
+
+// customDomainTestOrgHosts serves the dashboard on app.example.com and accepts
+// platform.example.com as a recorded default host.
+func customDomainTestOrgHosts(t *testing.T) *orghost.Resolver {
+	t.Helper()
+	siteURL, err := url.Parse("https://app.example.com")
+	require.NoError(t, err)
+	return orghost.New(orghost.Config{
+		ServerURL:                  siteURL,
+		SiteURL:                    siteURL,
+		PlatformHosts:              map[string]string{"platform.example.com": "https://platform.example.com"},
+		LegacyDefaultHost:          nil,
+		NewOrganizationDefaultHost: nil,
+	})
 }
 
 func TestCustomDomainHealthCheckAutoDisablesAfterProlongedFailure(t *testing.T) {
