@@ -216,3 +216,20 @@ func TestWakeCapturesRequesterOrOwnerAtCreation(t *testing.T) {
 		})
 	}
 }
+
+func TestRootDeletionWithoutIdentityLifecycleFailsClosed(t *testing.T) {
+	t.Parallel()
+	f := newIdentityFixture(t)
+	item, err := f.app.Create(t.Context(), f.createParams())
+	require.NoError(t, err)
+	before := f.resolve(t, f.assistantID, item.ID)
+	f.app.SetIdentityService(nil)
+	require.ErrorContains(t, f.app.Delete(t.Context(), f.projectID, item.ID), "identity lifecycle is not configured")
+	retained, err := f.app.GetInstance(t.Context(), f.projectID, item.ID)
+	require.NoError(t, err)
+	require.Equal(t, triggers.StatusActive, retained.Status)
+	require.Equal(t, before, f.resolve(t, f.assistantID, item.ID))
+	f.app.SetIdentityService(testIdentityService)
+	require.NoError(t, f.app.Delete(t.Context(), f.projectID, item.ID))
+	require.Equal(t, assistantidentity.Tombstoned, f.resolve(t, f.assistantID, item.ID).State)
+}

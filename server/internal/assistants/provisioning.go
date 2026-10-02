@@ -259,6 +259,9 @@ func (s *ServiceCore) ensureDashboardTrigger(ctx context.Context, db triggerrepo
 // ensureDashboardRootTx reuses the real durable dashboard ingress trigger.
 // The assistant anchor serializes creation, healing, upgrade, and deletion.
 func (s *ServiceCore) ensureDashboardRootTx(ctx context.Context, tx pgx.Tx, organizationID string, projectID, assistantID uuid.UUID, name string) (uuid.UUID, error) {
+	if err := assistantidentity.LockLiveProject(ctx, tx, organizationID, projectID); err != nil {
+		return uuid.Nil, fmt.Errorf("lock dashboard root project: %w", err)
+	}
 	anchor, err := assistantrepo.New(tx).LockAssistantIdentityAnchor(ctx, assistantrepo.LockAssistantIdentityAnchorParams{ProjectID: projectID, AssistantID: assistantID})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("lock assistant for dashboard ingress: %w", err)

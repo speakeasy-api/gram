@@ -1,3 +1,16 @@
+-- Shared liveness lock permits concurrent provisioning but excludes project deletion.
+-- NOWAIT avoids reversing caller-held assistant/trigger locks against deletion.
+-- name: LockLiveProject :one
+SELECT id FROM projects WHERE organization_id = @organization_id AND id = @project_id AND NOT deleted FOR SHARE NOWAIT;
+
+-- Lock the exact trigger, not every trigger in its project. Callers must roll
+-- back on lock contention; NOWAIT avoids assistant/trigger lock-order deadlocks.
+-- name: LockTrigger :one
+SELECT id, definition_slug, target_kind, target_ref, status, deleted
+FROM trigger_instances
+WHERE organization_id = @organization_id AND project_id = @project_id AND id = @trigger_id
+FOR UPDATE NOWAIT;
+
 -- name: LockAssistant :one
 SELECT id FROM assistants WHERE organization_id = @organization_id AND project_id = @project_id AND id = @assistant_id FOR UPDATE;
 
@@ -287,8 +300,6 @@ DELETE FROM projects WHERE organization_id = @organization_id AND id = @project_
 UPDATE trigger_instances SET definition_slug = @definition_slug
 WHERE organization_id = @organization_id AND project_id = @project_id AND id = @trigger_id;
 
--- Lock all tenant issuers before the agent. This covers non-root assignments
--- and prevents an admission on another existing issuer racing the sweep.
 -- name: FixtureWithdrawAssignment :exec
 UPDATE workload_agent_assignments SET deleted_at = clock_timestamp()
 WHERE organization_id = @organization_id AND workload_issuer_id = @issuer_id AND subject = @subject AND match_kind = 'exact' AND NOT deleted;

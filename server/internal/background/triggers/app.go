@@ -266,6 +266,9 @@ func (a *App) bindRootIdentity(ctx context.Context, tx pgx.Tx, item triggerrepo.
 	if item.DefinitionSlug == DefinitionSlugWake || item.Status != StatusActive || item.TargetKind != TargetKindAssistant {
 		return nil
 	}
+	if a.identities == nil {
+		return fmt.Errorf("assistant identity lifecycle is not configured")
+	}
 	if err := a.identities.BindRootTrigger(ctx, tx, item.OrganizationID, item.ProjectID, item.ID); err != nil {
 		return fmt.Errorf("bind root trigger identity: %w", err)
 	}
@@ -395,6 +398,9 @@ func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...Instance
 	}
 
 	if existing.TargetKind != item.TargetKind || existing.TargetRef != item.TargetRef {
+		if a.identities == nil {
+			return triggerrepo.TriggerInstance{}, fmt.Errorf("assistant identity lifecycle is not configured")
+		}
 		if err := a.identities.RetargetRootTrigger(ctx, tx, item.OrganizationID, item.ProjectID, item.ID); err != nil {
 			return triggerrepo.TriggerInstance{}, fmt.Errorf("rebind updated root trigger identity: %w", err)
 		}
@@ -1274,8 +1280,11 @@ type AssistantIdentityLifecycle interface {
 }
 
 func (a *App) tombstoneIdentity(ctx context.Context, tx pgx.Tx, item triggerrepo.TriggerInstance) error {
-	if a.identities == nil {
+	if item.DefinitionSlug == DefinitionSlugWake {
 		return nil
+	}
+	if a.identities == nil {
+		return fmt.Errorf("assistant identity lifecycle is not configured")
 	}
 	if err := a.identities.TombstoneTrigger(ctx, tx, item.OrganizationID, item.ProjectID, item.ID); err != nil {
 		return fmt.Errorf("withdraw trigger identity: %w", err)

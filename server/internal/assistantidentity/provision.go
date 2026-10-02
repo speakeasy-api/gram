@@ -36,6 +36,9 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (
 	if p.ActorUserID == "" || p.ActorUserID == urn.AllUsersPrincipalID {
 		return Binding{}, ErrActorIneligible
 	}
+	if err := LockLiveProject(ctx, tx, p.OrganizationID, p.ProjectID); err != nil {
+		return Binding{}, err
+	}
 	if err := lockAssistant(ctx, q, p.OrganizationID, p.ProjectID, p.AssistantID); err != nil {
 		return Binding{}, err
 	}
@@ -200,4 +203,13 @@ func nullableString(value string, valid bool) *string {
 
 func bindingFromRow(org string, project uuid.UUID, b repo.GetAssistantBindingRow) Binding {
 	return Binding{OrganizationID: org, ProjectID: project, AssistantID: b.OriginalAssistantID, AgentID: b.OriginalAgentID, Generation: b.Generation}
+}
+
+// LockLiveProject protects a provisioning transaction from project deletion
+// without serializing independent provisioners. A failed lock requires rollback.
+func LockLiveProject(ctx context.Context, tx pgx.Tx, org string, project uuid.UUID) error {
+	if _, err := repo.New(tx).LockLiveProject(ctx, repo.LockLiveProjectParams{OrganizationID: org, ProjectID: project}); err != nil {
+		return resourceError("lock live identity project", err)
+	}
+	return nil
 }

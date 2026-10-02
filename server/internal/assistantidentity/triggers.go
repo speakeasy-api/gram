@@ -29,7 +29,10 @@ func (s *Service) bindRoot(ctx context.Context, tx pgx.Tx, org string, project, 
 		return ErrInvalidIdentity
 	}
 	q := repo.New(tx)
-	root, err := q.GetTrigger(ctx, repo.GetTriggerParams{OrganizationID: org, ProjectID: project, TriggerID: trigger})
+	if err := LockLiveProject(ctx, tx, org, project); err != nil {
+		return err
+	}
+	root, err := q.LockTrigger(ctx, repo.LockTriggerParams{OrganizationID: org, ProjectID: project, TriggerID: trigger})
 	if err != nil {
 		return resourceError("load root trigger", err)
 	}
@@ -185,6 +188,10 @@ func TombstoneTrigger(ctx context.Context, tx pgx.Tx, org string, project, trigg
 
 func tombstoneTrigger(ctx context.Context, tx pgx.Tx, org string, project, trigger uuid.UUID) error {
 	q := repo.New(tx)
+	if _, err := q.LockTrigger(ctx, repo.LockTriggerParams{OrganizationID: org, ProjectID: project, TriggerID: trigger}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return resourceError("lock trigger withdrawal", err)
+	}
+
 	old, err := q.GetTriggerBinding(ctx, repo.GetTriggerBindingParams{PlatformIssuer: "", PlatformJwksUri: "", OrganizationID: org, ProjectID: project, TriggerID: trigger})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil

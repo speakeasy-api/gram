@@ -587,8 +587,6 @@ type FixtureWithdrawAssignmentParams struct {
 	Subject        string
 }
 
-// Lock all tenant issuers before the agent. This covers non-root assignments
-// and prevents an admission on another existing issuer racing the sweep.
 func (q *Queries) FixtureWithdrawAssignment(ctx context.Context, arg FixtureWithdrawAssignmentParams) error {
 	_, err := q.db.Exec(ctx, fixtureWithdrawAssignment, arg.OrganizationID, arg.IssuerID, arg.Subject)
 	return err
@@ -1061,6 +1059,62 @@ func (q *Queries) LockDedicatedAgent(ctx context.Context, arg LockDedicatedAgent
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const lockLiveProject = `-- name: LockLiveProject :one
+SELECT id FROM projects WHERE organization_id = $1 AND id = $2 AND NOT deleted FOR SHARE NOWAIT
+`
+
+type LockLiveProjectParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Shared liveness lock permits concurrent provisioning but excludes project deletion.
+// NOWAIT avoids reversing caller-held assistant/trigger locks against deletion.
+func (q *Queries) LockLiveProject(ctx context.Context, arg LockLiveProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockLiveProject, arg.OrganizationID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockTrigger = `-- name: LockTrigger :one
+SELECT id, definition_slug, target_kind, target_ref, status, deleted
+FROM trigger_instances
+WHERE organization_id = $1 AND project_id = $2 AND id = $3
+FOR UPDATE NOWAIT
+`
+
+type LockTriggerParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	TriggerID      uuid.UUID
+}
+
+type LockTriggerRow struct {
+	ID             uuid.UUID
+	DefinitionSlug string
+	TargetKind     string
+	TargetRef      string
+	Status         string
+	Deleted        bool
+}
+
+// Lock the exact trigger, not every trigger in its project. Callers must roll
+// back on lock contention; NOWAIT avoids assistant/trigger lock-order deadlocks.
+func (q *Queries) LockTrigger(ctx context.Context, arg LockTriggerParams) (LockTriggerRow, error) {
+	row := q.db.QueryRow(ctx, lockTrigger, arg.OrganizationID, arg.ProjectID, arg.TriggerID)
+	var i LockTriggerRow
+	err := row.Scan(
+		&i.ID,
+		&i.DefinitionSlug,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.Status,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const recordProvisioning = `-- name: RecordProvisioning :exec
