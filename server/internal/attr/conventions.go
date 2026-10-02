@@ -755,6 +755,20 @@ const (
 	TelemetryCHRowCountKey         = attribute.Key("gram.telemetry.ch.row_count")
 	InferenceInputCountKey         = attribute.Key("gram.inference.input_count")
 	InferenceAcceptedMessagesKey   = attribute.Key("gram.inference.accepted_messages")
+	// InferenceConversationOutcomeKey records how an Anthropic inference frame
+	// was mapped to a stored conversation: "session" (the frame's session id
+	// named an existing chat), "adopted_prefix" (the chat already holding the
+	// transcript's prefix was reused) or "new".
+	InferenceConversationOutcomeKey = attribute.Key("gram.inference.conversation_outcome")
+	// InferenceApplicationKey is the advisory source.application of an
+	// Anthropic inference frame (claude-ai, claude-code, claude-design, ...).
+	InferenceApplicationKey = attribute.Key("gram.inference.application")
+	// InferenceHasSessionIDKey reports whether an Anthropic inference frame
+	// carried a session id.
+	InferenceHasSessionIDKey = attribute.Key("gram.inference.has_session_id")
+	// InferenceMessageCountKey is the number of conversation messages in an
+	// Anthropic inference frame.
+	InferenceMessageCountKey = attribute.Key("gram.inference.message_count")
 	// TelemetryLogIDKey carries the telemetry_logs row id on records relayed
 	// to a customer OTLP destination. Delivery is at-least-once, so this is
 	// the key a destination dedupes redeliveries on.
@@ -3197,6 +3211,28 @@ func SlogInferenceInputCount(v int) slog.Attr {
 
 func SlogInferenceAcceptedMessages(v int) slog.Attr {
 	return slog.Int(string(InferenceAcceptedMessagesKey), v)
+}
+
+func InferenceConversationOutcome(v string) attribute.KeyValue {
+	return InferenceConversationOutcomeKey.String(v)
+}
+
+func SlogInferenceConversationOutcome(v string) slog.Attr {
+	return slog.String(string(InferenceConversationOutcomeKey), v)
+}
+
+func InferenceApplication(v string) attribute.KeyValue { return InferenceApplicationKey.String(v) }
+func SlogInferenceApplication(v string) slog.Attr {
+	return slog.String(string(InferenceApplicationKey), v)
+}
+
+func InferenceHasSessionID(v bool) attribute.KeyValue { return InferenceHasSessionIDKey.Bool(v) }
+func SlogInferenceHasSessionID(v bool) slog.Attr {
+	return slog.Bool(string(InferenceHasSessionIDKey), v)
+}
+
+func SlogInferenceMessageCount(v int) slog.Attr {
+	return slog.Int(string(InferenceMessageCountKey), v)
 }
 
 func SlogRegistryEntryID(v string) slog.Attr   { return slog.String(string(RegistryEntryIDKey), v) }

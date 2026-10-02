@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
@@ -453,4 +454,156 @@ func TestStoreContinuesHistoryStoredByCount(t *testing.T) {
 	require.Len(t, messages, 4)
 	require.Equal(t, "third", messages[2].Content)
 	require.Equal(t, "fourth", messages[3].Content)
+}
+
+// archiveFrame resolves the conversation the way Service.Process does, then
+// archives the frame. It returns the resolved chat, how it was resolved and
+// the index of the first message Save had not seen before.
+func archiveFrame(t *testing.T, store *postgresStore, config Config, frame Frame) (uuid.UUID, string, int) {
+	t.Helper()
+	chatID, outcome, err := store.ResolveConversation(t.Context(), config, frame)
+	require.NoError(t, err)
+	frame.conversation, frame.conversationOutcome = chatID, outcome
+	userID, err := store.ResolveActor(t.Context(), config, frame)
+	require.NoError(t, err)
+	start, err := store.Save(t.Context(), config, frame, userID)
+	require.NoError(t, err)
+	return chatID, outcome, start
+}
+
+func sessionlessFrame(requestID string, messages ...Message) Frame {
+	frame := exampleFrame()
+	frame.SessionID = ""
+	frame.RequestID = requestID
+	frame.Source.Application = "claude-design"
+	frame.Messages = messages
+	return frame
+}
+
+func TestStoreAdoptsTranscriptDeliveredWithoutSessionID(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	u1, a1, u2, a2, u3 := textMessage("user", "turn 1"), textMessage("assistant", "reply 1"), textMessage("user", "turn 2"), textMessage("assistant", "reply 2"), textMessage("user", "turn 3")
+
+	first := sessionlessFrame("request-1", u1)
+	chatID, outcome, start := archiveFrame(t, store, config, first)
+	require.Equal(t, conversationOutcomeNew, outcome)
+	require.Equal(t, conversationID(config, first), chatID)
+	require.Equal(t, 0, start)
+
+	second := sessionlessFrame("request-2", u1, a1, u2)
+	adopted, outcome, start := archiveFrame(t, store, config, second)
+	require.Equal(t, conversationOutcomeAdoptedPrefix, outcome)
+	require.Equal(t, chatID, adopted)
+	require.Equal(t, 1, start)
+
+	third := sessionlessFrame("request-3", u1, a1, u2, a2, u3)
+	adopted, outcome, start = archiveFrame(t, store, config, third)
+	require.Equal(t, conversationOutcomeAdoptedPrefix, outcome)
+	require.Equal(t, chatID, adopted)
+	require.Equal(t, 3, start)
+
+	messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, messages, 5)
+	require.Equal(t, "turn 3", messages[4].Content)
+	// The request-scoped identities of the later frames never became chats.
+	for _, frame := range []Frame{second, third} {
+		_, err := chatrepo.New(db).GetChat(t.Context(), chatrepo.GetChatParams{ID: conversationID(config, frame), ProjectID: config.ProjectID})
+		require.ErrorIs(t, err, pgx.ErrNoRows)
+	}
+}
+
+func TestStoreAdoptsRedeliveredTranscriptWithoutSessionID(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	u1, a1, u2 := textMessage("user", "turn 1"), textMessage("assistant", "reply 1"), textMessage("user", "turn 2")
+	chatID, outcome, _ := archiveFrame(t, store, config, sessionlessFrame("request-1", u1, a1, u2))
+	require.Equal(t, conversationOutcomeNew, outcome)
+	again, outcome, start := archiveFrame(t, store, config, sessionlessFrame("request-2", u1, a1, u2))
+	require.Equal(t, conversationOutcomeAdoptedPrefix, outcome)
+	require.Equal(t, chatID, again)
+	require.Equal(t, 3, start)
+	messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, messages, 3)
+}
+
+func TestStoreNeverAdoptsAnotherActorsTranscript(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	u1, a1, u2 := textMessage("user", "turn 1"), textMessage("assistant", "reply 1"), textMessage("user", "turn 2")
+	first, _, _ := archiveFrame(t, store, config, sessionlessFrame("request-1", u1, a1, u2))
+	other := sessionlessFrame("request-2", u1, a1, u2)
+	other.Actor.ID = "other-actor"
+	other.Actor.EmailAddress = "other@example.test"
+	second, outcome, start := archiveFrame(t, store, config, other)
+	require.Equal(t, conversationOutcomeNew, outcome)
+	require.NotEqual(t, first, second)
+	require.Equal(t, 0, start)
+	for _, chatID := range []uuid.UUID{first, second} {
+		messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: config.ProjectID})
+		require.NoError(t, err)
+		require.Len(t, messages, 3)
+	}
+}
+
+func TestStoreKeepsConversationsWithSharedOpeningApart(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	u1 := textMessage("user", "turn 1")
+	first, _, _ := archiveFrame(t, store, config, sessionlessFrame("request-1", u1, textMessage("assistant", "reply A"), textMessage("user", "turn 2A")))
+	// Same actor, same opening, different continuation: the opening matches a
+	// stored message, but not the first chat's newest, so it is a new chat.
+	second, outcome, start := archiveFrame(t, store, config, sessionlessFrame("request-2", u1, textMessage("assistant", "reply B"), textMessage("user", "turn 2B")))
+	require.Equal(t, conversationOutcomeNew, outcome)
+	require.NotEqual(t, first, second)
+	require.Equal(t, 0, start)
+	messages, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: first, ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, messages, 3)
+	require.Equal(t, "turn 2A", messages[2].Content)
+}
+
+func TestStoreContinuesBySessionWhenPresent(t *testing.T) {
+	t.Parallel()
+	store, _, config := newTestStore(t)
+	frame := exampleFrame()
+	chatID, outcome, _ := archiveFrame(t, store, config, frame)
+	require.Equal(t, conversationOutcomeNew, outcome)
+	require.Equal(t, conversationID(config, frame), chatID)
+	frame.RequestID = "next-request"
+	frame.Messages = append(frame.Messages, textMessage("assistant", "EXAMPLE reply"), textMessage("user", "EXAMPLE second prompt"))
+	again, outcome, start := archiveFrame(t, store, config, frame)
+	require.Equal(t, conversationOutcomeSession, outcome)
+	require.Equal(t, chatID, again)
+	require.Equal(t, 1, start)
+}
+
+func TestStoreCheckpointFollowsAdoptedConversation(t *testing.T) {
+	t.Parallel()
+	store, _, config := newTestStore(t)
+	u1, a1, u2, a2, u3 := textMessage("user", "turn 1"), textMessage("assistant", "reply 1"), textMessage("user", "turn 2"), textMessage("assistant", "reply 2"), textMessage("user", "turn 3")
+	second := sessionlessFrame("request-2", u1, a1, u2)
+	archiveFrame(t, store, config, sessionlessFrame("request-1", u1))
+	chatID, outcome, _ := archiveFrame(t, store, config, second)
+	require.Equal(t, conversationOutcomeAdoptedPrefix, outcome)
+	second.conversation, second.conversationOutcome = chatID, outcome
+	session, err := store.Begin(t.Context(), config, second, "")
+	require.NoError(t, err)
+	_, err = session.Load(t.Context())
+	require.NoError(t, err)
+	require.NoError(t, session.Accept(t.Context(), transcriptHashes(conversationMessages(second.Messages))))
+
+	third := sessionlessFrame("request-3", u1, a1, u2, a2, u3)
+	adopted, outcome, _ := archiveFrame(t, store, config, third)
+	require.Equal(t, conversationOutcomeAdoptedPrefix, outcome)
+	require.Equal(t, chatID, adopted)
+	third.conversation, third.conversationOutcome = adopted, outcome
+	session, err = store.Begin(t.Context(), config, third, "")
+	require.NoError(t, err)
+	accepted, err := session.Load(t.Context())
+	require.NoError(t, err)
+	require.Len(t, accepted, 3)
+	require.Equal(t, 3, acceptedPrefix(accepted, transcriptHashes(conversationMessages(third.Messages))))
 }

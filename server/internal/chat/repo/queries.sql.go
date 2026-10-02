@@ -679,6 +679,51 @@ func (q *Queries) DeleteChatResolutionsAfterMessage(ctx context.Context, arg Del
 	return err
 }
 
+const findInferenceChatByNewestMessageIdentity = `-- name: FindInferenceChatByNewestMessageIdentity :one
+SELECT cm.chat_id, c.inference_actor_key, c.deleted
+FROM chat_messages cm
+JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id
+WHERE cm.project_id = $1
+  AND cm.external_message_id = $2
+  AND cm.origin = 'anthropic-inference'
+  AND NOT EXISTS (
+    SELECT 1 FROM chat_messages newer
+    WHERE newer.chat_id = cm.chat_id AND newer.project_id = cm.project_id
+      AND newer.origin = 'anthropic-inference'
+      AND newer.external_message_id IS NOT NULL
+      AND newer.external_message_id NOT LIKE '%/block:%'
+      AND (newer.created_at, newer.seq) > (cm.created_at, cm.seq)
+  )
+ORDER BY cm.created_at DESC, cm.seq DESC
+LIMIT 1
+`
+
+type FindInferenceChatByNewestMessageIdentityParams struct {
+	ProjectID         uuid.NullUUID
+	ExternalMessageID pgtype.Text
+}
+
+type FindInferenceChatByNewestMessageIdentityRow struct {
+	ChatID            uuid.UUID
+	InferenceActorKey []byte
+	Deleted           bool
+}
+
+// Locates the chat whose newest stored Anthropic inference message carries
+// this chain identity, meaning the chat's history is exactly the transcript
+// prefix the identity was derived from. A transcript delivered without a
+// stable session id derives the identities of its own newest prefixes and
+// adopts the chat holding one, so history is archived once. Matching a
+// message that is not the chat's newest is not enough: two conversations can
+// share an opening message and must stay apart. The actor key is returned so
+// the caller can refuse another actor's conversation.
+func (q *Queries) FindInferenceChatByNewestMessageIdentity(ctx context.Context, arg FindInferenceChatByNewestMessageIdentityParams) (FindInferenceChatByNewestMessageIdentityRow, error) {
+	row := q.db.QueryRow(ctx, findInferenceChatByNewestMessageIdentity, arg.ProjectID, arg.ExternalMessageID)
+	var i FindInferenceChatByNewestMessageIdentityRow
+	err := row.Scan(&i.ChatID, &i.InferenceActorKey, &i.Deleted)
+	return i, err
+}
+
 const getActiveUserCountByMessages = `-- name: GetActiveUserCountByMessages :one
 SELECT
   COUNT(DISTINCT COALESCE(NULLIF(c.external_user_id, ''), c.user_id))::bigint as active_user_count
@@ -3776,6 +3821,25 @@ func (q *Queries) SetInferenceAcceptedCheckpoint(ctx context.Context, arg SetInf
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setInferenceActorKey = `-- name: SetInferenceActorKey :exec
+UPDATE chats SET inference_actor_key = $1
+WHERE id = $2 AND project_id = $3
+  AND inference_actor_key IS NULL
+`
+
+type SetInferenceActorKeyParams struct {
+	InferenceActorKey []byte
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+}
+
+// Records the actor key on a conversation the first time it is seen. The
+// key never changes for a chat, so an existing value is kept.
+func (q *Queries) SetInferenceActorKey(ctx context.Context, arg SetInferenceActorKeyParams) error {
+	_, err := q.db.Exec(ctx, setInferenceActorKey, arg.InferenceActorKey, arg.ID, arg.ProjectID)
+	return err
 }
 
 const softDeleteChat = `-- name: SoftDeleteChat :one

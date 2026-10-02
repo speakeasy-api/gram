@@ -2002,6 +2002,39 @@ UPDATE chats SET inference_accepted_checkpoint = @checkpoint
 WHERE project_id = @project_id AND external_chat_id = @external_chat_id
   AND inference_accepted_checkpoint IS NOT DISTINCT FROM sqlc.narg('expected_checkpoint')::bytea;
 
+-- name: FindInferenceChatByNewestMessageIdentity :one
+-- Locates the chat whose newest stored Anthropic inference message carries
+-- this chain identity, meaning the chat's history is exactly the transcript
+-- prefix the identity was derived from. A transcript delivered without a
+-- stable session id derives the identities of its own newest prefixes and
+-- adopts the chat holding one, so history is archived once. Matching a
+-- message that is not the chat's newest is not enough: two conversations can
+-- share an opening message and must stay apart. The actor key is returned so
+-- the caller can refuse another actor's conversation.
+SELECT cm.chat_id, c.inference_actor_key, c.deleted
+FROM chat_messages cm
+JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id
+WHERE cm.project_id = @project_id
+  AND cm.external_message_id = @external_message_id
+  AND cm.origin = 'anthropic-inference'
+  AND NOT EXISTS (
+    SELECT 1 FROM chat_messages newer
+    WHERE newer.chat_id = cm.chat_id AND newer.project_id = cm.project_id
+      AND newer.origin = 'anthropic-inference'
+      AND newer.external_message_id IS NOT NULL
+      AND newer.external_message_id NOT LIKE '%/block:%'
+      AND (newer.created_at, newer.seq) > (cm.created_at, cm.seq)
+  )
+ORDER BY cm.created_at DESC, cm.seq DESC
+LIMIT 1;
+
+-- name: SetInferenceActorKey :exec
+-- Records the actor key on a conversation the first time it is seen. The
+-- key never changes for a chat, so an existing value is kept.
+UPDATE chats SET inference_actor_key = @inference_actor_key
+WHERE id = @id AND project_id = @project_id
+  AND inference_actor_key IS NULL;
+
 -- name: InferencePolicyRevision :one
 -- Include mutable exclusions and custom rules, which do not bump policy
 -- versions. Strict inference scans cannot accept in-scope prompt-policy
