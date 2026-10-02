@@ -125,14 +125,26 @@ type IdentityCommitter struct {
 	db        *pgxpool.Pool
 	enc       *encryption.Client
 	audit     *audit.Logger
-	serverURL *url.URL
+	origins   CallbackOrigins
 	policy    *guardian.Policy
 	tunnels   *tunnelrouting.HTTPClient
 	telemetry registration.Recorder
 }
 
 func NewIdentityCommitter(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, auditLogger *audit.Logger, serverURL *url.URL, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, telemetry registration.Recorder) *IdentityCommitter {
-	return &IdentityCommitter{logger: logger, db: db, enc: enc, audit: auditLogger, serverURL: serverURL, policy: policy, tunnels: tunnels, telemetry: telemetry}
+	return &IdentityCommitter{logger: logger, db: db, enc: enc, audit: auditLogger, origins: DefaultCallbackOrigins(serverURL), policy: policy, tunnels: tunnels, telemetry: telemetry}
+}
+
+// SetCallbackOrigins replaces the default origins, which pin every client to
+// the server URL. Call it during wiring, before any commit runs.
+func (c *IdentityCommitter) SetCallbackOrigins(origins CallbackOrigins) {
+	c.origins = origins
+}
+
+// newClientBaseURL is the callback_base_url recorded on a client this commit
+// creates. The DCR registration and the stored row must agree on it.
+func (c *IdentityCommit) newClientBaseURL() pgtype.Text {
+	return c.committer.origins.NewClientBaseURL(c.plan.Scope.OrganizationID != "")
 }
 
 // IdentityScope is the tenant and actor every read and write of a commit uses.
@@ -591,7 +603,7 @@ func (c *IdentityCommit) register(ctx context.Context, reg Registration) (Regist
 	if c.provider.TunneledMcpServerID.Valid && !c.plan.Scope.ActorIsPlatformAdmin {
 		return reg, identityRefusal(ErrIdentityForbidden, nil, "registering through an MCP tunnel requires a platform admin")
 	}
-	response, err := RegisterDynamicClient(ctx, c.committer.policy, c.committer.tunnels, c.committer.serverURL, ProxyRegisterRequest{
+	response, err := RegisterDynamicClient(ctx, c.committer.policy, c.committer.tunnels, c.committer.origins.ForClient(c.newClientBaseURL()), ProxyRegisterRequest{
 		RegistrationEndpoint:    endpoint,
 		TunneledMcpServerID:     conv.PtrEmpty(tunnelBindingID(c.provider.TunneledMcpServerID)),
 		Scope:                   conv.PtrEmpty(strings.Join(policy.Scope, " ")),
@@ -1190,15 +1202,17 @@ func (c *IdentityCommit) createCIMDClient(ctx context.Context, tx *IdentityTx) (
 		return repo.RemoteSessionClient{}, fmt.Errorf("generate client id: %w", err)
 	}
 	policy := c.plan.Client.policy
+	callbackBaseURL := c.newClientBaseURL()
 	client, err := tx.q.CreateRemoteSessionClientCIMD(ctx, repo.CreateRemoteSessionClientCIMDParams{
 		ID:                    id,
 		ProjectID:             conv.ToNullUUID(c.plan.Scope.ProjectID),
 		OrganizationID:        conv.ToPGTextEmpty(c.plan.Scope.OrganizationID),
 		RemoteSessionIssuerID: c.provider.ID,
-		ClientIDMetadataUri:   ClientMetadataDocumentURL(c.committer.serverURL, id),
+		ClientIDMetadataUri:   ClientMetadataDocumentURL(c.committer.origins.ForClient(callbackBaseURL), id),
 		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
 		Scope:                 policy.Scope,
 		Audience:              conv.PtrToPGText(policy.Audience),
+		CallbackBaseUrl:       callbackBaseURL,
 	})
 	if err != nil {
 		return repo.RemoteSessionClient{}, fmt.Errorf("create cimd client: %w", err)
@@ -1240,6 +1254,7 @@ func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, crede
 		Scope:                        credentials.Scope,
 		Audience:                     conv.PtrToPGText(credentials.Audience),
 		LegacyCallbackUrl:            false,
+		CallbackBaseUrl:              c.newClientBaseURL(),
 	})
 	if err != nil {
 		return repo.RemoteSessionClient{}, fmt.Errorf("create client: %w", err)

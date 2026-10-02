@@ -87,6 +87,12 @@ type platformMCPConfig struct {
 	PublicationRequests    plugins.PublicationRequests
 	TemporalEnv            *tenv.Environment
 	Skills                 platformmcp.SkillsManagement
+	// CallbackOrigin is the origin of the redirect_uri a remote session client
+	// created now registers. The setup guides show that URL.
+	CallbackOrigin *url.URL
+	// OutboundCallbackOrigin is the pinned origin of the identity provider
+	// callback the Platform MCP OAuth login registers.
+	OutboundCallbackOrigin *url.URL
 	// SkillInsights is the ClickHouse read behind the skill insight tools.
 	// Startup always supplies it; a nil reader keeps the tools registered as
 	// stubs rather than answering with empty insights.
@@ -205,8 +211,9 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		Logger:        config.Logger,
 		// Backs the inbound CIMD document fetcher's SSRF protection; without
 		// it the authorization server serves DCR only.
-		GuardianPolicy: config.GuardianPolicy,
-		MeterProvider:  config.MeterProvider,
+		GuardianPolicy:     config.GuardianPolicy,
+		MeterProvider:      config.MeterProvider,
+		IDPCallbackBaseURL: config.OutboundCallbackOrigin,
 	})
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP OAuth service: %w", err)
@@ -532,9 +539,9 @@ func attachShadowAI(reader *platformmcp.PostgresReader, config platformMCPConfig
 // corpus that silently lost a provider looks exactly like one that never
 // covered it, and the model would be left to invent the steps.
 func platformMCPSetupResources(config platformMCPConfig) ([]platformmcp.SetupResource, error) {
-	// The one redirect_uri for every provider and slug, derived the same way
+	// The redirect_uri a newly created client registers, derived the same way
 	// externalmcp, remotesessions, and the dashboard derive it.
-	callbackURL := config.ServerURL.JoinPath("mcp", "remote_login_callback").String()
+	callbackURL := remotesessions.RemoteLoginCallbackURL(config.CallbackOrigin)
 	resources, err := setupcorpus.Build(setupcorpus.Options{OAuthCallbackURL: callbackURL})
 	if err != nil {
 		return nil, fmt.Errorf("build platform mcp setup corpus: %w", err)
@@ -694,8 +701,9 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		Logger:        config.Logger,
 		// Backs the inbound CIMD document fetcher's SSRF protection; without
 		// it the authorization server serves DCR only.
-		GuardianPolicy: config.GuardianPolicy,
-		MeterProvider:  config.MeterProvider,
+		GuardianPolicy:     config.GuardianPolicy,
+		MeterProvider:      config.MeterProvider,
+		IDPCallbackBaseURL: config.OutboundCallbackOrigin,
 	})
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create platform mcp oauth service: %w", err)

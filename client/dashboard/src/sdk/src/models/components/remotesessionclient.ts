@@ -48,6 +48,10 @@ export type RemoteSessionClient = {
    */
   audience?: string | undefined;
   /**
+   * The redirect URI this client registers with its upstream provider. It never changes after the client is created. Absent on global clients.
+   */
+  callbackUrl?: string | undefined;
+  /**
    * The client_id used to identify this client at the issuer's token and authorization endpoints.
    */
   clientId: string;
@@ -132,6 +136,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     audience: z.optional(z.string()),
+    callback_url: z.optional(z.string()),
     client_id: z.string(),
     client_id_issued_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -169,6 +174,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "callback_url": "callbackUrl",
       "client_id": "clientId",
       "client_id_issued_at": "clientIdIssuedAt",
       "client_id_metadata_uri": "clientIdMetadataUri",

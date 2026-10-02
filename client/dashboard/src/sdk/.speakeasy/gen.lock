@@ -522,6 +522,7 @@ trackedFiles:
   src/funcs/remoteSessionClientsDetachKeySet.ts: {}
   src/funcs/remoteSessionClientsDetachUserSessionIssuer.ts: {}
   src/funcs/remoteSessionClientsGet.ts: {}
+  src/funcs/remoteSessionClientsGetNewClientCallbackUrl.ts: {}
   src/funcs/remoteSessionClientsList.ts: {}
   src/funcs/remoteSessionClientsPrepareEMA.ts: {}
   src/funcs/remoteSessionClientsReadEMA.ts: {}
@@ -1404,6 +1405,7 @@ trackedFiles:
   src/models/components/networkingress.ts: {}
   src/models/components/networkingressdeleteimpact.ts: {}
   src/models/components/networkingressresult.ts: {}
+  src/models/components/newclientcallbackurlresult.ts: {}
   src/models/components/notmodified.ts: {}
   src/models/components/oauthenablementmetadata.ts: {}
   src/models/components/observabilitysummary.ts: {}
@@ -2171,6 +2173,7 @@ trackedFiles:
   src/models/operations/getmeterusage.ts: {}
   src/models/operations/getnetworkingress.ts: {}
   src/models/operations/getnetworkingressdeleteimpact.ts: {}
+  src/models/operations/getnewremotesessionclientcallbackurl.ts: {}
   src/models/operations/getobservabilityoverview.ts: {}
   src/models/operations/getonboardingstatus.ts: {}
   src/models/operations/getorganization.ts: {}
@@ -3240,6 +3243,8 @@ trackedFiles:
   src/react-query/networkIngressDeleteIngress.ts: {}
   src/react-query/networkIngressGetDeleteImpact.core.ts: {}
   src/react-query/networkIngressGetDeleteImpact.ts: {}
+  src/react-query/newRemoteSessionClientCallbackUrl.core.ts: {}
+  src/react-query/newRemoteSessionClientCallbackUrl.ts: {}
   src/react-query/oktaResourceConnections.core.ts: {}
   src/react-query/oktaResourceConnections.ts: {}
   src/react-query/oktaServerSuggestions.core.ts: {}
@@ -6934,6 +6939,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getNewRemoteSessionClientCallbackUrl:
+    speakeasy-default-get-new-remote-session-client-callback-url:
+      responses:
+        "200":
+          application/json: {"callback_url": "https://giving-boyfriend.org"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getObservabilityOverview:
     speakeasy-default-get-observability-overview:
       requestBody:
