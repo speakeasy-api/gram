@@ -363,7 +363,13 @@ func TestDescribeMCPServerHealthFailsClosedOnMalformedResults(t *testing.T) {
 		"enabled no outcomes":  func(c *gen.AdminMcpServerToolCalls) { c.Outcomes = nil },
 		"negative outcome":     func(c *gen.AdminMcpServerToolCalls) { c.Outcomes.Failed = -1 },
 		"bad watermark":        func(c *gen.AdminMcpServerToolCalls) { c.Watermark = new("soon") },
-		"other window":         func(c *gen.AdminMcpServerToolCalls) { c.WindowDays = new(30) },
+		"disabled with bucket": func(c *gen.AdminMcpServerToolCalls) {
+			*c = gen.AdminMcpServerToolCalls{Type: "logging:disabled", BucketSeconds: new(int64(86400))}
+		},
+		"disabled with daily": func(c *gen.AdminMcpServerToolCalls) {
+			*c = gen.AdminMcpServerToolCalls{Type: "logging:disabled", Daily: []*gen.AdminMcpServerToolCallBucket{}}
+		},
+		"other window": func(c *gen.AdminMcpServerToolCalls) { c.WindowDays = new(30) },
 	}
 	for name, mutate := range callCases {
 		reads := testServerHealthReads()

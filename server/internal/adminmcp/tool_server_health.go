@@ -282,7 +282,7 @@ func projectServerHealth(result *gen.AdminMcpServerHealth, calls *gen.AdminMcpSe
 func projectHealthToolCalls(calls *gen.AdminMcpServerToolCalls, window int) (MCPServerHealthToolCalls, bool) {
 	switch calls.Type {
 	case "logging:disabled":
-		if calls.WindowDays != nil || calls.Watermark != nil || calls.Outcomes != nil {
+		if calls.WindowDays != nil || calls.Watermark != nil || calls.Outcomes != nil || calls.BucketSeconds != nil || calls.Daily != nil {
 			return MCPServerHealthToolCalls{}, false
 		}
 		return MCPServerHealthToolCalls{Type: calls.Type}, true
