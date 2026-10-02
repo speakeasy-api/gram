@@ -3,6 +3,7 @@ package activities_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ import (
 )
 
 // titleCompletionStub answers every title request with a fixed title and
-// records the prompt it was asked to title.
+// records how often it was asked and the last prompt it saw.
 type titleCompletionStub struct {
 	title  string
 	calls  atomic.Int32
@@ -67,6 +68,7 @@ type titleTestChat struct {
 	chatID    uuid.UUID
 }
 
+// newTitleTestChat seeds an org, project and chat; an empty title stores NULL.
 func newTitleTestChat(t *testing.T, name, title string) titleTestChat {
 	t.Helper()
 
@@ -105,12 +107,12 @@ func (c titleTestChat) addMessage(t *testing.T, role, content string) {
 	require.NoError(t, err)
 }
 
-func (c titleTestChat) title(t *testing.T) string {
+func (c titleTestChat) get(t *testing.T) chatrepo.GetChatRow {
 	t.Helper()
 
 	row, err := c.repo.GetChat(t.Context(), chatrepo.GetChatParams{ID: c.chatID, ProjectID: c.projectID})
 	require.NoError(t, err)
-	return row.Title.String
+	return row
 }
 
 func (c titleTestChat) run(t *testing.T, client openrouter.CompletionClient) {
@@ -122,16 +124,14 @@ func (c titleTestChat) run(t *testing.T, client openrouter.CompletionClient) {
 	}))
 }
 
-// The hook ingest path titles a new session after the message that opened it.
-// That stand-in has to be replaced once there is a conversation to name,
-// otherwise every captured session is permanently labelled with a truncated
-// first prompt.
+// The stand-in hook ingest seeds from the opening prompt must be replaced once
+// there is a conversation to name.
 func TestGenerateChatTitle_ReplacesTitleDerivedFromFirstPrompt(t *testing.T) {
 	t.Parallel()
 
 	prompt := "we want to create a new cname record for our docs domain and i am not sure which one it should point at"
 	tc := newTitleTestChat(t, "generatetitle_derived", chat.DerivedTitle(prompt))
-	require.NotEqual(t, prompt, tc.title(t), "the seeded title should be a truncation of the prompt")
+	require.NotEqual(t, prompt, tc.get(t).Title.String, "the seeded title should be a truncation of the prompt")
 
 	tc.addMessage(t, "user", prompt)
 	tc.addMessage(t, "assistant", "Point the CNAME at the docs load balancer and wait for propagation.")
@@ -139,12 +139,10 @@ func TestGenerateChatTitle_ReplacesTitleDerivedFromFirstPrompt(t *testing.T) {
 	stub := &titleCompletionStub{title: "Docs Domain CNAME Setup"}
 	tc.run(t, stub)
 
-	require.Equal(t, "Docs Domain CNAME Setup", tc.title(t))
+	require.Equal(t, "Docs Domain CNAME Setup", tc.get(t).Title.String)
 	require.Equal(t, int32(1), stub.calls.Load())
 }
 
-// Generation is also what rescues the fixed placeholders, including the one
-// every archived Anthropic inference conversation is stored with.
 func TestGenerateChatTitle_ReplacesInferencePlaceholder(t *testing.T) {
 	t.Parallel()
 
@@ -154,11 +152,11 @@ func TestGenerateChatTitle_ReplacesInferencePlaceholder(t *testing.T) {
 
 	tc.run(t, &titleCompletionStub{title: "Quarterly Incident Review"})
 
-	require.Equal(t, "Quarterly Incident Review", tc.title(t))
+	require.Equal(t, "Quarterly Incident Review", tc.get(t).Title.String)
 }
 
-// A title a source deliberately chose — a Claude Tag channel label, an
-// imported conversation name — is not a stand-in and must survive.
+// A title a source chose (a channel label, an imported conversation name) is
+// not a stand-in and must survive without spending a completion.
 func TestGenerateChatTitle_LeavesSourceChosenTitle(t *testing.T) {
 	t.Parallel()
 
@@ -169,12 +167,11 @@ func TestGenerateChatTitle_LeavesSourceChosenTitle(t *testing.T) {
 	stub := &titleCompletionStub{title: "Failing Deploy Investigation"}
 	tc.run(t, stub)
 
-	require.Equal(t, "Claude Tag in #dev-demo", tc.title(t))
-	require.Zero(t, stub.calls.Load(), "an already-named chat must not spend a completion")
+	require.Equal(t, "Claude Tag in #dev-demo", tc.get(t).Title.String)
+	require.Zero(t, stub.calls.Load())
 }
 
-// Once a real title is on file a later turn must not re-title the chat, so the
-// steady state of a long session is one completion, not one per turn.
+// Once a real title is on file a later turn must not re-title the chat.
 func TestGenerateChatTitle_DoesNotRetitleAfterSuccess(t *testing.T) {
 	t.Parallel()
 
@@ -184,24 +181,24 @@ func TestGenerateChatTitle_DoesNotRetitleAfterSuccess(t *testing.T) {
 
 	stub := &titleCompletionStub{title: "Risk Scanner False Positives"}
 	tc.run(t, stub)
-	require.Equal(t, "Risk Scanner False Positives", tc.title(t))
+	require.Equal(t, "Risk Scanner False Positives", tc.get(t).Title.String)
 
 	tc.addMessage(t, "user", "ok please narrow the policy")
 	tc.run(t, stub)
 
-	require.Equal(t, "Risk Scanner False Positives", tc.title(t))
+	require.Equal(t, "Risk Scanner False Positives", tc.get(t).Title.String)
 	require.Equal(t, int32(1), stub.calls.Load())
 }
 
-// Agent transcripts carry multi-kilobyte turns. The prompt the titler sends
-// must stay bounded, or naming a session costs as much as holding it.
+// The prompt sent to the model is the last six turns, each cut to 600 runes
+// including the ellipsis, in chronological order.
 func TestGenerateChatTitle_BoundsTheTranscriptItSends(t *testing.T) {
 	t.Parallel()
 
 	tc := newTitleTestChat(t, "generatetitle_bounded", chat.DefaultChatTitle)
 	for range 12 {
-		tc.addMessage(t, "user", stringOfRunes('a', 5000))
-		tc.addMessage(t, "assistant", stringOfRunes('b', 5000))
+		tc.addMessage(t, "user", strings.Repeat("a", 5000))
+		tc.addMessage(t, "assistant", strings.Repeat("b", 5000))
 	}
 
 	stub := &titleCompletionStub{title: "Very Long Session"}
@@ -209,13 +206,11 @@ func TestGenerateChatTitle_BoundsTheTranscriptItSends(t *testing.T) {
 
 	prompt := stub.prompt.Load()
 	require.NotNil(t, prompt)
-	require.Less(t, len([]rune(*prompt)), 5000, "six turns of at most 600 runes each, not the raw transcript")
-}
-
-func stringOfRunes(r rune, count int) string {
-	out := make([]rune, count)
-	for i := range out {
-		out[i] = r
-	}
-	return string(out)
+	turn := func(role, letter string) string { return role + ": " + strings.Repeat(letter, 599) + "…" }
+	expected := strings.Join([]string{
+		turn("user", "a"), turn("assistant", "b"),
+		turn("user", "a"), turn("assistant", "b"),
+		turn("user", "a"), turn("assistant", "b"),
+	}, "\n")
+	require.Equal(t, expected, *prompt)
 }

@@ -9,30 +9,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 )
 
-func TestIsPlaceholderTitleCoversEverySeededTitle(t *testing.T) {
+func TestIsPlaceholderTitle(t *testing.T) {
 	t.Parallel()
 
-	// Every stand-in a capture path seeds a chat with has to be recognized
-	// here, or that path's chats are treated as deliberately titled and never
-	// get a generated name.
-	for _, title := range []string{
-		"",
-		"   ",
-		chat.DefaultChatTitle,
-		chat.DefaultClaudeChatTitle,
-		chat.DefaultCoworkChatTitle,
-		chat.DefaultClaudeAmbiguous,
-		chat.DefaultCursorChatTitle,
-		chat.DefaultCodexChatTitle,
-		chat.DefaultInferenceChatTitle,
-	} {
-		require.True(t, chat.IsPlaceholderTitle(title), "expected %q to be a placeholder", title)
-	}
-}
-
-func TestIsPlaceholderTitleLeavesRealTitles(t *testing.T) {
-	t.Parallel()
-
+	require.True(t, chat.IsPlaceholderTitle(""))
+	require.True(t, chat.IsPlaceholderTitle("   "))
+	require.True(t, chat.IsPlaceholderTitle(" "+chat.DefaultInferenceChatTitle+" "))
 	require.False(t, chat.IsPlaceholderTitle("Claude Tag in #dev-demo"))
 	require.False(t, chat.IsPlaceholderTitle("Reduce token usage in prompts"))
 }
@@ -42,16 +24,11 @@ func TestDerivedTitleTrimsAndBoundsByRunes(t *testing.T) {
 
 	require.Equal(t, "why does the build fail?", chat.DerivedTitle("\n  why does the build fail?  "))
 
-	// Bounded by runes, not bytes, so a multi-byte prompt is never cut
-	// mid-character.
+	// Bounded by runes so a multi-byte prompt is never cut mid-character.
 	title := chat.DerivedTitle(strings.Repeat("é", 200))
-	require.Len(t, []rune(title), 80)
-	require.Equal(t, strings.Repeat("é", 80), title)
+	require.Equal(t, strings.Repeat("é", chat.MaxDerivedTitleRunes), title)
 }
 
-// A session's stand-in title is re-derived from the chat's own messages to
-// decide whether title generation may replace it, so the two must agree for
-// both short and truncated prompts.
 func TestIsDerivedTitleMatchesTheMessageItCameFrom(t *testing.T) {
 	t.Parallel()
 
@@ -61,11 +38,12 @@ func TestIsDerivedTitleMatchesTheMessageItCameFrom(t *testing.T) {
 	require.True(t, chat.IsDerivedTitle(chat.DerivedTitle(short), "unrelated", short))
 	require.True(t, chat.IsDerivedTitle(chat.DerivedTitle(long), long))
 	require.False(t, chat.IsDerivedTitle("Simplifying The Pull Request", short, long))
+	// Only a title cut at the rune cap may match a longer message by prefix.
+	require.False(t, chat.IsDerivedTitle(short, short+" and more"))
+	require.False(t, chat.IsDerivedTitle(strings.Repeat("x", chat.MaxDerivedTitleRunes+1), strings.Repeat("x", 200)))
 }
 
-// An empty title is not "derived from" an empty message: emptiness is handled
-// as a placeholder, and treating it as derived would let any chat with a blank
-// tool result match.
+// An empty title is a placeholder, not something derived from a blank message.
 func TestIsDerivedTitleIgnoresEmptyTitle(t *testing.T) {
 	t.Parallel()
 

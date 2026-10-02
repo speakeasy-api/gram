@@ -4194,7 +4194,7 @@ DO UPDATE SET
       ELSE COALESCE(EXCLUDED.title, chats.title)
     END
   , updated_at = GREATEST(chats.updated_at, EXCLUDED.updated_at)
-RETURNING id
+RETURNING id, title
 `
 
 type UpsertExternalChatParams struct {
@@ -4210,7 +4210,12 @@ type UpsertExternalChatParams struct {
 	PreferStoredTitle bool
 }
 
-func (q *Queries) UpsertExternalChat(ctx context.Context, arg UpsertExternalChatParams) (uuid.UUID, error) {
+type UpsertExternalChatRow struct {
+	ID    uuid.UUID
+	Title pgtype.Text
+}
+
+func (q *Queries) UpsertExternalChat(ctx context.Context, arg UpsertExternalChatParams) (UpsertExternalChatRow, error) {
 	row := q.db.QueryRow(ctx, upsertExternalChat,
 		arg.ID,
 		arg.ProjectID,
@@ -4223,9 +4228,9 @@ func (q *Queries) UpsertExternalChat(ctx context.Context, arg UpsertExternalChat
 		arg.UpdatedAt,
 		arg.PreferStoredTitle,
 	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i UpsertExternalChatRow
+	err := row.Scan(&i.ID, &i.Title)
+	return i, err
 }
 
 const upsertSetupAssistantThread = `-- name: UpsertSetupAssistantThread :one

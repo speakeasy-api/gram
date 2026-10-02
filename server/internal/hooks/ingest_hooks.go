@@ -1537,16 +1537,15 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	var titleContent string
 	uncorrelatedPrompt := false
 	nativePrompt := false
-	// Only the conversational turns are worth naming a session after; tool
-	// traffic describes how the agent worked, not what it was asked to do.
-	conversationalTurn := false
+	// Title generation is scheduled on assistant turns only, as the
+	// per-platform hook endpoints do; tool traffic says nothing about the topic.
+	assistantTurn := false
 	switch strings.TrimSpace(payload.Event.Type) {
 	case "prompt.submitted":
 		content := canonicalPromptText(payload)
 		if strings.TrimSpace(content) == "" {
 			return false, nil
 		}
-		conversationalTurn = true
 		msg = baseMsg("user", content)
 		if correlationID := agentPromptCorrelationID(payload); correlationID != "" {
 			msg.MessageID = conv.ToPGText(correlationID)
@@ -1575,7 +1574,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 				return false, nil
 			}
 		}
-		conversationalTurn = true
+		assistantTurn = true
 		msg = baseMsg("assistant", content)
 		if len(outputToolCalls) > 0 {
 			toolCallsJSON, err := json.Marshal(outputToolCalls)
@@ -1606,7 +1605,9 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		msg = baseMsg("assistant", "")
 		msg.FinishReason = conv.ToPGText("tool_calls")
 		msg.ToolCalls = toolCallsJSON
-		titleContent = toolName
+		// A tool name is not message content, so a chat it opened could never be
+		// recognized as a stand-in; seed the surface placeholder instead.
+		titleContent = canonicalPlaceholderTitle(hookSource)
 	case "tool.completed", "tool.failed":
 		content := canonicalToolResultContent(payload)
 		if strings.TrimSpace(content) == "" {
@@ -1637,23 +1638,17 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			return false, fmt.Errorf("set Claude Tag chat title: %w", err)
 		}
 	}
-	if stored && conversationalTurn {
+	if stored && assistantTurn {
 		s.scheduleCanonicalChatTitle(ctx, authCtx, msg.ChatID, hookSource)
 	}
 	return stored && msg.Role == "user", nil
 }
 
-// scheduleCanonicalChatTitle asks the title generator to name a session
-// captured through unified ingest. Without this the session keeps the
-// stand-in canonicalChatTitle derived from its opening message for good: the
-// per-platform hook endpoints schedule generation themselves, and unified
-// ingest is the path every current agent client reports on.
-//
-// Claude Tag sessions are excluded. Their title is the channel they belong to,
-// refreshed on every wake, and a generated name would be overwritten on the
-// next message anyway.
+// scheduleCanonicalChatTitle asks the title generator to replace the stand-in
+// a unified-ingest session was seeded with. Claude Tag sessions are skipped:
+// their title is the channel, rewritten on every wake.
 func (s *Service) scheduleCanonicalChatTitle(ctx context.Context, authCtx *contextvalues.AuthContext, chatID uuid.UUID, hookSource string) {
-	if s.chatTitleGenerator == nil || authCtx.ProjectID == nil || hookSource == "claude-tag" {
+	if s.chatTitleGenerator == nil || hookSource == "claude-tag" {
 		return
 	}
 	// WithoutCancel so a client that hangs up as soon as the hook is
@@ -2222,10 +2217,8 @@ func canonicalSkillName(payload *gen.IngestPayload) string {
 // an empty string when the source is unknown. The claude-tag wake-envelope
 // rewrite is only applied to Claude-family sources to prevent non-Claude
 // adapters from being labelled as channel sessions.
-//
-// Apart from a channel label, what comes back is a stand-in derived from the
-// session's opening message, which scheduleCanonicalChatTitle then asks the
-// title generator to replace with a real name.
+// Apart from a channel label the result is a stand-in that title generation
+// later replaces.
 func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) string {
 	title := canonicalPromptText(payload)
 	if title == "" {
@@ -2237,6 +2230,25 @@ func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) str
 		}
 	}
 	return chat.DerivedTitle(title)
+}
+
+// canonicalPlaceholderTitle is the stand-in for a chat opened by an event that
+// carries no text to derive a title from.
+func canonicalPlaceholderTitle(hookSource string) string {
+	switch hookSource {
+	case agentVariantCowork:
+		return chat.DefaultCoworkChatTitle
+	case agentVariantClaudeCode, surfaceClaudeCodeDesktop:
+		return chat.DefaultClaudeChatTitle
+	case "claude", "claude-tag":
+		return chat.DefaultClaudeAmbiguous
+	case "cursor":
+		return chat.DefaultCursorChatTitle
+	case "codex":
+		return chat.DefaultCodexChatTitle
+	default:
+		return chat.DefaultChatTitle
+	}
 }
 
 func canonicalToolCallData(payload *gen.IngestPayload) *gen.HookToolCallData {

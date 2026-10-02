@@ -34,11 +34,10 @@ func (g *recordingTitleGenerator) scheduled() []string {
 	return append([]string(nil), g.chatIDs...)
 }
 
-// Unified ingest seeds a session with a stand-in title derived from its
-// opening prompt. Without scheduling generation the session wears that
-// truncated prompt forever, which is what every hook-captured session used to
-// do — the per-platform endpoints schedule, this path did not.
-func TestIngest_SchedulesChatTitleGenerationForConversationTurns(t *testing.T) {
+// A session is named once the assistant has answered: nothing is scheduled
+// for the prompt alone, and the stand-in it was seeded with is one the title
+// generator re-derives from the stored prompt.
+func TestIngest_SchedulesChatTitleGenerationOnAssistantTurns(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
@@ -56,6 +55,7 @@ func TestIngest_SchedulesChatTitleGenerationForConversationTurns(t *testing.T) {
 	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
 	_, err := ti.service.IngestAuthenticated(ctx, authCtx, payload)
 	require.NoError(t, err)
+	require.Empty(t, titles.scheduled())
 
 	reply := "Merged the two tasks; the verification steps are now step three of setup."
 	response := canonicalIngestPayload("claude", "assistant.responded", sessionID)
@@ -64,10 +64,8 @@ func TestIngest_SchedulesChatTitleGenerationForConversationTurns(t *testing.T) {
 	require.NoError(t, err)
 
 	chatID := sessionIDToUUID(sessionID).String()
-	require.Equal(t, []string{chatID, chatID}, titles.scheduled())
+	require.Equal(t, []string{chatID}, titles.scheduled())
 
-	// The stand-in the session is stored with is exactly what the title
-	// generator re-derives to decide it may replace it.
 	stored, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{
 		ID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID,
 	})
@@ -76,10 +74,10 @@ func TestIngest_SchedulesChatTitleGenerationForConversationTurns(t *testing.T) {
 	require.True(t, chat.IsDerivedTitle(stored.Title.String, prompt))
 }
 
-// Tool traffic says how the agent worked, not what it was asked to do, and a
-// busy session emits far more of it than conversation. Naming is only worth
-// scheduling on the turns that carry the topic.
-func TestIngest_DoesNotScheduleChatTitleGenerationForToolTraffic(t *testing.T) {
+// Tool traffic carries no topic: it schedules nothing, and a chat it opens is
+// seeded with the surface placeholder rather than a tool name generation could
+// never recognize as a stand-in.
+func TestIngest_ToolTrafficSeedsPlaceholderWithoutScheduling(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
@@ -109,11 +107,16 @@ func TestIngest_DoesNotScheduleChatTitleGenerationForToolTraffic(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, messages, 2, "both tool rows landed, so nothing was scheduled because of the event type")
 	require.Empty(t, titles.scheduled())
+
+	stored, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{
+		ID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.True(t, chat.IsPlaceholderTitle(stored.Title.String), "seeded %q instead of a placeholder", stored.Title.String)
 }
 
-// A Claude Tag session is titled after the channel it belongs to, refreshed on
-// every wake. A generated name would be overwritten on the next message, so
-// the completion is never worth spending.
+// A Claude Tag session is titled after its channel on every wake, so a
+// generated name would only be overwritten.
 func TestIngest_DoesNotScheduleChatTitleGenerationForClaudeTag(t *testing.T) {
 	t.Parallel()
 
@@ -131,6 +134,11 @@ func TestIngest_DoesNotScheduleChatTitleGenerationForClaudeTag(t *testing.T) {
 	payload := canonicalIngestPayload("claude-code", "prompt.submitted", sessionID)
 	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
 	ti.service.recordCanonicalHook(ctx, payload, authCtx, canonicalActor{UserID: "", Email: ""}, time.Now(), "")
+
+	reply := "Looking into it now."
+	response := canonicalIngestPayload("claude-code", "assistant.responded", sessionID)
+	response.Data = &gen.HookIngestData{Message: &gen.HookMessageData{Text: &reply}}
+	ti.service.recordCanonicalHook(ctx, response, authCtx, canonicalActor{UserID: "", Email: ""}, time.Now(), "")
 
 	require.Empty(t, titles.scheduled())
 

@@ -139,7 +139,7 @@ DO UPDATE SET
       ELSE COALESCE(EXCLUDED.title, chats.title)
     END
   , updated_at = GREATEST(chats.updated_at, EXCLUDED.updated_at)
-RETURNING id;
+RETURNING id, title;
 
 -- name: LinkAIIntegrationConfigChat :one
 -- Links a chat to the AI integration config that imported it and returns the

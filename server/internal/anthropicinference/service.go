@@ -41,6 +41,9 @@ const (
 	responseBudget = 250 * time.Millisecond
 	// requestBudget leaves 250ms before the documented 10-second upstream timeout.
 	requestBudget = verdictBudget + checkpointBudget + responseBudget
+	// titleScheduleTimeout bounds the goroutine that asks for a title, so a
+	// degraded Temporal frontend cannot pin one goroutine per inference request.
+	titleScheduleTimeout = 2 * time.Second
 	// unavailableDenyReason is the fail-closed copy for a request that could
 	// not be evaluated in full.
 	unavailableDenyReason = "Speakeasy could not evaluate this request. Please try again."
@@ -88,8 +91,7 @@ type Service struct {
 
 // NewService uses the shared chat writer so captured messages receive the same
 // storage, metering, and asynchronous analysis as other imported conversations.
-// titles may be nil, in which case archived conversations keep the placeholder
-// title they are stored with.
+// A nil titles leaves archived conversations with their placeholder title.
 func NewService(logger *slog.Logger, db *pgxpool.Pool, writer *chat.ChatMessageWriter, scanner scanner, titles ChatTitleGenerator) *Service {
 	return &Service{logger: logger, store: &postgresStore{db: db, writer: writer, titles: titles, logger: logger}, scanner: scanner}
 }
@@ -358,7 +360,7 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	// from native hooks and Compliance imports. Null sessions are request-local.
 	candidateID := conversationID(config, frame)
 	externalChatID := "anthropic-inference:" + candidateID.String()
-	chatID, err := chatrepo.New(s.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
+	conversation, err := chatrepo.New(s.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
 		ID:                candidateID,
 		ProjectID:         config.ProjectID,
 		OrganizationID:    config.OrganizationID,
@@ -373,6 +375,7 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	if err != nil {
 		return 0, fmt.Errorf("upsert inference conversation: %w", err)
 	}
+	chatID := conversation.ID
 	// When this frame omits the actor email, use the label preserved on the
 	// conversation (written by an earlier frame that had one) so new messages
 	// stay consistent with the conversation header and existing messages.
@@ -490,33 +493,31 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	if _, err := s.writer.WriteExternalWithContentParts(ctx, config.ProjectID, writes, parts); err != nil {
 		return 0, fmt.Errorf("write inference messages: %w", err)
 	}
-	if len(writes) > 0 {
+	// PreferStoredTitle keeps a generated title, so scheduling stops once one
+	// lands and an agent loop costs one start rather than one per model call.
+	if len(writes) > 0 && chat.IsPlaceholderTitle(conversation.Title.String) {
 		s.scheduleTitle(ctx, config, chatID)
 	}
 	return start, nil
 }
 
-// scheduleTitle asks the title generator to replace the placeholder every
-// archived inference conversation is stored with. "Claude inference
-// conversation" reads the same on every row, and these conversations show up
-// in the same session lists as natively captured ones.
+// scheduleTitle asks the title generator to replace the inference placeholder.
+// It runs off the request goroutine: the verdict is on a hard budget and a
+// Temporal round trip must not spend any of it.
 func (s *postgresStore) scheduleTitle(ctx context.Context, config Config, chatID uuid.UUID) {
 	if s.titles == nil {
 		return
 	}
-	// The enforcement verdict this archive rides along with is on a tight
-	// budget; scheduling must not inherit its deadline or its cancellation.
-	if err := s.titles.ScheduleChatTitleGeneration(
-		context.WithoutCancel(ctx),
-		chatID.String(),
-		config.OrganizationID,
-		config.ProjectID.String(),
-	); err != nil && s.logger != nil {
-		s.logger.WarnContext(ctx, "failed to schedule inference conversation title generation",
-			attr.SlogError(err),
-			attr.SlogChatID(chatID.String()),
-		)
-	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), titleScheduleTimeout)
+		defer cancel()
+		if err := s.titles.ScheduleChatTitleGeneration(ctx, chatID.String(), config.OrganizationID, config.ProjectID.String()); err != nil {
+			s.logger.WarnContext(ctx, "failed to schedule inference conversation title generation",
+				attr.SlogError(err),
+				attr.SlogChatID(chatID.String()),
+			)
+		}
+	}()
 }
 
 // alignFrame locates the incoming transcript within stored history. A frame

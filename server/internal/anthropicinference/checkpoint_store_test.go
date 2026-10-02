@@ -40,7 +40,7 @@ func testConcurrentCheckpoints(t *testing.T, singleConnection bool) {
 		writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), small, assetstest.NewTestBlobStore(t))
 		t.Cleanup(func() { require.NoError(t, shutdown(context.WithoutCancel(t.Context()))) })
 		db = small
-		store = &postgresStore{db: small, writer: writer}
+		store = &postgresStore{db: small, writer: writer, logger: testenv.NewLogger(t)}
 	}
 	frame := exampleFrame()
 	frame.Messages = []Message{textMessage("user", "prompt"), textMessage("assistant", "reply"), textMessage("user", "result")}
