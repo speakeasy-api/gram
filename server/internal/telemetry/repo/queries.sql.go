@@ -80,15 +80,37 @@ func (u UserIdentity) IsEmpty() bool {
 // user_email is compared lowercased on both sides because ingest stores the
 // provider's casing verbatim while the directory emails callers resolve are
 // normalized.
+//
+// The two identity sources are a union, not a preference. The canonical fold
+// resolves an email to its owner through the identity_map; the literal set is
+// resolved by the caller from the rows themselves. Neither covers the other:
+// the map knows an employee's linked emails even on rows this window never
+// shows, while only the rows know the user ids an *unmapped* email co-occurs
+// with — and for an unmapped email the fold's joinGet yields ” and its
+// id-keyed arm matches nothing at all. Letting the fold replace a populated
+// literal set therefore reported no activity for exactly the people the
+// grouped search still finds, because the search's group key falls back to the
+// recorded email (canonicalEmailExpr) while this filter had no such fallback.
+// ORing the two is what makes the per-person read agree with the grouped
+// search that offered the person. Callers populating only one (the telemetry
+// service's resolveUserScope, every literal-mode caller) are unaffected.
 func withUserIdentityFilter(sb squirrel.SelectBuilder, identity UserIdentity, canonical CanonicalUserIdentity) squirrel.SelectBuilder {
-	// Canonical mode replaces the Postgres-expanded identity set with the
-	// ClickHouse identity_map fold; the literal path below is unchanged and
-	// remains the flag-off behavior.
+	match := literalUserIdentityMatch(identity)
 	if canonical.Enabled() {
-		return withCanonicalUserIdentityFilter(sb, canonical)
+		match = append(match, canonicalUserIdentityMatch(canonical)...)
 	}
-	if identity.IsEmpty() {
+	if len(match) == 0 {
 		return sb
+	}
+
+	return sb.Where(match)
+}
+
+// literalUserIdentityMatch is the caller-expanded identity set's arms, or nil
+// for an empty identity.
+func literalUserIdentityMatch(identity UserIdentity) squirrel.Or {
+	if identity.IsEmpty() {
+		return nil
 	}
 
 	var match squirrel.Or
@@ -102,7 +124,7 @@ func withUserIdentityFilter(sb squirrel.SelectBuilder, identity UserIdentity, ca
 		})
 	}
 
-	return sb.Where(match)
+	return match
 }
 
 // withAccountTypeFilter applies the shared account-type filter semantics:
@@ -2468,7 +2490,7 @@ type GetTimeSeriesMetricsParams struct {
 	TimeEnd             int64
 	IntervalSeconds     int64                 // Bucket interval in seconds
 	User                UserIdentity          // Optional filter - scopes to one employee across all their identities
-	CanonicalUser       CanonicalUserIdentity // When enabled, scopes via the identity_map fold instead of the expanded User set
+	CanonicalUser       CanonicalUserIdentity // When enabled, adds the identity_map fold to the scope, unioned with any User set
 	ExternalUserID      string                // Optional filter
 	APIKeyID            string                // Optional filter
 	ToolsetSlug         string                // Optional filter - filters by toolset/MCP server slug
@@ -2607,7 +2629,7 @@ type GetToolMetricsBreakdownParams struct {
 	TimeStart           int64
 	TimeEnd             int64
 	User                UserIdentity          // Optional filter - scopes to one employee across all their identities
-	CanonicalUser       CanonicalUserIdentity // When enabled, scopes via the identity_map fold instead of the expanded User set
+	CanonicalUser       CanonicalUserIdentity // When enabled, adds the identity_map fold to the scope, unioned with any User set
 	ExternalUserID      string                // Optional filter
 	APIKeyID            string                // Optional filter
 	ToolsetSlug         string                // Optional filter - filters by toolset/MCP server slug
@@ -2730,7 +2752,7 @@ type GetOverviewSummaryParams struct {
 	TimeStart           int64
 	TimeEnd             int64
 	User                UserIdentity          // Optional filter - scopes to one employee across all their identities
-	CanonicalUser       CanonicalUserIdentity // When enabled, scopes via the identity_map fold instead of the expanded User set
+	CanonicalUser       CanonicalUserIdentity // When enabled, adds the identity_map fold to the scope, unioned with any User set
 	ExternalUserID      string                // Optional filter
 	APIKeyID            string                // Optional filter
 	ToolsetSlug         string                // Optional filter - filters by toolset/MCP server slug
@@ -3645,7 +3667,7 @@ type GetUserMetricsSummaryParams struct {
 	TimeStart           int64
 	TimeEnd             int64
 	User                UserIdentity          // the employee's identities (mutually exclusive with ExternalUserID)
-	CanonicalUser       CanonicalUserIdentity // when enabled, scopes via the identity_map fold instead of the expanded User set
+	CanonicalUser       CanonicalUserIdentity // when enabled, adds the identity_map fold to the scope, unioned with any User set
 	ExternalUserID      string                // external_user_id (mutually exclusive with User)
 	EventSource         string                // Optional filter - filters by event_source
 	HookSource          string                // Optional filter - filters by hook_source
@@ -3830,7 +3852,7 @@ type GetEmployeeDataFlowGraphParams struct {
 	TimeStart      int64
 	TimeEnd        int64
 	User           UserIdentity          // the employee's identities (mutually exclusive with ExternalUserID)
-	CanonicalUser  CanonicalUserIdentity // when enabled, scopes via the identity_map fold instead of the expanded User set
+	CanonicalUser  CanonicalUserIdentity // when enabled, adds the identity_map fold to the scope, unioned with any User set
 	ExternalUserID string                // external_user_id (mutually exclusive with User)
 	AccountType    string                // Optional filter - filters by account_type
 	ExternalOrgID  string                // Optional filter - scopes to a single account by provider org id

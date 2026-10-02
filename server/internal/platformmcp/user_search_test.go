@@ -3,6 +3,9 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"slices"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -401,12 +404,16 @@ func TestSearchUsers_CursorResumesOnlyTheQueryThatMintedIt(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestSearchUsers_RefusesACursorWithoutASealedBoundary pins that a cursor
-// carrying only a group key — the shape minted before the observed last_seen
-// was sealed in — is refused rather than resumed. Resuming it would leave the
-// repository to re-derive the boundary from a lookup that ignores this search's
-// window and its excluded hook sources, which is what could repeat a person.
-func TestSearchUsers_RefusesACursorWithoutASealedBoundary(t *testing.T) {
+// TestSearchUsers_RefusesACursorWithoutASealedPosition pins that every payload
+// shape short of the current one is refused rather than resumed.
+//
+// A cursor carrying only a group key would leave the repository to re-derive
+// the boundary from a lookup that ignores this search's window and its excluded
+// hook sources, which is what could repeat a person. A cursor carrying the
+// boundary but no interval would leave the window to be recomputed from the
+// clock, which is what could drop a person near its start before their page is
+// reached. Neither has a resume path.
+func TestSearchUsers_RefusesACursorWithoutASealedPosition(t *testing.T) {
 	t.Parallel()
 
 	reader := &recordingUserSearchReader{rows: []telemetryrepo.UserSummary{userSummaryRow("pat.a@example.com", "pat.a@example.com", 1, 0)}}
@@ -417,12 +424,25 @@ func TestSearchUsers_RefusesACursorWithoutASealedBoundary(t *testing.T) {
 	search.window, err = resolveWindow("24h", userSearchTestNow, userSearchWindowSpec)
 	require.NoError(t, err)
 
+	sealed := func(fields ...string) string {
+		return "u3:" + strings.Join(fields, ":")
+	}
+	start := strconv.FormatInt(search.window.start.UnixNano(), 10)
+	end := strconv.FormatInt(search.window.end.UnixNano(), 10)
+	boundary := strconv.FormatInt(userSearchTestNow.Add(-time.Hour).UnixNano(), 10)
 	for name, value := range map[string]string{
-		"key only":       "u:1:pat.a@example.com",
-		"zero boundary":  "u2:1:0:pat.a@example.com",
-		"no boundary":    "u2:1:pat.a@example.com",
-		"unparseable":    "u2:1:soon:pat.a@example.com",
-		"unknown prefix": "u3:1:5:pat.a@example.com",
+		// Shapes from before each field was sealed in.
+		"key only":          "u:1:pat.a@example.com",
+		"boundary only":     "u2:1:" + boundary + ":pat.a@example.com",
+		"unknown prefix":    "u9:1:" + start + ":" + end + ":" + boundary + ":pat.a@example.com",
+		"no interval":       sealed("1", boundary, "pat.a@example.com"),
+		"zero boundary":     sealed("1", start, end, "0", "pat.a@example.com"),
+		"unparseable start": sealed("1", "soon", end, boundary, "pat.a@example.com"),
+		"unparseable end":   sealed("1", start, "later", boundary, "pat.a@example.com"),
+		"inverted interval": sealed("1", end, start, boundary, "pat.a@example.com"),
+		"zero start":        sealed("1", "0", end, boundary, "pat.a@example.com"),
+		"unparseable count": sealed("many", start, end, boundary, "pat.a@example.com"),
+		"empty key":         sealed("1", start, end, boundary, ""),
 	} {
 		stale, err := service.references.EncodeScoped(principal, subjectKindCursor, search.cursorScope(), value, userSearchTestNow)
 		require.NoError(t, err, name)
@@ -623,7 +643,10 @@ func TestGetUserMetricsSummary_RefusesForeignAndMalformedReferences(t *testing.T
 	_, err = service.GetUserMetricsSummary(t.Context(), reauthorized, GetUserMetricsSummaryInput{ProjectID: userSearchTestProject, UserReference: own, Window: "", MCPID: ""})
 	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
 
-	cursor, err := service.references.EncodeScoped(principal, subjectKindCursor, projectUserScope(userSearchTestProject), formatUserSearchCursor("pat.rivera@example.com", userSearchTestNow.UnixNano(), 1), userSearchTestNow)
+	searchWindow, err := resolveWindow("7d", userSearchTestNow, userSearchWindowSpec)
+	require.NoError(t, err)
+	position := userSearchPosition{key: "pat.rivera@example.com", lastSeen: userSearchTestNow.UnixNano(), traversed: 1}
+	cursor, err := service.references.EncodeScoped(principal, subjectKindCursor, projectUserScope(userSearchTestProject), formatUserSearchCursor(position, searchWindow), userSearchTestNow)
 	require.NoError(t, err)
 	_, err = service.GetUserMetricsSummary(t.Context(), principal, GetUserMetricsSummaryInput{ProjectID: userSearchTestProject, UserReference: cursor, Window: "", MCPID: ""})
 	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
@@ -756,4 +779,257 @@ func TestUserSearchTools_UnavailableStubsRefuseReadably(t *testing.T) {
 		require.Equal(t, unavailableCode, refusal.Code, name)
 		require.Equal(t, "user_search", refusal.Feature, name)
 	}
+}
+
+// unmappedIdentityReader answers like the repository does for a person whose
+// email the identity map does not carry and whose every row carries a user id.
+//
+// The fold's id-keyed arm resolves such an email to no owner, and its other arm
+// matches only rows with an empty user_id, so the canonical identity alone
+// names none of this person's rows. Only the user ids the caller resolved from
+// the rows themselves can. Serving metrics on exactly that condition is what
+// makes this fake fail when the summary stops sending them.
+type unmappedIdentityReader struct {
+	person        telemetryrepo.UserSummary
+	personID      string
+	metrics       *telemetryrepo.MetricsSummaryRow
+	searchParams  []telemetryrepo.SearchUsersParams
+	metricsParams []telemetryrepo.GetUserMetricsSummaryParams
+}
+
+func (r *unmappedIdentityReader) SearchUsers(_ context.Context, arg telemetryrepo.SearchUsersParams) ([]telemetryrepo.UserSummary, error) {
+	r.searchParams = append(r.searchParams, arg)
+	return []telemetryrepo.UserSummary{r.person}, nil
+}
+
+func (r *unmappedIdentityReader) GetUserMetricsSummary(_ context.Context, arg telemetryrepo.GetUserMetricsSummaryParams) (*telemetryrepo.MetricsSummaryRow, error) {
+	r.metricsParams = append(r.metricsParams, arg)
+	if slices.Contains(arg.User.UserIDs, r.personID) {
+		return r.metrics, nil
+	}
+	// The scope never named a row of this person's: no observations.
+	return &telemetryrepo.MetricsSummaryRow{ToolCounts: map[string]uint64{}, ToolFailureCounts: map[string]uint64{}}, nil
+}
+
+// TestGetUserMetricsSummary_UnmappedEmailAgreesWithSearch covers a person the
+// identity map does not carry whose rows do carry a user id.
+//
+// The search finds them: its group key folds an unmapped email back to the
+// recorded address, so they are returned and reported active. The summary used
+// to disagree, because supplying the canonical identity made the repository
+// ignore the user ids the reference had been widened to and scope the read on
+// the mapping that does not exist — showing activity in the search and none in
+// the summary for the same person, in the same window.
+func TestGetUserMetricsSummary_UnmappedEmailAgreesWithSearch(t *testing.T) {
+	t.Parallel()
+
+	const (
+		unmappedEmail = "pat.rivera@example.com"
+		firstID       = "user-42"
+		secondID      = "user-91"
+	)
+	// Distinguishable from every other fixture value: two ids rather than the
+	// shared one, its own activity counts, and its own last-seen moment, so an
+	// assertion naming one of them cannot be satisfied by another row's value.
+	person := userSummaryRow(unmappedEmail, unmappedEmail, 7, 2)
+	person.RawUserIDs = []string{firstID, secondID}
+	person.LastSeenUnixNano = userSearchTestNow.Add(-17 * time.Minute).UnixNano()
+
+	reader := &unmappedIdentityReader{
+		person:   person,
+		personID: firstID,
+		metrics: &telemetryrepo.MetricsSummaryRow{
+			FirstSeenUnixNano: userSearchTestNow.Add(-31 * time.Hour).UnixNano(),
+			LastSeenUnixNano:  person.LastSeenUnixNano,
+			TotalToolCalls:    9,
+			ToolCallSuccess:   7,
+			ToolCallFailure:   2,
+			ToolCounts:        map[string]uint64{"mcp__payments__refund": 9},
+			ToolFailureCounts: map[string]uint64{"mcp__payments__refund": 2},
+		},
+	}
+	// On the fold: the organization has an identity map, it just does not carry
+	// this address.
+	service := newUserSearchService(t, reader, &recordingUserSearchAuditor{}, stubIdentityGate{org: "organization-1"})
+	principal := testPrincipal()
+
+	// What the search says about this person.
+	found, err := service.SearchUsers(t.Context(), principal, SearchUsersInput{ProjectID: userSearchTestProject, Query: "rivera", UserType: "", Window: "7d", Limit: 5, Cursor: ""})
+	require.NoError(t, err)
+	require.Len(t, found.Users, 1)
+	// The search's vocabulary is categorical evidence rather than a state, so
+	// "mixed" here is its way of saying this person has been doing things —
+	// seven successful calls and two failed ones.
+	require.Equal(t, "mixed", found.Users[0].Activity, "the search finds a person with observed activity")
+	require.Equal(t, time.Unix(0, person.LastSeenUnixNano).UTC().Format(time.RFC3339), found.Users[0].LastSeenAt)
+
+	// And what the summary says about the very reference the search minted.
+	summary, err := service.GetUserMetricsSummary(t.Context(), principal, GetUserMetricsSummaryInput{ProjectID: userSearchTestProject, UserReference: found.Users[0].UserReference, Window: "7d", MCPID: ""})
+	require.NoError(t, err)
+	require.Equal(t, SubjectStateActive, summary.Activity, "the summary must not report inactive for a person the search just showed as active")
+	require.Equal(t, found.Users[0].LastSeenAt, summary.LastSeenAt, "both tools must agree on when the person was last seen")
+	require.Equal(t, found.Users[0].MaskedIdentity, summary.MaskedIdentity)
+	require.Equal(t, int64(9), summary.ToolCalls)
+	require.False(t, summary.Envelope.NoObservations)
+
+	// The scope that got there: the fold is still applied, and the resolved ids
+	// travel with it rather than being dropped in its favour.
+	require.Len(t, reader.metricsParams, 1)
+	params := reader.metricsParams[0]
+	require.Equal(t, []string{firstID, secondID}, params.User.UserIDs, "every user id the reference was widened to survives")
+	require.Equal(t, []string{unmappedEmail}, params.User.Emails)
+	require.Equal(t, telemetryrepo.CanonicalUserIdentity{OrgID: "organization-1", UserID: "", EmailLower: unmappedEmail}, params.CanonicalUser)
+	require.True(t, params.CanonicalUser.Enabled(), "the fold stays in the scope for the mapped identities it does resolve")
+	require.False(t, params.User.IsEmpty(), "and the resolved set stays in it for the ones it does not")
+}
+
+// windowedUserSearchReader answers like the repository: only people observed
+// inside the interval the parameters name, newest first, resumed strictly after
+// the sealed (last_seen, key) boundary, capped at the requested limit.
+type windowedUserSearchReader struct {
+	people []telemetryrepo.UserSummary
+	params []telemetryrepo.SearchUsersParams
+}
+
+func (r *windowedUserSearchReader) SearchUsers(_ context.Context, arg telemetryrepo.SearchUsersParams) ([]telemetryrepo.UserSummary, error) {
+	r.params = append(r.params, arg)
+
+	matched := make([]telemetryrepo.UserSummary, 0, len(r.people))
+	for _, person := range r.people {
+		if person.LastSeenUnixNano < arg.TimeStart || person.LastSeenUnixNano > arg.TimeEnd {
+			continue
+		}
+		// The descending tuple comparison the repository applies:
+		// (last_seen, key) < (boundary, cursor).
+		if arg.Cursor != "" {
+			if person.LastSeenUnixNano > arg.CursorLastSeenUnixNano {
+				continue
+			}
+			if person.LastSeenUnixNano == arg.CursorLastSeenUnixNano && person.UserID >= arg.Cursor {
+				continue
+			}
+		}
+		matched = append(matched, person)
+	}
+	sort.Slice(matched, func(i, j int) bool { return matched[i].LastSeenUnixNano > matched[j].LastSeenUnixNano })
+	if arg.Limit > 0 && len(matched) > arg.Limit {
+		matched = matched[:arg.Limit]
+	}
+	return matched, nil
+}
+
+func (r *windowedUserSearchReader) GetUserMetricsSummary(context.Context, telemetryrepo.GetUserMetricsSummaryParams) (*telemetryrepo.MetricsSummaryRow, error) {
+	return &telemetryrepo.MetricsSummaryRow{ToolCounts: map[string]uint64{}, ToolFailureCounts: map[string]uint64{}}, nil
+}
+
+// TestSearchUsers_CursorAnchorsTheWindowAcrossPages pins that every page of one
+// traversal reads the interval the first page read, however long the caller
+// takes to ask for the next one. Re-resolving the window from the clock on each
+// page slid it forward under the traversal.
+func TestSearchUsers_CursorAnchorsTheWindowAcrossPages(t *testing.T) {
+	t.Parallel()
+
+	rows := make([]telemetryrepo.UserSummary, 0, 3)
+	for index, key := range []string{"pat.a@example.com", "pat.b@example.com", "pat.c@example.com"} {
+		row := userSummaryRow(key, key, 1, 0)
+		row.LastSeenUnixNano = userSearchTestNow.Add(-time.Hour - time.Duration(index)*time.Minute).UnixNano()
+		rows = append(rows, row)
+	}
+	reader := &recordingUserSearchReader{rows: rows}
+	clock := userSearchTestNow
+	service := newUserSearchService(t, reader, &recordingUserSearchAuditor{}, nil)
+	service.now = func() time.Time { return clock }
+	principal := testPrincipal()
+
+	first, err := service.SearchUsers(t.Context(), principal, SearchUsersInput{ProjectID: userSearchTestProject, Query: "pat", UserType: "", Window: "24h", Limit: 2, Cursor: ""})
+	require.NoError(t, err)
+	require.NotEmpty(t, first.NextCursor)
+
+	// A pause a caller can really take: the cursor is a reference, so it
+	// expires after SubjectReferenceTTL and nothing longer than that is
+	// reachable. That bounds how far a re-resolved window could slide, not
+	// whether it slides — seven minutes is already 12% of the shortest window
+	// this tool offers.
+	clock = clock.Add(7 * time.Minute)
+	second, err := service.SearchUsers(t.Context(), principal, SearchUsersInput{ProjectID: userSearchTestProject, Query: "pat", UserType: "", Window: "24h", Limit: 2, Cursor: first.NextCursor})
+	require.NoError(t, err)
+
+	require.Len(t, reader.searchParams, 2)
+	// Guards the assertions that follow: were the clock not actually moving,
+	// identical bounds would prove nothing about where they came from.
+	moved, err := resolveWindow("24h", clock, userSearchWindowSpec)
+	require.NoError(t, err)
+	require.NotEqual(t, reader.searchParams[0].TimeStart, moved.start.UnixNano(), "the clock must have moved for this test to mean anything")
+
+	require.Equal(t, reader.searchParams[0].TimeStart, reader.searchParams[1].TimeStart, "page 2 reads the interval page 1 read, not one recomputed from the clock")
+	require.Equal(t, reader.searchParams[0].TimeEnd, reader.searchParams[1].TimeEnd)
+	// And the interval the caller is told it read is the same one.
+	require.Equal(t, first.Envelope.ResolvedWindow.From, second.Envelope.ResolvedWindow.From)
+	require.Equal(t, first.Envelope.ResolvedWindow.To, second.Envelope.ResolvedWindow.To)
+	require.Equal(t, DiagnosticWindowLastDay, second.Envelope.ResolvedWindow.Window)
+}
+
+// TestSearchUsers_ReachesAPersonNearTheOriginalWindowStart is the complaint the
+// anchored interval answers. Under newest-first ordering the people nearest the
+// window's start are exactly the ones a later page reaches, so a window sliding
+// forward between pages drops them out of range before their page is asked for
+// — and the traversal then ends on a result the caller cannot tell from having
+// seen everyone.
+func TestSearchUsers_ReachesAPersonNearTheOriginalWindowStart(t *testing.T) {
+	t.Parallel()
+
+	// Distinct last-seen moments spanning the window: one recent, one in the
+	// middle, and one three minutes inside the original start, which a window
+	// re-resolved after a pause no longer covers.
+	offsets := map[string]time.Duration{
+		"pat.recent@example.com": -time.Hour,
+		"pat.middle@example.com": -2 * time.Hour,
+		"pat.oldest@example.com": -24*time.Hour + 3*time.Minute,
+	}
+	people := make([]telemetryrepo.UserSummary, 0, len(offsets))
+	for key, offset := range offsets {
+		row := userSummaryRow(key, key, 1, 0)
+		row.LastSeenUnixNano = userSearchTestNow.Add(offset).UnixNano()
+		people = append(people, row)
+	}
+	reader := &windowedUserSearchReader{people: people}
+	clock := userSearchTestNow
+	service := newUserSearchService(t, reader, &recordingUserSearchAuditor{}, nil)
+	service.now = func() time.Time { return clock }
+	principal := testPrincipal()
+
+	served := []string{}
+	cursor := ""
+	for page := range 5 {
+		output, err := service.SearchUsers(t.Context(), principal, SearchUsersInput{ProjectID: userSearchTestProject, Query: "pat", UserType: "", Window: "24h", Limit: 1, Cursor: cursor})
+		require.NoError(t, err, "page %d", page)
+		for _, user := range output.Users {
+			served = append(served, user.LastSeenAt)
+		}
+		cursor = output.NextCursor
+		if cursor == "" {
+			break
+		}
+		// The caller takes a few minutes before asking for the next page —
+		// comfortably inside SubjectReferenceTTL, so the cursor stays valid,
+		// and already enough to carry a re-resolved window past the oldest
+		// person.
+		clock = clock.Add(7 * time.Minute)
+	}
+	require.Empty(t, cursor, "the traversal must finish rather than be cut short")
+
+	oldest := userSearchTestNow.Add(-24*time.Hour + 3*time.Minute).UTC().Format(time.RFC3339)
+	require.Contains(t, served, oldest, "the person nearest the original window start must still be reachable on a later page")
+	require.Len(t, served, len(offsets), "and everyone else with them")
+
+	// Every page read the interval the first one did, and the clock really did
+	// move underneath them.
+	require.Greater(t, len(reader.params), 1)
+	for index, params := range reader.params {
+		require.Equal(t, reader.params[0].TimeStart, params.TimeStart, "page %d start", index)
+		require.Equal(t, reader.params[0].TimeEnd, params.TimeEnd, "page %d end", index)
+	}
+	require.NotEqual(t, userSearchTestNow, clock, "the clock must have moved for this test to mean anything")
+	require.LessOrEqual(t, reader.params[0].TimeStart, userSearchTestNow.Add(-24*time.Hour+3*time.Minute).UnixNano(),
+		"the anchored interval is the one that contains the oldest person")
 }

@@ -134,9 +134,11 @@ func (s *DiagnosticsService) SearchUsers(ctx context.Context, principal Principa
 		return SearchUsersOutput{}, fmt.Errorf("authorize user search: %w", err)
 	}
 	// The cursor resolves only against the query that minted it, so a position
-	// cannot be replayed with a different query, user type, or window.
+	// cannot be replayed with a different query, user type, or window. It also
+	// restores the interval the first page read, replacing the one just
+	// resolved from the clock.
 	scope := search.cursorScope()
-	cursorKey, cursorLastSeen, traversed, err := s.decodeUserSearchCursor(input.Cursor, principal, scope, search.now)
+	position, err := s.decodeUserSearchCursor(input.Cursor, principal, scope, &search)
 	if err != nil {
 		return SearchUsersOutput{}, err
 	}
@@ -173,13 +175,13 @@ func (s *DiagnosticsService) SearchUsers(ctx context.Context, principal Principa
 		UserIDs:             nil,
 		IdentityContains:    search.query,
 		SortOrder:           "desc",
-		Cursor:              cursorKey,
+		Cursor:              position.key,
 		// The boundary the previous page actually showed. Without it the
 		// repository re-derives this person's last_seen from a lookup that
 		// applies neither the window nor the Gram-hosted exclusion above, and a
 		// person whose excluded rows run later than their qualifying ones is
 		// handed back on every following page.
-		CursorLastSeenUnixNano: cursorLastSeen,
+		CursorLastSeenUnixNano: position.lastSeen,
 		// One extra row decides whether another page exists without a second
 		// round trip, and is dropped before anything is projected.
 		Limit:                search.limit + 1,
@@ -203,7 +205,7 @@ func (s *DiagnosticsService) SearchUsers(ctx context.Context, principal Principa
 	rows, more := boundedRows(rows, search.limit)
 	// Trimmed to what the traversal budget still allows, so the cap bounds the
 	// people actually handed over rather than only the number of pages.
-	if remaining := maxUserSearchTraversal - traversed; remaining < len(rows) {
+	if remaining := maxUserSearchTraversal - position.traversed; remaining < len(rows) {
 		rows = rows[:max(remaining, 0)]
 		more = false
 	}
@@ -233,10 +235,15 @@ func (s *DiagnosticsService) SearchUsers(ctx context.Context, principal Principa
 	}
 	output.Users = fitted
 	rows, more = resumeAfterFit(rows, len(fitted), dropped, more)
-	traversed += len(rows)
-	if more && len(rows) > 0 && traversed < maxUserSearchTraversal {
+	position.traversed += len(rows)
+	if more && len(rows) > 0 && position.traversed < maxUserSearchTraversal {
 		last := rows[len(rows)-1]
-		cursor, err := s.references.EncodeScoped(principal, subjectKindCursor, scope, formatUserSearchCursor(last.UserID, last.LastSeenUnixNano, traversed), search.now)
+		position.key, position.lastSeen = last.UserID, last.LastSeenUnixNano
+		// Sealed against search.window, which is the interval this page
+		// actually read: the one the cursor restored on a later page, or the
+		// one the clock resolved on the first. Every page of a traversal
+		// therefore hands on the same bounds.
+		cursor, err := s.references.EncodeScoped(principal, subjectKindCursor, scope, formatUserSearchCursor(position, search.window), search.now)
 		if err != nil {
 			return SearchUsersOutput{}, fmt.Errorf("mint user search cursor: %w", err)
 		}
@@ -346,12 +353,22 @@ func (s *DiagnosticsService) userSearchEnvelope(ctx context.Context, projectID s
 	return newDataEnvelope(now, watermarkTime(watermark), window, observed), nil
 }
 
+// userSearchPosition is everything a later page restores from its cursor: the
+// group key and last_seen to resume after, how far the traversal has reached,
+// and the absolute interval the first page read.
+type userSearchPosition struct {
+	key       string
+	lastSeen  int64
+	traversed int
+}
+
 // A search cursor carries the whole position the repository resumes after — the
 // group key, the last_seen the person was actually observed at on the page that
-// minted it, and how far the traversal has already reached — minted through the
-// same bound, expiring reference codec as everything else a caller holds
-// between calls. The key is frequently an email address, which is the reason
-// the cursor is encrypted rather than merely signed.
+// minted it, how far the traversal has already reached, and the absolute
+// interval the search began against — minted through the same bound, expiring
+// reference codec as everything else a caller holds between calls. The key is
+// frequently an email address, which is the reason the cursor is encrypted
+// rather than merely signed.
 //
 // The timestamp is sealed in rather than looked up again because this search
 // excludes Gram-hosted hook sources and applies a window, while the
@@ -360,57 +377,103 @@ func (s *DiagnosticsService) userSearchEnvelope(ctx context.Context, projectID s
 // timestamp and returned again on every following page. search_tool_calls
 // seals its own position for the same reason.
 //
-// The "u2:" prefix is the version of this payload. A "u:" cursor from before
-// the timestamp was sealed carries no boundary to compare against, so it is
-// refused as a stale reference rather than resumed on a position that would
-// repeat a person. The tools are unreleased and references live 10 minutes, so
-// nothing a caller can still be holding is worth a second parse path.
-func formatUserSearchCursor(key string, lastSeenUnixNano int64, traversed int) string {
-	return "u2:" + strconv.Itoa(traversed) + ":" + strconv.FormatInt(lastSeenUnixNano, 10) + ":" + key
+// The interval is sealed in because sealing the boundary alone only fixed the
+// ordering. A window re-derived from the clock on each page slides forward, so
+// the people nearest its original start — which, under newest-first ordering,
+// are exactly the ones a later page is reaching — drop out of range before
+// their page is requested, and the traversal ends early on a result the caller
+// cannot tell from exhaustion. list_chats seals its interval for the same
+// reason. Both the interval and the traversal count travel inside the sealed
+// token, so a caller can neither slide its own window nor reset its budget by
+// editing what it was handed. Nanoseconds, not list_chats' seconds, because the
+// repository takes the interval in nanoseconds and this cursor's boundary is
+// already one: no unit conversion sits between what is sealed and what is read
+// back, so the bounds restored are bit-for-bit the ones the first page used.
+//
+// The "u3:" prefix is the version of this payload. Earlier shapes ("u:" before
+// the boundary was sealed, "u2:" before the interval was) carry no interval to
+// restore, and resuming one would silently recompute the window from the clock
+// — the behaviour this version exists to remove — so they are refused as stale
+// references instead. The tools are unreleased and references live 10 minutes,
+// so nothing a caller can still be holding is worth a second parse path.
+func formatUserSearchCursor(position userSearchPosition, window ResolvedWindow) string {
+	return "u3:" + strconv.Itoa(position.traversed) +
+		":" + strconv.FormatInt(window.start.UnixNano(), 10) +
+		":" + strconv.FormatInt(window.end.UnixNano(), 10) +
+		":" + strconv.FormatInt(position.lastSeen, 10) +
+		":" + position.key
 }
 
-// parseUserSearchCursor recovers the traversal count, the observed last_seen,
-// and the group key. The key is taken as the whole remainder, so an identifier
-// containing a colon survives the round trip.
-func parseUserSearchCursor(value string) (string, int64, int, error) {
-	rest, ok := strings.CutPrefix(value, "u2:")
+// parseUserSearchCursor recovers the traversal count, the sealed interval, the
+// observed last_seen, and the group key. The key is taken as the whole
+// remainder, so an identifier containing a colon survives the round trip.
+func parseUserSearchCursor(value string) (userSearchPosition, time.Time, time.Time, error) {
+	none := userSearchPosition{key: "", lastSeen: 0, traversed: 0}
+	rest, ok := strings.CutPrefix(value, "u3:")
 	if !ok {
-		return "", 0, 0, ErrSubjectReferenceNotFound
+		return none, time.Time{}, time.Time{}, ErrSubjectReferenceNotFound
 	}
-	count, rest, ok := strings.Cut(rest, ":")
-	if !ok {
-		return "", 0, 0, ErrSubjectReferenceNotFound
+	fields := make([]string, 0, 4)
+	for range 4 {
+		field, remainder, found := strings.Cut(rest, ":")
+		if !found {
+			return none, time.Time{}, time.Time{}, ErrSubjectReferenceNotFound
+		}
+		fields = append(fields, field)
+		rest = remainder
 	}
-	stamp, key, ok := strings.Cut(rest, ":")
-	if !ok || key == "" {
-		return "", 0, 0, ErrSubjectReferenceNotFound
+	if rest == "" {
+		return none, time.Time{}, time.Time{}, ErrSubjectReferenceNotFound
 	}
-	traversed, err := strconv.Atoi(count)
+	traversed, err := strconv.Atoi(fields[0])
 	if err != nil || traversed < 0 || traversed > maxUserSearchTraversal {
-		return "", 0, 0, ErrSubjectReferenceNotFound
+		return none, time.Time{}, time.Time{}, ErrSubjectReferenceNotFound
+	}
+	start, err := strconv.ParseInt(fields[1], 10, 64)
+	if err != nil || start <= 0 {
+		return none, time.Time{}, time.Time{}, ErrSubjectReferenceNotFound
+	}
+	end, err := strconv.ParseInt(fields[2], 10, 64)
+	if err != nil || end <= start {
+		return none, time.Time{}, time.Time{}, ErrSubjectReferenceNotFound
 	}
 	// A zero last_seen would fall back to re-deriving the boundary, which is
 	// the behaviour this cursor exists to avoid, so it is not a valid position.
-	lastSeen, err := strconv.ParseInt(stamp, 10, 64)
+	lastSeen, err := strconv.ParseInt(fields[3], 10, 64)
 	if err != nil || lastSeen <= 0 {
-		return "", 0, 0, ErrSubjectReferenceNotFound
+		return none, time.Time{}, time.Time{}, ErrSubjectReferenceNotFound
 	}
-	return key, lastSeen, traversed, nil
+	return userSearchPosition{key: rest, lastSeen: lastSeen, traversed: traversed},
+		time.Unix(0, start).UTC(), time.Unix(0, end).UTC(), nil
 }
 
-func (s *DiagnosticsService) decodeUserSearchCursor(cursor string, principal Principal, scope string, now time.Time) (string, int64, int, error) {
+// decodeUserSearchCursor resolves a cursor against the search's scope and pins
+// the search's window to the interval the cursor carries, so every page of one
+// traversal reads the same bounds. Without a cursor the window resolved from
+// the clock stands. A cursor that cannot be opened, parsed, or that carries no
+// interval is refused rather than resumed, so no page can fall back to
+// recomputing the window from the clock.
+func (s *DiagnosticsService) decodeUserSearchCursor(cursor string, principal Principal, scope string, search *userSearch) (userSearchPosition, error) {
+	none := userSearchPosition{key: "", lastSeen: 0, traversed: 0}
 	if cursor == "" {
-		return "", 0, 0, nil
+		return none, nil
 	}
-	value, err := s.references.DecodeScoped(cursor, principal, subjectKindCursor, scope, now)
+	value, err := s.references.DecodeScoped(cursor, principal, subjectKindCursor, scope, search.now)
 	if err != nil {
-		return "", 0, 0, ErrSubjectReferenceNotFound
+		return none, ErrSubjectReferenceNotFound
 	}
-	key, lastSeen, traversed, err := parseUserSearchCursor(value)
+	position, start, end, err := parseUserSearchCursor(value)
 	if err != nil {
-		return "", 0, 0, ErrSubjectReferenceNotFound
+		return none, ErrSubjectReferenceNotFound
 	}
-	return key, lastSeen, traversed, nil
+	search.window = ResolvedWindow{
+		Window: search.window.Window,
+		From:   start.Format(time.RFC3339),
+		To:     end.Format(time.RFC3339),
+		start:  start,
+		end:    end,
+	}
+	return position, nil
 }
 
 // GetUserMetricsSummaryInput names one person by a reference a summary tool
@@ -533,6 +596,14 @@ func (s *DiagnosticsService) GetUserMetricsSummary(ctx context.Context, principa
 		if err != nil {
 			return GetUserMetricsSummaryOutput{}, err
 		}
+		// Both scopes are supplied, and the repository unions them. Neither
+		// alone agrees with the search that offered this person: the fold
+		// knows the employee's linked emails, while only the resolved set
+		// knows the user ids an email the identity map does not carry is
+		// recorded against — and for such an email the fold's id-keyed arm
+		// resolves to no owner and matches nothing, so relying on it alone
+		// reported no activity for a person search had just shown as active.
+		// Dropping either one reopens that disagreement.
 		params.CanonicalUser = canonicalUserIdentity(s.canonicalIdentityOrg(ctx, principal.OrganizationID), identityKind, identifier)
 	}
 	metrics, err := s.userSearch.GetUserMetricsSummary(ctx, params)
