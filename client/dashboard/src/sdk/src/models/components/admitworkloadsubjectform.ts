@@ -41,7 +41,7 @@ export type AdmitWorkloadSubjectForm = {
    */
   name?: string | undefined;
   /**
-   * Admit the subject for the selected project alone rather than the whole organization. Defaults to false.
+   * Admit the subject for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.
    */
   projectScoped?: boolean | undefined;
   /**

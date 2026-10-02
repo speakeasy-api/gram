@@ -19,9 +19,10 @@ import (
 // it trusts, the subjects those issuers may present, and the agent each
 // admitted workload inherits its policy from.
 type Service interface {
-	// Read the whole trust policy: every trusted issuer and every admitted
-	// subject, at both the organization and project tiers, with the agent each
-	// subject resolves to. Requires workload:read.
+	// Read the whole trust policy: every trusted issuer and every admitted subject
+	// at the organization tier, plus the selected project's tier when the caller
+	// names a project, with the agent each subject resolves to. Requires
+	// workload:read.
 	List(context.Context, *ListPayload) (res *WorkloadIdentityPolicy, err error)
 	// Trust an external issuer to vouch for workloads. Requires workload:write.
 	// Returns the whole policy, so a caller replaces its view rather than merging
@@ -102,7 +103,8 @@ type AdmitSubjectPayload struct {
 	// The agent whose policy the admitted workload inherits.
 	AgentID string
 	// Admit the subject for the selected project alone rather than the whole
-	// organization. Defaults to false.
+	// organization. Requires a caller that names a project; a dashboard session
+	// does not. Defaults to false.
 	ProjectScoped bool
 }
 
@@ -141,7 +143,8 @@ type RegisterIssuerPayload struct {
 	// tags of at most 64 characters each.
 	Tags []string
 	// Register the issuer for the selected project alone rather than the whole
-	// organization. Defaults to false.
+	// organization. Requires a caller that names a project; a dashboard session
+	// does not. Defaults to false.
 	ProjectScoped bool
 }
 
