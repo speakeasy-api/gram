@@ -1551,3 +1551,42 @@ func TestRegistrationStoreWritesWithoutAConnection(t *testing.T) {
 	require.True(t, replay.Replayed)
 	require.Equal(t, receipt.ID, replay.ID)
 }
+
+func TestFindReceiptIsExistingOnlyAndUserScoped(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_find_receipt")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn)
+	require.NoError(t, err)
+	request := registrationRequest(project, "reviewed", "find-only-key")
+	now := time.Now().UTC()
+	_, found, err := store.FindReceipt(ctx, principal, project, request, now)
+	require.NoError(t, err)
+	require.False(t, found)
+	receipt, err := store.BeginReceipt(ctx, principal, project, request, now)
+	require.NoError(t, err)
+	require.False(t, receipt.Replayed)
+	existing, found, err := store.FindReceipt(ctx, principal, project, request, now)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, receipt.ID, existing.ID)
+	require.True(t, existing.Replayed)
+	other := principal
+	other.UserID = "other-user"
+	_, found, err = store.FindReceipt(ctx, other, project, request, now)
+	require.NoError(t, err)
+	require.False(t, found)
+	changed := registrationRequest(project, "different", request.IdempotencyKey)
+	_, _, err = store.FindReceipt(ctx, principal, project, changed, now)
+	require.ErrorIs(t, err, ErrRegistrationConflict)
+	_, found, err = store.FindReceipt(ctx, principal, project, request, now.Add(25*time.Hour))
+	require.NoError(t, err)
+	require.False(t, found)
+	// Expiry discovery must leave the row intact; only BeginReceipt can reclaim it.
+	existing, found, err = store.FindReceipt(ctx, principal, project, request, now)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, receipt.ID, existing.ID)
+}

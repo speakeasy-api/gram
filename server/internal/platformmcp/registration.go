@@ -891,3 +891,30 @@ func catalogRegistrationInputHash(projectSlug, sourceKind, catalogProvider, cata
 	digest := sha256.Sum256([]byte(payload))
 	return hex.EncodeToString(digest[:])
 }
+
+// FindReceipt performs an existing-only, real-user scoped lookup. It never
+// deletes expired rows or creates a new idempotency boundary.
+func (s *RegistrationStore) FindReceipt(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, now time.Time) (OperationReceipt, bool, error) {
+	if s == nil || s.db == nil {
+		return OperationReceipt{}, false, ErrUnavailable
+	}
+	if err := validateCatalogRegistrationRequest(principal, project, request); err != nil {
+		return OperationReceipt{}, false, err
+	}
+	row, err := platformrepo.New(s.db).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
+		OrganizationID: principal.OrganizationID, UserID: conv.ToPGText(principal.UserID), SubjectUrn: userSubjectURN(principal.UserID), ProjectID: project.ID, Operation: operationRegisterCatalogMCP, IdempotencyKey: request.IdempotencyKey,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return OperationReceipt{}, false, nil
+	}
+	if err != nil {
+		return OperationReceipt{}, false, fmt.Errorf("find platform mcp receipt: %w", err)
+	}
+	if !row.ExpiresAt.Time.After(now) {
+		return OperationReceipt{}, false, nil
+	}
+	if row.InputHash != request.InputHash {
+		return OperationReceipt{}, false, ErrRegistrationConflict
+	}
+	return operationReceiptFromRow(row, true), true, nil
+}
