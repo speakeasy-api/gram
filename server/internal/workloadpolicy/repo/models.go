@@ -39,7 +39,6 @@ type WorkloadIdentityAdmission struct {
 
 type WorkloadIssuer struct {
 	ID                     uuid.UUID
-	IssuerKind             string
 	OrganizationID         string
 	ProjectID              uuid.NullUUID
 	Name                   string

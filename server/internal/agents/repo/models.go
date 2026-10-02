@@ -11,7 +11,6 @@ import (
 
 type Agent struct {
 	ID                          uuid.UUID
-	IdentityEpoch               int64
 	OrganizationID              string
 	OwnerUserID                 string
 	ProjectID                   uuid.NullUUID

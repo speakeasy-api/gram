@@ -179,7 +179,6 @@ func TestAgentSchemaStoresOnlyAuthoritativeFields(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{
 		"id",
-		"identity_epoch",
 		"organization_id",
 		"owner_user_id",
 		"project_id",
