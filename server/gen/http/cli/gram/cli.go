@@ -64,6 +64,7 @@ import (
 	modelkeysc "github.com/speakeasy-api/gram/server/gen/http/model_keys/client"
 	networkingressc "github.com/speakeasy-api/gram/server/gen/http/network_ingress/client"
 	oktaresourceconnectionsc "github.com/speakeasy-api/gram/server/gen/http/okta_resource_connections/client"
+	oktaserversuggestionsc "github.com/speakeasy-api/gram/server/gen/http/okta_server_suggestions/client"
 	organizationassetsc "github.com/speakeasy-api/gram/server/gen/http/organization_assets/client"
 	organizationremotesessionclientsc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_clients/client"
 	organizationremotesessionissuersc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_issuers/client"
@@ -159,6 +160,7 @@ func UsageCommands() []string {
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
 		"network-ingress (get-ingress|create-ingress|update-ingress|rotate-credentials|get-delete-impact|delete-ingress|check-health)",
 		"okta-resource-connections (list|confirm|reset)",
+		"okta-server-suggestions (list|dismiss|restore)",
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link|list-setup-tasks|update-setup-task|submit-onboarding-survey)",
 		"otel (logs|metrics|traces|list-event-log|get-event-volume|get-event-facets)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
@@ -1950,6 +1952,20 @@ func ParseEndpoint(
 		oktaResourceConnectionsResetFlags            = flag.NewFlagSet("reset", flag.ExitOnError)
 		oktaResourceConnectionsResetBodyFlag         = oktaResourceConnectionsResetFlags.String("body", "REQUIRED", "")
 		oktaResourceConnectionsResetSessionTokenFlag = oktaResourceConnectionsResetFlags.String("session-token", "", "")
+
+		oktaServerSuggestionsFlags = flag.NewFlagSet("okta-server-suggestions", flag.ContinueOnError)
+
+		oktaServerSuggestionsListFlags            = flag.NewFlagSet("list", flag.ExitOnError)
+		oktaServerSuggestionsListIncludeAllFlag   = oktaServerSuggestionsListFlags.String("include-all", "", "")
+		oktaServerSuggestionsListSessionTokenFlag = oktaServerSuggestionsListFlags.String("session-token", "", "")
+
+		oktaServerSuggestionsDismissFlags            = flag.NewFlagSet("dismiss", flag.ExitOnError)
+		oktaServerSuggestionsDismissBodyFlag         = oktaServerSuggestionsDismissFlags.String("body", "REQUIRED", "")
+		oktaServerSuggestionsDismissSessionTokenFlag = oktaServerSuggestionsDismissFlags.String("session-token", "", "")
+
+		oktaServerSuggestionsRestoreFlags            = flag.NewFlagSet("restore", flag.ExitOnError)
+		oktaServerSuggestionsRestoreBodyFlag         = oktaServerSuggestionsRestoreFlags.String("body", "REQUIRED", "")
+		oktaServerSuggestionsRestoreSessionTokenFlag = oktaServerSuggestionsRestoreFlags.String("session-token", "", "")
 
 		organizationsFlags = flag.NewFlagSet("organizations", flag.ContinueOnError)
 
@@ -5130,6 +5146,11 @@ func ParseEndpoint(
 	oktaResourceConnectionsConfirmFlags.Usage = oktaResourceConnectionsConfirmUsage
 	oktaResourceConnectionsResetFlags.Usage = oktaResourceConnectionsResetUsage
 
+	oktaServerSuggestionsFlags.Usage = oktaServerSuggestionsUsage
+	oktaServerSuggestionsListFlags.Usage = oktaServerSuggestionsListUsage
+	oktaServerSuggestionsDismissFlags.Usage = oktaServerSuggestionsDismissUsage
+	oktaServerSuggestionsRestoreFlags.Usage = oktaServerSuggestionsRestoreUsage
+
 	organizationsFlags.Usage = organizationsUsage
 	organizationsGetFlags.Usage = organizationsGetUsage
 	organizationsSendInviteFlags.Usage = organizationsSendInviteUsage
@@ -5834,6 +5855,8 @@ func ParseEndpoint(
 			svcf = networkIngressFlags
 		case "okta-resource-connections":
 			svcf = oktaResourceConnectionsFlags
+		case "okta-server-suggestions":
+			svcf = oktaServerSuggestionsFlags
 		case "organizations":
 			svcf = organizationsFlags
 		case "otel":
@@ -7068,6 +7091,19 @@ func ParseEndpoint(
 
 			case "reset":
 				epf = oktaResourceConnectionsResetFlags
+
+			}
+
+		case "okta-server-suggestions":
+			switch epn {
+			case "list":
+				epf = oktaServerSuggestionsListFlags
+
+			case "dismiss":
+				epf = oktaServerSuggestionsDismissFlags
+
+			case "restore":
+				epf = oktaServerSuggestionsRestoreFlags
 
 			}
 
@@ -9940,6 +9976,19 @@ func ParseEndpoint(
 			case "reset":
 				endpoint = c.Reset()
 				data, err = oktaresourceconnectionsc.BuildResetPayload(*oktaResourceConnectionsResetBodyFlag, *oktaResourceConnectionsResetSessionTokenFlag)
+			}
+		case "okta-server-suggestions":
+			c := oktaserversuggestionsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list":
+				endpoint = c.List()
+				data, err = oktaserversuggestionsc.BuildListPayload(*oktaServerSuggestionsListIncludeAllFlag, *oktaServerSuggestionsListSessionTokenFlag)
+			case "dismiss":
+				endpoint = c.Dismiss()
+				data, err = oktaserversuggestionsc.BuildDismissPayload(*oktaServerSuggestionsDismissBodyFlag, *oktaServerSuggestionsDismissSessionTokenFlag)
+			case "restore":
+				endpoint = c.Restore()
+				data, err = oktaserversuggestionsc.BuildRestorePayload(*oktaServerSuggestionsRestoreBodyFlag, *oktaServerSuggestionsRestoreSessionTokenFlag)
 			}
 		case "organizations":
 			c := organizationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -19479,6 +19528,79 @@ func oktaResourceConnectionsResetUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "okta-resource-connections reset --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+// oktaServerSuggestionsUsage displays the usage of the okta-server-suggestions
+// command and its subcommands.
+func oktaServerSuggestionsUsage() {
+	fmt.Fprintln(os.Stderr, `MCP servers suggested from the organization's Okta applications: catalog entries whose staff-curated Okta mapping matches a synced, assigned application. Administrators accept by creating the server through the usual remote MCP flow, or dismiss; dismissals are remembered per organization and audited.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] okta-server-suggestions COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list: List the catalog servers suggested from the Okta applications snapshot. Requires org:admin, the okta-connections rollout and a verified identity provider connection.`)
+	fmt.Fprintln(os.Stderr, `    dismiss: Dismiss a suggestion currently made to the organization. Remembered until restored, even across Okta reconnects. Requires org:admin and the okta-connections rollout.`)
+	fmt.Fprintln(os.Stderr, `    restore: Restore a dismissed suggestion currently made to the organization. Requires org:admin and the okta-connections rollout.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s okta-server-suggestions COMMAND --help\n", os.Args[0])
+}
+func oktaServerSuggestionsListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] okta-server-suggestions list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -include-all BOOL")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the catalog servers suggested from the Okta applications snapshot. Requires org:admin, the okta-connections rollout and a verified identity provider connection.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -include-all BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "okta-server-suggestions list --include-all false --session-token \"abc123\"")
+}
+
+func oktaServerSuggestionsDismissUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] okta-server-suggestions dismiss", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Dismiss a suggestion currently made to the organization. Remembered until restored, even across Okta reconnects. Requires org:admin and the okta-connections rollout.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "okta-server-suggestions dismiss --body '{\n      \"registry_entry_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func oktaServerSuggestionsRestoreUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] okta-server-suggestions restore", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Restore a dismissed suggestion currently made to the organization. Requires org:admin and the okta-connections rollout.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "okta-server-suggestions restore --body '{\n      \"registry_entry_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 // organizationsUsage displays the usage of the organizations command and its

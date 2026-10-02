@@ -54,6 +54,7 @@ var (
 	ModelProviderKeyV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.model_provider_key_event_v1", "Emitted when changes to customer model provider keys are made")
 	NetworkIngressV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.network_ingress_event_v1", "Emitted when changes to private network ingress desired state are made")
 	OktaResourceConnectionV1               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.okta_resource_connection_event_v1", "Emitted when an organization confirms or resets a Cross App Access resource connection, or an exchange changes its observed result")
+	OktaServerSuggestionV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.okta_server_suggestion_event_v1", "Emitted when an organization dismisses or restores an MCP server suggestion derived from its Okta applications")
 	OpenRouterAPIKeyV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.openrouter_api_key_event_v1", "Emitted when changes to the organization's platform OpenRouter key are made")
 	OrganizationHooksFailOpenV1            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_hooks_fail_open_event_v1", "Emitted when the organization's hooks fail-open setting is toggled")
 	OrganizationAccessV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_access_event_v1", "Emitted when staff enable or disable organization access, or change its demo-access whitelisting")

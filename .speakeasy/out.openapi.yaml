@@ -33682,6 +33682,308 @@ paths:
       x-speakeasy-name-override: reset
       x-speakeasy-react-hook:
         name: ResetOktaResourceConnection
+  /rpc/oktaServerSuggestions.dismiss:
+    post:
+      description: Dismiss a suggestion currently made to the organization. Remembered until restored, even across Okta reconnects. Requires org:admin and the okta-connections rollout.
+      operationId: dismissOktaServerSuggestion
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DismissOktaServerSuggestionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OktaServerSuggestion'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: dismiss oktaServerSuggestions
+      tags:
+        - oktaServerSuggestions
+      x-speakeasy-name-override: dismiss
+      x-speakeasy-react-hook:
+        name: DismissOktaServerSuggestion
+  /rpc/oktaServerSuggestions.list:
+    get:
+      description: List the catalog servers suggested from the Okta applications snapshot. Requires org:admin, the okta-connections rollout and a verified identity provider connection.
+      operationId: listOktaServerSuggestions
+      parameters:
+        - allowEmptyValue: true
+          description: Include dismissed and installed suggestions.
+          in: query
+          name: include_all
+          schema:
+            default: false
+            description: Include dismissed and installed suggestions.
+            type: boolean
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListOktaServerSuggestionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: list oktaServerSuggestions
+      tags:
+        - oktaServerSuggestions
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: OktaServerSuggestions
+  /rpc/oktaServerSuggestions.restore:
+    post:
+      description: Restore a dismissed suggestion currently made to the organization. Requires org:admin and the okta-connections rollout.
+      operationId: restoreOktaServerSuggestion
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreOktaServerSuggestionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OktaServerSuggestion'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: restore oktaServerSuggestions
+      tags:
+        - oktaServerSuggestions
+      x-speakeasy-name-override: restore
+      x-speakeasy-react-hook:
+        name: RestoreOktaServerSuggestion
   /rpc/organizationAssets.uploadImage:
     post:
       description: Upload an organization-tier image (e.g. a remote identity provider logo). Requires org:admin.
@@ -81474,6 +81776,15 @@ components:
           format: uuid
       required:
         - remote_mcp_server_id
+    DismissOktaServerSuggestionRequestBody:
+      type: object
+      properties:
+        registry_entry_id:
+          type: string
+          description: Catalog entry of the suggestion to dismiss.
+          format: uuid
+      required:
+        - registry_entry_id
     DismissSkillSuggestionRequestBody:
       type: object
       properties:
@@ -87112,6 +87423,34 @@ components:
         - total_count
         - undiscovered_count
         - agent_recorded
+    ListOktaServerSuggestionsResult:
+      type: object
+      properties:
+        connection_id:
+          type: string
+          description: The organization's identity provider connection the snapshot came from.
+          format: uuid
+        open_count:
+          type: integer
+          description: Suggestions the administrator has not acted on.
+          format: int64
+        snapshot_at:
+          type: string
+          description: When the applications snapshot was last synced; the suggestions are only as fresh as it.
+          format: date-time
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/OktaServerSuggestion'
+          description: Open suggestions first, then by server name. By default only open ones; include_all adds dismissed and installed.
+        total_count:
+          type: integer
+          description: Matching entries before filtering.
+          format: int64
+      required:
+        - suggestions
+        - open_count
+        - total_count
     ListOrganizationMcpServersResult:
       type: object
       properties:
@@ -90203,6 +90542,141 @@ components:
         - resource_indicator
         - scopes
         - client_binding
+    OktaServerSuggestion:
+      type: object
+      properties:
+        description:
+          type: string
+        dismissed_at:
+          type: string
+          description: When the suggestion was dismissed; present while a dismissal is recorded, whatever the state.
+          format: date-time
+        documentation_url:
+          type: string
+          description: Public documentation URL when the entry has one.
+        icon_url:
+          type: string
+          description: HTTPS URL of the entry's icon when it has one.
+          format: uri
+        installed_urls:
+          type: array
+          items:
+            type: string
+          description: The entry URLs the organization already fronts with a live MCP server.
+        okta_applications:
+          type: array
+          items:
+            $ref: '#/components/schemas/OktaServerSuggestionApplication'
+          description: Matching Okta application instances, by label.
+        registry_entry_id:
+          type: string
+          description: Catalog entry id; the key for dismiss and restore.
+          format: uuid
+        remotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/OktaServerSuggestionRemote'
+          description: Remote endpoints in catalog order.
+        server_name:
+          type: string
+          description: Catalog server name, for example io.example/linear; also the registry specifier for catalog lookups.
+        state:
+          type: string
+          description: 'open: not yet acted on; dismissed: an administrator dismissed it; installed: a live MCP server in one of the organization''s projects fronts one of the entry''s URLs (trailing slashes ignored; legacy deployment attachments are not consulted). Installed outranks dismissed.'
+          enum:
+            - open
+            - dismissed
+            - installed
+        supports_dcr:
+          type: boolean
+          description: Whether the catalog records that the server's authorization server supports OAuth dynamic client registration; install flows default to per-user OAuth when true.
+        title:
+          type: string
+          description: Catalog display title when the entry has one.
+        xaa_issuer:
+          type: string
+          description: Vendor Issuer URL for Cross App Access when the catalog knows it.
+      description: A Gram-owned catalog entry whose Okta mapping matches at least one active, assigned application in the organization's Okta snapshot. Suggest only; nothing is created until the administrator accepts through the remote MCP install flow.
+      required:
+        - registry_entry_id
+        - server_name
+        - description
+        - remotes
+        - okta_applications
+        - state
+        - installed_urls
+        - supports_dcr
+    OktaServerSuggestionApplication:
+      type: object
+      properties:
+        group_assignments:
+          type: integer
+          description: Live group assignments.
+          format: int64
+        label:
+          type: string
+          description: Admin-facing label. Admin-editable; never a key.
+        name:
+          type: string
+          description: Okta application template name; the key that matched the catalog entry.
+        okta_app_id:
+          type: string
+          description: Okta application id.
+        sign_on_mode:
+          type: string
+        user_assignments:
+          type: integer
+          description: Live direct and group-derived user assignments.
+          format: int64
+        xaa_supported:
+          type: boolean
+          description: Whether this instance's sign-on mode supports Cross App Access. False for password-vault (SWA) and bookmark instances.
+      description: One synced Okta application instance that maps to the suggested server.
+      required:
+        - okta_app_id
+        - label
+        - name
+        - sign_on_mode
+        - xaa_supported
+        - user_assignments
+        - group_assignments
+    OktaServerSuggestionRemote:
+      type: object
+      properties:
+        headers:
+          type: array
+          items:
+            $ref: '#/components/schemas/OktaServerSuggestionRemoteHeader'
+          description: Headers the endpoint expects, in catalog order.
+        type:
+          type: string
+          description: Transport type, for example streamable-http.
+        url:
+          type: string
+          description: Endpoint URL to create the remote MCP server with.
+          format: uri
+      description: One remote endpoint of the suggested server, as the catalog entry lists it. The administrator picks one when there are several.
+      required:
+        - type
+        - url
+        - headers
+    OktaServerSuggestionRemoteHeader:
+      type: object
+      properties:
+        description:
+          type: string
+        is_required:
+          type: boolean
+        is_secret:
+          type: boolean
+        name:
+          type: string
+          description: Header name.
+      description: A header the remote endpoint expects, as the catalog entry lists it; the install flow collects required ones from the administrator.
+      required:
+        - name
+        - is_required
+        - is_secret
     OnboardingHookEvent:
       type: object
       properties:
@@ -94030,6 +94504,15 @@ components:
         - type
         - status_codes
         - content_types
+    RestoreOktaServerSuggestionRequestBody:
+      type: object
+      properties:
+        registry_entry_id:
+          type: string
+          description: Catalog entry of the suggestion to restore.
+          format: uuid
+      required:
+        - registry_entry_id
     RestoreSkillVersionRequestBody:
       type: object
       properties:
@@ -105411,6 +105894,8 @@ tags:
     description: Manage an organization's private network ingress desired state.
   - name: oktaResourceConnections
     description: 'Okta resource connections per MCP server: what the organization administrator still has to do in the identity provider console, what they confirmed, and what the exchange path observed. Advisory only; the exchange path never consults it.'
+  - name: oktaServerSuggestions
+    description: 'MCP servers suggested from the organization''s Okta applications: catalog entries whose staff-curated Okta mapping matches a synced, assigned application. Administrators accept by creating the server through the usual remote MCP flow, or dismiss; dismissals are remembered per organization and audited.'
   - name: organizations
     description: Organization membership, invitations, and directory.
   - name: otel

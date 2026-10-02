@@ -166,6 +166,8 @@ export const AUDIT_ACTIONS = [
   "okta-resource-connection:confirm",
   "okta-resource-connection:reset",
   "okta-resource-connection:observe",
+  "okta-server-suggestion:dismiss",
+  "okta-server-suggestion:restore",
   "otel_destination:update",
   "platform-mcp-diagnostics:attribution_read",
   "platform-mcp-diagnostics:user_status_read",
@@ -427,6 +429,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "reset the Cross App Access connection for";
     case "okta-resource-connection:observe":
       return "observed a Cross App Access exchange result for";
+    case "okta-server-suggestion:dismiss":
+      return "dismissed a suggestion for";
+    case "okta-server-suggestion:restore":
+      return "restored a suggestion for";
     case "json_web_key_set:create":
       return "created JSON Web Key Set";
     case "json_web_key_set:update":
