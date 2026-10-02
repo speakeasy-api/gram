@@ -645,7 +645,7 @@ type ListSkillFeedbackOutput struct {
 
 type SkillSuggestionChange struct {
 	ID                   string `json:"id"`
-	ProposedDiff         string `json:"proposed_diff"`
+	ProposedDiff         string `json:"proposed_diff,omitempty"`
 	Rationale            string `json:"rationale"`
 	AppliesCleanly       bool   `json:"applies_cleanly"`
 	FeedbackCount        int64  `json:"feedback_count"`
@@ -675,8 +675,13 @@ type ListSkillSuggestionsInput struct {
 	ProjectSlug            string
 	SkillID                string
 	IncludeProposedContent bool
-	Cursor                 string
-	Limit                  int
+
+	// OmitDiffs leaves each change's proposed diff out, for triaging the queue
+	// from rationale and evidence counts before reading any change in full.
+	OmitDiffs bool
+
+	Cursor string
+	Limit  int
 }
 
 type ListSkillSuggestionsOutput struct {
@@ -727,7 +732,15 @@ func (s *SkillsService) ListSkillSuggestions(ctx context.Context, principal Prin
 	if err != nil {
 		return ListSkillSuggestionsOutput{}, err
 	}
-	return ListSkillSuggestionsOutput{ProjectSlug: project.Slug, Suggestions: buildSkillSuggestions(result.Suggestions, input.IncludeProposedContent), TotalOpenCount: result.TotalOpenCount, NextCursor: stringOrEmpty(result.NextCursor)}, nil
+	suggestions := buildSkillSuggestions(result.Suggestions, input.IncludeProposedContent)
+	if input.OmitDiffs {
+		for i := range suggestions {
+			for j := range suggestions[i].Changes {
+				suggestions[i].Changes[j].ProposedDiff = ""
+			}
+		}
+	}
+	return ListSkillSuggestionsOutput{ProjectSlug: project.Slug, Suggestions: suggestions, TotalOpenCount: result.TotalOpenCount, NextCursor: stringOrEmpty(result.NextCursor)}, nil
 }
 
 func (s *SkillsService) ListSkillSuggestionFeedback(ctx context.Context, principal Principal, input ListSkillSuggestionFeedbackInput) (ListSkillSuggestionFeedbackOutput, error) {
