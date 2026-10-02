@@ -65,7 +65,7 @@ export class WorkloadIdentities extends ClientSDK {
    * list workloadIdentities
    *
    * @remarks
-   * Read the whole trust policy: every trusted issuer and every admitted subject, at both the organization and project tiers, with the agent each subject resolves to. Requires workload:read.
+   * Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.
    */
   async list(
     request?: ListWorkloadIdentitiesRequest | undefined,

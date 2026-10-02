@@ -1341,6 +1341,43 @@ func (q *Queries) ListPluginAssignments(ctx context.Context, arg ListPluginAssig
 	return items, nil
 }
 
+const listPluginAudienceForRoleDeletionAudit = `-- name: ListPluginAudienceForRoleDeletionAudit :many
+SELECT pa.principal_urn
+FROM plugin_assignments pa
+JOIN plugins p ON p.id = pa.plugin_id AND p.organization_id = pa.organization_id
+WHERE pa.organization_id = $1
+  AND p.project_id = $2
+  AND pa.plugin_id = $3
+ORDER BY pa.principal_urn
+`
+
+type ListPluginAudienceForRoleDeletionAuditParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	PluginID       uuid.UUID
+}
+
+// Include archived plugins: cleanup changes their audience too.
+func (q *Queries) ListPluginAudienceForRoleDeletionAudit(ctx context.Context, arg ListPluginAudienceForRoleDeletionAuditParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listPluginAudienceForRoleDeletionAudit, arg.OrganizationID, arg.ProjectID, arg.PluginID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var principal_urn string
+		if err := rows.Scan(&principal_urn); err != nil {
+			return nil, err
+		}
+		items = append(items, principal_urn)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPluginEnvironmentConfigsForProject = `-- name: ListPluginEnvironmentConfigsForProject :many
 SELECT DISTINCT
   t.id AS toolset_id,
@@ -1746,6 +1783,98 @@ func (q *Queries) ListPlugins(ctx context.Context, arg ListPluginsParams) ([]Lis
 			&i.ServerCount,
 			&i.SkillCount,
 			&i.AssignmentCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPluginsForGlobalRoleDeletion = `-- name: ListPluginsForGlobalRoleDeletion :many
+SELECT p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.created_at, p.updated_at, p.deleted_at, p.deleted
+FROM plugins p
+JOIN plugin_assignments pa ON pa.plugin_id = p.id AND pa.organization_id = p.organization_id
+WHERE pa.principal_urn = $1
+ORDER BY p.id
+`
+
+// Global role deletion discovers this exact principal across organizations.
+// Each subsequent assignment deletion retains that plugin's tenant/project scope.
+func (q *Queries) ListPluginsForGlobalRoleDeletion(ctx context.Context, principalUrn string) ([]Plugin, error) {
+	rows, err := q.db.Query(ctx, listPluginsForGlobalRoleDeletion, principalUrn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Plugin
+	for rows.Next() {
+		var i Plugin
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.IsDefault,
+			&i.AutoCreated,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPluginsForRoleDeletion = `-- name: ListPluginsForRoleDeletion :many
+SELECT p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.created_at, p.updated_at, p.deleted_at, p.deleted
+FROM plugins p
+JOIN plugin_assignments pa ON pa.plugin_id = p.id AND pa.organization_id = p.organization_id
+WHERE pa.organization_id = $1
+  AND pa.principal_urn = $2
+ORDER BY p.id
+`
+
+type ListPluginsForRoleDeletionParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+}
+
+// Discover across the organization's projects, including archived plugins.
+// Each subsequent assignment deletion is scoped to the discovered project.
+func (q *Queries) ListPluginsForRoleDeletion(ctx context.Context, arg ListPluginsForRoleDeletionParams) ([]Plugin, error) {
+	rows, err := q.db.Query(ctx, listPluginsForRoleDeletion, arg.OrganizationID, arg.PrincipalUrn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Plugin
+	for rows.Next() {
+		var i Plugin
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.IsDefault,
+			&i.AutoCreated,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
 		); err != nil {
 			return nil, err
 		}
@@ -2224,6 +2353,37 @@ type RemoveAllPluginAssignmentsParams struct {
 
 func (q *Queries) RemoveAllPluginAssignments(ctx context.Context, arg RemoveAllPluginAssignmentsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, removeAllPluginAssignments, arg.PluginID, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const removeDeletedRolePluginAssignment = `-- name: RemoveDeletedRolePluginAssignment :execrows
+DELETE FROM plugin_assignments pa
+USING plugins p
+WHERE p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND pa.organization_id = $1
+  AND p.project_id = $2
+  AND pa.plugin_id = $3
+  AND pa.principal_urn = $4
+`
+
+type RemoveDeletedRolePluginAssignmentParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	PluginID       uuid.UUID
+	PrincipalUrn   string
+}
+
+func (q *Queries) RemoveDeletedRolePluginAssignment(ctx context.Context, arg RemoveDeletedRolePluginAssignmentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeDeletedRolePluginAssignment,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.PluginID,
+		arg.PrincipalUrn,
+	)
 	if err != nil {
 		return 0, err
 	}

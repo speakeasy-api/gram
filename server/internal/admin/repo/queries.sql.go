@@ -1552,6 +1552,39 @@ func (q *Queries) LockOrganizationMetadata(ctx context.Context, id string) (stri
 	return id_2, err
 }
 
+const lockOrganizationWhitelist = `-- name: LockOrganizationWhitelist :one
+SELECT id, name, slug, whitelisted, gram_account_type, disabled_at, updated_at
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+type LockOrganizationWhitelistRow struct {
+	ID              string
+	Name            string
+	Slug            string
+	Whitelisted     bool
+	GramAccountType string
+	DisabledAt      pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+// Pin the exact target and account context shown by whitelist approval.
+func (q *Queries) LockOrganizationWhitelist(ctx context.Context, id string) (LockOrganizationWhitelistRow, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationWhitelist, id)
+	var i LockOrganizationWhitelistRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Whitelisted,
+		&i.GramAccountType,
+		&i.DisabledAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const lockSupportMatrix = `-- name: LockSupportMatrix :exec
 SELECT pg_advisory_xact_lock(719438201)
 `
@@ -1748,6 +1781,29 @@ func (q *Queries) SetOrganizationAccess(ctx context.Context, arg SetOrganization
 		&i.DisabledAt,
 	)
 	return i, err
+}
+
+const setOrganizationWhitelist = `-- name: SetOrganizationWhitelist :one
+UPDATE organization_metadata
+SET whitelisted = $1::boolean,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND whitelisted = $3::boolean
+RETURNING whitelisted
+`
+
+type SetOrganizationWhitelistParams struct {
+	Whitelisted         bool
+	ID                  string
+	ExpectedWhitelisted bool
+}
+
+// Only the demo-access gate changes; other account and lifecycle fields survive.
+func (q *Queries) SetOrganizationWhitelist(ctx context.Context, arg SetOrganizationWhitelistParams) (bool, error) {
+	row := q.db.QueryRow(ctx, setOrganizationWhitelist, arg.Whitelisted, arg.ID, arg.ExpectedWhitelisted)
+	var whitelisted bool
+	err := row.Scan(&whitelisted)
+	return whitelisted, err
 }
 
 const upsertSupportCoverage = `-- name: UpsertSupportCoverage :exec

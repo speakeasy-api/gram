@@ -106,7 +106,7 @@ func TestAuditService_List_MasksConfigurationWriteActors(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAuditService(t)
 	authCtx := testAuthContext(t, ctx)
-	for _, action := range []string{"organization:enabled", "organization:disabled", "chat_analysis_settings:upsert"} {
+	for _, action := range []string{"organization:enabled", "organization:disabled", "organization:whitelist_updated", "chat_analysis_settings:upsert"} {
 		insertAuditLog(t, ctx, ti, auditLogSeed{
 			organizationID: authCtx.ActiveOrganizationID,
 			actorID:        "private-staff-subject", actorType: "user",
@@ -117,7 +117,7 @@ func TestAuditService_List_MasksConfigurationWriteActors(t *testing.T) {
 	}
 	result, err := ti.service.List(ctx, &gen.ListPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Logs, 3)
+	require.Len(t, result.Logs, 4)
 	for _, log := range result.Logs {
 		require.Empty(t, log.ActorID)
 		require.Nil(t, log.ActorSlug)

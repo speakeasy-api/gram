@@ -150,7 +150,7 @@ func TestMarkEnterpriseTrialConverted_LocksLifecycleThenAllKeysBeforeRowReads(t 
 	}()
 	updateWait, cancelUpdate := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelUpdate()
-	testenv.WaitForQueryBlockedBy(t, updateWait, conn, testenv.BackendPID(keyBlocker), "%UPDATE organization_metadata%")
+	testenv.WaitForQueryBlockedBy(t, updateWait, conn, testenv.BackendPID(keyBlocker), "%SELECT id, name, slug, whitelisted, gram_account_type, disabled_at, updated_at%")
 
 	require.NoError(t, keyBlocker.Rollback(ctx))
 	select {

@@ -52,6 +52,13 @@ describe("AUDIT_ACTIONS", () => {
     );
   });
 
+  it("distinguishes demo-access whitelisting from disabling an organisation", () => {
+    expect(isAuditAction("organization:whitelist_updated")).toBe(true);
+    expect(staticActionPhrase("organization:whitelist_updated")).toBe(
+      "changed demo-access whitelisting for",
+    );
+  });
+
   it("describes changed trial end dates", () => {
     expect(
       staticActionPhrase("organization:enterprise_trial_end_changed"),

@@ -2442,7 +2442,7 @@ webhooks:
                 required: true
     audit_log.organization_access_event_v1:
         post:
-            description: Emitted when staff enable or disable organization access
+            description: Emitted when staff enable or disable organization access, or change its demo-access whitelisting
             operationId: audit_log.organization_access_event_v1
             requestBody:
                 content:

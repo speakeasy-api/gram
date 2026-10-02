@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * list workloadIdentities
  *
  * @remarks
- * Read the whole trust policy: every trusted issuer and every admitted subject, at both the organization and project tiers, with the agent each subject resolves to. Requires workload:read.
+ * Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.
  */
 export function workloadIdentitiesList(
   client: GramCore,
@@ -125,11 +125,6 @@ async function $do(
 
   const requestSecurity = resolveSecurity(
     [
-      {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.option1?.projectSlugHeaderGramProject,
-      },
       {
         fieldName: "Gram-Session",
         type: "apiKey:header",
