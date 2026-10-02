@@ -125,6 +125,11 @@ type Service struct {
 	auth                      *auth.Auth
 	env                       toolconfig.EnvironmentLoader
 	serverURL                 *url.URL
+	// callbackOrigins pin URLs that external systems store: the IdP callback
+	// sent to WorkOS and to federated customer IdPs, and assistants' CIMD
+	// client IDs. They stay fixed when the server URL moves. Set by
+	// SetCallbackOrigins; a nil Outbound falls back to the server URL.
+	callbackOrigins remotesessions.CallbackOrigins
 	// authenticationHostBaseURL is the authentication host's base URL, empty
 	// when none is configured. Set by AttachAuthenticationHost.
 	authenticationHostBaseURL string
@@ -180,7 +185,10 @@ type Service struct {
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
 	remoteLoginCache       cache.TypedCacheObject[remotesessions.RemoteLoginState]
-	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
+	// remoteLoginHopCache holds the single-use stops of the remote login
+	// browser hop onto a remote client's different callback host.
+	remoteLoginHopCache   cache.TypedCacheObject[remoteLoginHop]
+	userSessionGrantCache cache.TypedCacheObject[UserSessionGrant]
 	// userSessionRefreshReplayCache retains the encrypted rotation outcome.
 	userSessionRefreshReplayCache cache.TypedCacheObject[userSessionRefreshReplay]
 
@@ -465,6 +473,7 @@ func NewService(
 		auth:                      auth.New(logger, db, sessions, authzEngine),
 		env:                       env,
 		serverURL:                 serverURL,
+		callbackOrigins:           remotesessions.CallbackOrigins{Outbound: nil, Registration: nil},
 		authenticationHostBaseURL: "",
 		siteURL:                   siteURL,
 		posthog:                   posthog,
@@ -507,7 +516,8 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		remoteLoginCache: cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger.With(attr.SlogCacheNamespace("remote_login")), cacheImpl, cache.SuffixNone),
+		remoteLoginCache:    cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger.With(attr.SlogCacheNamespace("remote_login")), cacheImpl, cache.SuffixNone),
+		remoteLoginHopCache: cache.NewTypedObjectCache[remoteLoginHop](logger.With(attr.SlogCacheNamespace("remote_login_hop")), cacheImpl, cache.SuffixNone),
 		userSessionGrantCache: cache.NewTypedObjectCache[UserSessionGrant](
 			logger.With(attr.SlogCacheNamespace("user_session_grant")),
 			cacheImpl,
@@ -544,6 +554,34 @@ func NewService(
 		metaRuntime:          metaRuntimeConfig.withDefaults(),
 	}
 	return service, nil
+}
+
+// SetCallbackOrigins pins the IdP callback URLs and assistants' CIMD client
+// IDs to the origins remote session clients are pinned to: origins.Outbound,
+// or a federated trusted client's recorded callback origin.
+func (s *Service) SetCallbackOrigins(origins remotesessions.CallbackOrigins) {
+	s.callbackOrigins = origins
+}
+
+// outboundOrigin is the pinned outbound origin of the WorkOS IdP callback and
+// of federated trusted clients with no recorded callback origin. It falls back
+// to the server URL. It pins only URLs Gram sends to external systems, never
+// an authorization server issuer: shared-mode issuers carry their own pinned
+// issuer (<host>/oauth/usi/{id}) and must not be routed through it.
+func (s *Service) outboundOrigin() *url.URL {
+	if s.callbackOrigins.Outbound != nil {
+		return s.callbackOrigins.Outbound
+	}
+	return s.serverURL
+}
+
+// federatedCallbackOrigin is the origin of the federated IdP callback for a
+// trusted client: its recorded callback_base_url, so it shares a host with
+// the client's remote_login_callback, or outboundOrigin when none is recorded.
+func (s *Service) federatedCallbackOrigin(provider *remotesessions.FederatedProvider) *url.URL {
+	origins := s.callbackOrigins
+	origins.Outbound = s.outboundOrigin()
+	return origins.ForClient(provider.CallbackBaseURL())
 }
 
 func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverName string) string {
@@ -647,6 +685,9 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.ErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
+	// Both stops of the remote login browser hop: the bind stop on a remote
+	// client's callback host, and the confirm stop on the IdP callback host.
+	o11y.AttachHandler(mux, "GET", remoteLoginBindPath, oops.ErrHandle(service.logger, service.HandleRemoteLoginBind).ServeHTTP)
 	// Backwards-compat: remote_session_clients flagged LegacyCallbackUrl were
 	// registered upstream against the retired oauth_proxy_servers /oauth/callback.
 	// Keep it mounted so their responses forward into remote_login_callback.
@@ -782,24 +823,7 @@ func (s *Service) HandleOpenAIAppsChallenge(w http.ResponseWriter, r *http.Reque
 // SSE requests against toolset-backed servers, which never send
 // server-initiated messages — keeps the legacy 405.
 func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metadataService *mcpmetadata.Service) error {
-	var wantsHTML, wantsSSE bool
-	for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
-		mediatype, params, err := mime.ParseMediaType(mediaTypeFull)
-		if err != nil {
-			continue
-		}
-		// An explicit q=0 marks the media type as not acceptable (RFC 9110
-		// § 12.4.2) — never route toward a representation the client rejected.
-		if q, qErr := strconv.ParseFloat(params["q"], 64); qErr == nil && q == 0 {
-			continue
-		}
-		switch mediatype {
-		case "text/html", "application/xhtml+xml":
-			wantsHTML = true
-		case "text/event-stream":
-			wantsSSE = true
-		}
-	}
+	wantsHTML, wantsSSE := getServerAccept(r.Header.Get("Accept"))
 
 	if wantsHTML {
 		// Intentionally NOT gated by enforceCustomDomainLockdown: the
@@ -825,6 +849,39 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 	}
 
 	return oops.E(oops.CodeMethodNotAllowed, nil, "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication.")
+}
+
+// ServesInstallPage reports whether HandleGetServer answers r with the HTML
+// install page. HTML takes precedence over SSE there, so such a request can
+// never open the Streamable HTTP stream; MCPSecurity uses this to let browser
+// navigations from other sites reach the page.
+func ServesInstallPage(r *http.Request) bool {
+	if r.Method != http.MethodGet || !strings.HasPrefix(r.URL.Path, "/mcp/") {
+		return false
+	}
+	wantsHTML, _ := getServerAccept(r.Header.Get("Accept"))
+	return wantsHTML
+}
+
+func getServerAccept(accept string) (wantsHTML, wantsSSE bool) {
+	for mediaTypeFull := range strings.SplitSeq(accept, ",") {
+		mediatype, params, err := mime.ParseMediaType(mediaTypeFull)
+		if err != nil {
+			continue
+		}
+		// An explicit q=0 marks the media type as not acceptable (RFC 9110
+		// § 12.4.2) — never route toward a representation the client rejected.
+		if q, qErr := strconv.ParseFloat(params["q"], 64); qErr == nil && q == 0 {
+			continue
+		}
+		switch mediatype {
+		case "text/html", "application/xhtml+xml":
+			wantsHTML = true
+		case "text/event-stream":
+			wantsSSE = true
+		}
+	}
+	return wantsHTML, wantsSSE
 }
 
 // HandleDeleteServer handles DELETE requests to /mcp/{mcpSlug} — Streamable

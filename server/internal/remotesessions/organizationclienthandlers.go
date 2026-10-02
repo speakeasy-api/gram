@@ -66,7 +66,7 @@ func (s *Service) ListClients(ctx context.Context, payload *orgclientsgen.ListCl
 
 	items := make([]*orgclientsgen.OrganizationRemoteSessionClient, 0, len(rows))
 	for _, row := range rows {
-		clientView, err := mv.BuildRemoteSessionClientView(row.RemoteSessionClient, row.UserSessionIssuerIds)
+		clientView, err := s.clientView(row.RemoteSessionClient, row.UserSessionIssuerIds)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
 		}
@@ -118,7 +118,7 @@ func (s *Service) GetClient(ctx context.Context, payload *orgclientsgen.GetClien
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
 
-	view, err := mv.BuildRemoteSessionClientView(client.RemoteSessionClient, client.UserSessionIssuerIds)
+	view, err := s.clientView(client.RemoteSessionClient, client.UserSessionIssuerIds)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
 	}
@@ -374,6 +374,7 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 		LegacyCallbackUrl:               false,
 		JsonWebKeySetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CallbackBaseUrl:                 s.origins.NewClientBaseURL(true),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create organization admin remote session client").LogError(ctx, logger)
@@ -396,7 +397,7 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 	}
 
 	// Standalone client: no user_session_issuer attachments.
-	view, err := mv.BuildRemoteSessionClientView(created, nil)
+	view, err := s.clientView(created, nil)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 	}
@@ -513,15 +514,17 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 		return nil, oops.E(oops.CodeUnexpected, err, "generate client id").LogError(ctx, logger)
 	}
 
+	callbackBaseURL := s.origins.NewClientBaseURL(true)
 	created, err := txRepo.CreateRemoteSessionClientCIMD(ctx, repo.CreateRemoteSessionClientCIMDParams{
 		ID:                    clientID,
 		ProjectID:             clientProjectID,
 		OrganizationID:        conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID: issuerID,
-		ClientIDMetadataUri:   ClientMetadataDocumentURL(s.serverURL, clientID),
+		ClientIDMetadataUri:   ClientMetadataDocumentURL(s.origins.ForClient(callbackBaseURL), clientID),
 		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
 		Scope:                 payload.Scope,
 		Audience:              conv.PtrToPGText(payload.Audience),
+		CallbackBaseUrl:       callbackBaseURL,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create organization admin remote session client").LogError(ctx, logger)
@@ -544,7 +547,7 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 	}
 
 	// Standalone client: no user_session_issuer attachments.
-	view, err := mv.BuildRemoteSessionClientView(created, nil)
+	view, err := s.clientView(created, nil)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 	}
@@ -709,6 +712,8 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
+	// Set after the audit snapshot so it matches the snapshot before.
+	afterView.CallbackURL = new(s.origins.ClientCallbackURL(updated.CallbackBaseUrl))
 	return afterView, nil
 }
 
@@ -791,7 +796,7 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 		}
 	}
 
-	view, err := mv.BuildRemoteSessionClientView(rotated, existing.UserSessionIssuerIds)
+	view, err := s.clientView(rotated, existing.UserSessionIssuerIds)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
 	}

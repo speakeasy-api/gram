@@ -114,33 +114,6 @@ func (q *Queries) CountChatMessages(ctx context.Context, arg CountChatMessagesPa
 	return count, err
 }
 
-const countChatMessagesWithMismatchedProject = `-- name: CountChatMessagesWithMismatchedProject :one
-SELECT count(*)::bigint
-FROM chat_messages cm
-JOIN chats c ON c.id = cm.chat_id
-WHERE cm.project_id IS DISTINCT FROM c.project_id
-`
-
-func (q *Queries) CountChatMessagesWithMismatchedProject(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countChatMessagesWithMismatchedProject)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
-const countChatMessagesWithNullProject = `-- name: CountChatMessagesWithNullProject :one
-SELECT count(*)::bigint
-FROM chat_messages
-WHERE project_id IS NULL
-`
-
-func (q *Queries) CountChatMessagesWithNullProject(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countChatMessagesWithNullProject)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const countChats = `-- name: CountChats :one
 WITH risk_counts AS (
   SELECT cm.chat_id, COUNT(*)::integer AS cnt
@@ -706,6 +679,62 @@ func (q *Queries) DeleteChatResolutionsAfterMessage(ctx context.Context, arg Del
 	return err
 }
 
+const findInferenceChatsByNewestMessageIdentity = `-- name: FindInferenceChatsByNewestMessageIdentity :many
+SELECT cm.chat_id, cm.external_message_id
+FROM chat_messages cm
+JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id
+WHERE cm.project_id = $1
+  AND cm.external_message_id = ANY($2::text[])
+  AND cm.external_message_id IS NOT NULL
+  AND cm.origin = 'anthropic-inference'
+  AND c.inference_actor_key = $3
+  AND c.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1 FROM chat_messages newer
+    WHERE newer.chat_id = cm.chat_id AND newer.project_id = cm.project_id
+      AND newer.origin = 'anthropic-inference'
+      AND newer.external_message_id IS NOT NULL
+      AND newer.external_message_id NOT LIKE '%/block:%'
+      AND (newer.created_at, newer.seq) > (cm.created_at, cm.seq)
+  )
+`
+
+type FindInferenceChatsByNewestMessageIdentityParams struct {
+	ProjectID          uuid.NullUUID
+	ExternalMessageIds []string
+	InferenceActorKey  []byte
+}
+
+type FindInferenceChatsByNewestMessageIdentityRow struct {
+	ChatID            uuid.UUID
+	ExternalMessageID pgtype.Text
+}
+
+// The actor's live chats whose newest stored Anthropic inference message
+// carries one of these chain identities, with the identity each matched. A
+// match on a message that is not the chat's newest does not count. The
+// caller ranks identities and treats several chats on one identity as
+// ambiguous.
+func (q *Queries) FindInferenceChatsByNewestMessageIdentity(ctx context.Context, arg FindInferenceChatsByNewestMessageIdentityParams) ([]FindInferenceChatsByNewestMessageIdentityRow, error) {
+	rows, err := q.db.Query(ctx, findInferenceChatsByNewestMessageIdentity, arg.ProjectID, arg.ExternalMessageIds, arg.InferenceActorKey)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindInferenceChatsByNewestMessageIdentityRow
+	for rows.Next() {
+		var i FindInferenceChatsByNewestMessageIdentityRow
+		if err := rows.Scan(&i.ChatID, &i.ExternalMessageID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getActiveUserCountByMessages = `-- name: GetActiveUserCountByMessages :one
 SELECT
   COUNT(DISTINCT COALESCE(NULLIF(c.external_user_id, ''), c.user_id))::bigint as active_user_count
@@ -826,7 +855,7 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 }
 
 const getChat = `-- name: GetChat :one
-SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.inference_accepted_checkpoint, c.user_account_id, c.litellm_proxied, c.cwd, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
+SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.inference_accepted_checkpoint, c.inference_actor_key, c.user_account_id, c.litellm_proxied, c.cwd, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
   at.assistant_id, a.name AS assistant_name
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
@@ -853,6 +882,7 @@ type GetChatRow struct {
 	Summary                     pgtype.Text
 	SummaryGeneratedAt          pgtype.Timestamptz
 	InferenceAcceptedCheckpoint []byte
+	InferenceActorKey           []byte
 	UserAccountID               uuid.NullUUID
 	LitellmProxied              bool
 	Cwd                         pgtype.Text
@@ -886,6 +916,7 @@ func (q *Queries) GetChat(ctx context.Context, arg GetChatParams) (GetChatRow, e
 		&i.Summary,
 		&i.SummaryGeneratedAt,
 		&i.InferenceAcceptedCheckpoint,
+		&i.InferenceActorKey,
 		&i.UserAccountID,
 		&i.LitellmProxied,
 		&i.Cwd,
@@ -1440,6 +1471,27 @@ func (q *Queries) GetTopUsersByMessages(ctx context.Context, arg GetTopUsersByMe
 		return nil, err
 	}
 	return items, nil
+}
+
+const inferenceChatExists = `-- name: InferenceChatExists :one
+SELECT EXISTS (
+  SELECT 1 FROM chats
+  WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+)
+`
+
+type InferenceChatExistsParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Whether the live chat a session id names already exists, with the same
+// visibility rule as GetChat and none of its joins.
+func (q *Queries) InferenceChatExists(ctx context.Context, arg InferenceChatExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, inferenceChatExists, arg.ID, arg.ProjectID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const inferencePolicyRevision = `-- name: InferencePolicyRevision :one
@@ -2597,24 +2649,30 @@ candidate_chats AS (
     )
 ),
 chat_stats AS (
-  -- Per-chat probe on chat_messages_chat_id_project_id_created_at_idx
-  -- (index-only count + max) instead of aggregating every candidate chat's
-  -- full message history. project_id keeps a sibling-project stamp on the
-  -- same chat_id from inflating num_messages or last_message_timestamp.
+  -- Last-message time is a single backward probe per candidate chat on
+  -- chat_messages_chat_id_project_id_created_at_idx. The message count walks
+  -- the chat's whole index range, so it only runs before LIMIT when the
+  -- listing sorts by it; otherwise page_chats counts the returned rows only.
+  -- project_id keeps a sibling-project stamp on the same chat_id from
+  -- inflating either value.
   SELECT
     cc.id,
-    stats.num_messages,
-    COALESCE(stats.max_created_at, cc.created_at)::timestamptz AS last_message_timestamp
+    CASE WHEN $13 = 'num_messages' THEN (
+      -- COUNT(*) rather than COUNT(cm.id) so the probe stays index-only.
+      SELECT COUNT(*)::integer
+      FROM chat_messages cm
+      WHERE cm.chat_id = cc.id
+        AND cm.project_id = $1::uuid
+    ) END AS sort_num_messages,
+    COALESCE((
+      SELECT cm.created_at
+      FROM chat_messages cm
+      WHERE cm.chat_id = cc.id
+        AND cm.project_id = $1::uuid
+      ORDER BY cm.created_at DESC
+      LIMIT 1
+    ), cc.created_at)::timestamptz AS last_message_timestamp
   FROM candidate_chats cc
-  CROSS JOIN LATERAL (
-    -- COUNT(*) rather than COUNT(cm.id) so the probe stays index-only.
-    SELECT
-      COUNT(*)::integer AS num_messages,
-      MAX(cm.created_at) AS max_created_at
-    FROM chat_messages cm
-    WHERE cm.chat_id = cc.id
-      AND cm.project_id = $1::uuid
-  ) stats
 ),
 filtered_chats AS (
   SELECT
@@ -2626,7 +2684,7 @@ filtered_chats AS (
     cc.updated_at,
     cc.pinned_at,
     cc.litellm_proxied,
-    cs.num_messages,
+    cs.sort_num_messages,
     cs.last_message_timestamp,
     cc.account_type,
     cc.account_email
@@ -2638,10 +2696,12 @@ filtered_chats AS (
   -- would evict an actively-writing chat the moment a new message lands past
   -- the caller's @to — the dashboard freezes @to when a range is picked, so
   -- running sessions would flicker out of the list until the next reload.
-  WHERE ($13::timestamptz IS NULL OR cs.last_message_timestamp >= $13)
-    AND ($14::timestamptz IS NULL OR cc.created_at <= $14)
+  WHERE ($14::timestamptz IS NULL OR cs.last_message_timestamp >= $14)
+    AND ($15::timestamptz IS NULL OR cc.created_at <= $15)
 ),
 limited_chats AS (
+  -- Only ordering, paging and the total run over every filtered chat; the
+  -- per-chat lookups for display columns run for the page rows in page_chats.
   SELECT
     fc.id,
     fc.title,
@@ -2651,57 +2711,83 @@ limited_chats AS (
     fc.updated_at,
     fc.pinned_at,
     fc.litellm_proxied,
-    fc.num_messages,
-    (SELECT source FROM chat_messages WHERE chat_id = fc.id AND project_id = $1::uuid AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
+    fc.sort_num_messages,
     fc.last_message_timestamp,
     fc.account_type,
     fc.account_email,
+    -- Window count runs before LIMIT/OFFSET, so every returned row carries the
+    -- total number of filtered chats.
+    COUNT(*) OVER ()::bigint AS total_count,
+    -- Carries the page order through the joins in page_chats.
+    ROW_NUMBER() OVER (
+      ORDER BY
+        -- Recency is pure message time. Hook rows persist at their occurred_at,
+        -- so a chat whose only new traffic is spool-replayed backlog keeps its
+        -- occurred-time position rather than jumping to the top on arrival —
+        -- deliberate: listings are a timeline of when conversations happened,
+        -- and folding in updated_at would let title renames and pin toggles
+        -- reorder recency.
+        CASE WHEN $13 = 'last_message_timestamp' AND $16 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
+        CASE WHEN $13 = 'last_message_timestamp' AND $16 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+        CASE WHEN $13 = 'num_messages' AND $16 = 'desc' THEN fc.sort_num_messages END DESC NULLS LAST,
+        CASE WHEN $13 = 'num_messages' AND $16 = 'asc' THEN fc.sort_num_messages END ASC NULLS LAST,
+        fc.last_message_timestamp DESC,
+        fc.id DESC
+    ) AS page_position
+  FROM filtered_chats fc
+  ORDER BY page_position
+  LIMIT $18
+  OFFSET $17
+),
+page_chats AS (
+  SELECT
+    lc.id,
+    lc.title,
+    lc.user_id,
+    lc.external_user_id,
+    lc.created_at,
+    lc.updated_at,
+    lc.pinned_at,
+    lc.litellm_proxied,
+    COALESCE(lc.sort_num_messages, (
+      SELECT COUNT(*)::integer
+      FROM chat_messages cm
+      WHERE cm.chat_id = lc.id
+        AND cm.project_id = $1::uuid
+    ))::integer AS num_messages,
+    (SELECT source FROM chat_messages WHERE chat_id = lc.id AND project_id = $1::uuid AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
+    lc.last_message_timestamp,
+    lc.account_type,
+    lc.account_email,
     -- Both assistant columns come from the project-scoped assistants row, so a
     -- thread here that points at another project's assistant reports neither
     -- its id nor its name; assistant_threads has no composite (project_id,
     -- assistant_id) key to rule that row out.
     a.id AS assistant_id,
     a.name AS assistant_name,
-    -- Window count runs before LIMIT/OFFSET, so every returned row carries the
-    -- total number of filtered chats.
-    COUNT(*) OVER ()::bigint AS total_count
-  FROM filtered_chats fc
-  -- One thread per chat, so a chat several assistants worked in is one row
-  -- and LIMIT/OFFSET, total_count and the page all count chats. The thread of
-  -- the assistant the listing was narrowed to wins; otherwise the most
-  -- recently active one. The lateral picks only the thread id: the columns
-  -- come from the base tables below so they stay nullable for a chat with no
-  -- assistant thread. Every step is scoped to the listed project, so a thread
-  -- or assistant recorded under another project can never be reported for a
-  -- chat here even if the chat/thread relationship is inconsistent.
+    lc.total_count,
+    lc.page_position
+  FROM limited_chats lc
+  -- One thread per chat. The thread of the assistant the listing was narrowed
+  -- to wins; otherwise the most recently active one. The lateral picks only
+  -- the thread id: the columns come from the base tables below so they stay
+  -- nullable for a chat with no assistant thread. Every step is scoped to the
+  -- listed project, so a thread or assistant recorded under another project
+  -- can never be reported for a chat here even if the chat/thread
+  -- relationship is inconsistent.
   LEFT JOIN LATERAL (
     SELECT at.id AS thread_id
     FROM assistant_threads at
-    WHERE at.chat_id = fc.id AND at.project_id = $1 AND at.deleted IS FALSE
+    WHERE at.chat_id = lc.id AND at.project_id = $1 AND at.deleted IS FALSE
     ORDER BY ($8 <> '' AND at.assistant_id::text = $8) DESC, at.last_event_at DESC, at.id DESC
     LIMIT 1
   ) picked ON TRUE
   LEFT JOIN assistant_threads thread ON thread.id = picked.thread_id AND thread.project_id = $1
   LEFT JOIN assistants a ON a.id = thread.assistant_id AND a.project_id = $1 AND a.deleted IS FALSE
-  ORDER BY
-    -- Recency is pure message time. Hook rows persist at their occurred_at,
-    -- so a chat whose only new traffic is spool-replayed backlog keeps its
-    -- occurred-time position rather than jumping to the top on arrival —
-    -- deliberate: listings are a timeline of when conversations happened,
-    -- and folding in updated_at would let title renames and pin toggles
-    -- reorder recency.
-    CASE WHEN $15 = 'last_message_timestamp' AND $16 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
-    CASE WHEN $15 = 'last_message_timestamp' AND $16 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
-    CASE WHEN $15 = 'num_messages' AND $16 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
-    CASE WHEN $15 = 'num_messages' AND $16 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
-    fc.last_message_timestamp DESC,
-    fc.id DESC
-  LIMIT $18
-  OFFSET $17
 ),
 chat_attribution AS (
   SELECT
-    lc.id, lc.title, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.litellm_proxied, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.total_count,
+    lc.id, lc.title, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.litellm_proxied, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.total_count, lc.page_position,
     COALESCE(CASE WHEN lc.source = 'litellm' THEN (
       SELECT CASE
         WHEN user_agent = ANY (ARRAY['claude-code', 'codex', 'opencode']::text[]) THEN user_agent
@@ -2714,7 +2800,7 @@ chat_attribution AS (
       ORDER BY created_at DESC
       LIMIT 1
     ) END, '')::text AS originating_client
-  FROM limited_chats lc
+  FROM page_chats lc
 )
 SELECT
   lc.id,
@@ -2748,6 +2834,7 @@ SELECT
   lc.assistant_name,
   lc.total_count
 FROM chat_attribution lc
+ORDER BY lc.page_position
 `
 
 type ListChatsParams struct {
@@ -2763,9 +2850,9 @@ type ListChatsParams struct {
 	ExcludeSourceKind string
 	AccountType       string
 	Sources           []string
+	SortBy            interface{}
 	FromTime          pgtype.Timestamptz
 	ToTime            pgtype.Timestamptz
-	SortBy            interface{}
 	SortOrder         interface{}
 	PageOffset        int32
 	PageLimit         int32
@@ -2815,9 +2902,9 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		arg.ExcludeSourceKind,
 		arg.AccountType,
 		arg.Sources,
+		arg.SortBy,
 		arg.FromTime,
 		arg.ToTime,
-		arg.SortBy,
 		arg.SortOrder,
 		arg.PageOffset,
 		arg.PageLimit,
@@ -3459,27 +3546,6 @@ func (q *Queries) RenameChat(ctx context.Context, arg RenameChatParams) error {
 	return err
 }
 
-const restampMismatchedChatMessageProjects = `-- name: RestampMismatchedChatMessageProjects :execrows
-UPDATE chat_messages cm
-SET project_id = c.project_id
-FROM chats c
-WHERE c.id = cm.chat_id
-  AND cm.project_id IS DISTINCT FROM c.project_id
-`
-
-// One-shot repair: copy chats.project_id onto chat_messages rows whose stamp
-// drifted (or is NULL). Hook ingest used to accept any project header for a
-// session-derived chat id, so a later request could file messages under a
-// sibling project. Not project-scoped: every drifted row has to move, and the
-// chat's project is the destination.
-func (q *Queries) RestampMismatchedChatMessageProjects(ctx context.Context) (int64, error) {
-	result, err := q.db.Exec(ctx, restampMismatchedChatMessageProjects)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const seedAssistant = `-- name: SeedAssistant :one
 INSERT INTO assistants (project_id, organization_id, name, model, instructions)
 VALUES ($1, $2, $3, 'anthropic/claude-opus-4.8', 'be helpful')
@@ -3787,6 +3853,25 @@ func (q *Queries) SetInferenceAcceptedCheckpoint(ctx context.Context, arg SetInf
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setInferenceActorKey = `-- name: SetInferenceActorKey :exec
+UPDATE chats SET inference_actor_key = $1
+WHERE id = $2 AND project_id = $3
+  AND inference_actor_key IS NULL
+`
+
+type SetInferenceActorKeyParams struct {
+	InferenceActorKey []byte
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+}
+
+// Records the actor key on a conversation the first time it is seen. The
+// key never changes for a chat, so an existing value is kept.
+func (q *Queries) SetInferenceActorKey(ctx context.Context, arg SetInferenceActorKeyParams) error {
+	_, err := q.db.Exec(ctx, setInferenceActorKey, arg.InferenceActorKey, arg.ID, arg.ProjectID)
+	return err
 }
 
 const softDeleteChat = `-- name: SoftDeleteChat :one

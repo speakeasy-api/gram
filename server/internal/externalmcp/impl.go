@@ -42,13 +42,15 @@ type Service struct {
 	sessions       *sessions.Manager
 	registryClient *RegistryClient
 	catalog        *CatalogService
-	serverURL      *url.URL
+	// callbackOrigin is the origin of the redirect_uri a newly created remote
+	// session client registers, shown in setup guides.
+	callbackOrigin *url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient, catalog *CatalogService, authzEngine *authz.Engine, serverURL *url.URL) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, registryClient *RegistryClient, catalog *CatalogService, authzEngine *authz.Engine, callbackOrigin *url.URL) *Service {
 	logger = logger.With(attr.SlogComponent("external_mcp"))
 
 	return &Service{
@@ -61,7 +63,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		sessions:       sessions,
 		registryClient: registryClient,
 		catalog:        catalog,
-		serverURL:      serverURL,
+		callbackOrigin: callbackOrigin,
 	}
 }
 
@@ -274,9 +276,9 @@ func (s *Service) GetSetupDocs(ctx context.Context, payload *gen.GetSetupDocsPay
 		return nil, oops.E(oops.CodeBadRequest, nil, "at least one of server_url or registry_specifier must be provided").LogError(ctx, s.logger)
 	}
 
-	// The one redirect_uri for every provider and slug. remotesessions/challenge.go,
-	// oauth/impl.go, and the dashboard derive it the same way.
-	callbackURL := s.serverURL.JoinPath("mcp", "remote_login_callback").String()
+	// The redirect_uri a newly created client registers, for every provider
+	// and slug. remotesessions and the dashboard derive it the same way.
+	callbackURL := s.callbackOrigin.JoinPath("mcp", "remote_login_callback").String()
 
 	return &gen.GetSetupDocsResult{
 		Guides: resolveSetupGuides(registrySpecifier, serverURL, callbackURL),

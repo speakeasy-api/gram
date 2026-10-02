@@ -278,6 +278,27 @@ type Assistant struct {
 	Deleted         bool
 }
 
+type AssistantAgentBinding struct {
+	ID                         uuid.UUID
+	OrganizationID             string
+	ProjectID                  uuid.UUID
+	ProjectRefOrganizationID   pgtype.Text
+	ProjectRefID               uuid.NullUUID
+	OriginalAssistantID        uuid.UUID
+	AssistantRefOrganizationID pgtype.Text
+	AssistantRefProjectID      uuid.NullUUID
+	AssistantID                uuid.NullUUID
+	OriginalAgentID            uuid.UUID
+	AgentRefOrganizationID     pgtype.Text
+	AgentRefProjectID          uuid.NullUUID
+	AgentID                    uuid.NullUUID
+	Generation                 int64
+	CreatedAt                  pgtype.Timestamptz
+	UpdatedAt                  pgtype.Timestamptz
+	DeletedAt                  pgtype.Timestamptz
+	Deleted                    bool
+}
+
 type AssistantDashboardMessage struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID
@@ -535,6 +556,7 @@ type Chat struct {
 	Summary                     pgtype.Text
 	SummaryGeneratedAt          pgtype.Timestamptz
 	InferenceAcceptedCheckpoint []byte
+	InferenceActorKey           []byte
 	UserAccountID               uuid.NullUUID
 	LitellmProxied              bool
 	Cwd                         pgtype.Text
@@ -3635,6 +3657,33 @@ type TriggerThreadRoute struct {
 	Deleted              bool
 }
 
+type TriggerWorkloadBinding struct {
+	ID                                uuid.UUID
+	OrganizationID                    string
+	ProjectID                         uuid.UUID
+	ProjectRefOrganizationID          pgtype.Text
+	ProjectRefID                      uuid.NullUUID
+	OriginalTriggerID                 uuid.UUID
+	TriggerRefOrganizationID          pgtype.Text
+	TriggerRefProjectID               uuid.NullUUID
+	TriggerID                         uuid.NullUUID
+	OriginalAssistantBindingID        uuid.UUID
+	AssistantBindingRefOrganizationID pgtype.Text
+	AssistantBindingRefProjectID      uuid.NullUUID
+	AssistantBindingID                uuid.NullUUID
+	AssistantBindingGeneration        int64
+	OriginalWorkloadIssuerID          uuid.UUID
+	WorkloadIssuerRefOrganizationID   pgtype.Text
+	WorkloadIssuerRefProjectID        uuid.NullUUID
+	WorkloadIssuerID                  uuid.NullUUID
+	Subject                           string
+	Generation                        int64
+	CreatedAt                         pgtype.Timestamptz
+	UpdatedAt                         pgtype.Timestamptz
+	DeletedAt                         pgtype.Timestamptz
+	Deleted                           bool
+}
+
 type TrustedIssuerSession struct {
 	ID                             uuid.UUID
 	RemoteSessionClientID          uuid.NullUUID
@@ -3799,6 +3848,7 @@ type UserSession struct {
 	ExpiresAt              pgtype.Timestamptz
 	ToolSelection          []byte
 	LastUsedAt             pgtype.Timestamptz
+	Resource               pgtype.Text
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
@@ -3856,6 +3906,8 @@ type UserSessionIssuer struct {
 	TrustedRemoteSessionIssuerID  uuid.NullUUID
 	TrustedRemoteSessionClientID  uuid.NullUUID
 	UseAuthenticationHost         bool
+	AuthorizationServerMode       string
+	PinnedIssuerUrl               pgtype.Text
 	CreatedAt                     pgtype.Timestamptz
 	UpdatedAt                     pgtype.Timestamptz
 	DeletedAt                     pgtype.Timestamptz

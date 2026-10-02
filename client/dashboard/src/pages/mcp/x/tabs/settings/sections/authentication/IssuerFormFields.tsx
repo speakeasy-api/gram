@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
+import { useNewRemoteSessionClientCallbackUrl } from "@gram/client/react-query/newRemoteSessionClientCallbackUrl.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import {
   UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
@@ -21,7 +22,6 @@ import {
   CLIENT_TYPE_LABELS,
   clientTypeHelp,
   isPrivateKeyJwtAuthMethod,
-  remoteLoginCallbackURL,
   type ClientType,
 } from "./issuerFormUtils";
 import type { ReactNode } from "react";
@@ -30,8 +30,42 @@ import type { ReactNode } from "react";
 // upstream provider's OAuth app before typed-in client credentials will
 // work. Rendered inside ClientCredentialsFields so both the Attach sheet's
 // Manual add path and the Modify sheet's existing-client edit path show it.
-function RedirectURICallout(): JSX.Element {
-  const redirectURI = remoteLoginCallbackURL();
+// An existing client passes the callbackURL it was registered with, or null
+// when it registered none; a client not yet created passes undefined and
+// shows the one the server will register for it.
+function RedirectURICallout({
+  callbackURL,
+}: {
+  callbackURL?: string | null;
+}): JSX.Element | null {
+  const newClientCallback = useNewRemoteSessionClientCallbackUrl(
+    undefined,
+    undefined,
+    { enabled: callbackURL === undefined, throwOnError: false },
+  );
+  if (callbackURL === null) return null;
+  const redirectURI = callbackURL ?? newClientCallback.data?.callbackUrl;
+  if (redirectURI === undefined && newClientCallback.isError) {
+    return (
+      <Alert variant="error" dismissible={false}>
+        Couldn't load the redirect URI to register.{" "}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void newClientCallback.refetch()}
+        >
+          <Button.Text>Retry</Button.Text>
+        </Button>
+      </Alert>
+    );
+  }
+  if (redirectURI === undefined) {
+    return (
+      <Text muted small>
+        Loading redirect URI…
+      </Text>
+    );
+  }
   return (
     <Stack gap={2}>
       <Label className="text-muted-foreground text-xs">Redirect URI</Label>
@@ -366,6 +400,7 @@ export function ClientCredentialsFields({
   clientSecretLabel = "Client Secret (optional)",
   clientSecretPlaceholder = "••••••••",
   showHeading = true,
+  callbackURL,
   onClientIdChange,
   onClientSecretChange,
   onTokenEndpointAuthMethodChange,
@@ -380,6 +415,9 @@ export function ClientCredentialsFields({
   clientSecretLabel?: string;
   clientSecretPlaceholder?: string;
   showHeading?: boolean;
+  // callbackURL is the redirect URI of an existing client, or null when it
+  // registered none. Omit it for a client not yet created.
+  callbackURL?: string | null;
   onClientIdChange: (value: string) => void;
   onClientSecretChange: (value: string) => void;
   onTokenEndpointAuthMethodChange: (
@@ -401,7 +439,7 @@ export function ClientCredentialsFields({
         </Stack>
       )}
 
-      <RedirectURICallout />
+      <RedirectURICallout callbackURL={callbackURL} />
 
       <Stack gap={2}>
         <Label className="text-muted-foreground text-xs">Client ID</Label>
