@@ -10412,3 +10412,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS chat_message_participants_message_provider_use
 ON chat_message_participants (project_id, message_id, provider, provider_user_id);
 CREATE INDEX IF NOT EXISTS chat_message_participants_project_chat_idx
 ON chat_message_participants (project_id, chat_id);
+
+CREATE INDEX IF NOT EXISTS chat_message_participants_chat_id_idx
+ON chat_message_participants (chat_id);
+CREATE INDEX IF NOT EXISTS chat_message_participants_message_id_idx
+ON chat_message_participants (message_id);
