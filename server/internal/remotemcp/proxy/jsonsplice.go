@@ -49,15 +49,29 @@ func spliceTopLevelKey(object json.RawMessage, key string, value json.RawMessage
 //
 // Every rule spliceTopLevelKey documents applies unchanged to each entry.
 func spliceTopLevelKeys(object json.RawMessage, replacements map[string]json.RawMessage) (json.RawMessage, error) {
+	return spliceTopLevelKeysWithDefaults(object, replacements, nil)
+}
+
+// spliceTopLevelKeysWithDefaults is spliceTopLevelKeys plus defaults: members
+// written only where object does not already carry them, in the same single
+// decode and re-encode. A member present in object keeps its original bytes,
+// whatever its value, including a literal null. Replacements are applied
+// after defaults, so a key in both is replaced.
+func spliceTopLevelKeysWithDefaults(object json.RawMessage, replacements, defaults map[string]json.RawMessage) (json.RawMessage, error) {
 	var members map[string]json.RawMessage
 	if err := json.Unmarshal(object, &members); err != nil {
 		return nil, fmt.Errorf("decode payload object: %w", err)
 	}
 	// A literal null decodes successfully into a nil map.
 	if members == nil {
-		members = make(map[string]json.RawMessage, len(replacements))
+		members = make(map[string]json.RawMessage, len(replacements)+len(defaults))
 	}
 
+	for key, value := range defaults {
+		if _, ok := members[key]; !ok {
+			members[key] = value
+		}
+	}
 	for key, value := range replacements {
 		if len(value) == 0 {
 			delete(members, key)

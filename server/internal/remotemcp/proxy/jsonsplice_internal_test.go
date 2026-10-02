@@ -111,3 +111,32 @@ func TestSpliceTopLevelKey_DoesNotHTMLEscape(t *testing.T) {
 	require.Contains(t, string(out), `"kept":"a<b&c"`, "preserved member must not be HTML-escaped")
 	require.Contains(t, string(out), `"q":"<&>"`, "replacement value must not be HTML-escaped")
 }
+
+func TestSpliceTopLevelKeysWithDefaults_FillsOnlyAbsentMembers(t *testing.T) {
+	t.Parallel()
+
+	out, err := spliceTopLevelKeysWithDefaults(
+		json.RawMessage(`{"ttlMs":60000,"nextCursor":null}`),
+		nil,
+		map[string]json.RawMessage{
+			"ttlMs":      json.RawMessage(`0`),
+			"nextCursor": json.RawMessage(`"c1"`),
+			"cacheScope": json.RawMessage(`"private"`),
+		},
+	)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"ttlMs":60000,"nextCursor":null,"cacheScope":"private"}`, string(out),
+		"a member already present must keep its value, even null; an absent one is filled")
+}
+
+func TestSpliceTopLevelKeysWithDefaults_ReplacementWinsOverDefault(t *testing.T) {
+	t.Parallel()
+
+	out, err := spliceTopLevelKeysWithDefaults(
+		json.RawMessage(`{}`),
+		map[string]json.RawMessage{"ttlMs": json.RawMessage(`0`)},
+		map[string]json.RawMessage{"ttlMs": json.RawMessage(`60000`)},
+	)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"ttlMs":0}`, string(out))
+}

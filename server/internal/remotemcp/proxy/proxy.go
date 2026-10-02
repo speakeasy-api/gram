@@ -263,6 +263,21 @@ type Proxy struct {
 	// converting them would break WWW-Authenticate challenge relay.
 	StrictToolSelection bool
 
+	// AnonymousCaller reports that the handler admitted the caller to a public
+	// server without any Gram credential. It is the one input to cache
+	// labelling the proxy cannot derive from its own configuration. When it
+	// is set and the proxy forwards no per-caller credential or configured
+	// pass-through header and attaches no list filter, list and
+	// resources/read results relay with the upstream's own cacheScope and
+	// ttlMs. Otherwise those results are labelled cacheScope "private": MCP
+	// 2026-07-28 reads an absent cacheScope as "public", which would let a
+	// shared intermediary serve a result shaped by Gram's access gate or
+	// filters to another caller.
+	//
+	// The zero value labels, so a handler that does not establish anonymity
+	// fails safe.
+	AnonymousCaller bool
+
 	// WWWAuthenticate is the challenge relayed to the client when the
 	// upstream rejects a request (401/403), replacing the upstream's own
 	// WWW-Authenticate — the upstream challenge names the upstream's
@@ -458,12 +473,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 	// the user's MCP runtime sees upstream's actual response instead of
 	// silently misparsing it as an SSE stream.
 	if isEventStream(upstreamResp.Header) {
-		// A client resuming a dropped POST stream with Last-Event-ID can
-		// receive the replayed reply to a caller-varying request here, and
-		// nothing on a GET stream says which request a reply answers. Label
-		// every reply carrying a result object: the label is meaningless on a
-		// reply to any other method, but harmless.
-		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, nil, nil, nil, nil, nil, true)
+		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, nil, nil, nil, nil, nil, p.streamCacheLabel(r))
 		responseBytes = n
 		if streamErr != nil {
 			// The standalone GET stream is idle by nature — most upstreams
@@ -675,7 +685,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		}
 	}
 
-	callerVarying := isCallerVaryingRequest(userReq)
+	label := p.requestCacheLabel(r, userReq)
 
 	// Materialize any typed-setter mutations (e.g. ToolsCallRequest.SetArguments)
 	// into the cached body bytes so the forwarder sends the mutated payload
@@ -725,7 +735,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	// below is bypassed entirely for SSE responses because the body is
 	// not a single message to hand off — it's a stream of them.
 	if isEventStream(upstreamResp.Header) {
-		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, initializeReq, toolsCallReq, toolsListReq, resourcesReadReq, resourcesListReq, callerVarying)
+		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, initializeReq, toolsCallReq, toolsListReq, resourcesReadReq, resourcesListReq, label)
 		responseBytes = n
 		if streamErr != nil {
 			// Unlike the standalone GET stream, a POST response stream going
@@ -851,10 +861,8 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		// still rejects an undecodable tools/list result below; labelling
 		// it first wastes a splice but never relays it.
 		interceptorMutated := remoteMsg.dirty
-		if callerVarying {
-			if err := markCallerVarying(remoteMsg); err != nil {
-				return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
-			}
+		if err := applyCacheLabel(remoteMsg, label); err != nil {
+			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 		}
 
 		// Materialize any typed-setter mutations (e.g.
@@ -1102,7 +1110,7 @@ func (p *Proxy) relaySSEStream(
 	toolsListReq *ToolsListRequest,
 	resourcesReadReq *ResourcesReadRequest,
 	resourcesListReq *ResourcesListRequest,
-	labelCallerVarying bool,
+	label cacheLabel,
 ) (int64, error) {
 	applyResponseHeaders(w, upstreamResp, p.WWWAuthenticate)
 	w.WriteHeader(upstreamResp.StatusCode)
@@ -1263,10 +1271,8 @@ func (p *Proxy) relaySSEStream(
 			// event is never relayed.
 			if rejectionErr == nil {
 				interceptorMutated = remoteMsg.dirty
-				if labelCallerVarying {
-					if err := markCallerVarying(remoteMsg); err != nil {
-						rejectionErr = err
-					}
+				if err := applyCacheLabel(remoteMsg, label); err != nil {
+					rejectionErr = err
 				}
 			}
 		}

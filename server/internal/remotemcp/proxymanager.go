@@ -37,6 +37,7 @@ import (
 type proxyBuildOptions struct {
 	recordIdentityCoverage bool
 	metaMCPServerID        string
+	anonymousCaller        bool
 }
 
 // BuildOption customizes one proxy without changing the defaults used by
@@ -58,6 +59,18 @@ func WithoutToolsCallIdentityCoverage() BuildOption {
 func WithMetaMCPServerID(metaMCPServerID string) BuildOption {
 	return BuildOption{apply: func(options *proxyBuildOptions) {
 		options.metaMCPServerID = metaMCPServerID
+	}}
+}
+
+// WithAnonymousCaller records that the handler admitted the caller without
+// any Gram credential. On a public server it lets list and resources/read
+// results relay with the upstream's own cache hints, unless the proxy still
+// forwards a per-caller credential or pass-through header or attaches a list
+// filter. It has no effect on a private server, whose access gate is itself a
+// reason to label every such result caller-varying.
+func WithAnonymousCaller() BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		options.anonymousCaller = true
 	}}
 }
 
@@ -214,7 +227,7 @@ func (f *ProxyManager) BuildTarget(
 	selection *toolfilter.SessionSelection,
 	buildOptions ...BuildOption,
 ) *proxy.Proxy {
-	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: ""}
+	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", anonymousCaller: false}
 	for _, option := range buildOptions {
 		if option.apply != nil {
 			option.apply(&options)
@@ -351,6 +364,7 @@ func (f *ProxyManager) BuildTarget(
 		UpstreamResponseInterceptor: nil,
 		DisableRedirects:            false,
 		StrictToolSelection:         selection != nil,
+		AnonymousCaller:             options.anonymousCaller && visibility == mcpservers.VisibilityPublic,
 		WWWAuthenticate:             wwwAuthenticate,
 		// The census runs first so every parsed request is counted, including
 		// those a later interceptor rejects — matching the hosted dispatch,

@@ -27,8 +27,9 @@ import (
 // tools/call enforcement does. A tool with no recorded metadata resolves to
 // the empty disposition, leaving a pure tool-name match.
 //
-// The filter leaves cache labelling to the proxy, which marks every relayed
-// tools/list result caller-varying whether or not anything was filtered.
+// The filter leaves cache labelling to the proxy, which marks every tools/list
+// result relayed through a chain with this filter attached caller-varying with
+// a zero ttl, whether or not anything was filtered.
 //
 // A 2xx tools/list whose result does not decode as [mcp.ListToolsResult]
 // never reaches the typed interceptor loop at all, and unless the proxy's
