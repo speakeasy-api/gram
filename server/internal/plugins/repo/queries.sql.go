@@ -1014,6 +1014,44 @@ func (q *Queries) HasPluginMembershipForMCPServer(ctx context.Context, arg HasPl
 	return column_1, err
 }
 
+const hasRoleDeliveryMembership = `-- name: HasRoleDeliveryMembership :one
+SELECT EXISTS (
+  SELECT 1 FROM plugin_servers ps JOIN plugins p ON p.id = ps.plugin_id
+  WHERE p.id = $1 AND p.organization_id = $2 AND p.project_id = $3
+    AND ((ps.toolset_id = $4::uuid)
+      OR (ps.mcp_server_id = $5::uuid)
+      OR (ps.toolset_id = $6::uuid))
+    AND (ps.deleted IS FALSE OR $7::boolean)
+)
+`
+
+type HasRoleDeliveryMembershipParams struct {
+	PluginID        uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	ToolsetID       uuid.NullUUID
+	McpServerID     uuid.NullUUID
+	LegacyToolsetID uuid.NullUUID
+	PreserveRemoval bool
+}
+
+// A legacy toolset membership and its typed MCP wrapper are the same delivery.
+// Setup/eligibility preserve deleted history; explicit new grants/audiences do not.
+func (q *Queries) HasRoleDeliveryMembership(ctx context.Context, arg HasRoleDeliveryMembershipParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasRoleDeliveryMembership,
+		arg.PluginID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ToolsetID,
+		arg.McpServerID,
+		arg.LegacyToolsetID,
+		arg.PreserveRemoval,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const isDefaultProject = `-- name: IsDefaultProject :one
 SELECT (
   SELECT p.id
@@ -2229,6 +2267,178 @@ func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, arg List
 	return items, nil
 }
 
+const listProjectRoleDeliveryPluginsForUpdate = `-- name: ListProjectRoleDeliveryPluginsForUpdate :many
+SELECT p.id FROM plugins p
+WHERE p.organization_id = $1 AND p.project_id = $2 AND p.deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM plugin_assignments a WHERE a.plugin_id = p.id AND a.organization_id = $1
+    AND (a.principal_urn LIKE 'role:organization:%' OR a.principal_urn LIKE 'role:global:%'))
+ORDER BY p.id FOR UPDATE OF p
+`
+
+type ListProjectRoleDeliveryPluginsForUpdateParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) ListProjectRoleDeliveryPluginsForUpdate(ctx context.Context, arg ListProjectRoleDeliveryPluginsForUpdateParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProjectRoleDeliveryPluginsForUpdate, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRoleDeliveryPlugins = `-- name: ListRoleDeliveryPlugins :many
+SELECT p.id, p.project_id
+FROM plugins p JOIN projects project ON project.id = p.project_id
+WHERE p.organization_id = $1 AND project.organization_id = $1
+  AND p.deleted IS FALSE AND project.deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM plugin_assignments a WHERE a.plugin_id = p.id
+    AND a.organization_id = $1 AND a.principal_urn = $2)
+ORDER BY p.project_id, p.id
+`
+
+type ListRoleDeliveryPluginsParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+}
+
+type ListRoleDeliveryPluginsRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Organization-scoped role event discovery; locks and writes retain exact project scope.
+func (q *Queries) ListRoleDeliveryPlugins(ctx context.Context, arg ListRoleDeliveryPluginsParams) ([]ListRoleDeliveryPluginsRow, error) {
+	rows, err := q.db.Query(ctx, listRoleDeliveryPlugins, arg.OrganizationID, arg.PrincipalUrn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRoleDeliveryPluginsRow
+	for rows.Next() {
+		var i ListRoleDeliveryPluginsRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRoleDeliveryProjects = `-- name: ListRoleDeliveryProjects :many
+SELECT p.id, p.slug, o.slug AS organization_slug
+FROM projects p JOIN organization_metadata o ON o.id = p.organization_id
+WHERE p.organization_id = $1 AND p.deleted IS FALSE AND o.disabled_at IS NULL
+ORDER BY p.id
+`
+
+type ListRoleDeliveryProjectsRow struct {
+	ID               uuid.UUID
+	Slug             string
+	OrganizationSlug string
+}
+
+// Organization-scoped discovery; every subsequent content write uses the discovered project.
+func (q *Queries) ListRoleDeliveryProjects(ctx context.Context, organizationID string) ([]ListRoleDeliveryProjectsRow, error) {
+	rows, err := q.db.Query(ctx, listRoleDeliveryProjects, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRoleDeliveryProjectsRow
+	for rows.Next() {
+		var i ListRoleDeliveryProjectsRow
+		if err := rows.Scan(&i.ID, &i.Slug, &i.OrganizationSlug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRoleDeliveryServers = `-- name: ListRoleDeliveryServers :many
+SELECT m.id, m.project_id, COALESCE(NULLIF(m.name, ''), NULLIF(m.slug, ''), m.id::text)::text AS name,
+  'mcp_server'::text AS backend_kind, COALESCE(m.toolset_id, m.id)::uuid AS resource_id, m.toolset_id AS legacy_toolset_id,
+  (m.visibility <> 'disabled' AND (m.unproxied_mcp_server_id IS NOT NULL OR EXISTS (
+    SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = m.id AND e.project_id = p.id AND e.deleted IS FALSE
+  )))::boolean AS eligible
+FROM mcp_servers m JOIN projects p ON p.id = m.project_id
+WHERE p.organization_id = $1 AND p.id = $2
+  AND p.deleted IS FALSE AND m.deleted IS FALSE
+UNION ALL
+SELECT t.id, t.project_id, t.name, 'toolset'::text, t.id, t.id,
+  (t.mcp_enabled AND COALESCE(t.mcp_slug, '') <> '' AND NOT EXISTS (
+    SELECT 1 FROM mcp_servers m WHERE m.toolset_id = t.id AND m.project_id = p.id AND m.deleted IS FALSE
+  ))::boolean
+FROM toolsets t JOIN projects p ON p.id = t.project_id
+WHERE p.organization_id = $1 AND p.id = $2
+  AND p.deleted IS FALSE AND t.deleted IS FALSE
+ORDER BY id
+`
+
+type ListRoleDeliveryServersParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type ListRoleDeliveryServersRow struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	Name            string
+	BackendKind     string
+	ResourceID      uuid.UUID
+	LegacyToolsetID uuid.NullUUID
+	Eligible        bool
+}
+
+// Keep ineligible live backends as removal candidates. Only additions require eligibility.
+func (q *Queries) ListRoleDeliveryServers(ctx context.Context, arg ListRoleDeliveryServersParams) ([]ListRoleDeliveryServersRow, error) {
+	rows, err := q.db.Query(ctx, listRoleDeliveryServers, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRoleDeliveryServersRow
+	for rows.Next() {
+		var i ListRoleDeliveryServersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.BackendKind,
+			&i.ResourceID,
+			&i.LegacyToolsetID,
+			&i.Eligible,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockMarketplaceSettings = `-- name: LockMarketplaceSettings :one
 INSERT INTO project_marketplace_settings (project_id)
 VALUES ($1)
@@ -2254,6 +2464,43 @@ func (q *Queries) LockMarketplaceSettings(ctx context.Context, projectID uuid.UU
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const lockRoleDeliveryPlugin = `-- name: LockRoleDeliveryPlugin :one
+SELECT id FROM plugins
+WHERE id = $1 AND organization_id = $2 AND project_id = $3 AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockRoleDeliveryPluginParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) LockRoleDeliveryPlugin(ctx context.Context, arg LockRoleDeliveryPluginParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockRoleDeliveryPlugin, arg.PluginID, arg.OrganizationID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockRoleDeliveryProject = `-- name: LockRoleDeliveryProject :one
+SELECT id FROM projects
+WHERE id = $1 AND organization_id = $2 AND deleted IS FALSE
+FOR SHARE
+`
+
+type LockRoleDeliveryProjectParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockRoleDeliveryProject(ctx context.Context, arg LockRoleDeliveryProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockRoleDeliveryProject, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const lockRoleSetupPauseFixture = `-- name: LockRoleSetupPauseFixture :exec

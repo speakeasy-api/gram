@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -131,7 +132,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	auditLogger := audit.NewLogger()
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	roleManager := NewRoleManager(logger, conn, roles, auditLogger)
+	roleManager := NewRoleManager(logger, conn, roles, auditLogger, plugins.PublicationRequests{}, nil)
 	emailSender := &recordingEmailSender{mu: sync.Mutex{}, sent: nil, failSend: false}
 	emailService := email.NewService(logger, emailSender, email.NewTemplateIDs(map[string]string{
 		"access_request": "access-request-test-id",

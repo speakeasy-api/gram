@@ -82,6 +82,7 @@ type platformMCPConfig struct {
 	AuditLogger            *audit.Logger
 	AccessRoles            access.RoleProvider
 	PluginPublisher        *plugins.Service
+	PluginManagement       *plugins.Service
 	PluginPublishSignaler  plugins.PluginPublishSignaler
 	NetworkAccessAdmission networkaccess.EligibilityChecker
 	PublicationRequests    plugins.PublicationRequests
@@ -380,13 +381,17 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithRemoteSessions(config.RemoteChallengeManager).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
+		WithPublicationRequests(config.PublicationRequests).
 		WithDistributionAdmission(config.DistributionAdmission).
 		WithDistributionAdmissionReads(distributionAdmissionReads)
 	if config.PluginPublisher != nil {
 		pluginInventory.WithPublicationEvidence(config.PluginPublisher)
 	}
+	if config.PluginManagement != nil {
+		pluginInventory.WithServerRemoval(config.PluginManagement)
+	}
 	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
-	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger))
+	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger, config.PublicationRequests, config.DistributionAdmission))
 	if accessRoleMutationErr != nil {
 		config.Logger.WarnContext(ctx, "Platform MCP access role mutations unavailable", attr.SlogError(accessRoleMutationErr))
 	}
@@ -848,13 +853,17 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithRemoteSessions(config.RemoteChallengeManager).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
+		WithPublicationRequests(config.PublicationRequests).
 		WithDistributionAdmission(config.DistributionAdmission).
 		WithDistributionAdmissionReads(distributionAdmissionReads)
 	if config.PluginPublisher != nil {
 		pluginInventory.WithPublicationEvidence(config.PluginPublisher)
 	}
+	if config.PluginManagement != nil {
+		pluginInventory.WithServerRemoval(config.PluginManagement)
+	}
 	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
-	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger))
+	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger, config.PublicationRequests, config.DistributionAdmission))
 	if accessRoleMutationErr != nil {
 		config.Logger.WarnContext(ctx, "Platform MCP access role mutations unavailable", attr.SlogError(accessRoleMutationErr))
 	}

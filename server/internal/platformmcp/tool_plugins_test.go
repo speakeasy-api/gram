@@ -11,7 +11,7 @@ var pluginReadToolNames = []string{"list_plugins", "get_plugin", "list_plugin_as
 
 // pluginMutationToolNames change who receives a plugin or what it carries and
 // stay external-only.
-var pluginMutationToolNames = []string{operationSetPluginAssignments, "distribute_mcp_to_plugin", "remove_mcp_from_plugin"}
+var pluginMutationToolNames = []string{operationSetPluginAssignments, "distribute_mcp_to_plugin", "remove_mcp_from_plugin", "remove_plugin_server"}
 
 // requirePluginToolAudiences asserts the audience split every plugin tool
 // registration must keep, whether the plugins service is composed or absent.

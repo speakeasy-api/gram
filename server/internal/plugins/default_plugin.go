@@ -14,7 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -401,22 +403,28 @@ func backendIDSuffix(params AttachToDefaultPluginParams) string {
 	return s[len(s)-4:]
 }
 
-// AttachToDefaultPluginAudited runs AttachToDefaultPlugin and records the
-// same audit trail a manual "add server to plugin" produces: a plugin
-// creation event when the Default plugin was lazily provisioned, and a
-// plugin-server add event for the attached server. Callers (toolsets on
+// AttachToDefaultAndRolePluginsAudited attaches the server to the Default plugin
+// and delivers it to matching role-audience plugins. It records the same audit
+// trail as manual content additions, plus a creation event when the Default
+// plugin is lazily provisioned. Callers (toolsets on
 // MCP-enable, mcpendpoints on first endpoint, mcpservers on visibility
 // enable) run this inside the same transaction as the triggering write.
-// Both audit events are scoped to params' organization/project — the same
+// Audit events are scoped to params' organization/project — the same
 // values the plugin rows are written with — while authCtx supplies only the
 // acting user. Returns pluginCreated=true when this call created the Default
 // plugin (project predates the feature) — callers should enqueue an initial
 // marketplace publish for it, but only after their own transaction commits,
 // since this runs pre-commit and the DB writes could still roll back.
-func AttachToDefaultPluginAudited(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams) (bool, error) {
+func AttachToDefaultAndRolePluginsAudited(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams, guard *admission.Guard) (bool, error) {
+	if err := admission.LockProject(ctx, dbtx, params.ProjectID); err != nil {
+		return false, fmt.Errorf("lock eligible server admission: %w", err)
+	}
 	attached, err := AttachToDefaultPlugin(ctx, dbtx, params)
 	if err != nil {
 		return false, fmt.Errorf("attach server to default plugin: %w", err)
+	}
+	if _, err := roledelivery.Eligible(ctx, dbtx, params.OrganizationID, params.ProjectID, params.ToolsetID, params.McpServerID, guard); err != nil {
+		return false, fmt.Errorf("deliver newly eligible server: %w", err)
 	}
 	if attached == nil {
 		return false, nil

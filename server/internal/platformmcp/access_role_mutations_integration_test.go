@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -50,7 +51,7 @@ func TestAccessRoleMutationsCommitReplayAndPreserveOtherGrants(t *testing.T) {
 	flags.SetFlag(feature.FlagPlatformMCPAccessRoleMutations, principal.OrganizationID, true)
 	logger := testenv.NewLogger(t)
 	reads := NewAccessReadService(logger, conn, allowBudget(), "access-role-integration-key")
-	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger())
+	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, nil)
 	service, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "access-role-integration-key", manager)
 	require.NoError(t, err)
 
