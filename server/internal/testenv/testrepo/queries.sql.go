@@ -955,6 +955,15 @@ func (q *Queries) DeleteOrganizationUserRelationshipFixture(ctx context.Context,
 	return err
 }
 
+const deleteRetainedCatalogSourcesFixture = `-- name: DeleteRetainedCatalogSourcesFixture :exec
+DELETE FROM mcp_registries
+`
+
+func (q *Queries) DeleteRetainedCatalogSourcesFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteRetainedCatalogSourcesFixture)
+	return err
+}
+
 const detachRemoteSessionClientFromUserSessionIssuer = `-- name: DetachRemoteSessionClientFromUserSessionIssuer :execrows
 DELETE FROM remote_session_client_user_session_issuers
 WHERE remote_session_client_id = $1
@@ -2718,6 +2727,15 @@ func (q *Queries) InsertRemoteSessionEMABindingFixture(ctx context.Context, arg 
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const insertRetainedLegacyCatalogSourceFixture = `-- name: InsertRetainedLegacyCatalogSourceFixture :exec
+INSERT INTO mcp_registries (id,name,url,source_type,auth_profile,enabled,certification_state,source_key) VALUES ($1,'Legacy catalog','https://legacy.example.test','pulse_v0_1','pulse_server_credentials',true,'certified','pulse')
+`
+
+func (q *Queries) InsertRetainedLegacyCatalogSourceFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, insertRetainedLegacyCatalogSourceFixture, id)
+	return err
 }
 
 const insertToolsetVersionFixture = `-- name: InsertToolsetVersionFixture :exec

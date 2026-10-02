@@ -1835,3 +1835,8 @@ WHERE t.id = @toolset_id
   AND t.project_id = @project_id
   AND t.organization_id = @organization_id
   AND t.deleted IS FALSE;
+-- name: DeleteRetainedCatalogSourcesFixture :exec
+DELETE FROM mcp_registries;
+
+-- name: InsertRetainedLegacyCatalogSourceFixture :exec
+INSERT INTO mcp_registries (id,name,url,source_type,auth_profile,enabled,certification_state,source_key) VALUES ($1,'Legacy catalog','https://legacy.example.test','pulse_v0_1','pulse_server_credentials',true,'certified','pulse');

@@ -91,6 +91,9 @@ type platformMCPConfig struct {
 	// CallbackOrigin is the origin of the redirect_uri a remote session client
 	// created now registers. The setup guides show that URL.
 	CallbackOrigin *url.URL
+	// OutboundCallbackOrigin is the pinned origin of the identity provider
+	// callback the Platform MCP OAuth login registers.
+	OutboundCallbackOrigin *url.URL
 	// SkillInsights is the ClickHouse read behind the skill insight tools.
 	// Startup always supplies it; a nil reader keeps the tools registered as
 	// stubs rather than answering with empty insights.
@@ -132,6 +135,10 @@ type platformMCPConfig struct {
 	// withholds the drill-down tools while leaving the overview-first entry
 	// points serving.
 	TelemetryDrilldown platformmcp.DrilldownTelemetryReader
+	// ToolCallSearch is the bounded Tool Logs summary list and attribute key
+	// inventory behind search_tool_calls and list_attribute_keys. Nil keeps
+	// both visible as unavailable.
+	ToolCallSearch platformmcp.ToolCallSearchReader
 
 	// WorkflowRun delivers shipped-workflow run reports to Speakeasy's own
 	// analytics. Nil registers record_workflow_run as a stub, so the tool
@@ -209,8 +216,9 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		Logger:        config.Logger,
 		// Backs the inbound CIMD document fetcher's SSRF protection; without
 		// it the authorization server serves DCR only.
-		GuardianPolicy: config.GuardianPolicy,
-		MeterProvider:  config.MeterProvider,
+		GuardianPolicy:     config.GuardianPolicy,
+		MeterProvider:      config.MeterProvider,
+		IDPCallbackBaseURL: config.OutboundCallbackOrigin,
 	})
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP OAuth service: %w", err)
@@ -439,7 +447,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithToolUsageBreakdown(config.ToolUsage).
-		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
+		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB)).
+		WithToolCallSearch(config.ToolCallSearch)
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
 	if err != nil {
@@ -741,8 +750,9 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		Logger:        config.Logger,
 		// Backs the inbound CIMD document fetcher's SSRF protection; without
 		// it the authorization server serves DCR only.
-		GuardianPolicy: config.GuardianPolicy,
-		MeterProvider:  config.MeterProvider,
+		GuardianPolicy:     config.GuardianPolicy,
+		MeterProvider:      config.MeterProvider,
+		IDPCallbackBaseURL: config.OutboundCallbackOrigin,
 	})
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create platform mcp oauth service: %w", err)
@@ -754,7 +764,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 
 	catalog := platformmcp.NewDynamicRegistryCatalogSources(func(ctx context.Context) ([]platformmcp.RegistryCatalogSource, error) {
 		return loadBrowserPlatformMCPCatalogDescriptors(ctx, config.Catalog)
-	})
+	}).WithIdentityService(config.Catalog)
 	store, err := platformmcp.NewRegistrationStore(config.DB)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create Platform MCP registration store: %w", err)
@@ -945,7 +955,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithToolUsageBreakdown(config.ToolUsage).
-		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
+		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB)).
+		WithToolCallSearch(config.ToolCallSearch)
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
 	if err != nil {

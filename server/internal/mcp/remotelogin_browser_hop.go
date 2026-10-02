@@ -59,7 +59,12 @@ func remoteLoginHopConfirmedID(cookieID string) string { return "confirmed-" + c
 // first binds the browser on that host; hop reports when the returned URL is
 // that bind stop rather than the upstream authorization URL.
 func (s *Service) startRemoteLogin(ctx context.Context, challengeState AuthnChallengeState, callbackOrigin *url.URL, parent remotesessions.ParentChallenge, mint func(remotesessions.ParentChallenge) (string, error)) (target string, hop bool, err error) {
-	if challengeState.Browser == nil || callbackOrigin == nil || sameOrigin(callbackOrigin, s.serverURL) {
+	if challengeState.Browser == nil || callbackOrigin == nil {
+		target, err = mint(parent)
+		return target, false, err
+	}
+	cookieOrigin := s.callbackCookieOrigin(challengeState.Browser)
+	if sameOrigin(callbackOrigin, cookieOrigin) {
 		target, err = mint(parent)
 		return target, false, err
 	}
@@ -77,7 +82,7 @@ func (s *Service) startRemoteLogin(ctx context.Context, challengeState AuthnChal
 	if err != nil {
 		return "", false, fmt.Errorf("build remote login bind URL: %w", err)
 	}
-	confirmURL, err := url.JoinPath(strings.TrimRight(s.serverURL.String(), "/"), remoteLoginBindPath)
+	confirmURL, err := url.JoinPath(strings.TrimRight(cookieOrigin.String(), "/"), remoteLoginBindPath)
 	if err != nil {
 		return "", false, fmt.Errorf("build remote login confirm URL: %w", err)
 	}
@@ -98,8 +103,8 @@ func (s *Service) startRemoteLogin(ctx context.Context, challengeState AuthnChal
 }
 
 // HandleRemoteLoginBind serves GET /mcp/remote_login_bind. The bind stop runs
-// on the remote client's callback host and the confirm stop on the server
-// URL's host, which holds the parent challenge's callback cookie.
+// on the remote client's callback host and the confirm stop on the IdP
+// callback host, which holds the parent challenge's callback cookie.
 func (s *Service) HandleRemoteLoginBind(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	if origin, ok := requestorigin.FromContext(ctx); ok && origin.Surface != requestorigin.SurfacePlatform {
@@ -181,6 +186,18 @@ func (s *Service) validateRemoteLoginHopBrowser(r *http.Request, parent AuthnCha
 		return errors.New("remote login browser was not confirmed")
 	}
 	return nil
+}
+
+// callbackCookieOrigin is the host holding a federated challenge's callback
+// cookie: the IdP callback origin recorded when it was minted. Challenges
+// minted before that was recorded used the outbound origin.
+func (s *Service) callbackCookieOrigin(browser *ChallengeBrowserBinding) *url.URL {
+	if browser.CallbackOrigin != "" {
+		if origin, err := url.Parse(browser.CallbackOrigin); err == nil && origin.Scheme != "" && origin.Host != "" {
+			return origin
+		}
+	}
+	return s.outboundOrigin()
 }
 
 func sameOrigin(a, b *url.URL) bool {

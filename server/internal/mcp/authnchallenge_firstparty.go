@@ -108,7 +108,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		http.Redirect(w, r, federatedURL.String(), http.StatusFound)
 		return nil
 	}
-	callbackURL, err := endpoint.IDPCallbackURL(s.serverURL.String())
+	callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 		return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").LogError(ctx, logger)
