@@ -299,7 +299,7 @@ func (riskIntakeQuietProbes) ListToolDeclarations(_ context.Context, _ string) (
 	return nil, nil
 }
 
-func (riskIntakeQuietProbes) Lookup(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
+func (riskIntakeQuietProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
 	return nil, nil
 }
 
