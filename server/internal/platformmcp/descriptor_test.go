@@ -236,7 +236,7 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	for _, name := range []string{
 		"get_platform_context", "list_projects", "find_mcp", "get_mcp",
 		"request_mcp_review", "get_my_mcp_review_request",
-		"get_project_overview", "get_mcp_diagnostics", "get_tool_usage_summary", "list_recent_tool_calls",
+		"get_project_overview", "get_mcp_diagnostics", "get_tool_usage_summary", "list_recent_tool_calls", "list_attribute_keys",
 		"search_gram_docs", "list_skills", "get_skill", "list_skill_versions",
 		"list_skill_feedback", "list_skill_suggestions", "list_skill_suggestion_feedback",
 		"create_skill", "add_skill_version", "update_skill_metadata", "list_skill_distributions",
@@ -249,6 +249,9 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	for _, name := range []string{"list_skill_insights", "compare_skill_versions"} {
 		require.Equal(t, ExternalAuthorizationOrgAdmin, byName[name], "session cost is organization spend: %s", name)
 	}
+	// search_tool_calls returns masked identities and person references, so it
+	// stays admin-gated like the drill-downs that do the same.
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["search_tool_calls"])
 	for _, resource := range registrar.resources {
 		if resource.Meta.servesAudience(AudienceExternal) {
 			require.Equal(t, ExternalAuthorizationMember, resource.Meta.Authorization, resource.URI)
@@ -438,6 +441,8 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"get_tool_usage_summary",
 		"list_organization_events",
 		"list_chats",
+		"search_tool_calls",
+		"list_attribute_keys",
 		"update_mcp_metadata",
 		"register_catalog_mcp",
 		"register_remote_mcp",
