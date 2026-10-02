@@ -91936,6 +91936,7 @@ components:
                     format: uri
             required:
                 - guides
+                - oauth_callback_url
         GetSignedAssetURLForm:
             type: object
             properties:

@@ -761,6 +761,22 @@ export function useUserIdentityDraft({
     setLocalStatus({ kind: "idle" });
   };
 
+  // Defaults can change without a menu selection (linked clients, discovery,
+  // or a new upstream). Reset during render so no committed render can save
+  // credentials from the previous provider, including a discovered sentinel
+  // whose issuer URL changes while its id stays the same.
+  const providerBinding = JSON.stringify([
+    upstreamUrl,
+    selectedProviderId,
+    selectedIssuer?.issuer ?? discoveredIssuerUrl,
+  ]);
+  const [previousProviderBinding, setPreviousProviderBinding] =
+    useState(providerBinding);
+  if (previousProviderBinding !== providerBinding) {
+    setPreviousProviderBinding(providerBinding);
+    resetChoice();
+  }
+
   // A client belongs to exactly one provider, so choosing a provider clears
   // the client choice and any outcome from the previous one.
   const selectProvider = (id: string | null): void => {

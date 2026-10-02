@@ -12,6 +12,7 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import { RemoteMcpIdentitySectionBody } from "./RemoteMcpIdentitySection";
 import type { AuthTarget } from "./authTarget";
 import {
+  SLACK_SCOPE_CHOICES,
   SLACK_READ_SCOPES,
   SLACK_DEFAULT_SCOPES,
   slackAppConfiguration,
@@ -247,19 +248,21 @@ vi.mock("@gram/client/react-query/deleteRemoteMcpServerHeader.js", () => ({
   }),
 }));
 
-function renderIdentity(): ReturnType<typeof render> {
+function renderIdentity(): ReturnType<typeof render> & { refresh: () => void } {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const view = () => (
     <MemoryRouter>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <RemoteMcpIdentitySectionBody target={target} />
         </TooltipProvider>
       </QueryClientProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+  const result = render(view());
+  return { ...result, refresh: () => result.rerender(view()) };
 }
 
 function configuredHeader(overrides: Record<string, unknown> = {}) {
@@ -619,7 +622,99 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 
-  it("retains unsaved edits and leaves the ordinary form usable without a callback", () => {
+  it("waits for callback metadata before showing a failure warning", () => {
+    slackFixture();
+    mocks.setupDocs.mockReturnValue({ data: undefined, isPending: true });
+    const { refresh } = renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    expect(
+      screen.queryByText(/Could not load a valid deployment callback/),
+    ).toBeNull();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Configure an existing Slack app",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    mocks.setupDocs.mockReturnValue({ data: undefined, isPending: false });
+    refresh();
+    expect(
+      screen.getByText(/Could not load a valid deployment callback/),
+    ).not.toBeNull();
+  });
+
+  it("associates every Slack permission with its description", () => {
+    slackFixture();
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    for (const choice of SLACK_SCOPE_CHOICES) {
+      const checkbox = screen.getByRole("checkbox", { name: choice.label });
+      const descriptionId = checkbox.getAttribute("aria-describedby");
+      expect(descriptionId).not.toBeNull();
+      expect(document.getElementById(descriptionId!)?.textContent).toBe(
+        choice.description,
+      );
+    }
+  });
+
+  it.each(["provider", "upstream"])(
+    "clears manual credentials and scopes when the automatic %s binding changes",
+    (change) => {
+      slackFixture();
+      const { refresh } = renderIdentity();
+      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Configure an existing Slack app" }),
+      );
+      fireEvent.change(screen.getByLabelText("Client ID"), {
+        target: { value: "stale-client" },
+      });
+      fireEvent.change(screen.getByLabelText("Client secret"), {
+        target: { value: "stale-secret" },
+      });
+      expect(
+        screen
+          .getByRole("checkbox", { name: "Read public channels" })
+          .getAttribute("aria-checked"),
+      ).toBe("true");
+      expect(
+        (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false);
+      if (change === "provider") {
+        const provider = mocks.issuers().data.result.items[0];
+        mocks.issuers.mockReturnValue({
+          data: {
+            result: { items: [{ ...provider, id: "replacement-provider" }] },
+          },
+        });
+      } else {
+        mocks.source.mockReturnValue({
+          data: { slug: "slack", url: "https://mcp.slack.com/another" },
+        });
+      }
+      refresh();
+      expect(
+        (screen.getByLabelText("Client ID") as HTMLInputElement).value,
+      ).toBe("");
+      expect(
+        (screen.getByLabelText("Client secret") as HTMLInputElement).value,
+      ).toBe("");
+      fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
+      const scopeField = screen.getByRole("combobox", { name: "Scope" });
+      for (const scope of SLACK_DEFAULT_SCOPES)
+        expect(scopeField.textContent).not.toContain(scope);
+      expect(
+        (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true);
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(mocks.commit).not.toHaveBeenCalled();
+    },
+  );
+
+  it("retains unsaved edits and leaves the ordinary form usable without a callback", async () => {
     slackFixture();
     mocks.setupDocs.mockReturnValue({ data: undefined });
     renderIdentity();
@@ -634,7 +729,24 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect((screen.getByLabelText("Client ID") as HTMLInputElement).value).toBe(
       "unsaved-client",
     );
-    expect(mocks.commit).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Client secret"), {
+      target: { value: "ordinary-secret" },
+    });
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    expect(mocks.commit).toHaveBeenCalledWith({
+      commitServerIdentityConfigurationForm: expect.objectContaining({
+        clientMode: "manual",
+        clientConfiguration: expect.objectContaining({
+          clientId: "unsaved-client",
+          clientSecret: "ordinary-secret",
+        }),
+      }),
+    });
   });
 
   it("reuses only a compatible Slack client without credential configuration", async () => {

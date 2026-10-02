@@ -4,7 +4,7 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { useGetMCPSetupDocs } from "@gram/client/react-query/getMCPSetupDocs.js";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { UserIdentityDraft } from "../drafts/useIdentityDraft";
 import {
   SLACK_DEFAULT_SCOPES,
@@ -21,7 +21,8 @@ export function SlackSetup({
   draft: UserIdentityDraft;
   disabled: boolean;
 }): JSX.Element | null {
-  const { data } = useGetMCPSetupDocs({ serverUrl }, undefined, {
+  const descriptionId = useId();
+  const { data, isPending } = useGetMCPSetupDocs({ serverUrl }, undefined, {
     throwOnError: false,
   });
   const [newApp, setNewApp] = useState(false);
@@ -93,7 +94,7 @@ export function SlackSetup({
       {!draft.connected && draft.choice !== "existing" && (
         <fieldset className="grid gap-2 sm:grid-cols-2" disabled={disabled}>
           <legend className="mb-2 text-sm font-medium">Slack access</legend>
-          {SLACK_SCOPE_CHOICES.map((choice) => (
+          {SLACK_SCOPE_CHOICES.map((choice, index) => (
             <label
               key={choice.label}
               className="flex cursor-pointer gap-3 rounded border p-3 text-sm"
@@ -105,10 +106,14 @@ export function SlackSetup({
                 }
                 disabled={disabled}
                 aria-label={choice.label}
+                aria-describedby={`${descriptionId}-${index}`}
               />
               <span>
                 <span className="block font-medium">{choice.label}</span>
-                <span className="text-muted-foreground block">
+                <span
+                  id={`${descriptionId}-${index}`}
+                  className="text-muted-foreground block"
+                >
                   {choice.description}
                 </span>
               </span>
@@ -132,7 +137,7 @@ export function SlackSetup({
         value={callback ?? ""}
         readOnly
       />
-      {!callbackValid && (
+      {!isPending && !callbackValid && (
         <Text small warning className="block">
           Could not load a valid deployment callback. Guided defaults and app
           creation are unavailable. Refresh the page to retry; the ordinary

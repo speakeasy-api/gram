@@ -65,7 +65,7 @@ type GetSetupDocsResponseBody struct {
 	Guides []*MCPSetupGuideResponseBody `form:"guides" json:"guides" xml:"guides"`
 	// Deployment-derived canonical remote OAuth callback URL, including when no
 	// guides match.
-	OauthCallbackURL *string `form:"oauth_callback_url,omitempty" json:"oauth_callback_url,omitempty" xml:"oauth_callback_url,omitempty"`
+	OauthCallbackURL string `form:"oauth_callback_url" json:"oauth_callback_url" xml:"oauth_callback_url"`
 }
 
 // ClearCacheUnauthorizedResponseBody is the type of the "mcpRegistries"

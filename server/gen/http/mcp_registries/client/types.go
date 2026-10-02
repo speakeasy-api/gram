@@ -1872,7 +1872,7 @@ func NewGetServerDetailsGatewayError(body *GetServerDetailsGatewayErrorResponseB
 // endpoint result from a HTTP "OK" response.
 func NewGetSetupDocsResultOK(body *GetSetupDocsResponseBody) *mcpregistries.GetSetupDocsResult {
 	v := &mcpregistries.GetSetupDocsResult{
-		OauthCallbackURL: body.OauthCallbackURL,
+		OauthCallbackURL: *body.OauthCallbackURL,
 	}
 	v.Guides = make([]*types.MCPSetupGuide, len(body.Guides))
 	for i, val := range body.Guides {
@@ -2107,6 +2107,9 @@ func ValidateGetServerDetailsResponseBody(body *GetServerDetailsResponseBody) (e
 func ValidateGetSetupDocsResponseBody(body *GetSetupDocsResponseBody) (err error) {
 	if body.Guides == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("guides", "body"))
+	}
+	if body.OauthCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oauth_callback_url", "body"))
 	}
 	for _, e := range body.Guides {
 		if e != nil {

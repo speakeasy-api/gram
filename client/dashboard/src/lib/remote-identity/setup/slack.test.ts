@@ -19,7 +19,9 @@ describe("Slack setup compatibility", () => {
       settings: { is_mcp_enabled: true },
       oauth_config: {
         redirect_urls: [callback],
-        scopes: { user: SLACK_DEFAULT_SCOPES },
+        scopes: {
+          user: ["search:read.public", "channels:history", "channels:read"],
+        },
       },
     });
     const link = new URL(config.creationUrl);
@@ -27,6 +29,28 @@ describe("Slack setup compatibility", () => {
     expect(link.searchParams.get("new_app")).toBe("1");
     expect(link.searchParams.get("manifest_json")).toBe(config.json);
     expect(config.json).not.toMatch(/secret|bot|events|chat:write|is_public/);
+  });
+  it("pins all twelve reviewed consent scopes independently", () => {
+    const expected = [
+      "search:read.public",
+      "channels:history",
+      "channels:read",
+      "search:read.private",
+      "groups:history",
+      "groups:read",
+      "search:read.im",
+      "search:read.mpim",
+      "im:history",
+      "im:read",
+      "mpim:history",
+      "mpim:read",
+    ];
+    expect(SLACK_READ_SCOPES).toEqual(expected);
+    const config = slackAppConfiguration(
+      "https://api.example.com/mcp/remote_login_callback",
+      SLACK_READ_SCOPES,
+    )!;
+    expect(JSON.parse(config.json).oauth_config.scopes.user).toEqual(expected);
   });
   it("refuses missing or noncanonical callbacks rather than deriving a browser origin", () => {
     for (const callback of [
@@ -58,7 +82,7 @@ describe("Slack setup compatibility", () => {
     expect(hasSlackReadScopes([...SLACK_READ_SCOPES].reverse())).toBe(true);
     expect(hasSlackReadScopes(SLACK_DEFAULT_SCOPES)).toBe(true);
     expect(
-      hasSlackReadScopes([...SLACK_READ_SCOPES, SLACK_READ_SCOPES[0]]),
+      hasSlackReadScopes([...SLACK_READ_SCOPES, "search:read.public"]),
     ).toBe(true);
     expect(hasSlackReadScopes([...SLACK_READ_SCOPES, "chat:write"])).toBe(
       false,

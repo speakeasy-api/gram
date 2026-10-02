@@ -153,6 +153,10 @@ on the client's pages and the compatibility-mode switch on its Settings tab;
 everyone else sees neither. The Settings tab also warns that the client's scopes
 have no effect. Browser verification: `[~]`.
 
+### Slack guided setup example
+
+Slack Setup Example is a separate disabled Remote MCP server at `mcp/x/slack-setup/settings#authentication`, with its own unbound project session issuer and no credentials, upstream client, sessions, endpoint, or gateway membership. The existing Slack Service Account and connection fixtures remain unchanged. In a writable local session, select User Identity to inspect the guided choices without saving. Do not change the shared demo during this check; the fixture does not grant Slack access or prove consent. Browser verification: `[~]` (not yet verified); see check 19 in `verify.md`.
+
 ## Local only (RunLocalFixtures, never the demo org)
 
 These come from `server/internal/demoseed/local.go` after the seed, so they are
@@ -175,10 +179,6 @@ present in a developer's org and deliberately absent from the shared demo org.
 | ChatGPT/Work usage split     | Later phase (`chatgpt:usage:metrics` rows)                                                                                                                                                                                                                                                                                                                                        |
 | Logs page content            | Enterprise-gated for the demo account type (README change 7)                                                                                                                                                                                                                                                                                                                      |
 | Remote MCP identity settings | PG Remote MCP fixtures span User Identity (Linear: `remote_session_issuers` + `remote_session_clients` + issuer binding, with `mcp_servers.remote_session_issuer_id` stamped to the one remote issuer every bound client shares), Service Account (Slack: inert static Authorization header), and None (GitHub: no client/header); all values are deterministic and nonfunctional | `[x]` |
-
-### Slack guided setup example
-
-Slack Setup Example is a separate disabled Remote MCP server at `mcp/x/slack-setup/settings#authentication`, with its own unbound project session issuer and no credentials, upstream client, sessions, endpoint, or gateway membership. The existing Slack Service Account and connection fixtures remain unchanged. In a writable local session, select User Identity to inspect the guided choices without saving. Shared demo visitors remain read-only; the fixture does not grant Slack access or prove consent. Browser verification remains pending; see check 19 in `verify.md`.
 
 ## Rules when extending
 

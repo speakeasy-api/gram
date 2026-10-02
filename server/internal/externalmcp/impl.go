@@ -282,7 +282,7 @@ func (s *Service) GetSetupDocs(ctx context.Context, payload *gen.GetSetupDocsPay
 
 	return &gen.GetSetupDocsResult{
 		Guides:           resolveSetupGuides(registrySpecifier, serverURL, callbackURL),
-		OauthCallbackURL: &callbackURL,
+		OauthCallbackURL: callbackURL,
 	}, nil
 }
 

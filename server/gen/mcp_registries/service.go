@@ -95,7 +95,7 @@ type GetSetupDocsResult struct {
 	Guides []*types.MCPSetupGuide
 	// Deployment-derived canonical remote OAuth callback URL, including when no
 	// guides match.
-	OauthCallbackURL *string
+	OauthCallbackURL string
 }
 
 // ListCatalogPayload is the payload type of the mcpRegistries service
