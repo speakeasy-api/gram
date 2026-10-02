@@ -4,13 +4,14 @@ import (
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRequirePluginWrite(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	for _, tc := range []struct {
 		name    string
 		grants  []Grant

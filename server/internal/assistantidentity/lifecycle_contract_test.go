@@ -1,11 +1,9 @@
 package assistantidentity_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -16,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	sessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	policyrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
@@ -24,7 +21,6 @@ func TestAgentSuspensionIsTemporaryAndPreservesBinding(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	id := f.provision(t)
-	session := sessionForIdentity(t, f, id)
 	q := agentrepo.New(f.db)
 	_, err := q.SuspendAgent(t.Context(), agentrepo.SuspendAgentParams{OrganizationID: f.org, ID: id.AgentID})
 	require.NoError(t, err)
@@ -35,18 +31,15 @@ func TestAgentSuspensionIsTemporaryAndPreservesBinding(t *testing.T) {
 	_, err = q.ResumeAgent(t.Context(), agentrepo.ResumeAgentParams{OrganizationID: f.org, ID: id.AgentID})
 	require.NoError(t, err)
 	require.NoError(t, testIdentityService.Validate(t.Context(), f.db, id))
-	_, err = sessionsrepo.New(f.db).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ProjectID: f.project, OrganizationID: f.org, ID: session})
-	require.NoError(t, err, "suspension must not retire credentials or change binding generations")
 }
 
-func TestAssignmentAwayAndBackCannotReviveBinding(t *testing.T) {
+func TestAssignmentChangeInvalidatesCurrentBinding(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	id := f.provision(t)
-	session := sessionForIdentity(t, f, id)
 	replacement, err := agentrepo.New(f.db).CreateAgent(t.Context(), agentrepo.CreateAgentParams{OrganizationID: f.org, ProjectID: uuid.NullUUID{UUID: f.project, Valid: true}, OwnerUserID: f.actor, Name: "Replacement"})
 	require.NoError(t, err)
-	for _, agent := range []uuid.UUID{replacement.ID, id.AgentID} {
+	for _, agent := range []uuid.UUID{replacement.ID} {
 		_, err = policyrepo.New(f.db).UpsertWorkloadAgentAssignment(t.Context(), policyrepo.UpsertWorkloadAgentAssignmentParams{OrganizationID: f.org, WorkloadIssuerID: id.IssuerID, Subject: id.Subject, MatchKind: "exact", AgentID: agent})
 		require.NoError(t, err)
 		require.ErrorIs(t, testIdentityService.Validate(t.Context(), f.db, id), assistantidentity.ErrInvalidIdentity)
@@ -54,38 +47,32 @@ func TestAssignmentAwayAndBackCannotReviveBinding(t *testing.T) {
 	resolved, err := testIdentityService.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, f.trigger)
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Tombstoned, resolved.State)
-	_, err = sessionsrepo.New(f.db).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ProjectID: f.project, OrganizationID: f.org, ID: session})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
-func TestIssuerKeyChangeAndRestorationCannotReviveBinding(t *testing.T) {
+func TestIssuerKeyMismatchInvalidatesCurrentBinding(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	id := f.provision(t)
-	session := sessionForIdentity(t, f, id)
 	q := policyrepo.New(f.db)
 	issuer, err := q.GetWorkloadIssuer(t.Context(), policyrepo.GetWorkloadIssuerParams{OrganizationID: f.org, ProjectID: uuid.NullUUID{UUID: f.project, Valid: true}, ID: id.IssuerID})
 	require.NoError(t, err)
 	require.Equal(t, "https://platform.example.invalid", issuer.Issuer)
 	require.Equal(t, "https://platform.example.invalid/.well-known/jwks.json", issuer.JwksUri)
-	for _, keys := range []string{"https://other.example.invalid/keys", issuer.JwksUri} {
+	for _, keys := range []string{"https://other.example.invalid/keys"} {
 		_, err = q.UpdateWorkloadIssuer(t.Context(), policyrepo.UpdateWorkloadIssuerParams{OrganizationID: f.org, ProjectID: issuer.ProjectID, ID: issuer.ID, Name: issuer.Name, Description: issuer.Description, Tags: issuer.Tags, JwksUri: keys})
 		require.NoError(t, err)
 		require.ErrorIs(t, testIdentityService.Validate(t.Context(), f.db, id), assistantidentity.ErrInvalidIdentity)
 	}
-	_, err = sessionsrepo.New(f.db).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ProjectID: f.project, OrganizationID: f.org, ID: session})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
-func TestOwnerTransferAwayAndBackCannotReviveBinding(t *testing.T) {
+func TestOwnerChangeInvalidatesCurrentBinding(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	id := f.provision(t)
-	session := sessionForIdentity(t, f, id)
 	q := repo.New(f.db)
 	require.NoError(t, q.FixtureCreateUser(t.Context(), repo.FixtureCreateUserParams{ID: "replacement-owner", Email: "replacement@example.invalid"}))
 	require.NoError(t, q.FixtureCreateMembership(t.Context(), repo.FixtureCreateMembershipParams{OrganizationID: f.org, UserID: conv.ToPGText("replacement-owner")}))
-	for _, owner := range []string{"replacement-owner", f.actor} {
+	for _, owner := range []string{"replacement-owner"} {
 		_, err := agentrepo.New(f.db).TransferAgent(t.Context(), agentrepo.TransferAgentParams{OrganizationID: f.org, ID: id.AgentID, OwnerUserID: owner})
 		require.NoError(t, err)
 		require.ErrorIs(t, testIdentityService.Validate(t.Context(), f.db, id), assistantidentity.ErrInvalidIdentity)
@@ -93,8 +80,6 @@ func TestOwnerTransferAwayAndBackCannotReviveBinding(t *testing.T) {
 	resolved, err := testIdentityService.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, f.trigger)
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Tombstoned, resolved.State)
-	_, err = sessionsrepo.New(f.db).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ProjectID: f.project, OrganizationID: f.org, ID: session})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestDeploymentIssuerMismatchFailsClosed(t *testing.T) {
@@ -144,34 +129,6 @@ func TestConfiguredSkillIncludesBoundedProjectGate(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(ceiling.Policy), f.project.String())
 	require.Contains(t, string(ceiling.Policy), skill.ID.String())
-}
-
-func TestCapabilityEditsRevokeSessionsWithoutChangingBinding(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	id := f.provision(t)
-	session := sessionForIdentity(t, f, id)
-	var before []authz.Grant
-	require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
-		var err error
-		before, err = assistantidentity.ConfiguredCapabilities(t.Context(), tx, f.org, f.project, f.assistant)
-		if err != nil {
-			return fmt.Errorf("capture configured capabilities: %w", err)
-		}
-		return nil
-	}))
-	require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
-		return assistantidentity.RevokeIfCapabilitiesChanged(t.Context(), tx, f.org, f.project, f.assistant, before)
-	}))
-	_, err := sessionsrepo.New(f.db).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ProjectID: f.project, OrganizationID: f.org, ID: session})
-	require.NoError(t, err, "unchanged configuration is not revocation")
-	f.attachMCP(t)
-	require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
-		return assistantidentity.RevokeIfCapabilitiesChanged(t.Context(), tx, f.org, f.project, f.assistant, before)
-	}))
-	_, err = sessionsrepo.New(f.db).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ProjectID: f.project, OrganizationID: f.org, ID: session})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
-	require.NoError(t, testIdentityService.Validate(t.Context(), f.db, id), "configuration edits do not change identity generations")
 }
 
 func TestAssignmentWithdrawalWithoutLiveAssignmentIsNoop(t *testing.T) {

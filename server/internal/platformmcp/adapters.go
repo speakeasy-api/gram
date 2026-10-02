@@ -380,8 +380,8 @@ type PostgresReader struct {
 	reviewRequestBudget       OperationBudget
 }
 
-func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
-	return &PostgresReader{
+func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool, management AssistantIdentityManagement) *PostgresReader {
+	r := &PostgresReader{
 		assistantIdentity:         nil,
 		logger:                    logger.With(attr.SlogComponent("platformmcp")),
 		db:                        db,
@@ -409,6 +409,10 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		reviewRequests:            nil,
 		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
 	}
+	if management != nil {
+		r.assistantIdentity = &assistantIdentityService{management: management, resolveProject: r.resolveInventoryProject}
+	}
+	return r
 }
 
 func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader {

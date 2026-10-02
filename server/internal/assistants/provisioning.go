@@ -168,9 +168,6 @@ func (s *ServiceCore) DisableManagedAssistant(ctx context.Context, projectID uui
 		return fmt.Errorf("begin disable managed assistant tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := triggerrepo.New(tx).LockTriggerProject(ctx, projectID); err != nil {
-		return fmt.Errorf("lock managed assistant project: %w", err)
-	}
 
 	queries := assistantrepo.New(tx)
 	// This anchor is the assistant row itself, not an optional identity binding.
@@ -262,9 +259,6 @@ func (s *ServiceCore) ensureDashboardTrigger(ctx context.Context, db triggerrepo
 // ensureDashboardRootTx reuses the real durable dashboard ingress trigger.
 // The assistant anchor serializes creation, healing, upgrade, and deletion.
 func (s *ServiceCore) ensureDashboardRootTx(ctx context.Context, tx pgx.Tx, organizationID string, projectID, assistantID uuid.UUID, name string) (uuid.UUID, error) {
-	if _, err := triggerrepo.New(tx).LockTriggerProject(ctx, projectID); err != nil {
-		return uuid.Nil, fmt.Errorf("lock dashboard ingress project: %w", err)
-	}
 	anchor, err := assistantrepo.New(tx).LockAssistantIdentityAnchor(ctx, assistantrepo.LockAssistantIdentityAnchorParams{ProjectID: projectID, AssistantID: assistantID})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("lock assistant for dashboard ingress: %w", err)
@@ -319,9 +313,6 @@ func (s *ServiceCore) createManagedAssistant(
 		return assistantRecord{}, fmt.Errorf("begin managed assistant tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := triggerrepo.New(tx).LockTriggerProject(ctx, projectID); err != nil {
-		return assistantRecord{}, fmt.Errorf("lock managed assistant project: %w", err)
-	}
 
 	queries := assistantrepo.New(tx)
 	created, err := queries.CreateAssistant(ctx, assistantrepo.CreateAssistantParams{

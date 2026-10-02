@@ -1615,40 +1615,6 @@ func (q *Queries) ListAssignableAgents(ctx context.Context, organizationID strin
 	return items, nil
 }
 
-const listAuthorityAgentIDsByRoles = `-- name: ListAuthorityAgentIDsByRoles :many
-SELECT DISTINCT a.id
-FROM agent_role_assignments ara
-JOIN agents a ON a.organization_id = ara.organization_id AND a.id = ara.agent_id
-WHERE ara.organization_id = $1 AND ara.role_urn = ANY($2::text[])
-  AND ara.deleted_at IS NULL AND a.deleted IS FALSE
-ORDER BY a.id
-`
-
-type ListAuthorityAgentIDsByRolesParams struct {
-	OrganizationID string
-	RoleUrns       []string
-}
-
-func (q *Queries) ListAuthorityAgentIDsByRoles(ctx context.Context, arg ListAuthorityAgentIDsByRolesParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listAuthorityAgentIDsByRoles, arg.OrganizationID, arg.RoleUrns)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listChallengeResolutions = `-- name: ListChallengeResolutions :many
 
 SELECT id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, resolved_by, created_at FROM authz_challenge_resolutions
@@ -2637,37 +2603,6 @@ func (q *Queries) LockAgentRoleAssignments(ctx context.Context, arg LockAgentRol
 	return err
 }
 
-const lockAuthorityAgents = `-- name: LockAuthorityAgents :many
-SELECT id FROM agents
-WHERE organization_id = $1 AND id = ANY($2::uuid[]) AND deleted IS FALSE
-ORDER BY id FOR UPDATE
-`
-
-type LockAuthorityAgentsParams struct {
-	OrganizationID string
-	AgentIds       []uuid.UUID
-}
-
-func (q *Queries) LockAuthorityAgents(ctx context.Context, arg LockAuthorityAgentsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, lockAuthorityAgents, arg.OrganizationID, arg.AgentIds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const lockChallengeResolutions = `-- name: LockChallengeResolutions :exec
 SELECT pg_advisory_xact_lock(hashtextextended(
   jsonb_build_array('access.challenge-resolution', $1::text)::text, 0
@@ -3010,40 +2945,6 @@ func (q *Queries) ReplaceOrganizationRoleAssignment(ctx context.Context, arg Rep
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
-}
-
-const revokeAuthorityWorkloadSessions = `-- name: RevokeAuthorityWorkloadSessions :exec
-UPDATE user_sessions s
-SET deleted_at = clock_timestamp()
-FROM user_session_issuers si
-LEFT JOIN projects ip ON ip.id = si.project_id
-WHERE si.id = s.user_session_issuer_id
-  AND s.deleted IS FALSE
-  AND COALESCE(s.organization_id, si.organization_id, (SELECT organization_id FROM projects WHERE id = s.project_id), ip.organization_id) = $1::text
-  AND (s.organization_id IS NULL OR s.organization_id = $1::text)
-  AND (si.organization_id IS NULL OR si.organization_id = $1::text)
-  AND ((SELECT organization_id FROM projects WHERE id = s.project_id) IS NULL OR (SELECT organization_id FROM projects WHERE id = s.project_id) = $1::text)
-  AND (ip.organization_id IS NULL OR ip.organization_id = $1::text)
-  AND (SELECT wa.agent_id
-    FROM workload_agent_assignments wa
-    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id
-    WHERE wa.organization_id = $1::text AND wa.deleted IS FALSE
-      AND ((wa.match_kind = 'exact' AND s.subject_urn = 'workload:' || wa.workload_issuer_id::text || ':' || wa.subject)
-        OR (wa.match_kind = 'wildcard' AND wi.allow_wildcard_admission
-            AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
-            AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
-    ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
-    LIMIT 1) = ANY($2::uuid[])
-`
-
-type RevokeAuthorityWorkloadSessionsParams struct {
-	OrganizationID string
-	AgentIds       []uuid.UUID
-}
-
-func (q *Queries) RevokeAuthorityWorkloadSessions(ctx context.Context, arg RevokeAuthorityWorkloadSessionsParams) error {
-	_, err := q.db.Exec(ctx, revokeAuthorityWorkloadSessions, arg.OrganizationID, arg.AgentIds)
-	return err
 }
 
 const softDeleteAgentRoleAssignmentsByRole = `-- name: SoftDeleteAgentRoleAssignmentsByRole :exec

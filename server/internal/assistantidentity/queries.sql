@@ -1,8 +1,5 @@
--- All identity mutations serialize on the retained project anchor. Call this
--- before reading history; it also serializes first provisioning across assistants.
--- name: LockProject :one
-SELECT id FROM projects WHERE organization_id = @organization_id AND id = @project_id
-FOR UPDATE;
+-- name: LockAssistant :one
+SELECT id FROM assistants WHERE organization_id = @organization_id AND project_id = @project_id AND id = @assistant_id FOR UPDATE;
 
 -- name: GetAssistant :one
 SELECT a.id, a.created_by_user_id, a.status, a.deleted,
@@ -44,12 +41,13 @@ FOR SHARE OF u, m;
 
 -- name: GetAssistantBinding :one
 SELECT b.id, b.original_assistant_id, b.original_agent_id, b.generation, b.deleted,
-  (b.deleted OR b.project_ref_id IS NULL OR b.assistant_id IS NULL OR b.agent_id IS NULL OR g.deleted OR g.revoked_at IS NOT NULL OR g.owner_reassignment_required_at IS NOT NULL)::boolean AS tombstoned,
+  (b.deleted OR b.project_ref_id IS NULL OR b.assistant_id IS NULL OR b.agent_id IS NULL OR g.deleted OR g.revoked_at IS NOT NULL OR g.owner_reassignment_required_at IS NOT NULL OR (a.created_by_user_id IS NOT NULL AND g.owner_user_id IS DISTINCT FROM a.created_by_user_id))::boolean AS tombstoned,
   COALESCE(NOT b.deleted AND b.project_ref_id IS NOT NULL AND b.assistant_id IS NOT NULL
     AND b.agent_id = b.original_agent_id AND b.assistant_id = b.original_assistant_id
     AND b.project_ref_id = b.project_id AND NOT p.deleted AND NOT a.deleted
     AND NOT g.deleted AND g.suspended_at IS NULL AND g.revoked_at IS NULL
-    AND g.owner_reassignment_required_at IS NULL AND u.deleted_at IS NULL
+    AND g.owner_reassignment_required_at IS NULL
+    AND (a.created_by_user_id IS NULL OR g.owner_user_id = a.created_by_user_id) AND u.deleted_at IS NULL
     AND u.workos_deleted_at IS NULL AND NOT m.deleted AND m.user_id IS NOT NULL, false)::boolean AS eligible
 FROM assistant_agent_bindings b
 LEFT JOIN projects p ON p.organization_id = b.organization_id AND p.id = b.project_ref_id
@@ -105,6 +103,7 @@ ORDER BY created_at, id FOR UPDATE;
 -- name: CreatePlatformIssuer :one
 INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission)
 VALUES (@organization_id, @project_id, @name, @issuer, @jwks_uri, false)
+ON CONFLICT (project_id, name) WHERE deleted IS FALSE DO NOTHING
 RETURNING id;
 
 -- name: CreateTriggerBinding :exec
@@ -290,11 +289,6 @@ WHERE organization_id = @organization_id AND project_id = @project_id AND id = @
 
 -- Lock all tenant issuers before the agent. This covers non-root assignments
 -- and prevents an admission on another existing issuer racing the sweep.
--- name: LockAssistantIssuers :exec
-SELECT i.id FROM workload_issuers i
-WHERE i.organization_id = @organization_id
-ORDER BY i.id FOR UPDATE;
-
 -- name: FixtureWithdrawAssignment :exec
 UPDATE workload_agent_assignments SET deleted_at = clock_timestamp()
 WHERE organization_id = @organization_id AND workload_issuer_id = @issuer_id AND subject = @subject AND match_kind = 'exact' AND NOT deleted;

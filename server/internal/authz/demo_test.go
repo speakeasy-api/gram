@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -26,7 +27,7 @@ func TestPrepareContext_demoOrgGetsEveryUserVisibleScope(t *testing.T) {
 
 	ctx := demoTestCtx(t)
 	conn := newTestDB(t)
-	engine := NewEngine(testInfrastructure.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	ctx, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)
@@ -67,7 +68,7 @@ func TestPrepareContext_demoOrgIgnoresScopeOverrides(t *testing.T) {
 	ctx = contextvalues.SetRBACScopeOverride(ctx, "project:write")
 
 	conn := newTestDB(t)
-	engine := NewEngine(testInfrastructure.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	ctx, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)

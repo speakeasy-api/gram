@@ -319,14 +319,6 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		return nil, oops.E(oops.CodeFailedPrecondition, nil, "access for this server changed while you were editing; reload and try again")
 	}
 
-	changedPrincipals, err := changedAudiencePrincipalsTx(ctx, tx, ac.ActiveOrganizationID, payload.ResourceID, principalsByLevel)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "resolve changed agent audience").LogError(ctx, s.logger)
-	}
-	if err := invalidateAgentAuthorityTx(ctx, tx, ac.ActiveOrganizationID, changedPrincipals, nil); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "invalidate agent audience authority").LogError(ctx, s.logger)
-	}
-
 	// Every level is rewritten, including the ones nobody was given, so a
 	// principal moved from "manage" to "use" does not keep its old rule. The
 	// narrower exclusion scopes are left alone: the role editor writes them as

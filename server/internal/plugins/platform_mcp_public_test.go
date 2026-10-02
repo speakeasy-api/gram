@@ -50,11 +50,6 @@ func TestPublicPlatformMCPFiles(t *testing.T) {
 		require.Contains(t, string(claudeSkill), tool)
 	}
 	for _, guardrail := range []string{
-		"The role/member tools above do not edit a server's direct audience",
-		"possible session retirement and obtain explicit confirmation",
-		"corresponding access-change",
-		"not direct audience or credential retirement",
-		"as unverified unless authoritative evidence is available",
 		"`list_projects` with `limit: 100`",
 		"only `limit` (capped at 100), not cursor or search",
 		"If `truncated: true`, stop and hand off project selection to the AICP dashboard",

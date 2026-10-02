@@ -42,23 +42,3 @@ Use this workflow only through the authenticated Speakeasy AI Control Plane (AIC
 12. Report the selected project, MCP, custom role, masked member, and confirmed grants as committed local desired state only when supported by the evidence. Clearly separate the historical commit from current local verification and pending or unverified provider synchronization. These tools do not verify provider convergence or effective provider access; do not claim either from their local results.
 
 Project, MCP, custom-role, masked-member, complete-grant, and final assignment choices all remain explicit conversation checkpoints. All selectors and mutation-control fields remain agent-operational.
-
-## Server audience and agent authority boundary
-
-The role/member tools above do not edit a server's direct audience. Do not use a
-role assignment as a substitute for an agent-specific server audience change.
-Changing an agent's server-local audience can retire its current workload
-sessions; unchanged audiences do not require revocation. This does not revoke
-unrelated agents or establish that a new execution credential has been issued.
-
-For a direct server-audience request, stop this tool workflow and offer a handoff
-to the AICP dashboard. Before the handoff, identify the exact project, server,
-and affected agent using authorized, privacy-safe evidence. Explain the proposed
-access change and possible session retirement and obtain explicit confirmation.
-Do not claim that these tools performed the change. The authorized user must
-review the fresh audience in the dashboard and apply the confirmed change there.
-Ask them to verify the resulting audience and the corresponding access-change
-audit event in the dashboard. Fresh role/member reads can verify only their own
-local state, not direct audience or credential retirement. Report those outcomes
-as unverified unless authoritative evidence is available; never infer them from
-role counts, a successful handoff, or provider synchronization.

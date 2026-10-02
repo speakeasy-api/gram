@@ -50,7 +50,7 @@ func TestMCPNetworkTrafficRequiresTargetReadAndReturnsBoundedSummary(t *testing.
 	lastSeen := time.Now().UTC().Add(-time.Minute)
 	traffic := &recordingNetworkTrafficReader{rows: []telemetryrepo.MCPNetworkTrafficRow{{Surface: "public", RequestCount: 3, LastSeen: lastSeen}, {Surface: "private", RequestCount: 2, LastSeen: lastSeen.Add(-time.Minute)}}}
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine).WithMCPNetworkTraffic(traffic, alwaysEnabledFeature)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn, nil).WithAuthorization(engine).WithMCPNetworkTraffic(traffic, alwaysEnabledFeature)
 	input := MCPNetworkTrafficInput{ProjectID: project.ID.String(), TargetKind: "mcp", TargetID: server.ID.String(), Window: "24h"}
 	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)

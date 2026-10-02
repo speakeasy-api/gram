@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/stretchr/testify/require"
 )
@@ -250,7 +251,7 @@ func TestGrantsAuthorizeDispositionDirectGrantReachesOnlyMatchingTools(t *testin
 func TestEngineFilterPrincipalPrecedence(t *testing.T) {
 	t.Parallel()
 
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		heldBy(precedenceRole, NewGrant(ScopeMCPConnect, WildcardResource)),
 		heldBy(precedenceRole, NewGrant(ScopeMCPBlockedConnect, "server-1")),
@@ -270,7 +271,7 @@ func TestEngineFilterPrincipalPrecedence(t *testing.T) {
 func TestEngineRequirePrincipalPrecedenceAppliesPerPolicy(t *testing.T) {
 	t.Parallel()
 
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	credentialPolicy := []Grant{NewGrant(ScopeMCPConnect, "server-1")}
 	agentPolicy := []Grant{heldBy(precedenceAgent, NewGrant(ScopeMCPConnect, "server-1"))}
 	ownerPolicy := []Grant{
@@ -297,7 +298,7 @@ func TestEngineRequirePrincipalPrecedenceAppliesPerPolicy(t *testing.T) {
 func TestRequireAnyUnblockedPrincipalPrecedence(t *testing.T) {
 	t.Parallel()
 
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	checks := []Check{
 		{Scope: ScopeSkillRead, ResourceID: "project-one", Dimensions: map[string]string{SelectorKeyProjectID: "project-one"}},
 		{Scope: ScopeSkillRead, ResourceID: "skill-one", Dimensions: map[string]string{SelectorKeyProjectID: "project-one"}},

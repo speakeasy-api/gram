@@ -89,6 +89,7 @@ func (q *Queries) CreateAssistantBinding(ctx context.Context, arg CreateAssistan
 const createPlatformIssuer = `-- name: CreatePlatformIssuer :one
 INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission)
 VALUES ($1, $2, $3, $4, $5, false)
+ON CONFLICT (project_id, name) WHERE deleted IS FALSE DO NOTHING
 RETURNING id
 `
 
@@ -586,6 +587,8 @@ type FixtureWithdrawAssignmentParams struct {
 	Subject        string
 }
 
+// Lock all tenant issuers before the agent. This covers non-root assignments
+// and prevents an admission on another existing issuer racing the sweep.
 func (q *Queries) FixtureWithdrawAssignment(ctx context.Context, arg FixtureWithdrawAssignmentParams) error {
 	_, err := q.db.Exec(ctx, fixtureWithdrawAssignment, arg.OrganizationID, arg.IssuerID, arg.Subject)
 	return err
@@ -655,12 +658,13 @@ func (q *Queries) GetAssistant(ctx context.Context, arg GetAssistantParams) (Get
 
 const getAssistantBinding = `-- name: GetAssistantBinding :one
 SELECT b.id, b.original_assistant_id, b.original_agent_id, b.generation, b.deleted,
-  (b.deleted OR b.project_ref_id IS NULL OR b.assistant_id IS NULL OR b.agent_id IS NULL OR g.deleted OR g.revoked_at IS NOT NULL OR g.owner_reassignment_required_at IS NOT NULL)::boolean AS tombstoned,
+  (b.deleted OR b.project_ref_id IS NULL OR b.assistant_id IS NULL OR b.agent_id IS NULL OR g.deleted OR g.revoked_at IS NOT NULL OR g.owner_reassignment_required_at IS NOT NULL OR (a.created_by_user_id IS NOT NULL AND g.owner_user_id IS DISTINCT FROM a.created_by_user_id))::boolean AS tombstoned,
   COALESCE(NOT b.deleted AND b.project_ref_id IS NOT NULL AND b.assistant_id IS NOT NULL
     AND b.agent_id = b.original_agent_id AND b.assistant_id = b.original_assistant_id
     AND b.project_ref_id = b.project_id AND NOT p.deleted AND NOT a.deleted
     AND NOT g.deleted AND g.suspended_at IS NULL AND g.revoked_at IS NULL
-    AND g.owner_reassignment_required_at IS NULL AND u.deleted_at IS NULL
+    AND g.owner_reassignment_required_at IS NULL
+    AND (a.created_by_user_id IS NULL OR g.owner_user_id = a.created_by_user_id) AND u.deleted_at IS NULL
     AND u.workos_deleted_at IS NULL AND NOT m.deleted AND m.user_id IS NOT NULL, false)::boolean AS eligible
 FROM assistant_agent_bindings b
 LEFT JOIN projects p ON p.organization_id = b.organization_id AND p.id = b.project_ref_id
@@ -1019,17 +1023,21 @@ func (q *Queries) LockActor(ctx context.Context, arg LockActorParams) (string, e
 	return id, err
 }
 
-const lockAssistantIssuers = `-- name: LockAssistantIssuers :exec
-SELECT i.id FROM workload_issuers i
-WHERE i.organization_id = $1
-ORDER BY i.id FOR UPDATE
+const lockAssistant = `-- name: LockAssistant :one
+SELECT id FROM assistants WHERE organization_id = $1 AND project_id = $2 AND id = $3 FOR UPDATE
 `
 
-// Lock all tenant issuers before the agent. This covers non-root assignments
-// and prevents an admission on another existing issuer racing the sweep.
-func (q *Queries) LockAssistantIssuers(ctx context.Context, organizationID string) error {
-	_, err := q.db.Exec(ctx, lockAssistantIssuers, organizationID)
-	return err
+type LockAssistantParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	AssistantID    uuid.UUID
+}
+
+func (q *Queries) LockAssistant(ctx context.Context, arg LockAssistantParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockAssistant, arg.OrganizationID, arg.ProjectID, arg.AssistantID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const lockDedicatedAgent = `-- name: LockDedicatedAgent :one
@@ -1050,25 +1058,6 @@ type LockDedicatedAgentParams struct {
 
 func (q *Queries) LockDedicatedAgent(ctx context.Context, arg LockDedicatedAgentParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockDedicatedAgent, arg.OrganizationID, arg.ProjectID, arg.AgentID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
-const lockProject = `-- name: LockProject :one
-SELECT id FROM projects WHERE organization_id = $1 AND id = $2
-FOR UPDATE
-`
-
-type LockProjectParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-}
-
-// All identity mutations serialize on the retained project anchor. Call this
-// before reading history; it also serializes first provisioning across assistants.
-func (q *Queries) LockProject(ctx context.Context, arg LockProjectParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, lockProject, arg.OrganizationID, arg.ProjectID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err

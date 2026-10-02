@@ -35,7 +35,7 @@ func TestLegacyUpgradeAndConcurrentRetries(t *testing.T) {
 			var binding assistantidentity.Binding
 			err := inTx(t, f.db, func(tx pgx.Tx) error {
 				var err error
-				binding, err = testIdentityService.Upgrade(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
+				binding, err = testIdentityService.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
 				if err != nil {
 					return fmt.Errorf("fixture operation: %w", err)
 				}
@@ -155,7 +155,7 @@ func TestCreatorAndConsentProvenanceRemainDistinct(t *testing.T) {
 	server := f.attachMCP(t)
 	f.grant(t, urn.NewPrincipal(urn.PrincipalTypeUser, f.actor), authz.ScopeMCPRead, "*")
 	require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
-		_, err := testIdentityService.Upgrade(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: upgrader})
+		_, err := testIdentityService.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: upgrader})
 		if err != nil {
 			return fmt.Errorf("fixture operation: %w", err)
 		}
@@ -308,7 +308,7 @@ func TestRootExplicitResumeAndPermanentAssistantTombstone(t *testing.T) {
 		return assistantidentity.TombstoneAssistant(t.Context(), tx, f.org, f.project, f.assistant)
 	}))
 	err = inTx(t, f.db, func(tx pgx.Tx) error {
-		_, err := testIdentityService.Upgrade(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
+		_, err := testIdentityService.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
 		if err != nil {
 			return fmt.Errorf("fixture operation: %w", err)
 		}

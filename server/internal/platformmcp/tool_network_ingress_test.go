@@ -57,7 +57,7 @@ func TestNetworkIngressToolHidesUnexpectedErrors(t *testing.T) {
 	pool, err := pgxpool.New(t.Context(), "postgres://sentinel-db-user@sentinel-db-host:5432/sentinel_db")
 	require.NoError(t, err)
 	pool.Close()
-	reader := NewPostgresReader(testenv.NewLogger(t), pool).WithNetworkIngressStatus(mustParseURL(t, "https://app.getgram.test"))
+	reader := NewPostgresReader(testenv.NewLogger(t), pool, nil).WithNetworkIngressStatus(mustParseURL(t, "https://app.getgram.test"))
 	require.NotNil(t, reader.networkIngress)
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "ingress-error", Version: "0.0.1"}, nil)
@@ -137,7 +137,7 @@ func TestGetNetworkIngressReportsLiveStateWithoutCredentials(t *testing.T) {
 	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
 	organization, err := organizationsrepo.New(conn).GetOrganizationMetadata(ctx, principal.OrganizationID)
 	require.NoError(t, err)
-	service := NewPostgresReader(testenv.NewLogger(t), conn).
+	service := NewPostgresReader(testenv.NewLogger(t), conn, nil).
 		WithNetworkIngressStatus(mustParseURL(t, "https://app.getgram.test")).networkIngress
 	require.NotNil(t, service)
 

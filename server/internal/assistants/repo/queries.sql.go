@@ -899,6 +899,44 @@ func (q *Queries) FailAssistantThreadEvent(ctx context.Context, arg FailAssistan
 	return err
 }
 
+const findLegacyWakeRequester = `-- name: FindLegacyWakeRequester :many
+SELECT DISTINCT actor_id::text
+FROM audit_logs
+WHERE organization_id = $1 AND project_id = $2::uuid
+  AND subject_id = $3::text AND subject_type = 'trigger_instance'
+  AND action = 'wake:scheduled' AND actor_type = 'user'
+  AND actor_id NOT IN ('', 'system', '*')
+LIMIT 2
+`
+
+type FindLegacyWakeRequesterParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	TriggerID      string
+}
+
+// Legacy scheduling audits can identify the original human actor. Multiple
+// distinct actors are ambiguous; callers retain legacy behavior instead of guessing.
+func (q *Queries) FindLegacyWakeRequester(ctx context.Context, arg FindLegacyWakeRequesterParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, findLegacyWakeRequester, arg.OrganizationID, arg.ProjectID, arg.TriggerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var actor_id string
+		if err := rows.Scan(&actor_id); err != nil {
+			return nil, err
+		}
+		items = append(items, actor_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getActiveAssistantRuntimeByThreadID = `-- name: GetActiveAssistantRuntimeByThreadID :one
 SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE assistant_thread_id = $1
@@ -1704,8 +1742,10 @@ const listAssistantIdentityStates = `-- name: ListAssistantIdentityStates :many
 SELECT DISTINCT ON (b.original_assistant_id)
  b.original_assistant_id, b.original_agent_id, b.generation,
  (b.deleted OR b.assistant_id IS NULL OR b.agent_id IS NULL OR b.project_ref_id IS NULL
- OR g.id IS NULL OR g.deleted OR g.revoked_at IS NOT NULL OR g.owner_reassignment_required_at IS NOT NULL)::boolean AS tombstoned
+ OR g.id IS NULL OR g.deleted OR g.revoked_at IS NOT NULL OR g.owner_reassignment_required_at IS NOT NULL
+ OR (a.created_by_user_id IS NOT NULL AND g.owner_user_id IS DISTINCT FROM a.created_by_user_id))::boolean AS tombstoned
 FROM assistant_agent_bindings b
+LEFT JOIN assistants a ON a.id = b.assistant_id AND a.organization_id = b.organization_id AND a.project_id = b.project_id
 LEFT JOIN agents g ON g.id = b.agent_id AND g.organization_id = b.organization_id AND g.project_id = b.project_id
 WHERE b.project_id = $1 AND b.original_assistant_id = ANY($2::uuid[])
 ORDER BY b.original_assistant_id, b.generation DESC

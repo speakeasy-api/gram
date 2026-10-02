@@ -11,6 +11,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -30,7 +31,7 @@ func TestCredentialAdmissionHookFailsClosed(t *testing.T) {
 	for name, admit := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			engine := NewEngine(testInfrastructure.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), EngineOpts{AdmitPrincipalCredential: admit})
+			engine := NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), EngineOpts{AdmitPrincipalCredential: admit})
 			_, err := engine.AdmitPrincipalCredential(t.Context())
 			if name == "failed admission" {
 				require.ErrorIs(t, err, admissionError)
@@ -55,7 +56,7 @@ func TestCredentialAdmissionHookReloadsAndConjoinsPolicies(t *testing.T) {
 		}
 		return PrincipalCredentialAdmission{OwnerUserID: "current-owner", Credential: grants, Agent: agent, Owner: grants}, nil
 	}
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), EngineOpts{AdmitPrincipalCredential: admit})
+	engine := NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), EngineOpts{AdmitPrincipalCredential: admit})
 	ctx := contextvalues.WithPrincipalCredentialAuthorization(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org-test"}, urn.NewPrincipal(urn.PrincipalTypeAgent, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001"), contextvalues.PrincipalCredential{})
 	prepared, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)
@@ -84,7 +85,7 @@ func TestCredentialDBTXAdmissionHookFailsClosed(t *testing.T) {
 	for name, admit := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			engine := NewEngine(testInfrastructure.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), EngineOpts{AdmitPrincipalCredentialWithDBTX: admit})
+			engine := NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), EngineOpts{AdmitPrincipalCredentialWithDBTX: admit})
 			_, err := engine.AdmitPrincipalCredentialWithDBTX(t.Context(), nil)
 			if name == "failed admission" {
 				require.ErrorIs(t, err, admissionError)
@@ -109,7 +110,7 @@ func TestCredentialDBTXAdmissionHookReloadsAndConjoinsPolicies(t *testing.T) {
 		}
 		return PrincipalCredentialAdmission{OwnerUserID: "current-owner", Credential: grants, Agent: agent, Owner: grants}, nil
 	}
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), EngineOpts{AdmitPrincipalCredentialWithDBTX: admit})
+	engine := NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), EngineOpts{AdmitPrincipalCredentialWithDBTX: admit})
 	ctx := contextvalues.WithPrincipalCredentialAuthorization(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org-test"}, urn.NewPrincipal(urn.PrincipalTypeAgent, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001"), contextvalues.PrincipalCredential{})
 	prepared, err := engine.AdmitPrincipalCredentialWithDBTX(ctx, nil)
 	require.NoError(t, err)

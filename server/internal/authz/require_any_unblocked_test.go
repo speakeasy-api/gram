@@ -4,13 +4,14 @@ import (
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRequireAnyUnblocked(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	checks := []Check{
 		{Scope: ScopeSkillRead, ResourceID: "project-one", Dimensions: map[string]string{SelectorKeyProjectID: "project-one"}},
 		{Scope: ScopeSkillRead, ResourceID: "skill-one", Dimensions: map[string]string{SelectorKeyProjectID: "project-one"}},

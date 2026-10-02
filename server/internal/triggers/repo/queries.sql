@@ -1,8 +1,3 @@
--- Identity mutations take the project anchor before trigger rows to match
--- assistantidentity's lock order, including concurrent first provisioning.
--- name: LockTriggerProject :one
-SELECT id FROM projects WHERE id = @project_id AND deleted IS FALSE FOR UPDATE;
-
 -- name: CreateTriggerInstance :one
 INSERT INTO trigger_instances (
     organization_id,
@@ -119,9 +114,8 @@ UPDATE trigger_instances
 SET
     status = @status,
     updated_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id
+WHERE id = @id
   AND status = @expected_status
-  AND definition_slug = 'wake'
   AND deleted IS FALSE
 RETURNING *;
 

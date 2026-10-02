@@ -12,6 +12,7 @@ import (
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -24,7 +25,7 @@ func staticChallengeLogging(enabled bool) ChallengeLoggingEnabled {
 
 func TestEngineRequire_requiresAuthContext(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 
 	err := engine.Require(t.Context(), Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
 	var oopsErr *oops.ShareableError
@@ -34,7 +35,7 @@ func TestEngineRequire_requiresAuthContext(t *testing.T) {
 
 func TestEngineRequire_mapsDeniedToForbidden(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), nil)
 
 	err := engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
@@ -46,7 +47,7 @@ func TestEngineRequire_mapsDeniedToForbidden(t *testing.T) {
 
 func TestEngineRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 
 	err := engine.Require(enterpriseSessionCtx(t), Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
 	var oopsErr *oops.ShareableError
@@ -57,7 +58,7 @@ func TestEngineRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
 
 func TestEvaluateLoadedGrants_doesNotConsultShouldEnforce(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID:  "org_123",
 		UserID:                "user_123",
@@ -86,7 +87,7 @@ func TestEvaluateLoadedGrants_doesNotConsultShouldEnforce(t *testing.T) {
 
 func TestEngineRequireAny_mapsDeniedToForbidden(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeMCPConnect, "tool_a")})
 
 	err := engine.RequireAny(ctx,
@@ -100,7 +101,7 @@ func TestEngineRequireAny_mapsDeniedToForbidden(t *testing.T) {
 
 func TestEngineFilter_returnsAllowedSubset(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, "proj_123")})
 
 	resourceIDs, err := engine.Filter(ctx, []Check{
@@ -118,7 +119,7 @@ func TestEngineFilter_logsSingleAggregateChallenge(t *testing.T) {
 	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, "proj_allowed")})
 	conn := newTestDB(t)
 	seedOrganization(t, ctx, conn, orgID)
-	engine := NewEngine(testInfrastructure.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
 
 	resourceIDs, err := engine.Filter(ctx, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_allowed"},
@@ -148,7 +149,7 @@ func TestEngineFilter_logsDenyWhenNoMatches(t *testing.T) {
 	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, "proj_other")})
 	conn := newTestDB(t)
 	seedOrganization(t, ctx, conn, orgID)
-	engine := NewEngine(testInfrastructure.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
 
 	resourceIDs, err := engine.Filter(ctx, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_a"},
@@ -174,7 +175,7 @@ func TestEngineFilter_skipsLogWhenNoChecks(t *testing.T) {
 	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 	conn := newTestDB(t)
 	seedOrganization(t, ctx, conn, orgID)
-	engine := NewEngine(testInfrastructure.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
 
 	resourceIDs, err := engine.Filter(ctx, nil)
 	require.NoError(t, err)
@@ -187,7 +188,7 @@ func TestEngineRequire_projectWriteBlocklistBlocksAccess(t *testing.T) {
 	t.Parallel()
 
 	const projectID = "0196cbd1-9328-74e7-b7bb-6e5357565573"
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		NewGrant(ScopeProjectWrite, WildcardResource),
 		NewGrantWithSelector(ScopeProjectBlockedWrite, Selector{
@@ -209,7 +210,7 @@ func TestEngineFilter_mcpWriteBlocklistExcludesProjectScopedResources(t *testing
 	t.Parallel()
 
 	const projectID = "0196cbd1-9328-74e7-b7bb-6e5357565573"
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		NewGrant(ScopeMCPWrite, WildcardResource),
 		NewGrantWithSelector(ScopeMCPBlockedWrite, Selector{
@@ -230,7 +231,7 @@ func TestEngineFilter_mcpWriteBlocklistExcludesProjectScopedResources(t *testing
 
 func TestEngineFilter_withDimensions(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		{
 			Scope: ScopeMCPConnect,
@@ -253,7 +254,7 @@ func TestEngineFilter_withDimensions(t *testing.T) {
 
 func TestEngineFilter_withDisposition(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		{
 			Scope: ScopeMCPConnect,
@@ -276,7 +277,7 @@ func TestEngineFilter_withDisposition(t *testing.T) {
 
 func TestEngineFilter_serverLevelGrantAllowsAllDimensions(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		NewGrant(ScopeMCPConnect, "toolsetA"),
 	})
@@ -292,7 +293,7 @@ func TestEngineFilter_serverLevelGrantAllowsAllDimensions(t *testing.T) {
 
 func TestEngineFilter_projectScopedGrantMatchesServersInProject(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		{
 			Scope: ScopeMCPConnect,
@@ -315,7 +316,7 @@ func TestEngineFilter_projectScopedGrantMatchesServersInProject(t *testing.T) {
 
 func TestEngineRequire_projectScopedGrantAllowsToolsInProject(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		{
 			Scope: ScopeMCPConnect,
@@ -346,7 +347,7 @@ func TestEngineRequire_projectScopedGrantAllowsToolsInProject(t *testing.T) {
 
 func TestEngineRequire_projectScopedMCPReadGrant(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		{
 			Scope: ScopeMCPRead,
@@ -371,7 +372,7 @@ func TestEngineRequire_projectScopedMCPReadGrant(t *testing.T) {
 
 func TestEngineFilter_projectAndServerGrantsCombine(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		// Project-scoped grant for proj_A
 		{
@@ -397,7 +398,7 @@ func TestEngineFilter_projectAndServerGrantsCombine(t *testing.T) {
 
 func TestEngineRequire_rejectsInvalidCheck(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
 	err := engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: ""})
@@ -409,7 +410,7 @@ func TestEngineRequire_rejectsInvalidCheck(t *testing.T) {
 
 func TestEngineRequire_requiresChecks(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
 	err := engine.Require(ctx)
@@ -421,7 +422,7 @@ func TestEngineRequire_requiresChecks(t *testing.T) {
 
 func TestEngineRequire_APIKeyAuthorizationModeIsExplicit(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	authCtx := &contextvalues.AuthContext{
 		ActiveOrganizationID: "org_123",
 		UserID:               "user_123",
@@ -479,7 +480,7 @@ func TestEngineRequire_APIKeyAuthorizationModeIsExplicit(t *testing.T) {
 
 func TestPrincipalCredentialPoliciesConjoinEveryCheck(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	check := Check{Scope: ScopeProjectRead, ResourceID: "project-one"}
 
 	credential := []Grant{NewGrant(ScopeProjectWrite, "project-one")}
@@ -505,7 +506,7 @@ func TestPrincipalCredentialPoliciesConjoinEveryCheck(t *testing.T) {
 
 func TestPrincipalCredentialPoliciesRequireAnyUsesSameCheck(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := principalPolicyTestContext(t,
 		[]Grant{NewGrant(ScopeProjectRead, "project-one")},
 		[]Grant{NewGrant(ScopeProjectRead, "project-two")},
@@ -523,7 +524,7 @@ func TestPrincipalCredentialPoliciesRequireAnyUsesSameCheck(t *testing.T) {
 
 func TestPrincipalCredentialPoliciesApplyToEvaluationAndFilters(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := principalPolicyTestContext(t,
 		[]Grant{NewGrant(ScopeProjectWrite, WildcardResource)},
 		[]Grant{NewGrant(ScopeProjectRead, "project-one")},
@@ -572,7 +573,7 @@ func principalPolicyTestContext(t *testing.T, credential, agent, owner []Grant) 
 
 func TestEngineFilter_enforcesForNonEnterpriseAccount(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	sessionID := "session_123"
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID:  "org_123",
@@ -601,7 +602,7 @@ func TestEngineFilter_enforcesForNonEnterpriseAccount(t *testing.T) {
 
 func TestEngineFindMatched_returnsParallelBools(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, "proj_123")})
 
 	matched, err := engine.FindMatched(ctx, []Check{
@@ -618,7 +619,7 @@ func TestEngineFindMatched_preservesOrderAcrossMixedMatches(t *testing.T) {
 	// Grants allow proj_b and proj_d. Input ordering puts allowed entries
 	// at index 1 and 3 — the returned bools must reflect those positions
 	// exactly, with no implicit reordering.
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		NewGrant(ScopeProjectRead, "proj_b"),
 		NewGrant(ScopeProjectRead, "proj_d"),
@@ -640,7 +641,7 @@ func TestEngineFindMatched_emptyInputReturnsEmptySlice(t *testing.T) {
 	orgID := "org_" + uuid.NewString()
 	conn := newTestDB(t)
 	seedOrganization(t, t.Context(), conn, orgID)
-	engine := NewEngine(testInfrastructure.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
 	matched, err := engine.FindMatched(ctx, nil)
@@ -652,7 +653,7 @@ func TestEngineFindMatched_emptyInputReturnsEmptySlice(t *testing.T) {
 
 func TestEngineFindMatched_missingGrantsReturnsError(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 
 	_, err := engine.FindMatched(enterpriseSessionCtx(t), []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_123"},
@@ -665,7 +666,7 @@ func TestEngineFindMatched_missingGrantsReturnsError(t *testing.T) {
 
 func TestEngineFindMatched_rejectsInvalidCheck(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
 	_, err := engine.FindMatched(ctx, []Check{{Scope: ScopeProjectRead, ResourceID: ""}})
@@ -682,7 +683,7 @@ func TestEngineFindMatched_logsSingleAggregateChallenge(t *testing.T) {
 	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, "proj_allowed")})
 	conn := newTestDB(t)
 	seedOrganization(t, ctx, conn, orgID)
-	engine := NewEngine(testInfrastructure.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
 
 	matched, err := engine.FindMatched(ctx, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_allowed"},
@@ -709,7 +710,7 @@ func TestEngineFindMatched_logsSingleAggregateChallenge(t *testing.T) {
 
 func TestEngineEvaluate_trueWhenGranted(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeChatRead, WildcardResource)})
 
 	allowed, err := engine.Evaluate(ctx, ChatReadCheck("proj_123"))
@@ -719,7 +720,7 @@ func TestEngineEvaluate_trueWhenGranted(t *testing.T) {
 
 func TestEngineEvaluate_falseWhenUnsatisfied(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
 	allowed, err := engine.Evaluate(ctx, ChatReadCheck("proj_123"))
@@ -729,7 +730,7 @@ func TestEngineEvaluate_falseWhenUnsatisfied(t *testing.T) {
 
 func TestEngineEvaluate_errorsWhenGrantsMissing(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 
 	allowed, err := engine.Evaluate(enterpriseSessionCtx(t), ChatReadCheck("proj_123"))
 	require.False(t, allowed)
@@ -748,7 +749,7 @@ func TestEngineEvaluate_neverLogsChallenge(t *testing.T) {
 	orgID := "org_" + uuid.NewString()
 	conn := newTestDB(t)
 	seedOrganization(t, t.Context(), conn, orgID)
-	engine := NewEngine(testInfrastructure.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
 	allowed, err := engine.Evaluate(ctx, ChatReadCheck("proj_123"))
@@ -813,7 +814,7 @@ func scopeOverrideCtx(t *testing.T, isAdmin bool, accountType string) context.Co
 // and every endpoint returns 403.
 func TestPrepareContext_adminImpersonationGrantsAllScopes(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 
 	// Build the trusted context produced by support-session authentication.
 	sessionID := "session_admin"
@@ -848,7 +849,7 @@ func TestPrepareContext_adminImpersonationGrantsAllScopes(t *testing.T) {
 
 func TestEngineRequire_skillReadIsProjectScoped(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeSkillRead, "project_a")})
 
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeSkillRead, ResourceKind: "", ResourceID: "project_a", Dimensions: nil}))
@@ -860,7 +861,7 @@ func TestEngineRequire_skillReadIsProjectScoped(t *testing.T) {
 
 func TestEngineRequire_skillWriteImpliesReadButReadDoesNotImplyWrite(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	writeCtx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeSkillWrite, "project_a")})
 	require.NoError(t, engine.Require(writeCtx, Check{Scope: ScopeSkillRead, ResourceKind: "", ResourceID: "project_a", Dimensions: nil}))
 
@@ -873,7 +874,7 @@ func TestEngineRequire_skillWriteImpliesReadButReadDoesNotImplyWrite(t *testing.
 
 func TestEngineRequire_projectScopesDoNotImplySkillScopes(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		NewGrant(ScopeProjectRead, "project_a"),
 		NewGrant(ScopeProjectWrite, "project_a"),
@@ -887,7 +888,7 @@ func TestEngineRequire_projectScopesDoNotImplySkillScopes(t *testing.T) {
 
 func TestEngineRequire_skillBlocklistExpansion(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	blockedWriteCtx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		NewGrant(ScopeSkillWrite, WildcardResource),
 		NewGrant(ScopeSkillBlockedWrite, "project_a"),
@@ -914,7 +915,7 @@ func TestEngineRequire_skillBlocklistExpansion(t *testing.T) {
 
 func TestCanUseOverride_devPlusAdmin(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient(), EngineOpts{DevMode: true})
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient(), EngineOpts{DevMode: true})
 	ctx := scopeOverrideCtx(t, true, "pro")
 
 	enforce, err := engine.ShouldEnforce(ctx)
@@ -924,7 +925,7 @@ func TestCanUseOverride_devPlusAdmin(t *testing.T) {
 
 func TestCanUseOverride_devPlusNonAdmin(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient(), EngineOpts{DevMode: true})
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient(), EngineOpts{DevMode: true})
 	ctx := scopeOverrideCtx(t, false, "pro")
 
 	enforce, err := engine.ShouldEnforce(ctx)
@@ -934,7 +935,7 @@ func TestCanUseOverride_devPlusNonAdmin(t *testing.T) {
 
 func TestCanUseOverride_prodPlusAdmin(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := scopeOverrideCtx(t, true, "pro")
 
 	enforce, err := engine.ShouldEnforce(ctx)
@@ -944,7 +945,7 @@ func TestCanUseOverride_prodPlusAdmin(t *testing.T) {
 
 func TestCanUseOverride_prodPlusNonAdmin(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := scopeOverrideCtx(t, false, "pro")
 
 	enforce, err := engine.ShouldEnforce(ctx)
@@ -958,7 +959,7 @@ func TestCanUseOverride_prodPlusNonAdmin(t *testing.T) {
 // pass regardless of what its user is allowed to do.
 func TestShouldEnforce_platformMCPSurfaceEnforcesWithoutASession(t *testing.T) {
 	t.Parallel()
-	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	authCtx := &contextvalues.AuthContext{
 		ActiveOrganizationID:  "org_123",
 		UserID:                "user_123",

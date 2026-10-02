@@ -42,15 +42,6 @@ type assistantIdentityService struct {
 	resolveProject func(context.Context, string, FindMCPInput) (ResolvedProject, error)
 }
 
-// WithAssistantIdentityManagement enables explicit legacy upgrades. A nil
-// dependency retains a discoverable, schema-compatible unavailable tool.
-func (r *PostgresReader) WithAssistantIdentityManagement(management AssistantIdentityManagement) *PostgresReader {
-	if management != nil {
-		r.assistantIdentity = &assistantIdentityService{management: management, resolveProject: r.resolveInventoryProject}
-	}
-	return r
-}
-
 func (s *assistantIdentityService) upgrade(ctx context.Context, principal Principal, input UpgradeAssistantIdentityInput) (UpgradeAssistantIdentityOutput, error) {
 	var zero UpgradeAssistantIdentityOutput
 	if s == nil || s.management == nil || s.resolveProject == nil {

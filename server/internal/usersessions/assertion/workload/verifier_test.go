@@ -228,9 +228,6 @@ func TestVerifyReplayStoreFailureIsClosed(t *testing.T) {
 func TestVerifyRefusesNonBearerTypesBeforeKeyResolution(t *testing.T) {
 	t.Parallel()
 	for _, typ := range []string{
-		"speakeasy-identity+jwt",
-		"application/SPEAKEASY-IDENTITY+JWT",
-		"gram-assistant-execution+jwt",
 		"wit+jwt",
 		"WIT+JWT",
 		"application/wit+jwt",

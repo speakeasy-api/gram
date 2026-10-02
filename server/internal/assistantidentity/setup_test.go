@@ -82,7 +82,7 @@ func inTx(t *testing.T, db *pgxpool.Pool, fn func(pgx.Tx) error) error {
 func (f fixture) provision(t *testing.T) assistantidentity.Identity {
 	t.Helper()
 	require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
-		_, err := testIdentityService.Upgrade(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
+		_, err := testIdentityService.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
 		if err != nil {
 			return fmt.Errorf("upgrade fixture: %w", err)
 		}

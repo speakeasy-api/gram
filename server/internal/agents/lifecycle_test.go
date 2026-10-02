@@ -1,4 +1,4 @@
-package agents_test
+package agents
 
 import (
 	"testing"
@@ -7,7 +7,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 )
 
@@ -18,19 +17,19 @@ func TestDeriveLifecycle(t *testing.T) {
 	tests := []struct {
 		name  string
 		agent repo.Agent
-		want  agents.Lifecycle
+		want  Lifecycle
 	}{
-		{name: "active", agent: repo.Agent{}, want: agents.LifecycleActive},
-		{name: "suspended", agent: repo.Agent{SuspendedAt: set}, want: agents.LifecycleSuspended},
-		{name: "revoked", agent: repo.Agent{RevokedAt: set}, want: agents.LifecycleRevoked},
-		{name: "revoked takes precedence over suspended", agent: repo.Agent{SuspendedAt: set, RevokedAt: set}, want: agents.LifecycleRevoked},
-		{name: "deleted takes precedence over every state", agent: repo.Agent{SuspendedAt: set, RevokedAt: set, DeletedAt: set}, want: agents.LifecycleDeleted},
+		{name: "active", agent: repo.Agent{}, want: LifecycleActive},
+		{name: "suspended", agent: repo.Agent{SuspendedAt: set}, want: LifecycleSuspended},
+		{name: "revoked", agent: repo.Agent{RevokedAt: set}, want: LifecycleRevoked},
+		{name: "revoked takes precedence over suspended", agent: repo.Agent{SuspendedAt: set, RevokedAt: set}, want: LifecycleRevoked},
+		{name: "deleted takes precedence over every state", agent: repo.Agent{SuspendedAt: set, RevokedAt: set, DeletedAt: set}, want: LifecycleDeleted},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tt.want, agents.DeriveLifecycle(tt.agent))
+			require.Equal(t, tt.want, DeriveLifecycle(tt.agent))
 		})
 	}
 }

@@ -97,7 +97,6 @@ SELECT EXISTS (
       (a.match_kind = 'exact' AND a.subject = @subject)
       OR (
         a.match_kind = 'wildcard'
-
         AND i.allow_wildcard_admission
         AND a.subject LIKE '%*'
         AND length(a.subject) > 1
@@ -150,8 +149,7 @@ WHERE a.organization_id = @organization_id
     (a.match_kind = 'exact' AND a.subject = @subject)
     OR (
       a.match_kind = 'wildcard'
-
-        AND i.allow_wildcard_admission
+      AND i.allow_wildcard_admission
       AND a.subject LIKE '%*'
       AND length(a.subject) > 1
       AND starts_with(@subject, left(a.subject, length(a.subject) - 1))
@@ -159,61 +157,3 @@ WHERE a.organization_id = @organization_id
   )
 ORDER BY (a.match_kind = 'exact') DESC, length(a.subject) DESC
 LIMIT 1;
-
--- name: LockWorkloadIssuerForRevocation :one
-SELECT id FROM workload_issuers
-WHERE organization_id = @organization_id AND id = @issuer_id
-FOR UPDATE;
-
--- name: LockWorkloadAgentForRevocation :one
--- Advance the issuance cutoff while holding the agent row lock. A transaction
--- begun before revocation must not insert old authority after waiting here.
-UPDATE agents SET updated_at = clock_timestamp()
-WHERE organization_id = @organization_id AND id = @agent_id
-RETURNING id;
-
--- name: RevokeWorkloadSessions :exec
-UPDATE user_sessions s
-SET deleted_at = clock_timestamp()
-FROM user_session_issuers si
-LEFT JOIN projects ip ON ip.id = si.project_id
-WHERE si.id = s.user_session_issuer_id
-  AND s.deleted IS FALSE
-  AND COALESCE(s.organization_id, si.organization_id, (SELECT organization_id FROM projects WHERE id = s.project_id), ip.organization_id) = @organization_id::text
-  AND (s.organization_id IS NULL OR s.organization_id = @organization_id::text)
-  AND (si.organization_id IS NULL OR si.organization_id = @organization_id::text)
-  AND ((SELECT organization_id FROM projects WHERE id = s.project_id) IS NULL OR (SELECT organization_id FROM projects WHERE id = s.project_id) = @organization_id::text)
-  AND (ip.organization_id IS NULL OR ip.organization_id = @organization_id::text)
-  AND s.subject_urn = @subject_urn::text;
-
--- name: RevokeAgentWorkloadSessions :exec
-UPDATE user_sessions s
-SET deleted_at = clock_timestamp()
-FROM user_session_issuers si
-LEFT JOIN projects ip ON ip.id = si.project_id
-WHERE si.id = s.user_session_issuer_id
-  AND s.deleted IS FALSE
-  AND COALESCE(s.organization_id, si.organization_id, (SELECT organization_id FROM projects WHERE id = s.project_id), ip.organization_id) = @organization_id::text
-  AND (s.organization_id IS NULL OR s.organization_id = @organization_id::text)
-  AND (si.organization_id IS NULL OR si.organization_id = @organization_id::text)
-  AND ((SELECT organization_id FROM projects WHERE id = s.project_id) IS NULL OR (SELECT organization_id FROM projects WHERE id = s.project_id) = @organization_id::text)
-  AND (ip.organization_id IS NULL OR ip.organization_id = @organization_id::text)
-  AND (SELECT wa.agent_id
-    FROM workload_agent_assignments wa
-    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id
-    WHERE wa.organization_id = @organization_id::text AND wa.deleted IS FALSE
-      AND ((wa.match_kind = 'exact' AND s.subject_urn = 'workload:' || wa.workload_issuer_id::text || ':' || wa.subject)
-        OR (wa.match_kind = 'wildcard' AND wi.allow_wildcard_admission
-            AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
-            AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
-    ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
-    LIMIT 1) = @agent_id::uuid;
-
--- name: FixtureMoveWorkloadSessionProject :exec
--- Simulate a legacy persisted credential to exercise serve-path tenant checks.
-UPDATE user_sessions s SET project_id = @project_id
-FROM user_session_issuers i, projects p
-WHERE s.id = @session_id AND i.id = s.user_session_issuer_id
- AND p.id = @project_id AND p.organization_id = @organization_id::text
- AND s.organization_id = @organization_id::text
- AND COALESCE(i.organization_id, (SELECT organization_id FROM projects WHERE id = i.project_id)) = @organization_id::text;

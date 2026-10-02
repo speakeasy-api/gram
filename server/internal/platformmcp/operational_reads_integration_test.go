@@ -73,7 +73,7 @@ func TestListDataExportsReturnsSafeStructuredConfiguration(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+	reader := NewPostgresReader(testenv.NewLogger(t), conn, nil).
 		WithDataExports(encryptionClient, mustParseURL(t, "https://app.getgram.test"))
 	output, err := reader.ListDataExports(ctx, principal, ListDataExportsInput{ProjectID: project.ID.String()})
 	require.NoError(t, err)
@@ -144,7 +144,7 @@ func TestListDataExportsBoundsReadsAndUsesJoinedProjectMetadata(t *testing.T) {
 	require.Equal(t, project.Name, routeRows[0].ProjectName)
 	require.Equal(t, project.Slug, routeRows[0].ProjectSlug)
 
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+	reader := NewPostgresReader(testenv.NewLogger(t), conn, nil).
 		WithDataExports(testenv.NewEncryptionClient(t), mustParseURL(t, "https://app.getgram.test"))
 	output, err := reader.ListDataExports(ctx, principal, ListDataExportsInput{Limit: 1})
 	require.NoError(t, err)
@@ -162,7 +162,7 @@ func TestCreateDataExportRequiresExplicitConfirmation(t *testing.T) {
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_create_export_confirmation")
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+	reader := NewPostgresReader(testenv.NewLogger(t), conn, nil).
 		WithDataExportMutations(audit.NewLogger(), mustParseURL(t, "https://app.getgram.test"))
 
 	_, err = reader.CreateDataExport(ctx, principal, CreateDataExportInput{
@@ -198,7 +198,7 @@ func TestCreateDataExportCommitsDestinationRouteAndAuditAtomically(t *testing.T)
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_create_export")
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+	reader := NewPostgresReader(testenv.NewLogger(t), conn, nil).
 		WithDataExportMutations(audit.NewLogger(), mustParseURL(t, "https://app.getgram.test"))
 
 	destinationAuditBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOtelDestinationCreate)
@@ -274,7 +274,7 @@ func TestCreateDataExportReturnsStructuredRecoverableRefusals(t *testing.T) {
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_create_export_refusals")
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+	reader := NewPostgresReader(testenv.NewLogger(t), conn, nil).
 		WithDataExportMutations(audit.NewLogger(), mustParseURL(t, "https://app.getgram.test"))
 
 	base := CreateDataExportInput{
@@ -376,7 +376,7 @@ func TestListRecentToolCallsUsesBoundedSafeSummaryProjection(t *testing.T) {
 		AccountType:       nil,
 	}}}
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+	reader := NewPostgresReader(testenv.NewLogger(t), conn, nil).
 		WithAuthorization(engine).
 		WithRecentToolCalls(telemetry, mustParseURL(t, "https://app.getgram.test"))
 	reader.recentToolCalls.now = func() time.Time { return fixedNow }
@@ -434,7 +434,7 @@ func TestOrganizationEventsRequireLogsFeature(t *testing.T) {
 	ctx := t.Context()
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_organization_events_require_logs")
 	require.NoError(t, err)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+	reader := NewPostgresReader(testenv.NewLogger(t), conn, nil).
 		WithOrganizationEvents(&recordingEventFeedReader{}, nil, mustParseURL(t, "https://app.getgram.test"))
 	_, err = reader.ListOrganizationEvents(ctx, Principal{OrganizationID: "organization"}, ListOrganizationEventsInput{})
 	require.ErrorIs(t, err, ErrUnavailable)
@@ -460,7 +460,7 @@ func TestListOrganizationEventsUsesBoundedSafeProjection(t *testing.T) {
 		Attributes:         `{"user.email":"person@example.test","secret":"private-attr"}`,
 		ResourceAttributes: `{"service.name":"payments","user.id":"private-user-key"}`,
 	}}}
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+	reader := NewPostgresReader(testenv.NewLogger(t), conn, nil).
 		WithOrganizationEvents(events, alwaysEnabledFeature, mustParseURL(t, "https://app.getgram.test"))
 	reader.eventFeed.now = func() time.Time { return fixedNow }
 
@@ -503,7 +503,7 @@ func TestListOrganizationEventsRejectsInvalidKindAndHonorsLimit(t *testing.T) {
 	require.NoError(t, err)
 	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
 	events := &recordingEventFeedReader{}
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+	reader := NewPostgresReader(testenv.NewLogger(t), conn, nil).
 		WithOrganizationEvents(events, alwaysEnabledFeature, mustParseURL(t, "https://app.getgram.test"))
 
 	_, err = reader.ListOrganizationEvents(ctx, principal, ListOrganizationEventsInput{Kind: "trace"})
@@ -534,7 +534,7 @@ func TestListOrganizationEventsRefusesWhenLogsDisabled(t *testing.T) {
 		Attributes:         `{"secret":"private-attr"}`,
 		ResourceAttributes: "",
 	}}}
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+	reader := NewPostgresReader(testenv.NewLogger(t), conn, nil).
 		WithOrganizationEvents(events, alwaysDisabledFeature, mustParseURL(t, "https://app.getgram.test"))
 
 	_, err = reader.ListOrganizationEvents(ctx, principal, ListOrganizationEventsInput{})
@@ -573,7 +573,7 @@ func TestListOrganizationEventsReportsMoreWhenPageOverflows(t *testing.T) {
 		}
 	}
 	events := &recordingEventFeedReader{rows: rows}
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+	reader := NewPostgresReader(testenv.NewLogger(t), conn, nil).
 		WithOrganizationEvents(events, alwaysEnabledFeature, mustParseURL(t, "https://app.getgram.test"))
 	reader.eventFeed.now = func() time.Time { return fixedNow }
 

@@ -286,14 +286,6 @@ func (r *RoleManager) CreateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 	}
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleID(createdRole.ID))
 
-	assignedAgentIDs, err := changedRoleAgentIDs(nil, payload.AgentIds)
-	if err != nil {
-		return RoleCreateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid agent ID").LogError(ctx, r.logger)
-	}
-	if err := invalidateAgentAuthorityTx(ctx, tx, gramOrgID, []string{createdRole.PrincipalURN}, assignedAgentIDs); err != nil {
-		return RoleCreateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "invalidate new role agent authority").LogError(ctx, r.logger)
-	}
-
 	syncedGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, roleSlug, createdRole.PrincipalURN, grants, nil)
 	if err != nil {
 		return RoleCreateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "add grants for created role").LogError(ctx, r.logger)
@@ -421,18 +413,6 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 		return RoleUpdateResult{}, RoleReconciliation{}, err
 	}
 
-	if err := repo.New(tx).LockAgentRoleAssignments(ctx, repo.LockAgentRoleAssignmentsParams{OrganizationID: gramOrgID, RoleUrn: currentRole.PrincipalURN}); err != nil {
-		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "lock role authority membership").LogError(ctx, r.logger)
-	}
-	assignedIDs, err := repo.New(tx).ListAuthorityAgentIDsByRoles(ctx, repo.ListAuthorityAgentIDsByRolesParams{OrganizationID: gramOrgID, RoleUrns: []string{currentRole.PrincipalURN}})
-	if err != nil {
-		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "load locked role agents").LogError(ctx, r.logger)
-	}
-	currentRole.AgentIDs = nil
-	for _, id := range assignedIDs {
-		currentRole.AgentIDs = append(currentRole.AgentIDs, id.String())
-	}
-
 	currentGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, nil, nil)
 	if err != nil {
 		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "load grants for role update").LogError(ctx, r.logger)
@@ -486,17 +466,6 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 		if removingOrgAdmin && !addingOrgAdmin {
 			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, nil, "the Admin role must keep the org:admin permission").LogError(ctx, r.logger)
 		}
-	}
-
-	var changedAgents []uuid.UUID
-	if payload.AgentIds != nil {
-		changedAgents, err = changedRoleAgentIDs(currentRole.AgentIDs, payload.AgentIds)
-		if err != nil {
-			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid agent ID").LogError(ctx, r.logger)
-		}
-	}
-	if err := invalidateAgentAuthorityTx(ctx, tx, gramOrgID, nil, changedAgents); err != nil {
-		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "invalidate role membership authority").LogError(ctx, r.logger)
 	}
 
 	updatedRole := currentRole
@@ -564,11 +533,6 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 		syncedGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, addGrants, removeGrants)
 		if err != nil {
 			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "patch grants for updated role").LogError(ctx, r.logger)
-		}
-		if !sameRoleGrantPolicy(currentGrants, syncedGrants) {
-			if err := invalidateAgentAuthorityTx(ctx, tx, gramOrgID, []string{currentRole.PrincipalURN}, nil); err != nil {
-				return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "invalidate changed role grants").LogError(ctx, r.logger)
-			}
 		}
 		updatedGrants = make([]*gen.RoleGrant, 0, len(syncedGrants))
 		for _, grant := range syncedGrants {
@@ -647,9 +611,6 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 	currentRole, err = r.getLocalRoleByIDTx(ctx, tx, gramOrgID, roleID)
 	if err != nil {
 		return localRole{}, err
-	}
-	if err := invalidateAgentAuthorityTx(ctx, tx, gramOrgID, []string{currentRole.PrincipalURN}, nil); err != nil {
-		return localRole{}, oops.E(oops.CodeUnexpected, err, "invalidate deleted role agent authority").LogError(ctx, r.logger)
 	}
 	if err := repo.New(tx).SoftDeleteAgentRoleAssignmentsByRole(ctx, repo.SoftDeleteAgentRoleAssignmentsByRoleParams{
 		OrganizationID: gramOrgID,

@@ -78,7 +78,7 @@ func TestAttachShadowInventoryConstructsWithLocalFixtureDependencies(t *testing.
 	t.Parallel()
 
 	limiter := allowingPlatformMCPBudget{}
-	reader := platformmcp.NewPostgresReader(testenv.NewLogger(t), nil)
+	reader := platformmcp.NewPostgresReader(testenv.NewLogger(t), nil, nil)
 	config := platformMCPConfig{
 		DB: nil, JWTSigningKey: "test-signing-key", FeatureFlags: &feature.InMemory{},
 		ShadowInventory: &access.Service{}, ShadowReview: &mcpapproval.Service{},

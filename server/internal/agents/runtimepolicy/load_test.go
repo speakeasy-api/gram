@@ -1,4 +1,4 @@
-package runtimepolicy_test
+package runtimepolicy
 
 import (
 	"context"
@@ -12,7 +12,6 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
-	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -34,7 +33,7 @@ func TestLoadAgentPolicyIncludesAssignedRoleGrants(t *testing.T) {
 	seedGrant(t, ctx, fixture.db, fixture.organizationID, fixture.rolePrincipal, authz.ScopeMCPConnect, fixture.resourceID)
 	seedGrant(t, ctx, fixture.db, fixture.organizationID, fixture.rolePrincipal, authz.ScopeOrgAdmin, fixture.organizationID)
 
-	grants, err := runtimepolicy.LoadAgentPolicy(ctx, fixture.db, fixture.organizationID, fixture.agentPrincipal)
+	grants, err := LoadAgentPolicy(ctx, fixture.db, fixture.organizationID, fixture.agentPrincipal)
 	require.NoError(t, err)
 
 	scopes := scopeSet(grants)
@@ -52,7 +51,7 @@ func TestLoadAgentPolicyDropsRoleGrantsOnceUnassigned(t *testing.T) {
 	fixture := newAgentRoleFixture(t, ctx)
 	seedGrant(t, ctx, fixture.db, fixture.organizationID, fixture.rolePrincipal, authz.ScopeMCPConnect, fixture.resourceID)
 
-	grants, err := runtimepolicy.LoadAgentPolicy(ctx, fixture.db, fixture.organizationID, fixture.agentPrincipal)
+	grants, err := LoadAgentPolicy(ctx, fixture.db, fixture.organizationID, fixture.agentPrincipal)
 	require.NoError(t, err)
 	require.Contains(t, scopeSet(grants), authz.ScopeMCPConnect)
 
@@ -61,7 +60,7 @@ func TestLoadAgentPolicyDropsRoleGrantsOnceUnassigned(t *testing.T) {
 		RoleUrn:        fixture.rolePrincipal.String(),
 	}))
 
-	grants, err = runtimepolicy.LoadAgentPolicy(ctx, fixture.db, fixture.organizationID, fixture.agentPrincipal)
+	grants, err = LoadAgentPolicy(ctx, fixture.db, fixture.organizationID, fixture.agentPrincipal)
 	require.NoError(t, err)
 	require.NotContains(t, scopeSet(grants), authz.ScopeMCPConnect)
 }
@@ -77,7 +76,7 @@ func TestLoadKnownAgentPoliciesIncludesAssignedRoleGrants(t *testing.T) {
 	seedGrant(t, ctx, fixture.db, fixture.organizationID, fixture.rolePrincipal, authz.ScopeMCPConnect, fixture.resourceID)
 	seedGrant(t, ctx, fixture.db, fixture.organizationID, fixture.rolePrincipal, authz.ScopeOrgAdmin, fixture.organizationID)
 
-	policies, err := runtimepolicy.LoadKnownAgentPolicies(ctx, fixture.db, fixture.organizationID, []uuid.UUID{fixture.agentID})
+	policies, err := LoadKnownAgentPolicies(ctx, fixture.db, fixture.organizationID, []uuid.UUID{fixture.agentID})
 	require.NoError(t, err)
 
 	scopes := scopeSet(policies[fixture.agentID])
@@ -172,7 +171,7 @@ func TestLoadAgentPolicyPreservesServerRestrictions(t *testing.T) {
 				principal = fixture.rolePrincipal
 			}
 			seedGrant(t, t.Context(), fixture.db, fixture.organizationID, principal, authz.ScopeMCPBlockedConnect, fixture.resourceID)
-			grants, err := runtimepolicy.LoadAgentPolicy(t.Context(), fixture.db, fixture.organizationID, fixture.agentPrincipal)
+			grants, err := LoadAgentPolicy(t.Context(), fixture.db, fixture.organizationID, fixture.agentPrincipal)
 			require.NoError(t, err)
 			allowed, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: fixture.resourceID})
 			require.NoError(t, err)
@@ -180,10 +179,10 @@ func TestLoadAgentPolicyPreservesServerRestrictions(t *testing.T) {
 			allowed, err = authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: "other-server"})
 			require.NoError(t, err)
 			require.True(t, allowed)
-			batched, err := runtimepolicy.LoadKnownAgentPolicies(t.Context(), fixture.db, fixture.organizationID, []uuid.UUID{fixture.agentID})
+			batched, err := LoadKnownAgentPolicies(t.Context(), fixture.db, fixture.organizationID, []uuid.UUID{fixture.agentID})
 			require.NoError(t, err)
 			require.ElementsMatch(t, grants, batched[fixture.agentID])
-			_, err = runtimepolicy.NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeMCPBlockedConnect, fixture.resourceID)})
+			_, err = NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeMCPBlockedConnect, fixture.resourceID)})
 			require.Error(t, err, "live restrictions must not become delegated allow grants")
 		})
 	}

@@ -19,10 +19,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -141,7 +142,7 @@ func (l *triggerDeliveryLogger) LogTriggerDelivery(
 }
 
 type App struct {
-	identities     *assistantidentity.Service
+	identities     AssistantIdentityLifecycle
 	logger         *slog.Logger
 	db             *pgxpool.Pool
 	repo           *triggerrepo.Queries
@@ -301,10 +302,6 @@ func (a *App) Create(ctx context.Context, params CreateParams, hooks ...Instance
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	if _, err := triggerrepo.New(tx).LockTriggerProject(ctx, params.ProjectID); err != nil {
-		return triggerrepo.TriggerInstance{}, fmt.Errorf("lock trigger project: %w", err)
-	}
-
 	item, err := triggerrepo.New(tx).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
 		OrganizationID: params.OrganizationID,
 		ProjectID:      params.ProjectID,
@@ -372,10 +369,6 @@ func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...Instance
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("begin trigger update transaction: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-
-	if _, err := triggerrepo.New(tx).LockTriggerProject(ctx, params.ProjectID); err != nil {
-		return triggerrepo.TriggerInstance{}, fmt.Errorf("lock trigger project: %w", err)
-	}
 
 	existing, err := triggerrepo.New(tx).GetTriggerInstanceByIDForUpdate(ctx, triggerrepo.GetTriggerInstanceByIDForUpdateParams{ID: params.ID, ProjectID: params.ProjectID})
 	if err != nil {
@@ -456,15 +449,11 @@ func (a *App) deleteInstance(ctx context.Context, projectID uuid.UUID, id uuid.U
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	if _, err := triggerrepo.New(tx).LockTriggerProject(ctx, projectID); err != nil {
-		return triggerrepo.TriggerInstance{}, fmt.Errorf("lock trigger project: %w", err)
-	}
-
 	existing, err := triggerrepo.New(tx).GetTriggerInstanceByIDForUpdate(ctx, triggerrepo.GetTriggerInstanceByIDForUpdateParams{ID: id, ProjectID: projectID})
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("lock trigger before deletion: %w", err)
 	}
-	if err := assistantidentity.TombstoneTrigger(ctx, tx, existing.OrganizationID, existing.ProjectID, existing.ID); err != nil {
+	if err := a.tombstoneIdentity(ctx, tx, existing); err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("invalidate trigger identity before deletion: %w", err)
 	}
 
@@ -495,10 +484,6 @@ func (a *App) SetStatus(ctx context.Context, projectID uuid.UUID, id uuid.UUID, 
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("begin trigger set-status transaction: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-
-	if _, err := triggerrepo.New(tx).LockTriggerProject(ctx, projectID); err != nil {
-		return triggerrepo.TriggerInstance{}, fmt.Errorf("lock trigger project: %w", err)
-	}
 
 	_, err = triggerrepo.New(tx).GetTriggerInstanceByIDForUpdate(ctx, triggerrepo.GetTriggerInstanceByIDForUpdateParams{ID: id, ProjectID: projectID})
 	if err != nil {
@@ -569,9 +554,31 @@ func (a *App) CreateWakeInstance(ctx context.Context, params CreateWakeInstanceP
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: %w", ErrBadRequest, err)
 	}
 
+	owner, err := assistantrepo.New(a.db).GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: params.ProjectID, AssistantID: params.AssistantID})
+	if err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("resolve wake owner: %w", err)
+	}
+	if owner.OrganizationID != params.OrganizationID {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: wake organization mismatch", ErrBadRequest)
+	}
+	userID := owner.CreatedByUserID.String
+	if auth, ok := contextvalues.GetAuthContext(ctx); ok && auth != nil {
+		if auth.ActiveOrganizationID != params.OrganizationID {
+			return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: wake requester organization mismatch", ErrBadRequest)
+		}
+		if auth.UserID != "" {
+			userID = auth.UserID
+		}
+	}
+	if userID == "" {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: wake requester is unavailable", ErrBadRequest)
+	}
+
 	configMap := map[string]any{
-		"fire_at":        params.FireAt.UTC().Format(time.RFC3339Nano),
-		"correlation_id": params.CorrelationID,
+		"fire_at":           params.FireAt.UTC().Format(time.RFC3339Nano),
+		"correlation_id":    params.CorrelationID,
+		"requester_user_id": userID,
+		"identity_version":  1,
 	}
 	if params.Note != nil {
 		configMap["note"] = *params.Note
@@ -631,17 +638,7 @@ func (a *App) CreateWakeInstance(ctx context.Context, params CreateWakeInstanceP
 // CancelWakeInstance flips an active wake to 'cancelled' and cancels its
 // pending workflow. Idempotent for already-cancelled or already-fired wakes.
 func (a *App) CancelWakeInstance(ctx context.Context, projectID uuid.UUID, instanceID uuid.UUID, hooks ...InstanceDBHook) (triggerrepo.TriggerInstance, error) {
-	tx, err := a.db.Begin(ctx)
-	if err != nil {
-		return triggerrepo.TriggerInstance{}, fmt.Errorf("begin wake cancel transaction: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-
-	if _, err := triggerrepo.New(tx).LockTriggerProject(ctx, projectID); err != nil {
-		return triggerrepo.TriggerInstance{}, fmt.Errorf("lock wake project before cancellation: %w", err)
-	}
-
-	existing, err := triggerrepo.New(tx).GetTriggerInstanceByIDForUpdate(ctx, triggerrepo.GetTriggerInstanceByIDForUpdateParams{
+	existing, err := a.repo.GetTriggerInstanceByID(ctx, triggerrepo.GetTriggerInstanceByIDParams{
 		ID:        instanceID,
 		ProjectID: projectID,
 	})
@@ -654,6 +651,12 @@ func (a *App) CancelWakeInstance(ctx context.Context, projectID uuid.UUID, insta
 	if existing.Status != StatusActive {
 		return existing, nil
 	}
+
+	tx, err := a.db.Begin(ctx)
+	if err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("begin wake cancel transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	item, err := triggerrepo.New(tx).SetTriggerInstanceStatus(ctx, triggerrepo.SetTriggerInstanceStatusParams{
 		Status:    StatusCancelled,
@@ -681,29 +684,11 @@ func (a *App) CancelWakeInstance(ctx context.Context, projectID uuid.UUID, insta
 	return item, nil
 }
 
-// MarkScheduledInstanceFired is the privileged worker completion entry point.
-// Derive the tenant from the persisted schedule target, not external user input.
-// Keep the activity payload unchanged for already scheduled workflow histories.
-func (a *App) MarkScheduledInstanceFired(ctx context.Context, instanceID string) error {
-	id, err := uuid.Parse(instanceID)
-	if err != nil {
-		return fmt.Errorf("parse scheduled instance id: %w", err)
-	}
-	instance, err := a.repo.GetTriggerInstanceByIDPublic(ctx, id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("load scheduled instance tenant: %w", err)
-	}
-	return a.MarkInstanceFired(ctx, instance.ProjectID, instanceID)
-}
-
 // MarkInstanceFired transitions an active wake instance to 'fired' and
 // records a wake:fired audit log. The UPDATE is guarded on status='active' so
 // a cancel that won the race is preserved (the workflow returns nil; the
 // already-cancelled row keeps its terminal state).
-func (a *App) MarkInstanceFired(ctx context.Context, projectID uuid.UUID, instanceID string) error {
+func (a *App) MarkInstanceFired(ctx context.Context, instanceID string) error {
 	id, err := uuid.Parse(instanceID)
 	if err != nil {
 		return fmt.Errorf("parse trigger instance id: %w", err)
@@ -717,7 +702,6 @@ func (a *App) MarkInstanceFired(ctx context.Context, projectID uuid.UUID, instan
 
 	item, err := triggerrepo.New(tx).SetTriggerInstanceStatusByID(ctx, triggerrepo.SetTriggerInstanceStatusByIDParams{
 		Status:         StatusFired,
-		ProjectID:      projectID,
 		ID:             id,
 		ExpectedStatus: StatusActive,
 	})
@@ -1277,7 +1261,24 @@ func nullUUIDToUUID(value uuid.NullUUID) uuid.UUID {
 }
 
 // SetIdentityService configures the deployment platform trust before serving requests.
-func (a *App) SetIdentityService(identities *assistantidentity.Service) *App {
+func (a *App) SetIdentityService(identities AssistantIdentityLifecycle) *App {
 	a.identities = identities
 	return a
+}
+
+// AssistantIdentityLifecycle keeps trigger transactions independent of identity implementation.
+type AssistantIdentityLifecycle interface {
+	BindRootTrigger(context.Context, pgx.Tx, string, uuid.UUID, uuid.UUID) error
+	RetargetRootTrigger(context.Context, pgx.Tx, string, uuid.UUID, uuid.UUID) error
+	TombstoneTrigger(context.Context, pgx.Tx, string, uuid.UUID, uuid.UUID) error
+}
+
+func (a *App) tombstoneIdentity(ctx context.Context, tx pgx.Tx, item triggerrepo.TriggerInstance) error {
+	if a.identities == nil {
+		return nil
+	}
+	if err := a.identities.TombstoneTrigger(ctx, tx, item.OrganizationID, item.ProjectID, item.ID); err != nil {
+		return fmt.Errorf("withdraw trigger identity: %w", err)
+	}
+	return nil
 }

@@ -2,8 +2,10 @@ package triggers_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"testing"
 	"time"
 
@@ -157,12 +159,7 @@ func TestRootIdentityPausedCreateAndMutationRollback(t *testing.T) {
 	err = f.app.Delete(t.Context(), f.projectID, item.ID, func(context.Context, pgx.Tx, triggerrepo.TriggerInstance) error { return hookErr })
 	require.ErrorIs(t, err, hookErr)
 	require.Equal(t, before, f.resolve(t, f.assistantID, item.ID))
-	// The one-shot workflow completion helper cannot fire a root trigger.
-	require.NoError(t, f.app.MarkInstanceFired(t.Context(), f.projectID, item.ID.String()))
-	persisted, err := f.app.GetInstance(t.Context(), f.projectID, item.ID)
-	require.NoError(t, err)
-	require.Equal(t, triggers.StatusActive, persisted.Status)
-	require.Equal(t, before, f.resolve(t, f.assistantID, item.ID))
+
 }
 
 func TestRootIdentityUpdatePausePreservesIdentityAndPausedRetargetReplacesIt(t *testing.T) {
@@ -191,17 +188,31 @@ func TestRootIdentityUpdatePausePreservesIdentityAndPausedRetargetReplacesIt(t *
 	require.Greater(t, next.Identity.TriggerGeneration, first.Identity.TriggerGeneration)
 }
 
-func TestWakeCompletionRequiresOwningProject(t *testing.T) {
+func TestWakeCapturesRequesterOrOwnerAtCreation(t *testing.T) {
 	t.Parallel()
-	f := newIdentityFixture(t)
-	item, err := triggerrepo.New(f.db).CreateTriggerInstance(t.Context(), triggerrepo.CreateTriggerInstanceParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, DefinitionSlug: triggers.DefinitionSlugWake, Name: "Follow up", TargetKind: triggers.TargetKindAssistant, TargetRef: f.assistantID.String(), TargetDisplay: "Assistant", ConfigJson: []byte(`{"correlation_id":"thread-scope"}`), Status: triggers.StatusActive})
-	require.NoError(t, err)
-	require.NoError(t, f.app.MarkInstanceFired(t.Context(), uuid.New(), item.ID.String()))
-	unchanged, err := f.app.GetInstance(t.Context(), f.projectID, item.ID)
-	require.NoError(t, err)
-	require.Equal(t, triggers.StatusActive, unchanged.Status)
-	require.NoError(t, f.app.MarkScheduledInstanceFired(t.Context(), item.ID.String()))
-	fired, err := f.app.GetInstance(t.Context(), f.projectID, item.ID)
-	require.NoError(t, err)
-	require.Equal(t, triggers.StatusFired, fired.Status)
+	for _, requester := range []string{"requester", ""} {
+		t.Run("requester="+requester, func(t *testing.T) {
+			t.Parallel()
+			f := newIdentityFixture(t)
+			ctx := t.Context()
+			if requester != "" {
+				ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{ActiveOrganizationID: "org-trigger-test", UserID: requester})
+			}
+			_, err := f.app.CreateWakeInstance(ctx, triggers.CreateWakeInstanceParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, AssistantID: f.assistantID, Name: "Wake", TargetDisplay: "Assistant", FireAt: time.Now().Add(time.Hour), CorrelationID: "thread"}, func(_ context.Context, _ pgx.Tx, item triggerrepo.TriggerInstance) error {
+				var config struct {
+					Requester string `json:"requester_user_id"`
+					Version   int    `json:"identity_version"`
+				}
+				require.NoError(t, json.Unmarshal(item.ConfigJson, &config))
+				expected := requester
+				if expected == "" {
+					expected = "trigger-owner"
+				}
+				require.Equal(t, expected, config.Requester)
+				require.Equal(t, 1, config.Version)
+				return errors.New("captured wake identity")
+			})
+			require.ErrorContains(t, err, "captured wake identity")
+		})
+	}
 }

@@ -11,6 +11,7 @@ import (
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -26,7 +27,7 @@ func TestChallengeLogger_skipsWithoutAuthContext(t *testing.T) {
 		Reason:    authzrepo.ReasonGrantMatched,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(t.Context(), conn, testInfrastructure.NewLogger(t), staticChallengeLogging(true))
+	}.Log(t.Context(), conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
 	require.Empty(t, listChallengeOutboxRows(t, conn))
 }
@@ -52,7 +53,7 @@ func TestChallengeLogger_skipsWhenImpersonating(t *testing.T) {
 		Reason:    authzrepo.ReasonGrantMatched,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(ctx, conn, testInfrastructure.NewLogger(t), staticChallengeLogging(true))
+	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
 	require.Empty(t, listChallengeOutboxRows(t, conn))
 }
@@ -86,7 +87,7 @@ func TestChallengeLogger_publishesUserPrincipal(t *testing.T) {
 		Focus:               &check,
 		Matches:             []grantMatch{{Grant: Grant{PrincipalUrn: "role:admin", Scope: ScopeProjectRead, Selector: NewSelector(ScopeProjectRead, WildcardResource)}, ViaCheck: check}},
 		EvaluatedGrantCount: 1,
-	}.Log(ctx, conn, testInfrastructure.NewLogger(t), staticChallengeLogging(true))
+	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
 	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
@@ -131,7 +132,7 @@ func TestChallengeLogger_publishesAPIKeyPrincipal(t *testing.T) {
 		Reason:    authzrepo.ReasonGrantMatched,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(ctx, conn, testInfrastructure.NewLogger(t), staticChallengeLogging(true))
+	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
 	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
@@ -180,7 +181,7 @@ func TestChallengeLogger_publishesAssistantPrincipal(t *testing.T) {
 		Reason:    authzrepo.ReasonGrantMatched,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(ctx, conn, testInfrastructure.NewLogger(t), staticChallengeLogging(true))
+	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
 	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
@@ -211,7 +212,7 @@ func TestChallengeLogger_stampsRequestID(t *testing.T) {
 		Reason:    authzrepo.ReasonNoGrants,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(ctx, conn, testInfrastructure.NewLogger(t), staticChallengeLogging(true))
+	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
 	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
@@ -251,7 +252,7 @@ func TestChallengeLogger_publishesNestedAndExpandedFields(t *testing.T) {
 		Focus:               &focus,
 		Matches:             matches,
 		EvaluatedGrantCount: 7,
-	}.Log(ctx, conn, testInfrastructure.NewLogger(t), staticChallengeLogging(true))
+	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
 	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
@@ -293,7 +294,7 @@ func TestChallengeLogger_publishesFilterCounts(t *testing.T) {
 		Focus:                &focus,
 		FilterCandidateCount: 4,
 		FilterAllowedCount:   1,
-	}.Log(ctx, conn, testInfrastructure.NewLogger(t), staticChallengeLogging(true))
+	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
 	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)

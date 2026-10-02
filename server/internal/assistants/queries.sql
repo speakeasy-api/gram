@@ -1629,8 +1629,21 @@ FOR UPDATE;
 SELECT DISTINCT ON (b.original_assistant_id)
  b.original_assistant_id, b.original_agent_id, b.generation,
  (b.deleted OR b.assistant_id IS NULL OR b.agent_id IS NULL OR b.project_ref_id IS NULL
- OR g.id IS NULL OR g.deleted OR g.revoked_at IS NOT NULL OR g.owner_reassignment_required_at IS NOT NULL)::boolean AS tombstoned
+ OR g.id IS NULL OR g.deleted OR g.revoked_at IS NOT NULL OR g.owner_reassignment_required_at IS NOT NULL
+ OR (a.created_by_user_id IS NOT NULL AND g.owner_user_id IS DISTINCT FROM a.created_by_user_id))::boolean AS tombstoned
 FROM assistant_agent_bindings b
+LEFT JOIN assistants a ON a.id = b.assistant_id AND a.organization_id = b.organization_id AND a.project_id = b.project_id
 LEFT JOIN agents g ON g.id = b.agent_id AND g.organization_id = b.organization_id AND g.project_id = b.project_id
 WHERE b.project_id = @project_id AND b.original_assistant_id = ANY(@assistant_ids::uuid[])
 ORDER BY b.original_assistant_id, b.generation DESC;
+
+-- name: FindLegacyWakeRequester :many
+-- Legacy scheduling audits can identify the original human actor. Multiple
+-- distinct actors are ambiguous; callers retain legacy behavior instead of guessing.
+SELECT DISTINCT actor_id::text
+FROM audit_logs
+WHERE organization_id = @organization_id AND project_id = @project_id::uuid
+  AND subject_id = @trigger_id::text AND subject_type = 'trigger_instance'
+  AND action = 'wake:scheduled' AND actor_type = 'user'
+  AND actor_id NOT IN ('', 'system', '*')
+LIMIT 2;

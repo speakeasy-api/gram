@@ -10,7 +10,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 )
 
 func (s *ServiceCore) hydrateAssistantIdentityStates(ctx context.Context, projectID uuid.UUID, records []assistantRecord) error {
@@ -64,9 +63,6 @@ func (s *ServiceCore) UpgradeAssistantIdentity(ctx context.Context, organization
 		return assistantRecord{}, fmt.Errorf("begin assistant identity upgrade: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := triggerrepo.New(tx).LockTriggerProject(ctx, projectID); err != nil {
-		return assistantRecord{}, fmt.Errorf("lock assistant identity project: %w", err)
-	}
 
 	row, err := assistantrepo.New(tx).LockAssistantIdentityAnchor(ctx, assistantrepo.LockAssistantIdentityAnchorParams{ProjectID: projectID, AssistantID: assistantID})
 	if err != nil {
@@ -75,7 +71,7 @@ func (s *ServiceCore) UpgradeAssistantIdentity(ctx context.Context, organization
 	if row.OrganizationID != organizationID {
 		return assistantRecord{}, pgx.ErrNoRows
 	}
-	if _, err = s.identities.Upgrade(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: assistantID, ActorUserID: actorUserID}); err != nil {
+	if _, err = s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: assistantID, ActorUserID: actorUserID}); err != nil {
 		return assistantRecord{}, fmt.Errorf("assistant identity Upgrade: %w", err)
 	}
 	if _, err = s.ensureDashboardRootTx(ctx, tx, organizationID, projectID, assistantID, row.Name); err != nil {

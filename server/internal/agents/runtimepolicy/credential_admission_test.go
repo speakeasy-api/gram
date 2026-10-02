@@ -1,4 +1,4 @@
-package runtimepolicy_test
+package runtimepolicy
 
 import (
 	"context"
@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
-	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -301,20 +300,20 @@ func newCredentialAdmissionFixture(t *testing.T) credentialAdmissionFixture {
 	seedGrant(t, ctx, db, organizationID, agentPrincipal, authz.ScopeProjectRead, projectID)
 	seedGrant(t, ctx, db, organizationID, ownerPrincipal, authz.ScopeProjectRead, projectID)
 
-	policy, err := runtimepolicy.NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeProjectRead, projectID)})
+	policy, err := NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeProjectRead, projectID)})
 	require.NoError(t, err)
-	rawPolicy, err := runtimepolicy.EncodeDelegatedPolicy(runtimepolicy.CurrentDelegatedPolicyVersion, policy)
+	rawPolicy, err := EncodeDelegatedPolicy(CurrentDelegatedPolicyVersion, policy)
 	require.NoError(t, err)
 	requestContext := contextvalues.WithPrincipalCredentialAuthorization(ctx, &contextvalues.AuthContext{
 		ActiveOrganizationID: organizationID,
 	}, agentPrincipal, contextvalues.PrincipalCredential{
 		AuthorizerUserID:       authorizerUserID,
 		DelegatedGrants:        rawPolicy,
-		DelegatedGrantsVersion: int32(runtimepolicy.CurrentDelegatedPolicyVersion),
+		DelegatedGrantsVersion: int32(CurrentDelegatedPolicyVersion),
 	})
 
 	return credentialAdmissionFixture{
-		db: db, engine: authz.NewEngine(testenv.NewLogger(t), db, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential}), requestContext: requestContext,
+		db: db, engine: authz.NewEngine(testenv.NewLogger(t), db, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: AdmitPrincipalCredential}), requestContext: requestContext,
 		organizationID: organizationID, ownerUserID: ownerUserID, authorizerUserID: authorizerUserID, agentID: agent.ID, projectID: projectID,
 	}
 }
@@ -328,9 +327,9 @@ func requireUnauthorized(t *testing.T, err error) {
 
 func TestCredentialAdmissionRejectsMissingContextBeforeDatabaseAccess(t *testing.T) {
 	t.Parallel()
-	_, err := runtimepolicy.AdmitPrincipalCredential(t.Context(), nil)
+	_, err := AdmitPrincipalCredential(t.Context(), nil)
 	require.Error(t, err)
-	_, err = runtimepolicy.AdmitPrincipalCredentialWithDBTX(t.Context(), nil)
+	_, err = AdmitPrincipalCredentialWithDBTX(t.Context(), nil)
 	require.Error(t, err)
 }
 
@@ -344,11 +343,11 @@ func TestPrincipalCredentialsHonorLiveServerRestriction(t *testing.T) {
 			for _, principal := range []urn.Principal{actor, urn.NewPrincipal(urn.PrincipalTypeUser, fixture.ownerUserID)} {
 				seedGrant(t, t.Context(), fixture.db, fixture.organizationID, principal, authz.ScopeMCPWrite, "*")
 			}
-			policy, err := runtimepolicy.NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, "*")})
+			policy, err := NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, "*")})
 			require.NoError(t, err)
-			raw, err := runtimepolicy.EncodeDelegatedPolicy(runtimepolicy.CurrentDelegatedPolicyVersion, policy)
+			raw, err := EncodeDelegatedPolicy(CurrentDelegatedPolicyVersion, policy)
 			require.NoError(t, err)
-			credential := contextvalues.PrincipalCredential{AuthorizerUserID: fixture.authorizerUserID, DelegatedGrants: raw, DelegatedGrantsVersion: int32(runtimepolicy.CurrentDelegatedPolicyVersion)}
+			credential := contextvalues.PrincipalCredential{AuthorizerUserID: fixture.authorizerUserID, DelegatedGrants: raw, DelegatedGrantsVersion: int32(CurrentDelegatedPolicyVersion)}
 			authCtx := &contextvalues.AuthContext{ActiveOrganizationID: fixture.organizationID}
 			ctx := contextvalues.WithPrincipalCredentialAuthorization(t.Context(), authCtx, actor, credential)
 			if apiKey {

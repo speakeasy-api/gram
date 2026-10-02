@@ -2,19 +2,15 @@ package assistantidentity_test
 
 import (
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
-	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/urn"
-	sessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestUpgradeNeverMintsContinuationWorkloads(t *testing.T) {
@@ -68,7 +64,7 @@ func TestRetargetPreservesSubjectAndRetiresOldGeneration(t *testing.T) {
 	for _, target := range []uuid.UUID{next, legacy} {
 		require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
 			q := repo.New(tx)
-			if _, err := q.LockProject(t.Context(), repo.LockProjectParams{OrganizationID: f.org, ProjectID: f.project}); err != nil {
+			if _, err := q.LockAssistant(t.Context(), repo.LockAssistantParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: target}); err != nil {
 				return fmt.Errorf("lock retarget fixture: %w", err)
 			}
 			if err := q.FixtureRetargetTrigger(t.Context(), repo.FixtureRetargetTriggerParams{OrganizationID: f.org, ProjectID: f.project, TriggerID: f.trigger, TargetRef: target.String()}); err != nil {
@@ -91,31 +87,13 @@ func TestRetargetPreservesSubjectAndRetiresOldGeneration(t *testing.T) {
 	}
 }
 
-func sessionForIdentity(t *testing.T, f fixture, id assistantidentity.Identity) uuid.UUID {
-	t.Helper()
-	q := sessionsrepo.New(f.db)
-	issuer, err := q.CreateUserSessionIssuer(t.Context(), sessionsrepo.CreateUserSessionIssuerParams{
-		ProjectID:      f.project,
-		OrganizationID: conv.ToPGText(f.org), Slug: "identity-sessions-" + uuid.NewString(), AuthnChallengeMode: "interactive",
-		SessionDuration: pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
-	})
-	require.NoError(t, err)
-	session, err := q.CreateUserSession(t.Context(), sessionsrepo.CreateUserSessionParams{
-		UserSessionIssuerID: issuer.ID, SubjectUrn: urn.NewWorkloadSubject(id.IssuerID, id.Subject), Jti: uuid.NewString(),
-		ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
-	})
-	require.NoError(t, err)
-	return session.ID
-}
-
-func TestTombstonesRevokeCurrentSessionsAtomically(t *testing.T) {
+func TestTombstonesWithdrawBindingAtomically(t *testing.T) {
 	t.Parallel()
 	for _, operation := range []string{"root", "assistant"} {
 		t.Run(operation, func(t *testing.T) {
 			t.Parallel()
 			f := newFixture(t)
 			id := f.provision(t)
-			session := sessionForIdentity(t, f, id)
 			mutate := func(tx pgx.Tx) error {
 				switch operation {
 				case "root":
@@ -131,13 +109,8 @@ func TestTombstonesRevokeCurrentSessionsAtomically(t *testing.T) {
 				return errInjected
 			})
 			require.ErrorIs(t, err, errInjected)
-			q := sessionsrepo.New(f.db)
-			_, err = q.GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ProjectID: f.project, ID: session, OrganizationID: f.org})
-			require.NoError(t, err, "rollback must restore current authority")
 			require.NoError(t, testIdentityService.Validate(t.Context(), f.db, id))
 			require.NoError(t, inTx(t, f.db, mutate))
-			_, err = q.GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ProjectID: f.project, ID: session, OrganizationID: f.org})
-			require.ErrorIs(t, err, pgx.ErrNoRows)
 			require.ErrorIs(t, testIdentityService.Validate(t.Context(), f.db, id), assistantidentity.ErrInvalidIdentity)
 		})
 	}

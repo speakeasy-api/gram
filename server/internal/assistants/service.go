@@ -450,6 +450,7 @@ func NewServiceCore(
 	telemetryLogger *telemetry.Logger,
 	contextWindow *openrouter.ContextWindowResolver,
 	auditLogger *audit.Logger,
+	identities *assistantidentity.Service,
 ) *ServiceCore {
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/assistants")
 	turnClassified, err := meter.Int64Counter(
@@ -462,7 +463,7 @@ func NewServiceCore(
 	}
 
 	return &ServiceCore{
-		identities:        nil,
+		identities:        identities,
 		logger:            logger,
 		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
 		db:                db,
@@ -1279,9 +1280,6 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, fmt.Errorf("begin assistant tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := triggerrepo.New(tx).LockTriggerProject(ctx, projectID); err != nil {
-		return assistantRecord{}, fmt.Errorf("lock assistant project: %w", err)
-	}
 
 	resolved, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets)
 	if err != nil {
@@ -1424,9 +1422,6 @@ func (s *ServiceCore) UpdateAssistant(
 		return assistantRecord{}, fmt.Errorf("begin assistant tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := triggerrepo.New(tx).LockTriggerProject(ctx, projectID); err != nil {
-		return assistantRecord{}, fmt.Errorf("lock assistant project: %w", err)
-	}
 
 	var resolved []resolvedToolsetInsert
 	if toolsets != nil {
@@ -1446,13 +1441,9 @@ func (s *ServiceCore) UpdateAssistant(
 	}
 
 	queries := assistantrepo.New(tx)
-	anchor, err := queries.LockAssistantIdentityAnchor(ctx, assistantrepo.LockAssistantIdentityAnchorParams{ProjectID: projectID, AssistantID: assistantID})
+	_, err = queries.LockAssistantIdentityAnchor(ctx, assistantrepo.LockAssistantIdentityAnchorParams{ProjectID: projectID, AssistantID: assistantID})
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("lock assistant for update: %w", err)
-	}
-	beforeCapabilities, err := assistantidentity.ConfiguredCapabilities(ctx, tx, anchor.OrganizationID, projectID, assistantID)
-	if err != nil {
-		return assistantRecord{}, fmt.Errorf("load assistant capability ceiling: %w", err)
 	}
 	updated, err := queries.UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
 		Name:           conv.PtrToPGText(name),
@@ -1480,9 +1471,6 @@ func (s *ServiceCore) UpdateAssistant(
 		}
 	}
 
-	if err := assistantidentity.RevokeIfCapabilitiesChanged(ctx, tx, record.OrganizationID, projectID, assistantID, beforeCapabilities); err != nil {
-		return assistantRecord{}, fmt.Errorf("invalidate changed assistant capabilities: %w", err)
-	}
 	if err := tx.Commit(ctx); err != nil {
 		return assistantRecord{}, fmt.Errorf("commit assistant tx: %w", err)
 	}
@@ -1536,9 +1524,6 @@ func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, 
 		return fmt.Errorf("begin delete assistant tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := triggerrepo.New(tx).LockTriggerProject(ctx, projectID); err != nil {
-		return fmt.Errorf("lock assistant project: %w", err)
-	}
 
 	queries := assistantrepo.New(tx)
 	anchor, err := queries.LockAssistantIdentityAnchor(ctx, assistantrepo.LockAssistantIdentityAnchorParams{ProjectID: projectID, AssistantID: assistantID})
@@ -2007,6 +1992,19 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	sourceKind, sourceRefJSON, normalizedPayloadJSON, sourcePayloadJSON, err := buildAssistantEventPayload(task)
 	if err != nil {
 		return EnqueueResult{}, err
+	}
+	// Persist the event source: wakes reuse an existing thread whose source may be Slack.
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(normalizedPayloadJSON, &payload); err != nil {
+		return EnqueueResult{}, fmt.Errorf("encode trigger event source: %w", err)
+	}
+	payload["_gram_source_kind"], err = json.Marshal(sourceKind)
+	if err != nil {
+		return EnqueueResult{}, fmt.Errorf("encode trigger event source: %w", err)
+	}
+	normalizedPayloadJSON, err = json.Marshal(payload)
+	if err != nil {
+		return EnqueueResult{}, fmt.Errorf("encode trigger event source: %w", err)
 	}
 	triggerInstanceID, err := conv.PtrToNullUUID(conv.PtrEmpty(task.TriggerInstanceID))
 	if err != nil {
@@ -2864,7 +2862,10 @@ func (s *ServiceCore) processEventTurn(
 		if err != nil {
 			return nil, fmt.Errorf("decode assistant turn: %w", err)
 		}
-		actorUserID = turnUserID(assistant, thread, event)
+		actorUserID, err = s.turnUserID(ctx, assistant, thread, event)
+		if err != nil {
+			return nil, err
+		}
 		// Best-effort: files attached to the triggering message ride along as
 		// vision/text content. Failures degrade to the metadata-only turn.
 		switch thread.SourceKind {
@@ -2964,22 +2965,6 @@ func (s *ServiceCore) assistantToolsVariant(ctx context.Context, projectID uuid.
 		return feature.VariantAssistantToolsLegacy
 	}
 	return feature.AssistantToolsVariant(variant)
-}
-
-// turnUserID returns the Gram user whose identity a turn should act under.
-// Dashboard turns carry a Gram user id on the event payload (the sender), so
-// MCP calls, audit attribution, and per-user RBAC reflect the actual sender
-// rather than the assistant's creator. Other sources either don't carry a
-// Gram user identity (cron/wake) or carry an external one (Slack), so they
-// fall back to the creator.
-func turnUserID(assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) string {
-	if thread.SourceKind == sourceKindDashboard {
-		var payload dashboardEventPayload
-		if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err == nil && payload.UserID != "" {
-			return payload.UserID
-		}
-	}
-	return assistant.CreatedByUserID
 }
 
 func (s *ServiceCore) startProcessingLeaseHeartbeat(
@@ -3898,10 +3883,4 @@ func (s *ServiceCore) stopRuntimeRecord(ctx context.Context, projectID, runtimeI
 		return fmt.Errorf("stop assistant runtime: %w", err)
 	}
 	return nil
-}
-
-// SetIdentityService configures the deployment platform trust before serving requests.
-func (s *ServiceCore) SetIdentityService(identities *assistantidentity.Service) *ServiceCore {
-	s.identities = identities
-	return s
 }

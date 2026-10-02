@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
-	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
 // BindRootTrigger binds the persisted target, never a caller-supplied target.
@@ -30,9 +29,6 @@ func (s *Service) bindRoot(ctx context.Context, tx pgx.Tx, org string, project, 
 		return ErrInvalidIdentity
 	}
 	q := repo.New(tx)
-	if err := lockProject(ctx, q, org, project); err != nil {
-		return err
-	}
 	root, err := q.GetTrigger(ctx, repo.GetTriggerParams{OrganizationID: org, ProjectID: project, TriggerID: trigger})
 	if err != nil {
 		return resourceError("load root trigger", err)
@@ -60,6 +56,9 @@ func (s *Service) bindRoot(ctx context.Context, tx pgx.Tx, org string, project, 
 	assistant, err := uuid.Parse(root.TargetRef)
 	if err != nil {
 		return fmt.Errorf("parse assistant root target: %w", ErrBrokenMapping)
+	}
+	if err := lockAssistant(ctx, q, org, project, assistant); err != nil {
+		return err
 	}
 	a, err := q.GetAssistant(ctx, repo.GetAssistantParams{OrganizationID: org, ProjectID: project, AssistantID: assistant})
 	if err != nil {
@@ -160,6 +159,18 @@ func (s *Service) platformIssuer(ctx context.Context, q *repo.Queries, org strin
 		OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true},
 		Name: "Assistant roots " + project.String(), Issuer: s.issuer, JwksUri: s.jwksURI,
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		// A concurrent assistant may have created the shared project trust. Re-read
+		// and validate it; a conflicting name with different trust is not adopted.
+		rows, readErr := q.GetPlatformIssuer(ctx, repo.GetPlatformIssuerParams{PlatformIssuer: s.issuer, OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}})
+		if readErr != nil {
+			return uuid.Nil, fmt.Errorf("read concurrent platform trust: %w", readErr)
+		}
+		if len(rows) != 1 || rows[0].JwksUri != s.jwksURI || rows[0].AllowWildcardAdmission {
+			return uuid.Nil, ErrBrokenMapping
+		}
+		return rows[0].ID, nil
+	}
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("create platform trust registration: %w", err)
 	}
@@ -167,11 +178,8 @@ func (s *Service) platformIssuer(ctx context.Context, q *repo.Queries, org strin
 }
 
 // TombstoneTrigger permanently withdraws this root's current association and
-// revokes its existing wake sessions in the caller's transaction. History stays.
+// withdraws its admission in the caller's transaction. History stays.
 func TombstoneTrigger(ctx context.Context, tx pgx.Tx, org string, project, trigger uuid.UUID) error {
-	if err := lockProject(ctx, repo.New(tx), org, project); err != nil {
-		return err
-	}
 	return tombstoneTrigger(ctx, tx, org, project, trigger)
 }
 
@@ -183,9 +191,6 @@ func tombstoneTrigger(ctx context.Context, tx pgx.Tx, org string, project, trigg
 	}
 	if err != nil {
 		return fmt.Errorf("read root authority for withdrawal: %w", err)
-	}
-	if err := workloadidentity.RevokeWorkloadSessionsTx(ctx, tx, org, old.OriginalWorkloadIssuerID, old.Subject); err != nil {
-		return fmt.Errorf("revoke root sessions: %w", err)
 	}
 	if err := q.RevokeAdmission(ctx, repo.RevokeAdmissionParams{OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}, IssuerID: old.OriginalWorkloadIssuerID, Subject: old.Subject}); err != nil {
 		return fmt.Errorf("withdraw root admission: %w", err)
@@ -203,7 +208,7 @@ func tombstoneTrigger(ctx context.Context, tx pgx.Tx, org string, project, trigg
 // including assignments not reachable through a now-deleted root reference.
 func TombstoneAssistant(ctx context.Context, tx pgx.Tx, org string, project, assistant uuid.UUID) error {
 	q := repo.New(tx)
-	if err := lockProject(ctx, q, org, project); err != nil {
+	if err := lockAssistant(ctx, q, org, project, assistant); err != nil {
 		return err
 	}
 	b, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{OrganizationID: org, ProjectID: project, AssistantID: assistant})
@@ -213,16 +218,9 @@ func TombstoneAssistant(ctx context.Context, tx pgx.Tx, org string, project, ass
 	if err != nil {
 		return fmt.Errorf("read assistant authority for withdrawal: %w", err)
 	}
-	// Session issuance locks issuer before agent. Preserve that order even when
-	// withdrawing all roots at once; missing hard-deleted issuer is harmless.
-	if err := q.LockAssistantIssuers(ctx, org); err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("lock assistant issuer for withdrawal: %w", err)
-	}
+
 	if err := q.RevokeDedicatedAgent(ctx, repo.RevokeDedicatedAgentParams{OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}, AgentID: b.OriginalAgentID}); err != nil {
 		return fmt.Errorf("revoke dedicated agent: %w", err)
-	}
-	if err := workloadidentity.RevokeAgentWorkloadSessionsTx(ctx, tx, org, b.OriginalAgentID); err != nil {
-		return fmt.Errorf("revoke dedicated agent sessions: %w", err)
 	}
 	roots, err := q.ListAssistantTriggerHistory(ctx, repo.ListAssistantTriggerHistoryParams{OrganizationID: org, ProjectID: project, AssistantID: assistant})
 	if err != nil {
@@ -243,4 +241,9 @@ func TombstoneAssistant(ctx context.Context, tx pgx.Tx, org string, project, ass
 		return fmt.Errorf("tombstone assistant binding: %w", err)
 	}
 	return nil
+}
+
+// TombstoneTrigger implements the trigger lifecycle transaction hook.
+func (s *Service) TombstoneTrigger(ctx context.Context, tx pgx.Tx, org string, project, trigger uuid.UUID) error {
+	return TombstoneTrigger(ctx, tx, org, project, trigger)
 }

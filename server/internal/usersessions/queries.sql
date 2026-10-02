@@ -1445,57 +1445,7 @@ FROM user_sessions
 WHERE user_session_issuer_id = @user_session_issuer_id
   AND jti = @jti
   AND deleted IS FALSE
-  AND expires_at > clock_timestamp()
-  -- Workload credentials have no assignment pin. An assignment created or
-  -- repointed after issuance must not lend new authority to an old session.
-  -- Select the winning rule BEFORE checking its time; never fall back to a
-  -- broader wildcard when an exact rule invalidates the credential.
-  AND (NOT starts_with(subject_urn, 'workload:') OR (
-    SELECT wa.updated_at <= user_sessions.created_at
-      AND EXISTS (SELECT 1 FROM agents a WHERE a.id = wa.agent_id
-        AND a.organization_id = wa.organization_id AND NOT a.deleted
-        AND a.revoked_at IS NULL AND a.suspended_at IS NULL
-        AND a.owner_reassignment_required_at IS NULL)
-      AND NOT EXISTS (
-        -- Retiring an exact or narrower wildcard must not expose an older,
-        -- broader assignment to a session minted before that withdrawal.
-        SELECT 1 FROM workload_agent_assignments retired
-        WHERE retired.organization_id = wa.organization_id
-          AND retired.workload_issuer_id = wa.workload_issuer_id
-          AND retired.deleted_at > user_sessions.created_at
-          AND (
-            (retired.match_kind = 'exact' AND wa.match_kind = 'wildcard')
-            OR (retired.match_kind = wa.match_kind AND length(retired.subject) > length(wa.subject))
-          )
-          AND (
-            (retired.match_kind = 'exact' AND user_sessions.subject_urn = 'workload:' || wi.id::text || ':' || retired.subject)
-            OR (retired.match_kind = 'wildcard' AND wi.allow_wildcard_admission
-              AND length(retired.subject) > 1 AND right(retired.subject, 1) = '*'
-              AND starts_with(user_sessions.subject_urn, 'workload:' || wi.id::text || ':' || left(retired.subject, length(retired.subject) - 1)))
-          )
-      )
-    FROM workload_agent_assignments wa
-    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id
-    WHERE wa.organization_id = COALESCE(user_sessions.organization_id,
-        (SELECT COALESCE(si.organization_id, p.organization_id)
-         FROM user_session_issuers si LEFT JOIN projects p ON p.id = si.project_id
-         WHERE si.id = user_sessions.user_session_issuer_id),
-        (SELECT organization_id FROM projects WHERE id = user_sessions.project_id))
-      AND wa.deleted IS FALSE AND wi.deleted IS FALSE
-      AND (wi.project_id IS NULL OR wi.project_id = COALESCE(user_sessions.project_id,
-        (SELECT si.project_id FROM user_session_issuers si WHERE si.id = user_sessions.user_session_issuer_id)))
-      AND (wi.project_id IS NULL OR NOT EXISTS (SELECT 1 FROM user_session_issuers si
-        WHERE si.id = user_sessions.user_session_issuer_id AND si.project_id IS NOT NULL AND si.project_id <> wi.project_id))
-
-      AND (
-        (wa.match_kind = 'exact' AND user_sessions.subject_urn = 'workload:' || wi.id::text || ':' || wa.subject)
-        OR (wa.match_kind = 'wildcard' AND wi.allow_wildcard_admission
-          AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
-          AND starts_with(user_sessions.subject_urn, 'workload:' || wi.id::text || ':' || left(wa.subject, length(wa.subject) - 1)))
-      )
-    ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
-    LIMIT 1
-  ));
+  AND expires_at > clock_timestamp();
 
 -- name: GetLatestLiveUserSessionToolSelection :one
 -- Reauth prefill: the identified subject's newest live restrictive policy
@@ -1801,39 +1751,6 @@ WITH issuer AS (
     WHERE issuer.id = @user_session_issuer_id
       AND issuer.deleted IS FALSE
     FOR KEY SHARE OF issuer
-), workload_issuer AS MATERIALIZED (
-    -- Serialize workload issuance with admission/assignment mutations before
-    -- locking the assigned agent. Non-workload sessions do not take these locks.
-    SELECT wi.id, wi.organization_id, wi.allow_wildcard_admission
-    FROM workload_issuers wi, issuer
-    WHERE wi.organization_id = issuer.organization_id
-      AND (wi.project_id IS NULL OR wi.project_id = issuer.project_id)
-      AND starts_with(@subject_urn::text, 'workload:' || wi.id::text || ':')
-
-      AND wi.deleted IS FALSE
-    FOR UPDATE OF wi
-), workload_assignment AS MATERIALIZED (
-    SELECT wa.agent_id, wa.organization_id, wa.updated_at
-    FROM workload_agent_assignments wa
-    JOIN workload_issuer wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id
-    WHERE wa.deleted IS FALSE
-      AND (
-        (wa.match_kind = 'exact' AND @subject_urn::text = 'workload:' || wi.id::text || ':' || wa.subject)
-        OR (wa.match_kind = 'wildcard' AND wi.allow_wildcard_admission
-          AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
-          AND starts_with(@subject_urn::text, 'workload:' || wi.id::text || ':' || left(wa.subject, length(wa.subject) - 1)))
-      )
-    ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
-    LIMIT 1
-), workload_agent AS MATERIALIZED (
-    SELECT a.id
-    FROM agents a
-    JOIN workload_assignment wa ON wa.agent_id = a.id AND wa.organization_id = a.organization_id
-    WHERE a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
-      AND wa.updated_at <= transaction_timestamp()
-      AND a.owner_reassignment_required_at IS NULL
-      AND a.updated_at <= transaction_timestamp()
-    FOR UPDATE OF a
 )
 INSERT INTO user_sessions (
     project_id,
@@ -1848,8 +1765,7 @@ INSERT INTO user_sessions (
     refresh_token_hash,
     refresh_expires_at,
     expires_at,
-    tool_selection,
-    created_at
+    tool_selection
 )
 SELECT
     issuer.project_id,
@@ -1864,10 +1780,8 @@ SELECT
     @refresh_token_hash,
     @refresh_expires_at,
     @expires_at,
-    @tool_selection,
-    CASE WHEN starts_with(@subject_urn::text, 'workload:') THEN transaction_timestamp() ELSE clock_timestamp() END
+    @tool_selection
 FROM issuer
-WHERE NOT starts_with(@subject_urn::text, 'workload:') OR EXISTS (SELECT 1 FROM workload_agent)
 RETURNING *;
 
 -- name: CreateUserSessionConsent :one
@@ -2156,12 +2070,3 @@ WHERE wia.organization_id = @organization_id::text
   AND (wia.project_id = @project_id::uuid OR wia.project_id IS NULL)
   AND wia.deleted IS FALSE
 ORDER BY wia.project_id NULLS LAST, wia.created_at ASC, wia.id ASC;
-
--- name: FixtureSetHistoricalSessionSubject :exec
--- Simulate pre-validation persisted credentials for management-display tests.
-UPDATE user_sessions s SET subject_urn = @subject_urn
-FROM user_session_issuers i
-WHERE s.id = @session_id AND i.id = s.user_session_issuer_id
- AND i.project_id = @project_id::uuid AND s.project_id = @project_id::uuid
- AND s.organization_id = @organization_id::text
- AND COALESCE(i.organization_id, (SELECT organization_id FROM projects WHERE id = i.project_id)) = @organization_id::text;

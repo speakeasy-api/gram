@@ -29,10 +29,6 @@ import (
 // Errors name the issuer by name; a workload issuer has no slug, its URL being
 // its canonical name.
 func workloadIssuerKeySource(endpoint *ResolvedMcpEndpoint, issuer *workloadidentity_repo.WorkloadIssuer) (jwks.Source, error) {
-	if issuer == nil {
-		return jwks.Source{}, fmt.Errorf("workload issuer does not support external assertions")
-	}
-
 	if issuer.JwksUri == "" {
 		return jwks.Source{}, fmt.Errorf("workload issuer %q records no jwks_uri", issuer.Name)
 	}
