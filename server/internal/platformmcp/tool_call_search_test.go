@@ -569,30 +569,52 @@ func TestListAttributeKeys_SplitsCustomFromFilterableSystemKeys(t *testing.T) {
 // says so, which is the only signal that a key's absence from the inventory
 // does not mean the project never recorded it — the inference an agent would
 // otherwise draw from a list it believes is complete.
+//
+// The cases walk the boundary in each kind independently, because that is where
+// a cut-detection bug lives: the flag is an OR over the two kinds, so moving
+// both of them together cannot tell an OR from an AND. Exactly at the cap
+// nothing is cut and nothing is claimed to be, which is what keeps truncated a
+// positive signal rather than always-on noise.
 func TestListAttributeKeys_CapsEachKindAndReportsTheCut(t *testing.T) {
 	t.Parallel()
 
-	keys := make([]string, 0, 2*(maxAttributeKeysPerKind+1))
-	for i := range maxAttributeKeysPerKind + 1 {
-		keys = append(keys, fmt.Sprintf("app.custom_%04d", i), fmt.Sprintf("gram.system_%04d", i))
+	keysOfKind := func(prefix string, count int) []string {
+		keys := make([]string, 0, count)
+		for i := range count {
+			keys = append(keys, fmt.Sprintf("%s_%04d", prefix, i))
+		}
+		return keys
 	}
-	reader := &recordingToolCallSearchReader{keys: keys}
-	service := newToolCallSearchService(t, reader, &recordingDrilldownAuditor{})
 
-	output, err := service.ListAttributeKeys(t.Context(), testPrincipal(), ListAttributeKeysInput{ProjectID: toolCallSearchTestProject})
-	require.NoError(t, err)
-	require.Len(t, output.CustomKeys, maxAttributeKeysPerKind)
-	require.Len(t, output.SystemKeys, maxAttributeKeysPerKind)
-	require.True(t, output.Truncated, "a cut inventory must say so, or absence reads as non-existence")
+	for _, test := range []struct {
+		name          string
+		custom        int
+		system        int
+		wantCustom    int
+		wantSystem    int
+		wantTruncated bool
+	}{
+		{name: "well under the cap in both kinds", custom: 3, system: 4, wantCustom: 3, wantSystem: 4, wantTruncated: false},
+		{name: "exactly at the cap in both kinds", custom: maxAttributeKeysPerKind, system: maxAttributeKeysPerKind, wantCustom: maxAttributeKeysPerKind, wantSystem: maxAttributeKeysPerKind, wantTruncated: false},
+		{name: "one past the cap in both kinds", custom: maxAttributeKeysPerKind + 1, system: maxAttributeKeysPerKind + 1, wantCustom: maxAttributeKeysPerKind, wantSystem: maxAttributeKeysPerKind, wantTruncated: true},
+		{name: "one past the cap in custom only", custom: maxAttributeKeysPerKind + 1, system: 3, wantCustom: maxAttributeKeysPerKind, wantSystem: 3, wantTruncated: true},
+		{name: "one past the cap in system only", custom: 3, system: maxAttributeKeysPerKind + 1, wantCustom: 3, wantSystem: maxAttributeKeysPerKind, wantTruncated: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 
-	// One key under the cap in each kind: nothing is cut and nothing is claimed
-	// to be, so truncated stays a positive signal rather than always-on noise.
-	reader.keys = keys[:2*maxAttributeKeysPerKind]
-	output, err = service.ListAttributeKeys(t.Context(), testPrincipal(), ListAttributeKeysInput{ProjectID: toolCallSearchTestProject})
-	require.NoError(t, err)
-	require.Len(t, output.CustomKeys, maxAttributeKeysPerKind)
-	require.Len(t, output.SystemKeys, maxAttributeKeysPerKind)
-	require.False(t, output.Truncated)
+			keys := append(keysOfKind("app.custom", test.custom), keysOfKind("gram.system", test.system)...)
+			reader := &recordingToolCallSearchReader{keys: keys}
+			service := newToolCallSearchService(t, reader, &recordingDrilldownAuditor{})
+
+			output, err := service.ListAttributeKeys(t.Context(), testPrincipal(), ListAttributeKeysInput{ProjectID: toolCallSearchTestProject})
+			require.NoError(t, err)
+			require.Len(t, output.CustomKeys, test.wantCustom)
+			require.Len(t, output.SystemKeys, test.wantSystem)
+			require.Equal(t, test.wantTruncated, output.Truncated,
+				"a cut inventory must say so and an uncut one must not, or truncated stops distinguishing absence from non-existence")
+		})
+	}
 }
 
 // TestSearchToolCalls_RefusesIdentityAttributesBeforeAnyRead pins that
