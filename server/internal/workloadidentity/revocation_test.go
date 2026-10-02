@@ -305,3 +305,31 @@ func TestCredentialEligibilityTracksTemporaryAgentSuspension(t *testing.T) {
 	_, err = q.GetUserSessionPrincipalCredentialByJTI(t.Context(), params)
 	require.NoError(t, err, "temporary suspension must not permanently invalidate the credential")
 }
+
+func TestRevocationExplicitlyHandlesMissingTenantAnchors(t *testing.T) {
+	t.Parallel()
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	f := newAssignmentFixture(t, conn)
+	seedAssignment(t, conn, f.tenant.organizationID, f.issuerID, testSubject, f.agentID)
+	issuer := workloadSessionIssuer(t, conn, f.tenant.organizationID)
+	session, err := sessionsrepo.New(conn).CreateUserSession(t.Context(), workloadSessionParams(issuer, f.issuerID, testSubject))
+	require.NoError(t, err)
+	missing := uuid.New()
+	q := identityrepo.New(conn)
+	_, err = q.LockWorkloadIssuerForRevocation(t.Context(), identityrepo.LockWorkloadIssuerForRevocationParams{OrganizationID: f.tenant.organizationID, IssuerID: missing})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = q.LockWorkloadAgentForRevocation(t.Context(), identityrepo.LockWorkloadAgentForRevocationParams{OrganizationID: f.tenant.organizationID, AgentID: missing})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.NoError(t, pgx.BeginFunc(t.Context(), conn, func(tx pgx.Tx) error {
+		if err := workloadidentity.RevokeWorkloadSessionsTx(t.Context(), tx, f.tenant.organizationID, missing, testSubject); err != nil {
+			return fmt.Errorf("clean missing issuer: %w", err)
+		}
+		if err := workloadidentity.RevokeAgentWorkloadSessionsTx(t.Context(), tx, f.tenant.organizationID, missing); err != nil {
+			return fmt.Errorf("clean missing agent: %w", err)
+		}
+		return nil
+	}))
+	_, err = sessionsrepo.New(conn).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ID: session.ID, OrganizationID: f.tenant.organizationID})
+	require.NoError(t, err, "absent tenant anchors must not borrow another live identity")
+}

@@ -74,3 +74,15 @@ The tool calls the same authorized management endpoint as the API and returns
 safe identity state, not credentials or private instructions. Contract tests cover
 live registration, audience and project-write parity, confirmation, ambiguous or
 hidden targets, safe errors, and a trusted OAuth upgrade against the real service.
+
+### Existing server-audience workflow
+
+`SetResourceAudience` adds no new editing operation in this change. It now retires
+current workload credentials when the affected agent's audience actually changes.
+The actor, target server, confirmation, concurrency checks and access-change audit
+remain those of the existing authorized audience editor. Platform MCP role/member
+tools are not a substitute for that editor. Update the shipped `manage-mcp-access`
+workflow with an explicit dashboard handoff, session-retirement warning and
+post-write audience/audit verification; do not add a broad audience mutation tool
+as part of this identity-provisioning change. Existing role reads cannot prove a
+direct audience change or credential retirement, and the workflow says so.

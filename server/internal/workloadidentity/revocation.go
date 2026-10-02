@@ -2,6 +2,7 @@ package workloadidentity
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -22,7 +23,9 @@ func RevokeWorkloadSessionsTx(ctx context.Context, tx pgx.Tx, organizationID str
 		return fmt.Errorf("validate exact workload revocation subject: %w", err)
 	}
 	q := repo.New(tx)
-	if err := q.LockWorkloadIssuerForRevocation(ctx, repo.LockWorkloadIssuerForRevocationParams{OrganizationID: organizationID, IssuerID: issuerID}); err != nil {
+	// A missing, tenant-scoped issuer cannot admit new sessions. Explicitly
+	// allow cleanup of retained sessions after hard deletion; never infer legacy.
+	if _, err := q.LockWorkloadIssuerForRevocation(ctx, repo.LockWorkloadIssuerForRevocationParams{OrganizationID: organizationID, IssuerID: issuerID}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("lock workload issuer for revocation: %w", err)
 	}
 	if err := q.RevokeWorkloadSessions(ctx, repo.RevokeWorkloadSessionsParams{OrganizationID: organizationID, SubjectUrn: urn.NewWorkloadSubject(issuerID, subject).String()}); err != nil {
@@ -41,7 +44,9 @@ func RevokeAgentWorkloadSessionsTx(ctx context.Context, tx pgx.Tx, organizationI
 		return fmt.Errorf("agent workload session revocation requires a tenant and agent")
 	}
 	q := repo.New(tx)
-	if err := q.LockWorkloadAgentForRevocation(ctx, repo.LockWorkloadAgentForRevocationParams{OrganizationID: organizationID, AgentID: agentID}); err != nil {
+	// A hard-deleted agent cannot pass the locked issuance query. Continue
+	// retiring retained sessions, but never treat a missing lock as a live agent.
+	if _, err := q.LockWorkloadAgentForRevocation(ctx, repo.LockWorkloadAgentForRevocationParams{OrganizationID: organizationID, AgentID: agentID}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("lock workload agent for revocation: %w", err)
 	}
 	if err := q.RevokeAgentWorkloadSessions(ctx, repo.RevokeAgentWorkloadSessionsParams{OrganizationID: organizationID, AgentID: agentID}); err != nil {
