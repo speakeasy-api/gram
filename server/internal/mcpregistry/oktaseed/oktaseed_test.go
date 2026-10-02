@@ -86,8 +86,8 @@ func TestVendorsAreValidRecords(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, oktaseed.Result{Created: 0, Updated: 0, Unchanged: len(oktaseed.Vendors)}, result)
 
-	// Staff edits outside the namespace survive a re-run; a drifted mapping
-	// is put back without touching them.
+	// Staff edits survive a re-run, inside the namespace and outside it: the
+	// seed adds its own names next to the one staff added.
 	first := oktaseed.Vendors[0]
 	e, err := svc.GetByName(ctx, first.Name)
 	require.NoError(t, err)
@@ -96,7 +96,7 @@ func TestVendorsAreValidRecords(t *testing.T) {
 	var meta map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(root["_meta"], &meta))
 	meta["com.speakeasy.ai/catalog"] = json.RawMessage(`{"documentationUrl":"https://docs.example.test/edited"}`)
-	meta[mcpregistry.OktaNamespace] = json.RawMessage(`{"oinNames":["drifted"]}`)
+	meta[mcpregistry.OktaNamespace] = json.RawMessage(`{"oinNames":["staff-added"],"xaaSignOnModes":[]}`)
 	rawMeta, err := json.Marshal(meta)
 	require.NoError(t, err)
 	root["_meta"] = rawMeta
@@ -113,7 +113,15 @@ func TestVendorsAreValidRecords(t *testing.T) {
 	require.Contains(t, string(e.Data), "https://docs.example.test/edited")
 	mapping, err := mcpregistry.ParseOktaMapping(e.Data)
 	require.NoError(t, err)
-	require.Equal(t, first.Mapping, mapping)
+	require.Equal(t, append([]string{"staff-added"}, first.Mapping.OINNames...), mapping.OINNames)
+	require.NotNil(t, mapping.XAASignOnModes)
+	require.Empty(t, mapping.XAASignOnModes, "an explicitly empty mode list is a staff decision")
+	require.Equal(t, first.Mapping.XAAIssuer, mapping.XAAIssuer)
+
+	// With nothing left to add, the staff edits do not count as drift.
+	result, err = oktaseed.Apply(ctx, logger, svc)
+	require.NoError(t, err)
+	require.Equal(t, oktaseed.Result{Created: 0, Updated: 0, Unchanged: len(oktaseed.Vendors)}, result)
 }
 
 func TestApplyRepairsNullMetadata(t *testing.T) {
@@ -185,6 +193,36 @@ func TestApplyKeepsExistingIcon(t *testing.T) {
 	recorded, present := storedSupportsDCR(t, e.Data)
 	require.True(t, present)
 	require.False(t, recorded)
+}
+
+func TestApplyLeavesAnUndecodableOktaMappingAlone(t *testing.T) {
+	t.Parallel()
+	v, err := mcpregistry.LoadValidator()
+	require.NoError(t, err)
+	ctx := t.Context()
+	db, err := infra.CloneTestDatabase(t, "oktaseedmappingtestdb")
+	require.NoError(t, err)
+	svc := mcpregistry.New(db, v)
+
+	first := oktaseed.Vendors[0]
+	remotes := make([]map[string]string, 0, len(first.Remotes))
+	for _, r := range first.Remotes {
+		remotes = append(remotes, map[string]string{"type": r.Type, "url": r.URL})
+	}
+	// A legacy row whose namespace does not decode is for staff to repair;
+	// the seed must not write over it.
+	legacy, err := json.Marshal(map[string]any{
+		"server": map[string]any{"name": first.Name, "description": "Legacy", "version": "1", "remotes": remotes},
+		"_meta":  map[string]any{mcpregistry.OktaNamespace: map[string]any{"oinNames": "not-a-list"}},
+	})
+	require.NoError(t, err)
+	require.NoError(t, registryrepo.New(db).InsertRegistryEntryFixture(ctx, registryrepo.InsertRegistryEntryFixtureParams{ID: uuid.New(), Data: legacy, Published: true}))
+
+	_, err = oktaseed.Apply(ctx, testenv.NewLogger(t), svc)
+	require.ErrorContains(t, err, "decode okta mapping")
+	e, err := svc.GetByName(ctx, first.Name)
+	require.NoError(t, err)
+	require.JSONEq(t, string(legacy), string(e.Data))
 }
 
 func TestApplyRefusesUndecodableCatalogMetadata(t *testing.T) {
