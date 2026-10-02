@@ -301,8 +301,8 @@ describe("McpServerHealth", () => {
 
     expect(writeText).toHaveBeenCalledTimes(1);
     const [prompt] = writeText.mock.calls[0] as unknown as [string];
-    expect(prompt).toContain(`"crm" (mcp_id ${SERVER_ID})`);
-    expect(prompt).toContain("in the default project");
+    expect(prompt).toContain(`MCP server with mcp_id ${SERVER_ID}.`);
+    expect(prompt).toContain('named "crm" in the project "default"');
   });
 
   it("drops the tail and searches login logs by issuer when there is no slug", async () => {
@@ -468,6 +468,35 @@ describe("McpServerHealth", () => {
     await screen.findByText("Server health couldn't be loaded.");
     expect(screen.queryByText(/something private/)).toBe(null);
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
+  it("never shows the last server's report while another server loads", async () => {
+    respond = (windowDays) => ({
+      ...withIssuer(windowDays),
+      user_session_issuer: {
+        ...ISSUER,
+        other_servers_using_issuer: [{ id: "srv_other", name: "Other" }],
+      },
+    });
+    const { router } = await open();
+    await screen.findByRole("heading", { name: "crm" });
+
+    // The next server's reads stay open, so only a stand-in could fill them.
+    const answer = mocks.healthFetch.getMockImplementation()!;
+    mocks.healthFetch.mockImplementation((input: RequestInfo | URL) =>
+      requestUrl(input).searchParams.get("mcp_server_id") === "srv_other"
+        ? new Promise(() => {})
+        : answer(input),
+    );
+    fireEvent.click(screen.getByRole("link", { name: "Other" }));
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        `/organizations/${ORG.slug}/mcp-servers/srv_other`,
+      ),
+    );
+    await screen.findByText("Loading...");
+    expect(screen.queryByRole("heading", { name: "crm" })).toBe(null);
   });
 
   it("names a legacy auth mode when there is no issuer", async () => {

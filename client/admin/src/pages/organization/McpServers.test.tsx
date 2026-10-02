@@ -102,7 +102,10 @@ beforeEach(() => {
   });
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("McpServers", () => {
   it("starts on the oldest project and writes its id into the address", async () => {
@@ -198,6 +201,10 @@ describe("McpServers", () => {
   });
 
   it("links each server to its health page in the selected project", async () => {
+    // The health page reads through the generated client, which fetches.
+    // Held open, so the navigation asserted here makes no real request.
+    const fetch = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal("fetch", fetch);
     const { router } = await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}/mcp-servers?project=${OLDEST.id}`,
     });
@@ -215,6 +222,7 @@ describe("McpServers", () => {
       ),
     );
     expect(router.state.location.search).toEqual({ project: OLDEST.id });
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
   });
 
   it("copies a server's URL without leaving the list", async () => {

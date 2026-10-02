@@ -1,5 +1,5 @@
 import { useRef, useState, type JSX, type ReactNode } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   Link,
   Navigate,
@@ -112,15 +112,24 @@ export function McpServerHealth({
   // configuration. Both take the window: the configuration counts the people
   // who signed in inside it. A new window keeps the last answers on screen
   // until it lands, rather than blanking the page between picks.
+  // Only another window of this same server stands in while a read lands.
+  // Moving to a different server, say through "Other servers on issuer",
+  // must never show the last server's report under the new one's name.
+  const sameServer = (previousKey: readonly unknown[] | undefined): boolean =>
+    previousKey?.[1] === idOrSlug &&
+    previousKey[2] === project &&
+    previousKey[3] === serverId;
   const health = useQuery({
     ...mcpServerHealthQuery(idOrSlug, request),
     enabled: !!project,
-    placeholderData: keepPreviousData,
+    placeholderData: (previous, previousQuery) =>
+      sameServer(previousQuery?.queryKey) ? previous : undefined,
   });
   const toolCalls = useQuery({
     ...mcpServerToolCallsQuery(idOrSlug, request),
     enabled: !!project,
-    placeholderData: keepPreviousData,
+    placeholderData: (previous, previousQuery) =>
+      sameServer(previousQuery?.queryKey) ? previous : undefined,
   });
 
   // The server is named inside a project, so an address without one has
@@ -1059,7 +1068,11 @@ function LogsCard({
           <LogLink
             href={loginChallengeUrl(loginQuery, range)}
             title="Login challenge logs"
-            description="OAuth flow, issuer gate and token exchange logs for this server's sign-ins"
+            description={
+              issuers.length > 0
+                ? "OAuth flow, issuer gate and token exchange logs for this server's sign-ins. The issuer terms also match other servers that sign in through the same upstream issuer."
+                : "OAuth flow, issuer gate and token exchange logs for this server's sign-ins"
+            }
             query={loginQuery}
           />
         )}
