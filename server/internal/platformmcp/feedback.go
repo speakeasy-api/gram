@@ -435,6 +435,8 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	"list_skill_feedback":                   {},
 	"list_skill_suggestions":                {},
 	"list_skill_suggestion_feedback":        {},
+	"approve_skill_suggestion":              {},
+	"dismiss_skill_suggestion":              {},
 	"create_skill":                          {},
 	"add_skill_version":                     {},
 	"update_skill_metadata":                 {},

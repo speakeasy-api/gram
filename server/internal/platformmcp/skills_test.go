@@ -48,6 +48,10 @@ type recordingSkillsManagement struct {
 	listFeedbackOut           *genskills.ListSkillFeedbackResult
 	listSuggestionsOut        *genskills.ListSkillSuggestionsResult
 	listSuggestionFeedbackOut *genskills.ListSkillSuggestionFeedbackResult
+	approved                  *genskills.ApproveSuggestionPayload
+	approveOut                *genskills.ApproveSkillSuggestionResult
+	dismissed                 *genskills.DismissSuggestionPayload
+	dismissOut                *types.SkillEditSuggestion
 	pluginDistributions       []*types.PluginSkillDistribution
 }
 
@@ -123,6 +127,22 @@ func (s *recordingSkillsManagement) ListSuggestionFeedback(_ context.Context, _ 
 		return nil, s.err
 	}
 	return s.listSuggestionFeedbackOut, nil
+}
+
+func (s *recordingSkillsManagement) ApproveSuggestion(_ context.Context, payload *genskills.ApproveSuggestionPayload) (*genskills.ApproveSkillSuggestionResult, error) {
+	s.approved = payload
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.approveOut, nil
+}
+
+func (s *recordingSkillsManagement) DismissSuggestion(_ context.Context, payload *genskills.DismissSuggestionPayload) (*types.SkillEditSuggestion, error) {
+	s.dismissed = payload
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.dismissOut, nil
 }
 
 func (s *recordingSkillsManagement) ListDistributions(_ context.Context, payload *genskills.ListDistributionsPayload) (*genskills.ListSkillDistributionsResult, error) {
