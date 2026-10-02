@@ -17,7 +17,7 @@ type AdminContext struct {
 	WriteOperations []WriteOperation `json:"available_write_operations"`
 }
 
-func registerContextTool(server *mcp.Server, organizationReadsAvailable, projectReadsAvailable, configurationReadsAvailable, activityReadsAvailable, usageReadsAvailable, coverageReadsAvailable, issuerReadsAvailable, matrixReadsAvailable, onboardingReadsAvailable, projectMCPReadsAvailable, billingDiagnosticsAvailable, organizationStatsAvailable, organizationMembersAvailable, billingDetailsAvailable, registryAvailable bool, runtime *Runtime) {
+func registerContextTool(server *mcp.Server, organizationReadsAvailable, projectReadsAvailable, configurationReadsAvailable, activityReadsAvailable, usageReadsAvailable, coverageReadsAvailable, issuerReadsAvailable, matrixReadsAvailable, onboardingReadsAvailable, projectMCPReadsAvailable, billingDiagnosticsAvailable, organizationStatsAvailable, organizationMembersAvailable, billingDetailsAvailable, registryAvailable, serverHealthAvailable bool, runtime *Runtime) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_admin_context",
 		Title:       "Get Staff Admin Context",
@@ -73,6 +73,9 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 		}
 		if registryAvailable {
 			workflows = append(workflows, "inspect bounded registry entries and safe validation summaries")
+		}
+		if serverHealthAvailable {
+			workflows = append(workflows, "inspect one MCP server's authentication configuration, session counts and tool call outcomes")
 		}
 		operations := []WriteOperation{}
 		if slices.Contains(principal.Scopes, ScopeWrite) && runtime.writes != nil {
