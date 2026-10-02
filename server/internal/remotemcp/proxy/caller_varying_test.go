@@ -107,10 +107,11 @@ func TestProxy_Post_ResourcesListLabelledWithoutInterceptors(t *testing.T) {
 	require.Contains(t, string(result["resources"]), `"x-vendor":"keep"`, "the resources member must keep its original values")
 }
 
-// TestProxy_Post_UntypedListMethodsLabelled covers the list methods the proxy
-// has no typed views for: the label gates on the method and works on the raw
-// result, so they need no interceptor support.
-func TestProxy_Post_UntypedListMethodsLabelled(t *testing.T) {
+// TestProxy_Post_OtherCallerVaryingMethodsLabelled covers the labelled methods
+// beyond tools/list and resources/list. The label gates on the method and
+// works on the raw result, so the methods without typed views need no
+// interceptor support.
+func TestProxy_Post_OtherCallerVaryingMethodsLabelled(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -130,6 +131,12 @@ func TestProxy_Post_UntypedListMethodsLabelled(t *testing.T) {
 			request:  `{"jsonrpc":"2.0","id":6,"method":"prompts/list","params":{}}`,
 			upstream: `{"jsonrpc":"2.0","id":6,"result":{"cacheScope":"public","ttlMs":60000,"prompts":[{"name":"a"}]}}`,
 			list:     "prompts",
+		},
+		{
+			name:     "resources/read",
+			request:  resourcesReadRequest,
+			upstream: `{"jsonrpc":"2.0","id":3,"result":{"cacheScope":"public","ttlMs":60000,"contents":[{"uri":"file:///etc/hosts","text":"127.0.0.1 localhost"}]}}`,
+			list:     "contents",
 		},
 	}
 	for _, tc := range cases {
@@ -328,6 +335,24 @@ func TestProxy_Post_SSEListResultsLabelled(t *testing.T) {
 			request:  `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"cursor":123}}`,
 			terminal: toolsListLabelledUpstream,
 			list:     "tools",
+		},
+		{
+			name:     "resources/templates/list",
+			request:  `{"jsonrpc":"2.0","id":5,"method":"resources/templates/list","params":{}}`,
+			terminal: `{"jsonrpc":"2.0","id":5,"result":{"cacheScope":"public","resourceTemplates":[{"name":"a","uriTemplate":"file:///{path}"}]}}`,
+			list:     "resourceTemplates",
+		},
+		{
+			name:     "prompts/list",
+			request:  `{"jsonrpc":"2.0","id":6,"method":"prompts/list","params":{}}`,
+			terminal: `{"jsonrpc":"2.0","id":6,"result":{"cacheScope":"public","prompts":[{"name":"a"}]}}`,
+			list:     "prompts",
+		},
+		{
+			name:     "resources/read",
+			request:  resourcesReadRequest,
+			terminal: `{"jsonrpc":"2.0","id":3,"result":{"cacheScope":"public","contents":[{"uri":"file:///etc/hosts","text":"127.0.0.1 localhost"}]}}`,
+			list:     "contents",
 		},
 	}
 	for _, tc := range cases {

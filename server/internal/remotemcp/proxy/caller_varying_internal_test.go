@@ -205,7 +205,7 @@ func TestCallerVaryingHintsDerivedFromCacheable(t *testing.T) {
 	require.Equal(t, callerVaryingCacheable, wire, "spliced bytes must decode back to the declared stance")
 }
 
-func TestIsCallerVaryingListRequest(t *testing.T) {
+func TestIsCallerVaryingRequest(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -219,7 +219,8 @@ func TestIsCallerVaryingListRequest(t *testing.T) {
 		{name: "tools/call", body: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"a"}}`, want: false},
 		{name: "resources/templates/list", body: `{"jsonrpc":"2.0","id":1,"method":"resources/templates/list"}`, want: true},
 		{name: "prompts/list", body: `{"jsonrpc":"2.0","id":1,"method":"prompts/list"}`, want: true},
-		{name: "resources/read", body: `{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"file:///a"}}`, want: false},
+		{name: "resources/read", body: `{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"file:///a"}}`, want: true},
+		{name: "initialize", body: `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`, want: false},
 		{name: "tools/list hidden by a later duplicate method", body: `{"jsonrpc":"2.0","id":1,"method":"tools/list","method":"ping"}`, want: true},
 		{name: "resources/list hidden by a later duplicate method", body: `{"jsonrpc":"2.0","id":1,"method":"resources/list","method":"ping"}`, want: true},
 		{name: "prompts/list hidden by a later duplicate method", body: `{"jsonrpc":"2.0","id":1,"method":"prompts/list","method":"ping"}`, want: true},
@@ -231,7 +232,7 @@ func TestIsCallerVaryingListRequest(t *testing.T) {
 			msg, err := jsonrpc.DecodeMessage([]byte(tc.body))
 			require.NoError(t, err)
 			req := &UserRequest{UserHTTPRequest: nil, JSONRPCMessages: []jsonrpc.Message{msg}, body: []byte(tc.body), dirty: false}
-			require.Equal(t, tc.want, isCallerVaryingListRequest(req))
+			require.Equal(t, tc.want, isCallerVaryingRequest(req))
 		})
 	}
 }

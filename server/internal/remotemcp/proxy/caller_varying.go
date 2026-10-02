@@ -21,49 +21,50 @@ const (
 	methodPromptsList = "prompts/list"
 )
 
-// callerVaryingListMethods are the list methods whose results the proxy
-// labels caller-varying.
-var callerVaryingListMethods = []string{
+// callerVaryingMethods are the methods whose results the proxy labels
+// caller-varying: the list methods, and resources/read, whose content
+// reaches the upstream with the same caller-supplied inputs.
+var callerVaryingMethods = []string{
 	methodToolsList,
 	methodResourcesList,
 	methodResourcesTemplatesList,
 	methodPromptsList,
+	methodResourcesRead,
 }
 
-// callerVaryingCacheable is the cache stance the proxy stamps on every list
-// result it relays, matching the hosted
-// surface's cacheHintsCallerVarying so both paths label the same property
-// identically. The zero ttlMs is part of the stance: an upstream's own ttl
-// would let the requesting client keep serving a list from cache after the
-// grants or upstream credentials that shaped it changed.
+// callerVaryingCacheable is the cache stance the proxy stamps on every
+// result it labels, matching the hosted surface's cacheHintsCallerVarying so
+// both paths label the same property identically. The zero ttlMs is part of
+// the stance: an upstream's own ttl would let the requesting client keep
+// serving a result from cache after the grants or upstream credentials that
+// shaped it changed.
 var callerVaryingCacheable = mcp.Cacheable{TTLMs: 0, CacheScope: "private"}
 
-// isCallerVaryingListRequest reports whether req is a single request for one
-// of [callerVaryingListMethods], whose result the proxy labels
-// caller-varying.
+// isCallerVaryingRequest reports whether req is a single request for one of
+// [callerVaryingMethods], whose result the proxy labels caller-varying.
 //
-// The label is unconditional because a proxied list varies by caller on
+// The label is unconditional because a proxied result varies by caller on
 // axes no interceptor sees: header pass-through forwards caller-supplied
 // header values upstream, the caller's own OAuth token or a signed caller
 // assertion can reach the upstream, and RBAC and consent selection filters
-// rewrite the list per principal. Server visibility gates none of the first
-// three, so a public server is no more shareable than a private one. MCP
-// reads an absent cacheScope as public, so an unlabelled result would let a
-// shared intermediary serve one caller's list to another.
+// rewrite tools/list per principal. Server visibility gates none of the
+// first three, so a public server is no more shareable than a private one.
+// MCP reads an absent cacheScope as public, so an unlabelled result would
+// let a shared intermediary serve one caller's result to another.
 //
 // The check reads the method alone rather than requiring a decoded typed
-// request view, so a list request whose params fail to decode is still
-// labelled. It also scans the raw body for every top-level method member,
-// since the decoded method keeps only the last of duplicate members while an
-// upstream may honour the first.
-func isCallerVaryingListRequest(req *UserRequest) bool {
-	if slices.Contains(callerVaryingListMethods, userRequestMethod(req)) {
+// request view, so a request whose params fail to decode is still labelled.
+// It also scans the raw body for every top-level method member, since the
+// decoded method keeps only the last of duplicate members while an upstream
+// may honour the first.
+func isCallerVaryingRequest(req *UserRequest) bool {
+	if slices.Contains(callerVaryingMethods, userRequestMethod(req)) {
 		return true
 	}
 	if req == nil {
 		return false
 	}
-	for _, method := range callerVaryingListMethods {
+	for _, method := range callerVaryingMethods {
 		if hasTopLevelJSONRPCMethod(req.body, method) {
 			return true
 		}
@@ -81,8 +82,8 @@ func isCallerVaryingListRequest(req *UserRequest) bool {
 // fails the strict typed decode is labelled the same way. A response carrying
 // both an error and a result object is labelled too, since a lenient client
 // may read the result whenever one is present. Only the two caching members
-// are spliced; the list itself and every other member keep their original
-// values. Messages that carry no result to label are left untouched: anything
+// are spliced; the payload itself and every other member keep their
+// original values. Messages that carry no result to label are left untouched: anything
 // that is not a [*jsonrpc.Response], and results that are absent or not JSON
 // objects (including a literal null, which the splice would otherwise turn
 // into an object).

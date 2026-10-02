@@ -459,10 +459,10 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 	// silently misparsing it as an SSE stream.
 	if isEventStream(upstreamResp.Header) {
 		// A client resuming a dropped POST stream with Last-Event-ID can
-		// receive the replayed reply to a list request here, and nothing on a
-		// GET stream says which request a reply answers. Label every reply
-		// carrying a result object: the label is meaningless on a reply that
-		// is not a list result, but harmless.
+		// receive the replayed reply to a caller-varying request here, and
+		// nothing on a GET stream says which request a reply answers. Label
+		// every reply carrying a result object: the label is meaningless on a
+		// reply to any other method, but harmless.
 		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, nil, nil, nil, nil, nil, true)
 		responseBytes = n
 		if streamErr != nil {
@@ -675,7 +675,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		}
 	}
 
-	callerVaryingList := isCallerVaryingListRequest(userReq)
+	callerVarying := isCallerVaryingRequest(userReq)
 
 	// Materialize any typed-setter mutations (e.g. ToolsCallRequest.SetArguments)
 	// into the cached body bytes so the forwarder sends the mutated payload
@@ -725,7 +725,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	// below is bypassed entirely for SSE responses because the body is
 	// not a single message to hand off — it's a stream of them.
 	if isEventStream(upstreamResp.Header) {
-		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, initializeReq, toolsCallReq, toolsListReq, resourcesReadReq, resourcesListReq, callerVaryingList)
+		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, initializeReq, toolsCallReq, toolsListReq, resourcesReadReq, resourcesListReq, callerVarying)
 		responseBytes = n
 		if streamErr != nil {
 			// Unlike the standalone GET stream, a POST response stream going
@@ -846,12 +846,12 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			}
 		}
 
-		// Label list results after every interceptor has run, covering
+		// Label the result after every interceptor has run, covering
 		// results that never decoded into a typed view. A strict proxy
 		// still rejects an undecodable tools/list result below; labelling
 		// it first wastes a splice but never relays it.
 		interceptorMutated := remoteMsg.dirty
-		if callerVaryingList {
+		if callerVarying {
 			if err := markCallerVarying(remoteMsg); err != nil {
 				return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 			}
@@ -1256,7 +1256,7 @@ func (p *Proxy) relaySSEStream(
 			}
 
 			// Label every response event on the stream, not only the one
-			// matching the terminal id: a list request is owed exactly one
+			// matching the terminal id: a request is owed exactly one
 			// response, so labelling any other fails safe, and neither a
 			// request whose params never decoded nor a GET stream has a
 			// terminal id to match. Rejection still wins, since a rejected
@@ -1350,9 +1350,9 @@ func (p *Proxy) logContextWithIdentity(ctx context.Context, level slog.Level, ms
 }
 
 // mutatedRelayLogLevel picks the level for logging a relayed mutated message.
-// Interceptor mutations are rare and logged at info. A message whose only
-// change is the caller-varying cache label covers every list result, so it
-// logs at debug to keep that volume out of info logs.
+// Interceptor mutations are rare and logged at info. The caller-varying cache
+// label alone mutates every labelled result, so a message whose only change
+// is that label logs at debug to keep the volume out of info logs.
 func mutatedRelayLogLevel(interceptorMutated bool) slog.Level {
 	if interceptorMutated {
 		return slog.LevelInfo
