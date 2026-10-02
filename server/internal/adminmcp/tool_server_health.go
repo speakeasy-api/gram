@@ -247,8 +247,12 @@ func projectServerHealth(result *gen.AdminMcpServerHealth, calls *gen.AdminMcpSe
 		return MCPServerHealth{}, false
 	}
 	c := result.Correlation
-	if (c.URLSlug != nil && (*c.URLSlug == "" || !validHealthText(*c.URLSlug))) || (c.McpServerID != nil && !validIssuerID(*c.McpServerID)) ||
-		(c.ToolsetSlug != nil && !validHealthText(*c.ToolsetSlug)) {
+	// A toolset-only server has no mcp_servers row; every other source is
+	// matched on its own row ID.
+	toolsetOnly := s.Source == "toolset_only"
+	if (c.URLSlug != nil && (*c.URLSlug == "" || !validHealthText(*c.URLSlug))) ||
+		(toolsetOnly && c.McpServerID != nil) || (!toolsetOnly && (c.McpServerID == nil || *c.McpServerID != s.ID)) ||
+		(c.ToolsetSlug != nil && (*c.ToolsetSlug == "" || !validHealthText(*c.ToolsetSlug))) {
 		return MCPServerHealth{}, false
 	}
 	if result.LegacyAuth != nil && (result.UserSessionIssuer != nil || !slices.Contains(healthLegacyAuth, *result.LegacyAuth)) {
@@ -346,7 +350,7 @@ func projectHealthUserIssuer(i *gen.AdminMcpServerHealthUserSessionIssuer) (MCPS
 func projectHealthRemoteClient(c *gen.AdminMcpServerHealthRemoteSessionClient) (MCPServerHealthRemoteSessionClient, bool) {
 	if c == nil || !validIssuerID(c.ID) || !slices.Contains(healthRegistrations, c.Registration) ||
 		(c.TokenEndpointAuthMethod != nil && !slices.Contains(healthTokenAuthMethods, *c.TokenEndpointAuthMethod)) ||
-		!validHealthList(c.Scope, maxHealthScopes) || !validHealthList(c.GrantTypes, maxHealthGrantTypes) ||
+		c.Scope == nil || !validHealthList(c.Scope, maxHealthScopes) || c.GrantTypes == nil || !validHealthList(c.GrantTypes, maxHealthGrantTypes) ||
 		!slices.Contains(healthAttachmentScopes, c.AttachmentScope) || !validHealthOptionalTime(c.UpstreamRejectedAt) ||
 		c.Issuer == nil || c.Sessions == nil {
 		return MCPServerHealthRemoteSessionClient{}, false
@@ -360,7 +364,7 @@ func projectHealthRemoteClient(c *gen.AdminMcpServerHealthRemoteSessionClient) (
 		return MCPServerHealthRemoteSessionClient{}, false
 	}
 	s := c.Sessions
-	if s.LinkedSubjects < 0 || s.Reauthorizations < 0 || !validHealthOptionalTime(s.FirstLinkedAt) {
+	if s.LinkedSubjects < 0 || s.Reauthorizations < 0 || !validHealthOptionalTime(s.FirstLinkedAt) || s.ValidationStatusCounts == nil {
 		return MCPServerHealthRemoteSessionClient{}, false
 	}
 	var counts MCPServerHealthValidationCounts

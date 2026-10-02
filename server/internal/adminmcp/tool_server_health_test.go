@@ -212,6 +212,19 @@ func TestDescribeMCPServerHealthWithoutURLSlug(t *testing.T) {
 	require.NotContains(t, string(data), "url_slug")
 }
 
+func TestDescribeMCPServerHealthToolsetOnlyCorrelation(t *testing.T) {
+	t.Parallel()
+	reads := testServerHealthReads()
+	reads.health.Server.Source = "toolset_only"
+	reads.health.Correlation.McpServerID = nil
+	body, data, isError := callServerHealthTool(t, reads, nil, healthArgs(""))
+	require.False(t, isError, body)
+	var output MCPServerHealth
+	require.NoError(t, json.Unmarshal(data, &output))
+	require.Nil(t, output.Correlation.MCPServerID)
+	require.Equal(t, "example-toolset", *output.Correlation.ToolsetSlug)
+}
+
 func TestDescribeMCPServerHealthRejectsInexactTargets(t *testing.T) {
 	t.Parallel()
 	for name, args := range map[string]string{
@@ -273,14 +286,23 @@ func TestDescribeMCPServerHealthFailsClosedOnMalformedResults(t *testing.T) {
 	t.Parallel()
 	long := strings.Repeat("x", maxHealthValueLength+1)
 	cases := map[string]func(*gen.AdminMcpServerHealth){
-		"nil result":          nil,
-		"nil server":          func(h *gen.AdminMcpServerHealth) { h.Server = nil },
-		"other server":        func(h *gen.AdminMcpServerHealth) { h.Server.ID = testHealthOtherID },
-		"unknown source":      func(h *gen.AdminMcpServerHealth) { h.Server.Source = "other" },
-		"long name":           func(h *gen.AdminMcpServerHealth) { h.Server.Name = long },
-		"bad created_at":      func(h *gen.AdminMcpServerHealth) { h.Server.CreatedAt = "yesterday" },
-		"empty url slug":      func(h *gen.AdminMcpServerHealth) { h.Correlation.URLSlug = new("") },
-		"long url slug":       func(h *gen.AdminMcpServerHealth) { h.Correlation.URLSlug = new(long) },
+		"nil result":            nil,
+		"nil server":            func(h *gen.AdminMcpServerHealth) { h.Server = nil },
+		"other server":          func(h *gen.AdminMcpServerHealth) { h.Server.ID = testHealthOtherID },
+		"unknown source":        func(h *gen.AdminMcpServerHealth) { h.Server.Source = "other" },
+		"long name":             func(h *gen.AdminMcpServerHealth) { h.Server.Name = long },
+		"bad created_at":        func(h *gen.AdminMcpServerHealth) { h.Server.CreatedAt = "yesterday" },
+		"empty url slug":        func(h *gen.AdminMcpServerHealth) { h.Correlation.URLSlug = new("") },
+		"long url slug":         func(h *gen.AdminMcpServerHealth) { h.Correlation.URLSlug = new(long) },
+		"missing mcp server id": func(h *gen.AdminMcpServerHealth) { h.Correlation.McpServerID = nil },
+		"other mcp server id":   func(h *gen.AdminMcpServerHealth) { h.Correlation.McpServerID = new(testHealthOtherID) },
+		"toolset_only with id":  func(h *gen.AdminMcpServerHealth) { h.Server.Source = "toolset_only" },
+		"empty toolset slug":    func(h *gen.AdminMcpServerHealth) { h.Correlation.ToolsetSlug = new("") },
+		"nil scope":             func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.RemoteSessionClients[0].Scope = nil },
+		"nil grant types":       func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.RemoteSessionClients[0].GrantTypes = nil },
+		"nil validation counts": func(h *gen.AdminMcpServerHealth) {
+			h.UserSessionIssuer.RemoteSessionClients[0].Sessions.ValidationStatusCounts = nil
+		},
 		"legacy with issuer":  func(h *gen.AdminMcpServerHealth) { h.LegacyAuth = new("gram_private") },
 		"unknown legacy":      func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer = nil; h.LegacyAuth = new("basic") },
 		"unscoped attachment": func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.AttachmentScope = "project:" + testProjectID },
