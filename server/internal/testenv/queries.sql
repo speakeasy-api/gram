@@ -1714,6 +1714,71 @@ SELECT set_config('lock_timeout', @timeout::text, true);
 -- name: LockToolsetNowaitFixture :one
 SELECT id FROM toolsets WHERE project_id = @project_id AND slug = @slug AND deleted IS FALSE FOR UPDATE NOWAIT;
 
+-- name: LockToolsetNoKeyUpdateFixture :one
+-- Parks a writer that wants the toolset row's FOR UPDATE lock while still
+-- allowing rows that reference the toolset to be inserted.
+--
+-- FOR UPDATE is the wrong tool for that: it conflicts with the FOR KEY SHARE
+-- lock PostgreSQL takes on the referenced row for a foreign key, so holding it
+-- also blocks attaching an mcp_servers row to this toolset — and a test that
+-- needs to do exactly that while a writer waits deadlocks itself. FOR NO KEY
+-- UPDATE conflicts with FOR UPDATE but not with FOR KEY SHARE, which is the
+-- combination an interleaving test needs.
+SELECT id FROM toolsets WHERE project_id = @project_id AND slug = @slug AND deleted IS FALSE FOR NO KEY UPDATE NOWAIT;
+
+-- name: LockMCPServerRowNowaitFixture :one
+-- Probes whether anyone currently holds the MCP server row lock, without
+-- waiting. Used to assert lock ORDER: a writer parked on the toolset row must
+-- not already be holding this one, or the two rows are taken in opposite
+-- orders by different paths and the pair can deadlock.
+SELECT id FROM mcp_servers WHERE id = @id AND project_id = @project_id AND deleted IS FALSE FOR UPDATE NOWAIT;
+
+-- name: LockMCPServerRowFixture :one
+-- Holds the row lock a dashboard edit of this MCP server would take, so a test
+-- can prove a writer pins the server-to-toolset binding before deciding what
+-- to change.
+SELECT id FROM mcp_servers WHERE id = @id AND project_id = @project_id AND deleted IS FALSE FOR UPDATE;
+
+-- name: RepointMCPServerToolsetFixture :one
+-- Moves an MCP server onto a different backing toolset, which is what
+-- UpdateMCPServer does to toolset_id. Used to stage the race where the target
+-- of a tool-exposure change moves after it was read.
+--
+-- The target toolset is resolved through toolsets scoped to the same project
+-- and organization, not taken on trust from the caller. mcp_servers.toolset_id
+-- has no composite constraint pairing it with project_id, so an unscoped
+-- version of this fixture could manufacture exactly the cross-project and
+-- cross-organization binding this workflow exists to refuse — and a test
+-- fixture that can build an impossible state makes the suite prove nothing.
+UPDATE mcp_servers AS m
+SET toolset_id = (
+        SELECT t.id
+        FROM toolsets AS t
+        JOIN projects AS p
+          ON p.id = t.project_id
+         AND p.organization_id = t.organization_id
+         AND p.deleted IS FALSE
+        WHERE t.id = @toolset_id
+          AND t.project_id = @project_id
+          AND t.organization_id = @organization_id
+          AND t.deleted IS FALSE
+    ),
+    updated_at = clock_timestamp()
+WHERE m.id = @id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE
+  -- Refuses rather than nulling the backend when the target does not resolve
+  -- in this tenancy: the exclusivity CHECK requires exactly one backend, so a
+  -- fixture that silently cleared it would fail far from the real cause.
+  AND EXISTS (
+      SELECT 1 FROM toolsets AS t
+      WHERE t.id = @toolset_id
+        AND t.project_id = @project_id
+        AND t.organization_id = @organization_id
+        AND t.deleted IS FALSE
+  )
+RETURNING m.id;
+
 -- name: LockExternalOAuthMetadataNowaitFixture :one
 SELECT id FROM external_oauth_server_metadata WHERE id = @id AND project_id = @project_id FOR UPDATE NOWAIT;
 
@@ -1737,6 +1802,39 @@ WHERE locks.locktype = 'advisory' AND locks.granted
 -- name: BackendPIDFixture :one
 -- Identify a holder exposed only through a transaction-enlisted query interface.
 SELECT pg_backend_pid();
+
+-- name: InsertDeploymentAssetFixture :exec
+INSERT INTO assets (id, project_id, organization_id, name, url, kind, content_type, content_length, sha256)
+VALUES (@id, @project_id, @organization_id, @name, @url, @kind, @content_type, 1, @sha256);
+
+-- name: InsertCompletedDeploymentFixture :exec
+WITH created AS (
+  INSERT INTO deployments (id, user_id, project_id, organization_id, idempotency_key)
+  VALUES (@id, @user_id, @project_id, @organization_id, @idempotency_key)
+  RETURNING id
+)
+INSERT INTO deployment_statuses (deployment_id, status)
+SELECT id, 'completed' FROM created;
+
+-- name: InsertDeploymentFunctionFixture :exec
+INSERT INTO deployments_functions (id, deployment_id, asset_id, name, slug, runtime)
+VALUES (@id, @deployment_id, @asset_id, @name, @slug, @runtime);
+
+-- name: InsertFunctionToolDefinitionFixture :exec
+INSERT INTO function_tool_definitions (tool_urn, project_id, deployment_id, function_id, runtime, name, description)
+VALUES (@tool_urn, @project_id, @deployment_id, @function_id, @runtime, @name, @description);
+
+-- name: InsertToolsetVersionFixture :exec
+-- Tenant-scoped on purpose: the insert only lands when the named toolset
+-- really belongs to the named project and organization, so a fixture cannot
+-- reach across tenants the way a bare toolset id would let it.
+INSERT INTO toolset_versions (toolset_id, version, tool_urns)
+SELECT t.id, @version, @tool_urns::TEXT[]
+FROM toolsets t
+WHERE t.id = @toolset_id
+  AND t.project_id = @project_id
+  AND t.organization_id = @organization_id
+  AND t.deleted IS FALSE;
 -- name: DeleteRetainedCatalogSourcesFixture :exec
 DELETE FROM mcp_registries;
 

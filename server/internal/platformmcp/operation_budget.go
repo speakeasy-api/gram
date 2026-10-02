@@ -41,6 +41,10 @@ const (
 	AccessRoleMutationOrganizationLimitName       = "platform-mcp-access-role-mutation-organization"
 	ShadowAccessDecisionConnectionLimitName       = "platform-mcp-shadow-access-decision-connection"
 	ShadowAccessDecisionOrganizationLimitName     = "platform-mcp-shadow-access-decision-organization"
+	ToolExposureReadConnectionLimitName           = "platform-mcp-tool-exposure-read-connection"
+	ToolExposureReadOrganizationLimitName         = "platform-mcp-tool-exposure-read-organization"
+	ToolExposureMutationConnectionLimitName       = "platform-mcp-tool-exposure-mutation-connection"
+	ToolExposureMutationOrganizationLimitName     = "platform-mcp-tool-exposure-mutation-organization"
 )
 
 const (
@@ -81,6 +85,22 @@ const (
 	ShadowAccessDecisionsPerOrganizationPerMinute     = 50
 	ReviewRequestsPerConnectionPerMinute              = 5
 	ReviewRequestsPerOrganizationPerMinute            = 50
+
+	// ToolExposureReadsPer* bound the project tool catalogue listing. It is a
+	// bounded, paginated PostgreSQL read of the project's own generated tool
+	// definitions, and an administrator legitimately pages through it while
+	// narrowing down one tool, so it is metered like the other inventory
+	// reads rather than like the write it leads to.
+	ToolExposureReadsPerConnectionPerMinute   = 30
+	ToolExposureReadsPerOrganizationPerMinute = 300
+
+	// ToolExposureMutationsPer* bound adding and removing a server's tools on
+	// their own allowance. Both tools share it, so alternating between them
+	// cannot multiply the permitted write rate: each allowed call takes the
+	// toolset row lock, appends a version, and republishes every plugin
+	// carrying the server.
+	ToolExposureMutationsPerConnectionPerMinute   = 5
+	ToolExposureMutationsPerOrganizationPerMinute = 50
 
 	// DrilldownRowsPerConnectionPerWindow and
 	// DrilldownMetricQueriesPerConnectionPerWindow are the second cap the

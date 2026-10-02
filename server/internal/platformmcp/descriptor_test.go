@@ -420,6 +420,11 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"continue_session",
 		"list_data_exports",
 		"create_data_export",
+		// Changing which tools a server exposes republishes every plugin that
+		// carries it to everyone holding one, so it stays on the surface an
+		// administrator drives directly, like the other distribution writes.
+		addToolsToMCPToolName,
+		removeToolsFromMCPToolName,
 	} {
 		require.False(t, admitted[name], "tool %q must not be admitted to the assistant", name)
 	}
@@ -472,6 +477,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"list_access_members",
 		"mark_risk_findings_false_positive",
 		"unmark_risk_findings_false_positive",
+		listProjectToolsToolName,
 	} {
 		require.True(t, admitted[name], "tool %q works without a connection and should serve the assistant", name)
 	}
