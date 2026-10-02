@@ -280,6 +280,22 @@ func TestListMatchesAssignedActiveApplications(t *testing.T) {
 	require.Len(t, list(t, ctx, si, false).Suggestions, 1)
 }
 
+func TestListXAASignOnModesOmittedVersusEmpty(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	createEntry(t, ctx, si, entryRecord("example.test/empty", []string{"https://mcp.empty.example/mcp"}, `{"oinNames":["empty"],"xaaSignOnModes":[]}`), true)
+	createEntry(t, ctx, si, entryRecord("example.test/omitted", []string{"https://mcp.omitted.example/mcp"}, `{"oinNames":["omitted"]}`), true)
+	createApp(t, ctx, si, "0oa1", "Empty", "empty", "SAML_2_0", true)
+	createApp(t, ctx, si, "0oa2", "Omitted", "omitted", "SAML_2_0", true)
+
+	supported := make(map[string]bool)
+	for _, sg := range list(t, ctx, si, false).Suggestions {
+		require.Len(t, sg.OktaApplications, 1)
+		supported[sg.ServerName] = sg.OktaApplications[0].XaaSupported
+	}
+	require.Equal(t, map[string]bool{"example.test/empty": false, "example.test/omitted": true}, supported)
+}
+
 func TestDismissAndRestore(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
