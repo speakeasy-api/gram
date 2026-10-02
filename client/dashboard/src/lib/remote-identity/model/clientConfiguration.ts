@@ -3,7 +3,8 @@ import type { ServerIdentityClientConfigurationTokenEndpointAuthMethod } from "@
 /**
  * The scopes a new client should request.
  *
- * The protected resource's RFC 9728 `scopes_supported` wins because it names
+ * An issuer override leaves the client scope unset so the override applies.
+ * Otherwise, the protected resource's RFC 9728 `scopes_supported` wins because it names
  * what this one server needs. The issuer's list is a fallback only: it names
  * everything the provider can grant, and requesting all of it is what broke
  * Salesforce logins. Every surface that registers a client must go through
@@ -12,7 +13,9 @@ import type { ServerIdentityClientConfigurationTokenEndpointAuthMethod } from "@
 export function preferredScopes(
   protectedResourceScopes: string[] | undefined | null,
   authorizationServerScopes: string[] | undefined | null,
+  issuerScopeOverride?: string[] | null,
 ): string[] {
+  if (issuerScopeOverride?.length) return [];
   const resourceScopes = nonEmptyStrings(protectedResourceScopes);
   return resourceScopes.length > 0
     ? resourceScopes

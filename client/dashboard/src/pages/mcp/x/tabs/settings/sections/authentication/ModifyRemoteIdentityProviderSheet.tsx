@@ -279,6 +279,7 @@ function ModifyRemoteIdentityProviderSheetBody({
     AuthAudienceFormat | undefined
   >();
   const [scopeOverride, setScopeOverride] = useState("");
+  const [scopeEdited, setScopeEdited] = useState(false);
   const [audienceOverride, setAudienceOverride] = useState("");
 
   const handleTokenEndpointAuthMethodChange = (
@@ -368,11 +369,8 @@ function ModifyRemoteIdentityProviderSheetBody({
           )
             ? authAudienceFormat
             : undefined,
-          // An empty array clears the stored scope; undefined keeps it.
-          scope:
-            parsedScopes.length > 0 || (primaryClient.scope?.length ?? 0) > 0
-              ? parsedScopes
-              : undefined,
+          // Only explicit edits may clear scope; URL resets must preserve it.
+          scope: scopeEdited ? parsedScopes : undefined,
           audience: trimmedAudience || undefined,
         },
       });
@@ -477,6 +475,7 @@ function ModifyRemoteIdentityProviderSheetBody({
               resetEndpointState();
               setClientSecret("");
               setScopeOverride("");
+              setScopeEdited(false);
               setAudienceOverride("");
             }
           }}
@@ -584,7 +583,10 @@ function ModifyRemoteIdentityProviderSheetBody({
         <OverridesFields
           scopeOverride={scopeOverride}
           audienceOverride={audienceOverride}
-          onScopeOverrideChange={setScopeOverride}
+          onScopeOverrideChange={(value) => {
+            setScopeOverride(value);
+            setScopeEdited(true);
+          }}
           onAudienceOverrideChange={setAudienceOverride}
         />
 

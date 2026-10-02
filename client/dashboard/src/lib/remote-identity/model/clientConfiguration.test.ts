@@ -8,6 +8,12 @@ import {
 } from "./clientConfiguration";
 
 describe("preferredScopes", () => {
+  it("leaves automatic client scopes unset when the issuer has an override", () => {
+    expect(preferredScopes(["read"], ["openid"], ["pinned.read"])).toEqual([]);
+    expect(preferredScopes(undefined, ["openid"], ["pinned.read"])).toEqual([]);
+    expect(preferredScopes(["read"], ["openid"], [])).toEqual(["read"]);
+  });
+
   it("prefers the protected resource's scopes over the issuer's", () => {
     expect(
       preferredScopes(["read", "write"], ["read", "write", "admin"]),

@@ -83,6 +83,7 @@ vi.mock("@/lib/remote-identity/queries/useAllRemoteSessionClients", () => ({
         tokenEndpointAuthMethod: AuthMethod.PrivateKeyJwt,
         jsonWebKeySetId: "set-1",
         legacyCallbackUrl: fixture.legacyCallbackUrl,
+        scope: ["openid", "profile"],
       },
     ],
     isLoading: false,
@@ -109,7 +110,19 @@ vi.mock("./IssuerFormFields", () => ({
     />
   ),
   EndpointsFields: () => null,
-  OverridesFields: () => null,
+  OverridesFields: ({
+    scopeOverride,
+    onScopeOverrideChange,
+  }: {
+    scopeOverride: string;
+    onScopeOverrideChange: (value: string) => void;
+  }) => (
+    <input
+      aria-label="Scope override"
+      value={scopeOverride}
+      onChange={(event) => onScopeOverrideChange(event.target.value)}
+    />
+  ),
   ClientCredentialsFields: ({
     clientSecret,
     tokenEndpointAuthMethod,
@@ -227,6 +240,47 @@ describe("ModifyRemoteIdentityProviderSheet legacy callback migration", () => {
 });
 
 describe("ModifyRemoteIdentityProviderSheet", () => {
+  it.each([false, true])(
+    "preserves stored scope after a URL reset (previous scope edit: %s)",
+    async (editScopeFirst) => {
+      renderSheet();
+      const scope = screen.getByRole("textbox", {
+        name: "Scope override",
+      }) as HTMLInputElement;
+      expect(scope.value).toBe("openid, profile");
+      if (editScopeFirst) {
+        fireEvent.change(scope, { target: { value: "email" } });
+      }
+      fireEvent.change(screen.getByRole("textbox", { name: "Issuer URL" }), {
+        target: { value: "https://other.example.com" },
+      });
+      expect(scope.value).toBe("");
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() =>
+        expect(sdk.updateClient).toHaveBeenCalledWith({
+          updateRemoteSessionClientForm: expect.objectContaining({
+            scope: undefined,
+          }),
+        }),
+      );
+    },
+  );
+
+  it("clears stored scope when the operator explicitly blanks the field", async () => {
+    renderSheet();
+    fireEvent.change(screen.getByRole("textbox", { name: "Scope override" }), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(sdk.updateClient).toHaveBeenCalledWith({
+        updateRemoteSessionClientForm: expect.objectContaining({ scope: [] }),
+      }),
+    );
+  });
+
   it("keeps private_key_jwt and its audience control after an issuer URL edit", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {

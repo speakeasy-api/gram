@@ -798,9 +798,8 @@ export function useUserIdentityDraft({
                 prm.metadata?.scopesSupported ??
                   resourceScopes ??
                   (await protectedResourceScopes(client, remoteMcpServerId)),
-                selectedIssuer?.scopeOverride?.length
-                  ? undefined
-                  : (selectedIssuer?.scopesSupported ?? draft?.scopesSupported),
+                selectedIssuer?.scopesSupported ?? draft?.scopesSupported,
+                selectedIssuer?.scopeOverride,
               );
         const secret = manualNeeded ? clientSecret.trim() : "";
         clientConfiguration = {
