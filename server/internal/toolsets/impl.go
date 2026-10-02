@@ -339,41 +339,62 @@ func (s *Service) triggerPluginPublish(ctx context.Context, authCtx *contextvalu
 }
 
 func (s *Service) triggerToolsetIndex(ctx context.Context, toolset *types.Toolset) {
-	if s.temporalEnv == nil || toolset == nil || !conv.PtrValOr(toolset.McpEnabled, false) || len(toolset.Tools) == 0 {
+	TriggerToolsetIndex(ctx, s.logger, s.db, s.temporalEnv, toolset)
+}
+
+// TriggerToolsetIndex schedules the search-index rebuild a new toolset version
+// needs, and is called after the transaction that created that version has
+// committed.
+//
+// This is not cosmetic upkeep. Dynamic-mode `tools/list` refuses to serve a
+// toolset whose current version has no embeddings — `requireToolSearchIndex`
+// returns `errToolSearchIndexUnavailable` and the whole request becomes a
+// JSON-RPC error, rather than an empty list or a fall back to the static tool
+// list. The index is looked up by the *latest* version, read live on every
+// request, so creating a version immediately invalidates it. A writer that
+// bumps the version without scheduling this leaves an otherwise working server
+// unable to list its tools until the five-minute sweep happens to pick it up.
+//
+// It is exported so every caller that creates a toolset version goes through
+// one implementation, and every failure only logs: the caller's change is
+// already committed, the sweep is still the backstop, and failing the call
+// after the fact would misreport a change that did land.
+func TriggerToolsetIndex(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, temporalEnv *tenv.Environment, toolset *types.Toolset) {
+	if logger == nil || db == nil || temporalEnv == nil || toolset == nil || !conv.PtrValOr(toolset.McpEnabled, false) || len(toolset.Tools) == 0 {
 		return
 	}
 
 	projectID, err := uuid.Parse(toolset.ProjectID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to parse project id for toolset indexing", attr.SlogError(err))
+		logger.ErrorContext(ctx, "failed to parse project id for toolset indexing", attr.SlogError(err))
 		return
 	}
 	toolsetID, err := uuid.Parse(toolset.ID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to parse toolset id for indexing", attr.SlogError(err))
+		logger.ErrorContext(ctx, "failed to parse toolset id for indexing", attr.SlogError(err))
 		return
 	}
-	deploymentID, err := deploymentsRepo.New(s.db).GetActiveDeploymentID(ctx, projectID)
+	deploymentID, err := deploymentsRepo.New(db).GetActiveDeploymentID(ctx, projectID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return
 	}
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to load active deployment for toolset indexing", attr.SlogError(err))
+		logger.ErrorContext(ctx, "failed to load active deployment for toolset indexing", attr.SlogError(err))
 		return
 	}
-	hasProxy, err := repo.New(s.db).ToolsetHasExternalMCPProxy(ctx, repo.ToolsetHasExternalMCPProxyParams{
+	hasProxy, err := repo.New(db).ToolsetHasExternalMCPProxy(ctx, repo.ToolsetHasExternalMCPProxyParams{
 		ToolsetID: toolsetID,
 		ProjectID: projectID,
 	})
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to check toolset for external MCP proxy before indexing", attr.SlogError(err))
+		logger.ErrorContext(ctx, "failed to check toolset for external MCP proxy before indexing", attr.SlogError(err))
 		return
 	}
 	if hasProxy {
 		return
 	}
 
-	_, err = background.ExecuteIndexToolset(ctx, s.temporalEnv, background.IndexToolsetParams{
+	_, err = background.ExecuteIndexToolset(ctx, temporalEnv, background.IndexToolsetParams{
 		ProjectID:             projectID,
 		ToolsetID:             toolsetID,
 		ToolsetSlug:           toolset.Slug,
@@ -382,8 +403,29 @@ func (s *Service) triggerToolsetIndex(ctx context.Context, toolset *types.Toolse
 		PermanentFailureCount: 0,
 	})
 	if err != nil && !temporalSDK.IsWorkflowExecutionAlreadyStartedError(err) {
-		s.logger.ErrorContext(ctx, "failed to start toolset indexing workflow", attr.SlogError(err))
+		logger.ErrorContext(ctx, "failed to start toolset indexing workflow", attr.SlogError(err))
 	}
+}
+
+// TriggerToolsetIndexForVersion is the entry point for a caller that created a
+// toolset version without holding the toolset view, such as the incremental
+// tool-exposure change. It loads that view by id and then schedules exactly
+// what the dashboard's own update schedules.
+func TriggerToolsetIndexForVersion(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, temporalEnv *tenv.Environment, projectID, toolsetID uuid.UUID) {
+	if logger == nil || db == nil || temporalEnv == nil || projectID == uuid.Nil || toolsetID == uuid.Nil {
+		return
+	}
+	toolset, err := repo.New(db).GetToolsetByIDAndProject(ctx, repo.GetToolsetByIDAndProjectParams{ID: toolsetID, ProjectID: projectID})
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to load toolset for indexing after a tool exposure change", attr.SlogError(err))
+		return
+	}
+	view, err := mv.DescribeToolset(ctx, logger, db, mv.ProjectID(projectID), mv.ToolsetSlug(toolset.Slug), nil, nil)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to describe toolset for indexing after a tool exposure change", attr.SlogError(err))
+		return
+	}
+	TriggerToolsetIndex(ctx, logger, db, temporalEnv, view)
 }
 
 func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPayload) (*gen.ListToolsetsResult, error) {

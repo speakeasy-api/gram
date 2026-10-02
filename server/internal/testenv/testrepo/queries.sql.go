@@ -3332,6 +3332,25 @@ func (q *Queries) LockExternalOAuthMetadataNowaitFixture(ctx context.Context, ar
 	return id, err
 }
 
+const lockMCPServerRowFixture = `-- name: LockMCPServerRowFixture :one
+SELECT id FROM mcp_servers WHERE id = $1 AND project_id = $2 AND deleted IS FALSE FOR UPDATE
+`
+
+type LockMCPServerRowFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Holds the row lock a dashboard edit of this MCP server would take, so a test
+// can prove a writer pins the server-to-toolset binding before deciding what
+// to change.
+func (q *Queries) LockMCPServerRowFixture(ctx context.Context, arg LockMCPServerRowFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockMCPServerRowFixture, arg.ID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockOpenRouterAPIKeyForUpdateFixture = `-- name: LockOpenRouterAPIKeyForUpdateFixture :one
 SELECT 1
 FROM openrouter_api_keys
@@ -3396,6 +3415,31 @@ type LockPublishOutboxRowFixtureParams struct {
 func (q *Queries) LockPublishOutboxRowFixture(ctx context.Context, arg LockPublishOutboxRowFixtureParams) (int64, error) {
 	row := q.db.QueryRow(ctx, lockPublishOutboxRowFixture, arg.ID, arg.OrganizationID)
 	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockToolsetNoKeyUpdateFixture = `-- name: LockToolsetNoKeyUpdateFixture :one
+SELECT id FROM toolsets WHERE project_id = $1 AND slug = $2 AND deleted IS FALSE FOR NO KEY UPDATE NOWAIT
+`
+
+type LockToolsetNoKeyUpdateFixtureParams struct {
+	ProjectID uuid.UUID
+	Slug      string
+}
+
+// Parks a writer that wants the toolset row's FOR UPDATE lock while still
+// allowing rows that reference the toolset to be inserted.
+//
+// FOR UPDATE is the wrong tool for that: it conflicts with the FOR KEY SHARE
+// lock PostgreSQL takes on the referenced row for a foreign key, so holding it
+// also blocks attaching an mcp_servers row to this toolset — and a test that
+// needs to do exactly that while a writer waits deadlocks itself. FOR NO KEY
+// UPDATE conflicts with FOR UPDATE but not with FOR KEY SHARE, which is the
+// combination an interleaving test needs.
+func (q *Queries) LockToolsetNoKeyUpdateFixture(ctx context.Context, arg LockToolsetNoKeyUpdateFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockToolsetNoKeyUpdateFixture, arg.ProjectID, arg.Slug)
+	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -4000,6 +4044,29 @@ ALTER TABLE publish_outbox ADD CONSTRAINT reject_publish_outbox_writes_fixture C
 func (q *Queries) RejectPublishOutboxWritesFixture(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, rejectPublishOutboxWritesFixture)
 	return err
+}
+
+const repointMCPServerToolsetFixture = `-- name: RepointMCPServerToolsetFixture :one
+UPDATE mcp_servers
+SET toolset_id = $1, updated_at = clock_timestamp()
+WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+RETURNING id
+`
+
+type RepointMCPServerToolsetFixtureParams struct {
+	ToolsetID uuid.NullUUID
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Moves an MCP server onto a different backing toolset, which is what
+// UpdateMCPServer does to toolset_id. Used to stage the race where the target
+// of a tool-exposure change moves after it was read.
+func (q *Queries) RepointMCPServerToolsetFixture(ctx context.Context, arg RepointMCPServerToolsetFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, repointMCPServerToolsetFixture, arg.ToolsetID, arg.ID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const restoreAgentAttachmentsFixture = `-- name: RestoreAgentAttachmentsFixture :execrows

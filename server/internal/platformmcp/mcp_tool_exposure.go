@@ -183,8 +183,21 @@ type MCPToolExposureService struct {
 	// loop of writes must not be fundable by not reading.
 	reads   OperationBudget
 	changes OperationBudget
-	now     func() time.Time
+	// index schedules the toolset search-index rebuild the committed change
+	// needs. Without it a dynamic-mode server cannot list its tools at all
+	// until the periodic sweep catches up, so a successful add would take a
+	// working server offline for minutes. It is a function rather than a
+	// Temporal environment so this package keeps no dependency on the
+	// background worker, exactly as LifecycleMetadataUpdater does for the
+	// dashboard's own metadata write.
+	index ToolExposureIndexer
+	now   func() time.Time
 }
+
+// ToolExposureIndexer is supplied by server composition. It is best-effort and
+// returns nothing: it runs after the change has committed, so there is no
+// outcome left to refuse, and the periodic sweep remains the backstop.
+type ToolExposureIndexer func(ctx context.Context, projectID, toolsetID uuid.UUID)
 
 func NewMCPToolExposureService(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, engine *authz.Engine, admin Authorizer, cursorKeyMaterial string, publication plugins.PublicationRequests, publisher plugins.PluginPublishSignaler, reads, changes OperationBudget) (*MCPToolExposureService, error) {
 	if logger == nil || db == nil || auditLogger == nil || engine == nil || admin == nil || !reads.valid() || !changes.valid() {
@@ -198,6 +211,17 @@ func NewMCPToolExposureService(logger *slog.Logger, db *pgxpool.Pool, auditLogge
 		db: db, queries: platformrepo.New(db), logger: logger, audit: auditLogger, engine: engine, admin: admin,
 		cursors: cursors, publication: publication, publisher: publisher, reads: reads, changes: changes, now: time.Now,
 	}, nil
+}
+
+// WithIndexing supplies the post-commit search-index trigger. A deployment
+// without it still serves every tool; its changes just wait for the sweep
+// before a dynamic-mode server can list tools again, so composition logs the
+// absence rather than the tools refusing.
+func (s *MCPToolExposureService) WithIndexing(index ToolExposureIndexer) *MCPToolExposureService {
+	if s != nil {
+		s.index = index
+	}
+	return s
 }
 
 func (s *MCPToolExposureService) valid() bool {
@@ -389,9 +413,24 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 			return encoded, nil
 		},
 		Mutate: func(ctx context.Context, tx pgx.Tx) (toolExposureReceipt, error) {
-			// Re-read the exposure through the transaction. The toolsets helper
-			// then takes the toolset row lock and recomputes the list from the
-			// committed one, so a concurrent writer cannot be overwritten.
+			// Pin the named server's backing-toolset binding before anything
+			// reads it. The exposure read below takes no lock of its own, and
+			// the toolset row lock the write takes is both later and on a
+			// different table, so without this the target of the write could
+			// be repointed underneath the decision. See the query's comment.
+			if _, err := s.queries.WithTx(tx).LockPlatformMCPServerToolsetBinding(ctx, platformrepo.LockPlatformMCPServerToolsetBindingParams{
+				OrganizationID: principal.OrganizationID, McpServerID: mcpID, ProjectID: project.ID,
+			}); err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return toolExposureReceipt{}, toolExposureMissing()
+				}
+				return toolExposureReceipt{}, fmt.Errorf("lock platform MCP server toolset binding: %w", err)
+			}
+			// Read the exposure under that lock, so the toolset this resolves
+			// to is the one the write will still be bound to at commit. The
+			// toolsets helper then takes the toolset row lock and recomputes
+			// the list from the committed one, so a concurrent writer of the
+			// same toolset cannot be overwritten either.
 			row, err := s.exposureRow(ctx, s.queries.WithTx(tx), principal, project.ID, mcpID)
 			if err != nil {
 				// exposureRow reports only a missing target or a wrapped query
@@ -409,9 +448,10 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 			if !hmac.Equal([]byte(committed), []byte(input.ExpectedVersion)) {
 				return toolExposureReceipt{}, toolExposureConflict()
 			}
-			// Under the same lock that performs the write, so the set of
-			// servers this change moves cannot grow between the check and the
-			// write.
+			// Authorized from the same pinned read the write is computed from.
+			// A server attached to this toolset after this point is caught by
+			// the re-read below, because a row lock cannot block the insert of
+			// a row that does not exist yet.
 			if err := s.authorizeEveryAffectedServer(ctx, project.ID, mcpID, row.FrontingServerIds, row.ForeignFrontingServerCount); err != nil {
 				return toolExposureReceipt{}, err
 			}
@@ -437,6 +477,19 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 			}
 			if !applied.Changed {
 				return result, nil
+			}
+			// Nothing was written above unless we get here, so this only runs
+			// when a real change is about to commit. The authorized set was
+			// read before the write, and a row lock cannot block the insert of
+			// a server row that did not exist then — so a dashboard attach can
+			// still have joined this toolset in between, and that server is
+			// one this change moves without ever having been checked. Reading
+			// the set again picks up anything committed since, because each
+			// statement in READ COMMITTED takes a fresh snapshot, and a
+			// difference aborts the whole transaction rather than committing a
+			// change to a server the caller did not clear.
+			if err := s.verifyAffectedServersUnmoved(ctx, tx, principal, project.ID, mcpID, row); err != nil {
+				return toolExposureReceipt{}, err
 			}
 			result.Outcome = "applied"
 			outcome, err := s.publication.ProjectWithOutcome(ctx, tx, principal.OrganizationID, project.ID, principal.UserID)
@@ -494,6 +547,18 @@ func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal
 	}
 	output.Exposure = &exposure
 	output.SnapshotScope = "fresh_read_after_commit"
+	// Schedule the search-index rebuild for the version that just committed,
+	// as the dashboard's own toolset update does. A dynamic-mode server
+	// refuses tools/list outright while its current version has no index, so
+	// skipping this would let a successful add take a working server offline
+	// until the sweep. Done after the verification read because that read is
+	// what names the toolset the change landed on, and only for a real change:
+	// a no-op created no version, so nothing needs reindexing.
+	if s.index != nil && stored.Outcome == "applied" {
+		if toolsetID, parseErr := uuid.Parse(exposure.ToolsetID); parseErr == nil {
+			s.index(ctx, project.ID, toolsetID)
+		}
+	}
 	return output
 }
 
@@ -634,6 +699,43 @@ func (s *MCPToolExposureService) authorizeEveryAffectedServer(ctx context.Contex
 		}
 	}
 	return nil
+}
+
+// verifyAffectedServersUnmoved re-reads the set of servers the committed write
+// moves and refuses when it is not the set that was authorized.
+//
+// This is the other half of the server-row lock. The lock pins the named
+// server's binding, so the write cannot land on a toolset it no longer fronts,
+// but no row lock can prevent a server row that does not exist yet from being
+// inserted against this toolset. That remaining case is a phantom, and this is
+// where it is caught: any attach committed during this transaction shows up
+// here and rolls the change back.
+//
+// It closes the window rather than eliminating it — an attach committing
+// between this read and COMMIT is still missed. That residue is not worth more
+// machinery: it is indistinguishable from an attach landing a moment after the
+// change commits, which no amount of locking prevents, so the authorization
+// statement is point-in-time by nature. Eliminating it outright would mean
+// every path that attaches a server to a toolset taking a shared lock on that
+// toolset, which is a change across mcpservers rather than here.
+func (s *MCPToolExposureService) verifyAffectedServersUnmoved(ctx context.Context, tx pgx.Tx, principal Principal, projectID, mcpID uuid.UUID, authorized platformrepo.GetPlatformMCPServerToolExposureRow) error {
+	current, err := s.exposureRow(ctx, s.queries.WithTx(tx), principal, projectID, mcpID)
+	if err != nil {
+		// The named server's row is locked by this transaction, so it cannot
+		// have been deleted or unlinked; anything here is a read failure.
+		return fmt.Errorf("re-read platform MCP tool exposure affected servers: %w", err)
+	}
+	// FrontingServerIds is aggregated with a deterministic ORDER BY, so an
+	// ordered comparison is exact rather than incidentally order-sensitive.
+	if slices.Equal(current.FrontingServerIds, authorized.FrontingServerIds) &&
+		current.ForeignFrontingServerCount == authorized.ForeignFrontingServerCount {
+		return nil
+	}
+	return &MCPToolExposureError{
+		Code:    "conflict",
+		Message: "The set of MCP servers offering this same set of tools changed while this change was being applied, so nothing was changed. Read the server again and repeat the request against what it reports now.",
+		Cause:   ErrMCPToolExposureConflict,
+	}
 }
 
 // requireKnownTools refuses the whole batch and names every tool that is

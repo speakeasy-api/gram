@@ -6934,6 +6934,49 @@ func (q *Queries) LockPlatformMCPRemoteIssuerAttachment(ctx context.Context, arg
 	return err
 }
 
+const lockPlatformMCPServerToolsetBinding = `-- name: LockPlatformMCPServerToolsetBinding :one
+SELECT m.id
+FROM mcp_servers AS m
+JOIN projects AS p
+  ON p.id = m.project_id
+ AND p.organization_id = $1
+ AND p.deleted IS FALSE
+WHERE m.id = $2
+  AND m.project_id = $3
+  AND m.deleted IS FALSE
+  AND m.toolset_id IS NOT NULL
+FOR UPDATE OF m
+`
+
+type LockPlatformMCPServerToolsetBindingParams struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+// Pins the named server's backing-toolset binding for the rest of the caller's
+// transaction, and must run before anything reads the exposure.
+//
+// GetPlatformMCPServerToolExposure takes no lock, so without this the whole
+// decision — which toolset to write, which servers that write moves, whether
+// any of them sit outside the project — is made against an unpinned snapshot
+// of mcp_servers. UpdateMCPServer assigns toolset_id, so a concurrent
+// dashboard edit can repoint this server between the read and the write; the
+// exposure version token covers toolset_versions only and would not notice.
+// The change would then land on a toolset the named server no longer fronts.
+//
+// FOR UPDATE OF m locks only the server row, which is what UpdateMCPServer and
+// DeleteMCPServer update by id, so both block until this transaction ends.
+// Nothing else in the codebase locks mcp_servers rows, and no toolsets query
+// touches this table, so acquiring this before the toolsets row lock taken by
+// the write introduces no lock-order inversion.
+func (q *Queries) LockPlatformMCPServerToolsetBinding(ctx context.Context, arg LockPlatformMCPServerToolsetBindingParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockPlatformMCPServerToolsetBinding, arg.OrganizationID, arg.McpServerID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockPlatformMCPSetupHandoff = `-- name: LockPlatformMCPSetupHandoff :exec
 SELECT pg_advisory_xact_lock(
     hashtextextended(

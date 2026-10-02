@@ -3624,7 +3624,15 @@ func TestGeneratePlatformMCPPackageEmitsToolExposureWorkflow(t *testing.T) {
 		"never loop back to a fresh read on it",
 		"Nothing is dropped silently.",
 		"Do not choose for them",
-		"Never retry a mutation automatically",
+		// One retry rule, not a general ban with a rate-limit exception bolted
+		// on: a throttle still goes back to the user like everything else.
+		"Never retry a mutation on your own initiative",
+		"never on a timer of your own",
+		// The latest-deployment requirement is right for adding and wrong for
+		// removing, since an orphaned entry is the thing a removal is for.
+		"The project's tool list governs additions only",
+		"taking that orphaned entry off is exactly what a removal is for",
+		"`tool_exposure.tool_urns`",
 		"It is not available to managed project assistants",
 		"Use `send_platform_mcp_feedback` only after asking for consent",
 		"nothing was changed at all, not that part of the request landed",

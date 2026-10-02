@@ -31,10 +31,17 @@ type toolExposureFixture struct {
 	principal Principal
 	project   ResolvedProject
 	toolsetID uuid.UUID
-	service   *MCPToolExposureService
-	conn      *pgxpool.Pool
-	tools     []string
-	grants    []authz.Grant
+	// toolsetSlug is what the write's own row lock is taken by, so an
+	// interleaving test can hold that lock from a probe connection.
+	toolsetSlug string
+	service     *MCPToolExposureService
+	conn        *pgxpool.Pool
+	tools       []string
+	grants      []authz.Grant
+	// indexed records every toolset the service asked to have reindexed. A
+	// committed change must schedule one, because dynamic-mode tools/list
+	// refuses a version with no search index.
+	indexed *[]uuid.UUID
 }
 
 // grantMCP returns a context that also carries mcp:read and mcp:write on the
@@ -124,7 +131,18 @@ func seedToolExposureFixture(t *testing.T, ctx context.Context, name string) (co
 	service, err := NewMCPToolExposureService(testenv.NewLogger(t), conn, audit.NewLogger(), engine, admin, "tool-exposure-cursor-key", plugins.PublicationRequests{}, nil, testOperationBudget(), testOperationBudget())
 	require.NoError(t, err)
 
-	return ctx, toolExposureFixture{principal: principal, project: project, toolsetID: toolset.ID, service: service, conn: conn, tools: tools, grants: grants}
+	// Stands in for toolsets.TriggerToolsetIndexForVersion, which needs a
+	// Temporal environment this package's tests do not run.
+	indexed := &[]uuid.UUID{}
+	service.WithIndexing(func(_ context.Context, indexedProject, indexedToolset uuid.UUID) {
+		require.Equal(t, project.ID, indexedProject)
+		*indexed = append(*indexed, indexedToolset)
+	})
+
+	return ctx, toolExposureFixture{
+		principal: principal, project: project, toolsetID: toolset.ID, toolsetSlug: toolset.Slug,
+		service: service, conn: conn, tools: tools, grants: grants, indexed: indexed,
+	}
 }
 
 func (f toolExposureFixture) add(t *testing.T, ctx context.Context, version string, urns ...string) (MCPToolExposureMutationOutput, error) {
@@ -199,11 +217,18 @@ func TestAddToolsToMCPAppendsWithoutReplacingTheList(t *testing.T) {
 	require.Equal(t, "applied", second.Outcome)
 	require.ElementsMatch(t, []string{fixture.tools[0], fixture.tools[1]}, second.Exposure.ToolURNs)
 
+	// Every committed change schedules the search-index rebuild. Without it a
+	// dynamic-mode server refuses tools/list entirely until the five-minute
+	// sweep catches up, so adding a tool would take a working server offline.
+	require.Equal(t, []uuid.UUID{fixture.toolsetID, fixture.toolsetID}, *fixture.indexed,
+		"both committed changes scheduled indexing for the toolset they wrote")
+
 	// Asking again for a tool the server already exposes is a no-op, not a
 	// second append and not a failure.
 	noop, err := fixture.add(t, ctx, second.Exposure.ExposureVersion, fixture.tools[1])
 	require.NoError(t, err)
 	require.Equal(t, "no_op", noop.Outcome)
+	require.Len(t, *fixture.indexed, 2, "a no-op created no version, so it schedules no reindex")
 	require.Empty(t, noop.Applied)
 	require.Equal(t, []string{fixture.tools[1]}, noop.Unchanged)
 	require.Equal(t, 2, noop.Exposure.ToolCount)
@@ -451,6 +476,133 @@ func TestChangeMCPToolsRefusesAToolListSharedWithAnotherProject(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "applied", applied.Outcome)
 	require.Equal(t, []string{fixture.tools[0]}, applied.Exposure.ToolURNs)
+}
+
+// The exposure read takes no lock of its own, and the toolset row lock the
+// write takes is both later and on a different table, so without a lock on the
+// server row the whole decision — which toolset to write, which servers that
+// write moves — is made against an unpinned snapshot of mcp_servers.
+// UpdateMCPServer assigns toolset_id, so a dashboard edit can repoint this
+// server between the read and the write, and the exposure version token covers
+// toolset_versions only and would not notice. The change would then land on a
+// toolset the named server no longer fronts.
+//
+// Falsification: drop the LockPlatformMCPServerToolsetBinding call from the
+// Mutate closure and the mutation never waits for the probe's row lock, so
+// WaitForQueryBlockedBy below fails after its 30s deadline.
+func TestChangeMCPToolsPinsTheServerToolsetBindingBeforeDeciding(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_tools_binding_lock")
+
+	stale, err := fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID)
+	require.NoError(t, err)
+
+	// A second toolset in the same project for the server to be moved onto.
+	other, err := toolsetsrepo.New(fixture.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID: fixture.principal.OrganizationID, ProjectID: fixture.project.ID,
+		Name: "Moved target", Slug: "moved-" + uuid.NewString()[:8], McpEnabled: true,
+	})
+	require.NoError(t, err)
+
+	// Hold exactly the row lock a dashboard edit of this server would take.
+	probe := testenv.BeginTx(t, ctx, fixture.conn)
+	_, err = testrepo.New(probe).LockMCPServerRowFixture(ctx, testrepo.LockMCPServerRowFixtureParams{
+		ID: fixture.toolsetID, ProjectID: fixture.project.ID,
+	})
+	require.NoError(t, err)
+
+	result := make(chan error, 1)
+	go func() {
+		_, addErr := fixture.add(t, ctx, stale.ExposureVersion, fixture.tools[0])
+		result <- addErr
+	}()
+
+	// The mutation must not be able to reach its decision while that row is
+	// pinned. This is the assertion the fix exists for.
+	testenv.WaitForQueryBlockedBy(t, ctx, fixture.conn, testenv.BackendPID(probe), "%LockPlatformMCPServerToolsetBinding%")
+
+	// Now commit the repoint, which is the race: the server the caller named
+	// no longer fronts the toolset its exposure version was read from.
+	_, err = testrepo.New(probe).RepointMCPServerToolsetFixture(ctx, testrepo.RepointMCPServerToolsetFixtureParams{
+		ID: fixture.toolsetID, ProjectID: fixture.project.ID, ToolsetID: uuid.NullUUID{UUID: other.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, probe.Commit(ctx))
+
+	// Having waited, the mutation reads the binding as it now stands and
+	// refuses, instead of writing the tool it was given onto the toolset the
+	// server was detached from.
+	var refusal *MCPToolExposureError
+	require.ErrorAs(t, <-result, &refusal)
+	require.Equal(t, "conflict", refusal.Code)
+
+	_, err = toolsetsrepo.New(fixture.conn).GetLatestToolsetVersion(ctx, fixture.toolsetID)
+	require.ErrorIs(t, err, pgx.ErrNoRows, "the detached toolset was not written")
+	_, err = toolsetsrepo.New(fixture.conn).GetLatestToolsetVersion(ctx, other.ID)
+	require.ErrorIs(t, err, pgx.ErrNoRows, "and neither was the one it moved to")
+}
+
+// A row lock cannot block the insert of a row that does not exist yet, so a
+// server attached to this toolset after the authorized set was read is still a
+// server this change moves without having been checked. The set is therefore
+// read again before the change is allowed to commit.
+//
+// Falsification: drop the verifyAffectedServersUnmoved call and the change
+// commits, so this test's conflict assertion fails with outcome "applied" —
+// and the newly attached server's tool list was changed unauthorized.
+func TestChangeMCPToolsAbortsWhenAServerJoinsTheToolsetMidChange(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_tools_attach_midchange")
+
+	current, err := fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID)
+	require.NoError(t, err)
+	require.Equal(t, 0, current.SharedWithOther, "only the named server fronts it when the change is authorized")
+
+	// Park the mutation after it has authorized and before it writes, by
+	// holding a lock that conflicts with the write's FOR UPDATE on the toolset
+	// row. It must be FOR NO KEY UPDATE rather than FOR UPDATE: the attach
+	// below needs the FOR KEY SHARE lock a foreign key takes on that same row,
+	// and FOR UPDATE would block it, deadlocking this test against itself.
+	probe := testenv.BeginTx(t, ctx, fixture.conn)
+	_, err = testrepo.New(probe).LockToolsetNoKeyUpdateFixture(ctx, testrepo.LockToolsetNoKeyUpdateFixtureParams{
+		ProjectID: fixture.project.ID, Slug: fixture.toolsetSlug,
+	})
+	require.NoError(t, err)
+
+	result := make(chan error, 1)
+	go func() {
+		_, addErr := fixture.add(t, ctx, current.ExposureVersion, fixture.tools[0])
+		result <- addErr
+	}()
+	testenv.WaitForQueryBlockedBy(t, ctx, fixture.conn, testenv.BackendPID(probe), "%GetToolsetForUpdate%")
+
+	// Attach a second server to this toolset and commit it, after the
+	// mutation authorized a set of one and before it writes.
+	second := uuid.New()
+	_, err = mcpserversrepo.New(fixture.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: second, ProjectID: fixture.project.ID, Name: conv.ToPGText("Joined mid-change"),
+		Slug:      conv.ToPGText("joined-" + uuid.NewString()[:8]),
+		ToolsetID: uuid.NullUUID{UUID: fixture.toolsetID, Valid: true}, Visibility: "private",
+	})
+	require.NoError(t, err)
+	require.NoError(t, probe.Commit(ctx))
+
+	var refusal *MCPToolExposureError
+	require.ErrorAs(t, <-result, &refusal)
+	require.Equal(t, "conflict", refusal.Code)
+	require.NotContains(t, refusal.Message, second.String(), "the server that joined is not named")
+
+	_, err = toolsetsrepo.New(fixture.conn).GetLatestToolsetVersion(ctx, fixture.toolsetID)
+	require.ErrorIs(t, err, pgx.ErrNoRows, "nothing was written for either server")
+
+	// Repeating against the set as it stands now, with write access to both,
+	// succeeds — so the refusal was the interleave, not the request.
+	after, err := fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID)
+	require.NoError(t, err)
+	require.Equal(t, 1, after.SharedWithOther)
+	applied, err := fixture.add(t, fixture.grantMCP(ctx, second), after.ExposureVersion, fixture.tools[0])
+	require.NoError(t, err)
+	require.Equal(t, "applied", applied.Outcome)
 }
 
 // Removal refuses a name it cannot act on for the same reason adding does: a

@@ -1714,6 +1714,33 @@ SELECT set_config('lock_timeout', @timeout::text, true);
 -- name: LockToolsetNowaitFixture :one
 SELECT id FROM toolsets WHERE project_id = @project_id AND slug = @slug AND deleted IS FALSE FOR UPDATE NOWAIT;
 
+-- name: LockToolsetNoKeyUpdateFixture :one
+-- Parks a writer that wants the toolset row's FOR UPDATE lock while still
+-- allowing rows that reference the toolset to be inserted.
+--
+-- FOR UPDATE is the wrong tool for that: it conflicts with the FOR KEY SHARE
+-- lock PostgreSQL takes on the referenced row for a foreign key, so holding it
+-- also blocks attaching an mcp_servers row to this toolset — and a test that
+-- needs to do exactly that while a writer waits deadlocks itself. FOR NO KEY
+-- UPDATE conflicts with FOR UPDATE but not with FOR KEY SHARE, which is the
+-- combination an interleaving test needs.
+SELECT id FROM toolsets WHERE project_id = @project_id AND slug = @slug AND deleted IS FALSE FOR NO KEY UPDATE NOWAIT;
+
+-- name: LockMCPServerRowFixture :one
+-- Holds the row lock a dashboard edit of this MCP server would take, so a test
+-- can prove a writer pins the server-to-toolset binding before deciding what
+-- to change.
+SELECT id FROM mcp_servers WHERE id = @id AND project_id = @project_id AND deleted IS FALSE FOR UPDATE;
+
+-- name: RepointMCPServerToolsetFixture :one
+-- Moves an MCP server onto a different backing toolset, which is what
+-- UpdateMCPServer does to toolset_id. Used to stage the race where the target
+-- of a tool-exposure change moves after it was read.
+UPDATE mcp_servers
+SET toolset_id = @toolset_id, updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING id;
+
 -- name: LockExternalOAuthMetadataNowaitFixture :one
 SELECT id FROM external_oauth_server_metadata WHERE id = @id AND project_id = @project_id FOR UPDATE NOWAIT;
 

@@ -54,6 +54,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
 type platformMCPConfig struct {
@@ -664,7 +665,18 @@ func newPlatformMCPToolExposure(config platformMCPConfig, authorizer platformmcp
 		config.Logger.WarnContext(context.Background(), "Platform MCP tool exposure unavailable", attr.SlogError(err))
 		return nil
 	}
-	return service
+	// A new toolset version has no search index, and dynamic-mode tools/list
+	// refuses to serve a version without one, so a committed change must
+	// schedule the rebuild the dashboard's own toolset update schedules.
+	// Without it the periodic sweep is the only recovery and an otherwise
+	// working server cannot list its tools in the meantime.
+	if config.TemporalEnv == nil {
+		config.Logger.WarnContext(context.Background(), "Platform MCP tool exposure cannot schedule toolset indexing; dynamic-mode servers will wait for the periodic sweep after a change")
+		return service
+	}
+	return service.WithIndexing(func(ctx context.Context, projectID, toolsetID uuid.UUID) {
+		toolsets.TriggerToolsetIndexForVersion(ctx, config.Logger, config.DB, config.TemporalEnv, projectID, toolsetID)
+	})
 }
 
 func newPlatformMCPConnectionMutations(config platformMCPConfig) *platformmcp.MCPConnectionMutationService {
