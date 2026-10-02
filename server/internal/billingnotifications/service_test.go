@@ -344,3 +344,24 @@ func TestSendPaygActivatedDeliversResolvedRecipientsBeforeReturningResolutionErr
 	require.ErrorIs(t, err, resolutionErr)
 	require.Len(t, sender.sends, 1)
 }
+
+func TestSendAccessPausedLeavesActionURLEmptyWithoutDashboardURL(t *testing.T) {
+	t.Parallel()
+	service, sender, organizationID := newNotificationTestService(t, "free", false)
+	service.orgHosts = orghost.New(orghost.Config{})
+	_, err := usagerepo.New(service.db).UpsertBillingEmail(t.Context(), usagerepo.UpsertBillingEmailParams{
+		OrganizationID: organizationID,
+		AlertEmail:     pgtype.Text{String: "billing@example.test", Valid: true},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, service.SendAccessPaused(t.Context(), SendAccessPausedInput{
+		EventID:        "event-placeholder",
+		OrganizationID: organizationID,
+		Kind:           AccessPausedSubscriptionLoss,
+	}))
+	require.Len(t, sender.sends, 1)
+	template, ok := sender.sends[0].template.(email.AccessPaused)
+	require.True(t, ok)
+	require.Empty(t, template.ActionURL)
+}
