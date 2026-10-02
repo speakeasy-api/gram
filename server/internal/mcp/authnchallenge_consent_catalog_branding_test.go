@@ -14,8 +14,8 @@ import (
 )
 
 // An unnamed tenant issuer shadowing a catalog issuer for the same
-// authorization server renders the catalog name, on the card and in the
-// stored inactive reason alike.
+// authorization server renders the catalog name, in the card title and its
+// inactive reason alike.
 func TestServeConsent_UnnamedIssuerBorrowsCatalogName(t *testing.T) {
 	t.Parallel()
 
@@ -58,6 +58,6 @@ func TestServeConsent_UnnamedIssuerBorrowsCatalogName(t *testing.T) {
 
 	fx.member.set(memberRejects)
 	requireValidated(t, fx)
-	require.Equal(t, "Inactive at Example Catalog", storedSession(t, ctx, fx).ValidationReason.String)
+	require.Equal(t, "inactive", storedSession(t, ctx, fx).ValidationStatus.String)
 	require.Contains(t, renderConsent(t, fx), "Inactive at Example Catalog — reconnect to continue")
 }

@@ -159,10 +159,6 @@ func (s *Service) probeRemoteSession(
 	probedAt := time.Now()
 	verdict, reason := s.probeUpstream(probeCtx, logger, target.build, target.name)
 	<-enriched
-	if upstream.Inactive {
-		// The stored reason names the service the way its card does.
-		client = s.remoteChallengeMgr.WithCatalogBranding(ctx, []remotesessions.Client{client})[0]
-	}
 	ownResource := s.newResourceDisplayOwner(endpoint).ownsOrFallsBack(ctx, logger, client)
 	issuerDisplay, _ := issuerCardBranding(client, ownResource, s.serverURL)
 	verdict, reason = combineUpstreamVerdict(verdict, reason, upstream, issuerDisplay)
@@ -438,5 +434,9 @@ func combineUpstreamVerdict(verdict remotesessions.ValidationOutcome, reason str
 	if verdict == remotesessions.ValidationOutcomeValid || !upstream.Inactive {
 		return verdict, reason
 	}
-	return remotesessions.ValidationOutcomeInactive, "Inactive at " + issuer
+	return remotesessions.ValidationOutcomeInactive, inactiveReason(issuer)
+}
+
+func inactiveReason(issuer string) string {
+	return "Inactive at " + issuer
 }

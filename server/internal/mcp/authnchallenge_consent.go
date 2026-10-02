@@ -1452,6 +1452,12 @@ func (s *Service) buildRemoteSessionCards(
 			validatedAt = state.LastValidatedAt.UTC().Format(time.RFC3339)
 			validatedAgo = formatTimeAgo(renderedAt, *state.LastValidatedAt)
 		}
+		// The stored inactive reason embeds the display resolved at probe
+		// time; recompose it so it always names the service the title does.
+		validationReason := state.ValidationReason
+		if state.ValidationStatus == remotesessions.ValidationOutcomeInactive {
+			validationReason = inactiveReason(issuerDisplay)
+		}
 		tokenActive, tokenExpiresAt, tokenExpiresIn := tokenLine(renderedAt, state.Token, state.AccessExpiresAt)
 		requested, _ := c.RequestedScopes()
 		connected := hasSession && state.Status == remotesessions.RemoteSessionActive && !unroutable
@@ -1488,7 +1494,7 @@ func (s *Service) buildRemoteSessionCards(
 			Unverified:             state.ValidationStatus == remotesessions.ValidationOutcomeUnknown,
 			ValidatedAt:            validatedAt,
 			ValidatedAgo:           validatedAgo,
-			ValidationReason:       state.ValidationReason,
+			ValidationReason:       validationReason,
 			ValidationNotice:       "",
 			CanValidate:            routing.canValidate(c, state.Resource),
 			Pending:                false,
