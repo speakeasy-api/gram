@@ -181,8 +181,8 @@ describe("McpServers", () => {
     expect(screen.getByText("2 MCP servers")).toBeTruthy();
   });
 
-  it("copies a server's URL", async () => {
-    await renderRouteTree(routeTree, {
+  it("copies a server's URL without leaving the list", async () => {
+    const { router } = await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}/mcp-servers?project=${OLDEST.id}`,
     });
 
@@ -198,6 +198,10 @@ describe("McpServers", () => {
     expect(
       screen.getByRole("button", { name: "Linear server URL copied" }),
     ).toBeTruthy();
+    // The button sits in a row that links, and the row leaves it alone.
+    expect(router.state.location.pathname).toBe(
+      `/organizations/${ORG.slug}/mcp-servers`,
+    );
   });
 
   it("links each server to its health page in the selected project", async () => {
@@ -223,25 +227,6 @@ describe("McpServers", () => {
     );
     expect(router.state.location.search).toEqual({ project: OLDEST.id });
     await waitFor(() => expect(fetch).toHaveBeenCalled());
-  });
-
-  it("copies a server's URL without leaving the list", async () => {
-    const { router } = await renderRouteTree(routeTree, {
-      initialPath: `/organizations/${ORG.slug}/mcp-servers?project=${OLDEST.id}`,
-    });
-
-    const copy = await screen.findByRole("button", {
-      name: "Copy Linear server URL",
-    });
-    await act(async () => {
-      fireEvent.click(copy);
-      await Promise.resolve();
-    });
-
-    expect(writeText).toHaveBeenCalledWith(LINEAR.url);
-    expect(router.state.location.pathname).toBe(
-      `/organizations/${ORG.slug}/mcp-servers`,
-    );
   });
 
   it("switches project from the picker and replaces the address", async () => {

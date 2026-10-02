@@ -200,8 +200,15 @@ function datadogQuery(path: string, params: Record<string, string>): string {
 // Ingress logs are the only per-server stream: the gateway's per-call logs
 // carry project and tool ids, not the server. Datadog does not record the
 // JSON-RPC method, so this is every request to the endpoint.
+// A Datadog search phrase. The slug and the issuer are the customer's to set,
+// so each is quoted with its own quotes and backslashes escaped: a value can
+// never close its phrase and add terms of its own to the search staff open.
+function datadogPhrase(value: string): string {
+  return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+}
+
 export function toolCallTailQuery(urlSlug: string): string {
-  return `source:nginx-ingress-controller @http.url_details.path:"/mcp/${urlSlug}"`;
+  return `source:nginx-ingress-controller @http.url_details.path:${datadogPhrase(`/mcp/${urlSlug}`)}`;
 }
 
 export function toolCallTailUrl(urlSlug: string): string {
@@ -214,8 +221,10 @@ export function loginChallengeQuery(
   issuers: string[],
 ): string {
   const terms = [
-    ...(urlSlug ? [`@gram.toolset.mcp_slug:${urlSlug}`] : []),
-    ...[...new Set(issuers)].map((issuer) => `@gram.oauth.issuer:"${issuer}"`),
+    ...(urlSlug ? [`@gram.toolset.mcp_slug:${datadogPhrase(urlSlug)}`] : []),
+    ...[...new Set(issuers)].map(
+      (issuer) => `@gram.oauth.issuer:${datadogPhrase(issuer)}`,
+    ),
   ];
   return terms.join(" OR ");
 }

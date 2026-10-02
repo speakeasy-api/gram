@@ -8,7 +8,8 @@ const searchSchema = z.object({
   project: z.string().optional().catch(undefined),
   window: z.coerce
     .number()
-    .pipe(z.union([z.literal(14), z.literal(30), z.literal(90)]))
+    // From the same list the picker draws, so the two cannot drift.
+    .pipe(z.literal(HEALTH_WINDOWS))
     .optional()
     .catch(undefined),
 });

@@ -9,6 +9,7 @@ import {
   loginChallengeQuery,
   loginChallengeUrl,
   platformMcpPrompt,
+  toolCallTailQuery,
   toolCallTailUrl,
   toolCallTotals,
   worstBucket,
@@ -121,6 +122,18 @@ describe("Datadog links", () => {
     );
   });
 
+  it("quotes customer-set values so they cannot add search terms", () => {
+    const issuer = 'https://idp.example.test" OR source:* OR "x\\';
+    const query = loginChallengeQuery('crm" OR *', [issuer]);
+    expect(query).toBe(
+      '@gram.toolset.mcp_slug:"crm\\" OR *" OR ' +
+        '@gram.oauth.issuer:"https://idp.example.test\\" OR source:* OR \\"x\\\\"',
+    );
+    expect(toolCallTailQuery('a"b')).toBe(
+      'source:nginx-ingress-controller @http.url_details.path:"/mcp/a\\"b"',
+    );
+  });
+
   it("searches login logs by issuer alone when there is no slug", () => {
     expect(loginChallengeQuery(undefined, ["https://login.example.test"])).toBe(
       '@gram.oauth.issuer:"https://login.example.test"',
@@ -135,7 +148,7 @@ describe("Datadog links", () => {
         "https://login.example.test",
       ]),
     ).toBe(
-      '@gram.toolset.mcp_slug:crm OR @gram.oauth.issuer:"https://login.example.test"',
+      '@gram.toolset.mcp_slug:"crm" OR @gram.oauth.issuer:"https://login.example.test"',
     );
 
     const from = new Date("2026-09-15T00:00:00Z");
@@ -144,7 +157,7 @@ describe("Datadog links", () => {
       loginChallengeUrl(loginChallengeQuery("crm", []), { from, to }),
     );
     expect(url.pathname).toBe("/logs");
-    expect(url.searchParams.get("query")).toBe("@gram.toolset.mcp_slug:crm");
+    expect(url.searchParams.get("query")).toBe('@gram.toolset.mcp_slug:"crm"');
     expect(url.searchParams.get("from_ts")).toBe(String(from.getTime()));
     expect(url.searchParams.get("to_ts")).toBe(String(to.getTime()));
   });

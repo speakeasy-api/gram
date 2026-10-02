@@ -286,7 +286,7 @@ describe("McpServerHealth", () => {
         .getAttribute("href")!,
     );
     expect(login.searchParams.get("query")).toBe(
-      '@gram.toolset.mcp_slug:crm-9c1e OR @gram.oauth.issuer:"https://login.example.test"',
+      '@gram.toolset.mcp_slug:"crm-9c1e" OR @gram.oauth.issuer:"https://login.example.test"',
     );
     expect(login.searchParams.get("from_ts")).toBeTruthy();
   });
