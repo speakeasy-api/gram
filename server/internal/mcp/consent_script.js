@@ -59,6 +59,18 @@
     var button = form.querySelector('button[type="submit"]');
     var submitted = false;
     var agentInputs = document.querySelectorAll("input[data-agent-select]");
+    var agentModes = document.querySelectorAll("input[data-agent-mode]");
+    var agentMode = document.querySelector(
+      'input[data-agent-mode][value="agent"]',
+    );
+    var selfMode = document.querySelector(
+      'input[data-agent-mode][value="self"]',
+    );
+    var selfAgentInput = document.querySelector("[data-agent-self]");
+    var agentPicker = document.querySelector("[data-agent-picker]");
+    var agentSetup = document.querySelector("[data-agent-setup]");
+    var agentSearch = document.querySelector("[data-agent-search]");
+    var agentEmpty = document.querySelector("[data-agent-empty]");
     var agentPolicy = document.querySelector("[data-agent-policy]");
     var agentPolicyName = document.querySelector("[data-agent-policy-name]");
     var subjectDisplay = document.querySelector(
@@ -75,8 +87,10 @@
     try {
       var savedAgent = sessionStorage.getItem(savedAgentKey);
       Array.prototype.forEach.call(agentInputs, function (input) {
-        if (savedAgent !== null && input.value === savedAgent)
+        if (savedAgent !== null && input.value === savedAgent) {
           input.checked = true;
+          if (agentMode) agentMode.checked = true;
+        }
       });
     } catch (_) {
       /* Storage may be disabled; normal selection still works. */
@@ -327,18 +341,22 @@
     }
     if (agentInputs.length > 0) {
       var syncAgentSelection = function () {
-        var selected = null;
+        var authorizingAgent = Boolean(agentMode && agentMode.checked);
+        var selected = authorizingAgent ? null : selfMode;
         Array.prototype.forEach.call(agentInputs, function (input) {
-          if (input.checked) {
-            selected = input;
-          }
+          input.disabled = !authorizingAgent;
+          input.required = authorizingAgent;
+          if (!authorizingAgent) input.checked = false;
+          if (input.checked) selected = input;
         });
-        var authorizingAgent = Boolean(selected && selected.value !== "");
+        if (selfAgentInput) selfAgentInput.disabled = authorizingAgent;
+        if (agentPicker) agentPicker.hidden = !authorizingAgent;
+        if (agentSetup) agentSetup.hidden = !authorizingAgent;
         var selectedDisplay = selected
           ? selected.getAttribute("data-subject-display") || ""
           : "";
         if (agentPolicy) {
-          agentPolicy.hidden = !authorizingAgent;
+          agentPolicy.hidden = !authorizingAgent || !selected;
         }
         if (agentPolicyName) {
           agentPolicyName.textContent = authorizingAgent ? selectedDisplay : "";
@@ -346,8 +364,8 @@
         Array.prototype.forEach.call(selfOnlySections, function (section) {
           section.hidden = authorizingAgent;
         });
-        if (subjectDisplay && selected) {
-          subjectDisplay.textContent = selectedDisplay;
+        if (subjectDisplay) {
+          subjectDisplay.textContent = selectedDisplay || "Choose an agent";
         }
         if (subjectMode) {
           subjectMode.textContent = authorizingAgent
@@ -367,7 +385,7 @@
             ? true
             : button.getAttribute("data-consent-self-ready") !== "true";
         }
-        var selectedID = authorizingAgent ? selected.value : "";
+        var selectedID = authorizingAgent && selected ? selected.value : "";
         try {
           sessionStorage.setItem(savedAgentKey, selectedID);
         } catch (_) {}
@@ -376,11 +394,41 @@
       Array.prototype.forEach.call(agentInputs, function (input) {
         input.addEventListener("change", syncAgentSelection);
       });
+      Array.prototype.forEach.call(agentModes, function (input) {
+        input.addEventListener("change", syncAgentSelection);
+      });
+      if (agentSearch) {
+        agentSearch.addEventListener("input", function () {
+          var query = agentSearch.value.trim().toLowerCase();
+          var matches = 0;
+          Array.prototype.forEach.call(agentInputs, function (input) {
+            var matchesName = (input.getAttribute("data-subject-display") || "")
+              .toLowerCase()
+              .includes(query);
+            input.closest("[data-agent-option]").hidden = !matchesName;
+            if (matchesName) matches++;
+          });
+          if (agentEmpty) agentEmpty.hidden = matches !== 0;
+        });
+      }
       syncAgentSelection();
+      // Agent mode requires these handlers; leave it unavailable if the script
+      // cannot load or initialize rather than silently approving as Myself.
+      if (agentMode) agentMode.disabled = false;
     }
 
     form.addEventListener("submit", function (event) {
-      if (submitted) {
+      // Guard implicit/programmatic submissions too: an empty Agent choice
+      // must never fall through to self authorization.
+      if (
+        submitted ||
+        (button && button.disabled) ||
+        (agentMode &&
+          agentMode.checked &&
+          !Array.prototype.some.call(agentInputs, function (input) {
+            return input.checked && !input.disabled;
+          }))
+      ) {
         event.preventDefault();
         return;
       }
