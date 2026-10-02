@@ -3742,6 +3742,11 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
 
 -- Create the chats table to track individual chat conversations
 CREATE TABLE IF NOT EXISTS chats (
+  -- Durable specialization observed in captured delivery envelopes.
+  session_surface TEXT,
+  slack_team_id TEXT,
+  slack_channel_id TEXT,
+  slack_channel_name TEXT,
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
@@ -5029,6 +5034,10 @@ CREATE TABLE IF NOT EXISTS slack_directory_memberships (
 
 CREATE UNIQUE INDEX IF NOT EXISTS slack_directory_memberships_org_team_user_key
 ON slack_directory_memberships (organization_id, slack_team_id, slack_user_id);
+
+-- Captured delivery envelopes may identify a sender without a workspace hint.
+CREATE INDEX IF NOT EXISTS slack_directory_memberships_org_user_idx
+ON slack_directory_memberships (organization_id, slack_user_id);
 
 -- Map a Slack member to an existing person in the same organization. Reassign
 -- by revoking the old row and inserting a new one to preserve the previous owner.
@@ -9587,8 +9596,8 @@ CREATE TABLE IF NOT EXISTS chat_session_links (
   -- closing NULL-child edges if such a continuation is captured later.
   parent_session_id TEXT NOT NULL,
   child_session_id TEXT,
-  -- Edge kind. Only 'move' is written today; reserved for future
-  -- evidence-based kinds (e.g. a proven handoff-URL continuation).
+  -- Edge kind: move, recall, or subagent. Subagent edges are directed from
+  -- the parent to its helper and require evidence from a delivery envelope.
   kind TEXT NOT NULL DEFAULT 'move',
   target_harness TEXT NOT NULL,
   source_surface TEXT,
@@ -10379,3 +10388,27 @@ CREATE TABLE IF NOT EXISTS widgets (
 
 CREATE INDEX IF NOT EXISTS widgets_project_id_updated_at_idx
 ON widgets (project_id, updated_at DESC) WHERE deleted IS FALSE;
+
+-- Observed conversation participants are independent of message ownership and
+-- billing attribution. Directory resolution is a snapshot, not an auth grant.
+CREATE TABLE IF NOT EXISTS chat_message_participants (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  chat_id uuid,
+  message_id uuid,
+  provider TEXT NOT NULL,
+  provider_user_id TEXT NOT NULL,
+  provider_team_id TEXT,
+  user_id TEXT,
+  display_name TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT chat_message_participants_pkey PRIMARY KEY (id),
+  CONSTRAINT chat_message_participants_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT chat_message_participants_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE SET NULL,
+  CONSTRAINT chat_message_participants_message_id_fkey FOREIGN KEY (message_id) REFERENCES chat_messages (id) ON DELETE SET NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS chat_message_participants_message_provider_user_key
+ON chat_message_participants (project_id, message_id, provider, provider_user_id);
+CREATE INDEX IF NOT EXISTS chat_message_participants_project_chat_idx
+ON chat_message_participants (project_id, chat_id);
