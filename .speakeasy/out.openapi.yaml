@@ -78733,6 +78733,9 @@ components:
           type: string
           description: An existing visible remote-session client to link. Required only for existing mode.
           format: uuid
+        initial_binding_only:
+          type: boolean
+          description: Manual mode only. Refuse with a conflict if any live visible client is already bound to the user session issuer. Omitted or false preserves explicit replacement behavior.
         mcp_server_id:
           type: string
           description: The target MCP server. It must be backed directly by a Remote MCP source.
@@ -84029,6 +84032,10 @@ components:
           items:
             $ref: '#/components/schemas/MCPSetupGuide'
           description: Matching setup guides, most specific match first. Empty when no guide has been published for the server.
+        oauth_callback_url:
+          type: string
+          description: Deployment-derived canonical remote OAuth callback URL, including when no guides match.
+          format: uri
       required:
         - guides
     GetSignedAssetURLForm:

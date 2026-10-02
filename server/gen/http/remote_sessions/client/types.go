@@ -48,6 +48,10 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	ExistingClientID *string `form:"existing_client_id,omitempty" json:"existing_client_id,omitempty" xml:"existing_client_id,omitempty"`
 	// Client settings for auto or manual mode. Forbidden for existing mode.
 	ClientConfiguration *ServerIdentityClientConfigurationRequestBody `form:"client_configuration,omitempty" json:"client_configuration,omitempty" xml:"client_configuration,omitempty"`
+	// Manual mode only. Refuse with a conflict if any live visible client is
+	// already bound to the user session issuer. Omitted or false preserves
+	// explicit replacement behavior.
+	InitialBindingOnly *bool `form:"initial_binding_only,omitempty" json:"initial_binding_only,omitempty" xml:"initial_binding_only,omitempty"`
 	// Auto mode only. cimd (the default) prefers a Client ID Metadata Document
 	// when the provider supports one and falls back to dynamic client
 	// registration; dcr always uses dynamic client registration.
@@ -1811,6 +1815,7 @@ func NewCommitServerIdentityConfigurationRequestBody(p *remotesessions.CommitSer
 		ProviderID:         p.ProviderID,
 		ClientMode:         p.ClientMode,
 		ExistingClientID:   p.ExistingClientID,
+		InitialBindingOnly: p.InitialBindingOnly,
 		RegistrationMethod: p.RegistrationMethod,
 	}
 	if p.CreateProvider != nil {

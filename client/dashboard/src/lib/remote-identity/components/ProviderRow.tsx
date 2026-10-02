@@ -52,7 +52,7 @@ import {
   X,
 } from "lucide-react";
 import type * as React from "react";
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import type {
   ClientOption,
@@ -386,7 +386,9 @@ function ClientStatus({
           aria-hidden="true"
           className={cn(STATUS_DOT, "bg-[var(--fill-success-default)]")}
         />
-        <Text small>Connected</Text>
+        <Text small>
+          {draft.slackSetup ? "Identity configured" : "Connected"}
+        </Text>
         <Button
           variant="tertiary"
           size="xs"
@@ -420,7 +422,7 @@ function ClientStatus({
         className={cn(STATUS_DOT, "border-muted-foreground border")}
       />
       <Text small muted>
-        Not connected
+        {draft.slackSetup ? "Identity not configured" : "Not connected"}
       </Text>
     </span>
   );
@@ -764,17 +766,29 @@ function ManualCredentialsFields({
   disabled: boolean;
   providerName: string;
 }): JSX.Element {
+  const clientIdRef = useRef<HTMLInputElement>(null);
+  const guidedManual = draft.slackSetup?.manualActive ?? false;
+  useEffect(() => {
+    if (guidedManual) clientIdRef.current?.focus();
+  }, [guidedManual]);
   // The guide URL comes from issuer metadata, so it is upstream input: only
   // render the action once it is known to be an ordinary http(s) link.
   const registrationGuideUrl = safeExternalHttpUrl(draft.registrationGuideUrl);
   return (
     <div className="space-y-3">
+      {guidedManual && (
+        <Text small className="block" role="status">
+          Read/search defaults applied. Enter your Slack app's client ID and
+          secret, then Save. Nothing has been saved yet.
+        </Text>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
           <Text muted small className="block">
             Client ID
           </Text>
           <Input
+            ref={clientIdRef}
             value={draft.clientId}
             onChange={draft.setClientId}
             placeholder={`from ${providerName}`}
@@ -791,7 +805,9 @@ function ManualCredentialsFields({
             type="password"
             value={draft.clientSecret}
             onChange={draft.setClientSecret}
-            placeholder="Optional"
+            placeholder={
+              draft.slackSetup?.manualActive ? "Required" : "Optional"
+            }
             disabled={disabled}
             aria-label="Client secret"
             noAutofill

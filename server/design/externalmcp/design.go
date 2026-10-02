@@ -156,6 +156,7 @@ var _ = Service("mcpRegistries", func() {
 
 		Result(func() {
 			Attribute("guides", ArrayOf(MCPSetupGuide), "Matching setup guides, most specific match first. Empty when no guide has been published for the server.")
+			Attribute("oauth_callback_url", String, "Deployment-derived canonical remote OAuth callback URL, including when no guides match.", func() { Format(FormatURI) })
 			Required("guides")
 		})
 

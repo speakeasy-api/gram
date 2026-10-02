@@ -11,6 +11,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { RemoteMcpIdentitySectionBody } from "./RemoteMcpIdentitySection";
 import type { AuthTarget } from "./authTarget";
+import {
+  SLACK_READ_SCOPES,
+  slackAppConfiguration,
+} from "@/lib/remote-identity/setup/slack";
+import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 
 const mocks = vi.hoisted(() => ({
   headers: vi.fn(),
@@ -39,6 +44,7 @@ const mocks = vi.hoisted(() => ({
   detach: vi.fn(),
   userSessionIssuer: vi.fn(),
   toastSuccess: vi.fn(),
+  setupDocs: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({
@@ -73,6 +79,13 @@ vi.mock("@/routes", () => ({
       },
     },
   }),
+}));
+
+vi.mock("@/components/setup-guide/SetupGuideCallout", () => ({
+  SetupGuideCallout: () => null,
+}));
+vi.mock("@gram/client/react-query/getMCPSetupDocs.js", () => ({
+  useGetMCPSetupDocs: () => mocks.setupDocs(),
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
@@ -190,7 +203,7 @@ vi.mock("@gram/client/react-query/remoteSessionsCount.js", () => ({
 }));
 
 vi.mock("@/lib/remote-identity/queries/useAllRemoteSessionClients", () => ({
-  useAllRemoteSessionClients: () => mocks.clients(),
+  useAllRemoteSessionClients: (request: unknown) => mocks.clients(request),
 }));
 
 vi.mock("@/lib/remote-identity/queries/useRemoteSessionIssuersByIds", () => ({
@@ -273,6 +286,13 @@ const target: AuthTarget = {
 };
 
 beforeEach(() => {
+  mocks.clients.mockReset();
+  mocks.setupDocs.mockReturnValue({
+    data: {
+      guides: [],
+      oauthCallbackUrl: "https://api.example.com/mcp/remote_login_callback",
+    },
+  });
   mocks.userSessionIssuer.mockReturnValue({
     data: { id: "user-session-issuer-1", projectId: "project-1" },
   });
@@ -357,8 +377,333 @@ afterEach(() => {
 });
 
 describe("RemoteMcpIdentitySectionBody", () => {
+  function slackFixture() {
+    mocks.source.mockReturnValue({
+      data: { slug: "slack", url: "https://mcp.slack.com/mcp" },
+    });
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "slack-provider",
+              name: "Slack",
+              slug: "slack",
+              issuer: "https://mcp.slack.com",
+              projectId: "project-1",
+              authorizationEndpoint:
+                "https://slack.com/oauth/v2_user/authorize",
+              tokenEndpoint: "https://slack.com/api/oauth.v2.user.access",
+              tokenEndpointAuthMethodsSupported: [
+                "client_secret_basic",
+                "client_secret_post",
+              ],
+            },
+          ],
+        },
+      },
+    });
+  }
+
+  it("deliberately applies Slack read/search defaults and guards the initial save", async () => {
+    slackFixture();
+    const { container } = renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    expect(
+      (screen.getByLabelText("Slack OAuth callback URL") as HTMLInputElement)
+        .value,
+    ).toBe("https://api.example.com/mcp/remote_login_callback");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Configure an existing Slack app" }),
+    );
+    expect(document.activeElement).toBe(screen.getByLabelText("Client ID"));
+    expect(screen.getByRole("status").textContent).toContain(
+      "Read/search defaults applied. Enter your Slack app's client ID and secret, then Save. Nothing has been saved yet.",
+    );
+    expect(mocks.commit).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Client ID"), {
+      target: { value: "slack-client" },
+    });
+    fireEvent.change(screen.getByLabelText("Client secret"), {
+      target: { value: "test-secret" },
+    });
+    expect(container.textContent).not.toContain("test-secret");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    expect(mocks.commit).toHaveBeenCalledWith({
+      commitServerIdentityConfigurationForm: expect.objectContaining({
+        initialBindingOnly: true,
+        clientMode: "manual",
+        clientConfiguration: expect.objectContaining({
+          scope: [...SLACK_READ_SCOPES],
+          tokenEndpointAuthMethod: "client_secret_post",
+        }),
+      }),
+    });
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("Client secret") as HTMLInputElement).value,
+      ).toBe(""),
+    );
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.detach).not.toHaveBeenCalled();
+  });
+
+  it("creates a non-secret new-app configuration and saves through the guarded manual form", async () => {
+    slackFixture();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create a new Slack app" }),
+    );
+    expect(document.activeElement).toBe(screen.getByLabelText("Client ID"));
+    const config = slackAppConfiguration(
+      "https://api.example.com/mcp/remote_login_callback",
+    )!;
+    const link = screen.getByRole("link", { name: "Open Slack app creation" });
+    expect(link.getAttribute("href")).toBe(config.creationUrl);
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+    fireEvent.click(screen.getByRole("button", { name: "Copy manifest JSON" }));
+    await waitFor(() =>
+      expect(screen.getByText("Manifest JSON copied.")).toBeDefined(),
+    );
+    expect(writeText).toHaveBeenCalledWith(config.json);
+    expect(mocks.commit).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Client ID"), {
+      target: { value: "new-app-client" },
+    });
+    fireEvent.change(screen.getByLabelText("Client secret"), {
+      target: { value: "test-secret" },
+    });
+    expect(link.getAttribute("href")).not.toContain("test-secret");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Configure an existing Slack app" }),
+    );
+    expect(
+      screen.queryByRole("link", { name: "Open Slack app creation" }),
+    ).toBeNull();
+    expect(
+      (screen.getByLabelText("Client secret") as HTMLInputElement).value,
+    ).toBe("test-secret");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create a new Slack app" }),
+    );
+    expect((screen.getByLabelText("Client ID") as HTMLInputElement).value).toBe(
+      "new-app-client",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    expect(mocks.commit).toHaveBeenCalledWith({
+      commitServerIdentityConfigurationForm: expect.objectContaining({
+        initialBindingOnly: true,
+        clientMode: "manual",
+        clientConfiguration: expect.objectContaining({
+          scope: JSON.parse(config.json).oauth_config.scopes.user,
+          tokenEndpointAuthMethod: "client_secret_post",
+        }),
+      }),
+    });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("link", { name: "Open Slack app creation" }),
+      ).toBeNull(),
+    );
+  });
+
+  it("does not generate a new app without a callback or overwrite ordinary unsaved credentials", () => {
+    slackFixture();
+    mocks.setupDocs.mockReturnValue({ data: undefined });
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    const action = screen.getByRole("button", {
+      name: "Create a new Slack app",
+    }) as HTMLButtonElement;
+    expect(action.disabled).toBe(true);
+    expect(
+      screen.queryByRole("link", { name: "Open Slack app creation" }),
+    ).toBeNull();
+    mocks.setupDocs.mockReturnValue({
+      data: {
+        guides: [],
+        oauthCallbackUrl: "https://api.example.com/mcp/remote_login_callback",
+      },
+    });
+    fireEvent.change(screen.getByLabelText("Client ID"), {
+      target: { value: "unsaved-client" },
+    });
+    expect(action.disabled).toBe(true);
+    expect((screen.getByLabelText("Client ID") as HTMLInputElement).value).toBe(
+      "unsaved-client",
+    );
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("reports clipboard failure and clears new-app state when leaving identity setup", async () => {
+    slackFixture();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
+    });
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create a new Slack app" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Copy manifest JSON" }));
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "Could not copy. Select and copy the JSON below instead.",
+        ),
+      ).toBeDefined(),
+    );
+    fireEvent.change(screen.getByLabelText("Client secret"), {
+      target: { value: "test-secret" },
+    });
+    fireEvent.click(screen.getByRole("radio", { name: /No Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    expect(
+      screen.queryByRole("link", { name: "Open Slack app creation" }),
+    ).toBeNull();
+    expect(
+      (screen.getByLabelText("Client secret") as HTMLInputElement).value,
+    ).toBe("");
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("retains unsaved edits and leaves the ordinary form usable without a callback", () => {
+    slackFixture();
+    mocks.setupDocs.mockReturnValue({ data: undefined });
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    const action = screen.getByRole("button", {
+      name: "Configure an existing Slack app",
+    }) as HTMLButtonElement;
+    expect(action.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Client ID"), {
+      target: { value: "unsaved-client" },
+    });
+    expect((screen.getByLabelText("Client ID") as HTMLInputElement).value).toBe(
+      "unsaved-client",
+    );
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("reuses only an exact compatible Slack client without credential configuration", async () => {
+    slackFixture();
+    const compatible = {
+      id: "compatible-client",
+      clientId: "stored-client",
+      remoteSessionIssuerId: "slack-provider",
+      createdAt: new Date(0),
+      tokenEndpointAuthMethod: "client_secret_post",
+      legacyCallbackUrl: false,
+      scope: [...SLACK_READ_SCOPES],
+    };
+    mocks.clients.mockImplementation(
+      (request: { remoteSessionIssuerId?: string }) => ({
+        items: request.remoteSessionIssuerId
+          ? [
+              compatible,
+              {
+                ...compatible,
+                id: "write-client",
+                clientId: "write-client",
+                scope: [...SLACK_READ_SCOPES, "chat:write"],
+              },
+            ]
+          : [],
+        isLoading: false,
+        isError: false,
+      }),
+    );
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    expect(
+      screen.getByText(
+        /Scopes must match the read\/search permissions exactly/,
+      ),
+    ).toBeDefined();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Reuse a compatible stored client" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create a new Slack app" }),
+    );
+    fireEvent.change(screen.getByLabelText("Client secret"), {
+      target: { value: "discarded-secret" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Reuse a compatible stored client" }),
+    );
+    expect(
+      screen.queryByRole("link", { name: "Open Slack app creation" }),
+    ).toBeNull();
+    expect(screen.queryByLabelText("Client secret")).toBeNull();
+    expect(mocks.commit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    expect(mocks.commit).toHaveBeenCalledWith({
+      commitServerIdentityConfigurationForm: expect.objectContaining({
+        clientMode: "existing",
+        existingClientId: "compatible-client",
+        clientConfiguration: undefined,
+        initialBindingOnly: undefined,
+      }),
+    });
+  });
+
+  it("clears Slack credentials on conflict and never retries as replacement", async () => {
+    slackFixture();
+    mocks.commit.mockRejectedValueOnce(
+      new ServiceError(
+        {
+          name: "conflict",
+          message: "identity changed",
+          fault: false,
+          id: "test",
+          temporary: false,
+          timeout: false,
+        },
+        {
+          response: new Response(null, { status: 409 }),
+          request: new Request("https://api.example.com"),
+          body: "",
+        },
+      ),
+    );
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Configure an existing Slack app" }),
+    );
+    fireEvent.change(screen.getByLabelText("Client ID"), {
+      target: { value: "slack-client" },
+    });
+    fireEvent.change(screen.getByLabelText("Client secret"), {
+      target: { value: "test-secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("Client secret") as HTMLInputElement).value,
+      ).toBe(""),
+    );
+    expect(mocks.commit).toHaveBeenCalledOnce();
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
   it("names the three identity modes after the upstream service", () => {
     renderIdentity();
+    expect(screen.queryByText("Slack read/search setup")).toBeNull();
 
     expect(screen.getByRole("radio", { name: /User Identity/ })).toBeDefined();
     expect(
@@ -370,6 +715,148 @@ describe("RemoteMcpIdentitySectionBody", () => {
       screen.getByRole("radio", { name: /Service Account/ }),
     ).toBeDefined();
     expect(screen.getByRole("radio", { name: /No Identity/ })).toBeDefined();
+  });
+
+  it("restores saved Slack identity on reopen without recreating a client", () => {
+    slackFixture();
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "saved-client",
+          clientId: "stored-client",
+          remoteSessionIssuerId: "slack-provider",
+          createdAt: new Date(0),
+          scope: [...SLACK_READ_SCOPES],
+          tokenEndpointAuthMethod: "client_secret_post",
+          legacyCallbackUrl: false,
+          userSessionIssuerIds: ["user-session-issuer-1"],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+    const view = renderIdentity();
+    expect(screen.getByText("Identity configured")).toBeDefined();
+    expect(screen.queryByText("Connected")).toBeNull();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Configure an existing Slack app",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    view.unmount();
+    renderIdentity();
+    expect(screen.getByText("Identity configured")).toBeDefined();
+    expect(screen.queryByLabelText("Client secret")).toBeNull();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("does not overwrite Slack drafts or accept broader scopes in guided setup", () => {
+    slackFixture();
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Configure an existing Slack app" }),
+    );
+    fireEvent.change(screen.getByLabelText("Client ID"), {
+      target: { value: "unsaved-client" },
+    });
+    fireEvent.change(screen.getByLabelText("Client secret"), {
+      target: { value: "test-secret" },
+    });
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Configure an existing Slack app",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
+    fireEvent.click(screen.getByRole("combobox", { name: "Scope" }));
+    fireEvent.change(screen.getByPlaceholderText("Search options..."), {
+      target: { value: "chat:write" },
+    });
+    fireEvent.click(screen.getByRole("option", { name: /Create new option/ }));
+    expect(
+      screen.getByRole("option", { name: /^chat:write, selected/ }),
+    ).toBeDefined();
+    expect((screen.getByLabelText("Client ID") as HTMLInputElement).value).toBe(
+      "unsaved-client",
+    );
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText(/Guided setup requires the exact read\/search scopes/),
+    ).toBeDefined();
+    fireEvent.click(screen.getByRole("radio", { name: /No Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    expect(
+      (screen.getByLabelText("Client secret") as HTMLInputElement).value,
+    ).toBe("");
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("leaves an incompatible stored Slack provider untouched", () => {
+    slackFixture();
+    const listed = mocks.issuers();
+    listed.data.result.items[0].tokenEndpoint =
+      "https://slack.com/api/oauth.v2.access";
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Configure an existing Slack app",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText(/selected provider does not match Slack/),
+    ).toBeDefined();
+    expect(listed.data.result.items[0].tokenEndpoint).toBe(
+      "https://slack.com/api/oauth.v2.access",
+    );
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("uses reviewed discovered Slack metadata without creating a provider before Save", async () => {
+    slackFixture();
+    const metadata = mocks.issuers().data.result.items[0];
+    mocks.issuers.mockReturnValue({ data: { result: { items: [] } } });
+    mocks.protectedResourceMetadata.mockReturnValue({
+      status: "available",
+      metadata: { authorizationServers: ["https://mcp.slack.com"] },
+    });
+    mocks.fetchMetadata.mockResolvedValue(metadata);
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    const defaults = screen.getByRole("button", {
+      name: "Configure an existing Slack app",
+    }) as HTMLButtonElement;
+    await waitFor(() => expect(defaults.disabled).toBe(false));
+    fireEvent.click(defaults);
+    expect(mocks.commit).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Client ID"), {
+      target: { value: "slack-client" },
+    });
+    fireEvent.change(screen.getByLabelText("Client secret"), {
+      target: { value: "test-secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    expect(mocks.commit).toHaveBeenCalledWith({
+      commitServerIdentityConfigurationForm: expect.objectContaining({
+        providerId: undefined,
+        createProvider: expect.objectContaining({
+          issuer: "https://mcp.slack.com",
+          tokenEndpoint: "https://slack.com/api/oauth.v2.user.access",
+        }),
+        initialBindingOnly: true,
+      }),
+    });
   });
 
   it("configures User Identity inline without OAuth vocabulary", async () => {

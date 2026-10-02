@@ -77,6 +77,7 @@ func TestExternalMCP_GetSetupDocs_ByRegistrySpecifier(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Guides, 1)
+	require.Equal(t, testCallbackURL, conv.PtrValOr(result.OauthCallbackURL, ""))
 
 	got := result.Guides[0]
 	require.Equal(t, string(guide.Slug), got.Slug)
@@ -290,6 +291,7 @@ func TestExternalMCP_GetSetupDocs_UnknownServerReturnsNoGuides(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result.Guides)
 	require.Empty(t, result.Guides)
+	require.Equal(t, testCallbackURL, conv.PtrValOr(result.OauthCallbackURL, ""))
 }
 
 func TestExternalMCP_GetSetupDocs_MissingLookupKeys(t *testing.T) {

@@ -63,6 +63,9 @@ type GetSetupDocsResponseBody struct {
 	// Matching setup guides, most specific match first. Empty when no guide has
 	// been published for the server.
 	Guides []*MCPSetupGuideResponseBody `form:"guides,omitempty" json:"guides,omitempty" xml:"guides,omitempty"`
+	// Deployment-derived canonical remote OAuth callback URL, including when no
+	// guides match.
+	OauthCallbackURL *string `form:"oauth_callback_url,omitempty" json:"oauth_callback_url,omitempty" xml:"oauth_callback_url,omitempty"`
 }
 
 // ClearCacheUnauthorizedResponseBody is the type of the "mcpRegistries"
@@ -1868,7 +1871,9 @@ func NewGetServerDetailsGatewayError(body *GetServerDetailsGatewayErrorResponseB
 // NewGetSetupDocsResultOK builds a "mcpRegistries" service "getSetupDocs"
 // endpoint result from a HTTP "OK" response.
 func NewGetSetupDocsResultOK(body *GetSetupDocsResponseBody) *mcpregistries.GetSetupDocsResult {
-	v := &mcpregistries.GetSetupDocsResult{}
+	v := &mcpregistries.GetSetupDocsResult{
+		OauthCallbackURL: body.OauthCallbackURL,
+	}
 	v.Guides = make([]*types.MCPSetupGuide, len(body.Guides))
 	for i, val := range body.Guides {
 		if val == nil {
@@ -2109,6 +2114,9 @@ func ValidateGetSetupDocsResponseBody(body *GetSetupDocsResponseBody) (err error
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	if body.OauthCallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.oauth_callback_url", *body.OauthCallbackURL, goa.FormatURI))
 	}
 	return
 }
