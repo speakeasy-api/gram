@@ -339,41 +339,102 @@ func (s *Service) triggerPluginPublish(ctx context.Context, authCtx *contextvalu
 }
 
 func (s *Service) triggerToolsetIndex(ctx context.Context, toolset *types.Toolset) {
-	if s.temporalEnv == nil || toolset == nil || !conv.PtrValOr(toolset.McpEnabled, false) || len(toolset.Tools) == 0 {
-		return
+	// The dashboard has nowhere to report this: its own response is already
+	// shaped and the change has committed. TriggerToolsetIndex logs every
+	// failure itself, so discarding the outcome here loses nothing.
+	_ = TriggerToolsetIndex(ctx, s.logger, s.db, s.temporalEnv, toolset)
+}
+
+// ErrToolsetIndexNotRequired reports that a toolset correctly needs no search
+// index, so a caller can tell that apart from a rebuild that failed to start.
+//
+// The only such case is a version with no tools, and it is not a gap: dynamic
+// mode's own gate, requireToolSearchIndex, returns early on exactly the same
+// condition and serves the facade tools without consulting the index. The two
+// predicates have to stay identical — if that gate ever starts requiring an
+// index for an empty version, this skip becomes a way to leave a server
+// unable to list its tools.
+var ErrToolsetIndexNotRequired = errors.New("toolset needs no search index")
+
+// ErrToolsetIndexUnavailable reports that no rebuild could even be requested,
+// which for a dynamic-mode server means it cannot list its tools until the
+// periodic sweep reaches it.
+var ErrToolsetIndexUnavailable = errors.New("toolset search index rebuild cannot be scheduled")
+
+// TriggerToolsetIndex schedules the search-index rebuild a new toolset version
+// needs, and is called after the transaction that created that version has
+// committed.
+//
+// This is not cosmetic upkeep. Dynamic-mode `tools/list` refuses to serve a
+// toolset whose current version has no embeddings — `requireToolSearchIndex`
+// returns `errToolSearchIndexUnavailable` and the whole request becomes a
+// JSON-RPC error, rather than an empty list or a fall back to the static tool
+// list. The index is looked up by the *latest* version, read live on every
+// request, so creating a version immediately invalidates it. A writer that
+// bumps the version without scheduling this leaves an otherwise working server
+// unable to list its tools until the five-minute sweep happens to pick it up.
+//
+// It is exported so every caller that creates a toolset version goes through
+// one implementation, and every failure only logs: the caller's change is
+// already committed, the sweep is still the backstop, and failing the call
+// after the fact would misreport a change that did land.
+func TriggerToolsetIndex(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, temporalEnv *tenv.Environment, toolset *types.Toolset) error {
+	if logger == nil || db == nil || toolset == nil {
+		return ErrToolsetIndexUnavailable
+	}
+	// Whether an index is needed is asked BEFORE whether one could be
+	// scheduled, and the order is load-bearing. These two errors mean opposite
+	// things to a caller: "not_required" is a success, while "unavailable"
+	// tells an agent a dynamic-mode server may be unable to list its tools.
+	// Reporting unavailable for a version that needed no index in the first
+	// place sends that agent chasing a failure that did not happen.
+	//
+	// A version with no tools needs no index, and dynamic mode serves it
+	// without one — see ErrToolsetIndexNotRequired. Same for a toolset that is
+	// not MCP-enabled: nothing serves it.
+	if !conv.PtrValOr(toolset.McpEnabled, false) || len(toolset.Tools) == 0 {
+		return ErrToolsetIndexNotRequired
+	}
+	if temporalEnv == nil {
+		logger.ErrorContext(ctx, "no temporal environment to schedule toolset indexing; a dynamic-mode server cannot list its tools until the periodic sweep reaches it")
+		return ErrToolsetIndexUnavailable
 	}
 
 	projectID, err := uuid.Parse(toolset.ProjectID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to parse project id for toolset indexing", attr.SlogError(err))
-		return
+		logger.ErrorContext(ctx, "failed to parse project id for toolset indexing", attr.SlogError(err))
+		return fmt.Errorf("parse project id for toolset indexing: %w", err)
 	}
 	toolsetID, err := uuid.Parse(toolset.ID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to parse toolset id for indexing", attr.SlogError(err))
-		return
+		logger.ErrorContext(ctx, "failed to parse toolset id for indexing", attr.SlogError(err))
+		return fmt.Errorf("parse toolset id for indexing: %w", err)
 	}
-	deploymentID, err := deploymentsRepo.New(s.db).GetActiveDeploymentID(ctx, projectID)
+	deploymentID, err := deploymentsRepo.New(db).GetActiveDeploymentID(ctx, projectID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return
+		// No completed deployment means no tool definitions to embed, and the
+		// sweep requires one too, so there is nothing to schedule.
+		return ErrToolsetIndexNotRequired
 	}
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to load active deployment for toolset indexing", attr.SlogError(err))
-		return
+		logger.ErrorContext(ctx, "failed to load active deployment for toolset indexing", attr.SlogError(err))
+		return fmt.Errorf("load active deployment for toolset indexing: %w", err)
 	}
-	hasProxy, err := repo.New(s.db).ToolsetHasExternalMCPProxy(ctx, repo.ToolsetHasExternalMCPProxyParams{
+	hasProxy, err := repo.New(db).ToolsetHasExternalMCPProxy(ctx, repo.ToolsetHasExternalMCPProxyParams{
 		ToolsetID: toolsetID,
 		ProjectID: projectID,
 	})
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to check toolset for external MCP proxy before indexing", attr.SlogError(err))
-		return
+		logger.ErrorContext(ctx, "failed to check toolset for external MCP proxy before indexing", attr.SlogError(err))
+		return fmt.Errorf("check toolset for external MCP proxy before indexing: %w", err)
 	}
 	if hasProxy {
-		return
+		// The current indexer cannot embed proxy tools, so this toolset is
+		// never served from the index.
+		return ErrToolsetIndexNotRequired
 	}
 
-	_, err = background.ExecuteIndexToolset(ctx, s.temporalEnv, background.IndexToolsetParams{
+	_, err = background.ExecuteIndexToolset(ctx, temporalEnv, background.IndexToolsetParams{
 		ProjectID:             projectID,
 		ToolsetID:             toolsetID,
 		ToolsetSlug:           toolset.Slug,
@@ -382,8 +443,31 @@ func (s *Service) triggerToolsetIndex(ctx context.Context, toolset *types.Toolse
 		PermanentFailureCount: 0,
 	})
 	if err != nil && !temporalSDK.IsWorkflowExecutionAlreadyStartedError(err) {
-		s.logger.ErrorContext(ctx, "failed to start toolset indexing workflow", attr.SlogError(err))
+		logger.ErrorContext(ctx, "failed to start toolset indexing workflow", attr.SlogError(err))
+		return fmt.Errorf("start toolset indexing workflow: %w", err)
 	}
+	return nil
+}
+
+// TriggerToolsetIndexForVersion is the entry point for a caller that created a
+// toolset version without holding the toolset view, such as the incremental
+// tool-exposure change. It loads that view by id and then schedules exactly
+// what the dashboard's own update schedules.
+func TriggerToolsetIndexForVersion(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, temporalEnv *tenv.Environment, projectID, toolsetID uuid.UUID) error {
+	if logger == nil || db == nil || projectID == uuid.Nil || toolsetID == uuid.Nil {
+		return ErrToolsetIndexUnavailable
+	}
+	toolset, err := repo.New(db).GetToolsetByIDAndProject(ctx, repo.GetToolsetByIDAndProjectParams{ID: toolsetID, ProjectID: projectID})
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to load toolset for indexing after a tool exposure change", attr.SlogError(err))
+		return fmt.Errorf("load toolset for indexing after a tool exposure change: %w", err)
+	}
+	view, err := mv.DescribeToolset(ctx, logger, db, mv.ProjectID(projectID), mv.ToolsetSlug(toolset.Slug), nil, nil)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to describe toolset for indexing after a tool exposure change", attr.SlogError(err))
+		return fmt.Errorf("describe toolset for indexing after a tool exposure change: %w", err)
+	}
+	return TriggerToolsetIndex(ctx, logger, db, temporalEnv, view)
 }
 
 func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPayload) (*gen.ListToolsetsResult, error) {

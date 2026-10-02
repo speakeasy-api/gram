@@ -1008,3 +1008,83 @@ func TestGetUnproxiedMcpServerUserUsage_CanonicalFold_OneRowPerEmployee(t *testi
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 }
+
+// TestListToolUsageTraces_CanonicalFold_EmailFilterReachesAliasRows pins the
+// contract a person filter has to honour to be usable with the identities the
+// folded lists hand out. ListMCPUsageUsers reports one canonical directory
+// address for an employee whose calls are stored under several, so a trace
+// filter for that address must reach the rows recorded under a linked alias.
+// Here the canonical address appears on one call and an alias on the other; the
+// folded filter must return both, and the literal filter is shown returning only
+// the one spelled the canonical way — the partial history the fold exists to
+// stop.
+func TestListToolUsageTraces_CanonicalFold_EmailFilterReachesAliasRows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, orgID := foldTestContext(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	suffix := uuid.NewString()[:8]
+	workEmail := "work-" + suffix + "@example.com"
+	aliasEmail := "personal-" + suffix + "@example.com"
+	strangerEmail := "stranger-" + suffix + "@example.com"
+	userID := uuid.NewString()
+
+	seedIdentityMapEntry(t, ctx, ti, orgID, workEmail, userID, workEmail)
+	seedIdentityMapEntry(t, ctx, ti, orgID, aliasEmail, userID, workEmail)
+
+	now := time.Now().UTC()
+	for _, email := range []string{workEmail, aliasEmail, strangerEmail} {
+		insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+			projectID:   projectID,
+			timestamp:   now.Add(-10 * time.Minute),
+			toolsetSlug: "payments",
+			toolName:    "charge",
+			userEmail:   email,
+			statusCode:  200,
+		})
+	}
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	// "email" is the user kind the Tool Logs query records an email-attributed
+	// call under; the repository's own constant for it is unexported.
+	params := repo.ListToolUsageTracesParams{
+		GramProjectID:        projectID,
+		TimeStart:            now.Add(-time.Hour).UnixNano(),
+		TimeEnd:              now.Add(time.Hour).UnixNano(),
+		UserFilters:          []repo.ToolUsageUserFilter{{Kind: "email", Key: workEmail}},
+		CanonicalIdentityOrg: orgID,
+		SortOrder:            "desc",
+		Limit:                10,
+	}
+
+	var folded []repo.ToolUsageTraceSummary
+	require.Eventually(t, func() bool {
+		var err error
+		folded, err = ti.chClient.ListToolUsageTraces(ctx, params)
+		return err == nil && len(folded) == 2
+	}, 2*time.Second, 50*time.Millisecond, "expected the folded filter to reach both the canonical and the alias row")
+	keys := make([]string, 0, len(folded))
+	for _, row := range folded {
+		keys = append(keys, row.UserKey)
+	}
+	require.ElementsMatch(t, []string{workEmail, aliasEmail}, keys)
+
+	// The same request without the fold returns only the row literally spelled
+	// the canonical way, which is what made the advertised reference serve part
+	// of a person's history or none of it.
+	params.CanonicalIdentityOrg = ""
+	literal, err := ti.chClient.ListToolUsageTraces(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, literal, 1)
+	require.Equal(t, workEmail, literal[0].UserKey)
+
+	// And a filter for the alias alone folds to the same identity, so the
+	// canonical row is reached from either spelling.
+	params.CanonicalIdentityOrg = orgID
+	params.UserFilters = []repo.ToolUsageUserFilter{{Kind: "email", Key: aliasEmail}}
+	fromAlias, err := ti.chClient.ListToolUsageTraces(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, fromAlias, 2)
+}

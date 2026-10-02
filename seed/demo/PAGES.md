@@ -157,6 +157,17 @@ have no effect. Browser verification: `[~]`.
 
 Slack Setup Example is a separate disabled Remote MCP server at `mcp/x/slack-setup/settings#authentication`, with its own unbound project session issuer and no credentials, upstream client, sessions, endpoint, or gateway membership. The existing Slack Service Account and connection fixtures remain unchanged. In a writable local session, select User Identity to inspect the guided choices without saving. Do not change the shared demo during this check; the fixture does not grant Slack access or prove consent. Browser verification: `[~]` (not yet verified); see check 19 in `verify.md`.
 
+### Upstream session validation outcomes
+
+PG `remote_sessions` ×6 on Linear's CIMD remote session client, one per demo
+user, give the admin server health view a populated validation breakdown for
+the **Linear** server: `valid` ×2, `rejected_by_member`, `inactive`, `unknown`,
+and one never validated (NULL status, left out of the counts). One session
+carries `grant_generation` 3 and another 2, so re-authorizations show as 3.
+Like the attachment above, every row has invalid ciphertext, no refresh token
+and auto-refresh disabled; they are display-only. IDs derive from
+`Spec.NameSeed` (`gram-demo-validated-session-<n>`).
+
 ## Local only (RunLocalFixtures, never the demo org)
 
 These come from `server/internal/demoseed/local.go` after the seed, so they are

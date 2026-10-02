@@ -478,22 +478,29 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 	}
 
 	searchParams := repo.SearchUsersParams{
-		ExcludedHookSources:  excludedHookSources,
-		GramProjectID:        params.projectID,
-		TimeStart:            params.timeStart,
-		TimeEnd:              params.timeEnd,
-		GramDeploymentID:     deploymentID,
-		EventSource:          conv.PtrValOr(filter.EventSource, ""),
-		HookSource:           conv.PtrValOr(filter.HookSource, ""),
-		AccountType:          conv.PtrValOr(filter.AccountType, ""),
-		ExternalOrgID:        conv.PtrValOr(filter.ExternalOrgID, ""),
-		GroupBy:              groupBy,
-		UserIDs:              userKeys,
-		SortOrder:            params.sortOrder,
-		Cursor:               params.cursor,
-		Limit:                params.limit + 1,
-		MetricsDetail:        metricsDetailFromPayload(payload.Metrics),
-		CanonicalIdentityOrg: canonicalOrg,
+		ExcludedHookSources: excludedHookSources,
+		GramProjectID:       params.projectID,
+		TimeStart:           params.timeStart,
+		TimeEnd:             params.timeEnd,
+		GramDeploymentID:    deploymentID,
+		EventSource:         conv.PtrValOr(filter.EventSource, ""),
+		HookSource:          conv.PtrValOr(filter.HookSource, ""),
+		AccountType:         conv.PtrValOr(filter.AccountType, ""),
+		ExternalOrgID:       conv.PtrValOr(filter.ExternalOrgID, ""),
+		GroupBy:             groupBy,
+		UserIDs:             userKeys,
+		IdentityContains:    "",
+		SortOrder:           params.sortOrder,
+		Cursor:              params.cursor,
+		// The dashboard's cursor is the group key alone, so the repository
+		// re-derives its boundary timestamp. That lookup ignores this query's
+		// window and its Gram-hosted exclusion, which can repeat a person
+		// across pages — tracked separately rather than changed here, because
+		// sealing the boundary is a cursor format change for a shipped surface.
+		CursorLastSeenUnixNano: 0,
+		Limit:                  params.limit + 1,
+		MetricsDetail:          metricsDetailFromPayload(payload.Metrics),
+		CanonicalIdentityOrg:   canonicalOrg,
 	}
 	items, err := s.chRepo.SearchUsers(ctx, searchParams)
 	if err != nil {
@@ -1154,22 +1161,24 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 		userKeys := s.expandUserSearchKeys(egCtx, params.organizationID, filter.UserIds)
 		var fetchErr error
 		items, fetchErr = s.chRepo.SearchUsers(egCtx, repo.SearchUsersParams{
-			ExcludedHookSources:  billing.GramHostedHookSourceNames(),
-			GramProjectID:        params.projectID,
-			TimeStart:            params.timeStart,
-			TimeEnd:              params.timeEnd,
-			GramDeploymentID:     deploymentID,
-			EventSource:          conv.PtrValOr(filter.EventSource, ""),
-			HookSource:           conv.PtrValOr(filter.HookSource, ""),
-			AccountType:          conv.PtrValOr(filter.AccountType, ""),
-			ExternalOrgID:        conv.PtrValOr(filter.ExternalOrgID, ""),
-			GroupBy:              "user_id",
-			UserIDs:              userKeys,
-			SortOrder:            "desc",
-			Cursor:               "",
-			Limit:                10001,                  // Upper bound; orgs rarely have >10k users
-			MetricsDetail:        repo.MetricsDetailFull, // role aggregation sums cost/tokens across the full metric set
-			CanonicalIdentityOrg: canonicalOrg,
+			ExcludedHookSources:    billing.GramHostedHookSourceNames(),
+			GramProjectID:          params.projectID,
+			TimeStart:              params.timeStart,
+			TimeEnd:                params.timeEnd,
+			GramDeploymentID:       deploymentID,
+			EventSource:            conv.PtrValOr(filter.EventSource, ""),
+			HookSource:             conv.PtrValOr(filter.HookSource, ""),
+			AccountType:            conv.PtrValOr(filter.AccountType, ""),
+			ExternalOrgID:          conv.PtrValOr(filter.ExternalOrgID, ""),
+			GroupBy:                "user_id",
+			UserIDs:                userKeys,
+			IdentityContains:       "",
+			SortOrder:              "desc",
+			Cursor:                 "",
+			CursorLastSeenUnixNano: 0,                      // Unpaginated: there is no boundary to seal.
+			Limit:                  10001,                  // Upper bound; orgs rarely have >10k users
+			MetricsDetail:          repo.MetricsDetailFull, // role aggregation sums cost/tokens across the full metric set
+			CanonicalIdentityOrg:   canonicalOrg,
 		})
 		if fetchErr != nil {
 			return oops.E(oops.CodeUnexpected, fetchErr, "error searching users for role aggregation")
@@ -3822,19 +3831,25 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		MetaMCPMatchers:    metaMCPMatchers,
 		TargetTypes:        targetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerTargetIDs: nil,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMCPServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        userFilters,
-		HookSources:        payload.HookSources,
-		ClientKeys:         payload.ClientKeys,
-		AccountType:        conv.PtrValOr(payload.AccountType, ""),
-		Statuses:           statuses,
-		Query:              conv.PtrValOr(payload.Query, ""),
-		Filters:            toRepoAttributeFilters(payload.Filters),
-		SortOrder:          params.sortOrder,
-		CursorTimeUnixNano: cursorTimeUnixNano,
-		CursorID:           cursorID,
-		Limit:              params.limit + 1,
+		// Left literal: the Tool Logs page offers the user filter values this
+		// list produces (GetToolUsageFilterOptions), and those are unfolded, so
+		// folding only one side of that pair would make the page's own chips
+		// select rows it never listed.
+		CanonicalIdentityOrg: "",
+		HookSources:          payload.HookSources,
+		ClientKeys:           payload.ClientKeys,
+		AccountType:          conv.PtrValOr(payload.AccountType, ""),
+		Statuses:             statuses,
+		Query:                conv.PtrValOr(payload.Query, ""),
+		Filters:              toRepoAttributeFilters(payload.Filters),
+		SortOrder:            params.sortOrder,
+		CursorTimeUnixNano:   cursorTimeUnixNano,
+		CursorID:             cursorID,
+		Limit:                params.limit + 1,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage traces").LogError(ctx, logger)
