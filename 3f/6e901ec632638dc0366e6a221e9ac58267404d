@@ -8,6 +8,8 @@ server/internal/adminmcp/tool_write_feature_entitlements_test.go
   h_9630b74bdac540 1-177
 server/internal/adminmcp/tool_write_feature.go
   h_9630b74bdac540 28-29,44,159,276
+server/internal/adminmcp/runtime.go
+  h_9630b74bdac540 96
 ---
 {
   "schema_version": "authorship/3.0.0",
