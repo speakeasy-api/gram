@@ -505,7 +505,7 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 	mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
 	mux.Use(middleware.NewRecovery(logger))
 	mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), platformOrigins(platformHosts), chatSessions))
-	mcpSecurity, err := middleware.MCPSecurity(logger, append([]string{c.String("server-url"), c.String("site-url")}, platformOrigins(platformHosts)...))
+	mcpSecurity, err := middleware.MCPSecurity(logger, append([]string{c.String("server-url"), c.String("site-url")}, platformOrigins(platformHosts)...), mcp.ServesInstallPage)
 	if err != nil {
 		return nil, fmt.Errorf("configure mcp security middleware: %w", err)
 	}

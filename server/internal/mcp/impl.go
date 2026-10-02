@@ -782,24 +782,7 @@ func (s *Service) HandleOpenAIAppsChallenge(w http.ResponseWriter, r *http.Reque
 // SSE requests against toolset-backed servers, which never send
 // server-initiated messages — keeps the legacy 405.
 func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metadataService *mcpmetadata.Service) error {
-	var wantsHTML, wantsSSE bool
-	for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
-		mediatype, params, err := mime.ParseMediaType(mediaTypeFull)
-		if err != nil {
-			continue
-		}
-		// An explicit q=0 marks the media type as not acceptable (RFC 9110
-		// § 12.4.2) — never route toward a representation the client rejected.
-		if q, qErr := strconv.ParseFloat(params["q"], 64); qErr == nil && q == 0 {
-			continue
-		}
-		switch mediatype {
-		case "text/html", "application/xhtml+xml":
-			wantsHTML = true
-		case "text/event-stream":
-			wantsSSE = true
-		}
-	}
+	wantsHTML, wantsSSE := getServerAccept(r.Header.Get("Accept"))
 
 	if wantsHTML {
 		// Intentionally NOT gated by enforceCustomDomainLockdown: the
@@ -825,6 +808,39 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 	}
 
 	return oops.E(oops.CodeMethodNotAllowed, nil, "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication.")
+}
+
+// ServesInstallPage reports whether HandleGetServer answers r with the HTML
+// install page. HTML takes precedence over SSE there, so such a request can
+// never open the Streamable HTTP stream; MCPSecurity uses this to let browser
+// navigations from other sites reach the page.
+func ServesInstallPage(r *http.Request) bool {
+	if r.Method != http.MethodGet || !strings.HasPrefix(r.URL.Path, "/mcp/") {
+		return false
+	}
+	wantsHTML, _ := getServerAccept(r.Header.Get("Accept"))
+	return wantsHTML
+}
+
+func getServerAccept(accept string) (wantsHTML, wantsSSE bool) {
+	for mediaTypeFull := range strings.SplitSeq(accept, ",") {
+		mediatype, params, err := mime.ParseMediaType(mediaTypeFull)
+		if err != nil {
+			continue
+		}
+		// An explicit q=0 marks the media type as not acceptable (RFC 9110
+		// § 12.4.2) — never route toward a representation the client rejected.
+		if q, qErr := strconv.ParseFloat(params["q"], 64); qErr == nil && q == 0 {
+			continue
+		}
+		switch mediatype {
+		case "text/html", "application/xhtml+xml":
+			wantsHTML = true
+		case "text/event-stream":
+			wantsSSE = true
+		}
+	}
+	return wantsHTML, wantsSSE
 }
 
 // HandleDeleteServer handles DELETE requests to /mcp/{mcpSlug} — Streamable

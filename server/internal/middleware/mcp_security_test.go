@@ -23,6 +23,7 @@ func newMCPSecurity(t *testing.T) func(http.Handler) http.Handler {
 	mw, err := MCPSecurity(
 		testenv.NewLogger(t),
 		[]string{gramOrigin, "https://localhost:5173"},
+		nil,
 	)
 	require.NoError(t, err)
 	return mw
@@ -402,7 +403,7 @@ func TestMCPSecurity_CanonicalizesTrustedOrigins(t *testing.T) {
 		t.Run(configured, func(t *testing.T) {
 			t.Parallel()
 
-			mw, err := MCPSecurity(testenv.NewLogger(t), []string{configured})
+			mw, err := MCPSecurity(testenv.NewLogger(t), []string{configured}, nil)
 			require.NoError(t, err)
 
 			reached := false
@@ -427,7 +428,7 @@ func TestMCPSecurity_CanonicalizesTrustedOrigins(t *testing.T) {
 func TestMCPSecurity_RejectsInvalidTrustedOrigin(t *testing.T) {
 	t.Parallel()
 
-	_, err := MCPSecurity(testenv.NewLogger(t), []string{"app.getgram.ai"})
+	_, err := MCPSecurity(testenv.NewLogger(t), []string{"app.getgram.ai"}, nil)
 
 	require.Error(t, err, "an origin without a scheme must fail at construction, not silently at runtime")
 }
@@ -435,7 +436,7 @@ func TestMCPSecurity_RejectsInvalidTrustedOrigin(t *testing.T) {
 func TestMCPSecurity_SkipsEmptyTrustedOrigins(t *testing.T) {
 	t.Parallel()
 
-	_, err := MCPSecurity(testenv.NewLogger(t), []string{"", gramOrigin})
+	_, err := MCPSecurity(testenv.NewLogger(t), []string{"", gramOrigin}, nil)
 
 	require.NoError(t, err, "an unset server-url or site-url flag must not break startup")
 }
