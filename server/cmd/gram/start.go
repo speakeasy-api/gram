@@ -1827,6 +1827,7 @@ func newStartCommand() *cli.Command {
 				RiskAnalysisDescriber:    riskAnalysisDescriber,
 				RiskFindings:             riskFindings,
 				RiskFindingList:          riskFindings,
+				UserSearch:               telemetryrepo.New(chDB),
 				Telemetry:                telemetryrepo.New(chDB),
 				ToolUsage:                telemetryrepo.New(chDB),
 				ToolCallSearch:           telemetryrepo.New(chDB),

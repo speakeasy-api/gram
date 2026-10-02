@@ -135,6 +135,9 @@ type platformMCPConfig struct {
 	// withholds the drill-down tools while leaving the overview-first entry
 	// points serving.
 	TelemetryDrilldown platformmcp.DrilldownTelemetryReader
+	// UserSearch is the per-person read model behind search_users and
+	// get_user_metrics_summary. Nil keeps both visible as unavailable.
+	UserSearch platformmcp.UserSearchReader
 	// ToolCallSearch is the bounded Tool Logs summary list and attribute key
 	// inventory behind search_tool_calls and list_attribute_keys. Nil keeps
 	// both visible as unavailable.
@@ -448,6 +451,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithToolUsageBreakdown(config.ToolUsage).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB)).
+		WithUserSearch(config.UserSearch).
 		WithToolCallSearch(config.ToolCallSearch)
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
@@ -956,6 +960,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithToolUsageBreakdown(config.ToolUsage).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB)).
+		WithUserSearch(config.UserSearch).
 		WithToolCallSearch(config.ToolCallSearch)
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)

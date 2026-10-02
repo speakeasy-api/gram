@@ -408,6 +408,11 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	} else {
 		registerToolUsageSummaryTool(reg, diagnostics)
 	}
+	if !diagnostics.userSearchValid() {
+		registerUnavailableUserSearchTools(reg)
+	} else {
+		registerUserSearchTools(reg, diagnostics)
+	}
 	if !diagnostics.toolCallSearchValid() {
 		registerUnavailableToolCallSearchTools(reg)
 	} else {
