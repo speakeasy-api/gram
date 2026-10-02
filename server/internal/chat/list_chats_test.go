@@ -959,6 +959,15 @@ func TestListChats_SortByNumMessages(t *testing.T) {
 	require.Equal(t, twoMessages.String(), result.Chats[1].ID)
 	require.Equal(t, 2, result.Chats[1].NumMessages)
 
+	payload.Offset = 2
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 3, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, oneMessage.String(), result.Chats[0].ID)
+	require.Equal(t, 1, result.Chats[0].NumMessages)
+
+	payload.Offset = 0
 	payload.SortOrder = "asc"
 	result, err = ti.service.ListChats(ctx, payload)
 	require.NoError(t, err)
