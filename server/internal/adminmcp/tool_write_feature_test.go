@@ -46,7 +46,7 @@ func TestFeatureWriteApprovalAndExecution(t *testing.T) {
 
 	_, err = writer.prepare(ctx, PrepareFeatureInput{OrganizationID: f.orgA, Feature: "logs", Enabled: true})
 	require.Error(t, err, "retry keys are mandatory")
-	for _, unreviewed := range []string{"sso", "remote_session_auto_refresh_enforced", "session_portability", "platform_mcp", "skills", ""} {
+	for _, unreviewed := range []string{"custom_model_keys", "remote_session_auto_refresh_enforced", "session_portability", "platform_mcp", "skills", ""} {
 		_, err = writer.prepare(ctx, PrepareFeatureInput{OrganizationID: f.orgA, Feature: unreviewed, Enabled: true, RetryKey: "not-supported-" + unreviewed})
 		require.Error(t, err, "unreviewed feature %q stays disabled", unreviewed)
 	}
@@ -61,7 +61,7 @@ func TestFeatureWriteApprovalAndExecution(t *testing.T) {
 
 	// Sequential, not subtests: features share one organisation so each
 	// run can check that the other features are left alone.
-	writable := []productfeatures.Feature{productfeatures.FeatureLogs, productfeatures.FeatureConsentToolFiltering, productfeatures.FeatureRemoteSessionAutoRefresh, productfeatures.FeatureAutomaticRoleDistribution}
+	writable := []productfeatures.Feature{productfeatures.FeatureLogs, productfeatures.FeatureConsentToolFiltering, productfeatures.FeatureRemoteSessionAutoRefresh, productfeatures.FeatureAutomaticRoleDistribution, productfeatures.FeatureSSO, productfeatures.FeatureSCIM}
 	// New organizations already enable role distribution by default. Start both
 	// exact targets from the same off state for this approval lifecycle test.
 	for _, orgID := range []string{f.orgA, f.orgB} {
@@ -194,7 +194,7 @@ func TestFeatureWriteRejectsUnreviewedStoredFeature(t *testing.T) {
 	ctx := writeContext(t, f)
 	unreviewed := func(key string) NewProposal {
 		p := featureProposal(f.orgA, key, true)
-		p.Arguments = json.RawMessage(`{"feature":"sso","enabled":true}`)
+		p.Arguments = json.RawMessage(`{"feature":"custom_model_keys","enabled":true}`)
 		return p
 	}
 
@@ -210,7 +210,7 @@ func TestFeatureWriteRejectsUnreviewedStoredFeature(t *testing.T) {
 	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: q.ID.String()})
 	require.ErrorIs(t, err, ErrProposalInvalidated)
 	require.Equal(t, 0, countWriteEvents(t, f.db, q.ID, "executed"))
-	enabled, err := featurerepo.New(f.db).IsFeatureEnabled(t.Context(), featurerepo.IsFeatureEnabledParams{OrganizationID: f.orgA, FeatureName: "sso"})
+	enabled, err := featurerepo.New(f.db).IsFeatureEnabled(t.Context(), featurerepo.IsFeatureEnabledParams{OrganizationID: f.orgA, FeatureName: "custom_model_keys"})
 	require.NoError(t, err)
 	require.False(t, enabled)
 }
