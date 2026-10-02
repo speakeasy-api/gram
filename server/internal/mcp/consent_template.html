@@ -84,7 +84,7 @@
             class="grid grid-cols-2 border"
           >
             <label
-              class="has-[:checked]:bg-accent hover:bg-accent flex min-w-0 cursor-pointer items-start gap-2.5 px-4 py-3"
+              class="has-[:checked]:bg-accent hover:bg-accent flex min-w-0 cursor-pointer items-center gap-2.5 px-4 py-3"
             >
               <input
                 type="radio"
@@ -93,17 +93,17 @@
                 checked
                 data-agent-mode
                 data-subject-display="{{.SubjectDisplay}}"
-                class="checked:border-foreground focus-visible:outline-2 focus-visible:outline-offset-2 mt-0.5 size-3.5 shrink-0 cursor-pointer appearance-none rounded-full border checked:border-[4.5px]"
+                class="checked:border-foreground focus-visible:outline-2 focus-visible:outline-offset-2 size-3.5 shrink-0 cursor-pointer appearance-none rounded-full border checked:border-[4.5px]"
               />
-              <span class="flex min-w-0 flex-col gap-0.5">
-                <span class="text-sm font-medium">Myself</span>
+              <span class="flex min-w-0 items-center gap-2">
+                <span class="shrink-0 text-sm font-medium">Myself</span>
                 <span class="text-muted-foreground truncate font-mono text-xs"
                   >{{.SubjectDisplay}}</span
                 >
               </span>
             </label>
             <label
-              class="has-[:checked]:bg-accent hover:bg-accent flex min-w-0 cursor-pointer items-start gap-2.5 border-l px-4 py-3"
+              class="has-[:checked]:bg-accent hover:bg-accent flex min-w-0 cursor-pointer items-center gap-2.5 border-l px-4 py-3"
             >
               <input
                 type="radio"
@@ -111,7 +111,7 @@
                 value="agent"
                 disabled
                 data-agent-mode
-                class="checked:border-foreground focus-visible:outline-2 focus-visible:outline-offset-2 mt-0.5 size-3.5 shrink-0 cursor-pointer appearance-none rounded-full border checked:border-[4.5px]"
+                class="checked:border-foreground focus-visible:outline-2 focus-visible:outline-offset-2 size-3.5 shrink-0 cursor-pointer appearance-none rounded-full border checked:border-[4.5px]"
               />
               <span class="text-sm font-medium">Agent</span>
             </label>
