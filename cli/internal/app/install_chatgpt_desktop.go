@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/speakeasy-api/gram/cli/internal/app/logging"
 	"github.com/urfave/cli/v2"
@@ -23,6 +24,9 @@ func doInstallChatGPTDesktop(c *cli.Context) error {
 	info, err := resolveToolsetInfo(c)
 	if err != nil {
 		return fmt.Errorf("failed to resolve toolset info: %w", err)
+	}
+	if !strings.HasPrefix(info.URL, "https://") {
+		return fmt.Errorf("ChatGPT Desktop only connects to HTTPS MCP servers, got %q", info.URL)
 	}
 
 	logger.InfoContext(ctx, "prepared ChatGPT Desktop MCP install instructions",
