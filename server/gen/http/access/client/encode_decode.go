@@ -6140,6 +6140,246 @@ func DecodeListAudienceOptionsResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// BuildExplainResourceAccessRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "explainResourceAccess"
+// endpoint
+func (c *Client) BuildExplainResourceAccessRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ExplainResourceAccessAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "explainResourceAccess", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeExplainResourceAccessRequest returns an encoder for requests sent to
+// the access explainResourceAccess server.
+func EncodeExplainResourceAccessRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ExplainResourceAccessPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "explainResourceAccess", "*access.ExplainResourceAccessPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("resource_kind", p.ResourceKind)
+		values.Add("resource_id", p.ResourceID)
+		values.Add("user_id", p.UserID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeExplainResourceAccessResponse returns a decoder for responses returned
+// by the access explainResourceAccess endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeExplainResourceAccessResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeExplainResourceAccessResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ExplainResourceAccessResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+			}
+			err = ValidateExplainResourceAccessResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+			}
+			res := NewExplainResourceAccessResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ExplainResourceAccessUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+			}
+			err = ValidateExplainResourceAccessUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+			}
+			return nil, NewExplainResourceAccessUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ExplainResourceAccessForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+			}
+			err = ValidateExplainResourceAccessForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+			}
+			return nil, NewExplainResourceAccessForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ExplainResourceAccessBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+			}
+			err = ValidateExplainResourceAccessBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+			}
+			return nil, NewExplainResourceAccessBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ExplainResourceAccessNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+			}
+			err = ValidateExplainResourceAccessNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+			}
+			return nil, NewExplainResourceAccessNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ExplainResourceAccessConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+			}
+			err = ValidateExplainResourceAccessConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+			}
+			return nil, NewExplainResourceAccessConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ExplainResourceAccessUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+			}
+			err = ValidateExplainResourceAccessUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+			}
+			return nil, NewExplainResourceAccessUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ExplainResourceAccessInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+			}
+			err = ValidateExplainResourceAccessInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+			}
+			return nil, NewExplainResourceAccessInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ExplainResourceAccessInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+				}
+				err = ValidateExplainResourceAccessInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+				}
+				return nil, NewExplainResourceAccessInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ExplainResourceAccessUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+				}
+				err = ValidateExplainResourceAccessUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+				}
+				return nil, NewExplainResourceAccessUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "explainResourceAccess", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ExplainResourceAccessGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+			}
+			err = ValidateExplainResourceAccessGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+			}
+			return nil, NewExplainResourceAccessGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "explainResourceAccess", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildRequestAccessRequest instantiates a HTTP request object with method and
 // path set to call the "access" service "requestAccess" endpoint
 func (c *Client) BuildRequestAccessRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -7941,6 +8181,84 @@ func unmarshalAudienceOptionResponseBodyToAccessAudienceOption(v *AudienceOption
 		DisplayName:  *v.DisplayName,
 		Description:  v.Description,
 		MemberCount:  v.MemberCount,
+	}
+
+	return res
+}
+
+// unmarshalExplainedAccessLevelResponseBodyToAccessExplainedAccessLevel builds
+// a value of type *access.ExplainedAccessLevel from a value of type
+// *ExplainedAccessLevelResponseBody.
+func unmarshalExplainedAccessLevelResponseBodyToAccessExplainedAccessLevel(v *ExplainedAccessLevelResponseBody) *access.ExplainedAccessLevel {
+	res := &access.ExplainedAccessLevel{
+		Level:      *v.Level,
+		Allowed:    *v.Allowed,
+		ToolAccess: v.ToolAccess,
+	}
+	res.Rules = make([]*access.ExplainedAccessRule, len(v.Rules))
+	for i, val := range v.Rules {
+		if val == nil {
+			res.Rules[i] = nil
+			continue
+		}
+		res.Rules[i] = unmarshalExplainedAccessRuleResponseBodyToAccessExplainedAccessRule(val)
+	}
+
+	return res
+}
+
+// unmarshalExplainedAccessRuleResponseBodyToAccessExplainedAccessRule builds a
+// value of type *access.ExplainedAccessRule from a value of type
+// *ExplainedAccessRuleResponseBody.
+func unmarshalExplainedAccessRuleResponseBodyToAccessExplainedAccessRule(v *ExplainedAccessRuleResponseBody) *access.ExplainedAccessRule {
+	res := &access.ExplainedAccessRule{
+		PrincipalUrn:        *v.PrincipalUrn,
+		Kind:                *v.Kind,
+		DisplayName:         *v.DisplayName,
+		Level:               *v.Level,
+		AppliesTo:           *v.AppliesTo,
+		Effect:              *v.Effect,
+		Reason:              v.Reason,
+		ViaDirectoryMapping: *v.ViaDirectoryMapping,
+	}
+	if v.Tools != nil {
+		res.Tools = make([]string, len(v.Tools))
+		for i, val := range v.Tools {
+			res.Tools[i] = val
+		}
+	}
+	if v.Dispositions != nil {
+		res.Dispositions = make([]string, len(v.Dispositions))
+		for i, val := range v.Dispositions {
+			res.Dispositions[i] = val
+		}
+	}
+	if v.DirectorySources != nil {
+		res.DirectorySources = make([]*access.ExplainedAccessDirectorySource, len(v.DirectorySources))
+		for i, val := range v.DirectorySources {
+			if val == nil {
+				res.DirectorySources[i] = nil
+				continue
+			}
+			res.DirectorySources[i] = unmarshalExplainedAccessDirectorySourceResponseBodyToAccessExplainedAccessDirectorySource(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalExplainedAccessDirectorySourceResponseBodyToAccessExplainedAccessDirectorySource
+// builds a value of type *access.ExplainedAccessDirectorySource from a value
+// of type *ExplainedAccessDirectorySourceResponseBody.
+func unmarshalExplainedAccessDirectorySourceResponseBodyToAccessExplainedAccessDirectorySource(v *ExplainedAccessDirectorySourceResponseBody) *access.ExplainedAccessDirectorySource {
+	if v == nil {
+		return nil
+	}
+	res := &access.ExplainedAccessDirectorySource{
+		SourceKind:         *v.SourceKind,
+		DirectoryGroupName: v.DirectoryGroupName,
+		AttributeKey:       v.AttributeKey,
+		AttributeValue:     v.AttributeValue,
 	}
 
 	return res

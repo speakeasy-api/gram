@@ -6,31 +6,35 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
-export type ListResourceAudienceSecurity = {
+export type ExplainResourceAccessSecurity = {
   apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
 /**
- * The kind of resource to describe.
+ * The kind of resource to explain.
  */
-export const QueryParamResourceKind = {
+export const ResourceKind = {
   Mcp: "mcp",
 } as const;
 /**
- * The kind of resource to describe.
+ * The kind of resource to explain.
  */
-export type QueryParamResourceKind = ClosedEnum<typeof QueryParamResourceKind>;
+export type ResourceKind = ClosedEnum<typeof ResourceKind>;
 
-export type ListResourceAudienceRequest = {
+export type ExplainResourceAccessRequest = {
   /**
-   * The kind of resource to describe.
+   * The kind of resource to explain.
    */
-  resourceKind: QueryParamResourceKind;
+  resourceKind: ResourceKind;
   /**
-   * The resource to describe.
+   * The resource to explain.
    */
   resourceId: string;
+  /**
+   * The organization member whose access to explain.
+   */
+  userId: string;
   /**
    * API Key header
    */
@@ -42,15 +46,15 @@ export type ListResourceAudienceRequest = {
 };
 
 /** @internal */
-export type ListResourceAudienceSecurity$Outbound = {
+export type ExplainResourceAccessSecurity$Outbound = {
   "apikey_header_Gram-Key"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
-export const ListResourceAudienceSecurity$outboundSchema: z.ZodMiniType<
-  ListResourceAudienceSecurity$Outbound,
-  ListResourceAudienceSecurity
+export const ExplainResourceAccessSecurity$outboundSchema: z.ZodMiniType<
+  ExplainResourceAccessSecurity$Outbound,
+  ExplainResourceAccessSecurity
 > = z.pipe(
   z.object({
     apikeyHeaderGramKey: z.optional(z.string()),
@@ -64,37 +68,38 @@ export const ListResourceAudienceSecurity$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function listResourceAudienceSecurityToJSON(
-  listResourceAudienceSecurity: ListResourceAudienceSecurity,
+export function explainResourceAccessSecurityToJSON(
+  explainResourceAccessSecurity: ExplainResourceAccessSecurity,
 ): string {
   return JSON.stringify(
-    ListResourceAudienceSecurity$outboundSchema.parse(
-      listResourceAudienceSecurity,
+    ExplainResourceAccessSecurity$outboundSchema.parse(
+      explainResourceAccessSecurity,
     ),
   );
 }
 
 /** @internal */
-export const QueryParamResourceKind$outboundSchema: z.ZodMiniEnum<
-  typeof QueryParamResourceKind
-> = z.enum(QueryParamResourceKind);
+export const ResourceKind$outboundSchema: z.ZodMiniEnum<typeof ResourceKind> = z
+  .enum(ResourceKind);
 
 /** @internal */
-export type ListResourceAudienceRequest$Outbound = {
+export type ExplainResourceAccessRequest$Outbound = {
   resource_kind: string;
   resource_id: string;
+  user_id: string;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
 
 /** @internal */
-export const ListResourceAudienceRequest$outboundSchema: z.ZodMiniType<
-  ListResourceAudienceRequest$Outbound,
-  ListResourceAudienceRequest
+export const ExplainResourceAccessRequest$outboundSchema: z.ZodMiniType<
+  ExplainResourceAccessRequest$Outbound,
+  ExplainResourceAccessRequest
 > = z.pipe(
   z.object({
-    resourceKind: QueryParamResourceKind$outboundSchema,
+    resourceKind: ResourceKind$outboundSchema,
     resourceId: z.string(),
+    userId: z.string(),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),
@@ -102,18 +107,19 @@ export const ListResourceAudienceRequest$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       resourceKind: "resource_kind",
       resourceId: "resource_id",
+      userId: "user_id",
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
     });
   }),
 );
 
-export function listResourceAudienceRequestToJSON(
-  listResourceAudienceRequest: ListResourceAudienceRequest,
+export function explainResourceAccessRequestToJSON(
+  explainResourceAccessRequest: ExplainResourceAccessRequest,
 ): string {
   return JSON.stringify(
-    ListResourceAudienceRequest$outboundSchema.parse(
-      listResourceAudienceRequest,
+    ExplainResourceAccessRequest$outboundSchema.parse(
+      explainResourceAccessRequest,
     ),
   );
 }

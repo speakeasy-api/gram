@@ -500,6 +500,10 @@ BEGIN
   WHERE organization_id = demo_org
     AND scope = 'risk_policy:bypass'
     AND selectors ->> 'resource_id' = policy_sm::text;
+  DELETE FROM principal_grants
+  WHERE organization_id = demo_org
+    AND id IN (demo.det_uuid('gram-demo-github-direct-grant'),
+               demo.det_uuid('gram-demo-github-wildcard-grant'));
   -- Workload trust is organization-scoped: an organization-tier issuer or
   -- admission would outlive the projects cascade, so all three tables are
   -- cleared explicitly, children first.
@@ -663,6 +667,11 @@ BEGIN
        ARRAY['org:read', 'project:read', 'environment:read',
              'environment:write', 'mcp:read'],
        ARRAY['user_demo_lucas'],
+       ARRAY[]::text[]),
+      ('contractors', 'Contractors',
+       'Outside contractors. Holds no access of its own; it blocks GitHub.',
+       ARRAY[]::text[],
+       ARRAY['user_demo_priya'],
        ARRAY[]::text[]),
       ('temporary-escalation', 'Temporary Escalation',
        'Elevated access granted for a fixed period and reviewed each quarter.',
@@ -858,6 +867,15 @@ BEGIN
          'role:organization:' || r.id
   FROM organization_roles r
   WHERE r.organization_id = demo_org AND r.workos_slug = 'analyst';
+
+  -- Contractors arrive through the directory, so Check Access on GitHub can
+  -- name the mapping that put a person in the role that blocks them.
+  INSERT INTO directory_role_mappings
+    (organization_id, source_kind, attribute_key, attribute_value, role_urn)
+  SELECT demo_org, 'attribute', 'employee_type', 'contractor',
+         'role:organization:' || r.id
+  FROM organization_roles r
+  WHERE r.organization_id = demo_org AND r.workos_slug = 'contractors';
 
   -- AI provider accounts (the identity pages' Accounts column and panel):
   -- everyone has a team account under one shared fake provider org, and three
@@ -1413,6 +1431,30 @@ BEGIN
     (demo.det_uuid('gram-demo-mcpserver-github'), proj_a, 'GitHub', 'github',
      NULL, demo.det_uuid('gram-demo-remotemcp-github'),
      demo.det_uuid('gram-demo-issuer-workforce'), 'private');
+
+  -- Check Access scenarios on GitHub. Contractors blocks connecting, which
+  -- wins over every other role's grant: Mateo (a contractor through the
+  -- directory) is blocked even though Engineer reaches every server, and his
+  -- own grant covering every server cannot outrank the block. Priya holds the
+  -- role too, but a grant made to her by name for GitHub outranks it. The
+  -- user grants are cleared by id at the top of this function.
+  INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
+  SELECT demo.det_uuid('gram-demo-github-contractors-block'), demo_org,
+         'role:organization:' || r.id, 'mcp:blocked_connect',
+         jsonb_build_object('resource_kind', 'mcp',
+           'resource_id', demo.det_uuid('gram-demo-mcpserver-github')::text)
+  FROM organization_roles r
+  WHERE r.organization_id = demo_org AND r.workos_slug = 'contractors';
+
+  INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
+  VALUES
+    (demo.det_uuid('gram-demo-github-direct-grant'), demo_org,
+     'user:' || demo_user_ids[3], 'mcp:connect',
+     jsonb_build_object('resource_kind', 'mcp',
+       'resource_id', demo.det_uuid('gram-demo-mcpserver-github')::text)),
+    (demo.det_uuid('gram-demo-github-wildcard-grant'), demo_org,
+     'user:' || demo_user_ids[4], 'mcp:connect',
+     jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*'));
 
   -- Leave instructions NULL so Settings starts with the editable built-in
   -- instructions, matching the gateway's initialize and server/discover text.
@@ -3546,8 +3588,17 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
 
   SELECT count(*) INTO stray FROM directory_role_mappings
   WHERE organization_id = demo_org AND deleted IS FALSE;
-  IF stray <> 2 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 2 directory role mappings, found %', stray;
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 directory role mappings, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM principal_grants
+  WHERE organization_id = demo_org
+    AND id IN (demo.det_uuid('gram-demo-github-contractors-block'),
+               demo.det_uuid('gram-demo-github-direct-grant'),
+               demo.det_uuid('gram-demo-github-wildcard-grant'));
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 GitHub Check Access grants, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM slack_identity_mappings WHERE organization_id = demo_org AND revoked_at IS NULL;

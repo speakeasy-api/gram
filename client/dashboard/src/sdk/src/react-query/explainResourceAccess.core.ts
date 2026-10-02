@@ -8,27 +8,27 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { accessListResourceAudience } from "../funcs/accessListResourceAudience.js";
+import { accessExplainResourceAccess } from "../funcs/accessExplainResourceAccess.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ResourceAudienceResult } from "../models/components/resourceaudienceresult.js";
+import { ExplainResourceAccessResult } from "../models/components/explainresourceaccessresult.js";
 import {
-  ListResourceAudienceRequest,
-  ListResourceAudienceSecurity,
-  QueryParamResourceKind,
-} from "../models/operations/listresourceaudience.js";
+  ExplainResourceAccessRequest,
+  ExplainResourceAccessSecurity,
+  ResourceKind,
+} from "../models/operations/explainresourceaccess.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ResourceAudienceQueryData = ResourceAudienceResult;
+export type ExplainResourceAccessQueryData = ExplainResourceAccessResult;
 
-export function prefetchResourceAudience(
+export function prefetchExplainResourceAccess(
   queryClient: QueryClient,
   client$: GramCore,
-  request: ListResourceAudienceRequest,
-  security?: ListResourceAudienceSecurity | undefined,
+  request: ExplainResourceAccessRequest,
+  security?: ExplainResourceAccessSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildResourceAudienceQuery(
+    ...buildExplainResourceAccessQuery(
       client$,
       request,
       security,
@@ -37,27 +37,28 @@ export function prefetchResourceAudience(
   });
 }
 
-export function buildResourceAudienceQuery(
+export function buildExplainResourceAccessQuery(
   client$: GramCore,
-  request: ListResourceAudienceRequest,
-  security?: ListResourceAudienceSecurity | undefined,
+  request: ExplainResourceAccessRequest,
+  security?: ExplainResourceAccessSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<ResourceAudienceQueryData>;
+  ) => Promise<ExplainResourceAccessQueryData>;
 } {
   return {
-    queryKey: queryKeyResourceAudience({
+    queryKey: queryKeyExplainResourceAccess({
       resourceKind: request.resourceKind,
       resourceId: request.resourceId,
+      userId: request.userId,
       gramKey: request.gramKey,
       gramSession: request.gramSession,
     }),
-    queryFn: async function resourceAudienceQueryFn(
+    queryFn: async function explainResourceAccessQueryFn(
       ctx,
-    ): Promise<ResourceAudienceQueryData> {
+    ): Promise<ExplainResourceAccessQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -69,7 +70,7 @@ export function buildResourceAudienceQuery(
         signal: sig,
       };
 
-      return unwrapAsync(accessListResourceAudience(
+      return unwrapAsync(accessExplainResourceAccess(
         client$,
         request,
         security,
@@ -79,13 +80,14 @@ export function buildResourceAudienceQuery(
   };
 }
 
-export function queryKeyResourceAudience(
+export function queryKeyExplainResourceAccess(
   parameters: {
-    resourceKind: QueryParamResourceKind;
+    resourceKind: ResourceKind;
     resourceId: string;
+    userId: string;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "access", "listResourceAudience", parameters];
+  return ["@gram/client", "access", "explainResourceAccess", parameters];
 }
