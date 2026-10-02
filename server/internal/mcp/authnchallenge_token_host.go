@@ -88,7 +88,7 @@ func urlOrigin(raw string) string {
 	}
 	scheme := strings.ToLower(u.Scheme)
 	host := strings.ToLower(u.Hostname())
-	if port := u.Port(); port != "" && !(scheme == "https" && port == "443") && !(scheme == "http" && port == "80") {
+	if port := u.Port(); port != "" && (scheme != "https" || port != "443") && (scheme != "http" || port != "80") {
 		return scheme + "://" + net.JoinHostPort(host, port)
 	}
 	if strings.Contains(host, ":") {
