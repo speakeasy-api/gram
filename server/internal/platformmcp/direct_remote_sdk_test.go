@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -73,6 +74,9 @@ func directRemoteProtocolFixture(t *testing.T, mode string) (*directRemoteHTTPIn
 			return
 		}
 		if r.Method == http.MethodDelete {
+			if r.Header.Get("Mcp-Session-Id") != "fixture-session" {
+				t.Error("cleanup must identify the established session")
+			}
 			mu.Lock()
 			methods = append(methods, "DELETE")
 			mu.Unlock()
@@ -221,19 +225,31 @@ func TestDirectRemoteSDKRejectsUnsafeRedirectWithoutFallback(t *testing.T) {
 
 func TestDirectRemoteSDKBodyReadDeadline(t *testing.T) {
 	t.Parallel()
-	inspector := directRemoteHTTPFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		if err := http.NewResponseController(w).Flush(); err != nil {
-			t.Error(err)
-			return
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		defer cancel()
+		var requests atomic.Int32
+		inspector := &directRemoteHTTPInspector{
+			inspector: NewGuardianDirectRemoteInspector(directRemoteTestPolicy(t)),
+			transport: directRemoteTestRoundTripper(func(r *http.Request) (*http.Response, error) {
+				requests.Add(1)
+				reader, writer := io.Pipe()
+				context.AfterFunc(r.Context(), func() { _ = writer.CloseWithError(r.Context().Err()) })
+				response := directRemoteTestResponse(r, http.StatusOK, "")
+				response.Body = reader
+				return response, nil
+			}),
 		}
-		<-r.Context().Done()
-	}))
-	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
-	defer cancel()
-	_, err := inspector.Inspect(ctx, "https://remote.example.test/mcp")
-	require.Equal(t, SetupCategoryTimeout, setupCategoryFromError(err))
+		finished := make(chan error, 1)
+		go func() { _, err := inspector.Inspect(ctx, "https://remote.example.test/mcp"); finished <- err }()
+		// All goroutines are blocked: the response is available and its body read
+		// is waiting on the pipe. Advance fake time only after proving that state.
+		synctest.Wait()
+		require.Equal(t, int32(1), requests.Load())
+		require.NoError(t, ctx.Err())
+		<-time.After(time.Second)
+		require.Equal(t, SetupCategoryTimeout, setupCategoryFromError(<-finished))
+	})
 }
 
 func TestDirectRemoteTransportAggregateByteBudget(t *testing.T) {
@@ -502,15 +518,21 @@ func TestDirectRemoteSDKSuccessfulFallbackDiscardsDiscoveryAuthentication(t *tes
 
 func TestDirectRemoteSDKRejectsNonJSONBodyWithoutFallback(t *testing.T) {
 	t.Parallel()
-	var requests atomic.Int32
-	inspector := directRemoteHTTPFixture(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		requests.Add(1)
-		w.Header().Set("Content-Type", "text/plain")
-		_, _ = io.WriteString(w, `{}`)
-	}))
-	_, err := inspector.Inspect(t.Context(), "https://remote.example.test/mcp")
-	require.Equal(t, SetupCategoryInvalidMCPResponse, setupCategoryFromError(err))
-	require.Equal(t, int32(1), requests.Load())
+	for _, status := range []int{http.StatusOK, http.StatusAccepted} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			t.Parallel()
+			var requests atomic.Int32
+			inspector := directRemoteHTTPFixture(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requests.Add(1)
+				w.Header().Set("Content-Type", "text/plain")
+				w.WriteHeader(status)
+				_, _ = io.WriteString(w, `{}`)
+			}))
+			_, err := inspector.Inspect(t.Context(), "https://remote.example.test/mcp")
+			require.Equal(t, SetupCategoryInvalidMCPResponse, setupCategoryFromError(err))
+			require.Equal(t, int32(1), requests.Load())
+		})
+	}
 }
 
 func TestDirectRemoteSDKRejectsEmptyCallResponses(t *testing.T) {

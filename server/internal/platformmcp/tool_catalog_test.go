@@ -107,10 +107,22 @@ func catalogInspectionDescriptor(t *testing.T, registrar *Registrar) Descriptor 
 
 func TestCandidateInspectionDirectRemoteProtocols(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []string{"modern", "legacy", "stateful", "auth401", "auth403", "tools-auth", "discover-auth", "stateful-auth-cleanup"} {
-		t.Run(mode, func(t *testing.T) {
+	for _, tc := range []struct {
+		mode           string
+		authentication string
+	}{
+		{"modern", "anonymous"},
+		{"legacy", "anonymous"},
+		{"stateful", "anonymous"},
+		{"auth401", "authentication_required"},
+		{"auth403", "authentication_required"},
+		{"tools-auth", "authentication_required"},
+		{"discover-auth", "authentication_required"},
+		{"stateful-auth-cleanup", "authentication_required"},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
 			t.Parallel()
-			inspector, _ := directRemoteProtocolFixture(t, mode)
+			inspector, _ := directRemoteProtocolFixture(t, tc.mode)
 			registrar := newRegistrar(newTestMCPServer())
 			registerCandidateInspectionTool(registrar, nil, inspector, &testRegistrationGate{enabled: true}, allowBudget())
 			result, err := catalogInspectionDescriptor(t, registrar).Invoke(ContextWithPrincipal(t.Context(), registrationServicePrincipal()), json.RawMessage(`{"remote_url":"https://remote.example.test/mcp"}`))
@@ -118,13 +130,12 @@ func TestCandidateInspectionDirectRemoteProtocols(t *testing.T) {
 			inspection, ok := result.(CandidateInspection)
 			require.True(t, ok)
 			require.Equal(t, "https://remote.example.test/mcp", inspection.CanonicalURL)
-			if mode == "auth401" || mode == "auth403" || mode == "tools-auth" || mode == "discover-auth" || mode == "stateful-auth-cleanup" {
-				require.Equal(t, "authentication_required", inspection.Authentication)
+			require.Equal(t, tc.authentication, inspection.Authentication)
+			if tc.authentication == "authentication_required" {
 				require.Equal(t, "available_dcr", inspection.OAuthDiscovery)
 				require.True(t, inspection.RequiresDashboardSetup)
 			} else {
 				require.Equal(t, []string{"example"}, inspection.ToolNames)
-				require.Equal(t, "anonymous", inspection.Authentication)
 			}
 		})
 	}

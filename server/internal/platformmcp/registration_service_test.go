@@ -702,10 +702,22 @@ func (s *recordingRegistrationStore) FindReceipt(context.Context, Principal, Res
 
 func TestRegistrationServiceDirectRemoteProtocols(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []string{"modern", "legacy", "stateful", "auth401", "auth403", "tools-auth", "discover-auth", "stateful-auth-cleanup"} {
-		t.Run(mode, func(t *testing.T) {
+	for _, tc := range []struct {
+		mode       string
+		nextAction string
+	}{
+		{"modern", "ready"},
+		{"legacy", "ready"},
+		{"stateful", "ready"},
+		{"auth401", "secure_dashboard_setup_required"},
+		{"auth403", "secure_dashboard_setup_required"},
+		{"tools-auth", "secure_dashboard_setup_required"},
+		{"discover-auth", "secure_dashboard_setup_required"},
+		{"stateful-auth-cleanup", "secure_dashboard_setup_required"},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
 			t.Parallel()
-			inspector, _ := directRemoteProtocolFixture(t, mode)
+			inspector, _ := directRemoteProtocolFixture(t, tc.mode)
 			registrationID := uuid.New()
 			store := &recordingRegistrationStore{
 				project:   ResolvedProject{ID: uuid.New(), Slug: "project"},
@@ -720,11 +732,11 @@ func TestRegistrationServiceDirectRemoteProtocols(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, registrationID.String(), result.Registration)
 			require.Equal(t, "https://remote.example.test/mcp", store.configuration.remoteURL)
-			if mode == "auth401" || mode == "auth403" || mode == "tools-auth" || mode == "discover-auth" || mode == "stateful-auth-cleanup" {
-				require.Equal(t, "secure_dashboard_setup_required", result.NextAction)
+			require.Equal(t, tc.nextAction, result.NextAction)
+			if tc.nextAction == "secure_dashboard_setup_required" {
 				require.NotEmpty(t, result.DashboardSetupURL)
 			} else {
-				require.Equal(t, "ready", result.NextAction)
+				require.Empty(t, result.DashboardSetupURL)
 			}
 		})
 	}

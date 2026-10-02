@@ -323,7 +323,7 @@ func (rt *directRemoteRoundTripper) roundTrip(req *http.Request) (*http.Response
 		return nil, directRemoteTransportError(rt.ctx, err)
 	}
 	// Notification acknowledgements may be an empty 200 or 204 instead of 202.
-	if successfulMCP && resp.StatusCode != http.StatusAccepted && len(payload) > 0 && mediaType != "application/json" {
+	if successfulMCP && len(payload) > 0 && mediaType != "application/json" {
 		return nil, setupFailure(SetupCategoryInvalidMCPResponse, ErrDirectRemoteRejected)
 	}
 	resp.Body = io.NopCloser(bytes.NewReader(payload))
