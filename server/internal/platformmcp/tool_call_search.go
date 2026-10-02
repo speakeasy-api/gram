@@ -144,7 +144,7 @@ type ToolCallAttributeFilter struct {
 // optional; an empty search lists the newest calls in the window.
 type SearchToolCallsInput struct {
 	ProjectID        string                    `json:"project_id" jsonschema:"project ID to search"`
-	Window           string                    `json:"window,omitempty" jsonschema:"observation window: 1h, 24h (default), 7d, or 30d"`
+	Window           string                    `json:"window,omitempty" jsonschema:"observation window: 1h, 24h (default), 7d, or 30d. When a cursor is supplied the interval comes from the cursor and this must still name the window the cursor was minted for"`
 	ToolNameContains string                    `json:"tool_name_contains,omitempty" jsonschema:"case-sensitive text the tool name must contain"`
 	ErrorContains    string                    `json:"error_contains,omitempty" jsonschema:"case-sensitive text the recorded error message must contain; only calls that failed with an error message can match"`
 	Outcome          string                    `json:"outcome,omitempty" jsonschema:"optional outcome filter: success, failure, blocked, or pending"`
@@ -152,7 +152,7 @@ type SearchToolCallsInput struct {
 	UserReference    string                    `json:"user_reference,omitempty" jsonschema:"optional person reference from a previous search_tool_calls row in this project, or from list_mcp_usage_users when the same mcp_id and window are supplied"`
 	Attributes       []ToolCallAttributeFilter `json:"attributes,omitempty" jsonschema:"optional attribute filters, at most 5, combined with AND; discover keys with list_attribute_keys. A system key is refused when it identifies a person, in which case narrow to one person with user_reference instead, and when it carries tool content or an HTTP header. An @-prefixed custom key is the project's own integration data and allows every operator, whatever it is named"`
 	Limit            int                       `json:"limit,omitempty" jsonschema:"maximum calls to return; defaults to 20 and is capped at 50"`
-	Cursor           string                    `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous search_tool_calls result; it pins the observation window to the interval the first page read, so paging a relative window does not drift as time passes"`
+	Cursor           string                    `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous search_tool_calls result; it pins the observation window to the interval the first page read, so paging a relative window does not drift as time passes. One search walks at most 500 calls in total, so a missing next cursor can mean that budget ran out rather than that nothing else matches"`
 }
 
 // ToolCallMatch is one tool call reduced to what an investigation needs. It
@@ -173,10 +173,17 @@ type ToolCallMatch struct {
 type SearchToolCallsOutput struct {
 	ProjectID string `json:"project_id"`
 	// MCPID echoes the server the search was narrowed to, when it was.
-	MCPID      string          `json:"mcp_id,omitempty"`
-	Envelope   DataEnvelope    `json:"data"`
-	Calls      []ToolCallMatch `json:"calls"`
-	NextCursor string          `json:"next_cursor,omitempty"`
+	MCPID    string       `json:"mcp_id,omitempty"`
+	Envelope DataEnvelope `json:"data"`
+	// Calls can be shorter than the requested limit, or empty, while more calls
+	// matched: the response cap trims a page to what fits and the traversal
+	// budget ends the walk outright. An empty page is therefore not the same
+	// claim as the envelope's no_observations, which alone says the window
+	// produced nothing at all.
+	Calls []ToolCallMatch `json:"calls"`
+	// NextCursor is absent both at the genuine end of the results and when the
+	// traversal budget is spent, so its absence does not prove exhaustion.
+	NextCursor string `json:"next_cursor,omitempty"`
 	// AttributionUnavailable states that the configured MCP named by mcp_id
 	// has no identity its telemetry is reliably recorded under, so nothing
 	// could be attributed to it. It is reported beside the empty page rather
@@ -879,15 +886,21 @@ type ListAttributeKeysOutput struct {
 	ProjectID string       `json:"project_id"`
 	Envelope  DataEnvelope `json:"data"`
 	// CustomKeys are the @-prefixed attributes the project's own integrations
-	// attached; every operator is allowed on them.
+	// attached; every operator is allowed on them. Capped at
+	// maxAttributeKeysPerKind, so this is not necessarily every custom key the
+	// window carried — see Truncated.
 	CustomKeys []string `json:"custom_keys"`
 	// SystemKeys are the platform-recorded attributes that may be filtered on.
 	// Keys that carry tool content, keys that carry an HTTP header, and keys
 	// that identify a person are withheld here because a search refuses them:
 	// one person's calls are narrowed to with user_reference, which records the
-	// attribution read.
+	// attribution read. Capped the same way as CustomKeys.
 	SystemKeys []string `json:"system_keys"`
-	Truncated  bool     `json:"truncated"`
+	// Truncated states that at least one kind held more than
+	// maxAttributeKeysPerKind keys and was cut. It is the only signal that a
+	// key's absence from the lists above does not mean the project never
+	// recorded it, so the tool description points a caller at it.
+	Truncated bool `json:"truncated"`
 }
 
 func (s *DiagnosticsService) ListAttributeKeys(ctx context.Context, principal Principal, input ListAttributeKeysInput) (ListAttributeKeysOutput, error) {

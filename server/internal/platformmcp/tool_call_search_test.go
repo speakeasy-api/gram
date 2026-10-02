@@ -564,6 +564,37 @@ func TestListAttributeKeys_SplitsCustomFromFilterableSystemKeys(t *testing.T) {
 	require.ErrorIs(t, err, ErrToolCallSearchInvalid)
 }
 
+// TestListAttributeKeys_CapsEachKindAndReportsTheCut pins the bound the tool
+// description cites. Each kind is cut to maxAttributeKeysPerKind and truncated
+// says so, which is the only signal that a key's absence from the inventory
+// does not mean the project never recorded it — the inference an agent would
+// otherwise draw from a list it believes is complete.
+func TestListAttributeKeys_CapsEachKindAndReportsTheCut(t *testing.T) {
+	t.Parallel()
+
+	keys := make([]string, 0, 2*(maxAttributeKeysPerKind+1))
+	for i := range maxAttributeKeysPerKind + 1 {
+		keys = append(keys, fmt.Sprintf("app.custom_%04d", i), fmt.Sprintf("gram.system_%04d", i))
+	}
+	reader := &recordingToolCallSearchReader{keys: keys}
+	service := newToolCallSearchService(t, reader, &recordingDrilldownAuditor{})
+
+	output, err := service.ListAttributeKeys(t.Context(), testPrincipal(), ListAttributeKeysInput{ProjectID: toolCallSearchTestProject})
+	require.NoError(t, err)
+	require.Len(t, output.CustomKeys, maxAttributeKeysPerKind)
+	require.Len(t, output.SystemKeys, maxAttributeKeysPerKind)
+	require.True(t, output.Truncated, "a cut inventory must say so, or absence reads as non-existence")
+
+	// One key under the cap in each kind: nothing is cut and nothing is claimed
+	// to be, so truncated stays a positive signal rather than always-on noise.
+	reader.keys = keys[:2*maxAttributeKeysPerKind]
+	output, err = service.ListAttributeKeys(t.Context(), testPrincipal(), ListAttributeKeysInput{ProjectID: toolCallSearchTestProject})
+	require.NoError(t, err)
+	require.Len(t, output.CustomKeys, maxAttributeKeysPerKind)
+	require.Len(t, output.SystemKeys, maxAttributeKeysPerKind)
+	require.False(t, output.Truncated)
+}
+
 // TestSearchToolCalls_RefusesIdentityAttributesBeforeAnyRead pins that
 // user_reference is the only way to narrow to one person, because it is the only
 // way that records the attribution read. An identity attribute would reach the
