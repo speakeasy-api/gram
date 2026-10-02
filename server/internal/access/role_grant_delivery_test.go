@@ -3,15 +3,15 @@ package access
 import (
 	"context"
 	"encoding/json"
-	publicationv1 "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1"
-	"google.golang.org/protobuf/proto"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
+	publicationv1 "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1"
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	plugingen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/authz"
