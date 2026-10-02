@@ -128,6 +128,7 @@ type AdminMcpWriteProposal struct {
 
 type Agent struct {
 	ID                          uuid.UUID
+	IdentityEpoch               int64
 	OrganizationID              string
 	OwnerUserID                 string
 	ProjectID                   uuid.NullUUID
@@ -262,20 +263,43 @@ type Asset struct {
 }
 
 type Assistant struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	OrganizationID  string
-	CreatedByUserID pgtype.Text
-	Name            string
-	Model           string
-	Instructions    string
-	WarmTtlSeconds  int64
-	MaxConcurrency  int64
-	Status          string
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	ID                uuid.UUID
+	CreateRequestKey  pgtype.Text
+	CreateRequestHash pgtype.Text
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	CreatedByUserID   pgtype.Text
+	Name              string
+	Model             string
+	Instructions      string
+	WarmTtlSeconds    int64
+	MaxConcurrency    int64
+	Status            string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
+}
+
+type AssistantAgentBinding struct {
+	ID                         uuid.UUID
+	OrganizationID             string
+	ProjectID                  uuid.UUID
+	ProjectRefOrganizationID   pgtype.Text
+	ProjectRefID               uuid.NullUUID
+	OriginalAssistantID        uuid.UUID
+	AssistantRefOrganizationID pgtype.Text
+	AssistantRefProjectID      uuid.NullUUID
+	AssistantID                uuid.NullUUID
+	OriginalAgentID            uuid.UUID
+	AgentRefOrganizationID     pgtype.Text
+	AgentRefProjectID          uuid.NullUUID
+	AgentID                    uuid.NullUUID
+	Generation                 int64
+	CreatedAt                  pgtype.Timestamptz
+	UpdatedAt                  pgtype.Timestamptz
+	DeletedAt                  pgtype.Timestamptz
+	Deleted                    bool
 }
 
 type AssistantDashboardMessage struct {
@@ -3635,6 +3659,34 @@ type TriggerThreadRoute struct {
 	Deleted              bool
 }
 
+type TriggerWorkloadBinding struct {
+	ID                                uuid.UUID
+	OrganizationID                    string
+	ProjectID                         uuid.UUID
+	ProjectRefOrganizationID          pgtype.Text
+	ProjectRefID                      uuid.NullUUID
+	OriginalTriggerID                 uuid.UUID
+	TriggerRefOrganizationID          pgtype.Text
+	TriggerRefProjectID               uuid.NullUUID
+	TriggerID                         uuid.NullUUID
+	OriginalAssistantBindingID        uuid.UUID
+	AssistantBindingRefOrganizationID pgtype.Text
+	AssistantBindingRefProjectID      uuid.NullUUID
+	AssistantBindingID                uuid.NullUUID
+	AssistantBindingGeneration        int64
+	OriginalWorkloadIssuerID          uuid.UUID
+	WorkloadIssuerRefOrganizationID   pgtype.Text
+	WorkloadIssuerRefProjectID        uuid.NullUUID
+	WorkloadIssuerID                  uuid.NullUUID
+	WorkloadIssuerRefKind             pgtype.Text
+	Subject                           string
+	Generation                        int64
+	CreatedAt                         pgtype.Timestamptz
+	UpdatedAt                         pgtype.Timestamptz
+	DeletedAt                         pgtype.Timestamptz
+	Deleted                           bool
+}
+
 type TrustedIssuerSession struct {
 	ID                             uuid.UUID
 	RemoteSessionClientID          uuid.NullUUID
@@ -3920,6 +3972,7 @@ type WorkloadIdentityAdmission struct {
 
 type WorkloadIssuer struct {
 	ID                     uuid.UUID
+	IssuerKind             string
 	OrganizationID         string
 	ProjectID              uuid.NullUUID
 	Name                   string

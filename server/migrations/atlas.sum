@@ -1,4 +1,4 @@
-h1:oJuAjpdl5kAoEYdpRQkZy0AoAOLVnoghW76ChxoYfB0=
+h1:uXPzWTHkcd4M+VBYaLtPSSL/z3TtZ4X24hi7asIZZ9Q=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -450,4 +450,4 @@ h1:oJuAjpdl5kAoEYdpRQkZy0AoAOLVnoghW76ChxoYfB0=
 20261001180720_okta-server-suggestion-dismissals.sql h1:XNLp2SFt684tMne7ilQ9Y6EVp7m7rMir2nZnnGtARoY=
 20261001211108_plugin_auto_created.sql h1:6L8IgWx3iu2HjqMubX4EnVkuYILSDwWamyVONr24+G0=
 20261001215122_drop-queries-table.sql h1:xWFkosNDeXftjXIZBDHR0ASSnDkvsGvlk7wDYvmeakc=
-20261002110409_assistant_identity_bindings.sql h1:IIF2zH45V+V+8eQxf6hRgs526nRrbA6U3SUGrh3ymcs=
+20261002111657_assistant_identity_bindings.sql h1:mGK5xOYkdY68X1qJ57CZG01OCp7qZlqgdKd58N8LmqA=
