@@ -463,7 +463,7 @@ describe("clearStorageForLogout", () => {
     ).toBeNull();
   });
 
-  it("keeps theme and favorites when the session is unclassified", () => {
+  it("does not live-capture while the session is unclassified", () => {
     resetPreservedStorageCapture();
     window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "light");
     window.localStorage.setItem(
@@ -474,18 +474,38 @@ describe("clearStorageForLogout", () => {
 
     clearStorageForLogout();
 
+    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBeNull();
+    expect(
+      window.localStorage.getItem("gram:org-favorites:<ORG_ID>"),
+    ).toBeNull();
+    expect(window.localStorage.getItem("gram:recents:<USER_ID>")).toBeNull();
+  });
+
+  // A logged-out visit never classifies on its own. The session-expiry
+  // redirect confirms auth.info is 401, then opts into classification, so
+  // stars survive the bounce to /login. An unclassified clear must not.
+  it("keeps theme and favorites when logout is confirmed", () => {
+    resetPreservedStorageCapture();
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "dark");
+    window.localStorage.setItem(
+      "gram:org-favorites:<ORG_ID>",
+      '["<PROJECT_ID>"]',
+    );
+    window.localStorage.setItem("gram:recents:<USER_ID>", '["/recent-page"]');
+    window.localStorage.setItem("preferredProject", "project-slug");
+
+    clearStorageForLogout(undefined, { confirmedLoggedOut: true });
+
     expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
-      "light",
+      "dark",
     );
     expect(window.localStorage.getItem("gram:org-favorites:<ORG_ID>")).toBe(
       '["<PROJECT_ID>"]',
     );
     expect(window.localStorage.getItem("gram:recents:<USER_ID>")).toBeNull();
+    expect(window.localStorage.getItem("preferredProject")).toBeNull();
   });
 
-  // A logged-out visit never classifies on its own. The session-expiry
-  // redirect confirms auth.info is 401, then notes that before clearing, so
-  // stars survive the bounce to /login.
   it("keeps theme and favorites after a confirmed logged-out session is noted", () => {
     resetPreservedStorageCapture();
     window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "dark");
@@ -523,8 +543,7 @@ describe("clearStorageForLogout", () => {
       '["<CUSTOMER_PROJECT_ID>"]',
     );
 
-    noteOwnLoggedOutSession();
-    clearStorageForLogout();
+    clearStorageForLogout(undefined, { confirmedLoggedOut: true });
 
     expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
       "dark",

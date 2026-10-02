@@ -98,9 +98,11 @@ export function setPreservedStorageImpersonating(value: boolean): void {
  * Storage cleanup refuses to read localStorage until the document is
  * classified, so an impersonation load cannot snapshot the customer org.
  * A logged-out visit never receives a session, so it never classifies, and
- * a clear would delete theme and project favorites. Called from
- * clearStorageForLogout so every caller keeps those keys. A document already
- * marked as impersonation is left alone — its snapshot has to stay the admin's.
+ * a clear would delete theme and project favorites. Only the auth check that
+ * has already seen auth.info return 401 calls this — classifying every
+ * unclassified document would live-capture a customer org on a fresh
+ * impersonation load. A document already marked as impersonation is left
+ * alone — its snapshot has to stay the admin's.
  */
 export function noteOwnLoggedOutSession(): void {
   if (sessionIsImpersonating) return;
@@ -195,8 +197,9 @@ function snapshotForRestore(preserved?: PreservedStorage): PreservedStorage {
 
   if (hasPreservedStorageBackup()) return readPreservedStorageBackup();
 
-  // Impersonation still refuses a live read. clearStorageForLogout classifies
-  // every other document first, so a logged-out visit keeps theme and favorites.
+  // Unclassified and impersonation documents refuse a live read. A confirmed
+  // logged-out auth check classifies first; everything else must not snapshot
+  // whatever happens to be in the store.
   if (sessionIsImpersonating || !sessionClassified) return [];
   return capturePreservedStorage();
 }
@@ -297,13 +300,19 @@ export function restorePreservedStorage(preserved: PreservedStorage): void {
  * `Clear-Site-Data` response, a snapshot taken before the request is the only
  * remaining copy of those entries. Callers that omit it restore lastCaptured
  * or the window.name backup, not a live re-read of a possibly mixed store.
+ *
+ * Pass `confirmedLoggedOut` only after auth.info has returned 401. That is
+ * the one path allowed to classify an otherwise unclassified document so the
+ * bounce to /login keeps theme and favorites. Other callers leave the
+ * unclassified guard in place.
  */
-export function clearStorageForLogout(preserved?: PreservedStorage): void {
+export function clearStorageForLogout(
+  preserved?: PreservedStorage,
+  options?: { confirmedLoggedOut?: boolean },
+): void {
   if (typeof window === "undefined") return;
 
-  // A logged-out document never classifies on its own. Without this, the
-  // clear that bounces the browser to /login deletes theme and favorites.
-  noteOwnLoggedOutSession();
+  if (options?.confirmedLoggedOut) noteOwnLoggedOutSession();
   const toRestore = snapshotForRestore(preserved);
 
   try {
