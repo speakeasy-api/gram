@@ -432,6 +432,22 @@ SET disabled_at = NULL,
     updated_at = clock_timestamp()
 WHERE id = @id;
 
+-- name: LockOrganizationWhitelist :one
+-- Pin the exact target and account context shown by whitelist approval.
+SELECT id, name, slug, whitelisted, gram_account_type, disabled_at, updated_at
+FROM organization_metadata
+WHERE id = @id
+FOR UPDATE;
+
+-- name: SetOrganizationWhitelist :one
+-- Only the demo-access gate changes; other account and lifecycle fields survive.
+UPDATE organization_metadata
+SET whitelisted = @whitelisted::boolean,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND whitelisted = @expected_whitelisted::boolean
+RETURNING whitelisted;
+
 -- name: LockOrganizationAccess :one
 -- Pin canonical identity and current access state before a guarded transition.
 SELECT id, name, slug, disabled_at

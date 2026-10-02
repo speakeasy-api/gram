@@ -44,10 +44,11 @@ const (
 	ActionOrganizationEnterpriseTrialStarted    Action = "organization:enterprise_trial_started"
 	ActionOrganizationEnterpriseTrialEndChanged Action = "organization:enterprise_trial_end_changed"
 
-	ActionOrganizationDisabled        Action = "organization:disabled"
-	ActionOrganizationEnabled         Action = "organization:enabled"
-	ActionOrganizationPaygActivated   Action = "organization:payg_activated"
-	ActionOrganizationPaygDeactivated Action = "organization:payg_deactivated"
+	ActionOrganizationDisabled         Action = "organization:disabled"
+	ActionOrganizationEnabled          Action = "organization:enabled"
+	ActionOrganizationWhitelistUpdated Action = "organization:whitelist_updated"
+	ActionOrganizationPaygActivated    Action = "organization:payg_activated"
+	ActionOrganizationPaygDeactivated  Action = "organization:payg_deactivated"
 )
 
 type LogOrganizationSetupTaskUpdatedEvent struct {
@@ -987,6 +988,54 @@ type LogOrganizationPaygDeactivatedEvent struct {
 
 	OrganizationSnapshotBefore *OrganizationPaygActivationSnapshot
 	OrganizationSnapshotAfter  *OrganizationPaygActivationSnapshot
+}
+
+// OrganizationWhitelistSnapshot records the dashboard demo-access gate.
+type OrganizationWhitelistSnapshot struct {
+	// Whitelisted bypasses the demo gate without changing account type or disabled state.
+	Whitelisted bool `json:"whitelisted"`
+}
+
+type LogOrganizationWhitelistUpdatedEvent struct {
+	// OrganizationID is the canonical target.
+	OrganizationID string
+
+	// Actor is the verified staff principal.
+	Actor urn.Principal
+
+	// ActorDisplayName is the staff display name.
+	ActorDisplayName *string
+
+	// OrganizationName identifies the subject.
+	OrganizationName string
+
+	// OrganizationSlug identifies the subject.
+	OrganizationSlug string
+
+	// OrganizationSnapshotBefore records the previous gate setting.
+	OrganizationSnapshotBefore *OrganizationWhitelistSnapshot
+
+	// OrganizationSnapshotAfter records the committed gate setting.
+	OrganizationSnapshotAfter *OrganizationWhitelistSnapshot
+}
+
+func (l *Logger) LogOrganizationWhitelistUpdated(ctx context.Context, dbtx repo.DBTX, event LogOrganizationWhitelistUpdatedEvent) error {
+	before, err := marshalAuditPayload(event.OrganizationSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal whitelist before snapshot: %w", err)
+	}
+	after, err := marshalAuditPayload(event.OrganizationSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal whitelist after snapshot: %w", err)
+	}
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.ToPGTextEmpty(""),
+		Action: string(ActionOrganizationWhitelistUpdated), SubjectID: event.OrganizationID, SubjectType: "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName), SubjectSlug: conv.ToPGTextEmpty(event.OrganizationSlug),
+		Metadata: nil, BeforeSnapshot: before, AfterSnapshot: after,
+	}
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationAccessV1})
 }
 
 // OrganizationAccessSnapshot records whether the organization was disabled.

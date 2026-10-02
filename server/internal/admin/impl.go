@@ -1110,6 +1110,24 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 	if payload.AccountType == nil && payload.Whitelisted == nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "at least one of account_type or whitelisted must be supplied")
 	}
+	if payload.AccountType == nil {
+		tx, err := s.db.Begin(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "begin organization whitelist change").LogError(ctx, s.logger)
+		}
+		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+		actor, displayName, _ := adminActor(ctx)
+		if _, err := SetOrganizationWhitelistTx(ctx, tx, s.audit, payload.ID, *payload.Whitelisted, actor, displayName); err != nil {
+			if errors.Is(err, ErrOrganizationWhitelistNotFound) {
+				return nil, oops.E(oops.CodeNotFound, err, "organization not found")
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "set organization whitelist").LogError(ctx, s.logger)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "commit organization whitelist change").LogError(ctx, s.logger)
+		}
+		return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after whitelist change")
+	}
 	// See ExtendTrial: the design bounds this too, but generated validation only
 	// runs at the HTTP boundary.
 	if payload.AccountType != nil && !constants.IsAccountType(*payload.AccountType) {
