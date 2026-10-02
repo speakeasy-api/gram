@@ -387,7 +387,11 @@ type RoleUpdateResult struct {
 // PrepareRoleUpdate resolves role-delivery admission before the caller opens
 // a transaction. Pass the returned context to UpdateRoleTx to reuse the decision.
 func (r *RoleManager) PrepareRoleUpdate(ctx context.Context, gramOrgID string) (context.Context, error) {
-	return roledelivery.PrepareAdmission(ctx, r.db, r.roleDeliveryGuard, gramOrgID)
+	prepared, err := roledelivery.PrepareAdmission(ctx, r.db, r.roleDeliveryGuard, gramOrgID)
+	if err != nil {
+		return prepared, fmt.Errorf("prepare role update admission: %w", err)
+	}
+	return prepared, nil
 }
 
 // UpdateRole updates an existing local role, optional grants/assignments, and
