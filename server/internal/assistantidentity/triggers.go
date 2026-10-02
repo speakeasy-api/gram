@@ -57,7 +57,7 @@ func (s *Service) bindRoot(ctx context.Context, tx pgx.Tx, org string, project, 
 		return nil
 	}
 	assistant, err := uuid.Parse(root.TargetRef)
-	if err != nil {
+	if err != nil || root.TargetRef != assistant.String() {
 		return fmt.Errorf("parse assistant root target: %w", ErrBrokenMapping)
 	}
 	if err := lockAssistant(ctx, q, org, project, assistant); err != nil {

@@ -2,7 +2,7 @@ package assistantidentity_test
 
 import (
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/conv"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestUpgradeNeverMintsContinuationWorkloads(t *testing.T) {
@@ -83,7 +84,11 @@ func TestRetargetPreservesSubjectAndRetiresOldGeneration(t *testing.T) {
 		} else {
 			require.Equal(t, assistantidentity.Tombstoned, result.State)
 		}
-		require.Error(t, testIdentityService.Validate(t.Context(), f.db, first))
+		expected := assistantidentity.ErrInvalidIdentity
+		if target == next {
+			expected = assistantidentity.ErrBrokenMapping
+		}
+		require.ErrorIs(t, testIdentityService.Validate(t.Context(), f.db, first), expected)
 	}
 }
 
@@ -112,6 +117,45 @@ func TestTombstonesWithdrawBindingAtomically(t *testing.T) {
 			require.NoError(t, testIdentityService.Validate(t.Context(), f.db, id))
 			require.NoError(t, inTx(t, f.db, mutate))
 			require.ErrorIs(t, testIdentityService.Validate(t.Context(), f.db, id), assistantidentity.ErrInvalidIdentity)
+		})
+	}
+}
+
+func TestRootBindingRejectsNoncanonicalAssistantTarget(t *testing.T) {
+	t.Parallel()
+	for _, spelling := range []string{"uppercase", "compact", "braced"} {
+		t.Run(spelling, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t)
+			f.provision(t)
+			target := f.assistant.String()
+			switch spelling {
+			case "uppercase":
+				target = strings.ToUpper(target)
+			case "compact":
+				target = strings.ReplaceAll(target, "-", "")
+			case "braced":
+				target = "{" + target + "}"
+			}
+			root := uuid.New()
+			q := repo.New(f.db)
+			require.NoError(t, q.FixtureCreateRoot(t.Context(), repo.FixtureCreateRootParams{ID: root, OrganizationID: f.org, ProjectID: f.project, DefinitionSlug: "cron", TargetRef: target}))
+			before, err := q.FixtureAuthorityCounts(t.Context(), f.org)
+			require.NoError(t, err)
+			err = inTx(t, f.db, func(tx pgx.Tx) error {
+				return testIdentityService.BindRootTrigger(t.Context(), tx, f.org, f.project, root)
+			})
+			require.ErrorIs(t, err, assistantidentity.ErrBrokenMapping)
+			after, err := q.FixtureAuthorityCounts(t.Context(), f.org)
+			require.NoError(t, err)
+			require.Equal(t, before, after, "invalid target must not allocate authority")
+			require.NoError(t, q.FixtureRetargetTrigger(t.Context(), repo.FixtureRetargetTriggerParams{OrganizationID: f.org, ProjectID: f.project, TriggerID: root, TargetRef: f.assistant.String()}))
+			require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
+				return testIdentityService.BindRootTrigger(t.Context(), tx, f.org, f.project, root)
+			}))
+			result, err := testIdentityService.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, root)
+			require.NoError(t, err)
+			require.Equal(t, assistantidentity.Active, result.State)
 		})
 	}
 }
