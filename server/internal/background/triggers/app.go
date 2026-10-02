@@ -637,6 +637,10 @@ func (a *App) CancelWakeInstance(ctx context.Context, projectID uuid.UUID, insta
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
+	if _, err := triggerrepo.New(tx).LockTriggerProject(ctx, projectID); err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("lock wake project before cancellation: %w", err)
+	}
+
 	existing, err := triggerrepo.New(tx).GetTriggerInstanceByIDForUpdate(ctx, triggerrepo.GetTriggerInstanceByIDForUpdateParams{
 		ID:        instanceID,
 		ProjectID: projectID,

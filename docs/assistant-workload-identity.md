@@ -7,6 +7,14 @@ contract. Existing assistants remain legacy until an authorized explicit upgrade
 Creation retains existing name uniqueness and request semantics; it does not add
 an idempotency header, request-key store, or request fingerprint.
 
+The API's dedicated upgrade command is itself the explicit mutation request;
+reads and legacy ensure paths never upgrade implicitly. Conversational clients
+use the Platform MCP tool's mandatory confirmation gate before that command.
+`identity_state` is additive optional response metadata for compatibility with
+existing assistant representations, not a credential or execution permission.
+Hydrated management reads report the configured state; consumers must not treat
+omitted state as permission or infer legacy fallback from it.
+
 Initial agent grants are the intersection of configured assistant capabilities
 and the provisioning actor's policy. The assistant creator and consenting actor
 are retained separately in provisioning provenance. Later access edits use the
@@ -66,8 +74,8 @@ itself an identity or treat a configuration-state field as execution permission.
 
 Add `upgrade_assistant_workload_identity` for the outcome of explicitly upgrading
 one legacy assistant in the selected project. The actor must be an authenticated
-human authorized for project write (including the trusted Platform MCP OAuth
-surface), and must confirm the exact assistant target. Existing assistant read
+human authorized for both organization administration and project write
+(including the trusted Platform MCP OAuth surface), and must confirm the exact assistant target. Existing assistant read
 surfaces expose identity state but do not perform this irreversible upgrade;
 creation already provisions new assistants, so neither is a substitute.
 The tool calls the same authorized management endpoint as the API and returns

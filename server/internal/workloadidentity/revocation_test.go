@@ -333,3 +333,19 @@ func TestRevocationExplicitlyHandlesMissingTenantAnchors(t *testing.T) {
 	_, err = sessionsrepo.New(conn).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ID: session.ID, OrganizationID: f.tenant.organizationID})
 	require.NoError(t, err, "absent tenant anchors must not borrow another live identity")
 }
+
+func TestAgentLifecycleRevokesDirectAgentSessions(t *testing.T) {
+	t.Parallel()
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	f := newAssignmentFixture(t, conn)
+	issuer := workloadSessionIssuer(t, conn, f.tenant.organizationID)
+	params := workloadSessionParams(issuer, f.issuerID, testSubject)
+	params.SubjectUrn = urn.NewAgentSubject(f.agentID)
+	session, err := sessionsrepo.New(conn).CreateUserSession(t.Context(), params)
+	require.NoError(t, err)
+	_, err = agentrepo.New(conn).RevokeAgent(t.Context(), agentrepo.RevokeAgentParams{OrganizationID: f.tenant.organizationID, ID: f.agentID})
+	require.NoError(t, err)
+	_, err = sessionsrepo.New(conn).GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{OrganizationID: f.tenant.organizationID, ID: session.ID})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}

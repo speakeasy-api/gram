@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	sessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+	policyrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
 func assignmentSession(t *testing.T, ctx context.Context, ti *testInstance, issuerID string, subject string) sessionsrepo.UserSession {
@@ -37,18 +37,12 @@ func assignmentSession(t *testing.T, ctx context.Context, ti *testInstance, issu
 
 func requireAssignmentSessionState(t *testing.T, ctx context.Context, ti *testInstance, session sessionsrepo.UserSession, revoked bool) {
 	t.Helper()
-	// This lookup only checks the persisted session tombstone, not the current
-	// assignment or agent: losing access through resolution alone is insufficient.
-	current, err := sessionsrepo.New(ti.conn).GetUserSessionByJTI(ctx, sessionsrepo.GetUserSessionByJTIParams{
-		UserSessionIssuerID: session.UserSessionIssuerID, Jti: session.Jti,
-	})
-	if revoked {
-		require.ErrorIs(t, err, pgx.ErrNoRows)
-		return
-	}
-	require.NoError(t, err)
+	current, err := policyrepo.New(ti.conn).FixtureWorkloadSessionRevocationState(ctx, policyrepo.FixtureWorkloadSessionRevocationStateParams{OrganizationID: ti.orgID, SessionID: session.ID})
+	require.NoError(t, err, "revocation must retain the session row")
 	require.Equal(t, session.ID, current.ID)
-	require.False(t, current.Deleted)
+	require.Equal(t, revoked, current.Deleted)
+	require.Equal(t, revoked, current.DeletedAt.Valid)
+
 }
 
 func assignmentAdmission(t *testing.T, ctx context.Context, ti *testInstance, subject, matchKind string, agentID uuid.UUID) *types.WorkloadAdmission {
@@ -159,6 +153,31 @@ func TestAssignmentSessions_BroadMutationPreservesExactException(t *testing.T) {
 			require.Equal(t, exactAgent, resolvedAgent(t, ctx, ti, exact))
 			requireAssignmentSessionState(t, ctx, ti, exactSession, false)
 			requireAssignmentSessionState(t, ctx, ti, broadSession, true)
+		})
+	}
+}
+
+func TestIssuerMutationsRetireWildcardSessions(t *testing.T) {
+	t.Parallel()
+	for _, mutation := range []string{"keys", "withdraw"} {
+		t.Run(mutation, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			policy := registerAnthropic(t, ctx, ti, true)
+			agent := newAgent(t, ctx, ti, "wildcard-agent")
+			admission := assignmentAdmission(t, ctx, ti, fleetRule, "wildcard", agent)
+			session := assignmentSession(t, ctx, ti, admission.WorkloadIssuerID, fleetStem+"wildcard-session")
+			requireAssignmentSessionState(t, ctx, ti, session, false)
+			if mutation == "keys" {
+				payload := updatePayload(policy.Issuers[0].ID)
+				payload.JwksURI = new("https://replacement.example.invalid/keys")
+				_, err := ti.service.UpdateIssuer(ctx, payload)
+				require.NoError(t, err)
+			} else {
+				_, err := ti.service.WithdrawIssuer(ctx, &gen.WithdrawIssuerPayload{ID: policy.Issuers[0].ID})
+				require.NoError(t, err)
+			}
+			requireAssignmentSessionState(t, ctx, ti, session, true)
 		})
 	}
 }

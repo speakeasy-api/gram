@@ -19,3 +19,11 @@ func TestNilIdentityServiceFailsClosed(t *testing.T) {
 	require.ErrorIs(t, service.BindRootTrigger(t.Context(), nil, "", [16]byte{}, [16]byte{}), assistantidentity.ErrInvalidIdentity)
 	require.ErrorIs(t, service.RetargetRootTrigger(t.Context(), nil, "", [16]byte{}, [16]byte{}), assistantidentity.ErrInvalidIdentity)
 }
+
+func TestIssuerRejectsEmptyHostnameAndFragmentDelimiter(t *testing.T) {
+	t.Parallel()
+	for _, origin := range []string{"https://:443", "https://platform.example.invalid#", "https://platform.example.invalid/#"} {
+		_, err := assistantidentity.New(origin, false)
+		require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity, origin)
+	}
+}

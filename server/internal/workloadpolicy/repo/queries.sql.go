@@ -198,6 +198,31 @@ func (q *Queries) FindWorkloadIssuersByIssuer(ctx context.Context, arg FindWorkl
 	return items, nil
 }
 
+const fixtureWorkloadSessionRevocationState = `-- name: FixtureWorkloadSessionRevocationState :one
+SELECT s.id, s.deleted, s.deleted_at FROM user_sessions s
+JOIN user_session_issuers i ON i.id = s.user_session_issuer_id
+WHERE s.id = $1 AND s.organization_id = $2::text
+ AND COALESCE(i.organization_id, (SELECT organization_id FROM projects WHERE id = i.project_id)) = $2::text
+`
+
+type FixtureWorkloadSessionRevocationStateParams struct {
+	SessionID      uuid.UUID
+	OrganizationID string
+}
+
+type FixtureWorkloadSessionRevocationStateRow struct {
+	ID        uuid.UUID
+	Deleted   bool
+	DeletedAt pgtype.Timestamptz
+}
+
+func (q *Queries) FixtureWorkloadSessionRevocationState(ctx context.Context, arg FixtureWorkloadSessionRevocationStateParams) (FixtureWorkloadSessionRevocationStateRow, error) {
+	row := q.db.QueryRow(ctx, fixtureWorkloadSessionRevocationState, arg.SessionID, arg.OrganizationID)
+	var i FixtureWorkloadSessionRevocationStateRow
+	err := row.Scan(&i.ID, &i.Deleted, &i.DeletedAt)
+	return i, err
+}
+
 const getOrganizationAgent = `-- name: GetOrganizationAgent :one
 SELECT id, name
 FROM agents
@@ -880,15 +905,17 @@ WITH invalidated_bindings AS (
  RETURNING b.organization_id, b.original_workload_issuer_id, b.subject
 ), retired_binding_sessions AS (
  UPDATE user_sessions s SET deleted_at = clock_timestamp()
- FROM invalidated_bindings b, user_session_issuers si
+ FROM workload_issuers b, user_session_issuers si
  WHERE si.id = s.user_session_issuer_id AND NOT s.deleted
+ AND b.organization_id = $1 AND b.id = $3 AND NOT b.deleted
+ AND (b.project_id IS NULL OR b.project_id = $2)
  AND COALESCE(s.organization_id, si.organization_id,
    (SELECT organization_id FROM projects WHERE id = s.project_id),
    (SELECT organization_id FROM projects WHERE id = si.project_id)) = b.organization_id
  AND (s.organization_id IS NULL OR s.organization_id = b.organization_id)
  AND (si.organization_id IS NULL OR si.organization_id = b.organization_id)
  AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id IN (s.project_id, si.project_id) AND p.organization_id <> b.organization_id)
- AND s.subject_urn = 'workload:' || b.original_workload_issuer_id::text || ':' || b.subject
+ AND starts_with(s.subject_urn, 'workload:' || b.id::text || ':')
  RETURNING s.id
 )
 UPDATE workload_issuers
@@ -992,15 +1019,18 @@ WITH invalidated_bindings AS (
  RETURNING b.organization_id, b.original_workload_issuer_id, b.subject
 ), retired_binding_sessions AS (
  UPDATE user_sessions s SET deleted_at = clock_timestamp()
- FROM invalidated_bindings b, user_session_issuers si
+ FROM workload_issuers b, user_session_issuers si
  WHERE si.id = s.user_session_issuer_id AND NOT s.deleted
+ AND b.organization_id = $5 AND b.id = $7 AND NOT b.deleted
+ AND (b.project_id IS NULL OR b.project_id = $6)
+ AND b.jwks_uri IS DISTINCT FROM $4
  AND COALESCE(s.organization_id, si.organization_id,
    (SELECT organization_id FROM projects WHERE id = s.project_id),
    (SELECT organization_id FROM projects WHERE id = si.project_id)) = b.organization_id
  AND (s.organization_id IS NULL OR s.organization_id = b.organization_id)
  AND (si.organization_id IS NULL OR si.organization_id = b.organization_id)
  AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id IN (s.project_id, si.project_id) AND p.organization_id <> b.organization_id)
- AND s.subject_urn = 'workload:' || b.original_workload_issuer_id::text || ':' || b.subject
+ AND starts_with(s.subject_urn, 'workload:' || b.id::text || ':')
  RETURNING s.id
 )
 UPDATE workload_issuers

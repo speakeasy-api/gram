@@ -1626,9 +1626,11 @@ FROM assistants WHERE id = @assistant_id AND project_id = @project_id AND delete
 FOR UPDATE;
 
 -- name: ListAssistantIdentityStates :many
-SELECT DISTINCT ON (original_assistant_id)
-  original_assistant_id, original_agent_id, generation,
-  (deleted OR assistant_id IS NULL OR agent_id IS NULL OR project_ref_id IS NULL)::boolean AS tombstoned
-FROM assistant_agent_bindings
-WHERE project_id = @project_id AND original_assistant_id = ANY(@assistant_ids::uuid[])
-ORDER BY original_assistant_id, generation DESC;
+SELECT DISTINCT ON (b.original_assistant_id)
+ b.original_assistant_id, b.original_agent_id, b.generation,
+ (b.deleted OR b.assistant_id IS NULL OR b.agent_id IS NULL OR b.project_ref_id IS NULL
+ OR g.id IS NULL OR g.deleted OR g.revoked_at IS NOT NULL OR g.owner_reassignment_required_at IS NOT NULL)::boolean AS tombstoned
+FROM assistant_agent_bindings b
+LEFT JOIN agents g ON g.id = b.agent_id AND g.organization_id = b.organization_id AND g.project_id = b.project_id
+WHERE b.project_id = @project_id AND b.original_assistant_id = ANY(@assistant_ids::uuid[])
+ORDER BY b.original_assistant_id, b.generation DESC;

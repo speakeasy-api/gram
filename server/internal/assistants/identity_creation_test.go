@@ -250,3 +250,20 @@ func TestDisableLegacyManagedAssistantWithoutBinding(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, roots)
 }
+
+func TestIdentityPresentationIncludesAgentOwnerBarrier(t *testing.T) {
+	t.Parallel()
+	db, err := assistantsInfra.CloneTestDatabase(t, "identity_state_agent")
+	require.NoError(t, err)
+	project := newProvisioningProject(t, db, "identity-state-agent")
+	core := newProvisioningCore(t, db)
+	item, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Identity presentation", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive)
+	require.NoError(t, err)
+	binding, err := identityrepo.New(db).GetAssistantBinding(t.Context(), identityrepo.GetAssistantBindingParams{OrganizationID: "org-test", ProjectID: project, AssistantID: item.ID})
+	require.NoError(t, err)
+	require.NoError(t, identityrepo.New(db).FixtureLatchOwner(t.Context(), identityrepo.FixtureLatchOwnerParams{OrganizationID: "org-test", AgentID: binding.OriginalAgentID}))
+	rows, err := core.ListAssistants(t.Context(), project)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "TOMBSTONED", rows[0].IdentityState)
+}

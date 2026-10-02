@@ -21,7 +21,7 @@ type Service struct {
 // alternate signing infrastructure is created here.
 func New(issuerURL string, allowHTTP bool) (*Service, error) {
 	u, err := url.Parse(issuerURL)
-	validOrigin := u != nil && u.Host != "" && u.User == nil && !u.ForceQuery && u.RawQuery == "" && u.Fragment == "" && (u.Path == "" || u.Path == "/")
+	validOrigin := u != nil && u.Hostname() != "" && !strings.Contains(issuerURL, "#") && u.User == nil && !u.ForceQuery && u.RawQuery == "" && u.Fragment == "" && (u.Path == "" || u.Path == "/")
 	validScheme := u != nil && (u.Scheme == "https" || (allowHTTP && u.Scheme == "http"))
 	if err != nil || !validOrigin || !validScheme {
 		return nil, fmt.Errorf("platform workload issuer must be the configured Gram issuer origin: %w", ErrInvalidIdentity)

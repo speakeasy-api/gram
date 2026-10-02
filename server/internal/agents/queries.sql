@@ -104,7 +104,7 @@ LEFT JOIN projects ip ON ip.id = si.project_id
   AND (si.organization_id IS NULL OR si.organization_id = target.organization_id)
   AND ((SELECT organization_id FROM projects WHERE id = s.project_id) IS NULL OR (SELECT organization_id FROM projects WHERE id = s.project_id) = target.organization_id)
   AND (ip.organization_id IS NULL OR ip.organization_id = target.organization_id)
-    AND (SELECT wa.agent_id
+    AND (s.subject_urn = 'agent:' || target.id::text OR (SELECT wa.agent_id
     FROM workload_agent_assignments wa
     JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id AND NOT wi.deleted
     WHERE wa.organization_id = target.organization_id AND wa.deleted IS FALSE
@@ -113,7 +113,7 @@ LEFT JOIN projects ip ON ip.id = si.project_id
             AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
             AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
     ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
-    LIMIT 1) = target.id
+    LIMIT 1) = target.id)
   RETURNING s.id
 )
 UPDATE agents
@@ -149,7 +149,7 @@ LEFT JOIN projects ip ON ip.id = si.project_id
   AND (si.organization_id IS NULL OR si.organization_id = target.organization_id)
   AND ((SELECT organization_id FROM projects WHERE id = s.project_id) IS NULL OR (SELECT organization_id FROM projects WHERE id = s.project_id) = target.organization_id)
   AND (ip.organization_id IS NULL OR ip.organization_id = target.organization_id)
-    AND (SELECT wa.agent_id
+    AND (s.subject_urn = 'agent:' || target.id::text OR (SELECT wa.agent_id
     FROM workload_agent_assignments wa
     JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id AND NOT wi.deleted
     WHERE wa.organization_id = target.organization_id AND wa.deleted IS FALSE
@@ -158,7 +158,7 @@ LEFT JOIN projects ip ON ip.id = si.project_id
             AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
             AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
     ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
-    LIMIT 1) = target.id
+    LIMIT 1) = target.id)
   RETURNING s.id
 )
 UPDATE agents
@@ -194,7 +194,7 @@ LEFT JOIN projects ip ON ip.id = si.project_id
   AND (si.organization_id IS NULL OR si.organization_id = target.organization_id)
   AND ((SELECT organization_id FROM projects WHERE id = s.project_id) IS NULL OR (SELECT organization_id FROM projects WHERE id = s.project_id) = target.organization_id)
   AND (ip.organization_id IS NULL OR ip.organization_id = target.organization_id)
-    AND (SELECT wa.agent_id
+    AND (s.subject_urn = 'agent:' || target.id::text OR (SELECT wa.agent_id
     FROM workload_agent_assignments wa
     JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id AND NOT wi.deleted
     WHERE wa.organization_id = target.organization_id AND wa.deleted IS FALSE
@@ -203,7 +203,7 @@ LEFT JOIN projects ip ON ip.id = si.project_id
             AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
             AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
     ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
-    LIMIT 1) = target.id
+    LIMIT 1) = target.id)
   RETURNING s.id
 )
 UPDATE agents
@@ -239,7 +239,7 @@ LEFT JOIN projects ip ON ip.id = si.project_id
   AND (si.organization_id IS NULL OR si.organization_id = target.organization_id)
   AND ((SELECT organization_id FROM projects WHERE id = s.project_id) IS NULL OR (SELECT organization_id FROM projects WHERE id = s.project_id) = target.organization_id)
   AND (ip.organization_id IS NULL OR ip.organization_id = target.organization_id)
-    AND (SELECT wa.agent_id
+    AND (s.subject_urn = 'agent:' || target.id::text OR (SELECT wa.agent_id
     FROM workload_agent_assignments wa
     JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id AND NOT wi.deleted
     WHERE wa.organization_id = target.organization_id AND wa.deleted IS FALSE
@@ -248,7 +248,7 @@ LEFT JOIN projects ip ON ip.id = si.project_id
             AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
             AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
     ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
-    LIMIT 1) = target.id
+    LIMIT 1) = target.id)
   RETURNING s.id
 )
 UPDATE agents
@@ -307,7 +307,7 @@ LEFT JOIN projects ip ON ip.id = si.project_id
   AND (si.organization_id IS NULL OR si.organization_id = target.organization_id)
   AND ((SELECT organization_id FROM projects WHERE id = s.project_id) IS NULL OR (SELECT organization_id FROM projects WHERE id = s.project_id) = target.organization_id)
   AND (ip.organization_id IS NULL OR ip.organization_id = target.organization_id)
-    AND (SELECT wa.agent_id
+    AND (s.subject_urn = 'agent:' || target.id::text OR (SELECT wa.agent_id
     FROM workload_agent_assignments wa
     JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id AND NOT wi.deleted
     WHERE wa.organization_id = target.organization_id AND wa.deleted IS FALSE
@@ -316,7 +316,7 @@ LEFT JOIN projects ip ON ip.id = si.project_id
             AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
             AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
     ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
-    LIMIT 1) = target.id
+    LIMIT 1) = target.id)
   RETURNING s.id
 )
 UPDATE agents
@@ -352,7 +352,7 @@ LEFT JOIN projects ip ON ip.id = si.project_id
   AND (si.organization_id IS NULL OR si.organization_id = target.organization_id)
   AND ((SELECT organization_id FROM projects WHERE id = s.project_id) IS NULL OR (SELECT organization_id FROM projects WHERE id = s.project_id) = target.organization_id)
   AND (ip.organization_id IS NULL OR ip.organization_id = target.organization_id)
-    AND (SELECT wa.agent_id
+    AND (s.subject_urn = 'agent:' || target.id::text OR (SELECT wa.agent_id
     FROM workload_agent_assignments wa
     JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id AND NOT wi.deleted
     WHERE wa.organization_id = target.organization_id AND wa.deleted IS FALSE
@@ -361,7 +361,7 @@ LEFT JOIN projects ip ON ip.id = si.project_id
             AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
             AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
     ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
-    LIMIT 1) = target.id
+    LIMIT 1) = target.id)
   RETURNING s.id
 )
 UPDATE agents
