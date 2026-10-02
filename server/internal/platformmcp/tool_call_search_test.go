@@ -709,6 +709,23 @@ func TestToolCallSearch_RefusesHeaderAttributesAndWithholdsThemFromDiscovery(t *
 	}
 	require.Equal(t, 5, reader.calls)
 
+	// A custom key keeps every operator even when it is spelled like a header:
+	// it is the project's own integration data, not a header the platform
+	// recorded, exactly as the identity and content refusals already treat
+	// custom keys. This is the boundary the input schema states, pinned here so
+	// the schema cannot drift from what the server enforces.
+	for _, filter := range []ToolCallAttributeFilter{
+		{Key: "@headers.Cookie", Op: "eq", Values: []string{"guess"}},
+		{Key: "@http.request.headers.Authorization", Op: "contains", Values: []string{"Bearer"}},
+	} {
+		_, err := service.SearchToolCalls(t.Context(), principal, SearchToolCallsInput{
+			ProjectID:  toolCallSearchTestProject,
+			Attributes: []ToolCallAttributeFilter{filter},
+		})
+		require.NoError(t, err, filter.Key)
+	}
+	require.Equal(t, 7, reader.calls)
+
 	// The other half: discovery never names a key the search refuses, so an
 	// agent is not led to build a header predicate and told it is malformed
 	// only afterwards.
