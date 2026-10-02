@@ -17,7 +17,7 @@ export type GetSetupDocsResponseBody = {
   /**
    * Deployment-derived canonical remote OAuth callback URL, including when no guides match.
    */
-  oauthCallbackUrl?: string | undefined;
+  oauthCallbackUrl: string;
 };
 
 /** @internal */
@@ -27,7 +27,7 @@ export const GetSetupDocsResponseBody$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     guides: z.array(MCPSetupGuide$inboundSchema),
-    oauth_callback_url: z.optional(z.string()),
+    oauth_callback_url: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
