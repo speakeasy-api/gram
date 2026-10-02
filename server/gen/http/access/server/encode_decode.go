@@ -5662,7 +5662,6 @@ func DecodeExplainResourceAccessRequest(mux goahttp.Muxer, decoder func(*http.Re
 			resourceKind string
 			resourceID   string
 			userID       string
-			apikeyToken  *string
 			sessionToken *string
 			err          error
 		)
@@ -5682,10 +5681,6 @@ func DecodeExplainResourceAccessRequest(mux goahttp.Muxer, decoder func(*http.Re
 		if userID == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "query string"))
 		}
-		apikeyTokenRaw := r.Header.Get("Gram-Key")
-		if apikeyTokenRaw != "" {
-			apikeyToken = &apikeyTokenRaw
-		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -5693,14 +5688,7 @@ func DecodeExplainResourceAccessRequest(mux goahttp.Muxer, decoder func(*http.Re
 		if err != nil {
 			return payload, err
 		}
-		payload = NewExplainResourceAccessPayload(resourceKind, resourceID, userID, apikeyToken, sessionToken)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
-			}
-		}
+		payload = NewExplainResourceAccessPayload(resourceKind, resourceID, userID, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

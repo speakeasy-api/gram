@@ -11,7 +11,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -120,7 +119,6 @@ func explainAccess(t *testing.T, ctx context.Context, ti *testInstance, serverID
 		ResourceKind: "mcp",
 		ResourceID:   serverID,
 		UserID:       userID,
-		ApikeyToken:  nil,
 		SessionToken: nil,
 	})
 	require.NoError(t, err)
@@ -293,7 +291,6 @@ func TestService_ExplainResourceAccess_RejectsNonMember(t *testing.T) {
 		ResourceKind: "mcp",
 		ResourceID:   serverID,
 		UserID:       "local_stranger",
-		ApikeyToken:  nil,
 		SessionToken: nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
@@ -310,7 +307,6 @@ func TestService_ExplainResourceAccess_RequiresOrgRead(t *testing.T) {
 		ResourceKind: "mcp",
 		ResourceID:   fixture.serverID,
 		UserID:       fixture.userID,
-		ApikeyToken:  nil,
 		SessionToken: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -327,7 +323,6 @@ func TestService_ExplainResourceAccess_RequiresServerRead(t *testing.T) {
 		ResourceKind: "mcp",
 		ResourceID:   fixture.serverID,
 		UserID:       fixture.userID,
-		ApikeyToken:  nil,
 		SessionToken: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -398,7 +393,6 @@ func TestService_ExplainResourceAccess_RejectsGateway(t *testing.T) {
 		ResourceKind: "mcp",
 		ResourceID:   gatewayID,
 		UserID:       "local_viewer",
-		ApikeyToken:  nil,
 		SessionToken: nil,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
@@ -426,24 +420,6 @@ func TestService_ExplainResourceAccess_ProjectScopedGrant(t *testing.T) {
 	require.True(t, use.Allowed)
 	require.Len(t, use.Rules, 1)
 	require.Equal(t, explainedAppliesToProject, use.Rules[0].AppliesTo)
-}
-
-func TestService_ExplainResourceAccess_HidesDirectorySourcesFromLegacyAPIKeys(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestAccessService(t)
-	fixture := seedExplainAccessFixture(t, ctx, ti)
-
-	// A legacy key is never checked against grants, so it passes the org:admin
-	// check that would otherwise reveal the mapping.
-	keyCtx := *testAccessAuthContext(t, ctx)
-	keyCtx.APIKeyID = uuid.NewString()
-	legacyCtx := contextvalues.WithLegacyAPIKeyAuthorization(ctx, &keyCtx)
-
-	use := explainedLevel(t, explainAccess(t, legacyCtx, ti, fixture.serverID, fixture.userID), audienceLevelUse)
-	contractors := explainedRule(t, use.Rules, "Contractors")
-	require.True(t, contractors.ViaDirectoryMapping)
-	require.Empty(t, contractors.DirectorySources)
 }
 
 func TestService_ExplainResourceAccess_KeepsMappingForDirectlyHeldRole(t *testing.T) {

@@ -6164,10 +6164,6 @@ func EncodeExplainResourceAccessRequest(encoder func(*http.Request) goahttp.Enco
 		if !ok {
 			return goahttp.ErrInvalidType("access", "explainResourceAccess", "*access.ExplainResourceAccessPayload", v)
 		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
-		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)

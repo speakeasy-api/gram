@@ -112,7 +112,10 @@ type Service interface {
 	// Explain whether one organization member can connect to, view, and manage one
 	// resource, and which rules decide it. The decision comes from the same
 	// evaluation as runtime enforcement. A gateway is refused: nothing checks
-	// access on its own id, so check each server it fronts instead.
+	// access on its own id, so check each server it fronts instead. Like
+	// listIdentityAccess it describes one person's access, so it takes a session
+	// only: API keys are not checked against grants and would see any member's
+	// rules.
 	ExplainResourceAccess(context.Context, *ExplainResourceAccessPayload) (res *ExplainResourceAccessResult, err error)
 	// Request access to a scope by sending an email notification to organization
 	// administrators.
@@ -506,7 +509,6 @@ type ExplainResourceAccessPayload struct {
 	ResourceID string
 	// The organization member whose access to explain.
 	UserID       string
-	ApikeyToken  *string
 	SessionToken *string
 }
 
@@ -574,8 +576,8 @@ type ExplainedAccessRule struct {
 	// Whether the member holds this role only through a directory role mapping.
 	ViaDirectoryMapping bool
 	// The directory role mappings giving the member this role, including when they
-	// also hold it directly. Returned only to organization administrators, and
-	// never to legacy API keys, because attribute values can carry personal data.
+	// also hold it directly. Returned only to organization administrators, because
+	// attribute values can carry personal data.
 	DirectorySources []*ExplainedAccessDirectorySource
 }
 

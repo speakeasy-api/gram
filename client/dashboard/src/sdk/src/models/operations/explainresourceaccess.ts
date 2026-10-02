@@ -7,7 +7,6 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 export type ExplainResourceAccessSecurity = {
-  apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
@@ -36,10 +35,6 @@ export type ExplainResourceAccessRequest = {
    */
   userId: string;
   /**
-   * API Key header
-   */
-  gramKey?: string | undefined;
-  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -47,7 +42,6 @@ export type ExplainResourceAccessRequest = {
 
 /** @internal */
 export type ExplainResourceAccessSecurity$Outbound = {
-  "apikey_header_Gram-Key"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
@@ -57,12 +51,10 @@ export const ExplainResourceAccessSecurity$outboundSchema: z.ZodMiniType<
   ExplainResourceAccessSecurity
 > = z.pipe(
   z.object({
-    apikeyHeaderGramKey: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      apikeyHeaderGramKey: "apikey_header_Gram-Key",
       sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
@@ -87,7 +79,6 @@ export type ExplainResourceAccessRequest$Outbound = {
   resource_kind: string;
   resource_id: string;
   user_id: string;
-  "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
 
@@ -100,7 +91,6 @@ export const ExplainResourceAccessRequest$outboundSchema: z.ZodMiniType<
     resourceKind: ResourceKind$outboundSchema,
     resourceId: z.string(),
     userId: z.string(),
-    gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
@@ -108,7 +98,6 @@ export const ExplainResourceAccessRequest$outboundSchema: z.ZodMiniType<
       resourceKind: "resource_kind",
       resourceId: "resource_id",
       userId: "user_id",
-      gramKey: "Gram-Key",
       gramSession: "Gram-Session",
     });
   }),

@@ -28,6 +28,9 @@ export function CheckAccess({
     throwOnError: false,
   });
   const [userId, setUserId] = useState<string>();
+  // A failed background refetch keeps the members already loaded, so only a
+  // lookup that never returned anyone counts as failed.
+  const failed = isError && !membersData;
 
   const items = useMemo((): DropdownItem[] => {
     const members = membersData?.members ?? [];
@@ -74,10 +77,10 @@ export function CheckAccess({
           variant="secondary"
           className="h-auto w-full justify-start py-2 text-left"
           contentClassName="w-[var(--radix-popover-trigger-width)]"
-          disabledMessage={membersUnavailable(isLoading, isError)}
+          disabledMessage={membersUnavailable(isLoading, failed)}
         >
           <PickerLabel
-            failed={isError}
+            failed={failed}
             selected={selected}
             serverName={serverName}
           />
@@ -101,9 +104,9 @@ export function CheckAccess({
 /** Why the picker cannot be used yet, when it cannot. */
 function membersUnavailable(
   isLoading: boolean,
-  isError: boolean,
+  failed: boolean,
 ): string | undefined {
-  if (isError) return "People could not be loaded";
+  if (failed) return "People could not be loaded";
   if (isLoading) return "Loading people";
   return undefined;
 }

@@ -15,7 +15,6 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -159,9 +158,7 @@ func (s *Service) ExplainResourceAccess(ctx context.Context, payload *gen.Explai
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve member role sources").LogError(ctx, logger)
 	}
 	// Directory attribute values can carry personal data, so which mapping
-	// produced a role is shown to the same audience as the mappings. A legacy
-	// API key is never checked against grants, so it would pass any scope
-	// check; like the mappings themselves, the sources stay out of its reach.
+	// produced a role is shown to the same audience as the mappings.
 	showSources, err := s.authz.Evaluate(ctx, authz.Check{
 		Scope:        authz.ScopeOrgAdmin,
 		ResourceKind: "",
@@ -170,9 +167,6 @@ func (s *Service) ExplainResourceAccess(ctx context.Context, payload *gen.Explai
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "evaluate directory mapping visibility").LogError(ctx, logger)
-	}
-	if mode, byKey := contextvalues.APIKeyAuthorization(ctx); byKey && mode != contextvalues.APIKeyAuthorizationModePrincipal {
-		showSources = false
 	}
 	if !showSources {
 		for principalURN, source := range sources {

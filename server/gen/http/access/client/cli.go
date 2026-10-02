@@ -1073,7 +1073,7 @@ func BuildListAudienceOptionsPayload(accessListAudienceOptionsApikeyToken string
 
 // BuildExplainResourceAccessPayload builds the payload for the access
 // explainResourceAccess endpoint from CLI flags.
-func BuildExplainResourceAccessPayload(accessExplainResourceAccessResourceKind string, accessExplainResourceAccessResourceID string, accessExplainResourceAccessUserID string, accessExplainResourceAccessApikeyToken string, accessExplainResourceAccessSessionToken string) (*access.ExplainResourceAccessPayload, error) {
+func BuildExplainResourceAccessPayload(accessExplainResourceAccessResourceKind string, accessExplainResourceAccessResourceID string, accessExplainResourceAccessUserID string, accessExplainResourceAccessSessionToken string) (*access.ExplainResourceAccessPayload, error) {
 	var err error
 	var resourceKind string
 	{
@@ -1093,12 +1093,6 @@ func BuildExplainResourceAccessPayload(accessExplainResourceAccessResourceKind s
 	{
 		userID = accessExplainResourceAccessUserID
 	}
-	var apikeyToken *string
-	{
-		if accessExplainResourceAccessApikeyToken != "" {
-			apikeyToken = &accessExplainResourceAccessApikeyToken
-		}
-	}
 	var sessionToken *string
 	{
 		if accessExplainResourceAccessSessionToken != "" {
@@ -1109,7 +1103,6 @@ func BuildExplainResourceAccessPayload(accessExplainResourceAccessResourceKind s
 	v.ResourceKind = resourceKind
 	v.ResourceID = resourceID
 	v.UserID = userID
-	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil

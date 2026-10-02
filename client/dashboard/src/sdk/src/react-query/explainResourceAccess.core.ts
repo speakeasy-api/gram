@@ -53,7 +53,6 @@ export function buildExplainResourceAccessQuery(
       resourceKind: request.resourceKind,
       resourceId: request.resourceId,
       userId: request.userId,
-      gramKey: request.gramKey,
       gramSession: request.gramSession,
     }),
     queryFn: async function explainResourceAccessQueryFn(
@@ -85,7 +84,6 @@ export function queryKeyExplainResourceAccess(
     resourceKind: ResourceKind;
     resourceId: string;
     userId: string;
-    gramKey?: string | undefined;
     gramSession?: string | undefined;
   },
 ): QueryKey {

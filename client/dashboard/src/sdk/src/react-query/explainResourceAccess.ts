@@ -60,7 +60,7 @@ export type ExplainResourceAccessQueryError =
  * explainResourceAccess access
  *
  * @remarks
- * Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead.
+ * Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead. Like listIdentityAccess it describes one person's access, so it takes a session only: API keys are not checked against grants and would see any member's rules.
  */
 export function useExplainResourceAccess(
   request: ExplainResourceAccessRequest,
@@ -89,7 +89,7 @@ export function useExplainResourceAccess(
  * explainResourceAccess access
  *
  * @remarks
- * Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead.
+ * Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead. Like listIdentityAccess it describes one person's access, so it takes a session only: API keys are not checked against grants and would see any member's rules.
  */
 export function useExplainResourceAccessSuspense(
   request: ExplainResourceAccessRequest,
@@ -121,7 +121,6 @@ export function setExplainResourceAccessData(
       resourceKind: ResourceKind;
       resourceId: string;
       userId: string;
-      gramKey?: string | undefined;
       gramSession?: string | undefined;
     },
   ],
@@ -139,7 +138,6 @@ export function invalidateExplainResourceAccess(
       resourceKind: ResourceKind;
       resourceId: string;
       userId: string;
-      gramKey?: string | undefined;
       gramSession?: string | undefined;
     }]
   >,

@@ -251,7 +251,7 @@ export class Access extends ClientSDK {
    * explainResourceAccess access
    *
    * @remarks
-   * Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead.
+   * Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead. Like listIdentityAccess it describes one person's access, so it takes a session only: API keys are not checked against grants and would see any member's rules.
    */
   async explainResourceAccess(
     request: ExplainResourceAccessRequest,
