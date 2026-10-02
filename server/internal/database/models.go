@@ -128,7 +128,6 @@ type AdminMcpWriteProposal struct {
 
 type Agent struct {
 	ID                          uuid.UUID
-	IdentityEpoch               int64
 	OrganizationID              string
 	OwnerUserID                 string
 	ProjectID                   uuid.NullUUID
@@ -263,22 +262,20 @@ type Asset struct {
 }
 
 type Assistant struct {
-	ID                uuid.UUID
-	CreateRequestKey  pgtype.Text
-	CreateRequestHash pgtype.Text
-	ProjectID         uuid.UUID
-	OrganizationID    string
-	CreatedByUserID   pgtype.Text
-	Name              string
-	Model             string
-	Instructions      string
-	WarmTtlSeconds    int64
-	MaxConcurrency    int64
-	Status            string
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
-	DeletedAt         pgtype.Timestamptz
-	Deleted           bool
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Model           string
+	Instructions    string
+	WarmTtlSeconds  int64
+	MaxConcurrency  int64
+	Status          string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 type AssistantAgentBinding struct {
@@ -3679,7 +3676,6 @@ type TriggerWorkloadBinding struct {
 	WorkloadIssuerRefOrganizationID   pgtype.Text
 	WorkloadIssuerRefProjectID        uuid.NullUUID
 	WorkloadIssuerID                  uuid.NullUUID
-	WorkloadIssuerRefKind             pgtype.Text
 	Subject                           string
 	Generation                        int64
 	CreatedAt                         pgtype.Timestamptz
@@ -3976,7 +3972,6 @@ type WorkloadIdentityAdmission struct {
 
 type WorkloadIssuer struct {
 	ID                     uuid.UUID
-	IssuerKind             string
 	OrganizationID         string
 	ProjectID              uuid.NullUUID
 	Name                   string

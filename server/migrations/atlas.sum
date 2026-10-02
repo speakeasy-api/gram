@@ -1,4 +1,4 @@
-h1:1Fm6kTuXk4dNuQo7Go5I36U45T33wtnhJp0lAXKCAwg=
+h1:SbUXE6cfB6AC6mc5+6dOtBCLYWPQQw6DJnlPbkLrwjs=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -450,6 +450,6 @@ h1:1Fm6kTuXk4dNuQo7Go5I36U45T33wtnhJp0lAXKCAwg=
 20261001180720_okta-server-suggestion-dismissals.sql h1:XNLp2SFt684tMne7ilQ9Y6EVp7m7rMir2nZnnGtARoY=
 20261001211108_plugin_auto_created.sql h1:6L8IgWx3iu2HjqMubX4EnVkuYILSDwWamyVONr24+G0=
 20261001215122_drop-queries-table.sql h1:xWFkosNDeXftjXIZBDHR0ASSnDkvsGvlk7wDYvmeakc=
-20261002111657_assistant_identity_bindings.sql h1:mGK5xOYkdY68X1qJ57CZG01OCp7qZlqgdKd58N8LmqA=
-20261002134357_user-session-issuer-authorization-server-mode.sql h1:7e+z6YOGNhF3vV+0oThJrONPqG18NAJYdTlIfyy3IkQ=
-20261002160117_inference-conversation-adoption.sql h1:NtLk0jTaFvHh3oN/tZLyLU7cYF9tfYGoeZx617lM9V4=
+20261002125232_assistant_identity_bindings.sql h1:FCf/hO9/kn0rA9eJ5iFB20Q0st1L/aEL/iFBA/FE0e8=
+20261002134357_user-session-issuer-authorization-server-mode.sql h1:oGWkxOlIOc65viYWLFR1R1VmlJTcRWh+Uw04jaQt+SI=
+20261002160117_inference-conversation-adoption.sql h1:P0PYATAaGoP8vk8z19V8vV9wY2Gll64JG9eQ0cVRyZQ=
