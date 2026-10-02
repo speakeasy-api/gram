@@ -65,6 +65,10 @@ var _ = Service("assistants", func() {
 
 		Payload(func() {
 			Extend(CreateAssistantForm)
+			Attribute("idempotency_key", String, "Optional retry key, scoped to the caller and project. Reusing it with a different request or a deleted result is a conflict.", func() {
+				MinLength(1)
+				MaxLength(256)
+			})
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -73,6 +77,7 @@ var _ = Service("assistants", func() {
 
 		HTTP(func() {
 			POST("/rpc/assistants.create")
+			Header("idempotency_key:Idempotency-Key")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
@@ -80,6 +85,25 @@ var _ = Service("assistants", func() {
 
 		Meta("openapi:operationId", "createAssistant")
 		Meta("openapi:extension:x-speakeasy-name-override", "create")
+	})
+
+	Method("upgradeAssistantIdentity", func() {
+		Description("Explicitly upgrade a legacy assistant to a dedicated agent and stable trigger workload identities. Existing assistants are never upgraded implicitly.")
+		Payload(func() {
+			Attribute("id", String, "The assistant ID.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+		Result(shared.Assistant)
+		HTTP(func() {
+			POST("/rpc/assistants.upgradeIdentity")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "upgradeAssistantIdentity")
+		Meta("openapi:extension:x-speakeasy-name-override", "upgradeIdentity")
 	})
 
 	Method("updateAssistant", func() {

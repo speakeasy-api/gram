@@ -633,6 +633,9 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 		OrganizationID: t.organizationID,
 		ID:             id,
 	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "workload issuer not found")
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "error locking the workload issuer").LogError(ctx, s.logger)
 	}
 
@@ -1041,6 +1044,12 @@ func (s *Service) UpdateSubject(ctx context.Context, payload *gen.UpdateSubjectP
 	}
 
 	if agent != nil {
+		if err := q.RevokeWorkloadAssignmentSessions(ctx, repo.RevokeWorkloadAssignmentSessionsParams{
+			OrganizationID: t.organizationID, WorkloadIssuerID: existing.WorkloadIssuerID,
+			MatchKind: existing.MatchKind, Subject: existing.Subject,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error revoking reassigned workload sessions").LogError(ctx, s.logger)
+		}
 		// Repointed in place, in the same transaction as the admission, so the
 		// workload is never without an agent. The assignment is keyed on the
 		// (issuer, match_kind, subject) tuple rather than on this admission, so an
@@ -1134,6 +1143,9 @@ func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubj
 		OrganizationID: t.organizationID,
 		ID:             existing.WorkloadIssuerID,
 	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "workload issuer not found")
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "error locking the workload issuer").LogError(ctx, s.logger)
 	}
 
@@ -1183,6 +1195,12 @@ func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubj
 	}
 
 	if remaining == 0 {
+		if err := q.RevokeWorkloadAssignmentSessions(ctx, repo.RevokeWorkloadAssignmentSessionsParams{
+			OrganizationID: t.organizationID, WorkloadIssuerID: existing.WorkloadIssuerID,
+			MatchKind: existing.MatchKind, Subject: existing.Subject,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error revoking withdrawn workload sessions").LogError(ctx, s.logger)
+		}
 		if _, err := q.SoftDeleteWorkloadAgentAssignmentForSubject(ctx, repo.SoftDeleteWorkloadAgentAssignmentForSubjectParams{
 			OrganizationID:   t.organizationID,
 			WorkloadIssuerID: existing.WorkloadIssuerID,

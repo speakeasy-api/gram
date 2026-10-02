@@ -1,4 +1,4 @@
-package agents
+package agents_test
 
 import (
 	"testing"
@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -27,32 +28,32 @@ func TestResolvePrincipalIsTenantScopedAndFailClosed(t *testing.T) {
 	require.NoError(t, err)
 	principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
 
-	resolved, err := ResolvePrincipal(t.Context(), conn, "org_one", principal)
+	resolved, err := agents.ResolvePrincipal(t.Context(), conn, "org_one", principal)
 	require.NoError(t, err)
 	require.Equal(t, agent.ID, resolved.ID)
 
-	_, err = ResolvePrincipal(t.Context(), conn, "org_two", principal)
-	require.ErrorIs(t, err, ErrPrincipalNotFound)
+	_, err = agents.ResolvePrincipal(t.Context(), conn, "org_two", principal)
+	require.ErrorIs(t, err, agents.ErrPrincipalNotFound)
 
 	missing := urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString())
-	_, err = ResolvePrincipal(t.Context(), conn, "org_one", missing)
-	require.ErrorIs(t, err, ErrPrincipalNotFound)
+	_, err = agents.ResolvePrincipal(t.Context(), conn, "org_one", missing)
+	require.ErrorIs(t, err, agents.ErrPrincipalNotFound)
 
 	err = testrepo.New(conn).SoftDeleteAgentFixture(t.Context(), agent.ID)
 	require.NoError(t, err)
-	_, err = ResolvePrincipal(t.Context(), conn, "org_one", principal)
-	require.ErrorIs(t, err, ErrPrincipalNotFound)
+	_, err = agents.ResolvePrincipal(t.Context(), conn, "org_one", principal)
+	require.ErrorIs(t, err, agents.ErrPrincipalNotFound)
 
 	malformed := urn.NewPrincipal(urn.PrincipalTypeAgent, "not-a-uuid")
-	_, err = ResolvePrincipal(t.Context(), conn, "org_one", malformed)
-	require.ErrorIs(t, err, ErrPrincipalInvalid)
+	_, err = agents.ResolvePrincipal(t.Context(), conn, "org_one", malformed)
+	require.ErrorIs(t, err, agents.ErrPrincipalInvalid)
 
-	_, err = ResolvePrincipal(t.Context(), conn, "org_one", urn.NewPrincipal(urn.PrincipalTypeUser, "user_one"))
-	require.ErrorIs(t, err, ErrPrincipalInvalid)
+	_, err = agents.ResolvePrincipal(t.Context(), conn, "org_one", urn.NewPrincipal(urn.PrincipalTypeUser, "user_one"))
+	require.ErrorIs(t, err, agents.ErrPrincipalInvalid)
 
 	conn.Close()
-	_, err = ResolvePrincipal(t.Context(), conn, "org_one", missing)
+	_, err = agents.ResolvePrincipal(t.Context(), conn, "org_one", missing)
 	require.Error(t, err)
-	require.NotErrorIs(t, err, ErrPrincipalInvalid)
-	require.NotErrorIs(t, err, ErrPrincipalNotFound)
+	require.NotErrorIs(t, err, agents.ErrPrincipalInvalid)
+	require.NotErrorIs(t, err, agents.ErrPrincipalNotFound)
 }

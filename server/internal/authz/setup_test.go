@@ -2,52 +2,40 @@ package authz
 
 import (
 	"context"
-	"log"
-	"os"
+	"log/slog"
 	"testing"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/metric"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-var (
-	cloneTestDatabase   testenv.PostgresDBCloneFunc
-	newClickhouseClient testenv.ClickhouseClientFunc
-)
+// TestInfrastructure supplies test-only dependencies from the external test
+// package. Keeping testenv outside package authz avoids its application-level
+// import cycle while preserving private API integration coverage.
+type TestInfrastructure struct {
+	ClonePostgres       func(t *testing.T, name string) (*pgxpool.Pool, error)
+	NewClickhouseClient func(t *testing.T) (clickhouse.Conn, error)
+	NewLogger           func(t *testing.T) *slog.Logger
+	NewMeterProvider    func(t *testing.T) metric.MeterProvider
+	BeginTx             func(t *testing.T, ctx context.Context, conn *pgxpool.Pool) pgx.Tx
+}
 
-func TestMain(m *testing.M) {
-	ctx := context.Background()
+var testInfrastructure TestInfrastructure
 
-	pgContainer, cloneFunc, err := testenv.NewTestPostgres(ctx)
-	if err != nil {
-		log.Fatalf("launch test postgres: %v", err)
-	}
-	cloneTestDatabase = cloneFunc
-
-	chContainer, chFactory, err := testenv.NewTestClickhouse(ctx)
-	if err != nil {
-		log.Fatalf("launch test clickhouse: %v", err)
-	}
-	newClickhouseClient = chFactory
-
-	code := m.Run()
-
-	if err := chContainer.Terminate(ctx); err != nil {
-		log.Fatalf("terminate clickhouse container: %v", err)
-	}
-	if err := pgContainer.Terminate(ctx); err != nil {
-		log.Fatalf("terminate postgres container: %v", err)
-	}
-
-	os.Exit(code)
+// SetTestInfrastructure is called once by the external TestMain, before m.Run.
+// It is compiled only into the test binary; no production API is exposed.
+func SetTestInfrastructure(infrastructure TestInfrastructure) {
+	testInfrastructure = infrastructure
 }
 
 func enterpriseTestCtx(ctx context.Context) context.Context {
@@ -72,7 +60,7 @@ func enterpriseTestCtx(ctx context.Context) context.Context {
 func newTestDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
-	conn, err := cloneTestDatabase(t, "testdb")
+	conn, err := testInfrastructure.ClonePostgres(t, "testdb")
 	require.NoError(t, err)
 
 	return conn

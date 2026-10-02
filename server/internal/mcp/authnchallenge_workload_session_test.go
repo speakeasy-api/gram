@@ -347,5 +347,11 @@ func TestApplyIssuerGate_WorkloadSessionDoesNotInheritAnUnassignedAgentsPolicy(t
 
 	w = httptest.NewRecorder()
 	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
-	require.NoError(t, err, "the same workload must be admitted through an agent that holds the grant, or the refusal above proves nothing")
+	require.Error(t, err, "an old session must not inherit a replacement agent's authority")
+
+	fresh := seedWorkloadSession(t, ctx, ti, fx, subject)
+	freshToken := mintSessionBearerExpiringAt(t, ti, fx, fresh, fresh.ExpiresAt.Time)
+	w = httptest.NewRecorder()
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, freshToken, ti.serverURL.String(), endpoint)
+	require.NoError(t, err, "fresh issuance under the replacement agent must remain supported")
 }

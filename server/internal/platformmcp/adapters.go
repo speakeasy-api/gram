@@ -352,6 +352,7 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
+	assistantIdentity         *assistantIdentityService
 	xaaReadiness              *xaaReadinessService
 	logger                    *slog.Logger
 	db                        *pgxpool.Pool
@@ -381,6 +382,7 @@ type PostgresReader struct {
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 	return &PostgresReader{
+		assistantIdentity:         nil,
 		logger:                    logger.With(attr.SlogComponent("platformmcp")),
 		db:                        db,
 		reader:                    readmodel.New(db),

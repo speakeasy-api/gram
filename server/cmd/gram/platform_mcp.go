@@ -57,6 +57,7 @@ import (
 )
 
 type platformMCPConfig struct {
+	AssistantIdentity      platformmcp.AssistantIdentityManagement
 	Logger                 *slog.Logger
 	MeterProvider          metric.MeterProvider
 	TracerProvider         trace.TracerProvider
@@ -416,6 +417,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), config.FeatureFlags).
 		WithAuthorization(config.Authz).
+		WithAssistantIdentityManagement(config.AssistantIdentity).
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
@@ -865,6 +867,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), config.FeatureFlags).
 		WithAuthorization(config.Authz).
+		WithAssistantIdentityManagement(config.AssistantIdentity).
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).

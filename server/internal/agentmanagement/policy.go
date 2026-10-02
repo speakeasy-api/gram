@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
 type policyGrantRow struct {
@@ -75,7 +76,10 @@ func (s *Service) CreatePolicyGrant(ctx context.Context, payload *gen.CreatePoli
 			return err
 		}
 		result, err = s.createPolicyGrant(ctx, tx, human, agent, scope, selectorRaw)
-		return err
+		if err != nil {
+			return err
+		}
+		return invalidatePolicyAuthority(ctx, tx, agent)
 	})
 	if err != nil {
 		return nil, s.serviceError(ctx, err, string(audit.ActionAgentPolicyGrantCreate))
@@ -148,6 +152,9 @@ func (s *Service) UpdatePolicyGrant(ctx context.Context, payload *gen.UpdatePoli
 		if err != nil {
 			return err
 		}
+		if err := invalidatePolicyAuthority(ctx, tx, agent); err != nil {
+			return err
+		}
 		return s.logPolicyGrant(ctx, tx, human, agent, audit.ActionAgentPolicyGrantUpdate, policyGrantAuditSnapshot(before), policyGrantAuditSnapshot(after))
 	})
 	if err != nil {
@@ -181,6 +188,9 @@ func (s *Service) DeletePolicyGrant(ctx context.Context, payload *gen.DeletePoli
 			return fmt.Errorf("delete agent policy grant: %w", err)
 		}
 		before := policyGrantRow{ID: row.ID, Scope: row.Scope, Selectors: row.Selectors, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
+		if err := invalidatePolicyAuthority(ctx, tx, agent); err != nil {
+			return err
+		}
 		return s.logPolicyGrant(ctx, tx, human, agent, audit.ActionAgentPolicyGrantDelete, policyGrantAuditSnapshot(before), nil)
 	})
 	if err != nil {
@@ -293,4 +303,14 @@ func parseGrantID(raw string) (uuid.UUID, error) {
 		return uuid.Nil, oops.E(oops.CodeBadRequest, err, "invalid policy grant id")
 	}
 	return id, nil
+}
+
+func invalidatePolicyAuthority(ctx context.Context, tx pgx.Tx, agent repo.Agent) error {
+	if err := workloadidentity.RevokeAgentWorkloadSessionsTx(ctx, tx, agent.OrganizationID, agent.ID); err != nil {
+		return fmt.Errorf("invalidate agent authority: %w", err)
+	}
+	if err := repo.New(tx).AdvanceAgentIdentityEpoch(ctx, repo.AdvanceAgentIdentityEpochParams{OrganizationID: agent.OrganizationID, AgentID: agent.ID}); err != nil {
+		return fmt.Errorf("advance agent policy identity epoch: %w", err)
+	}
+	return nil
 }

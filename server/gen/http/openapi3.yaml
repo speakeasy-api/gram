@@ -18325,6 +18325,15 @@ paths:
             operationId: createAssistant
             parameters:
                 - allowEmptyValue: true
+                  description: Optional retry key, scoped to the caller and project. Reusing it with a different request or a deleted result is a conflict.
+                  in: header
+                  name: Idempotency-Key
+                  schema:
+                    description: Optional retry key, scoped to the caller and project. Reusing it with a different request or a deleted result is a conflict.
+                    maxLength: 256
+                    minLength: 1
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -19148,6 +19157,99 @@ paths:
             tags:
                 - assistants
             x-speakeasy-name-override: update
+    /rpc/assistants.upgradeIdentity:
+        post:
+            description: Explicitly upgrade a legacy assistant to a dedicated agent and stable trigger workload identities. Existing assistants are never upgraded implicitly.
+            operationId: upgradeAssistantIdentity
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskIDRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Assistant'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: upgradeAssistantIdentity assistants
+            tags:
+                - assistants
+            x-speakeasy-name-override: upgradeIdentity
     /rpc/auditlogs.list:
         get:
             description: List audit logs across organization and projects.
@@ -84153,6 +84255,10 @@ components:
         Assistant:
             type: object
             properties:
+                agent_id:
+                    type: string
+                    description: The dedicated agent ID for an active identity binding.
+                    format: uuid
                 created_at:
                     type: string
                     description: Creation timestamp.
@@ -84164,6 +84270,17 @@ components:
                     type: string
                     description: The assistant ID.
                     format: uuid
+                identity_generation:
+                    type: integer
+                    description: The current or last retained assistant identity binding generation.
+                    format: int64
+                identity_state:
+                    type: string
+                    description: Whether this assistant has never configured, active, or tombstoned workload identity bindings. This is configuration state, not permission to execute.
+                    enum:
+                        - NEVER_CONFIGURED
+                        - ACTIVE
+                        - TOMBSTONED
                 instructions:
                     type: string
                     description: The system instructions for the assistant.

@@ -17,6 +17,10 @@ export type CreateAssistantSecurity = {
 
 export type CreateAssistantRequest = {
   /**
+   * Optional retry key, scoped to the caller and project. Reusing it with a different request or a deleted result is a conflict.
+   */
+  idempotencyKey?: string | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -60,6 +64,7 @@ export function createAssistantSecurityToJSON(
 
 /** @internal */
 export type CreateAssistantRequest$Outbound = {
+  "Idempotency-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   CreateAssistantForm: CreateAssistantForm$Outbound;
@@ -71,12 +76,14 @@ export const CreateAssistantRequest$outboundSchema: z.ZodMiniType<
   CreateAssistantRequest
 > = z.pipe(
   z.object({
+    idempotencyKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     createAssistantForm: CreateAssistantForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
+      idempotencyKey: "Idempotency-Key",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
       createAssistantForm: "CreateAssistantForm",

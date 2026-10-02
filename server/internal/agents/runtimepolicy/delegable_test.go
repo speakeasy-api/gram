@@ -1,7 +1,8 @@
-package runtimepolicy
+package runtimepolicy_test
 
 import (
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -18,7 +19,7 @@ func TestDelegableGrants(t *testing.T) {
 
 	t.Run("implications and pinned dimensions", func(t *testing.T) {
 		t.Parallel()
-		grants, err := DelegableGrants([]authz.Grant{broad}, []authz.Grant{owner}, []authz.Grant{caller})
+		grants, err := runtimepolicy.DelegableGrants([]authz.Grant{broad}, []authz.Grant{owner}, []authz.Grant{caller})
 		require.NoError(t, err)
 		require.Len(t, grants, 1)
 		require.Equal(t, authz.ScopeMCPConnect, grants[0].Scope)
@@ -29,7 +30,7 @@ func TestDelegableGrants(t *testing.T) {
 		t.Parallel()
 		incompatible := authz.Grant{PrincipalUrn: "", Scope: caller.Scope, Selector: authz.NewSelector(caller.Scope, "other-server")}
 		for _, policy := range [][]authz.Grant{nil, {incompatible}} {
-			grants, err := DelegableGrants([]authz.Grant{broad}, []authz.Grant{owner}, policy)
+			grants, err := runtimepolicy.DelegableGrants([]authz.Grant{broad}, []authz.Grant{owner}, policy)
 			require.NoError(t, err)
 			require.Empty(t, grants)
 		}
@@ -38,31 +39,31 @@ func TestDelegableGrants(t *testing.T) {
 		t.Parallel()
 		exclusion := authz.Grant{PrincipalUrn: "", Scope: authz.ScopeMCPBlockedConnect, Selector: authz.NewSelector(authz.ScopeMCPBlockedConnect, server)}
 		exclusion.Selector[authz.SelectorKeyTool] = "denied-tool"
-		grants, err := DelegableGrants([]authz.Grant{broad}, []authz.Grant{broad}, []authz.Grant{broad, exclusion})
+		grants, err := runtimepolicy.DelegableGrants([]authz.Grant{broad}, []authz.Grant{broad}, []authz.Grant{broad, exclusion})
 		require.NoError(t, err)
 		require.Empty(t, grants, "write and read imply connect, whose broad candidate overlaps the exclusion")
-		grants, err = DelegableGrants([]authz.Grant{broad}, []authz.Grant{owner}, []authz.Grant{caller, exclusion})
+		grants, err = runtimepolicy.DelegableGrants([]authz.Grant{broad}, []authz.Grant{owner}, []authz.Grant{caller, exclusion})
 		require.NoError(t, err)
 		require.Len(t, grants, 1, "a disjoint pinned tool remains representable")
 		exclusion.Selector[authz.SelectorKeyTool] = "allowed-tool"
-		grants, err = DelegableGrants([]authz.Grant{broad}, []authz.Grant{owner}, []authz.Grant{caller, exclusion})
+		grants, err = runtimepolicy.DelegableGrants([]authz.Grant{broad}, []authz.Grant{owner}, []authz.Grant{caller, exclusion})
 		require.NoError(t, err)
 		require.Empty(t, grants)
 	})
 	t.Run("current registry scopes are discoverable", func(t *testing.T) {
 		t.Parallel()
 		sync := authz.NewGrant(authz.ScopeOrgDeviceAgentSync, "example-org")
-		grants, err := DelegableGrants([]authz.Grant{sync}, []authz.Grant{sync}, []authz.Grant{sync})
+		grants, err := runtimepolicy.DelegableGrants([]authz.Grant{sync}, []authz.Grant{sync}, []authz.Grant{sync})
 		require.NoError(t, err)
 		require.Len(t, grants, 1)
 		require.Equal(t, authz.ScopeOrgDeviceAgentSync, grants[0].Scope)
-		_, err = NewDelegatedPolicy(CurrentDelegatedPolicyVersion, grants)
+		_, err = runtimepolicy.NewDelegatedPolicy(runtimepolicy.CurrentDelegatedPolicyVersion, grants)
 		require.NoError(t, err)
 	})
 	t.Run("runtime unsafe scopes never become candidates", func(t *testing.T) {
 		t.Parallel()
 		unsafe := authz.Grant{PrincipalUrn: "", Scope: authz.ScopeAgentAuthorize, Selector: authz.NewSelector(authz.ScopeAgentAuthorize, "example-agent")}
-		grants, err := DelegableGrants([]authz.Grant{unsafe}, []authz.Grant{unsafe}, []authz.Grant{unsafe})
+		grants, err := runtimepolicy.DelegableGrants([]authz.Grant{unsafe}, []authz.Grant{unsafe}, []authz.Grant{unsafe})
 		require.NoError(t, err)
 		require.Empty(t, grants)
 	})
@@ -76,20 +77,20 @@ func TestDelegableWildcardCandidates(t *testing.T) {
 		t.Run(resource, func(t *testing.T) {
 			t.Parallel()
 			agent := authz.NewGrant(authz.ScopeMCPWrite, resource)
-			grants, err := DelegableGrants([]authz.Grant{agent}, []authz.Grant{broad}, []authz.Grant{caller})
+			grants, err := runtimepolicy.DelegableGrants([]authz.Grant{agent}, []authz.Grant{broad}, []authz.Grant{caller})
 			require.NoError(t, err)
 			require.Len(t, grants, 1)
 			require.Equal(t, resource, grants[0].Selector[authz.SelectorKeyResourceID])
-			policy, err := NewDelegatedPolicyV1(grants)
+			policy, err := runtimepolicy.NewDelegatedPolicyV1(grants)
 			require.NoError(t, err)
-			allowed, err := DelegationContained(policy, []authz.Grant{agent}, []authz.Grant{broad}, []authz.Grant{caller})
+			allowed, err := runtimepolicy.DelegationContained(policy, []authz.Grant{agent}, []authz.Grant{broad}, []authz.Grant{caller})
 			require.NoError(t, err)
 			require.True(t, allowed)
 			exclusion := authz.NewGrant(authz.ScopeMCPBlockedConnect, "example-server")
-			allowed, err = DelegationContained(policy, []authz.Grant{agent}, []authz.Grant{broad}, []authz.Grant{caller, exclusion})
+			allowed, err = runtimepolicy.DelegationContained(policy, []authz.Grant{agent}, []authz.Grant{broad}, []authz.Grant{caller, exclusion})
 			require.NoError(t, err)
 			require.False(t, allowed)
-			grants, err = DelegableGrants([]authz.Grant{agent}, []authz.Grant{broad}, []authz.Grant{caller, exclusion})
+			grants, err = runtimepolicy.DelegableGrants([]authz.Grant{agent}, []authz.Grant{broad}, []authz.Grant{caller, exclusion})
 			require.NoError(t, err)
 			require.Empty(t, grants)
 		})
@@ -112,10 +113,10 @@ func TestDelegableGrantsConcreteResource(t *testing.T) {
 				}
 				policies := [][]authz.Grant{{broad}, {broad}, {broad}}
 				policies[excludedBy] = append(policies[excludedBy], exclusion)
-				unscoped, err := DelegableGrants(policies[0], policies[1], policies[2])
+				unscoped, err := runtimepolicy.DelegableGrants(policies[0], policies[1], policies[2])
 				require.NoError(t, err)
 				require.Empty(t, unscoped)
-				grants, err := DelegableGrants(policies[0], policies[1], policies[2], constraint)
+				grants, err := runtimepolicy.DelegableGrants(policies[0], policies[1], policies[2], constraint)
 				require.NoError(t, err)
 				if dimension == authz.SelectorKeyTool || dimension == authz.SelectorKeyDisposition {
 					require.Empty(t, grants, "overlapping tool/disposition exclusions still fail closed")
@@ -124,14 +125,14 @@ func TestDelegableGrantsConcreteResource(t *testing.T) {
 				require.Len(t, grants, 3, "write, read, and connect implications remain delegable")
 				for _, grant := range grants {
 					require.Equal(t, constraint, grant.Selector)
-					policy, err := NewDelegatedPolicyV1([]authz.Grant{grant})
+					policy, err := runtimepolicy.NewDelegatedPolicyV1([]authz.Grant{grant})
 					require.NoError(t, err)
-					safe, err := DelegationContained(policy, policies...)
+					safe, err := runtimepolicy.DelegationContained(policy, policies...)
 					require.NoError(t, err)
 					require.True(t, safe)
 				}
 				exclusion.Selector[dimension] = constraint[dimension]
-				grants, err = DelegableGrants(policies[0], policies[1], policies[2], constraint)
+				grants, err = runtimepolicy.DelegableGrants(policies[0], policies[1], policies[2], constraint)
 				require.NoError(t, err)
 				require.Empty(t, grants, "selected resource exclusions also block implied scopes")
 			})
@@ -147,7 +148,7 @@ func TestDelegableGrantsConcreteResourcePreservesPinnedDimensions(t *testing.T) 
 	pinned := authz.NewGrant(authz.ScopeMCPConnect, "*")
 	pinned.Selector[authz.SelectorKeyTool] = "safe-tool"
 	pinned.Selector[authz.SelectorKeyDisposition] = authz.DispositionReadOnly
-	grants, err := DelegableGrants([]authz.Grant{broad}, []authz.Grant{broad}, []authz.Grant{pinned}, constraint)
+	grants, err := runtimepolicy.DelegableGrants([]authz.Grant{broad}, []authz.Grant{broad}, []authz.Grant{pinned}, constraint)
 	require.NoError(t, err)
 	require.Len(t, grants, 1)
 	require.Equal(t, authz.ScopeMCPConnect, grants[0].Scope)
@@ -156,11 +157,11 @@ func TestDelegableGrantsConcreteResourcePreservesPinnedDimensions(t *testing.T) 
 	for _, dimension := range []string{authz.SelectorKeyResourceID, authz.SelectorKeyProjectID} {
 		incompatible := authz.NewGrant(authz.ScopeMCPConnect, "*")
 		incompatible.Selector[dimension] = "other"
-		grants, err := DelegableGrants([]authz.Grant{broad}, []authz.Grant{broad}, []authz.Grant{incompatible}, constraint)
+		grants, err := runtimepolicy.DelegableGrants([]authz.Grant{broad}, []authz.Grant{broad}, []authz.Grant{incompatible}, constraint)
 		require.NoError(t, err)
 		require.Empty(t, grants)
 	}
-	grants, err = DelegableGrants([]authz.Grant{authz.NewGrant(authz.ScopeSkillRead, "*")}, []authz.Grant{broad}, []authz.Grant{broad}, constraint)
+	grants, err = runtimepolicy.DelegableGrants([]authz.Grant{authz.NewGrant(authz.ScopeSkillRead, "*")}, []authz.Grant{broad}, []authz.Grant{broad}, constraint)
 	require.NoError(t, err)
 	require.Empty(t, grants, "scoped discovery excludes unrelated resource kinds")
 }
@@ -176,15 +177,15 @@ func TestDelegationContainedDirectGrantOutranksInheritedRestriction(t *testing.T
 	roleBlock := authz.Grant{PrincipalUrn: role, Scope: authz.ScopeMCPBlockedConnect, Selector: authz.NewSelector(authz.ScopeMCPBlockedConnect, server)}
 	direct := authz.Grant{PrincipalUrn: user, Scope: authz.ScopeMCPConnect, Selector: authz.NewSelector(authz.ScopeMCPConnect, server)}
 	ownBlock := authz.Grant{PrincipalUrn: user, Scope: authz.ScopeMCPBlockedConnect, Selector: authz.NewSelector(authz.ScopeMCPBlockedConnect, server)}
-	concrete, err := NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, server)})
+	concrete, err := runtimepolicy.NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, server)})
 	require.NoError(t, err)
-	wildcard, err := NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, "*")})
+	wildcard, err := runtimepolicy.NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, "*")})
 	require.NoError(t, err)
 
 	for _, tc := range []struct {
 		name      string
 		policy    []authz.Grant
-		delegated DelegatedPolicy
+		delegated runtimepolicy.DelegatedPolicy
 		contained bool
 	}{
 		{"inherited restriction blocks", []authz.Grant{roleAllow, roleBlock}, concrete, false},
@@ -194,7 +195,7 @@ func TestDelegationContainedDirectGrantOutranksInheritedRestriction(t *testing.T
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			contained, err := DelegationContained(tc.delegated, tc.policy)
+			contained, err := runtimepolicy.DelegationContained(tc.delegated, tc.policy)
 			require.NoError(t, err)
 			require.Equal(t, tc.contained, contained)
 		})

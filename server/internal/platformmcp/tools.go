@@ -213,6 +213,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"Registration never distributes an MCP: use list_plugins to show the project's plugins, ask the user which one should carry it, then call distribute_mcp_to_plugin naming that plugin exactly. There is no implicit default.",
 			"To change an existing MCP server or gateway address or network access, first read its exact connection settings in the selected project. Show the current and proposed address or mode, and wait for explicit confirmation before changing it. Re-read that same target afterwards. A publication request means the plugin update was requested, not that its packages or downstream users have converged; verify the publication evidence before reporting completion.",
 			"Before moving any MCP server or gateway to dual or private_only, call get_network_ingress. If ready_for_private_access is false, report its next_action and present its exact setup_url instead of attempting the change; Tailscale credentials are entered only in the dashboard, never in chat. Private access restricts who can reach the AI Control Plane endpoint over the organization's tailnet; it does not change where the upstream MCP server is hosted.",
+			"Use upgrade_assistant_workload_identity only when the user explicitly requests upgrading a legacy assistant. Name the exact project and assistant and wait for confirmation. Never upgrade implicitly, expose binding primitives, or treat ACTIVE identity configuration as runtime authorization. Repeating this one-way upgrade is safe; it cannot restore tombstoned identities.",
 			"Creating a data export is a mutation: first show the exact project, endpoint, data source, enabled state, and sensitive-data policy, then ask for explicit confirmation. Never request or accept authorization header values in chat; create the export without headers and send the user to the returned management URL to add authentication securely.",
 			"Dismissing Watchdog findings as false positives, or restoring them, is a mutation: name the exact project and the exact findings, wait for explicit confirmation, then report which findings changed, which were already in that state, and which were not found in the project. A dismissal suppresses only the findings named; a risk exclusion is the tool for a whole class of findings.",
 			"Project-wide chat listings are metadata only: when a conversation was active, how long it ran, which app produced it, whether risk analysis found anything, and a masked participant. Never present a listed chat's title or what was said as known, and send the administrator to the dashboard to read a transcript. Personal session recall is separate: it may present the caller's own sessions by title and their own redacted handoff digest.",
@@ -237,6 +238,12 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	})
 
 	reg := newRegistrar(server)
+
+	var assistantIdentity *assistantIdentityService
+	if postgresReader, ok := reader.(*PostgresReader); ok {
+		assistantIdentity = postgresReader.assistantIdentity
+	}
+	registerAssistantIdentityTool(reg, assistantIdentity)
 
 	registerReadTools(reg, reader, cursorKeyMaterial)
 	var xaaReadiness *xaaReadinessService

@@ -7,7 +7,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -27,7 +26,7 @@ func TestRequireUserOrganizationScopeLoadsRequestedOrganizationRoleGrants(t *tes
 	seedRoleAssignmentForUser(t, ctx, conn, targetOrganizationID, userID, SystemRoleMember)
 
 	ctx = GrantsToContext(ctx, []Grant{NewGrant(ScopeOrgRead, activeOrganizationID)})
-	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testInfrastructure.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	require.NoError(t, engine.RequireUserOrganizationScope(ctx, targetOrganizationID, userID, ScopeOrgRead))
 }
@@ -45,7 +44,7 @@ func TestRequireUserOrganizationScopeRejectsActiveOrganizationGrants(t *testing.
 	seedOrganization(t, ctx, conn, targetOrganizationID)
 	seedActiveOrganizationUser(t, ctx, conn, targetOrganizationID, userID)
 	ctx = GrantsToContext(ctx, []Grant{NewGrant(ScopeOrgAdmin, WildcardResource)})
-	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testInfrastructure.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	err := engine.RequireUserOrganizationScope(ctx, targetOrganizationID, userID, ScopeOrgRead)
 	require.Error(t, err)
@@ -62,7 +61,7 @@ func TestRequireUserOrganizationScopeSkipsSessionlessRequests(t *testing.T) {
 	require.True(t, ok)
 	authCtx.SessionID = nil
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
-	engine := NewEngine(testenv.NewLogger(t), nil, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testInfrastructure.NewLogger(t), nil, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	require.NoError(t, engine.RequireUserOrganizationScope(ctx, "org_requested_scope_target", authCtx.UserID, ScopeOrgRead))
 }
@@ -76,7 +75,7 @@ func TestRequireUserOrganizationScopeRejectsAPIKeys(t *testing.T) {
 	authCtx.APIKeyID = "api_key_requested_scope"
 	authCtx.SessionID = nil
 	ctx = contextvalues.WithLegacyAPIKeyAuthorization(ctx, authCtx)
-	engine := NewEngine(testenv.NewLogger(t), nil, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testInfrastructure.NewLogger(t), nil, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	err := engine.RequireUserOrganizationScope(ctx, "org_requested_scope_target", authCtx.UserID, ScopeOrgRead)
 	require.Error(t, err)

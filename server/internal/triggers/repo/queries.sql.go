@@ -302,6 +302,43 @@ func (q *Queries) GetTriggerInstanceByID(ctx context.Context, arg GetTriggerInst
 	return i, err
 }
 
+const getTriggerInstanceByIDForUpdate = `-- name: GetTriggerInstanceByIDForUpdate :one
+SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+FROM trigger_instances ti
+WHERE ti.id = $1
+  AND ti.project_id = $2
+  AND ti.deleted IS FALSE
+FOR UPDATE
+`
+
+type GetTriggerInstanceByIDForUpdateParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetTriggerInstanceByIDForUpdate(ctx context.Context, arg GetTriggerInstanceByIDForUpdateParams) (TriggerInstance, error) {
+	row := q.db.QueryRow(ctx, getTriggerInstanceByIDForUpdate, arg.ID, arg.ProjectID)
+	var i TriggerInstance
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.DefinitionSlug,
+		&i.Name,
+		&i.EnvironmentID,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.TargetDisplay,
+		&i.ConfigJson,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getTriggerInstanceByIDPublic = `-- name: GetTriggerInstanceByIDPublic :one
 SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 FROM trigger_instances ti
@@ -545,6 +582,19 @@ func (q *Queries) ListTriggerInstances(ctx context.Context, projectID uuid.UUID)
 	return items, nil
 }
 
+const lockTriggerProject = `-- name: LockTriggerProject :one
+SELECT id FROM projects WHERE id = $1 AND deleted IS FALSE FOR UPDATE
+`
+
+// Identity mutations take the project anchor before trigger rows to match
+// assistantidentity's lock order, including concurrent first provisioning.
+func (q *Queries) LockTriggerProject(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockTriggerProject, projectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const routeTriggerThread = `-- name: RouteTriggerThread :one
 INSERT INTO trigger_thread_routes (
     project_id,
@@ -662,6 +712,7 @@ SET
     updated_at = clock_timestamp()
 WHERE id = $2
   AND status = $3
+  AND definition_slug = 'wake'
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 `

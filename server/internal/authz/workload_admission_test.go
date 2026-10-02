@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -18,7 +17,7 @@ import (
 func TestWorkloadAdmissionReplacesEarlierAdmittedPolicies(t *testing.T) {
 	t.Parallel()
 	check := Check{Scope: ScopeProjectRead, ResourceID: "project-one"}
-	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient(), EngineOpts{
+	engine := NewEngine(testInfrastructure.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient(), EngineOpts{
 		DevMode: false,
 		AdmitWorkloadSession: func(context.Context, *pgxpool.Pool) (WorkloadSessionAdmission, error) {
 			return WorkloadSessionAdmission{

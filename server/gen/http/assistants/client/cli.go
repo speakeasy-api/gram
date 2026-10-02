@@ -73,7 +73,7 @@ func BuildGetAssistantPayload(assistantsGetAssistantID string, assistantsGetAssi
 
 // BuildCreateAssistantPayload builds the payload for the assistants
 // createAssistant endpoint from CLI flags.
-func BuildCreateAssistantPayload(assistantsCreateAssistantBody string, assistantsCreateAssistantSessionToken string, assistantsCreateAssistantProjectSlugInput string) (*assistants.CreateAssistantPayload, error) {
+func BuildCreateAssistantPayload(assistantsCreateAssistantBody string, assistantsCreateAssistantIdempotencyKey string, assistantsCreateAssistantSessionToken string, assistantsCreateAssistantProjectSlugInput string) (*assistants.CreateAssistantPayload, error) {
 	var err error
 	var body CreateAssistantRequestBody
 	{
@@ -91,6 +91,21 @@ func BuildCreateAssistantPayload(assistantsCreateAssistantBody string, assistant
 		}
 		if err != nil {
 			return nil, err
+		}
+	}
+	var idempotencyKey *string
+	{
+		if assistantsCreateAssistantIdempotencyKey != "" {
+			idempotencyKey = &assistantsCreateAssistantIdempotencyKey
+			if utf8.RuneCountInString(*idempotencyKey) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("idempotency_key", *idempotencyKey, utf8.RuneCountInString(*idempotencyKey), 1, true))
+			}
+			if utf8.RuneCountInString(*idempotencyKey) > 256 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("idempotency_key", *idempotencyKey, utf8.RuneCountInString(*idempotencyKey), 256, false))
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var sessionToken *string
@@ -134,6 +149,43 @@ func BuildCreateAssistantPayload(assistantsCreateAssistantBody string, assistant
 			}
 			v.McpServers[i] = marshalAssistantMCPServerRefRequestBodyToTypesAssistantMCPServerRef(val)
 		}
+	}
+	v.IdempotencyKey = idempotencyKey
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUpgradeAssistantIdentityPayload builds the payload for the assistants
+// upgradeAssistantIdentity endpoint from CLI flags.
+func BuildUpgradeAssistantIdentityPayload(assistantsUpgradeAssistantIdentityBody string, assistantsUpgradeAssistantIdentitySessionToken string, assistantsUpgradeAssistantIdentityProjectSlugInput string) (*assistants.UpgradeAssistantIdentityPayload, error) {
+	var err error
+	var body UpgradeAssistantIdentityRequestBody
+	{
+		err = json.Unmarshal([]byte(assistantsUpgradeAssistantIdentityBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if assistantsUpgradeAssistantIdentitySessionToken != "" {
+			sessionToken = &assistantsUpgradeAssistantIdentitySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assistantsUpgradeAssistantIdentityProjectSlugInput != "" {
+			projectSlugInput = &assistantsUpgradeAssistantIdentityProjectSlugInput
+		}
+	}
+	v := &assistants.UpgradeAssistantIdentityPayload{
+		ID: body.ID,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

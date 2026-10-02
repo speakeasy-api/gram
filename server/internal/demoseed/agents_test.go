@@ -33,7 +33,7 @@ func TestAgentGrantsReseed(t *testing.T) {
 			seedLocalPostgres(ctx, t, db, spec)
 			agentsBefore, err := fixtures.ListDemoSeedAgentsFixture(ctx, spec.OrgID)
 			require.NoError(t, err)
-			require.Len(t, agentsBefore, 4)
+			require.Len(t, agentsBefore, 5)
 			principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agentsBefore[0].ID.String())
 
 			// Use the target agent's URN in both organizations to catch cleanup

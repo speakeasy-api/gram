@@ -46,10 +46,11 @@ func admitWithFailingKeys(t *testing.T, keyErr error) error {
 	verifier, err := workload.NewVerifier(failingWorkloadKeys{err: keyErr}, unusedReplayGuard{})
 	require.NoError(t, err)
 	lookup := &countingLookup{issuer: workloadidentity_repo.WorkloadIssuer{
-		ID:      uuid.New(),
-		Name:    "test issuer",
-		Issuer:  workloadGrantTestIssuer,
-		JwksUri: workloadGrantTestIssuer + "/jwks",
+		IssuerKind: "remote",
+		ID:         uuid.New(),
+		Name:       "test issuer",
+		Issuer:     workloadGrantTestIssuer,
+		JwksUri:    workloadGrantTestIssuer + "/jwks",
 	}, found: true}
 	grant := &workloadGrant{
 		issuers:    newWorkloadTestAdmission(t, lookup.fn(), allowAllWorkloadLookups),

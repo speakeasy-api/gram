@@ -488,6 +488,8 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 	conn, err := assistantsInfra.CloneTestDatabase(t, dbName)
 	require.NoError(t, err)
 
+	seedIdentityCreationMembers(t, conn)
+
 	proj, err := projectsRepo.New(conn).CreateProject(t.Context(), projectsRepo.CreateProjectParams{
 		Name:           "Project",
 		Slug:           "project-rbac-test",

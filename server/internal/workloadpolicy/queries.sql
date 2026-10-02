@@ -45,8 +45,8 @@ WHERE organization_id = @organization_id
 ORDER BY (project_id IS NULL) DESC, name;
 
 -- name: CreateWorkloadIssuer :one
-INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission)
-VALUES (@organization_id, @project_id, @name, sqlc.narg(description), @tags, @issuer, @jwks_uri, @allow_wildcard_admission)
+INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, issuer_kind)
+VALUES (@organization_id, @project_id, @name, sqlc.narg(description), @tags, @issuer, @jwks_uri, @allow_wildcard_admission, 'remote')
 RETURNING *;
 
 -- name: UpdateWorkloadIssuer :one
@@ -192,6 +192,7 @@ FROM workload_issuers
 WHERE organization_id = @organization_id
   AND id = @id
   AND deleted IS FALSE
+  AND issuer_kind = 'remote'
 FOR UPDATE;
 
 -- name: CountLiveAdmissionsForSubject :one
@@ -250,3 +251,35 @@ FROM agents
 WHERE organization_id = @organization_id
   AND id = @id
   AND deleted IS FALSE;
+
+-- name: RevokeWorkloadAssignmentSessions :exec
+-- The issuer write lock is held by the caller. Resolve the winning assignment
+-- before withdrawing/repointing it, so an exact exception does not revoke a
+-- different agent's sessions when a broad wildcard changes.
+UPDATE user_sessions s
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers si
+LEFT JOIN projects ip ON ip.id = si.project_id
+WHERE si.id = s.user_session_issuer_id
+  AND s.deleted IS FALSE
+  AND COALESCE(s.organization_id, si.organization_id, ip.organization_id,
+      (SELECT organization_id FROM projects WHERE id = s.project_id)) = @organization_id::text
+  AND (s.organization_id IS NULL OR s.organization_id = @organization_id::text)
+  AND (si.organization_id IS NULL OR si.organization_id = @organization_id::text)
+  AND (ip.organization_id IS NULL OR ip.organization_id = @organization_id::text)
+  AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id = s.project_id AND p.organization_id <> @organization_id::text)
+  AND (
+    SELECT wa.match_kind = @match_kind::text AND wa.subject = @subject::text
+    FROM workload_agent_assignments wa
+    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id
+    WHERE wa.organization_id = @organization_id::text AND wa.workload_issuer_id = @workload_issuer_id
+      AND wa.deleted IS FALSE
+      AND (
+        (wa.match_kind = 'exact' AND s.subject_urn = 'workload:' || wi.id::text || ':' || wa.subject)
+        OR (wa.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
+          AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
+          AND starts_with(s.subject_urn, 'workload:' || wi.id::text || ':' || left(wa.subject, length(wa.subject) - 1)))
+      )
+    ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
+    LIMIT 1
+  );

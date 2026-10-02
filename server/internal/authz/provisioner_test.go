@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestProvisionOrganizationAdminWithoutWorkOSUserIDReturnsError(t *testing.T) {
@@ -42,7 +41,7 @@ func TestProvisionOrganizationAdminTxUsesCallerTransaction(t *testing.T) {
 	seedOrganization(t, ctx, conn, organizationID)
 	seedConnectedUser(t, ctx, conn, organizationID, "user_transaction", "user@example.com", "Test User", workosUserID, "membership_transaction")
 
-	tx := testenv.BeginTx(t, ctx, conn)
+	tx := testInfrastructure.BeginTx(t, ctx, conn)
 
 	provisioner := NewProvisioner(conn)
 	err := provisioner.ProvisionOrganizationAdminTx(ctx, tx, organizationID, InitialOrganizationAdmin{

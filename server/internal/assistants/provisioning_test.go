@@ -26,6 +26,8 @@ func newProvisioningCore(t *testing.T, conn *pgxpool.Pool) *ServiceCore {
 
 func newProvisioningProject(t *testing.T, conn *pgxpool.Pool, slug string) uuid.UUID {
 	t.Helper()
+	seedIdentityCreationMembers(t, conn)
+
 	proj, err := projectsrepo.New(conn).CreateProject(t.Context(), projectsrepo.CreateProjectParams{
 		Name:           slug,
 		Slug:           slug,

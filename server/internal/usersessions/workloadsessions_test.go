@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	workloadpolicyrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
 // A GitHub Actions subject: colons inside the external subject are what make a
@@ -213,11 +214,23 @@ func TestListUserSessions_WorkloadAgentIsKeyedOnIssuerAndSubject(t *testing.T) {
 	unassigned := seedWorkloadIssuer(t, ctx, ti.conn, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "Unassigned issuer")
 	agent := seedWorkloadAgent(t, ctx, ti.conn, "Keyed bot")
 	seedWorkloadAssignment(t, ctx, ti.conn, assigned, workloadTestSubject, agent.ID)
+	seedWorkloadAssignment(t, ctx, ti.conn, unassigned, workloadTestSubject, agent.ID)
 
 	withAgent, err := seedUserSession(t, ctx, ti.conn, issuerID, urn.NewWorkloadSubject(assigned, workloadTestSubject))
 	require.NoError(t, err)
 	sameSubjectOtherIssuer, err := seedUserSession(t, ctx, ti.conn, issuerID, urn.NewWorkloadSubject(unassigned, workloadTestSubject))
 	require.NoError(t, err)
+
+	// Model a historical session after its assignment disappeared. Use the row
+	// query rather than the management service, which also revokes sessions.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	removed, err := workloadpolicyrepo.New(ti.conn).SoftDeleteWorkloadAgentAssignmentForSubject(ctx, workloadpolicyrepo.SoftDeleteWorkloadAgentAssignmentForSubjectParams{
+		OrganizationID: authCtx.ActiveOrganizationID, WorkloadIssuerID: unassigned,
+		MatchKind: "exact", Subject: workloadTestSubject,
+	})
+	require.NoError(t, err)
+	require.Len(t, removed, 1)
 
 	items := listAllSessions(t, ctx, ti, nil)
 
@@ -239,6 +252,8 @@ func TestListUserSessions_WorkloadIssuerOfSiblingProjectIsUnnamed(t *testing.T) 
 	issuerID := seedIssuer(t, ctx, ti, "workload-sibling")
 	siblingProjectID := createSiblingProject(t, ctx, ti.conn, "workload-sibling-project")
 	siblingIssuer := seedWorkloadIssuer(t, ctx, ti.conn, uuid.NullUUID{UUID: siblingProjectID, Valid: true}, "Sibling issuer")
+	agent := seedWorkloadAgent(t, ctx, ti.conn, "Sibling workload bot")
+	seedWorkloadAssignment(t, ctx, ti.conn, siblingIssuer, workloadTestSubject, agent.ID)
 
 	session, err := seedUserSession(t, ctx, ti.conn, issuerID, urn.NewWorkloadSubject(siblingIssuer, workloadTestSubject))
 	require.NoError(t, err)
@@ -255,21 +270,17 @@ func TestListUserSessions_ReportsSuspendedWorkloadAgent(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
 
 	issuerID := seedIssuer(t, ctx, ti, "workload-suspended")
 	workloadIssuerID := seedWorkloadIssuer(t, ctx, ti.conn, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "Suspended agent issuer")
 	agent := seedWorkloadAgent(t, ctx, ti.conn, "Suspended bot")
 	seedWorkloadAssignment(t, ctx, ti.conn, workloadIssuerID, workloadTestSubject, agent.ID)
-	_, err := agentsrepo.New(ti.conn).SuspendAgent(ctx, agentsrepo.SuspendAgentParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ID:             agent.ID,
-	})
-	require.NoError(t, err)
-
 	session, err := seedUserSession(t, ctx, ti.conn, issuerID, urn.NewWorkloadSubject(workloadIssuerID, workloadTestSubject))
 	require.NoError(t, err)
+
+	// Keep the historical session visible without the production suspension
+	// path revoking it; issuance itself requires an active agent.
+	require.NoError(t, testrepo.New(ti.conn).SetAgentSuspendedFixture(ctx, agent.ID))
 
 	got := sessionByID(t, listAllSessions(t, ctx, ti, nil), session.ID).Workload
 	require.NotNil(t, got.AgentStatus)
@@ -287,6 +298,8 @@ func TestListUserSessions_ListsEveryAdmissionLettingTheWorkloadIn(t *testing.T) 
 
 	issuerID := seedIssuer(t, ctx, ti, "workload-admissions")
 	workloadIssuerID := seedWorkloadIssuer(t, ctx, ti.conn, organization, "Admitting issuer")
+	agent := seedWorkloadAgent(t, ctx, ti.conn, "Admitted workload bot")
+	seedWorkloadAssignment(t, ctx, ti.conn, workloadIssuerID, workloadTestSubject, agent.ID)
 	siblingProjectID := createSiblingProject(t, ctx, ti.conn, "workload-admissions-sibling")
 
 	withdrawn := seedWorkloadAdmission(t, ctx, ti.conn, project, workloadIssuerID, workloadTestSubject, "Withdrawn admission")
@@ -320,10 +333,12 @@ func TestListUserSessions_AdmissionsUnderDeletedIssuerAreNotListed(t *testing.T)
 	issuerID := seedIssuer(t, ctx, ti, "workload-deleted-issuer")
 	workloadIssuerID := seedWorkloadIssuer(t, ctx, ti.conn, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "Deleted issuer")
 	seedWorkloadAdmission(t, ctx, ti.conn, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadIssuerID, workloadTestSubject, "Orphaned admission")
-	softDeleteWorkloadIssuer(t, ctx, ti.conn, workloadIssuerID)
+	agent := seedWorkloadAgent(t, ctx, ti.conn, "Historical workload bot")
+	seedWorkloadAssignment(t, ctx, ti.conn, workloadIssuerID, workloadTestSubject, agent.ID)
 
 	session, err := seedUserSession(t, ctx, ti.conn, issuerID, urn.NewWorkloadSubject(workloadIssuerID, workloadTestSubject))
 	require.NoError(t, err)
+	softDeleteWorkloadIssuer(t, ctx, ti.conn, workloadIssuerID)
 
 	got := sessionByID(t, listAllSessions(t, ctx, ti, nil), session.ID).Workload
 	require.NotNil(t, got)
@@ -365,6 +380,8 @@ func TestRevokeUserSession_WorkloadSession(t *testing.T) {
 
 	issuerID := seedIssuer(t, ctx, ti, "workload-revoke")
 	workloadIssuerID := seedWorkloadIssuer(t, ctx, ti.conn, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "Revoke issuer")
+	agent := seedWorkloadAgent(t, ctx, ti.conn, "Revoked session bot")
+	seedWorkloadAssignment(t, ctx, ti.conn, workloadIssuerID, workloadTestSubject, agent.ID)
 	subject := urn.NewWorkloadSubject(workloadIssuerID, workloadTestSubject)
 
 	target, err := seedUserSession(t, ctx, ti.conn, issuerID, subject)

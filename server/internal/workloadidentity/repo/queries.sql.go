@@ -88,6 +88,38 @@ func (q *Queries) ListWorkloadIssuersByIssuerURL(ctx context.Context, arg ListWo
 	return items, nil
 }
 
+const lockWorkloadAgentForRevocation = `-- name: LockWorkloadAgentForRevocation :exec
+SELECT id FROM agents
+WHERE organization_id = $1 AND id = $2
+FOR UPDATE
+`
+
+type LockWorkloadAgentForRevocationParams struct {
+	OrganizationID string
+	AgentID        uuid.UUID
+}
+
+func (q *Queries) LockWorkloadAgentForRevocation(ctx context.Context, arg LockWorkloadAgentForRevocationParams) error {
+	_, err := q.db.Exec(ctx, lockWorkloadAgentForRevocation, arg.OrganizationID, arg.AgentID)
+	return err
+}
+
+const lockWorkloadIssuerForRevocation = `-- name: LockWorkloadIssuerForRevocation :exec
+SELECT id FROM workload_issuers
+WHERE organization_id = $1 AND id = $2
+FOR UPDATE
+`
+
+type LockWorkloadIssuerForRevocationParams struct {
+	OrganizationID string
+	IssuerID       uuid.UUID
+}
+
+func (q *Queries) LockWorkloadIssuerForRevocation(ctx context.Context, arg LockWorkloadIssuerForRevocationParams) error {
+	_, err := q.db.Exec(ctx, lockWorkloadIssuerForRevocation, arg.OrganizationID, arg.IssuerID)
+	return err
+}
+
 const resolveWorkloadAgentAssignment = `-- name: ResolveWorkloadAgentAssignment :one
 SELECT a.agent_id
 FROM workload_agent_assignments a
@@ -98,11 +130,13 @@ WHERE a.organization_id = $1
   AND a.workload_issuer_id = $2
   AND a.deleted IS FALSE
   AND i.deleted IS FALSE
+    AND i.issuer_kind IN ('remote', 'system')
   AND (
     (a.match_kind = 'exact' AND a.subject = $3)
     OR (
       a.match_kind = 'wildcard'
-      AND i.allow_wildcard_admission
+      AND i.issuer_kind = 'remote'
+        AND i.allow_wildcard_admission
       AND a.subject LIKE '%*'
       AND length(a.subject) > 1
       AND starts_with($3, left(a.subject, length(a.subject) - 1))
@@ -155,6 +189,65 @@ func (q *Queries) ResolveWorkloadAgentAssignment(ctx context.Context, arg Resolv
 	return agent_id, err
 }
 
+const revokeAgentWorkloadSessions = `-- name: RevokeAgentWorkloadSessions :exec
+UPDATE user_sessions s
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers si
+LEFT JOIN projects ip ON ip.id = si.project_id
+WHERE si.id = s.user_session_issuer_id
+  AND s.deleted IS FALSE
+  AND COALESCE(s.organization_id, si.organization_id, (SELECT organization_id FROM projects WHERE id = s.project_id), ip.organization_id) = $1::text
+  AND (s.organization_id IS NULL OR s.organization_id = $1::text)
+  AND (si.organization_id IS NULL OR si.organization_id = $1::text)
+  AND ((SELECT organization_id FROM projects WHERE id = s.project_id) IS NULL OR (SELECT organization_id FROM projects WHERE id = s.project_id) = $1::text)
+  AND (ip.organization_id IS NULL OR ip.organization_id = $1::text)
+  AND (SELECT wa.agent_id
+    FROM workload_agent_assignments wa
+    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id
+    WHERE wa.organization_id = $1::text AND wa.deleted IS FALSE
+      AND ((wa.match_kind = 'exact' AND s.subject_urn = 'workload:' || wa.workload_issuer_id::text || ':' || wa.subject)
+        OR (wa.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
+            AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
+            AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
+    ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
+    LIMIT 1) = $2::uuid
+`
+
+type RevokeAgentWorkloadSessionsParams struct {
+	OrganizationID string
+	AgentID        uuid.UUID
+}
+
+func (q *Queries) RevokeAgentWorkloadSessions(ctx context.Context, arg RevokeAgentWorkloadSessionsParams) error {
+	_, err := q.db.Exec(ctx, revokeAgentWorkloadSessions, arg.OrganizationID, arg.AgentID)
+	return err
+}
+
+const revokeWorkloadSessions = `-- name: RevokeWorkloadSessions :exec
+UPDATE user_sessions s
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers si
+LEFT JOIN projects ip ON ip.id = si.project_id
+WHERE si.id = s.user_session_issuer_id
+  AND s.deleted IS FALSE
+  AND COALESCE(s.organization_id, si.organization_id, (SELECT organization_id FROM projects WHERE id = s.project_id), ip.organization_id) = $1::text
+  AND (s.organization_id IS NULL OR s.organization_id = $1::text)
+  AND (si.organization_id IS NULL OR si.organization_id = $1::text)
+  AND ((SELECT organization_id FROM projects WHERE id = s.project_id) IS NULL OR (SELECT organization_id FROM projects WHERE id = s.project_id) = $1::text)
+  AND (ip.organization_id IS NULL OR ip.organization_id = $1::text)
+  AND s.subject_urn = $2::text
+`
+
+type RevokeWorkloadSessionsParams struct {
+	OrganizationID string
+	SubjectUrn     string
+}
+
+func (q *Queries) RevokeWorkloadSessions(ctx context.Context, arg RevokeWorkloadSessionsParams) error {
+	_, err := q.db.Exec(ctx, revokeWorkloadSessions, arg.OrganizationID, arg.SubjectUrn)
+	return err
+}
+
 const workloadIdentityIsAdmitted = `-- name: WorkloadIdentityIsAdmitted :one
 SELECT EXISTS (
   SELECT 1
@@ -174,10 +267,12 @@ SELECT EXISTS (
     AND (a.project_id = $3 OR a.project_id IS NULL)
     AND a.deleted IS FALSE
     AND i.deleted IS FALSE
+    AND i.issuer_kind IN ('remote', 'system')
     AND (
       (a.match_kind = 'exact' AND a.subject = $4)
       OR (
         a.match_kind = 'wildcard'
+        AND i.issuer_kind = 'remote'
         AND i.allow_wildcard_admission
         AND a.subject LIKE '%*'
         AND length(a.subject) > 1

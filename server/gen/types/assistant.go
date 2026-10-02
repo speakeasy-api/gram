@@ -15,6 +15,13 @@ type Assistant struct {
 	ProjectID string
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string
+	// Whether this assistant has never configured, active, or tombstoned workload
+	// identity bindings. This is configuration state, not permission to execute.
+	IdentityState *string
+	// The dedicated agent ID for an active identity binding.
+	AgentID *string
+	// The current or last retained assistant identity binding generation.
+	IdentityGeneration *int64
 	// The assistant name.
 	Name string
 	// The model identifier used by the assistant.

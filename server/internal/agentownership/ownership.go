@@ -3,6 +3,7 @@ package agentownership
 import (
 	"context"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/agents/lifecycle"
@@ -10,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
 // OwnerReassignmentReason is the stable reason an agent can no longer rely on
@@ -30,6 +32,22 @@ func LatchOwnerLossByUser(ctx context.Context, dbtx repo.DBTX, ownerUserID strin
 	if !reason.valid() {
 		return fmt.Errorf("invalid owner reassignment reason %q", reason)
 	}
+
+	if _, ok := dbtx.(pgx.Tx); !ok {
+		beginner, ok := dbtx.(interface {
+			Begin(context.Context) (pgx.Tx, error)
+		})
+		if !ok {
+			return fmt.Errorf("owner loss requires a transaction-capable database")
+		}
+		err := pgx.BeginFunc(ctx, beginner, func(tx pgx.Tx) error {
+			return LatchOwnerLossByUser(ctx, tx, ownerUserID, reason, actor, actorDisplayName)
+		})
+		if err != nil {
+			return fmt.Errorf("latch owner loss transaction: %w", err)
+		}
+		return nil
+	}
 	rows, err := repo.New(dbtx).LatchAgentsForOwnerLossByUser(ctx, repo.LatchAgentsForOwnerLossByUserParams{
 		OwnerUserID:             ownerUserID,
 		OwnerReassignmentReason: conv.ToPGText(string(reason)),
@@ -46,7 +64,24 @@ func LatchOwnerLossByMembership(ctx context.Context, dbtx repo.DBTX, organizatio
 	if !reason.valid() {
 		return fmt.Errorf("invalid owner reassignment reason %q", reason)
 	}
+
 	if ownerUserID == "" {
+		return nil
+	}
+
+	if _, ok := dbtx.(pgx.Tx); !ok {
+		beginner, ok := dbtx.(interface {
+			Begin(context.Context) (pgx.Tx, error)
+		})
+		if !ok {
+			return fmt.Errorf("owner loss requires a transaction-capable database")
+		}
+		err := pgx.BeginFunc(ctx, beginner, func(tx pgx.Tx) error {
+			return LatchOwnerLossByMembership(ctx, tx, organizationID, ownerUserID, reason, actor, actorDisplayName)
+		})
+		if err != nil {
+			return fmt.Errorf("latch owner loss transaction: %w", err)
+		}
 		return nil
 	}
 	rows, err := repo.New(dbtx).LatchAgentsForOwnerLossByMembership(ctx, repo.LatchAgentsForOwnerLossByMembershipParams{
@@ -63,6 +98,13 @@ func LatchOwnerLossByMembership(ctx context.Context, dbtx repo.DBTX, organizatio
 func logOwnerLoss(ctx context.Context, dbtx repo.DBTX, rows []repo.Agent, actor urn.Principal, actorDisplayName *string) error {
 	logger := audit.NewLogger()
 	for _, after := range rows {
+		tx, ok := dbtx.(pgx.Tx)
+		if !ok {
+			return fmt.Errorf("owner loss audit requires a transaction")
+		}
+		if err := workloadidentity.RevokeAgentWorkloadSessionsTx(ctx, tx, after.OrganizationID, after.ID); err != nil {
+			return fmt.Errorf("revoke owner-loss workload sessions: %w", err)
+		}
 		before := agentAuditSnapshot(after)
 		before.OwnerReassignmentRequiredAt = nil
 		before.OwnerReassignmentReason = nil

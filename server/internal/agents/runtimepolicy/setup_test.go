@@ -1,4 +1,4 @@
-package runtimepolicy
+package runtimepolicy_test
 
 import (
 	"context"

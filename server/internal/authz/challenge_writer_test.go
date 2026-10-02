@@ -12,7 +12,6 @@ import (
 
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestChallengeRowFromMessage(t *testing.T) {
@@ -51,10 +50,10 @@ func TestChallengeRowFromMessage(t *testing.T) {
 func newChallengeCHWriter(t *testing.T) (*ChallengeCHWriter, clickhouse.Conn) {
 	t.Helper()
 
-	conn, err := newClickhouseClient(t)
+	conn, err := testInfrastructure.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	return NewChallengeCHWriter(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn), conn
+	return NewChallengeCHWriter(testInfrastructure.NewLogger(t), testInfrastructure.NewMeterProvider(t), conn), conn
 }
 
 func TestChallengeCHWriterPersistsMessage(t *testing.T) {

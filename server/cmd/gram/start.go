@@ -1772,6 +1772,7 @@ func newStartCommand() *cli.Command {
 			}
 			riskFindings := riskchrepo.New(chDB)
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
+				AssistantIdentity:        assistantsSvc,
 				Logger:                   logger,
 				MeterProvider:            meterProvider,
 				TracerProvider:           tracerProvider,

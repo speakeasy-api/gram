@@ -91,8 +91,8 @@ func (q *Queries) CreateWorkloadAdmission(ctx context.Context, arg CreateWorkloa
 }
 
 const createWorkloadIssuer = `-- name: CreateWorkloadIssuer :one
-INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, issuer_kind)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'remote')
 RETURNING id, issuer_kind, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
 `
 
@@ -526,6 +526,7 @@ FROM workload_issuers
 WHERE organization_id = $1
   AND id = $2
   AND deleted IS FALSE
+  AND issuer_kind = 'remote'
 FOR UPDATE
 `
 
@@ -552,6 +553,56 @@ func (q *Queries) LockWorkloadIssuerForWrite(ctx context.Context, arg LockWorklo
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const revokeWorkloadAssignmentSessions = `-- name: RevokeWorkloadAssignmentSessions :exec
+UPDATE user_sessions s
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers si
+LEFT JOIN projects ip ON ip.id = si.project_id
+WHERE si.id = s.user_session_issuer_id
+  AND s.deleted IS FALSE
+  AND COALESCE(s.organization_id, si.organization_id, ip.organization_id,
+      (SELECT organization_id FROM projects WHERE id = s.project_id)) = $1::text
+  AND (s.organization_id IS NULL OR s.organization_id = $1::text)
+  AND (si.organization_id IS NULL OR si.organization_id = $1::text)
+  AND (ip.organization_id IS NULL OR ip.organization_id = $1::text)
+  AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id = s.project_id AND p.organization_id <> $1::text)
+  AND (
+    SELECT wa.match_kind = $2::text AND wa.subject = $3::text
+    FROM workload_agent_assignments wa
+    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id
+    WHERE wa.organization_id = $1::text AND wa.workload_issuer_id = $4
+      AND wa.deleted IS FALSE
+      AND (
+        (wa.match_kind = 'exact' AND s.subject_urn = 'workload:' || wi.id::text || ':' || wa.subject)
+        OR (wa.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
+          AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
+          AND starts_with(s.subject_urn, 'workload:' || wi.id::text || ':' || left(wa.subject, length(wa.subject) - 1)))
+      )
+    ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
+    LIMIT 1
+  )
+`
+
+type RevokeWorkloadAssignmentSessionsParams struct {
+	OrganizationID   string
+	MatchKind        string
+	Subject          string
+	WorkloadIssuerID uuid.UUID
+}
+
+// The issuer write lock is held by the caller. Resolve the winning assignment
+// before withdrawing/repointing it, so an exact exception does not revoke a
+// different agent's sessions when a broad wildcard changes.
+func (q *Queries) RevokeWorkloadAssignmentSessions(ctx context.Context, arg RevokeWorkloadAssignmentSessionsParams) error {
+	_, err := q.db.Exec(ctx, revokeWorkloadAssignmentSessions,
+		arg.OrganizationID,
+		arg.MatchKind,
+		arg.Subject,
+		arg.WorkloadIssuerID,
+	)
+	return err
 }
 
 const softDeleteWorkloadAdmission = `-- name: SoftDeleteWorkloadAdmission :one

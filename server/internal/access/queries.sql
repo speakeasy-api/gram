@@ -1571,3 +1571,43 @@ SET deleted_at = clock_timestamp(),
 WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
+
+-- name: ListAuthorityAgentIDsByRoles :many
+SELECT DISTINCT a.id
+FROM agent_role_assignments ara
+JOIN agents a ON a.organization_id = ara.organization_id AND a.id = ara.agent_id
+WHERE ara.organization_id = @organization_id AND ara.role_urn = ANY(@role_urns::text[])
+  AND ara.deleted_at IS NULL AND a.deleted IS FALSE
+ORDER BY a.id;
+
+-- name: LockAuthorityAgents :many
+SELECT id FROM agents
+WHERE organization_id = @organization_id AND id = ANY(@agent_ids::uuid[]) AND deleted IS FALSE
+ORDER BY id FOR UPDATE;
+
+-- name: AdvanceAuthorityAgentEpochs :exec
+UPDATE agents SET identity_epoch = identity_epoch + 1, updated_at = clock_timestamp()
+WHERE organization_id = @organization_id AND id = ANY(@agent_ids::uuid[]) AND deleted IS FALSE;
+
+-- name: RevokeAuthorityWorkloadSessions :exec
+UPDATE user_sessions s
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers si
+LEFT JOIN projects ip ON ip.id = si.project_id
+WHERE si.id = s.user_session_issuer_id
+  AND s.deleted IS FALSE
+  AND COALESCE(s.organization_id, si.organization_id, (SELECT organization_id FROM projects WHERE id = s.project_id), ip.organization_id) = @organization_id::text
+  AND (s.organization_id IS NULL OR s.organization_id = @organization_id::text)
+  AND (si.organization_id IS NULL OR si.organization_id = @organization_id::text)
+  AND ((SELECT organization_id FROM projects WHERE id = s.project_id) IS NULL OR (SELECT organization_id FROM projects WHERE id = s.project_id) = @organization_id::text)
+  AND (ip.organization_id IS NULL OR ip.organization_id = @organization_id::text)
+  AND (SELECT wa.agent_id
+    FROM workload_agent_assignments wa
+    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id
+    WHERE wa.organization_id = @organization_id::text AND wa.deleted IS FALSE
+      AND ((wa.match_kind = 'exact' AND s.subject_urn = 'workload:' || wa.workload_issuer_id::text || ':' || wa.subject)
+        OR (wa.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
+            AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
+            AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
+    ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
+    LIMIT 1) = ANY(@agent_ids::uuid[]);

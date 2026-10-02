@@ -92,8 +92,9 @@ agent identifier and must show unavailable, never human-owner activity or zeros.
 Verify in the local rewritten seed with an ordinary human session: shared demo
 impersonation remains intentionally restricted by agent management authorization.
 `agent-management` enables inventory; `agent-identity-credentials` enables API key
-management. PG `agents` ×4 includes Release assistant, Support triage, Retired
-documentation bot, and the active Release notes assistant, covering active,
+management. PG `agents` ×5 includes Release assistant, Support triage, Retired
+documentation bot, the active Release notes assistant, and the dedicated
+Identity-bound assistant agent (empty grants), covering active,
 suspended, and revoked identities with three existing fictional owners (display names and
 avatar initials fallback). One inert agent-subject `user_sessions` row shows the
 credential relationship and approving human; its refresh hash is invalid and its
@@ -169,7 +170,7 @@ present in a developer's org and deliberately absent from the shared demo org.
 
 | Page                         | Why                                                                                                                                                                                                                                                                                                                                                                               |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Assistants                   | Auto-provision on first visit; empty state is intentional                                                                                                                                                                                                                                                                                                                         |
+| Assistants                   | Identity-bound assistant with a dedicated empty-ceiling agent and canonical dashboard root; separate legacy assistant remains unbound                                                                                                                                                                                                                                             |
 | Integrations / Triggers      | Acceptable empty states                                                                                                                                                                                                                                                                                                                                                           |
 | Settings                     | Render fine without seed data                                                                                                                                                                                                                                                                                                                                                     |
 | ChatGPT/Work usage split     | Later phase (`chatgpt:usage:metrics` rows)                                                                                                                                                                                                                                                                                                                                        |
@@ -251,3 +252,5 @@ Shared Explore Demo is read-only for Slack connections, syncing and mappings. Th
 ### [~] Plugins: initial role audiences
 
 The Default project contains its Everyone Default plugin and an empty role-only plugin for each active organization/global role. Same-name roles share a plugin. These are completed one-time setup results, not continuously managed mappings: later audience/content edits or plugin deletion are not repaired. Database isolation and repeat-seed checks are automated; browser verification remains pending.
+
+AIM-409 assistant fixtures use one project-scoped system issuer (empty JWKS sentinel, no wildcard admission), exact root admission/assignment, and complete generation-1 binding mirror tuples. The fifth managed agent belongs only to the bound assistant and has no grants or upstream credentials. Dashboard roots are durable, not per-wake. Browser verification pending.
