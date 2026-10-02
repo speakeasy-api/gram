@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
@@ -51,7 +52,7 @@ type Vendor struct {
 const (
 	// applyRevision is raised when Apply changes what it writes for the same
 	// Vendors, so that deployed environments apply the seed again.
-	applyRevision = 1
+	applyRevision = 2
 
 	// versionHexLength keeps 48 bits of the content hash: enough to tell seed
 	// versions apart, short enough to read in a workflow ID.
@@ -606,9 +607,10 @@ type Result struct {
 	Unchanged int
 }
 
-// Apply creates missing vendor entries and writes the Okta namespace onto
-// existing ones without touching their name, remotes or other metadata. It
-// is safe to run repeatedly.
+// Apply creates missing vendor entries and, on existing ones, adds the Okta
+// names and fields they lack. It never removes or replaces what an entry
+// already has, so edits made in the registry editor survive. It is safe to
+// run repeatedly.
 func Apply(ctx context.Context, logger *slog.Logger, svc *mcpregistry.Service) (Result, error) {
 	var result Result
 	for _, v := range Vendors {
@@ -644,9 +646,13 @@ func apply(ctx context.Context, svc *mcpregistry.Service, v Vendor) (string, err
 	case err != nil:
 		return "", fmt.Errorf("lookup: %w", err)
 	}
-	// The seed owns the namespace: one that is missing, stale or undecodable
-	// is replaced below.
+	// Staff edit the same namespace in the registry editor, so the seed only
+	// adds what is missing. A namespace it cannot decode is theirs to fix.
 	current, err := mcpregistry.ParseOktaMapping(existing.Data)
+	if err != nil && !errors.Is(err, mcpregistry.ErrNoOktaMapping) {
+		return "", fmt.Errorf("decode okta mapping: %w", err)
+	}
+	merged, mappingAdded := mergeMapping(current, v.Mapping)
 	iconed, iconAdded, iconErr := withIcon(existing.Data, v.IconURL)
 	if iconErr != nil {
 		return "", iconErr
@@ -655,7 +661,7 @@ func apply(ctx context.Context, svc *mcpregistry.Service, v Vendor) (string, err
 	if dcrErr != nil {
 		return "", dcrErr
 	}
-	if err == nil && equalMapping(current, v.Mapping) && !iconAdded && !dcrAdded {
+	if !mappingAdded && !iconAdded && !dcrAdded {
 		// Nothing to write, but a stored record that no longer meets the
 		// contract is reported rather than silently left alone.
 		if issues := svc.ValidateStored(existing.Data); len(issues) > 0 {
@@ -663,7 +669,7 @@ func apply(ctx context.Context, svc *mcpregistry.Service, v Vendor) (string, err
 		}
 		return "unchanged", nil
 	}
-	data, err := withMapping(iconed, v.Mapping)
+	data, err := withMapping(iconed, merged)
 	if err != nil {
 		return "", err
 	}
@@ -727,9 +733,9 @@ func withMapping(data json.RawMessage, mapping mcpregistry.OktaMapping) (json.Ra
 	if meta == nil {
 		meta = map[string]json.RawMessage{}
 	}
-	encoded, err := json.Marshal(mapping)
+	encoded, err := encodeMapping(mapping)
 	if err != nil {
-		return nil, fmt.Errorf("encode mapping: %w", err)
+		return nil, err
 	}
 	meta[mcpregistry.OktaNamespace] = encoded
 	rawMeta, err := json.Marshal(meta)
@@ -831,8 +837,49 @@ func withSupportsDCR(data json.RawMessage, supported bool) (json.RawMessage, boo
 	return out, true, nil
 }
 
-func equalMapping(a, b mcpregistry.OktaMapping) bool {
-	x, errX := json.Marshal(a)
-	y, errY := json.Marshal(b)
-	return errX == nil && errY == nil && string(x) == string(y)
+// encodeMapping writes a non-nil empty mode list, which the struct's
+// omitempty tag would drop: staff use it to say no mode is usable.
+func encodeMapping(mapping mcpregistry.OktaMapping) (json.RawMessage, error) {
+	namespace := map[string]any{"oinNames": mapping.OINNames}
+	if mapping.OINIntegrationID != "" {
+		namespace["oinIntegrationId"] = mapping.OINIntegrationID
+	}
+	if mapping.XAASignOnModes != nil {
+		namespace["xaaSignOnModes"] = mapping.XAASignOnModes
+	}
+	if mapping.XAAIssuer != "" {
+		namespace["xaaIssuer"] = mapping.XAAIssuer
+	}
+	encoded, err := json.Marshal(namespace)
+	if err != nil {
+		return nil, fmt.Errorf("encode mapping: %w", err)
+	}
+	return encoded, nil
+}
+
+// mergeMapping adds the seed's values to a stored mapping without replacing
+// anything: names staff added stay, and a field staff set, including an
+// explicitly empty mode list, is kept.
+func mergeMapping(stored, seed mcpregistry.OktaMapping) (mcpregistry.OktaMapping, bool) {
+	merged, changed := stored, false
+	merged.OINNames = slices.Clone(stored.OINNames)
+	for _, name := range seed.OINNames {
+		if !slices.Contains(merged.OINNames, name) {
+			merged.OINNames = append(merged.OINNames, name)
+			changed = true
+		}
+	}
+	if merged.OINIntegrationID == "" && seed.OINIntegrationID != "" {
+		merged.OINIntegrationID = seed.OINIntegrationID
+		changed = true
+	}
+	if merged.XAASignOnModes == nil && len(seed.XAASignOnModes) > 0 {
+		merged.XAASignOnModes = slices.Clone(seed.XAASignOnModes)
+		changed = true
+	}
+	if merged.XAAIssuer == "" && seed.XAAIssuer != "" {
+		merged.XAAIssuer = seed.XAAIssuer
+		changed = true
+	}
+	return merged, changed
 }
