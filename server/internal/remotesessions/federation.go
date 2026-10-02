@@ -21,6 +21,7 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -55,6 +56,13 @@ func (p *FederatedProvider) GoString() string { return p.String() }
 func (p *FederatedProvider) Fingerprint() string {
 	digest := sha256.Sum256([]byte(p.fingerprint + ":" + p.signingKeyRevision))
 	return hex.EncodeToString(digest[:])
+}
+
+// CallbackBaseURL is the trusted client's recorded callback_base_url. Its
+// remote_login_callback and the federated IdP callback share this origin, so
+// one customer IdP app allowlists a single host.
+func (p *FederatedProvider) CallbackBaseURL() pgtype.Text {
+	return p.client.CallbackBaseUrl
 }
 
 // ValidateResponseIssuer implements RFC 9207 before the code leaves Gram.

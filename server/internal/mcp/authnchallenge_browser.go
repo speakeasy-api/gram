@@ -19,6 +19,11 @@ type ChallengeBrowserBinding struct {
 	CookieID     string `json:"cookie_id"`
 	OriginHash   string `json:"origin_hash"`
 	CallbackHash string `json:"callback_hash"`
+	// CallbackOrigin is the origin of the federated IdP callback this challenge
+	// was minted with, which holds the callback cookie. It outlives the
+	// Federation state so the remote login hop can find that host. Empty on
+	// challenges minted before it was recorded.
+	CallbackOrigin string `json:"callback_origin,omitempty"`
 }
 
 func validateChallengeBrowser(r *http.Request, state AuthnChallengeState, callback bool) error {
