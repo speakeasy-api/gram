@@ -467,6 +467,7 @@ export type DisplayItem =
       id: string;
       author: TurnAuthor;
       userId?: string;
+      participant?: NonNullable<ChatMessage["participants"]>[number];
       /** Every message in the turn (the assistant turn spans text + tool rows),
        * so the header can surface the turn's risk badge + exclusion actions. */
       messageIds: string[];
@@ -589,7 +590,12 @@ export function buildDisplayItems({
     // Open a new turn whenever authorship flips (user ↔ assistant), grouping an
     // assistant's text + tool calls under one header.
     const author = rowTurnAuthor(row);
-    if (author !== lastAuthor || (row.kind === "message" && row.separateTurn)) {
+    if (
+      author !== lastAuthor ||
+      (row.kind === "message" &&
+        (row.separateTurn ||
+          (row.entryType === "user" && !!row.message.participants?.length)))
+    ) {
       // Collect every message in this turn (look ahead until authorship flips)
       // so the header can aggregate the turn's findings + exclusion actions.
       const messageIds: string[] = [];
@@ -599,7 +605,10 @@ export function buildDisplayItems({
         rowTurnAuthor(rows[j]!) === author &&
         (j === i ||
           !(
-            rows[j]!.kind === "message" && (rows[j] as MessageRow).separateTurn
+            rows[j]!.kind === "message" &&
+            ((rows[j] as MessageRow).separateTurn ||
+              ((rows[j] as MessageRow).entryType === "user" &&
+                !!(rows[j] as MessageRow).message.participants?.length))
           ));
         j++
       ) {
@@ -611,8 +620,13 @@ export function buildDisplayItems({
         author,
         userId:
           row.kind === "message"
-            ? (row.message.externalUserId ?? row.message.userId)
+            ? (row.message.participants?.[0]?.displayName ??
+              row.message.participants?.[0]?.providerUserId ??
+              row.message.externalUserId ??
+              row.message.userId)
             : undefined,
+        participant:
+          row.kind === "message" ? row.message.participants?.[0] : undefined,
         createdAt:
           row.kind === "message"
             ? row.message.createdAt

@@ -614,7 +614,7 @@ candidate_chats AS (
       -- stream owns every transcript row (proxied rows are suppressed as
       -- duplicates, so the message-source probe alone would miss them).
       OR ('litellm' = ANY (@sources::text[]) AND c.litellm_proxied)
-      OR (
+      OR coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = @project_id::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
         WHERE cmsrc.chat_id = c.id
@@ -623,7 +623,7 @@ candidate_chats AS (
           AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
         LIMIT 1
-      ) = ANY (@sources::text[])
+      )) = ANY (@sources::text[])
     )
 ),
 chat_activity AS (
@@ -680,6 +680,7 @@ candidate_chats AS (
   SELECT
     c.id,
     c.title,
+    c.session_surface,
     c.user_id,
     c.external_user_id,
     c.created_at,
@@ -755,7 +756,7 @@ candidate_chats AS (
       -- stream owns every transcript row (proxied rows are suppressed as
       -- duplicates, so the message-source probe alone would miss them).
       OR ('litellm' = ANY (@sources::text[]) AND c.litellm_proxied)
-      OR (
+      OR coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = @project_id::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
         WHERE cmsrc.chat_id = c.id
@@ -764,7 +765,7 @@ candidate_chats AS (
           AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
         LIMIT 1
-      ) = ANY (@sources::text[])
+      )) = ANY (@sources::text[])
     )
 ),
 chat_stats AS (
@@ -797,6 +798,7 @@ filtered_chats AS (
   SELECT
     cc.id,
     cc.title,
+    cc.session_surface,
     cc.user_id,
     cc.external_user_id,
     cc.created_at,
@@ -831,6 +833,7 @@ limited_chats AS (
     fc.pinned_at,
     fc.litellm_proxied,
     fc.sort_num_messages,
+    fc.session_surface,
     fc.last_message_timestamp,
     fc.account_type,
     fc.account_email,
@@ -874,7 +877,7 @@ page_chats AS (
       WHERE cm.chat_id = lc.id
         AND cm.project_id = @project_id::uuid
     ))::integer AS num_messages,
-    (SELECT source FROM chat_messages WHERE chat_id = lc.id AND project_id = @project_id::uuid AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
+    coalesce(lc.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = @project_id::uuid AND tag_link.child_chat_id = lc.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, (SELECT source FROM chat_messages WHERE chat_id = lc.id AND project_id = @project_id::uuid AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1)) AS source,
     lc.last_message_timestamp,
     lc.account_type,
     lc.account_email,
@@ -1042,7 +1045,7 @@ LIMIT @page_limit;
 -- The lateral join drops chats with no sourced messages, matching the previous
 -- inner-join semantics. project_id keeps a sibling-project stamp from
 -- advertising a source this project cannot load.
-SELECT DISTINCT latest.source
+SELECT DISTINCT coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = @project_id::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, latest.source) AS source
 FROM chats c
 CROSS JOIN LATERAL (
   SELECT cm.source
@@ -1080,7 +1083,10 @@ ORDER BY source;
 -- '' for account_type/account_email when the chat has no linked account or it
 -- is unclassified.
 SELECT c.*, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
-  at.assistant_id, a.name AS assistant_name
+  at.assistant_id, a.name AS assistant_name,
+  coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links l
+    WHERE l.project_id = c.project_id AND l.child_chat_id = c.id AND l.kind = 'subagent'
+      AND l.source_surface = 'claude-tag') THEN 'claude-tag' END, '')::text AS captured_surface
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
 LEFT JOIN assistant_threads at ON at.chat_id = c.id AND at.deleted IS FALSE
@@ -2057,3 +2063,114 @@ SELECT jsonb_build_object(
     'custom_rules', (SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY r.id), '[]'::jsonb)
       FROM risk_custom_detection_rules r WHERE r.project_id = @project_id AND r.deleted IS FALSE)
   )::text AS revision;
+
+-- name: RecordSlackMessageParticipant :exec
+-- Without a workspace hint, only a unique organization-local directory match
+-- is resolvable. Never select an arbitrary workspace or match profile email.
+WITH candidates AS (
+ SELECT d.slack_team_id, d.display_name, m.user_id
+ FROM slack_directory_memberships d
+ JOIN projects p ON p.organization_id = d.organization_id AND p.id = @project_id::uuid
+ LEFT JOIN slack_identity_mappings m ON m.organization_id = d.organization_id
+   AND m.slack_team_id = d.slack_team_id AND m.slack_user_id = d.slack_user_id AND m.revoked_at IS NULL
+ WHERE d.slack_user_id = @provider_user_id::text
+   AND (@team_id::text = '' OR d.slack_team_id = @team_id::text)
+), resolved AS (
+ SELECT * FROM candidates WHERE (SELECT count(*) FROM candidates) = 1
+)
+INSERT INTO chat_message_participants (
+ project_id, chat_id, message_id, provider, provider_user_id, provider_team_id, user_id, display_name
+)
+SELECT @project_id, cm.chat_id, cm.id, 'slack', @provider_user_id,
+ coalesce(r.slack_team_id, nullif(@team_id::text, '')), r.user_id, r.display_name
+FROM chat_messages cm
+LEFT JOIN resolved r ON true
+WHERE cm.id = @message_id::uuid AND cm.project_id = @project_id::uuid
+ON CONFLICT (project_id, message_id, provider, provider_user_id) DO NOTHING;
+
+-- name: ListChatParticipants :many
+SELECT DISTINCT p.chat_id, p.message_id, p.provider, p.provider_user_id,
+ p.provider_team_id, p.user_id, p.display_name
+FROM chat_message_participants p
+JOIN chats c ON c.id = p.chat_id AND c.project_id = p.project_id AND c.deleted IS FALSE
+WHERE p.project_id = @project_id AND p.chat_id = ANY(@chat_ids::uuid[])
+ORDER BY p.provider, p.provider_user_id;
+
+-- name: MarkClaudeTagMessages :exec
+UPDATE chats SET session_surface = 'claude-tag'
+WHERE project_id = @project_id AND id = @chat_id AND session_surface IS DISTINCT FROM 'claude-tag';
+
+-- name: LockSubsessionLinks :exec
+SELECT pg_advisory_xact_lock(hashtextextended('subsession:' || CAST(@project_id AS text), 0));
+
+-- name: InsertSubsessionLink :exec
+-- The project lock serializes competing evidence so two deliveries cannot
+-- give a child multiple parents or introduce a cycle.
+WITH RECURSIVE descendants AS (
+ SELECT child_chat_id AS descendant_id FROM chat_session_links WHERE project_id = @project_id AND parent_chat_id = @child_chat_id AND kind = 'subagent'
+ UNION
+ SELECT l.child_chat_id FROM chat_session_links l JOIN descendants d ON l.parent_chat_id = d.descendant_id
+ WHERE l.project_id = @project_id AND l.kind = 'subagent'
+)
+INSERT INTO chat_session_links (project_id, organization_id, parent_chat_id, child_chat_id,
+ parent_session_id, child_session_id, kind, target_harness, source_surface)
+SELECT p.id, p.organization_id, @parent_chat_id, @child_chat_id,
+ coalesce((SELECT external_chat_id FROM chats parent_chat WHERE parent_chat.id = @parent_chat_id AND parent_chat.project_id = @project_id), @parent_session_id::text), @child_session_id, 'subagent', 'claude-tag', 'claude-tag'
+FROM projects p WHERE p.id = @project_id
+ AND @parent_chat_id::uuid <> @child_chat_id::uuid
+ AND NOT EXISTS (SELECT 1 FROM descendants WHERE descendant_id = @parent_chat_id)
+ AND NOT EXISTS (SELECT 1 FROM chat_session_links WHERE project_id = @project_id AND child_chat_id = @child_chat_id AND kind = 'subagent')
+ON CONFLICT (project_id, parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL DO NOTHING;
+
+-- name: MarkKnownClaudeTagSubsession :exec
+UPDATE chats c SET session_surface = 'claude-tag'
+WHERE c.project_id = @project_id AND c.id = @chat_id
+ AND c.session_surface IS DISTINCT FROM 'claude-tag'
+ AND EXISTS (SELECT 1 FROM chat_session_links l WHERE l.project_id = c.project_id
+   AND l.child_chat_id = c.id AND l.kind = 'subagent' AND l.source_surface = 'claude-tag');
+
+-- name: ListChatParticipantRollups :many
+-- One face per Slack identity; message snapshots retain their historical names.
+SELECT DISTINCT ON (p.chat_id, p.provider, coalesce(p.provider_team_id, ''), p.provider_user_id)
+ p.chat_id, p.provider, p.provider_user_id, p.provider_team_id, p.user_id, p.display_name
+FROM chat_message_participants p
+JOIN chats c ON c.id = p.chat_id AND c.project_id = p.project_id AND c.deleted IS FALSE
+WHERE p.project_id = @project_id AND p.chat_id = ANY(@chat_ids::uuid[])
+ORDER BY p.chat_id, p.provider, coalesce(p.provider_team_id, ''), p.provider_user_id, p.created_at DESC, p.id DESC;
+
+-- name: ListChatMessageParticipants :many
+SELECT p.message_id, p.provider, p.provider_user_id,
+ p.provider_team_id, p.user_id, p.display_name
+FROM chat_message_participants p
+JOIN chats c ON c.id = p.chat_id AND c.project_id = p.project_id AND c.deleted IS FALSE
+WHERE p.project_id = @project_id AND p.message_id = ANY(@message_ids::uuid[])
+ORDER BY p.provider, p.provider_user_id;
+
+-- name: RecordChatSlackChannel :exec
+UPDATE chats SET slack_team_id = coalesce(nullif(@team_id::text, ''), CASE WHEN slack_channel_id = @channel_id::text THEN slack_team_id END),
+ slack_channel_name = coalesce(nullif(@channel_name::text, ''), CASE WHEN slack_channel_id = @channel_id::text THEN slack_channel_name END),
+ slack_channel_id = @channel_id::text
+WHERE project_id = @project_id AND id = @chat_id;
+
+-- name: ListChatSlackChannels :many
+-- Take a complete channel record from the nearest visible ancestor. Never
+-- combine identifiers/names from different channels or cross hidden parents.
+WITH RECURSIVE ancestry AS (
+ SELECT c.id AS root_id, c.id, c.slack_team_id, c.slack_channel_id, c.slack_channel_name,
+  ARRAY[c.id] AS visited, 0 AS depth
+ FROM chats c WHERE c.project_id = @project_id AND c.id = ANY(@chat_ids::uuid[]) AND c.deleted IS FALSE
+ UNION ALL
+ SELECT a.root_id, parent.id, parent.slack_team_id, parent.slack_channel_id, parent.slack_channel_name,
+  a.visited || parent.id, a.depth + 1
+ FROM ancestry a
+ JOIN chat_session_links l ON l.project_id = @project_id AND l.child_chat_id = a.id AND l.kind = 'subagent'
+ JOIN chats parent ON parent.id = l.parent_chat_id AND parent.project_id = @project_id AND parent.deleted IS FALSE
+ WHERE a.slack_channel_id IS NULL AND NOT parent.id = ANY(a.visited)
+  AND (@external_user_id::text = '' OR parent.external_user_id = @external_user_id::text)
+  AND (@user_id::text = '' OR parent.user_id = @user_id::text)
+)
+SELECT DISTINCT ON (root_id) root_id AS id,
+ coalesce(slack_team_id, '')::text AS slack_team_id,
+ coalesce(slack_channel_id, '')::text AS slack_channel_id,
+ coalesce(slack_channel_name, '')::text AS slack_channel_name
+FROM ancestry ORDER BY root_id, (slack_channel_id IS NULL), depth;

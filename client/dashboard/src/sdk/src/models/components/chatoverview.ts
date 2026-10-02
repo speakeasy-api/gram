@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  ChatParticipant,
+  ChatParticipant$inboundSchema,
+} from "./chatparticipant.js";
 
 export type ChatOverview = {
   /**
@@ -54,6 +58,10 @@ export type ChatOverview = {
    */
   originatingClient?: string | undefined;
   /**
+   * Distinct observed conversation participants across the session.
+   */
+  participants?: Array<ChatParticipant> | undefined;
+  /**
    * True when the chat is pinned
    */
   pinned?: boolean | undefined;
@@ -61,6 +69,18 @@ export type ChatOverview = {
    * Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
    */
   riskFindingsCount?: number | undefined;
+  /**
+   * Observed Slack channel associated with this session.
+   */
+  slackChannelId?: string | undefined;
+  /**
+   * Observed Slack channel name, without the leading hash.
+   */
+  slackChannelName?: string | undefined;
+  /**
+   * Observed Slack workspace associated with this session.
+   */
+  slackTeamId?: string | undefined;
   /**
    * The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)
    */
@@ -128,8 +148,12 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
       litellm_proxied: z.optional(z.boolean()),
       num_messages: z.int(),
       originating_client: z.optional(z.string()),
+      participants: z.optional(z.array(ChatParticipant$inboundSchema)),
       pinned: z.optional(z.boolean()),
       risk_findings_count: z.optional(z.int()),
+      slack_channel_id: z.optional(z.string()),
+      slack_channel_name: z.optional(z.string()),
+      slack_team_id: z.optional(z.string()),
       source: z.optional(z.string()),
       summary: z.optional(z.string()),
       summary_generated_at: z.optional(
@@ -160,6 +184,9 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
         "num_messages": "numMessages",
         "originating_client": "originatingClient",
         "risk_findings_count": "riskFindingsCount",
+        "slack_channel_id": "slackChannelId",
+        "slack_channel_name": "slackChannelName",
+        "slack_team_id": "slackTeamId",
         "summary_generated_at": "summaryGeneratedAt",
         "total_cost": "totalCost",
         "total_input_tokens": "totalInputTokens",

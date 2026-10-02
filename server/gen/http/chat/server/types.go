@@ -135,6 +135,14 @@ type LoadChatResponseBody struct {
 	// Full work-units analysis verdict as JSON (per-task breakdown, rationales,
 	// and flags). Present only when `work_units` is present.
 	WorkUnitsReport *string `form:"work_units_report,omitempty" json:"work_units_report,omitempty" xml:"work_units_report,omitempty"`
+	// Observed Slack workspace associated with this session.
+	SlackTeamID *string `form:"slack_team_id,omitempty" json:"slack_team_id,omitempty" xml:"slack_team_id,omitempty"`
+	// Observed Slack channel associated with this session.
+	SlackChannelID *string `form:"slack_channel_id,omitempty" json:"slack_channel_id,omitempty" xml:"slack_channel_id,omitempty"`
+	// Observed Slack channel name, without the leading hash.
+	SlackChannelName *string `form:"slack_channel_name,omitempty" json:"slack_channel_name,omitempty" xml:"slack_channel_name,omitempty"`
+	// Distinct observed conversation participants across the session.
+	Participants []*ChatParticipantResponseBody `form:"participants,omitempty" json:"participants,omitempty" xml:"participants,omitempty"`
 	// The ID of the chat
 	ID string `form:"id" json:"id" xml:"id"`
 	// The title of the chat
@@ -2620,6 +2628,14 @@ type ListSessionLinksGatewayErrorResponseBody struct {
 
 // ChatOverviewResponseBody is used to define fields on response body types.
 type ChatOverviewResponseBody struct {
+	// Observed Slack workspace associated with this session.
+	SlackTeamID *string `form:"slack_team_id,omitempty" json:"slack_team_id,omitempty" xml:"slack_team_id,omitempty"`
+	// Observed Slack channel associated with this session.
+	SlackChannelID *string `form:"slack_channel_id,omitempty" json:"slack_channel_id,omitempty" xml:"slack_channel_id,omitempty"`
+	// Observed Slack channel name, without the leading hash.
+	SlackChannelName *string `form:"slack_channel_name,omitempty" json:"slack_channel_name,omitempty" xml:"slack_channel_name,omitempty"`
+	// Distinct observed conversation participants across the session.
+	Participants []*ChatParticipantResponseBody `form:"participants,omitempty" json:"participants,omitempty" xml:"participants,omitempty"`
 	// The ID of the chat
 	ID string `form:"id" json:"id" xml:"id"`
 	// The title of the chat
@@ -2679,6 +2695,21 @@ type ChatOverviewResponseBody struct {
 	SummaryGeneratedAt *string `form:"summary_generated_at,omitempty" json:"summary_generated_at,omitempty" xml:"summary_generated_at,omitempty"`
 }
 
+// ChatParticipantResponseBody is used to define fields on response body types.
+type ChatParticipantResponseBody struct {
+	// Directory provider that identifies this conversation participant.
+	Provider string `form:"provider" json:"provider" xml:"provider"`
+	// Provider identity observed in the message envelope.
+	ProviderUserID string `form:"provider_user_id" json:"provider_user_id" xml:"provider_user_id"`
+	// Workspace resolved from the organization directory, when unambiguous.
+	ProviderTeamID *string `form:"provider_team_id,omitempty" json:"provider_team_id,omitempty" xml:"provider_team_id,omitempty"`
+	// Explicitly mapped Gram person at capture time; this attribution grants no
+	// permissions.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// Directory display name at capture time.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+}
+
 // WorkUnitsTrendBucketResponseBody is used to define fields on response body
 // types.
 type WorkUnitsTrendBucketResponseBody struct {
@@ -2732,6 +2763,9 @@ type ChatMessageResponseBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The ID of the external user who created the message
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+	// Observed per-message conversation participants, independent of message
+	// ownership.
+	Participants []*ChatParticipantResponseBody `form:"participants,omitempty" json:"participants,omitempty" xml:"participants,omitempty"`
 	// When the message was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// Conversation generation — bumps on compaction or edit divergence
@@ -2871,7 +2905,8 @@ type ChatSessionLinkResponseBody struct {
 	// Whether the continuation exists as a captured chat the caller can read, i.e.
 	// whether the child side is navigable.
 	ChildCaptured bool `form:"child_captured" json:"child_captured" xml:"child_captured"`
-	// Link kind. Currently always 'move'.
+	// Link kind: move for continuations, recall for recalled context, or subagent
+	// for a helper session.
 	Kind string `form:"kind" json:"kind" xml:"kind"`
 	// Harness the session was moved to (e.g. cursor, codex, claude-code).
 	TargetHarness string `form:"target_harness" json:"target_harness" xml:"target_harness"`
@@ -2949,6 +2984,9 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		HasMoreBefore:        res.HasMoreBefore,
 		HasMoreAfter:         res.HasMoreAfter,
 		WorkUnitsReport:      res.WorkUnitsReport,
+		SlackTeamID:          res.SlackTeamID,
+		SlackChannelID:       res.SlackChannelID,
+		SlackChannelName:     res.SlackChannelName,
 		ID:                   res.ID,
 		Title:                res.Title,
 		UserID:               res.UserID,
@@ -3023,6 +3061,16 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 	}
 	if res.Totals != nil {
 		body.Totals = marshalChatChatTotalsToChatTotalsResponseBody(res.Totals)
+	}
+	if res.Participants != nil {
+		body.Participants = make([]*ChatParticipantResponseBody, len(res.Participants))
+		for i, val := range res.Participants {
+			if val == nil {
+				body.Participants[i] = nil
+				continue
+			}
+			body.Participants[i] = marshalChatChatParticipantToChatParticipantResponseBody(val)
+		}
 	}
 	return body
 }

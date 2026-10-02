@@ -149,6 +149,14 @@ type Chat struct {
 	// Full work-units analysis verdict as JSON (per-task breakdown, rationales,
 	// and flags). Present only when `work_units` is present.
 	WorkUnitsReport *string
+	// Observed Slack workspace associated with this session.
+	SlackTeamID *string
+	// Observed Slack channel associated with this session.
+	SlackChannelID *string
+	// Observed Slack channel name, without the leading hash.
+	SlackChannelName *string
+	// Distinct observed conversation participants across the session.
+	Participants []*ChatParticipant
 	// The ID of the chat
 	ID string
 	// The title of the chat
@@ -256,6 +264,9 @@ type ChatMessage struct {
 	UserID *string
 	// The ID of the external user who created the message
 	ExternalUserID *string
+	// Observed per-message conversation participants, independent of message
+	// ownership.
+	Participants []*ChatParticipant
 	// When the message was created.
 	CreatedAt string
 	// Conversation generation — bumps on compaction or edit divergence
@@ -263,6 +274,14 @@ type ChatMessage struct {
 }
 
 type ChatOverview struct {
+	// Observed Slack workspace associated with this session.
+	SlackTeamID *string
+	// Observed Slack channel associated with this session.
+	SlackChannelID *string
+	// Observed Slack channel name, without the leading hash.
+	SlackChannelName *string
+	// Distinct observed conversation participants across the session.
+	Participants []*ChatParticipant
 	// The ID of the chat
 	ID string
 	// The title of the chat
@@ -322,6 +341,20 @@ type ChatOverview struct {
 	SummaryGeneratedAt *string
 }
 
+type ChatParticipant struct {
+	// Directory provider that identifies this conversation participant.
+	Provider string
+	// Provider identity observed in the message envelope.
+	ProviderUserID string
+	// Workspace resolved from the organization directory, when unambiguous.
+	ProviderTeamID *string
+	// Explicitly mapped Gram person at capture time; this attribution grants no
+	// permissions.
+	UserID *string
+	// Directory display name at capture time.
+	DisplayName *string
+}
+
 type ChatSessionLink struct {
 	// Chat id of the session the move originated from. Absent when the caller's
 	// visibility scope cannot read the parent — a masked end exposes no identity,
@@ -344,7 +377,8 @@ type ChatSessionLink struct {
 	// Whether the continuation exists as a captured chat the caller can read, i.e.
 	// whether the child side is navigable.
 	ChildCaptured bool
-	// Link kind. Currently always 'move'.
+	// Link kind: move for continuations, recall for recalled context, or subagent
+	// for a helper session.
 	Kind string
 	// Harness the session was moved to (e.g. cursor, codex, claude-code).
 	TargetHarness string

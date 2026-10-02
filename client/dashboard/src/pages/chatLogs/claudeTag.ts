@@ -2,7 +2,7 @@ import type { ChatMessage } from "@gram/client/models/components/chatmessage.js"
 import { messageText, type TranscriptRow } from "./transcript";
 
 interface ClaudeTagWake {
-  title: string;
+  title?: string;
   messages: Array<{
     text: string;
     author: string;
@@ -10,13 +10,64 @@ interface ClaudeTagWake {
     timestamp: string | null;
     trigger: boolean;
     channel: string;
+    sender?: string;
   }>;
 }
 
 export function parseClaudeTagWake(content: unknown): ClaudeTagWake | null {
-  const text = messageText(content).trim();
+  let text = messageText(content).trim();
+  let botId: string | undefined;
+  let contextChannel: { id: string; name: string } | undefined;
+  const context = text.match(/^<session-context nonce="([A-Za-z0-9_-]+)">/);
+  if (context) {
+    const closing = `</session-context nonce="${context[1]}">`;
+    const end = text.indexOf(closing, context[0].length);
+    if (end < 0) return null;
+    botId = text
+      .slice(context[0].length, end)
+      .match(/^You: .*bot user id `([^`]+)`/m)?.[1];
+    const channel = text
+      .slice(context[0].length, end)
+      .match(/^Channel: #([^\n]+) \(id: `([^`]+)`\)\r?$/m);
+    if (channel) contextChannel = { id: channel[2]!, name: channel[1]! };
+    text = text.slice(end + closing.length).trim();
+  }
+  if (/^<standing_owner_message[\s>]/.test(text)) {
+    const end = text.indexOf("</standing_owner_message>");
+    if (end < 0) return null;
+    const doc = new DOMParser().parseFromString(
+      text.slice(0, end + "</standing_owner_message>".length),
+      "application/xml",
+    );
+    const el = doc.documentElement;
+    if (
+      doc.querySelector("parsererror") ||
+      el.tagName !== "standing_owner_message" ||
+      !el.getAttribute("sender")
+    )
+      return null;
+    return {
+      title: (el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 80),
+      messages: [
+        {
+          text: el.textContent ?? "",
+          author: el.getAttribute("sender")!,
+          sender: el.getAttribute("sender")!,
+          id: el.getAttribute("ts"),
+          timestamp: el.getAttribute("sent-at"),
+          trigger: el.getAttribute("originating-ask") === "true",
+          channel: el.getAttribute("channel-id") ?? "",
+        },
+      ],
+    };
+  }
   if (!text.startsWith("<wake")) return null;
-  const doc = new DOMParser().parseFromString(text, "application/xml");
+  const end = text.indexOf("</wake>");
+  if (end < 0) return null;
+  const doc = new DOMParser().parseFromString(
+    text.slice(0, end + "</wake>".length),
+    "application/xml",
+  );
   if (
     doc.querySelector("parsererror") ||
     doc.documentElement.tagName !== "wake"
@@ -28,7 +79,10 @@ export function parseClaudeTagWake(content: unknown): ClaudeTagWake | null {
   const messages = channels.flatMap((channel) =>
     Array.from(channel.children)
       .filter(
-        (el) => el.tagName === "message" && el.getAttribute("from") === "human",
+        (el) =>
+          el.tagName === "message" &&
+          el.getAttribute("from") === "human" &&
+          (!botId || el.getAttribute("author-id") !== botId),
       )
       .map((el) => ({
         text: (el.textContent ?? "").replace(/<@[^>|]+\|([^>]+)>/g, "@$1"),
@@ -36,10 +90,17 @@ export function parseClaudeTagWake(content: unknown): ClaudeTagWake | null {
           el.getAttribute("author") ||
           el.getAttribute("author-handle") ||
           "User",
+        sender:
+          el.getAttribute("author-id") ??
+          el.getAttribute("sender") ??
+          undefined,
         id: el.getAttribute("id"),
         timestamp: el.getAttribute("sent-at"),
         trigger: el.getAttribute("trigger") === "true",
         channel:
+          (contextChannel?.id === channel.getAttribute("id")
+            ? contextChannel.name
+            : undefined) ||
           channel.getAttribute("name") ||
           channel.getAttribute("channel-name") ||
           channel.getAttribute("id")!,
@@ -65,7 +126,11 @@ export function claudeTagMetadata(messages: ChatMessage[]): {
     detected: wakes.length > 0,
     title: wakes[0]?.title,
     channels: [
-      ...new Set(wakes.flatMap((wake) => wake.messages.map((m) => m.channel))),
+      ...new Set(
+        wakes.flatMap((wake) =>
+          wake.messages.map((m) => m.channel).filter(Boolean),
+        ),
+      ),
     ],
   };
 }
@@ -134,6 +199,15 @@ export function projectClaudeTagRows(rows: TranscriptRow[]): TranscriptRow[] {
         const timestamp = message.timestamp
           ? new Date(message.timestamp)
           : row.message.createdAt;
+        const participants = message.sender
+          ? [
+              row.message.participants?.find(
+                (participant) =>
+                  participant.provider === "slack" &&
+                  participant.providerUserId === message.sender,
+              ) ?? { provider: "slack", providerUserId: message.sender },
+            ]
+          : undefined;
         return [
           {
             ...row,
@@ -142,8 +216,12 @@ export function projectClaudeTagRows(rows: TranscriptRow[]): TranscriptRow[] {
             message: {
               ...row.message,
               content: message.text,
-              userId: message.author,
-              externalUserId: undefined,
+              participants,
+              // Legacy wakes contain display handles rather than directory IDs.
+              userId: message.sender ? row.message.userId : message.author,
+              externalUserId: message.sender
+                ? row.message.externalUserId
+                : undefined,
               createdAt: Number.isNaN(timestamp.getTime())
                 ? row.message.createdAt
                 : timestamp,

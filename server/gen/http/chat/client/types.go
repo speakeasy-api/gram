@@ -134,6 +134,14 @@ type LoadChatResponseBody struct {
 	// Full work-units analysis verdict as JSON (per-task breakdown, rationales,
 	// and flags). Present only when `work_units` is present.
 	WorkUnitsReport *string `form:"work_units_report,omitempty" json:"work_units_report,omitempty" xml:"work_units_report,omitempty"`
+	// Observed Slack workspace associated with this session.
+	SlackTeamID *string `form:"slack_team_id,omitempty" json:"slack_team_id,omitempty" xml:"slack_team_id,omitempty"`
+	// Observed Slack channel associated with this session.
+	SlackChannelID *string `form:"slack_channel_id,omitempty" json:"slack_channel_id,omitempty" xml:"slack_channel_id,omitempty"`
+	// Observed Slack channel name, without the leading hash.
+	SlackChannelName *string `form:"slack_channel_name,omitempty" json:"slack_channel_name,omitempty" xml:"slack_channel_name,omitempty"`
+	// Distinct observed conversation participants across the session.
+	Participants []*ChatParticipantResponseBody `form:"participants,omitempty" json:"participants,omitempty" xml:"participants,omitempty"`
 	// The ID of the chat
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The title of the chat
@@ -2619,6 +2627,14 @@ type ListSessionLinksGatewayErrorResponseBody struct {
 
 // ChatOverviewResponseBody is used to define fields on response body types.
 type ChatOverviewResponseBody struct {
+	// Observed Slack workspace associated with this session.
+	SlackTeamID *string `form:"slack_team_id,omitempty" json:"slack_team_id,omitempty" xml:"slack_team_id,omitempty"`
+	// Observed Slack channel associated with this session.
+	SlackChannelID *string `form:"slack_channel_id,omitempty" json:"slack_channel_id,omitempty" xml:"slack_channel_id,omitempty"`
+	// Observed Slack channel name, without the leading hash.
+	SlackChannelName *string `form:"slack_channel_name,omitempty" json:"slack_channel_name,omitempty" xml:"slack_channel_name,omitempty"`
+	// Distinct observed conversation participants across the session.
+	Participants []*ChatParticipantResponseBody `form:"participants,omitempty" json:"participants,omitempty" xml:"participants,omitempty"`
 	// The ID of the chat
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The title of the chat
@@ -2678,6 +2694,21 @@ type ChatOverviewResponseBody struct {
 	SummaryGeneratedAt *string `form:"summary_generated_at,omitempty" json:"summary_generated_at,omitempty" xml:"summary_generated_at,omitempty"`
 }
 
+// ChatParticipantResponseBody is used to define fields on response body types.
+type ChatParticipantResponseBody struct {
+	// Directory provider that identifies this conversation participant.
+	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	// Provider identity observed in the message envelope.
+	ProviderUserID *string `form:"provider_user_id,omitempty" json:"provider_user_id,omitempty" xml:"provider_user_id,omitempty"`
+	// Workspace resolved from the organization directory, when unambiguous.
+	ProviderTeamID *string `form:"provider_team_id,omitempty" json:"provider_team_id,omitempty" xml:"provider_team_id,omitempty"`
+	// Explicitly mapped Gram person at capture time; this attribution grants no
+	// permissions.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// Directory display name at capture time.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+}
+
 // WorkUnitsTrendBucketResponseBody is used to define fields on response body
 // types.
 type WorkUnitsTrendBucketResponseBody struct {
@@ -2731,6 +2762,9 @@ type ChatMessageResponseBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The ID of the external user who created the message
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+	// Observed per-message conversation participants, independent of message
+	// ownership.
+	Participants []*ChatParticipantResponseBody `form:"participants,omitempty" json:"participants,omitempty" xml:"participants,omitempty"`
 	// When the message was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// Conversation generation — bumps on compaction or edit divergence
@@ -2870,7 +2904,8 @@ type ChatSessionLinkResponseBody struct {
 	// Whether the continuation exists as a captured chat the caller can read, i.e.
 	// whether the child side is navigable.
 	ChildCaptured *bool `form:"child_captured,omitempty" json:"child_captured,omitempty" xml:"child_captured,omitempty"`
-	// Link kind. Currently always 'move'.
+	// Link kind: move for continuations, recall for recalled context, or subagent
+	// for a helper session.
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
 	// Harness the session was moved to (e.g. cursor, codex, claude-code).
 	TargetHarness *string `form:"target_harness,omitempty" json:"target_harness,omitempty" xml:"target_harness,omitempty"`
@@ -3448,6 +3483,9 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 		HasMoreBefore:        *body.HasMoreBefore,
 		HasMoreAfter:         *body.HasMoreAfter,
 		WorkUnitsReport:      body.WorkUnitsReport,
+		SlackTeamID:          body.SlackTeamID,
+		SlackChannelID:       body.SlackChannelID,
+		SlackChannelName:     body.SlackChannelName,
 		ID:                   *body.ID,
 		Title:                *body.Title,
 		UserID:               body.UserID,
@@ -3514,6 +3552,16 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 	}
 	if body.Totals != nil {
 		v.Totals = unmarshalChatTotalsResponseBodyToChatChatTotals(body.Totals)
+	}
+	if body.Participants != nil {
+		v.Participants = make([]*chat.ChatParticipant, len(body.Participants))
+		for i, val := range body.Participants {
+			if val == nil {
+				v.Participants[i] = nil
+				continue
+			}
+			v.Participants[i] = unmarshalChatParticipantResponseBodyToChatChatParticipant(val)
+		}
 	}
 
 	return v
@@ -5224,6 +5272,13 @@ func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 	if body.Totals != nil {
 		if err2 := ValidateChatTotalsResponseBody(body.Totals); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Participants {
+		if e != nil {
+			if err2 := ValidateChatParticipantResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	if body.CreatedAt != nil {
@@ -8477,6 +8532,13 @@ func ValidateChatOverviewResponseBody(body *ChatOverviewResponseBody) (err error
 	if body.LastMessageTimestamp == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("last_message_timestamp", "body"))
 	}
+	for _, e := range body.Participants {
+		if e != nil {
+			if err2 := ValidateChatParticipantResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -8488,6 +8550,18 @@ func ValidateChatOverviewResponseBody(body *ChatOverviewResponseBody) (err error
 	}
 	if body.SummaryGeneratedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.summary_generated_at", *body.SummaryGeneratedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateChatParticipantResponseBody runs the validations defined on
+// ChatParticipantResponseBody
+func ValidateChatParticipantResponseBody(body *ChatParticipantResponseBody) (err error) {
+	if body.Provider == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
+	}
+	if body.ProviderUserID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provider_user_id", "body"))
 	}
 	return
 }
@@ -8536,6 +8610,13 @@ func ValidateChatMessageResponseBody(body *ChatMessageResponseBody) (err error) 
 	}
 	if body.Generation == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("generation", "body"))
+	}
+	for _, e := range body.Participants {
+		if e != nil {
+			if err2 := ValidateChatParticipantResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

@@ -28,6 +28,7 @@ export function summarizeLineage(
     derived: false,
   };
   for (const link of links) {
+    if (link.kind === "subagent") continue;
     if (link.parentChatId === chatId) {
       if (link.kind === "recall") {
         summary.recalledCount += 1;
@@ -50,4 +51,43 @@ export function summarizeLineage(
     return undefined;
   }
   return summary;
+}
+
+/** Stable depth-first order keeps helpers below their parent. Cyclic or
+ * incomplete evidence cannot drop rows or loop forever. */
+export function groupSubsessions<T extends { id: string }>(
+  sessions: T[],
+  links: ChatSessionLink[],
+): Array<{ session: T; depth: number }> {
+  const byId = new Map(sessions.map((session) => [session.id, session]));
+  const parentByChild = new Map<string, string>();
+  for (const link of links) {
+    if (
+      link.kind === "subagent" &&
+      link.parentChatId &&
+      link.childChatId &&
+      link.parentChatId !== link.childChatId &&
+      byId.has(link.parentChatId) &&
+      byId.has(link.childChatId)
+    )
+      parentByChild.set(link.childChatId, link.parentChatId);
+  }
+  const children = new Map<string, T[]>();
+  for (const session of sessions) {
+    const parent = parentByChild.get(session.id);
+    if (parent)
+      children.set(parent, [...(children.get(parent) ?? []), session]);
+  }
+  const visited = new Set<string>();
+  const ordered: Array<{ session: T; depth: number }> = [];
+  const visit = (session: T, depth: number) => {
+    if (visited.has(session.id)) return;
+    visited.add(session.id);
+    ordered.push({ session, depth });
+    for (const child of children.get(session.id) ?? []) visit(child, depth + 1);
+  };
+  for (const session of sessions)
+    if (!parentByChild.has(session.id)) visit(session, 0);
+  for (const session of sessions) visit(session, 0);
+  return ordered;
 }

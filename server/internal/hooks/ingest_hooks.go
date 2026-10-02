@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/claudetag"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
@@ -1044,7 +1045,7 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	// hook row and the chat persistence below stamp the same AI-account
 	// attribution.
 	metadata := s.canonicalSessionMetadata(ctx, payload, authCtx, actor)
-	if _, tag := claudeTagTitle(canonicalPromptText(payload)); tag && claudeServiceNameSpecificity(metadata.ServiceName) > 0 {
+	if _, tag := claudeTagTitle(canonicalPromptText(payload)); tag || claudetag.Parse(canonicalPromptText(payload)).Detected {
 		metadata.ServiceName = "claude-tag"
 	}
 	// Resolve the product surface once per event: the OTEL-cached service.name
@@ -2227,6 +2228,12 @@ func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) str
 	if claudeServiceNameSpecificity(source) > 0 {
 		if tagTitle, ok := claudeTagTitle(title); ok {
 			title = tagTitle
+		} else if delivery := claudetag.Parse(title); delivery.Detected {
+			if delivery.Sender != "" {
+				title = delivery.Text
+			} else {
+				title = "Claude Tag coordination"
+			}
 		}
 	}
 	return chat.DerivedTitle(title)

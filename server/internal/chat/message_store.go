@@ -459,6 +459,11 @@ func insertChatMessages(ctx context.Context, db repo.DBTX, params []repo.CreateC
 	if err != nil {
 		return 0, fmt.Errorf("create chat messages: %w", err)
 	}
+	for _, param := range params {
+		if err := persistClaudeTagMetadata(ctx, db, param); err != nil {
+			return 0, err
+		}
+	}
 	return n, nil
 }
 
@@ -578,6 +583,10 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 	}
 	if err != nil {
 		return 0, fmt.Errorf("upsert correlated chat message: %w", err)
+	}
+	param.ID = stored.ID
+	if err := persistClaudeTagMetadata(ctx, tx, param); err != nil {
+		return 0, err
 	}
 	if stored.Inserted {
 		writes[0].Params.ID = stored.ID

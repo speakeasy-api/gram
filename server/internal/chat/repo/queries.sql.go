@@ -197,7 +197,7 @@ candidate_chats AS (
       -- stream owns every transcript row (proxied rows are suppressed as
       -- duplicates, so the message-source probe alone would miss them).
       OR ('litellm' = ANY ($14::text[]) AND c.litellm_proxied)
-      OR (
+      OR coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = $5::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
         WHERE cmsrc.chat_id = c.id
@@ -206,7 +206,7 @@ candidate_chats AS (
           AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
         LIMIT 1
-      ) = ANY ($14::text[])
+      )) = ANY ($14::text[])
     )
 ),
 chat_activity AS (
@@ -856,7 +856,10 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 
 const getChat = `-- name: GetChat :one
 SELECT c.session_surface, c.slack_team_id, c.slack_channel_id, c.slack_channel_name, c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.inference_accepted_checkpoint, c.inference_actor_key, c.user_account_id, c.litellm_proxied, c.cwd, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
-  at.assistant_id, a.name AS assistant_name
+  at.assistant_id, a.name AS assistant_name,
+  coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links l
+    WHERE l.project_id = c.project_id AND l.child_chat_id = c.id AND l.kind = 'subagent'
+      AND l.source_surface = 'claude-tag') THEN 'claude-tag' END, '')::text AS captured_surface
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
 LEFT JOIN assistant_threads at ON at.chat_id = c.id AND at.deleted IS FALSE
@@ -898,6 +901,7 @@ type GetChatRow struct {
 	AccountEmail                string
 	AssistantID                 uuid.NullUUID
 	AssistantName               pgtype.Text
+	CapturedSurface             string
 }
 
 // Loads a chat plus the team/personal classification of the AI account that
@@ -936,6 +940,7 @@ func (q *Queries) GetChat(ctx context.Context, arg GetChatParams) (GetChatRow, e
 		&i.AccountEmail,
 		&i.AssistantID,
 		&i.AssistantName,
+		&i.CapturedSurface,
 	)
 	return i, err
 }
@@ -1603,6 +1608,45 @@ func (q *Queries) InsertChatResolutionMessage(ctx context.Context, arg InsertCha
 	return err
 }
 
+const insertSubsessionLink = `-- name: InsertSubsessionLink :exec
+WITH RECURSIVE descendants AS (
+ SELECT child_chat_id AS descendant_id FROM chat_session_links WHERE project_id = $3 AND parent_chat_id = $2 AND kind = 'subagent'
+ UNION
+ SELECT l.child_chat_id FROM chat_session_links l JOIN descendants d ON l.parent_chat_id = d.descendant_id
+ WHERE l.project_id = $3 AND l.kind = 'subagent'
+)
+INSERT INTO chat_session_links (project_id, organization_id, parent_chat_id, child_chat_id,
+ parent_session_id, child_session_id, kind, target_harness, source_surface)
+SELECT p.id, p.organization_id, $1, $2,
+ coalesce((SELECT external_chat_id FROM chats parent_chat WHERE parent_chat.id = $1 AND parent_chat.project_id = $3), $4::text), $5, 'subagent', 'claude-tag', 'claude-tag'
+FROM projects p WHERE p.id = $3
+ AND $1::uuid <> $2::uuid
+ AND NOT EXISTS (SELECT 1 FROM descendants WHERE descendant_id = $1)
+ AND NOT EXISTS (SELECT 1 FROM chat_session_links WHERE project_id = $3 AND child_chat_id = $2 AND kind = 'subagent')
+ON CONFLICT (project_id, parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL DO NOTHING
+`
+
+type InsertSubsessionLinkParams struct {
+	ParentChatID    uuid.UUID
+	ChildChatID     uuid.NullUUID
+	ProjectID       uuid.UUID
+	ParentSessionID string
+	ChildSessionID  pgtype.Text
+}
+
+// The project lock serializes competing evidence so two deliveries cannot
+// give a child multiple parents or introduce a cycle.
+func (q *Queries) InsertSubsessionLink(ctx context.Context, arg InsertSubsessionLinkParams) error {
+	_, err := q.db.Exec(ctx, insertSubsessionLink,
+		arg.ParentChatID,
+		arg.ChildChatID,
+		arg.ProjectID,
+		arg.ParentSessionID,
+		arg.ChildSessionID,
+	)
+	return err
+}
+
 const insertUserFeedback = `-- name: InsertUserFeedback :one
 INSERT INTO chat_user_feedback (
     project_id,
@@ -1865,6 +1909,56 @@ func (q *Queries) ListChatContentPartsByChatID(ctx context.Context, arg ListChat
 			&i.DeletedAt,
 			&i.Deleted,
 			&i.IsRisk,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatMessageParticipants = `-- name: ListChatMessageParticipants :many
+SELECT p.message_id, p.provider, p.provider_user_id,
+ p.provider_team_id, p.user_id, p.display_name
+FROM chat_message_participants p
+JOIN chats c ON c.id = p.chat_id AND c.project_id = p.project_id AND c.deleted IS FALSE
+WHERE p.project_id = $1 AND p.message_id = ANY($2::uuid[])
+ORDER BY p.provider, p.provider_user_id
+`
+
+type ListChatMessageParticipantsParams struct {
+	ProjectID  uuid.UUID
+	MessageIds []uuid.UUID
+}
+
+type ListChatMessageParticipantsRow struct {
+	MessageID      uuid.NullUUID
+	Provider       string
+	ProviderUserID string
+	ProviderTeamID pgtype.Text
+	UserID         pgtype.Text
+	DisplayName    pgtype.Text
+}
+
+func (q *Queries) ListChatMessageParticipants(ctx context.Context, arg ListChatMessageParticipantsParams) ([]ListChatMessageParticipantsRow, error) {
+	rows, err := q.db.Query(ctx, listChatMessageParticipants, arg.ProjectID, arg.MessageIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatMessageParticipantsRow
+	for rows.Next() {
+		var i ListChatMessageParticipantsRow
+		if err := rows.Scan(
+			&i.MessageID,
+			&i.Provider,
+			&i.ProviderUserID,
+			&i.ProviderTeamID,
+			&i.UserID,
+			&i.DisplayName,
 		); err != nil {
 			return nil, err
 		}
@@ -2271,6 +2365,109 @@ func (q *Queries) ListChatMessagesForMatch(ctx context.Context, arg ListChatMess
 	return items, nil
 }
 
+const listChatParticipantRollups = `-- name: ListChatParticipantRollups :many
+SELECT DISTINCT ON (p.chat_id, p.provider, coalesce(p.provider_team_id, ''), p.provider_user_id)
+ p.chat_id, p.provider, p.provider_user_id, p.provider_team_id, p.user_id, p.display_name
+FROM chat_message_participants p
+JOIN chats c ON c.id = p.chat_id AND c.project_id = p.project_id AND c.deleted IS FALSE
+WHERE p.project_id = $1 AND p.chat_id = ANY($2::uuid[])
+ORDER BY p.chat_id, p.provider, coalesce(p.provider_team_id, ''), p.provider_user_id, p.created_at DESC, p.id DESC
+`
+
+type ListChatParticipantRollupsParams struct {
+	ProjectID uuid.UUID
+	ChatIds   []uuid.UUID
+}
+
+type ListChatParticipantRollupsRow struct {
+	ChatID         uuid.NullUUID
+	Provider       string
+	ProviderUserID string
+	ProviderTeamID pgtype.Text
+	UserID         pgtype.Text
+	DisplayName    pgtype.Text
+}
+
+// One face per Slack identity; message snapshots retain their historical names.
+func (q *Queries) ListChatParticipantRollups(ctx context.Context, arg ListChatParticipantRollupsParams) ([]ListChatParticipantRollupsRow, error) {
+	rows, err := q.db.Query(ctx, listChatParticipantRollups, arg.ProjectID, arg.ChatIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatParticipantRollupsRow
+	for rows.Next() {
+		var i ListChatParticipantRollupsRow
+		if err := rows.Scan(
+			&i.ChatID,
+			&i.Provider,
+			&i.ProviderUserID,
+			&i.ProviderTeamID,
+			&i.UserID,
+			&i.DisplayName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatParticipants = `-- name: ListChatParticipants :many
+SELECT DISTINCT p.chat_id, p.message_id, p.provider, p.provider_user_id,
+ p.provider_team_id, p.user_id, p.display_name
+FROM chat_message_participants p
+JOIN chats c ON c.id = p.chat_id AND c.project_id = p.project_id AND c.deleted IS FALSE
+WHERE p.project_id = $1 AND p.chat_id = ANY($2::uuid[])
+ORDER BY p.provider, p.provider_user_id
+`
+
+type ListChatParticipantsParams struct {
+	ProjectID uuid.UUID
+	ChatIds   []uuid.UUID
+}
+
+type ListChatParticipantsRow struct {
+	ChatID         uuid.NullUUID
+	MessageID      uuid.NullUUID
+	Provider       string
+	ProviderUserID string
+	ProviderTeamID pgtype.Text
+	UserID         pgtype.Text
+	DisplayName    pgtype.Text
+}
+
+func (q *Queries) ListChatParticipants(ctx context.Context, arg ListChatParticipantsParams) ([]ListChatParticipantsRow, error) {
+	rows, err := q.db.Query(ctx, listChatParticipants, arg.ProjectID, arg.ChatIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatParticipantsRow
+	for rows.Next() {
+		var i ListChatParticipantsRow
+		if err := rows.Scan(
+			&i.ChatID,
+			&i.MessageID,
+			&i.Provider,
+			&i.ProviderUserID,
+			&i.ProviderTeamID,
+			&i.UserID,
+			&i.DisplayName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatSessionLinks = `-- name: ListChatSessionLinks :many
 SELECT
   l.parent_chat_id,
@@ -2377,8 +2574,76 @@ func (q *Queries) ListChatSessionLinks(ctx context.Context, arg ListChatSessionL
 	return items, nil
 }
 
+const listChatSlackChannels = `-- name: ListChatSlackChannels :many
+WITH RECURSIVE ancestry AS (
+ SELECT c.id AS root_id, c.id, c.slack_team_id, c.slack_channel_id, c.slack_channel_name,
+  ARRAY[c.id] AS visited, 0 AS depth
+ FROM chats c WHERE c.project_id = $1 AND c.id = ANY($2::uuid[]) AND c.deleted IS FALSE
+ UNION ALL
+ SELECT a.root_id, parent.id, parent.slack_team_id, parent.slack_channel_id, parent.slack_channel_name,
+  a.visited || parent.id, a.depth + 1
+ FROM ancestry a
+ JOIN chat_session_links l ON l.project_id = $1 AND l.child_chat_id = a.id AND l.kind = 'subagent'
+ JOIN chats parent ON parent.id = l.parent_chat_id AND parent.project_id = $1 AND parent.deleted IS FALSE
+ WHERE a.slack_channel_id IS NULL AND NOT parent.id = ANY(a.visited)
+  AND ($3::text = '' OR parent.external_user_id = $3::text)
+  AND ($4::text = '' OR parent.user_id = $4::text)
+)
+SELECT DISTINCT ON (root_id) root_id AS id,
+ coalesce(slack_team_id, '')::text AS slack_team_id,
+ coalesce(slack_channel_id, '')::text AS slack_channel_id,
+ coalesce(slack_channel_name, '')::text AS slack_channel_name
+FROM ancestry ORDER BY root_id, (slack_channel_id IS NULL), depth
+`
+
+type ListChatSlackChannelsParams struct {
+	ProjectID      uuid.UUID
+	ChatIds        []uuid.UUID
+	ExternalUserID string
+	UserID         string
+}
+
+type ListChatSlackChannelsRow struct {
+	ID               uuid.UUID
+	SlackTeamID      string
+	SlackChannelID   string
+	SlackChannelName string
+}
+
+// Take a complete channel record from the nearest visible ancestor. Never
+// combine identifiers/names from different channels or cross hidden parents.
+func (q *Queries) ListChatSlackChannels(ctx context.Context, arg ListChatSlackChannelsParams) ([]ListChatSlackChannelsRow, error) {
+	rows, err := q.db.Query(ctx, listChatSlackChannels,
+		arg.ProjectID,
+		arg.ChatIds,
+		arg.ExternalUserID,
+		arg.UserID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatSlackChannelsRow
+	for rows.Next() {
+		var i ListChatSlackChannelsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SlackTeamID,
+			&i.SlackChannelID,
+			&i.SlackChannelName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatSources = `-- name: ListChatSources :many
-SELECT DISTINCT latest.source
+SELECT DISTINCT coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = $1::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, latest.source) AS source
 FROM chats c
 CROSS JOIN LATERAL (
   SELECT cm.source
@@ -2569,6 +2834,7 @@ candidate_chats AS (
   SELECT
     c.id,
     c.title,
+    c.session_surface,
     c.user_id,
     c.external_user_id,
     c.created_at,
@@ -2644,7 +2910,7 @@ candidate_chats AS (
       -- stream owns every transcript row (proxied rows are suppressed as
       -- duplicates, so the message-source probe alone would miss them).
       OR ('litellm' = ANY ($12::text[]) AND c.litellm_proxied)
-      OR (
+      OR coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = $1::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
         WHERE cmsrc.chat_id = c.id
@@ -2653,7 +2919,7 @@ candidate_chats AS (
           AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
         LIMIT 1
-      ) = ANY ($12::text[])
+      )) = ANY ($12::text[])
     )
 ),
 chat_stats AS (
@@ -2686,6 +2952,7 @@ filtered_chats AS (
   SELECT
     cc.id,
     cc.title,
+    cc.session_surface,
     cc.user_id,
     cc.external_user_id,
     cc.created_at,
@@ -2720,6 +2987,7 @@ limited_chats AS (
     fc.pinned_at,
     fc.litellm_proxied,
     fc.sort_num_messages,
+    fc.session_surface,
     fc.last_message_timestamp,
     fc.account_type,
     fc.account_email,
@@ -2763,7 +3031,7 @@ page_chats AS (
       WHERE cm.chat_id = lc.id
         AND cm.project_id = $1::uuid
     ))::integer AS num_messages,
-    (SELECT source FROM chat_messages WHERE chat_id = lc.id AND project_id = $1::uuid AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
+    coalesce(lc.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = $1::uuid AND tag_link.child_chat_id = lc.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, (SELECT source FROM chat_messages WHERE chat_id = lc.id AND project_id = $1::uuid AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1)) AS source,
     lc.last_message_timestamp,
     lc.account_type,
     lc.account_email,
@@ -3504,6 +3772,15 @@ func (q *Queries) ListUserFeedbackForChat(ctx context.Context, arg ListUserFeedb
 	return items, nil
 }
 
+const lockSubsessionLinks = `-- name: LockSubsessionLinks :exec
+SELECT pg_advisory_xact_lock(hashtextextended('subsession:' || CAST($1 AS text), 0))
+`
+
+func (q *Queries) LockSubsessionLinks(ctx context.Context, projectID string) error {
+	_, err := q.db.Exec(ctx, lockSubsessionLinks, projectID)
+	return err
+}
+
 const markChatLiteLLMProxied = `-- name: MarkChatLiteLLMProxied :exec
 UPDATE chats
 SET litellm_proxied = TRUE
@@ -3523,6 +3800,107 @@ type MarkChatLiteLLMProxiedParams struct {
 // trace of the proxy.
 func (q *Queries) MarkChatLiteLLMProxied(ctx context.Context, arg MarkChatLiteLLMProxiedParams) error {
 	_, err := q.db.Exec(ctx, markChatLiteLLMProxied, arg.ID, arg.ProjectID)
+	return err
+}
+
+const markClaudeTagMessages = `-- name: MarkClaudeTagMessages :exec
+UPDATE chats SET session_surface = 'claude-tag'
+WHERE project_id = $1 AND id = $2 AND session_surface IS DISTINCT FROM 'claude-tag'
+`
+
+type MarkClaudeTagMessagesParams struct {
+	ProjectID uuid.UUID
+	ChatID    uuid.UUID
+}
+
+func (q *Queries) MarkClaudeTagMessages(ctx context.Context, arg MarkClaudeTagMessagesParams) error {
+	_, err := q.db.Exec(ctx, markClaudeTagMessages, arg.ProjectID, arg.ChatID)
+	return err
+}
+
+const markKnownClaudeTagSubsession = `-- name: MarkKnownClaudeTagSubsession :exec
+UPDATE chats c SET session_surface = 'claude-tag'
+WHERE c.project_id = $1 AND c.id = $2
+ AND c.session_surface IS DISTINCT FROM 'claude-tag'
+ AND EXISTS (SELECT 1 FROM chat_session_links l WHERE l.project_id = c.project_id
+   AND l.child_chat_id = c.id AND l.kind = 'subagent' AND l.source_surface = 'claude-tag')
+`
+
+type MarkKnownClaudeTagSubsessionParams struct {
+	ProjectID uuid.UUID
+	ChatID    uuid.UUID
+}
+
+func (q *Queries) MarkKnownClaudeTagSubsession(ctx context.Context, arg MarkKnownClaudeTagSubsessionParams) error {
+	_, err := q.db.Exec(ctx, markKnownClaudeTagSubsession, arg.ProjectID, arg.ChatID)
+	return err
+}
+
+const recordChatSlackChannel = `-- name: RecordChatSlackChannel :exec
+UPDATE chats SET slack_team_id = coalesce(nullif($1::text, ''), CASE WHEN slack_channel_id = $2::text THEN slack_team_id END),
+ slack_channel_name = coalesce(nullif($3::text, ''), CASE WHEN slack_channel_id = $2::text THEN slack_channel_name END),
+ slack_channel_id = $2::text
+WHERE project_id = $4 AND id = $5
+`
+
+type RecordChatSlackChannelParams struct {
+	TeamID      string
+	ChannelID   string
+	ChannelName string
+	ProjectID   uuid.UUID
+	ChatID      uuid.UUID
+}
+
+func (q *Queries) RecordChatSlackChannel(ctx context.Context, arg RecordChatSlackChannelParams) error {
+	_, err := q.db.Exec(ctx, recordChatSlackChannel,
+		arg.TeamID,
+		arg.ChannelID,
+		arg.ChannelName,
+		arg.ProjectID,
+		arg.ChatID,
+	)
+	return err
+}
+
+const recordSlackMessageParticipant = `-- name: RecordSlackMessageParticipant :exec
+WITH candidates AS (
+ SELECT d.slack_team_id, d.display_name, m.user_id
+ FROM slack_directory_memberships d
+ JOIN projects p ON p.organization_id = d.organization_id AND p.id = $1::uuid
+ LEFT JOIN slack_identity_mappings m ON m.organization_id = d.organization_id
+   AND m.slack_team_id = d.slack_team_id AND m.slack_user_id = d.slack_user_id AND m.revoked_at IS NULL
+ WHERE d.slack_user_id = $2::text
+   AND ($3::text = '' OR d.slack_team_id = $3::text)
+), resolved AS (
+ SELECT slack_team_id, display_name, user_id FROM candidates WHERE (SELECT count(*) FROM candidates) = 1
+)
+INSERT INTO chat_message_participants (
+ project_id, chat_id, message_id, provider, provider_user_id, provider_team_id, user_id, display_name
+)
+SELECT $1, cm.chat_id, cm.id, 'slack', $2,
+ coalesce(r.slack_team_id, nullif($3::text, '')), r.user_id, r.display_name
+FROM chat_messages cm
+LEFT JOIN resolved r ON true
+WHERE cm.id = $4::uuid AND cm.project_id = $1::uuid
+ON CONFLICT (project_id, message_id, provider, provider_user_id) DO NOTHING
+`
+
+type RecordSlackMessageParticipantParams struct {
+	ProjectID      uuid.UUID
+	ProviderUserID string
+	TeamID         string
+	MessageID      uuid.UUID
+}
+
+// Without a workspace hint, only a unique organization-local directory match
+// is resolvable. Never select an arbitrary workspace or match profile email.
+func (q *Queries) RecordSlackMessageParticipant(ctx context.Context, arg RecordSlackMessageParticipantParams) error {
+	_, err := q.db.Exec(ctx, recordSlackMessageParticipant,
+		arg.ProjectID,
+		arg.ProviderUserID,
+		arg.TeamID,
+		arg.MessageID,
+	)
 	return err
 }
 
