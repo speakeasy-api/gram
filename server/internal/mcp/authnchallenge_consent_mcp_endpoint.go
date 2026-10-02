@@ -342,12 +342,18 @@ func (s *Service) serveConsentProxiedMCP(
 	}
 	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 	if err != nil {
+		if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
+			return remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
+		}
+		if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
+			return oops.E(oops.CodeFailedPrecondition, err, "%s", remoteSessionMisconfiguredDescription).LogWarn(ctx, logger)
+		}
 		if errors.Is(err, remotesessions.ErrNoValidToken) {
 			return oops.E(oops.CodeConflict, err, "connect the upstream service before choosing tools").LogWarn(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for consent transport").LogError(ctx, logger)
 	}
-	upstreamToken, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, tunneledBackendIssuer(serverRow))
+	upstreamToken, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, serverRow.TunneledMcpServerID.Valid, tunneledBackendIssuer(serverRow))
 	var routeErr *upstreamRoutingError
 	switch {
 	case errors.As(err, &routeErr):

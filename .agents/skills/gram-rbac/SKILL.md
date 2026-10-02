@@ -29,6 +29,8 @@ Gram's RBAC is a scope-and-selector model. The server ships with a fixed set of 
 
 **Principal.** Who holds a grant — a `urn.Principal` with a type (user, role, service account) and an id.
 
+**Principal precedence.** Blocklist exclusions (`*:blocked_*`) normally subtract from allows regardless of which principal holds either. One exception: a grant made directly to the user (`user:<id>`) that names a concrete resource (`resource_id` not `*`) outranks a block the user inherits from a role or `user:all`. Agent grants never outrank, because agent owners can write them without being administrators. The user's own blocks always apply, wildcard direct grants never outrank, roles and `user:all` share one level, a narrowed direct grant outranks only as far as it reaches, and `risk_policy:bypass` is never outranked. The rule lives in `server/internal/authz/precedence.go` (`IsDirectGrant`, `DirectOverrideGrants`, `ExclusionYieldsToDirectGrants`) and is mirrored in `ListAccessibleMCPServersForUser` / `ListAccessibleSkillsForUser`, `runtimepolicy.DelegationContained`, `access.listGrants` (`direct_selectors`), and the dashboard's `useRBAC` and per-server access list. Any new code that evaluates exclusions outside `authz.Engine` must apply it too.
+
 **Dimensions.** Optional narrowing keys on a `Check` beyond `resource_id`. Today: `tool` and `disposition` for MCP scopes (see [server/internal/authz/checks.go](server/internal/authz/checks.go) and `MCPToolCallCheck`). Allowed keys per scope family are enforced by `ValidateSelector`; new dimensions must be added to `allowedSelectorKeys` in `selector.go`.
 
 **Disposition.** A snake_case bucket derived from MCP tool annotation hints — `read_only`, `destructive`, `idempotent`, `open_world`. Constants live in `authz/selector.go`; `conv.DispositionFromAnnotations(annotations)` is the canonical conversion from `*types.ToolAnnotations`.
@@ -92,6 +94,7 @@ Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s
 | `server/internal/authz/grants.go`      | `Grant`/`RoleGrant`/`ScopedGrant` types, `SystemRoleGrants`, `SyncGrants`, `SeedSystemRoleGrants`, `GrantsForRole`, `GrantsToScopedGrants`.               |
 | `server/internal/authz/load.go`        | Principal grant loading from the database.                                                                                                                |
 | `server/internal/authz/override.go`    | Scope override plumbing (header parsing, override-to-grants conversion).                                                                                  |
+| `server/internal/authz/precedence.go`  | Principal precedence: direct concrete grants outrank blocklist exclusions inherited from roles or `user:all`.                                             |
 | `server/internal/authz/provisioner.go` | New-organization provisioning for built-in role grants and the initial Admin assignment.                                                                  |
 | `server/internal/authz/scopes.go`      | Scope type, constants, and expansion rules.                                                                                                               |
 | `server/internal/authz/selector.go`    | `Selector` type, matching rules, `NewSelector`/`NewGrant` helpers, `ValidateSelector`, `ResourceKindForScope`, disposition vocabulary, `SelectorFromRow`. |
@@ -279,6 +282,7 @@ This file documents conventions that evolve over time. Adding a new scope, resou
 - Replacing `authz.Engine` as the central enforcer, or changing its method set (`Require`, `RequireAny`, `Filter`, `PrepareContext`, `ShouldEnforce`, etc.) or constructor signature.
 - Moving authorization primitives back into `access` or into a new package — the `authz` / `access` split is deliberate and load-bearing for import-cycle reasons.
 - Changing the `Check` struct shape (currently `{Scope, ResourceKind, ResourceID, Dimensions}`) or the `Selector` type's matching rules.
+- Changing principal precedence (which principals count as direct, which exclusions yield, or where the rule is mirrored).
 - Adding a new selector dimension key (currently `tool`, `disposition` for MCP) — including changes to `allowedSelectorKeys` or `validDispositions` in `authz/selector.go`, or to the matching `SelectorModel` enums in the design file.
 - Changing scope-expansion semantics (e.g. how `scopeSubScopes` is computed from `scopeExpansions`, or introducing transitive expansion). The expansion algorithm currently emits one entry per scope level (relying on selector matching to handle wildcards) — switching back to per-scope×per-resource enumeration would change the perf profile and is worth re-documenting.
 - Changing where the full-access scope catalogue lives (currently inline in `access.ListGrants` and mirrored by `expectedFullAccessScopes` in tests), or where `ListScopes` is populated.

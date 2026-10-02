@@ -6,15 +6,16 @@ import {
   COMING_SOON_AGENT_PROVIDER_IDS,
   type AgentProviderId,
 } from "@/components/agent-providers/agent-providers";
+import { agentEgressHosts, getServerURL } from "@/lib/utils";
 import type { AgentPlatform } from "./types";
 
 // Claude Code reads the same keys from Managed Settings (org rollout) and from
 // a user's ~/.claude/settings.json (personal plans), so both paths share it.
-const CLAUDE_CODE_SETTINGS_JSON = `{
+const claudeCodeSettingsJSON = (origin: string) => `{
   "env": {
     "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
     "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
-    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://app.getgram.ai/otel",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "${origin}/otel",
     "OTEL_EXPORTER_OTLP_HEADERS": "Gram-Project={{GRAM_PROJECT_SLUG}},Gram-Key={{GRAM_API_KEY}}",
     "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
     "OTEL_LOGS_EXPORTER": "otlp",
@@ -36,10 +37,15 @@ const CLAUDE_CODE_SETTINGS_JSON = `{
   }
 }`;
 
-const SETUP_AGENT_PLATFORMS: Array<{
+// Setup copy names the host the reader is on (app.getgram.ai or
+// ai.speakeasy.com): every platform host serves the OTLP and hooks endpoints.
+const setupAgentPlatforms = (
+  origin: string,
+  egressHosts: string[],
+): Array<{
   id: AgentProviderId;
   setupSteps: AgentPlatform["setupSteps"];
-}> = [
+}> => [
   {
     id: "claude",
     setupSteps: [
@@ -65,7 +71,7 @@ const SETUP_AGENT_PLATFORMS: Array<{
                 },
                 `, preserving existing values. It registers the marketplace, enables the plugin, and configures logs, metrics, and beta traces for export. Higher-precedence policy can override user settings. The API key and token-bearing marketplace URL are secrets: share privately and never commit them. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
               ],
-              code: CLAUDE_CODE_SETTINGS_JSON,
+              code: claudeCodeSettingsJSON(origin),
               language: "json",
               requiresApiKey: true,
               helpLink: {
@@ -112,7 +118,7 @@ const SETUP_AGENT_PLATFORMS: Array<{
           alt: "Claude Code Managed settings JSON editor dialog with Update settings button",
           caption: 'Paste in the JSON below and click "Update settings"',
         },
-        code: CLAUDE_CODE_SETTINGS_JSON,
+        code: claudeCodeSettingsJSON(origin),
         language: "json",
         requiresApiKey: true,
       },
@@ -236,7 +242,7 @@ const SETUP_AGENT_PLATFORMS: Array<{
         fields: [
           {
             label: "OTLP endpoint",
-            value: "https://app.getgram.ai/rpc/hooks.otel",
+            value: `${origin}/rpc/hooks.otel`,
           },
           { label: "OTLP protocol", value: "http/json" },
           {
@@ -257,10 +263,11 @@ const SETUP_AGENT_PLATFORMS: Array<{
       {
         title: "Verify hook and bootstrap network access",
         description:
-          "Native OTEL automatically allowlists its collector hostname; it does not require a manual egress exception. Hook scripts and bootstrap binary downloads are separate traffic. If they are blocked, review Admin settings → Capabilities → Network egress and allow only the destinations they need, including the hook endpoint below.",
-        fields: [
-          { label: "Additional allowed domains", value: "app.getgram.ai" },
-        ],
+          "Native OTEL automatically allowlists its collector hostname; it does not require a manual egress exception. Hook scripts and bootstrap binary downloads are separate traffic. If they are blocked, review Admin settings → Capabilities → Network egress and allow only the destinations they need, including the hook endpoints below.",
+        fields: egressHosts.map((host) => ({
+          label: "Additional allowed domains",
+          value: host,
+        })),
         afterFields:
           "Start a new Cowork session, run a tool, and confirm hook events and native monitoring separately in Speakeasy. A successful plugin install or a single allowlisted domain does not prove bootstrap downloads and hooks can run.",
       },
@@ -432,17 +439,27 @@ function toAgentPlatform(
   };
 }
 
-export const AGENT_PLATFORMS: AgentPlatform[] = [
-  ...ACTIVE_AGENT_PROVIDER_IDS.setup.map((id) =>
-    toAgentPlatform(
-      id,
-      SETUP_AGENT_PLATFORMS.find((platform) => platform.id === id)!.setupSteps,
+/** The setup platforms, with copy-paste values for the given server's host. */
+export function getAgentPlatforms(
+  serverURL: string = getServerURL(),
+): AgentPlatform[] {
+  const server = new URL(serverURL, window.location.origin);
+  const platforms = setupAgentPlatforms(
+    server.origin,
+    agentEgressHosts(server.href),
+  );
+  return [
+    ...ACTIVE_AGENT_PROVIDER_IDS.setup.map((id) =>
+      toAgentPlatform(
+        id,
+        platforms.find((platform) => platform.id === id)!.setupSteps,
+      ),
     ),
-  ),
-  ...COMING_SOON_AGENT_PROVIDER_IDS.map((id) =>
-    toAgentPlatform(id, [] as AgentPlatform["setupSteps"], false),
-  ),
-];
+    ...COMING_SOON_AGENT_PROVIDER_IDS.map((id) =>
+      toAgentPlatform(id, [] as AgentPlatform["setupSteps"], false),
+    ),
+  ];
+}
 
 /**
  * The steps a platform shows given the answer to its plan question: the org

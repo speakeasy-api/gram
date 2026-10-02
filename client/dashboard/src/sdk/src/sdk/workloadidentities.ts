@@ -5,6 +5,8 @@
 import { workloadIdentitiesAdmitSubject } from "../funcs/workloadIdentitiesAdmitSubject.js";
 import { workloadIdentitiesList } from "../funcs/workloadIdentitiesList.js";
 import { workloadIdentitiesRegisterIssuer } from "../funcs/workloadIdentitiesRegisterIssuer.js";
+import { workloadIdentitiesUpdateIssuer } from "../funcs/workloadIdentitiesUpdateIssuer.js";
+import { workloadIdentitiesUpdateSubject } from "../funcs/workloadIdentitiesUpdateSubject.js";
 import { workloadIdentitiesWithdrawIssuer } from "../funcs/workloadIdentitiesWithdrawIssuer.js";
 import { workloadIdentitiesWithdrawSubject } from "../funcs/workloadIdentitiesWithdrawSubject.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -21,6 +23,14 @@ import {
   RegisterWorkloadIssuerRequest,
   RegisterWorkloadIssuerSecurity,
 } from "../models/operations/registerworkloadissuer.js";
+import {
+  UpdateWorkloadIssuerRequest,
+  UpdateWorkloadIssuerSecurity,
+} from "../models/operations/updateworkloadissuer.js";
+import {
+  UpdateWorkloadSubjectRequest,
+  UpdateWorkloadSubjectSecurity,
+} from "../models/operations/updateworkloadsubject.js";
 import {
   WithdrawWorkloadIssuerRequest,
   WithdrawWorkloadIssuerSecurity,
@@ -55,7 +65,7 @@ export class WorkloadIdentities extends ClientSDK {
    * list workloadIdentities
    *
    * @remarks
-   * Read the whole trust policy: every trusted issuer and every admitted subject, at both the organization and project tiers, with the agent each subject resolves to. Requires workload:read.
+   * Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.
    */
   async list(
     request?: ListWorkloadIdentitiesRequest | undefined,
@@ -82,6 +92,44 @@ export class WorkloadIdentities extends ClientSDK {
     options?: RequestOptions,
   ): Promise<WorkloadIdentityPolicy> {
     return unwrapAsync(workloadIdentitiesRegisterIssuer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateIssuer workloadIdentities
+   *
+   * @remarks
+   * Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
+   */
+  async updateIssuer(
+    request: UpdateWorkloadIssuerRequest,
+    security?: UpdateWorkloadIssuerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<WorkloadIdentityPolicy> {
+    return unwrapAsync(workloadIdentitiesUpdateIssuer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateSubject workloadIdentities
+   *
+   * @remarks
+   * Edit an admitted subject's label, tags, or assigned agent. Omitted fields are left unchanged. The subject, match kind, issuer, and tier are fixed at admission. The agent assignment is shared by every admission of the same subject under the same issuer, at either tier, so reassigning it through one admission reassigns it for both. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
+   */
+  async updateSubject(
+    request: UpdateWorkloadSubjectRequest,
+    security?: UpdateWorkloadSubjectSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<WorkloadIdentityPolicy> {
+    return unwrapAsync(workloadIdentitiesUpdateSubject(
       this,
       request,
       security,

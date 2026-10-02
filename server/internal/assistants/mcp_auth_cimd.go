@@ -40,10 +40,11 @@ const (
 )
 
 // AssistantClientMetadataDocumentURL builds the platform-canonical CIMD
-// document URL for an assistant. serverURL is the Gram deployment's public
-// API base; the path component is the assistant's globally unique id. This
-// is the value stored as both client_id and client_id_metadata_uri on a
-// CIMD-mode row and the URL Gram sends upstream as client_id.
+// document URL for an assistant. serverURL is the Gram deployment's pinned
+// outbound origin, which stays fixed when the server URL moves; the path
+// component is the assistant's globally unique id. This is the value stored
+// as both client_id and client_id_metadata_uri on a CIMD-mode row and the URL
+// Gram sends upstream as client_id.
 func AssistantClientMetadataDocumentURL(serverURL *url.URL, assistantID uuid.UUID) string {
 	return strings.TrimRight(serverURL.String(), "/") + assistantClientMetadataDocumentPath + assistantID.String()
 }
@@ -125,7 +126,8 @@ func (s *Service) assistantCIMDAllowed(ctx context.Context, orgID, orgSlug strin
 	// A CIMD client_id must be an HTTPS URL, so a deployment served over
 	// plain HTTP stays on DCR rather than minting a client_id every
 	// authorization server rejects.
-	if s.core.serverURL == nil || s.core.serverURL.Scheme != "https" || s.core.featureFlags == nil || orgID == "" {
+	origin := s.core.mcpAuthOrigin()
+	if origin == nil || origin.Scheme != "https" || s.core.featureFlags == nil || orgID == "" {
 		return false
 	}
 	on, err := s.core.featureFlags.IsFlagEnabled(ctx, feature.FlagAssistantOAuthCIMD, orgID, feature.OrgProjectGroups(orgSlug, ""))
@@ -151,7 +153,9 @@ func (s *Service) handleAssistantClientMetadataDocument(w http.ResponseWriter, r
 	ctx := r.Context()
 
 	// Pin the document to the platform host: a custom-domain document would
-	// advertise a client_id no outbound /authorize ever sent.
+	// advertise a client_id no outbound /authorize ever sent. On any platform
+	// host, client_id comes from the pinned outbound origin, so it always
+	// matches the client_id an authorization server stored.
 	if customdomains.FromContext(ctx) != nil {
 		return oops.E(oops.CodeNotFound, nil, "client metadata document not found")
 	}
@@ -161,7 +165,7 @@ func (s *Service) handleAssistantClientMetadataDocument(w http.ResponseWriter, r
 		return oops.E(oops.CodeNotFound, err, "client metadata document not found")
 	}
 
-	if s.core.serverURL == nil {
+	if s.core.mcpAuthOrigin() == nil {
 		return oops.E(oops.CodeNotFound, nil, "client metadata document not found")
 	}
 
@@ -173,8 +177,8 @@ func (s *Service) handleAssistantClientMetadataDocument(w http.ResponseWriter, r
 		return oops.E(oops.CodeUnexpected, err, "load assistant client metadata document").LogError(ctx, s.logger)
 	}
 
-	clientID := AssistantClientMetadataDocumentURL(s.core.serverURL, assistantID)
-	redirectURI := s.core.serverURL.JoinPath("rpc", "assistantMcpAuth", assistantID.String(), "oauth", "callback").String()
+	clientID := AssistantClientMetadataDocumentURL(s.core.mcpAuthOrigin(), assistantID)
+	redirectURI := s.core.mcpAuthRedirectURI(assistantID)
 	doc := buildAssistantClientMetadataDocument(
 		clientID,
 		assistantClientName(row.Name),

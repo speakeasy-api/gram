@@ -21,6 +21,8 @@ import {
 } from "@/hooks/usePrivateMcpServerUrls";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import {
   MCPServerAvailabilityToggle,
   MCPServerStatusDropdown,
@@ -56,6 +58,7 @@ import {
   LayoutDashboard,
   Plug,
   Settings as SettingsIcon,
+  ShieldCheck,
   Users,
   Wrench,
 } from "lucide-react";
@@ -217,48 +220,45 @@ export function SidebarUrlRow({
   const display = url.replace(/^https?:\/\//, "");
   return (
     <div className="flex flex-col gap-1">
-      <DetailSidebarInfoLabel>{label}</DetailSidebarInfoLabel>
-      <div className="flex items-start gap-1">
-        <div className="min-w-0 flex-1">
-          {/* No delay: this is a reveal of text already on screen, not a
-            disclosure of extra information. */}
-          <HoverCard openDelay={0}>
-            <HoverCardTrigger asChild>
-              {/* The padding belongs to the trigger, not the text inside it:
-                the card aligns to the trigger's box, and matching insets are
-                what land the two texts on each other. The negative margin
-                cancels the indent so the URL stays flush with its label. */}
-              <span className="-mx-2 block px-2 py-1">
-                <Text
-                  variant="small"
-                  muted
-                  data-slot="sidebar-url-line"
-                  className="block truncate font-mono text-xs"
-                >
-                  {display}
-                </Text>
-              </span>
-            </HoverCardTrigger>
-            {/* The card carries the same insets as the line, so aligning their
-              boxes aligns their text: pull up by exactly the trigger's height
-              and the two land on each other. */}
-            <HoverCardContent
-              align="start"
-              side="bottom"
-              sideOffset={-24}
-              data-slot="sidebar-url-full"
-              className="w-auto max-w-none px-2 py-1 font-mono text-xs whitespace-nowrap duration-75"
-            >
-              {display}
-            </HoverCardContent>
-          </HoverCard>
-        </div>
-        <CopyButton
-          text={url}
-          size="xs"
-          tooltip={copyTooltip}
-          className="mt-[-2px] shrink-0"
-        />
+      {/* The copy button sits beside the label, not the URL: the hover card
+        that reveals the full URL would otherwise cover it. */}
+      <div className="flex items-center gap-1">
+        <DetailSidebarInfoLabel>{label}</DetailSidebarInfoLabel>
+        <CopyButton text={url} size="xs" tooltip={copyTooltip} />
+      </div>
+      <div className="min-w-0">
+        {/* No delay: this is a reveal of text already on screen, not a
+          disclosure of extra information. */}
+        <HoverCard openDelay={0}>
+          <HoverCardTrigger asChild>
+            {/* The padding belongs to the trigger, not the text inside it:
+              the card aligns to the trigger's box, and matching insets are
+              what land the two texts on each other. The negative margin
+              cancels the indent so the URL stays flush with its label. */}
+            <span className="-mx-2 block px-2 py-1">
+              <Text
+                variant="small"
+                muted
+                data-slot="sidebar-url-line"
+                className="block truncate font-mono text-xs"
+              >
+                {display}
+              </Text>
+            </span>
+          </HoverCardTrigger>
+          {/* The card carries the same insets as the line, so aligning their
+            boxes aligns their text: pull up by exactly the trigger's height
+            and the two land on each other. */}
+          <HoverCardContent
+            align="start"
+            side="bottom"
+            sideOffset={-24}
+            data-slot="sidebar-url-full"
+            className="w-auto max-w-none px-2 py-1 font-mono text-xs whitespace-nowrap duration-75"
+          >
+            {display}
+          </HoverCardContent>
+        </HoverCard>
       </div>
     </div>
   );
@@ -286,6 +286,8 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const location = useLocation();
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
   const { hasScope, hasAnyScope } = useRBAC();
+  const mcpScoped =
+    useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies).status === "enabled";
   const organization = useOrganization();
   const pluginScope = usePluginQueryScope();
   const canWritePlugins = usePluginWriteAccess();
@@ -413,6 +415,15 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const canViewTeamAccess =
     !!mcpServer &&
     hasScope("org:read", organization.id) &&
+    hasScope("mcp:read", mcpServer.id);
+
+  // Guardrails police traffic that passes through Gram, so unproxied servers
+  // (which never do) have none. Admin-only, like the policies it manages.
+  const canViewGuardrails =
+    mcpScoped &&
+    !!mcpServer &&
+    !isUnproxied &&
+    hasScope("org:admin", organization.id) &&
     hasScope("mcp:read", mcpServer.id);
 
   // A Remote MCP server's identity is derived, so the readiness item reads the
@@ -545,6 +556,17 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
             Icon: Users,
             href: mcpServerTabHref(routes, idOrSlug, "team-access"),
             active: activeTab === "team-access",
+          },
+        ]
+      : []),
+    ...(canViewGuardrails
+      ? [
+          {
+            key: "guardrails",
+            title: "Guardrails",
+            Icon: ShieldCheck,
+            href: mcpServerTabHref(routes, idOrSlug, "guardrails"),
+            active: activeTab === "guardrails",
           },
         ]
       : []),

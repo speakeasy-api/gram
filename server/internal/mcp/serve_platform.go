@@ -479,20 +479,21 @@ func (s *Service) callPlatformToolsetTool(
 		})
 	}()
 
-	decision := s.scanEvaluator.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
-		Surface:        mcpriskscan.SurfacePlatformMCP,
-		Method:         mcpriskscan.MethodToolsCall,
-		OrganizationID: descriptor.OrganizationID,
-		ProjectID:      descriptor.ProjectID,
-		ServerID:       "",
-		MetaServerID:   "",
-		ToolsetID:      "",
-		ToolName:       descriptor.Name,
-		ResourceURI:    "",
-		PromptName:     "",
-		// The header only: the assistant thread id fallback above is not a chat.
-		ChatID: chatIDHeader,
-	}, mcpriskscan.BorrowPayload(requestBodyBytes)))
+	requestSubject := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+		Surface:         mcpriskscan.SurfacePlatformMCP,
+		Method:          mcpriskscan.MethodToolsCall,
+		OrganizationID:  descriptor.OrganizationID,
+		ProjectID:       descriptor.ProjectID,
+		ServerID:        platformtools.PlatformToolsetID(toolset.Slug).String(),
+		MetaServerID:    "",
+		ToolsetID:       "",
+		ToolName:        descriptor.Name,
+		ResourceURI:     "",
+		PromptName:      "",
+		ChatID:          chatIDHeader,
+		ToolAnnotations: desc.Annotations,
+	}, mcpriskscan.BorrowPayload(requestBodyBytes))
+	decision := s.scanEvaluator.Scan(ctx, requestSubject)
 	if decision.Denied() {
 		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
 		recordToolCallErrorStatus(ctx, rw, failure)
@@ -509,11 +510,23 @@ func (s *Service) callPlatformToolsetTool(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to format platform tool call result").LogError(ctx, logger)
 	}
+	responseContent := []json.RawMessage{chunk}
+	responsePayload, parseErr := mcpriskscan.ToolResultPayload(responseContent, structured)
+	if parseErr != nil {
+		responsePayload = mcpriskscan.Payload{}
+	}
+	decision = s.scanEvaluator.Scan(ctx, mcpriskscan.NewResponse(requestSubject, responsePayload))
+	if decision.Denied() {
+		discardWithheldBody(rw.body)
+		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
+	}
 
 	bs, err := json.Marshal(result[toolCallResult]{
 		ID: req.ID,
 		Result: toolCallResult{
-			Content:           []json.RawMessage{chunk},
+			Content:           responseContent,
 			StructuredContent: structured,
 			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},

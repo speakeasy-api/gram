@@ -120,7 +120,7 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, ErrLifecycleVisibilityInvalid
 	}
-	store, err := NewRegistrationStore(s.db, RegistrationStoreConfig{ActiveRegistrationCap: 1})
+	store, err := NewRegistrationStore(s.db)
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, err
 	}

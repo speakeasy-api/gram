@@ -102,6 +102,34 @@ func TestAuditService_List_MasksAdminSurfaceActors(t *testing.T) {
 	require.Equal(t, customerClientID, *controlLog.ActingClientID, "customer OAuth client IDs remain visible")
 }
 
+func TestAuditService_List_MasksConfigurationWriteActors(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+	for _, action := range []string{"organization:enabled", "organization:disabled", "organization:whitelist_updated", "chat_analysis_settings:upsert"} {
+		insertAuditLog(t, ctx, ti, auditLogSeed{
+			organizationID: authCtx.ActiveOrganizationID,
+			actorID:        "private-staff-subject", actorType: "user",
+			actorDisplayName: new("Private Staff"), actorSlug: new("private-staff"),
+			actingSurface: new("admin_mcp"), actingClientID: new("private-staff-client"),
+			action: action, subjectID: authCtx.ActiveOrganizationID, subjectType: "organization",
+		})
+	}
+	result, err := ti.service.List(ctx, &gen.ListPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 4)
+	for _, log := range result.Logs {
+		require.Empty(t, log.ActorID)
+		require.Nil(t, log.ActorSlug)
+		require.Nil(t, log.ActingClientID)
+		require.NotNil(t, log.ActorDisplayName)
+		require.Equal(t, "Speakeasy Team", *log.ActorDisplayName)
+	}
+	facets, err := ti.service.ListFacets(ctx, &gen.ListFacetsPayload{})
+	require.NoError(t, err)
+	require.Empty(t, facets.Actors)
+}
+
 // Admin actor facets are omitted because their IDs cannot be exposed as
 // customer-facing filter values.
 func TestAuditService_ListFacets_MasksAdminSurfaceActors(t *testing.T) {

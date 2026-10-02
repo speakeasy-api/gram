@@ -64,9 +64,12 @@ func BuildRemoteSessionClientView(row repo.RemoteSessionClient, userSessionIssue
 		JSONWebKeySetID:                 conv.FromNullableUUID(row.JsonWebKeySetID),
 		Scope:                           row.Scope,
 		Audience:                        conv.FromPGText[string](row.Audience),
+		LegacyCallbackURL:               row.LegacyCallbackUrl,
 		CreatedAt:                       row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                       row.UpdatedAt.Time.Format(time.RFC3339),
 		GrantTypes:                      row.GrantTypes,
+		// The owning service fills this in from its pinned callback origins.
+		CallbackURL: nil,
 	}, nil
 }
 
@@ -118,8 +121,11 @@ func BuildGlobalRemoteSessionClientView(row repo.RemoteSessionClient) *types.Rem
 		JSONWebKeySetID:                 conv.FromNullableUUID(row.JsonWebKeySetID),
 		Scope:                           row.Scope,
 		Audience:                        conv.FromPGText[string](row.Audience),
+		LegacyCallbackURL:               row.LegacyCallbackUrl,
 		CreatedAt:                       row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                       row.UpdatedAt.Time.Format(time.RFC3339),
 		GrantTypes:                      row.GrantTypes,
+		// Global clients are shared and keep the pinned outbound origin.
+		CallbackURL: nil,
 	}
 }

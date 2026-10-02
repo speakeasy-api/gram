@@ -82,6 +82,7 @@ var (
 	discoveryOrgRead             = []authz.Scope{authz.ScopeOrgRead}
 	discoveryProjectRead         = []authz.Scope{authz.ScopeProjectRead}
 	discoveryMCPRead             = []authz.Scope{authz.ScopeMCPRead}
+	discoveryMCPWrite            = []authz.Scope{authz.ScopeMCPWrite}
 	discoveryMCPReadOrConnect    = []authz.Scope{authz.ScopeMCPRead, authz.ScopeMCPConnect}
 	discoveryOrgReadOrMCPConnect = []authz.Scope{authz.ScopeOrgRead, authz.ScopeMCPConnect}
 	discoverySkillRead           = []authz.Scope{authz.ScopeSkillRead}

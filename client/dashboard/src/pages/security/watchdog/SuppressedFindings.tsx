@@ -18,6 +18,7 @@ import { useChatDetailSheet } from "@/pages/chatLogs/useChatDetailSheet";
 import { CategoryLabel } from "../risk-ui";
 import { getRuleTitleFallback } from "../risk-utils";
 import { useDismissFinding } from "../useDismissFinding";
+import type { MCPFindingNames } from "../mcp-finding-context";
 import { SuppressedFindingDrawer } from "./SuppressedFindingDrawer";
 import {
   isRestorable,
@@ -41,7 +42,11 @@ const resultId = (result: RiskResult): string => result.id;
  * Renders nothing at all when there is nothing suppressed — an empty section
  * here would read as a broken feature rather than a clean slate.
  */
-export function SuppressedFindings(): JSX.Element | null {
+export function SuppressedFindings({
+  mcpFindingNames,
+}: {
+  mcpFindingNames?: MCPFindingNames;
+}): JSX.Element | null {
   const [expanded, setExpanded] = useState(false);
   // The listing cursor is forward-only, so paging back replays the cursor that
   // opened each already-visited page. Index 0 is the first page's absent cursor.
@@ -202,6 +207,7 @@ export function SuppressedFindings(): JSX.Element | null {
       )}
       <SuppressedFindingDrawer
         finding={openFinding}
+        mcpFindingNames={mcpFindingNames}
         exclusion={
           openFinding?.exclusionId
             ? exclusionsById.get(openFinding.exclusionId)

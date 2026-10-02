@@ -300,22 +300,24 @@ func (f *ProxyManager) BuildTarget(
 		toolsCallReqInterceptors = append(toolsCallReqInterceptors, selectionInterceptor)
 		toolsListRespInterceptors = append(toolsListRespInterceptors, selectionInterceptor)
 	}
-	toolsCallReqInterceptors = append(toolsCallReqInterceptors, NewToolsCallRiskScanInterceptor(
+	riskScanInterceptor := NewToolsCallRiskScanInterceptor(
 		f.scanEvaluator,
 		mcpriskscan.Event{
-			Surface:        mcpriskscan.SurfaceRemoteMCP,
-			Method:         mcpriskscan.MethodToolsCall,
-			OrganizationID: organizationID,
-			ProjectID:      projectID,
-			ServerID:       identity.McpServerID,
-			MetaServerID:   identity.MetaMCPServerID,
-			ToolsetID:      "",
-			ToolName:       "",
-			ResourceURI:    "",
-			PromptName:     "",
-			ChatID:         "",
+			Surface:         mcpriskscan.SurfaceRemoteMCP,
+			Method:          mcpriskscan.MethodToolsCall,
+			OrganizationID:  organizationID,
+			ProjectID:       projectID,
+			ServerID:        identity.McpServerID,
+			MetaServerID:    identity.MetaMCPServerID,
+			ToolsetID:       "",
+			ToolName:        "",
+			ResourceURI:     "",
+			PromptName:      "",
+			ChatID:          "",
+			ToolAnnotations: nil,
 		},
-	))
+	)
+	toolsCallReqInterceptors = append(toolsCallReqInterceptors, riskScanInterceptor)
 
 	// Resources request chain: free-tier ToolCalls usage limits apply to
 	// resources/read invocations alongside tools/call. Per-resource RBAC
@@ -341,6 +343,7 @@ func (f *ProxyManager) BuildTarget(
 	toolsCallResponseInterceptors := []proxy.ToolsCallResponseInterceptor{
 		usageTracking,
 		clickHouseLogInterceptor,
+		riskScanInterceptor,
 	}
 	if f.platformMCPSelectedUseRecorder != nil && identity.RemoteMCPServerID != "" {
 		toolsCallResponseInterceptors = append(toolsCallResponseInterceptors, NewPlatformMCPSelectedUseInterceptor(f.platformMCPSelectedUseRecorder, identity))

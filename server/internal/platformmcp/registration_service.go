@@ -23,6 +23,7 @@ type CatalogRegistrationGateChecker interface {
 }
 
 type RegistrationPersistence interface {
+	FindReceipt(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, now time.Time) (OperationReceipt, bool, error)
 	ResolveProject(ctx context.Context, organizationID, projectSlug string) (ResolvedProject, error)
 	EligibleCatalogRegistrationTarget(ctx context.Context, organizationID string, project ResolvedProject) (bool, error)
 	BeginReceipt(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, now time.Time) (OperationReceipt, error)
@@ -310,7 +311,7 @@ func (s *RegistrationService) DashboardSetupURL(ctx context.Context, principal P
 		if s.catalog == nil {
 			return "", ErrRegistrationUnavailable
 		}
-		catalog, err := s.catalog.Inspect(ctx, input.ProviderKey, input.CatalogRef)
+		catalog, err := s.inspectCatalogIdentity(ctx, input.ProviderKey, input.CatalogRef)
 		if err != nil {
 			return "", fmt.Errorf("inspect dashboard setup catalog candidate: %w", err)
 		}
@@ -436,7 +437,7 @@ func (s *RegistrationService) IssueSetupHandoff(ctx context.Context, principal P
 		if s.catalog == nil {
 			return IssuedSetupHandoff{}, ErrRegistrationUnavailable
 		}
-		catalog, err := s.catalog.Inspect(ctx, candidate.ProviderKey, candidate.CatalogRef)
+		catalog, err := s.inspectCatalogIdentity(ctx, candidate.ProviderKey, candidate.CatalogRef)
 		if err != nil {
 			return IssuedSetupHandoff{}, fmt.Errorf("inspect setup handoff catalog candidate: %w", err)
 		}
@@ -564,9 +565,6 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 			return RegisterRemoteMCPResult{}, fmt.Errorf("converge direct remote registration: %w", err)
 		}
 	}
-	if receipt.ResultCode == receiptResultActiveCap {
-		return RegisterRemoteMCPResult{}, ErrRegistrationCap
-	}
 	if !receipt.RegistrationID.Valid {
 		return RegisterRemoteMCPResult{}, ErrRegistrationUnavailable
 	}
@@ -605,14 +603,6 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 		return RegisterCatalogMCPResult{}, ErrRegistrationUnavailable
 	}
 
-	catalog, err := s.catalog.Inspect(ctx, input.ProviderKey, input.CatalogRef)
-	if err != nil {
-		return RegisterCatalogMCPResult{}, fmt.Errorf("inspect registration catalog candidate: %w", err)
-	}
-	if catalog.ProviderKey != input.ProviderKey || catalog.CatalogRef != input.CatalogRef || catalog.SetupIntent == "" || catalog.Transport != "streamable-http" {
-		return RegisterCatalogMCPResult{}, ErrCatalogRejected
-	}
-
 	project, err := s.store.ResolveProject(ctx, principal.OrganizationID, input.ProjectSlug)
 	if err != nil {
 		return RegisterCatalogMCPResult{}, fmt.Errorf("resolve catalog registration project: %w", err)
@@ -620,33 +610,44 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 	if err := s.requireEligibleTarget(ctx, principal.OrganizationID, project); err != nil {
 		return RegisterCatalogMCPResult{}, err
 	}
+	configurationHash := catalogConfigurationHash(input.NonSecretConfig)
+	request := CatalogRegistrationRequest{
+		ProjectSlug: project.Slug, SourceKind: "catalog", CatalogProvider: input.ProviderKey, CatalogReference: input.CatalogRef,
+		ConfigurationHash: configurationHash, IdempotencyKey: input.IdempotencyKey,
+		InputHash: catalogRegistrationInputHash(project.Slug, "catalog", input.ProviderKey, input.CatalogRef, configurationHash),
+	}
+	// Find only: admission must not create or reclaim a receipt to discover prior work.
+	receipt, found, err := s.store.FindReceipt(ctx, principal, project, request, s.now())
+	if err != nil {
+		return RegisterCatalogMCPResult{}, fmt.Errorf("find catalog registration receipt: %w", err)
+	}
+	inspect := s.catalog.Inspect
+	if found {
+		inspect = s.inspectCatalogIdentity
+	}
+	catalog, err := inspect(ctx, input.ProviderKey, input.CatalogRef)
+	if err != nil {
+		return RegisterCatalogMCPResult{}, fmt.Errorf("inspect registration catalog candidate: %w", err)
+	}
+	if catalog.ProviderKey != input.ProviderKey || catalog.CatalogRef != input.CatalogRef || catalog.SetupIntent == "" || catalog.Transport != "streamable-http" {
+		return RegisterCatalogMCPResult{}, ErrCatalogRejected
+	}
 	configuration, err := catalog.resolveConfiguration(input.NonSecretConfig)
 	if err != nil {
 		return RegisterCatalogMCPResult{}, ErrCatalogConfigurationRejected
 	}
 	configuration.displayName = catalogDisplayName(catalog)
-	configurationHash := catalogConfigurationHash(input.NonSecretConfig)
-	request := CatalogRegistrationRequest{
-		ProjectSlug:       project.Slug,
-		SourceKind:        "catalog",
-		CatalogProvider:   catalog.ProviderKey,
-		CatalogReference:  catalog.CatalogRef,
-		ConfigurationHash: configurationHash,
-		IdempotencyKey:    input.IdempotencyKey,
-		InputHash:         catalogRegistrationInputHash(project.Slug, "catalog", catalog.ProviderKey, catalog.CatalogRef, configurationHash),
-	}
-	receipt, err := s.store.BeginReceipt(ctx, principal, project, request, s.now())
-	if err != nil {
-		return RegisterCatalogMCPResult{}, fmt.Errorf("begin catalog registration receipt: %w", err)
+	if !found {
+		receipt, err = s.store.BeginReceipt(ctx, principal, project, request, s.now())
+		if err != nil {
+			return RegisterCatalogMCPResult{}, fmt.Errorf("begin catalog registration receipt: %w", err)
+		}
 	}
 	if !receipt.Replayed || receipt.Status == receiptStatusPending {
 		receipt, err = s.store.ConvergeRegistration(ctx, principal, project, request, receipt)
 		if err != nil {
 			return RegisterCatalogMCPResult{}, fmt.Errorf("converge catalog registration: %w", err)
 		}
-	}
-	if receipt.ResultCode == receiptResultActiveCap {
-		return RegisterCatalogMCPResult{}, ErrRegistrationCap
 	}
 	if !receipt.RegistrationID.Valid {
 		return RegisterCatalogMCPResult{}, ErrRegistrationUnavailable
@@ -704,4 +705,14 @@ func (s *RegistrationService) requireEligibleTarget(ctx context.Context, organiz
 		return ErrTargetIneligible
 	}
 	return nil
+}
+
+// inspectCatalogIdentity is used only after persistence has authorized retained work.
+func (s *RegistrationService) inspectCatalogIdentity(ctx context.Context, providerKey, catalogRef string) (CatalogDetails, error) {
+	if catalog, ok := s.catalog.(interface {
+		InspectIdentity(context.Context, string, string) (CatalogDetails, error)
+	}); ok {
+		return catalog.InspectIdentity(ctx, providerKey, catalogRef)
+	}
+	return s.catalog.Inspect(ctx, providerKey, catalogRef)
 }

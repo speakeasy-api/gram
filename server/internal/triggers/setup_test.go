@@ -109,6 +109,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		serverURL,
 		nil,
 		nil,
+		nil,
 		cache.NoopCache,
 	)
 

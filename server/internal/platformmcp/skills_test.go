@@ -713,7 +713,7 @@ func TestSkillsToolResultLeavesUnexpectedFailuresAsErrors(t *testing.T) {
 func TestSkillsToolsAreDeclaredWithAndWithoutTheirDependencies(t *testing.T) {
 	t.Parallel()
 
-	wanted := []string{"list_skills", "get_skill", "list_skill_versions", "create_skill", "add_skill_version", "update_skill_metadata", "distribute_skill", "list_skill_distributions", "undistribute_skill"}
+	wanted := []string{"list_skills", "get_skill", "list_skill_versions", "create_skill", "add_skill_version", "update_skill_metadata", "distribute_skill", "list_skill_distributions", "undistribute_skill", "list_skill_insights", "compare_skill_versions"}
 
 	for _, test := range []struct {
 		name  string

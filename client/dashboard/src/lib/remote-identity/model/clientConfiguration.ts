@@ -19,6 +19,24 @@ export function preferredScopes(
     : nonEmptyStrings(authorizationServerScopes);
 }
 
+/** Every scope on offer: the protected resource's first, then the issuer's. */
+export function advertisedScopes(
+  protectedResourceScopes: string[] | undefined | null,
+  authorizationServerScopes: string[] | undefined | null,
+): string[] {
+  return normalizeScopes([
+    ...(protectedResourceScopes ?? []),
+    ...(authorizationServerScopes ?? []),
+  ]);
+}
+
+/** One scope per entry, without repeats: a pasted "read write" is two. */
+export function normalizeScopes(values: string[]): string[] {
+  return [
+    ...new Set(nonEmptyStrings(values.flatMap((value) => value.split(/\s+/)))),
+  ];
+}
+
 function nonEmptyStrings(values: string[] | undefined | null): string[] {
   return (values ?? [])
     .map((value) => value.trim())

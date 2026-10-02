@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
-import { getServerURL } from "@/lib/utils";
+import { useNewRemoteSessionClientCallbackUrl } from "@gram/client/react-query/newRemoteSessionClientCallbackUrl.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import {
   UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
@@ -24,23 +24,48 @@ import {
   isPrivateKeyJwtAuthMethod,
   type ClientType,
 } from "./issuerFormUtils";
-
-// remoteLoginCallbackURL is the single stable redirect_uri Gram uses for
-// every upstream OAuth provider, regardless of MCP server or slug (see
-// canonicalCallbackRouteBase in server/internal/remotesessions/challenge.go).
-// Manual clients need it registered on the upstream's app out-of-band; DCR
-// and CIMD clients send/publish it automatically, so this only surfaces
-// where the operator has to do that registration by hand.
-function remoteLoginCallbackURL(): string {
-  return `${getServerURL()}/mcp/remote_login_callback`;
-}
+import type { ReactNode } from "react";
 
 // RedirectURICallout shows the redirect_uri operators must register on the
 // upstream provider's OAuth app before typed-in client credentials will
 // work. Rendered inside ClientCredentialsFields so both the Attach sheet's
 // Manual add path and the Modify sheet's existing-client edit path show it.
-function RedirectURICallout(): JSX.Element {
-  const redirectURI = remoteLoginCallbackURL();
+// An existing client passes the callbackURL it was registered with, or null
+// when it registered none; a client not yet created passes undefined and
+// shows the one the server will register for it.
+function RedirectURICallout({
+  callbackURL,
+}: {
+  callbackURL?: string | null;
+}): JSX.Element | null {
+  const newClientCallback = useNewRemoteSessionClientCallbackUrl(
+    undefined,
+    undefined,
+    { enabled: callbackURL === undefined, throwOnError: false },
+  );
+  if (callbackURL === null) return null;
+  const redirectURI = callbackURL ?? newClientCallback.data?.callbackUrl;
+  if (redirectURI === undefined && newClientCallback.isError) {
+    return (
+      <Alert variant="error" dismissible={false}>
+        Couldn't load the redirect URI to register.{" "}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void newClientCallback.refetch()}
+        >
+          <Button.Text>Retry</Button.Text>
+        </Button>
+      </Alert>
+    );
+  }
+  if (redirectURI === undefined) {
+    return (
+      <Text muted small>
+        Loading redirect URI…
+      </Text>
+    );
+  }
   return (
     <Stack gap={2}>
       <Label className="text-muted-foreground text-xs">Redirect URI</Label>
@@ -375,6 +400,7 @@ export function ClientCredentialsFields({
   clientSecretLabel = "Client Secret (optional)",
   clientSecretPlaceholder = "••••••••",
   showHeading = true,
+  callbackURL,
   onClientIdChange,
   onClientSecretChange,
   onTokenEndpointAuthMethodChange,
@@ -389,6 +415,9 @@ export function ClientCredentialsFields({
   clientSecretLabel?: string;
   clientSecretPlaceholder?: string;
   showHeading?: boolean;
+  // callbackURL is the redirect URI of an existing client, or null when it
+  // registered none. Omit it for a client not yet created.
+  callbackURL?: string | null;
   onClientIdChange: (value: string) => void;
   onClientSecretChange: (value: string) => void;
   onTokenEndpointAuthMethodChange: (
@@ -410,7 +439,7 @@ export function ClientCredentialsFields({
         </Stack>
       )}
 
-      <RedirectURICallout />
+      <RedirectURICallout callbackURL={callbackURL} />
 
       <Stack gap={2}>
         <Label className="text-muted-foreground text-xs">Client ID</Label>
@@ -458,17 +487,20 @@ export function ClientCredentialsFields({
 // OverridesFields renders the per-client OAuth dance overrides. Both fields
 // are optional and apply in both DCR and manual modes — they control what
 // Gram sends at authorize/token time, independent of how the client was
-// registered.
+// registered. scopeWarning renders under the scope input once it has text, for
+// callers whose issuer pins the requested scopes and so makes this field inert.
 export function OverridesFields({
   scopeOverride,
   audienceOverride,
   onScopeOverrideChange,
   onAudienceOverrideChange,
+  scopeWarning,
 }: {
   scopeOverride: string;
   audienceOverride: string;
   onScopeOverrideChange: (value: string) => void;
   onAudienceOverrideChange: (value: string) => void;
+  scopeWarning?: ReactNode;
 }): JSX.Element {
   return (
     <Stack gap={4} className="border-t pt-6">
@@ -486,6 +518,8 @@ export function OverridesFields({
           during the OAuth dance; otherwise it falls back to the issuer's
           scopes_supported.
         </Text>
+        {/* Only warn once there are client scopes to be overridden. */}
+        {scopeOverride.trim() && scopeWarning}
       </Stack>
 
       <Stack gap={2}>

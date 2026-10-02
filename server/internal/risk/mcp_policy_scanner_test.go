@@ -12,15 +12,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type fixedMCPPolicyLookup []policycore.Policy
 
-func (p fixedMCPPolicyLookup) ListEnabledForMCPServer(context.Context, string, uuid.UUID, uuid.UUID, string) ([]policycore.Policy, error) {
+func (p fixedMCPPolicyLookup) ListEnabledForMCP(context.Context, string, uuid.UUID, policycore.MCPTarget) ([]policycore.Policy, error) {
 	return p, nil
 }
 
@@ -90,6 +92,34 @@ func TestMCPPolicyScanner_AccountIdentityDoesNotMakeGitleaksIndeterminate(t *tes
 	for _, finding := range findings {
 		require.Equal(t, risk_analysis.SourceGitleaks, finding.Source)
 	}
+}
+
+func TestMCPPolicyScanner_UsesResponseMessageSurface(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	include := `kind == "tool_response"`
+	detector := risk.NewMCPPolicyScanner(newShadowMCPTestScanner(t, ti), nil)
+	policy := policycore.Policy{
+		ID:             uuid.New(),
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Sources:        []string{risk_analysis.SourceGitleaks},
+		DetectionScopes: []policycore.DetectionScope{{
+			Category: "secrets", ScopeInclude: &include, ScopeExempt: nil,
+		}},
+	}
+	scan := func(messageType message.Type) []scanners.Finding {
+		findings, err := detector.ScanMCPPolicy(ctx, policy, risk.MCPScanRequest{
+			Text: `{"token":"ASIAZ2XY3WNBQR5TUVWX"}`, ToolName: "lookup",
+			ToolsetID: "", ServerID: uuid.NewString(), UserID: authCtx.UserID, MessageType: messageType,
+		})
+		require.NoError(t, err)
+		return findings
+	}
+
+	require.Empty(t, scan(message.ToolRequest))
+	require.NotEmpty(t, scan(message.ToolResponse))
 }
 
 func TestMCPPolicyScanner_PresidioDeadLetterUsesFailMode(t *testing.T) {

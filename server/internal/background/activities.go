@@ -169,6 +169,7 @@ type Activities struct {
 	reapInactiveAssistantRuntimes    *activities.ReapInactiveAssistantRuntimes
 	reapStoppedAssistantRuntimes     *activities.ReapStoppedAssistantRuntimes
 	recycleAssistantRuntimeImages    *activities.RecycleAssistantRuntimeImages
+	applyStartupSeed                 *activities.ApplyStartupSeed
 	reapSoftDeletedAssistantMems     *activities.ReapSoftDeletedAssistantMemories
 	signalAssistantCoordinator       *activities.SignalAssistantCoordinator
 	signalAssistantThread            *activities.SignalAssistantThread
@@ -219,6 +220,7 @@ func NewActivities(
 	functionsVersion functions.RunnerVersion,
 	ragService *rag.ToolsetVectorStore,
 	mcpRegistryClient *externalmcp.RegistryClient,
+	mcpCatalog *externalmcp.CatalogService,
 	temporalEnv *tenv.Environment,
 	telemetryLogger *telemetry.Logger,
 	chConn clickhouse.Conn,
@@ -251,6 +253,7 @@ func NewActivities(
 	issuerMetadataRefresher *remotesessions.IssuerMetadataRefresher,
 	remoteSessionEnricher *remotesessions.SessionEnricher,
 	remoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner,
+	startupSeeds []activities.StartupSeed,
 ) *Activities {
 	spendRulesCH := spendrulesch.New(chConn)
 	riskFindingsCH := riskchrepo.New(chConn)
@@ -354,7 +357,7 @@ func NewActivities(
 	// worker's own clients; workers wired without the full ingredient set
 	// (test workers) get a nil activity and no schedule.
 	var mcpApprovalRecheck *activities.McpApprovalRecheck
-	if db != nil && guardianPolicy != nil && mcpRegistryClient != nil && features != nil && auditLogger != nil {
+	if db != nil && guardianPolicy != nil && mcpCatalog != nil && features != nil && auditLogger != nil {
 		recheckProber := remoteprobe.New(logger, guardianPolicy)
 		mcpApprovalRecheck = activities.NewMcpApprovalRecheck(logger, db, mcpapprovalevidence.NewAssembler(
 			packagemeta.NewClient(guardianPolicy.PooledClient()),
@@ -364,7 +367,7 @@ func NewActivities(
 			telemetryRepo,
 			recheckProber,
 			recheckProber,
-			mcpapprovalcatalog.New(logger, db, mcpRegistryClient),
+			mcpapprovalcatalog.New(logger, db, mcpCatalog),
 		), features, auditLogger)
 	}
 
@@ -420,7 +423,7 @@ func NewActivities(
 		promoteStagedTelemetry:           activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:      activities.NewListStagedTelemetryProjects(logger, chConn),
 		generateChatTitle:                activities.NewGenerateChatTitle(logger, db, chatClient),
-		processDeployment:                activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpRegistryClient),
+		processDeployment:                activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpCatalog),
 		provisionFunctionsAccess:         activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		reapFlyApps:                      activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
@@ -454,6 +457,7 @@ func NewActivities(
 		reapInactiveAssistantRuntimes:    activities.NewReapInactiveAssistantRuntimes(logger, assistantsCore),
 		reapStoppedAssistantRuntimes:     activities.NewReapStoppedAssistantRuntimes(logger, assistantsCore),
 		recycleAssistantRuntimeImages:    activities.NewRecycleAssistantRuntimeImages(logger, assistantsCore),
+		applyStartupSeed:                 activities.NewApplyStartupSeed(startupSeeds),
 		reapSoftDeletedAssistantMems:     activities.NewReapSoftDeletedAssistantMemories(logger, db),
 		signalAssistantCoordinator:       activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		signalAssistantThread:            activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
@@ -951,6 +955,10 @@ func (a *Activities) ReapStoppedAssistantRuntimes(ctx context.Context, req activ
 
 func (a *Activities) RecycleAssistantRuntimeImages(ctx context.Context) (*activities.RecycleAssistantRuntimeImagesResult, error) {
 	return a.recycleAssistantRuntimeImages.Do(ctx)
+}
+
+func (a *Activities) ApplyStartupSeed(ctx context.Context, args activities.ApplyStartupSeedArgs) error {
+	return a.applyStartupSeed.Do(ctx, args)
 }
 
 func (a *Activities) ReapSoftDeletedAssistantMemories(ctx context.Context, cutoff time.Time) (int64, error) {

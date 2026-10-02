@@ -25,11 +25,6 @@ import (
 // with a key from its set; detaching the set leaves it declaring a method it
 // cannot execute, which fails at the counterparty's token endpoint as an
 // opaque 401 rather than here.
-//
-// Unreachable until AIM-156 adds private_key_jwt to tokenEndpointAuthMethodEnum.
-// That ordering is deliberate: the guard lands before the value it guards is
-// selectable, so there is never a window where an administrator can choose a
-// method Gram cannot execute.
 func requireDetachableKeySet(client repo.RemoteSessionClient) error {
 	if TokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String) != TokenEndpointAuthMethodPrivateKeyJWT {
 		return nil
@@ -96,10 +91,6 @@ func interpretClientLock(ctx context.Context, logger *slog.Logger, err error) er
 // zero value, permanently — those rows carry a NULL organization_id by
 // construction and remote_session_clients_json_web_key_set_id_check forbids a
 // set without one.
-//
-// Unreachable until AIM-156 adds private_key_jwt to tokenEndpointAuthMethodEnum;
-// Goa rejects the value at the boundary until then. See
-// TokenEndpointAuthMethodPrivateKeyJWT.
 func requirePrivateKeyJWTKeySet(method *string, existing uuid.NullUUID) error {
 	if method == nil || TokenEndpointAuthMethod(*method) != TokenEndpointAuthMethodPrivateKeyJWT {
 		return nil

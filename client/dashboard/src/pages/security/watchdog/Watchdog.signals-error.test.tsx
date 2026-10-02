@@ -42,7 +42,8 @@ vi.mock("./SuppressedFindings", () => ({
   SuppressedFindings: () => <div>Suppressed section</div>,
 }));
 
-// All three reach the SDK provider, which this test has no use for.
+// SDK-backed children and hooks are replaced because this error-state test
+// exercises only the section-level failure boundary.
 vi.mock("./SignalDrawer", () => ({ SignalDrawer: () => null }));
 vi.mock("./AnalysisStatusBadge", () => ({ AnalysisStatusBadge: () => null }));
 
@@ -62,6 +63,22 @@ vi.mock("@gram/client/react-query/riskSignals.js", () => ({
     isLoading: false,
   }),
   invalidateAllRiskSignals: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/mcpServers.js", () => ({
+  useMcpServers: () => ({ data: { mcpServers: [] } }),
+}));
+
+vi.mock("@gram/client/react-query/riskMcpServerCounts.js", () => ({
+  useRiskMcpServerCounts: () => ({ data: undefined }),
+}));
+
+vi.mock("@gram/client/react-query/metaMcpServers.js", () => ({
+  useMetaMcpServers: () => ({ data: { metaMcpServers: [] } }),
+}));
+
+vi.mock("@gram/client/react-query/listToolsets.js", () => ({
+  useListToolsets: () => ({ data: { toolsets: [] } }),
 }));
 
 vi.mock("@gram/client/react-query/riskCreateExclusion.js", () => ({

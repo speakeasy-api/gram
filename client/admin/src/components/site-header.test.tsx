@@ -15,6 +15,9 @@ import { renderRouteTree } from "@/test/harness";
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
+  listUsers: vi
+    .fn()
+    .mockResolvedValue({ users: [], total: 0, page: 1, limit: 50 }),
   listOrganizations: vi.fn(),
   getOrganization: vi.fn(),
   getProject: vi.fn(),
@@ -27,6 +30,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   return {
     ...actual,
     getSession: mocks.getSession,
+    listUsers: mocks.listUsers,
     listOrganizations: mocks.listOrganizations,
     getOrganization: mocks.getOrganization,
     getProject: mocks.getProject,
@@ -240,6 +244,7 @@ describe("SiteHeader", () => {
   // where the record crumb's own target is where the operator is standing.
   it.each([
     ["the organizations list", "/organizations", "Organizations"],
+    ["the users list", "/users", "Users"],
     ["a record's own index", `/organizations/${ORG.slug}`, "Overview"],
     ["the activity view", `/organizations/${ORG.slug}/activity`, "Activity"],
     ["the members view", `/organizations/${ORG.slug}/members`, "Members"],

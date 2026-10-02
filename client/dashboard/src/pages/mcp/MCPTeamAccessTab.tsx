@@ -61,8 +61,9 @@ interface NamedRule {
 
 /**
  * Someone two rules disagree about: a role gives them the server and another
- * role they are also in takes it away. A block outranks every grant, so the
- * grant does nothing — which is invisible from either role's own page.
+ * role they are also in takes it away. A role's block outranks every grant
+ * except one made to the person by name for this server, so the role's grant
+ * does nothing — which is invisible from either role's own page.
  */
 interface MemberConflict {
   member: AccessMember;
@@ -135,6 +136,7 @@ export function MCPTeamAccessTab({
         const reach = effectiveReach(
           reaching.get(member.id) ?? [],
           toolCatalog ?? [],
+          `user:${member.id}`,
         );
         if (!reach) return null;
         return { member, reach };
@@ -169,7 +171,7 @@ export function MCPTeamAccessTab({
     return members
       .map((member) => {
         const rules = reaching.get(member.id) ?? [];
-        const blocks = blockingRules(rules);
+        const blocks = blockingRules(rules, `user:${member.id}`);
         // A grant they never had is not a conflict, it is just no access.
         if (blocks.length === 0) return null;
         const blockedBy = named(blocks);
@@ -331,10 +333,12 @@ export function MCPTeamAccessTab({
               </div>
               <Text muted small className="mt-1">
                 These people are granted access through one rule and blocked by
-                another. A block outranks every grant, so they cannot reach this
-                server. To fix it, remove the block: on the blocking
-                role&rsquo;s page, or from the list above when it names the
-                person directly.
+                another, so they cannot reach this server. To fix it, remove the
+                block: on the blocking role&rsquo;s page, or from the list above
+                when it names the person directly. When the block comes from a
+                role or everyone, giving them access to this server by name also
+                works, since that outranks it; a block on the person themselves
+                still applies.
               </Text>
             </div>
             <Table columns={conflictColumns}>

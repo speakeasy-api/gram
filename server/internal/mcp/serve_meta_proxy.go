@@ -165,6 +165,9 @@ func (s *Service) routeMetaMember(
 			return memberDial{}, "remote", fmt.Errorf("load meta MCP member upstream headers: %w", herr)
 		}
 		upstreamToken, terr := routeMetaMemberToken(gate.tokens, member, strings.TrimRight(remoteServer.Url, "/"))
+		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil {
+			upstreamToken, terr = gate.chainUpstream(ctx, remoteServer.Url)
+		}
 		if terr != nil {
 			return memberDial{}, "remote", terr
 		}
@@ -179,6 +182,9 @@ func (s *Service) routeMetaMember(
 
 	case member.tunneledServerID.Valid:
 		upstreamToken, terr := routeMetaMemberToken(gate.tokens, member, strings.TrimRight(member.tunneledResourceIdentifier, "/"))
+		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil {
+			upstreamToken, terr = gate.chainUpstream(ctx, member.tunneledResourceIdentifier)
+		}
 		if terr != nil {
 			return memberDial{}, "tunneled", terr
 		}
@@ -330,7 +336,10 @@ func (s *Service) executeProxiedMemberTool(
 			Version: clientIdentity.Version,
 		})
 	}
-	dial, err := s.dialMetaMember(ctx, logger, *gate, member, gate.callerIdentity())
+	// Only a tool call may acquire a downstream token by identity chaining.
+	callGate := *gate
+	callGate.chainUpstream = s.metaMemberChainer(gate, member)
+	dial, err := s.dialMetaMember(ctx, logger, callGate, member, gate.callerIdentity())
 	if err != nil {
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)

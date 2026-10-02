@@ -1,5 +1,31 @@
 # admin
 
+## 0.7.0
+
+### Minor Changes
+
+- dfe104d: Onboarding use cases and playbooks in the admin dashboard. Staff create use cases and playbooks on a new Use Cases & Playbooks page: a playbook is ordered top-level steps that belong to a use case, shared and possibly its default, or to one customer, never both, and every playbook is checked for prerequisites. An organization's Overview page shows its assigned playbook and links to the page scoped to that organization, where staff write it a playbook of its own or assign it a shared one, refused when the recorded stack does not support a step. A shared playbook is a template: assigning it gives the organization a copy of its own, so later edits to the shared playbook never reach an organization already on it. The onboarding survey assigns a use case's default playbook and the customer setup wizard walks the assigned one. The preset selection editor and its Admin API are gone, the Admin MCP diagnostics tool reports the assigned playbook instead, and the Admin MCP's onboarding write proposal assigns a playbook, by ID or by use case, in place of setting task visibility. Enable it with the `assign_organization_onboarding_playbook` write operation.
+- a49b065: Onboarding stack and step catalog in the admin dashboard. Staff record an organization's stack, meaning the vendors it uses with the organizational plan it is on for each and its device management, on the organization's Overview page; the vendor, plan and product lists come from the support matrix catalog, which now carries plans and files every product under its real vendor. Setup steps can nest one level under a group, whose status follows its cards: observability in other platforms and MCP distribution become groups over their cards. The catalog is mirrored into the database at start-up and shown read-only on a new Steps page, where a prerequisite links to its own row.
+
+### Patch Changes
+
+- b177711: Staff can map Okta Integration Network applications to Gram-owned MCP catalog entries through the `com.speakeasy.ai/okta` metadata namespace. The registry validates the mapping, keeps each OIN application name on at most one entry, and returns the mapping to registry consumers as public catalog data.
+- b34e9dc: The staff registry editor proposes Okta application names for a catalog entry from the names observed across synced tenants, matched by vendor domain, title or tenant label, and lists observed names no entry claims yet. Proposals are confirmed by hand; nothing is applied automatically.
+- 52bb406: Add a temporary staff-only control for enabling role-based plugin distribution per organization, with audited Admin MCP approval.
+
+## 0.6.2
+
+### Patch Changes
+
+- 27e22f1: Staff can record a Stripe subscription ID for a PAYG organization that does not have one yet. The admin API checks that the subscription belongs to the organization's Stripe customer, and stores the billing-cycle anchor Stripe returns, before saving it.
+
+## 0.6.1
+
+### Patch Changes
+
+- d0945f1: Add a Demo organization link to the admin sidebar that opens the explore demo org in a new tab.
+- d24e7a1: Add an "Open in WorkOS" link beside the WorkOS org ID on the admin organization record. It appears when the organization is linked to WorkOS and the admin API has `WORKOS_ENVIRONMENT_ID` set.
+
 ## 0.6.0
 
 ### Minor Changes

@@ -38,7 +38,8 @@ export type SignalGroupMode =
   | "category"
   | "team"
   | "app"
-  | "principal";
+  | "principal"
+  | "server";
 
 /**
  * Group key for signals whose findings carry no team/app attribution (rows
@@ -133,7 +134,24 @@ function groupKeyForMode(signal: RiskSignal, mode: SignalGroupMode): string {
       return dominantApp(signal);
     case "principal":
       return dominantPrincipal(signal);
+    case "server":
+      // Server grouping files a signal under every server it was seen on
+      // (see groupKeysForMode); the first is only a fallback for callers that
+      // need a single key.
+      return signal.mcpServerIds[0] ?? UNATTRIBUTED_GROUP_KEY;
   }
+}
+
+/**
+ * Every group a signal belongs to. A signal spans several MCP servers, so under
+ * server grouping it appears once per server (finding counts on a row stay
+ * whole-signal); every other mode files it under exactly one group.
+ */
+function groupKeysForMode(signal: RiskSignal, mode: SignalGroupMode): string[] {
+  if (mode === "server" && signal.mcpServerIds.length > 0) {
+    return signal.mcpServerIds;
+  }
+  return [groupKeyForMode(signal, mode)];
 }
 
 /**
@@ -149,12 +167,13 @@ export function groupSignals(
 ): SignalGroup[] {
   const byKey = new Map<string, RiskSignal[]>();
   for (const signal of signals) {
-    const key = groupKeyForMode(signal, mode);
-    const bucket = byKey.get(key);
-    if (bucket) {
-      bucket.push(signal);
-    } else {
-      byKey.set(key, [signal]);
+    for (const key of groupKeysForMode(signal, mode)) {
+      const bucket = byKey.get(key);
+      if (bucket) {
+        bucket.push(signal);
+      } else {
+        byKey.set(key, [signal]);
+      }
     }
   }
 

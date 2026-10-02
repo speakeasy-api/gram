@@ -99,6 +99,7 @@ type CatalogDescriptorLoader func(ctx context.Context) ([]CatalogDescriptor, err
 type RegistryCatalogSourceLoader func(ctx context.Context) ([]RegistryCatalogSource, error)
 
 type DynamicRegistryCatalog struct {
+	identity    *externalmcp.CatalogService
 	client      *externalmcp.RegistryClient
 	load        CatalogDescriptorLoader
 	loadSources RegistryCatalogSourceLoader
@@ -265,10 +266,17 @@ func (c *RegistryCatalog) Inspect(ctx context.Context, providerKey, catalogRef s
 	if err != nil {
 		return CatalogDetails{}, fmt.Errorf("inspect platform mcp catalog candidate: %w", err)
 	}
-	if details.RemoteURL == "" || !validCatalogRemoteTemplate(details.RemoteURL) || details.TransportType != externalmcptypes.TransportTypeStreamableHTTP || !containsString(allowedURLs, details.RemoteURL) {
+	if !containsString(allowedURLs, details.RemoteURL) {
 		return CatalogDetails{}, ErrCatalogRejected
 	}
 
+	return projectCatalogDetails(descriptor, catalogRef, details)
+}
+
+func projectCatalogDetails(descriptor CatalogDescriptor, catalogRef string, details *externalmcp.ServerDetails) (CatalogDetails, error) {
+	if details.RemoteURL == "" || !validCatalogRemoteTemplate(details.RemoteURL) || details.TransportType != externalmcptypes.TransportTypeStreamableHTTP {
+		return CatalogDetails{}, ErrCatalogRejected
+	}
 	toolNames := make([]string, 0, len(details.Tools))
 	for _, tool := range details.Tools {
 		if tool.Name != "" {
@@ -279,7 +287,7 @@ func (c *RegistryCatalog) Inspect(ctx context.Context, providerKey, catalogRef s
 	configuration := catalogConfiguration(details.Headers, details.Variables)
 	return CatalogDetails{
 		CatalogCandidate: CatalogCandidate{
-			ProviderKey: providerKey,
+			ProviderKey: descriptor.ProviderKey,
 			CatalogRef:  catalogRef,
 			Name:        details.Name,
 			Description: details.Description,
@@ -416,4 +424,40 @@ func catalogCandidateFromEntry(descriptor CatalogDescriptor, entry *types.Extern
 		ToolCount:   entry.ToolCount,
 		SetupIntent: descriptor.SetupIntent,
 	}
+}
+
+// WithIdentityService keeps continuation independent of the currently selected
+// source. Only callers with an authorized receipt or registration use this path.
+func (c *DynamicRegistryCatalog) WithIdentityService(service *externalmcp.CatalogService) *DynamicRegistryCatalog {
+	c.identity = service
+	return c
+}
+
+func (c *DynamicRegistryCatalog) InspectIdentity(ctx context.Context, providerKey, catalogRef string) (CatalogDetails, error) {
+	if c.identity == nil {
+		return c.Inspect(ctx, providerKey, catalogRef)
+	}
+	idText, ok := strings.CutPrefix(providerKey, "browser-catalog-registry-")
+	if !ok || catalogRef == "" {
+		return CatalogDetails{}, ErrCatalogRejected
+	}
+	id, err := uuid.Parse(idText)
+	if err != nil {
+		return CatalogDetails{}, ErrCatalogRejected
+	}
+	source, err := c.identity.IdentitySource(ctx, id)
+	if err != nil {
+		return CatalogDetails{}, fmt.Errorf("resolve retained catalog source: %w", err)
+	}
+	reader, err := c.identity.ReaderFor(source)
+	if err != nil {
+		return CatalogDetails{}, fmt.Errorf("resolve retained catalog reader: %w", err)
+	}
+	// Persistence authorized this exact identity before entry lookup. Published
+	// discovery membership is required only for new inspection/admission.
+	details, err := reader.GetServerDetails(ctx, source.Registry, catalogRef, nil)
+	if err != nil {
+		return CatalogDetails{}, fmt.Errorf("inspect retained platform mcp catalog candidate: %w", err)
+	}
+	return projectCatalogDetails(BrowserCatalogDescriptor(source.Registry), catalogRef, details)
 }

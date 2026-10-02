@@ -45,7 +45,7 @@ function show(view: string) {
   render(
     <MemoryRouter
       initialEntries={[
-        `/example/identity?tab=enterprise-managed-auth&provider=okta&view=${view}`,
+        `/example/identity?tab=identity-providers&provider=okta&view=${view}`,
       ]}
     >
       <OktaWorkspace />
@@ -82,7 +82,7 @@ describe("Okta workspace", () => {
       screen
         .getByRole("link", { name: "All identity providers" })
         .getAttribute("href"),
-    ).toBe("/example/identity?tab=enterprise-managed-auth");
+    ).toBe("/example/identity?tab=identity-providers");
   });
   it("activates Okta views using ArrowRight and Space", async () => {
     mocks.query.data.connection = {
@@ -121,7 +121,9 @@ describe("Okta workspace", () => {
       ).toBeTruthy();
       expect(screen.getByText("Okta content: setup")).toBeTruthy();
       expect(screen.queryByRole("tablist")).toBeNull();
-      expect(screen.queryByText(/Manage how your AI agents/)).toBeNull();
+      expect(
+        screen.queryByText(/Sync the applications your organization uses/),
+      ).toBeNull();
     },
   );
   it("treats revoked connections as unconnected for deep links", () => {
@@ -132,7 +134,9 @@ describe("Okta workspace", () => {
     show("cross-app-access");
     expect(screen.getByText("Okta content: setup")).toBeTruthy();
     expect(screen.queryByRole("tablist")).toBeNull();
-    expect(screen.queryByText(/Manage how your AI agents/)).toBeNull();
+    expect(
+      screen.queryByText(/Sync the applications your organization uses/),
+    ).toBeNull();
   });
   it.each(["pending", "verified"])(
     "keeps workspace tabs for %s connections",
@@ -144,7 +148,9 @@ describe("Okta workspace", () => {
       show("applications");
       expect(screen.getAllByRole("tab")).toHaveLength(3);
       expect(screen.getByText("Okta content: applications")).toBeTruthy();
-      expect(screen.getByText(/Manage how your AI agents/)).toBeTruthy();
+      expect(
+        screen.getByText(/Sync the applications your organization uses/),
+      ).toBeTruthy();
     },
   );
   it("hides workspace navigation while the connection loads", () => {
@@ -155,7 +161,9 @@ describe("Okta workspace", () => {
       screen.getByRole("link", { name: "All identity providers" }),
     ).toBeTruthy();
     expect(screen.queryByRole("tablist")).toBeNull();
-    expect(screen.queryByText(/Manage how your AI agents/)).toBeNull();
+    expect(
+      screen.queryByText(/Sync the applications your organization uses/),
+    ).toBeNull();
     expect(screen.queryByText(/Okta content:/)).toBeNull();
   });
   it("shows a failed load inline without tabs", () => {

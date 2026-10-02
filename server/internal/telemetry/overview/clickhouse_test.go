@@ -16,7 +16,7 @@ import (
 func TestFetchProjectOverviewClickHouseRunsSessionQueriesConcurrently(t *testing.T) {
 	t.Parallel()
 
-	reader := newBarrierProjectOverviewReader(4)
+	reader := newBarrierProjectOverviewReader(5)
 	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
 
@@ -31,14 +31,15 @@ func TestFetchProjectOverviewClickHouseRunsSessionQueriesConcurrently(t *testing
 	require.NoError(t, err)
 	require.Equal(t, uint64(11), result.ToolMetrics.TotalToolCalls)
 	require.Equal(t, uint64(7), result.ToolMetricsComparison.TotalToolCalls)
-	require.Equal(t, uint64(3), result.ActiveCounts.ActiveServersCount)
+	require.Equal(t, uint64(5), result.ActiveCounts.ActiveServersCount)
 	require.Equal(t, uint64(4), result.ActiveCounts.ActiveUsersCount)
 	require.Equal(t, []repo.TopServer{{ServerName: "server", ToolCallCount: 5}}, result.TopServers)
 	require.Empty(t, result.TopUsers)
 	require.Empty(t, result.LLMClients)
-	require.Equal(t, int32(4), reader.started.Load())
+	require.Equal(t, int32(5), reader.started.Load())
 	require.Equal(t, int32(2), reader.overviewCalls.Load())
 	require.Equal(t, int32(1), reader.activeCountCalls.Load())
+	require.Equal(t, int32(1), reader.unifiedActiveServerCalls.Load())
 	require.Equal(t, int32(1), reader.topServerCalls.Load())
 	require.Zero(t, reader.topUserCalls.Load())
 	require.Zero(t, reader.llmClientCalls.Load())
@@ -47,7 +48,7 @@ func TestFetchProjectOverviewClickHouseRunsSessionQueriesConcurrently(t *testing
 func TestFetchProjectOverviewClickHouseRunsToolCallQueriesConcurrently(t *testing.T) {
 	t.Parallel()
 
-	reader := newBarrierProjectOverviewReader(6)
+	reader := newBarrierProjectOverviewReader(7)
 	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
 
@@ -62,29 +63,31 @@ func TestFetchProjectOverviewClickHouseRunsToolCallQueriesConcurrently(t *testin
 	require.NoError(t, err)
 	require.Equal(t, uint64(11), result.ToolMetrics.TotalToolCalls)
 	require.Equal(t, uint64(7), result.ToolMetricsComparison.TotalToolCalls)
-	require.Equal(t, uint64(3), result.ActiveCounts.ActiveServersCount)
+	require.Equal(t, uint64(5), result.ActiveCounts.ActiveServersCount)
 	require.Equal(t, uint64(4), result.ActiveCounts.ActiveUsersCount)
 	require.Equal(t, []repo.TopServer{{ServerName: "server", ToolCallCount: 5}}, result.TopServers)
 	require.Equal(t, []repo.TopUser{{UserID: "user", UserType: "external", ActivityCount: 6}}, result.TopUsers)
 	require.Equal(t, []repo.LLMClientUsage{{ClientName: "client", ActivityCount: 8}}, result.LLMClients)
-	require.Equal(t, int32(6), reader.started.Load())
+	require.Equal(t, int32(7), reader.started.Load())
 	require.Equal(t, int32(2), reader.overviewCalls.Load())
 	require.Equal(t, int32(1), reader.activeCountCalls.Load())
+	require.Equal(t, int32(1), reader.unifiedActiveServerCalls.Load())
 	require.Equal(t, int32(1), reader.topServerCalls.Load())
 	require.Equal(t, int32(1), reader.topUserCalls.Load())
 	require.Equal(t, int32(1), reader.llmClientCalls.Load())
 }
 
 type barrierProjectOverviewReader struct {
-	expected         int32
-	started          atomic.Int32
-	overviewCalls    atomic.Int32
-	activeCountCalls atomic.Int32
-	topServerCalls   atomic.Int32
-	topUserCalls     atomic.Int32
-	llmClientCalls   atomic.Int32
-	allStarted       chan struct{}
-	closeOnce        sync.Once
+	expected                 int32
+	started                  atomic.Int32
+	overviewCalls            atomic.Int32
+	activeCountCalls         atomic.Int32
+	unifiedActiveServerCalls atomic.Int32
+	topServerCalls           atomic.Int32
+	topUserCalls             atomic.Int32
+	llmClientCalls           atomic.Int32
+	allStarted               chan struct{}
+	closeOnce                sync.Once
 }
 
 func newBarrierProjectOverviewReader(expected int32) *barrierProjectOverviewReader {
@@ -115,6 +118,14 @@ func (r *barrierProjectOverviewReader) GetActiveCounts(ctx context.Context, _ re
 		return nil, err
 	}
 	return &repo.ActiveCounts{ActiveServersCount: 3, ActiveUsersCount: 4}, nil
+}
+
+func (r *barrierProjectOverviewReader) GetUnifiedActiveServerCount(ctx context.Context, _ repo.GetTopServersParams) (uint64, error) {
+	r.unifiedActiveServerCalls.Add(1)
+	if err := r.waitForQueries(ctx); err != nil {
+		return 0, err
+	}
+	return 5, nil
 }
 
 func (r *barrierProjectOverviewReader) GetTopServers(ctx context.Context, _ repo.GetTopServersParams) ([]repo.TopServer, error) {

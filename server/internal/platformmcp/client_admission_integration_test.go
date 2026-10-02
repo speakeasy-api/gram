@@ -37,7 +37,7 @@ func TestClientAdmissionRoundTripsWithoutAConnection(t *testing.T) {
 		ClientID:       AssistantClientID,
 		Surface:        SurfaceProjectAssistant,
 	}
-	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	store, err := NewRegistrationStore(conn)
 	require.NoError(t, err)
 
 	request := registrationRequest(project, "client-admission", "client-admission-key")
@@ -111,7 +111,7 @@ func TestClientAdmissionProtectsActiveEMABindings(t *testing.T) {
 			conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_admission_ema")
 			require.NoError(t, err)
 			principal, project := seedRegistrationLifecycle(t, ctx, conn)
-			store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
+			store, err := NewRegistrationStore(conn)
 			require.NoError(t, err)
 			request := registrationRequest(project, "admission-ema", "admission-ema-key")
 			receipt, err := store.BeginReceipt(ctx, principal, project, request, time.Now().UTC())
@@ -148,10 +148,7 @@ func TestClientAdmissionProtectsActiveEMABindings(t *testing.T) {
 					_, err := service.Set(ctx, principal, project, registrationID, "disabled")
 					done <- err
 				}()
-				require.Eventually(t, func() bool {
-					blocked, err := testrepo.New(conn).IsQueryBlockedOnLockFixture(ctx, "%LockEMAUserIssuer :one%")
-					return err == nil && blocked
-				}, 10*time.Second, 10*time.Millisecond)
+				testenv.WaitForQueryBlockedBy(t, ctx, conn, testenv.BackendPID(tx), "%LockEMAUserIssuer :one%")
 				require.Empty(t, done, "mode change must wait for preparation")
 				require.NoError(t, txq.EnsureEMABinding(ctx, bindingParams))
 				require.NoError(t, tx.Commit(ctx))
