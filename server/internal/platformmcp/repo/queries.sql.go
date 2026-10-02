@@ -6967,9 +6967,13 @@ type LockPlatformMCPServerToolsetBindingParams struct {
 //
 // FOR UPDATE OF m locks only the server row, which is what UpdateMCPServer and
 // DeleteMCPServer update by id, so both block until this transaction ends.
-// Nothing else in the codebase locks mcp_servers rows, and no toolsets query
-// touches this table, so acquiring this before the toolsets row lock taken by
-// the write introduces no lock-order inversion.
+//
+// This runs AFTER LockPlatformMCPToolsetForToolExposure, never before: see
+// that query for the lock-order cycle it would otherwise form with
+// UpdateToolset. Because the toolset id can only be learned by reading this
+// binding first, the caller peeks at it unlocked, locks the toolset, locks
+// this row, and then re-reads — so a repoint in between is detected rather
+// than acted on.
 func (q *Queries) LockPlatformMCPServerToolsetBinding(ctx context.Context, arg LockPlatformMCPServerToolsetBindingParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockPlatformMCPServerToolsetBinding, arg.OrganizationID, arg.McpServerID, arg.ProjectID)
 	var id uuid.UUID
@@ -7001,6 +7005,42 @@ func (q *Queries) LockPlatformMCPSetupHandoff(ctx context.Context, arg LockPlatf
 		arg.Intent,
 	)
 	return err
+}
+
+const lockPlatformMCPToolsetForToolExposure = `-- name: LockPlatformMCPToolsetForToolExposure :one
+SELECT t.id
+FROM toolsets AS t
+JOIN projects AS p
+  ON p.id = t.project_id
+ AND p.organization_id = $1
+ AND p.deleted IS FALSE
+WHERE t.id = $2
+  AND t.project_id = $3
+  AND t.deleted IS FALSE
+FOR UPDATE OF t
+`
+
+type LockPlatformMCPToolsetForToolExposureParams struct {
+	OrganizationID string
+	ToolsetID      uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+// Takes the toolset row lock, and must run BEFORE the server row is locked.
+//
+// The order is the constraint, not the lock. toolsets.UpdateToolset holds this
+// same row (via GetToolsetForUpdate) and then, inside reconcileHostedNetworkAccess,
+// updates the hosted mcp_servers row — an exclusive row lock taken by a plain
+// UPDATE rather than an explicit FOR UPDATE. For a hosted server both ids are
+// the toolset id, so it is the same pair of rows this path touches. Locking the
+// server first here and the toolset first there is an ABBA cycle that
+// PostgreSQL resolves by aborting one side with deadlock_detected, so both
+// paths take toolsets before mcp_servers.
+func (q *Queries) LockPlatformMCPToolsetForToolExposure(ctx context.Context, arg LockPlatformMCPToolsetForToolExposureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockPlatformMCPToolsetForToolExposure, arg.OrganizationID, arg.ToolsetID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const markPlatformMCPConnectionReauthorizationRequired = `-- name: MarkPlatformMCPConnectionReauthorizationRequired :one

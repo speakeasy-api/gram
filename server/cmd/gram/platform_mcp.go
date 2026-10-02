@@ -670,12 +670,15 @@ func newPlatformMCPToolExposure(config platformMCPConfig, authorizer platformmcp
 	// schedule the rebuild the dashboard's own toolset update schedules.
 	// Without it the periodic sweep is the only recovery and an otherwise
 	// working server cannot list its tools in the meantime.
+	// Composed even without a Temporal environment: the helper then reports
+	// ErrToolsetIndexUnavailable, which surfaces as index_signal
+	// "unavailable" so the caller can say the server may not list its tools
+	// until the sweep — rather than the result implying a rebuild happened.
 	if config.TemporalEnv == nil {
-		config.Logger.WarnContext(context.Background(), "Platform MCP tool exposure cannot schedule toolset indexing; dynamic-mode servers will wait for the periodic sweep after a change")
-		return service
+		config.Logger.WarnContext(context.Background(), "Platform MCP tool exposure cannot schedule toolset indexing; changes will report index_signal unavailable until the periodic sweep runs")
 	}
-	return service.WithIndexing(func(ctx context.Context, projectID, toolsetID uuid.UUID) {
-		toolsets.TriggerToolsetIndexForVersion(ctx, config.Logger, config.DB, config.TemporalEnv, projectID, toolsetID)
+	return service.WithIndexing(func(ctx context.Context, projectID, toolsetID uuid.UUID) error {
+		return toolsets.TriggerToolsetIndexForVersion(ctx, config.Logger, config.DB, config.TemporalEnv, projectID, toolsetID)
 	})
 }
 

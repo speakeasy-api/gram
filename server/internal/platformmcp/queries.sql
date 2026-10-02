@@ -3686,6 +3686,28 @@ WHERE htd.deployment_id IN (SELECT id FROM all_deployment_ids)
   AND htd.deleted IS FALSE
   AND htd.tool_urn = ANY(@tool_urns::text[]);
 
+-- name: LockPlatformMCPToolsetForToolExposure :one
+-- Takes the toolset row lock, and must run BEFORE the server row is locked.
+--
+-- The order is the constraint, not the lock. toolsets.UpdateToolset holds this
+-- same row (via GetToolsetForUpdate) and then, inside reconcileHostedNetworkAccess,
+-- updates the hosted mcp_servers row — an exclusive row lock taken by a plain
+-- UPDATE rather than an explicit FOR UPDATE. For a hosted server both ids are
+-- the toolset id, so it is the same pair of rows this path touches. Locking the
+-- server first here and the toolset first there is an ABBA cycle that
+-- PostgreSQL resolves by aborting one side with deadlock_detected, so both
+-- paths take toolsets before mcp_servers.
+SELECT t.id
+FROM toolsets AS t
+JOIN projects AS p
+  ON p.id = t.project_id
+ AND p.organization_id = @organization_id
+ AND p.deleted IS FALSE
+WHERE t.id = @toolset_id
+  AND t.project_id = @project_id
+  AND t.deleted IS FALSE
+FOR UPDATE OF t;
+
 -- name: LockPlatformMCPServerToolsetBinding :one
 -- Pins the named server's backing-toolset binding for the rest of the caller's
 -- transaction, and must run before anything reads the exposure.
@@ -3700,9 +3722,13 @@ WHERE htd.deployment_id IN (SELECT id FROM all_deployment_ids)
 --
 -- FOR UPDATE OF m locks only the server row, which is what UpdateMCPServer and
 -- DeleteMCPServer update by id, so both block until this transaction ends.
--- Nothing else in the codebase locks mcp_servers rows, and no toolsets query
--- touches this table, so acquiring this before the toolsets row lock taken by
--- the write introduces no lock-order inversion.
+--
+-- This runs AFTER LockPlatformMCPToolsetForToolExposure, never before: see
+-- that query for the lock-order cycle it would otherwise form with
+-- UpdateToolset. Because the toolset id can only be learned by reading this
+-- binding first, the caller peeks at it unlocked, locks the toolset, locks
+-- this row, and then re-reads — so a repoint in between is detected rather
+-- than acted on.
 SELECT m.id
 FROM mcp_servers AS m
 JOIN projects AS p

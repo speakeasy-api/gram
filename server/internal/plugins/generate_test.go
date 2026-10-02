@@ -3633,6 +3633,13 @@ func TestGeneratePlatformMCPPackageEmitsToolExposureWorkflow(t *testing.T) {
 		"The project's tool list governs additions only",
 		"taking that orphaned entry off is exactly what a removal is for",
 		"`tool_exposure.tool_urns`",
+		// A removal still has to go through server selection; skipping to the
+		// read would leave it with no server id.
+		"carry on through step 3",
+		// A dynamic-mode server serves nothing while its current tool list has
+		// no search index, so an unscheduled rebuild has to be reportable.
+		"`index_signal`",
+		"cannot list any tools at all while its current tool list has no search index",
 		"It is not available to managed project assistants",
 		"Use `send_platform_mcp_feedback` only after asking for consent",
 		"nothing was changed at all, not that part of the request landed",

@@ -150,10 +150,22 @@ type MCPToolExposureMutationOutput struct {
 	SnapshotScope string           `json:"snapshot_scope"`
 	// Distributions names the plugins that carry this server. Changing the
 	// tool list republishes each of them to everyone holding that plugin.
-	Distributions      []MCPDistribution       `json:"distributions"`
-	PublicationRequest string                  `json:"publication_request"`
-	PublishSignal      string                  `json:"publish_signal"`
-	Receipt            RiskMutationToolReceipt `json:"receipt"`
+	Distributions      []MCPDistribution `json:"distributions"`
+	PublicationRequest string            `json:"publication_request"`
+	PublishSignal      string            `json:"publish_signal"`
+	// IndexSignal reports whether the tool-search index rebuild this change
+	// needs was scheduled. It matters beyond bookkeeping: a dynamic-mode server
+	// refuses tools/list outright while its current version has no index, so
+	// anything other than "requested" or "not_required" means the server may
+	// not be able to list its tools until the periodic sweep reaches it.
+	//   requested      — rebuild scheduled
+	//   not_required   — this version needs no index (it exposes no tools, or
+	//                    nothing serves it from the index), and dynamic mode
+	//                    serves it without one
+	//   unavailable    — nothing could schedule a rebuild on this deployment
+	//   request_failed — scheduling was attempted and failed
+	IndexSignal string                  `json:"index_signal"`
+	Receipt     RiskMutationToolReceipt `json:"receipt"`
 }
 
 // MCPToolExposureService reads what a project can expose and what one server
@@ -194,10 +206,12 @@ type MCPToolExposureService struct {
 	now   func() time.Time
 }
 
-// ToolExposureIndexer is supplied by server composition. It is best-effort and
-// returns nothing: it runs after the change has committed, so there is no
-// outcome left to refuse, and the periodic sweep remains the backstop.
-type ToolExposureIndexer func(ctx context.Context, projectID, toolsetID uuid.UUID)
+// ToolExposureIndexer is supplied by server composition. It runs after the
+// change has committed, so its error cannot refuse anything — it is reported
+// to the caller through IndexSignal instead, because the consequence of a
+// rebuild that never started is a dynamic-mode server that cannot list its
+// tools, and an agent that just added a tool needs to be able to say so.
+type ToolExposureIndexer func(ctx context.Context, projectID, toolsetID uuid.UUID) error
 
 func NewMCPToolExposureService(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, engine *authz.Engine, admin Authorizer, cursorKeyMaterial string, publication plugins.PublicationRequests, publisher plugins.PluginPublishSignaler, reads, changes OperationBudget) (*MCPToolExposureService, error) {
 	if logger == nil || db == nil || auditLogger == nil || engine == nil || admin == nil || !reads.valid() || !changes.valid() {
@@ -343,11 +357,20 @@ func (s *MCPToolExposureService) RemoveTools(ctx context.Context, principal Prin
 }
 
 type toolExposureReceipt struct {
-	Outcome      string   `json:"outcome"`
-	Applied      []string `json:"applied"`
-	Unchanged    []string `json:"unchanged"`
-	VersionAfter int64    `json:"version_after"`
-	Publication  string   `json:"publication_request"`
+	Outcome   string   `json:"outcome"`
+	Applied   []string `json:"applied"`
+	Unchanged []string `json:"unchanged"`
+	// ToolsetID is the toolset this change actually wrote, recorded while its
+	// row was still locked. The post-commit reindex is scheduled from here and
+	// never from a later read: a read taken after the transaction can report a
+	// different toolset once a concurrent repoint lands, which would rebuild
+	// the index for a toolset this change never touched and leave the one it
+	// did touch unindexed — the same mistake as deciding anything else from an
+	// after-the-fact read. Carrying it also makes a replay schedule the same
+	// toolset the original did.
+	ToolsetID    string `json:"toolset_id"`
+	VersionAfter int64  `json:"version_after"`
+	Publication  string `json:"publication_request"`
 }
 
 type toolExposureMutationRequest struct {
@@ -413,12 +436,37 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 			return encoded, nil
 		},
 		Mutate: func(ctx context.Context, tx pgx.Tx) (toolExposureReceipt, error) {
-			// Pin the named server's backing-toolset binding before anything
-			// reads it. The exposure read below takes no lock of its own, and
-			// the toolset row lock the write takes is both later and on a
-			// different table, so without this the target of the write could
-			// be repointed underneath the decision. See the query's comment.
-			if _, err := s.queries.WithTx(tx).LockPlatformMCPServerToolsetBinding(ctx, platformrepo.LockPlatformMCPServerToolsetBindingParams{
+			txQueries := s.queries.WithTx(tx)
+			// Both rows this change depends on are locked before any of it is
+			// decided, and in the order UpdateToolset takes them: toolsets
+			// first, then mcp_servers. Reversing that pair is an ABBA cycle
+			// with the dashboard, which holds the toolset row and then updates
+			// the hosted server row inside reconcileHostedNetworkAccess — so
+			// one side would be aborted with deadlock_detected under
+			// concurrency.
+			//
+			// Which toolset to lock can only be learned from the binding, and
+			// reading it is what the lock is meant to make safe, so the order
+			// is: peek unlocked, lock the toolset that peek named, lock the
+			// server row, then re-read. A repoint in that window leaves the
+			// authoritative read naming a different toolset from the one
+			// locked, which is detected below instead of acted on.
+			peek, err := s.exposureRow(ctx, txQueries, principal, project.ID, mcpID)
+			if err != nil {
+				if errors.Is(err, ErrMCPToolExposureMissing) {
+					return toolExposureReceipt{}, toolExposureMissing()
+				}
+				return toolExposureReceipt{}, err
+			}
+			if _, err := txQueries.LockPlatformMCPToolsetForToolExposure(ctx, platformrepo.LockPlatformMCPToolsetForToolExposureParams{
+				OrganizationID: principal.OrganizationID, ToolsetID: peek.ToolsetID, ProjectID: project.ID,
+			}); err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return toolExposureReceipt{}, toolExposureMissing()
+				}
+				return toolExposureReceipt{}, fmt.Errorf("lock platform MCP toolset for tool exposure: %w", err)
+			}
+			if _, err := txQueries.LockPlatformMCPServerToolsetBinding(ctx, platformrepo.LockPlatformMCPServerToolsetBindingParams{
 				OrganizationID: principal.OrganizationID, McpServerID: mcpID, ProjectID: project.ID,
 			}); err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
@@ -426,12 +474,11 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 				}
 				return toolExposureReceipt{}, fmt.Errorf("lock platform MCP server toolset binding: %w", err)
 			}
-			// Read the exposure under that lock, so the toolset this resolves
-			// to is the one the write will still be bound to at commit. The
-			// toolsets helper then takes the toolset row lock and recomputes
-			// the list from the committed one, so a concurrent writer of the
-			// same toolset cannot be overwritten either.
-			row, err := s.exposureRow(ctx, s.queries.WithTx(tx), principal, project.ID, mcpID)
+			// The authoritative read, under both locks. From here the toolset
+			// the write lands on cannot move, and the toolsets helper
+			// recomputes the list from the committed one under the same
+			// toolset lock, so a concurrent writer cannot be overwritten.
+			row, err := s.exposureRow(ctx, txQueries, principal, project.ID, mcpID)
 			if err != nil {
 				// exposureRow reports only a missing target or a wrapped query
 				// failure, and the latter is already the right error to return
@@ -440,6 +487,14 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 					return toolExposureReceipt{}, toolExposureMissing()
 				}
 				return toolExposureReceipt{}, err
+			}
+			if row.ToolsetID != peek.ToolsetID {
+				// Repointed between the peek and the locks, so the toolset
+				// that is locked is not the one this server now fronts.
+				// Refusing is the only safe answer: acting would either write
+				// a toolset the server no longer fronts or write one whose row
+				// this transaction does not hold.
+				return toolExposureReceipt{}, toolExposureConflict()
 			}
 			// Compared against the version computed from the committed list
 			// rather than the public projection, which truncates the list it
@@ -459,7 +514,7 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 			// reporting it as unchanged. A tool the server already exposes is
 			// still removable after its definition is gone, so a name already
 			// on the server counts as known.
-			if err := s.requireKnownTools(ctx, s.queries.WithTx(tx), principal, project.ID, requested, row.ToolUrns); err != nil {
+			if err := s.requireKnownTools(ctx, txQueries, principal, project.ID, requested, row.ToolUrns); err != nil {
 				return toolExposureReceipt{}, err
 			}
 			change := toolsets.ToolExposureChange{Add: requested}
@@ -473,6 +528,7 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 			}
 			result := toolExposureReceipt{
 				Outcome: "no_op", Applied: toolURNStrings(applied.Applied), Unchanged: toolURNStrings(applied.Unchanged),
+				ToolsetID:    row.ToolsetID.String(),
 				VersionAfter: applied.VersionAfter, Publication: string(plugins.ProjectPublicationNotConfigured),
 			}
 			if !applied.Changed {
@@ -514,7 +570,7 @@ func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal
 	output := MCPToolExposureMutationOutput{
 		Outcome: stored.Outcome, Applied: stored.Applied, Unchanged: stored.Unchanged,
 		Distributions: []MCPDistribution{}, PublicationRequest: stored.Publication, PublishSignal: "not_requested",
-		Receipt: riskMutationToolReceipt(receipt),
+		IndexSignal: "not_required", Receipt: riskMutationToolReceipt(receipt),
 	}
 	if output.Applied == nil {
 		output.Applied = []string{}
@@ -540,6 +596,21 @@ func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal
 			output.Distributions = distributions
 		}
 	}
+	// Schedule the search-index rebuild for the version that just committed, as
+	// the dashboard's own toolset update does. A dynamic-mode server refuses
+	// tools/list outright while its current version has no index, so skipping
+	// this would let a successful add take a working server offline until the
+	// sweep.
+	//
+	// The target comes from the receipt, recorded while the toolset row was
+	// still locked, and deliberately not from the verification read below: a
+	// read taken after the transaction can name a different toolset once a
+	// concurrent repoint lands, which would rebuild one this change never
+	// touched and leave the one it did touch unindexed. Only a real change
+	// needs it — a no-op created no version.
+	if stored.Outcome == "applied" {
+		output.IndexSignal = s.scheduleIndex(ctx, project.ID, stored.ToolsetID)
+	}
 	exposure, err := s.Exposure(ctx, principal, project.ID, mcpID)
 	if err != nil {
 		output.SnapshotScope = "verification_unavailable"
@@ -547,19 +618,30 @@ func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal
 	}
 	output.Exposure = &exposure
 	output.SnapshotScope = "fresh_read_after_commit"
-	// Schedule the search-index rebuild for the version that just committed,
-	// as the dashboard's own toolset update does. A dynamic-mode server
-	// refuses tools/list outright while its current version has no index, so
-	// skipping this would let a successful add take a working server offline
-	// until the sweep. Done after the verification read because that read is
-	// what names the toolset the change landed on, and only for a real change:
-	// a no-op created no version, so nothing needs reindexing.
-	if s.index != nil && stored.Outcome == "applied" {
-		if toolsetID, parseErr := uuid.Parse(exposure.ToolsetID); parseErr == nil {
-			s.index(ctx, project.ID, toolsetID)
-		}
-	}
 	return output
+}
+
+// scheduleIndex reports what happened rather than swallowing it, because a
+// rebuild that never started leaves a dynamic-mode server unable to list its
+// tools until the sweep, and the caller is the only one who can tell the user.
+func (s *MCPToolExposureService) scheduleIndex(ctx context.Context, projectID uuid.UUID, toolsetID string) string {
+	if s.index == nil {
+		return "unavailable"
+	}
+	parsed, err := uuid.Parse(toolsetID)
+	if err != nil {
+		return "request_failed"
+	}
+	switch err := s.index(ctx, projectID, parsed); {
+	case err == nil:
+		return "requested"
+	case errors.Is(err, toolsets.ErrToolsetIndexNotRequired):
+		return "not_required"
+	case errors.Is(err, toolsets.ErrToolsetIndexUnavailable):
+		return "unavailable"
+	default:
+		return "request_failed"
+	}
 }
 
 func (s *MCPToolExposureService) validate(input ChangeMCPToolsInput) (uuid.UUID, uuid.UUID, []urn.Tool, error) {
@@ -701,23 +783,23 @@ func (s *MCPToolExposureService) authorizeEveryAffectedServer(ctx context.Contex
 	return nil
 }
 
-// verifyAffectedServersUnmoved re-reads the set of servers the committed write
-// moves and refuses when it is not the set that was authorized.
+// verifyAffectedServersUnmoved is the backstop under the lock ordering, not the
+// primary guarantee.
 //
-// This is the other half of the server-row lock. The lock pins the named
-// server's binding, so the write cannot land on a toolset it no longer fronts,
-// but no row lock can prevent a server row that does not exist yet from being
-// inserted against this toolset. That remaining case is a phantom, and this is
-// where it is caught: any attach committed during this transaction shows up
-// here and rolls the change back.
+// The primary guarantee is the toolset row lock itself. Attaching a server to
+// this toolset, or repointing one onto it, writes mcp_servers.toolset_id, and
+// PostgreSQL enforces that foreign key by taking FOR KEY SHARE on the
+// referenced toolsets row — which conflicts with the FOR UPDATE this
+// transaction holds from before the authorized read until commit. So a server
+// cannot join this toolset inside that window at all: it either committed
+// before the lock, and is in the authorized set, or it waits until after.
 //
-// It closes the window rather than eliminating it — an attach committing
-// between this read and COMMIT is still missed. That residue is not worth more
-// machinery: it is indistinguishable from an attach landing a moment after the
-// change commits, which no amount of locking prevents, so the authorization
-// statement is point-in-time by nature. Eliminating it outright would mean
-// every path that attaches a server to a toolset taking a shared lock on that
-// toolset, which is a change across mcpservers rather than here.
+// This re-read exists in case that reasoning ever stops holding — a changed
+// constraint, a path that writes the column without the key check. It refuses
+// only when the set has GROWN. It must not refuse on shrinkage: a concurrent
+// DeleteMCPServer sets deleted_at without touching toolset_id, so it takes no
+// key-share lock and can commit inside the window, and a server leaving the set
+// only means this change authorized more than it needed to.
 func (s *MCPToolExposureService) verifyAffectedServersUnmoved(ctx context.Context, tx pgx.Tx, principal Principal, projectID, mcpID uuid.UUID, authorized platformrepo.GetPlatformMCPServerToolExposureRow) error {
 	current, err := s.exposureRow(ctx, s.queries.WithTx(tx), principal, projectID, mcpID)
 	if err != nil {
@@ -725,15 +807,19 @@ func (s *MCPToolExposureService) verifyAffectedServersUnmoved(ctx context.Contex
 		// have been deleted or unlinked; anything here is a read failure.
 		return fmt.Errorf("re-read platform MCP tool exposure affected servers: %w", err)
 	}
-	// FrontingServerIds is aggregated with a deterministic ORDER BY, so an
-	// ordered comparison is exact rather than incidentally order-sensitive.
-	if slices.Equal(current.FrontingServerIds, authorized.FrontingServerIds) &&
-		current.ForeignFrontingServerCount == authorized.ForeignFrontingServerCount {
+	grew := current.ForeignFrontingServerCount > authorized.ForeignFrontingServerCount
+	for _, id := range current.FrontingServerIds {
+		if !slices.Contains(authorized.FrontingServerIds, id) {
+			grew = true
+			break
+		}
+	}
+	if !grew {
 		return nil
 	}
 	return &MCPToolExposureError{
 		Code:    "conflict",
-		Message: "The set of MCP servers offering this same set of tools changed while this change was being applied, so nothing was changed. Read the server again and repeat the request against what it reports now.",
+		Message: "Another MCP server started offering this same set of tools while this change was being applied, so nothing was changed. Read the server again and repeat the request against what it reports now.",
 		Cause:   ErrMCPToolExposureConflict,
 	}
 }

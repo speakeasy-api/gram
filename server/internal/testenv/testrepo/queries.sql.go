@@ -3351,6 +3351,26 @@ func (q *Queries) LockMCPServerRowFixture(ctx context.Context, arg LockMCPServer
 	return id, err
 }
 
+const lockMCPServerRowNowaitFixture = `-- name: LockMCPServerRowNowaitFixture :one
+SELECT id FROM mcp_servers WHERE id = $1 AND project_id = $2 AND deleted IS FALSE FOR UPDATE NOWAIT
+`
+
+type LockMCPServerRowNowaitFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Probes whether anyone currently holds the MCP server row lock, without
+// waiting. Used to assert lock ORDER: a writer parked on the toolset row must
+// not already be holding this one, or the two rows are taken in opposite
+// orders by different paths and the pair can deadlock.
+func (q *Queries) LockMCPServerRowNowaitFixture(ctx context.Context, arg LockMCPServerRowNowaitFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockMCPServerRowNowaitFixture, arg.ID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockOpenRouterAPIKeyForUpdateFixture = `-- name: LockOpenRouterAPIKeyForUpdateFixture :one
 SELECT 1
 FROM openrouter_api_keys
@@ -4047,23 +4067,60 @@ func (q *Queries) RejectPublishOutboxWritesFixture(ctx context.Context) error {
 }
 
 const repointMCPServerToolsetFixture = `-- name: RepointMCPServerToolsetFixture :one
-UPDATE mcp_servers
-SET toolset_id = $1, updated_at = clock_timestamp()
-WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
-RETURNING id
+UPDATE mcp_servers AS m
+SET toolset_id = (
+        SELECT t.id
+        FROM toolsets AS t
+        JOIN projects AS p
+          ON p.id = t.project_id
+         AND p.organization_id = t.organization_id
+         AND p.deleted IS FALSE
+        WHERE t.id = $1
+          AND t.project_id = $2
+          AND t.organization_id = $3
+          AND t.deleted IS FALSE
+    ),
+    updated_at = clock_timestamp()
+WHERE m.id = $4
+  AND m.project_id = $2
+  AND m.deleted IS FALSE
+  -- Refuses rather than nulling the backend when the target does not resolve
+  -- in this tenancy: the exclusivity CHECK requires exactly one backend, so a
+  -- fixture that silently cleared it would fail far from the real cause.
+  AND EXISTS (
+      SELECT 1 FROM toolsets AS t
+      WHERE t.id = $1
+        AND t.project_id = $2
+        AND t.organization_id = $3
+        AND t.deleted IS FALSE
+  )
+RETURNING m.id
 `
 
 type RepointMCPServerToolsetFixtureParams struct {
-	ToolsetID uuid.NullUUID
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ToolsetID      uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	ID             uuid.UUID
 }
 
 // Moves an MCP server onto a different backing toolset, which is what
 // UpdateMCPServer does to toolset_id. Used to stage the race where the target
 // of a tool-exposure change moves after it was read.
+//
+// The target toolset is resolved through toolsets scoped to the same project
+// and organization, not taken on trust from the caller. mcp_servers.toolset_id
+// has no composite constraint pairing it with project_id, so an unscoped
+// version of this fixture could manufacture exactly the cross-project and
+// cross-organization binding this workflow exists to refuse — and a test
+// fixture that can build an impossible state makes the suite prove nothing.
 func (q *Queries) RepointMCPServerToolsetFixture(ctx context.Context, arg RepointMCPServerToolsetFixtureParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, repointMCPServerToolsetFixture, arg.ToolsetID, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, repointMCPServerToolsetFixture,
+		arg.ToolsetID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ID,
+	)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
