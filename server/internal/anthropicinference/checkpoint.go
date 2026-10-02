@@ -47,9 +47,14 @@ type postgresCheckpoint struct {
 	revision   string
 }
 
-// Begin creates request-local checkpoint state; it acquires no connection or lock.
-func (s *postgresStore) Begin(_ context.Context, config Config, frame Frame, userID string) (checkpointSession, error) {
-	return &postgresCheckpoint{userID: userID, db: s.db, expected: nil, config: config, externalID: "anthropic-inference:" + conversationID(config, frame).String(), revision: ""}, nil
+// Begin creates request-local checkpoint state; it acquires no connection or
+// lock beyond resolving the conversation when Process has not already.
+func (s *postgresStore) Begin(ctx context.Context, config Config, frame Frame, userID string) (checkpointSession, error) {
+	chatID, err := s.conversation(ctx, config, frame)
+	if err != nil {
+		return nil, err
+	}
+	return &postgresCheckpoint{userID: userID, db: s.db, expected: nil, config: config, externalID: "anthropic-inference:" + chatID.String(), revision: ""}, nil
 }
 
 func (s *postgresCheckpoint) Load(ctx context.Context) ([][]byte, error) {
