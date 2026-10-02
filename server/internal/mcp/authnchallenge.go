@@ -389,6 +389,8 @@ const remoteSessionUnavailableRetryAfter = 30 * time.Second
 
 func issuerGateFailureReason(err error) string {
 	switch {
+	case errors.Is(err, errTokenHostMismatch):
+		return issuerGateReasonIssuerMismatch
 	case errors.Is(err, errIssuerGateOrgLookup):
 		return "org_lookup_failed"
 	case errors.Is(err, errIssuerGateCallerProfile):
@@ -499,6 +501,13 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 			return ctx, nil, nil, false, fmt.Errorf("validate user-session bearer: %w", err)
 		}
 		return ctx, nil, nil, false, fmt.Errorf("%w: validate user-session bearer: %w", errCredentialRejected, err)
+	}
+	// Only the issuer-scoped audiences are shared across hosts; a token on the
+	// exact resource audience is already bound to this host.
+	if acceptedAudience != userSessionAudienceResource {
+		if err := s.checkPerEndpointTokenHost(ctx, session, endpoint, baseURL); err != nil {
+			return ctx, nil, nil, false, fmt.Errorf("%w: %w", errCredentialRejected, err)
+		}
 	}
 	if acceptedAudience == userSessionAudienceLegacy {
 		s.metrics.RecordLegacyAudienceAccepted(ctx, endpoint.UserSessionIssuerID.String())
