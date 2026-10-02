@@ -78076,6 +78076,11 @@ components:
         originating_client:
           type: string
           description: The supported client that originated a chat routed through the source, when known
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatParticipant'
+          description: Distinct observed conversation participants across the session.
         pinned:
           type: boolean
           description: True when the chat is pinned
@@ -78088,6 +78093,15 @@ components:
           items:
             $ref: '#/components/schemas/RiskSegment'
           description: 'Present only when `risk_only` was requested: contiguous runs of returned messages, each spanning a risk finding and its surrounding context. Use each segment''s cursors to expand it.'
+        slack_channel_id:
+          type: string
+          description: Observed Slack channel associated with this session.
+        slack_channel_name:
+          type: string
+          description: Observed Slack channel name, without the leading hash.
+        slack_team_id:
+          type: string
+          description: Observed Slack workspace associated with this session.
         source:
           type: string
           description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
@@ -78239,6 +78253,11 @@ components:
         model:
           type: string
           description: The model that generated the message
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatParticipant'
+          description: Observed per-message conversation participants, independent of message ownership.
         prompt_id:
           type: string
           description: The agent prompt/turn ID associated with this message, when available.
@@ -78304,6 +78323,11 @@ components:
         originating_client:
           type: string
           description: The supported client that originated a chat routed through the source, when known
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatParticipant'
+          description: Distinct observed conversation participants across the session.
         pinned:
           type: boolean
           description: True when the chat is pinned
@@ -78311,6 +78335,15 @@ components:
           type: integer
           description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
           format: int64
+        slack_channel_id:
+          type: string
+          description: Observed Slack channel associated with this session.
+        slack_channel_name:
+          type: string
+          description: Observed Slack channel name, without the leading hash.
+        slack_team_id:
+          type: string
+          description: Observed Slack workspace associated with this session.
         source:
           type: string
           description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
@@ -78358,6 +78391,27 @@ components:
         - created_at
         - updated_at
         - last_message_timestamp
+    ChatParticipant:
+      type: object
+      properties:
+        display_name:
+          type: string
+          description: Directory display name at capture time.
+        provider:
+          type: string
+          description: Directory provider that identifies this conversation participant.
+        provider_team_id:
+          type: string
+          description: Workspace resolved from the organization directory, when unambiguous.
+        provider_user_id:
+          type: string
+          description: Provider identity observed in the message envelope.
+        user_id:
+          type: string
+          description: Explicitly mapped Gram person at capture time; this attribution grants no permissions.
+      required:
+        - provider
+        - provider_user_id
     ChatSessionLink:
       type: object
       properties:
@@ -78383,7 +78437,7 @@ components:
           description: Hostname of the machine the move happened on, when known.
         kind:
           type: string
-          description: Link kind. Currently always 'move'.
+          description: 'Link kind: move for continuations, recall for recalled context, or subagent for a helper session.'
         parent_captured:
           type: boolean
           description: Whether the parent exists as a captured chat the caller can read, i.e. whether the parent side is navigable.

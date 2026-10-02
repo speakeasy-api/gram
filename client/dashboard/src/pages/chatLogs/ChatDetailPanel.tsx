@@ -1,3 +1,4 @@
+import { SlackChannelLink } from "@/components/slack-channel-link";
 import { claudeTagMetadata, projectClaudeTagRows } from "./claudeTag";
 import { IdentityLink } from "@/components/identity-link";
 import { format, formatDistanceToNow } from "date-fns";
@@ -279,6 +280,9 @@ function SessionSummary({
     accountEmail?: string;
     source?: string;
     channelNames?: string[];
+    slackChannelId?: string;
+    slackChannelName?: string;
+    slackTeamId?: string;
     originatingClient?: string;
     litellmProxied?: boolean;
     createdAt: Date;
@@ -372,6 +376,15 @@ function SessionSummary({
                 </span>
               </MetaRow>
             )}
+            {chat.slackChannelId && (
+              <MetaRow label="Channel">
+                <SlackChannelLink
+                  channelId={chat.slackChannelId}
+                  channelName={chat.slackChannelName}
+                  teamId={chat.slackTeamId}
+                />
+              </MetaRow>
+            )}
             {chat.channelNames && chat.channelNames.length > 0 && (
               <MetaRow label="Channel">{chat.channelNames.join(", ")}</MetaRow>
             )}
@@ -458,6 +471,15 @@ function ChatDetailMetadataBadges({
             </span>
           </Badge.Text>
         </Badge>
+      )}
+      {chat.slackChannelId && (
+        <HeaderMetadataBadge>
+          <SlackChannelLink
+            channelId={chat.slackChannelId}
+            channelName={chat.slackChannelName}
+            teamId={chat.slackTeamId}
+          />
+        </HeaderMetadataBadge>
       )}
       {chat.channelNames?.map((channel) => (
         <HeaderMetadataBadge key={channel}>
@@ -740,7 +762,20 @@ function ChatDetailHeader({
                   toolCount={toolCount}
                 />
               ) : (
-                <HeaderMetadataBadge>{getTraceId(chatId)}</HeaderMetadataBadge>
+                <div className="flex flex-wrap items-center gap-2">
+                  <HeaderMetadataBadge>
+                    {getTraceId(chatId)}
+                  </HeaderMetadataBadge>
+                  {chat.slackChannelId && (
+                    <HeaderMetadataBadge>
+                      <SlackChannelLink
+                        channelId={chat.slackChannelId}
+                        channelName={chat.slackChannelName}
+                        teamId={chat.slackTeamId}
+                      />
+                    </HeaderMetadataBadge>
+                  )}
+                </div>
               )}
               <WorkUnitsHeaderMetrics chat={chat} />
             </div>
@@ -918,7 +953,10 @@ function SessionLinksSection({
         {inbound.map((link, i) =>
           row(
             `in-${i}-${link.createdAt.toISOString()}`,
-            <>Derived from {link.parentTitle ?? "an earlier session"}</>,
+            <>
+              {link.kind === "subagent" ? "Subagent of" : "Derived from"}{" "}
+              {link.parentTitle ?? "an earlier session"}
+            </>,
             link.createdAt,
             hop(link.parentChatId, link.parentCaptured),
             link.parentCaptured ? (
@@ -945,11 +983,18 @@ function SessionLinksSection({
               )
             : row(
                 `out-${i}-${link.createdAt.toISOString()}`,
-                <>Moved to {formatPlatform(link.targetHarness)}</>,
+                <>
+                  {link.kind === "subagent" ? "Subagent" : "Moved to"}{" "}
+                  {link.kind === "subagent"
+                    ? (link.childTitle ?? "Claude Tag")
+                    : formatPlatform(link.targetHarness)}
+                </>,
                 link.createdAt,
                 hop(link.childChatId, link.childCaptured),
                 link.childCaptured
-                  ? (link.childTitle ?? undefined)
+                  ? link.kind === "subagent"
+                    ? undefined
+                    : (link.childTitle ?? undefined)
                   : "not yet captured",
               ),
         )}
@@ -1181,19 +1226,19 @@ function ChatDetailPanel({
     [transcript.messages],
   );
   const isClaudeTag =
-    capturedChat?.source === "claude-tag" ||
-    ((capturedChat?.source === "claude-code" ||
-      capturedChat?.source === "claude") &&
-      tagMetadata.detected);
+    capturedChat?.source === "claude-tag" || tagMetadata.detected;
   const chat = useMemo(() => {
     if (!capturedChat || !isClaudeTag) return capturedChat;
-    const title = capturedChat.title?.startsWith("<wake")
-      ? tagMetadata.title
-      : capturedChat.title;
+    const title =
+      /^<(wake|standing_owner_message|session-context)\b/.test(
+        capturedChat.title ?? "",
+      ) && tagMetadata.title
+        ? tagMetadata.title
+        : capturedChat.title;
     return {
       ...capturedChat,
       source: "claude-tag",
-      channelNames: tagMetadata.channels,
+      channelNames: capturedChat.slackChannelId ? [] : tagMetadata.channels,
       title: title || "Claude Tag session",
     };
   }, [capturedChat, isClaudeTag, tagMetadata.title, tagMetadata.channels]);

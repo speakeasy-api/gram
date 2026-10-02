@@ -3201,6 +3201,9 @@ func EncodeListSessionLinksError(encoder func(context.Context, http.ResponseWrit
 // *ChatOverviewResponseBody from a value of type *chat.ChatOverview.
 func marshalChatChatOverviewToChatOverviewResponseBody(v *chat.ChatOverview) *ChatOverviewResponseBody {
 	res := &ChatOverviewResponseBody{
+		SlackTeamID:          v.SlackTeamID,
+		SlackChannelID:       v.SlackChannelID,
+		SlackChannelName:     v.SlackChannelName,
 		ID:                   v.ID,
 		Title:                v.Title,
 		UserID:               v.UserID,
@@ -3225,6 +3228,33 @@ func marshalChatChatOverviewToChatOverviewResponseBody(v *chat.ChatOverview) *Ch
 		Pinned:               v.Pinned,
 		Summary:              v.Summary,
 		SummaryGeneratedAt:   v.SummaryGeneratedAt,
+	}
+	if v.Participants != nil {
+		res.Participants = make([]*ChatParticipantResponseBody, len(v.Participants))
+		for i, val := range v.Participants {
+			if val == nil {
+				res.Participants[i] = nil
+				continue
+			}
+			res.Participants[i] = marshalChatChatParticipantToChatParticipantResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalChatChatParticipantToChatParticipantResponseBody builds a value of
+// type *ChatParticipantResponseBody from a value of type *chat.ChatParticipant.
+func marshalChatChatParticipantToChatParticipantResponseBody(v *chat.ChatParticipant) *ChatParticipantResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ChatParticipantResponseBody{
+		Provider:       v.Provider,
+		ProviderUserID: v.ProviderUserID,
+		ProviderTeamID: v.ProviderTeamID,
+		UserID:         v.UserID,
+		DisplayName:    v.DisplayName,
 	}
 
 	return res
@@ -3265,6 +3295,16 @@ func marshalChatChatMessageToChatMessageResponseBody(v *chat.ChatMessage) *ChatM
 		ExternalUserID: v.ExternalUserID,
 		CreatedAt:      v.CreatedAt,
 		Generation:     v.Generation,
+	}
+	if v.Participants != nil {
+		res.Participants = make([]*ChatParticipantResponseBody, len(v.Participants))
+		for i, val := range v.Participants {
+			if val == nil {
+				res.Participants[i] = nil
+				continue
+			}
+			res.Participants[i] = marshalChatChatParticipantToChatParticipantResponseBody(val)
+		}
 	}
 
 	return res

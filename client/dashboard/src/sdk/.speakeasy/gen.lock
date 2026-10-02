@@ -899,6 +899,7 @@ trackedFiles:
   src/models/components/chatcontentpart.ts: {}
   src/models/components/chatmessage.ts: {}
   src/models/components/chatoverview.ts: {}
+  src/models/components/chatparticipant.ts: {}
   src/models/components/chatsessionlink.ts: {}
   src/models/components/chatsummary.ts: {}
   src/models/components/chattotals.ts: {}

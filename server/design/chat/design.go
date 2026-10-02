@@ -521,7 +521,7 @@ var ChatSessionLink = Type("ChatSessionLink", func() {
 	Attribute("child_title", String, "Title of the child chat, when it has been captured and titled and the caller's visibility scope can read it.")
 	Attribute("parent_captured", Boolean, "Whether the parent exists as a captured chat the caller can read, i.e. whether the parent side is navigable.")
 	Attribute("child_captured", Boolean, "Whether the continuation exists as a captured chat the caller can read, i.e. whether the child side is navigable.")
-	Attribute("kind", String, "Link kind. Currently always 'move'.")
+	Attribute("kind", String, "Link kind: move for continuations, recall for recalled context, or subagent for a helper session.")
 	Attribute("target_harness", String, "Harness the session was moved to (e.g. cursor, codex, claude-code).")
 	Attribute("source_surface", String, "Harness the session originated in, when known.")
 	Attribute("actor_email", String, "Email of the person who initiated the move, when known.")
@@ -577,6 +577,10 @@ var SummarizeToolCallResult = Type("SummarizeToolCallResult", func() {
 })
 
 var ChatOverview = Type("ChatOverview", func() {
+ Attribute("slack_team_id", String, "Observed Slack workspace associated with this session.")
+ Attribute("slack_channel_id", String, "Observed Slack channel associated with this session.")
+ Attribute("slack_channel_name", String, "Observed Slack channel name, without the leading hash.")
+	Attribute("participants", ArrayOf(ChatParticipant), "Distinct observed conversation participants across the session.")
 	Attribute("id", String, "The ID of the chat")
 	Attribute("title", String, "The title of the chat")
 	Attribute("user_id", String, "The ID of the user who created the chat")
@@ -615,6 +619,15 @@ var ChatOverview = Type("ChatOverview", func() {
 	})
 
 	Required("id", "title", "num_messages", "created_at", "updated_at", "last_message_timestamp")
+})
+
+var ChatParticipant = Type("ChatParticipant", func() {
+	Attribute("provider", String, "Directory provider that identifies this conversation participant.")
+	Attribute("provider_user_id", String, "Provider identity observed in the message envelope.")
+	Attribute("provider_team_id", String, "Workspace resolved from the organization directory, when unambiguous.")
+	Attribute("user_id", String, "Explicitly mapped Gram person at capture time; this attribution grants no permissions.")
+	Attribute("display_name", String, "Directory display name at capture time.")
+	Required("provider", "provider_user_id")
 })
 
 var Chat = Type("Chat", func() {
@@ -688,6 +701,7 @@ var ChatMessage = Type("ChatMessage", func() {
 	Attribute("prompt_id", String, "The agent prompt/turn ID associated with this message, when available.")
 	Attribute("user_id", String, "The ID of the user who created the message")
 	Attribute("external_user_id", String, "The ID of the external user who created the message")
+	Attribute("participants", ArrayOf(ChatParticipant), "Observed per-message conversation participants, independent of message ownership.")
 	Attribute("created_at", String, func() {
 		Description("When the message was created.")
 		Format(FormatDateTime)

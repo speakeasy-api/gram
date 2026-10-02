@@ -3168,6 +3168,9 @@ func DecodeListSessionLinksResponse(decoder func(*http.Response) goahttp.Decoder
 // *chat.ChatOverview from a value of type *ChatOverviewResponseBody.
 func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponseBody) *chat.ChatOverview {
 	res := &chat.ChatOverview{
+		SlackTeamID:          v.SlackTeamID,
+		SlackChannelID:       v.SlackChannelID,
+		SlackChannelName:     v.SlackChannelName,
 		ID:                   *v.ID,
 		Title:                *v.Title,
 		UserID:               v.UserID,
@@ -3192,6 +3195,33 @@ func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponse
 		Pinned:               v.Pinned,
 		Summary:              v.Summary,
 		SummaryGeneratedAt:   v.SummaryGeneratedAt,
+	}
+	if v.Participants != nil {
+		res.Participants = make([]*chat.ChatParticipant, len(v.Participants))
+		for i, val := range v.Participants {
+			if val == nil {
+				res.Participants[i] = nil
+				continue
+			}
+			res.Participants[i] = unmarshalChatParticipantResponseBodyToChatChatParticipant(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalChatParticipantResponseBodyToChatChatParticipant builds a value of
+// type *chat.ChatParticipant from a value of type *ChatParticipantResponseBody.
+func unmarshalChatParticipantResponseBodyToChatChatParticipant(v *ChatParticipantResponseBody) *chat.ChatParticipant {
+	if v == nil {
+		return nil
+	}
+	res := &chat.ChatParticipant{
+		Provider:       *v.Provider,
+		ProviderUserID: *v.ProviderUserID,
+		ProviderTeamID: v.ProviderTeamID,
+		UserID:         v.UserID,
+		DisplayName:    v.DisplayName,
 	}
 
 	return res
@@ -3232,6 +3262,16 @@ func unmarshalChatMessageResponseBodyToChatChatMessage(v *ChatMessageResponseBod
 		ExternalUserID: v.ExternalUserID,
 		CreatedAt:      *v.CreatedAt,
 		Generation:     *v.Generation,
+	}
+	if v.Participants != nil {
+		res.Participants = make([]*chat.ChatParticipant, len(v.Participants))
+		for i, val := range v.Participants {
+			if val == nil {
+				res.Participants[i] = nil
+				continue
+			}
+			res.Participants[i] = unmarshalChatParticipantResponseBodyToChatChatParticipant(val)
+		}
 	}
 
 	return res

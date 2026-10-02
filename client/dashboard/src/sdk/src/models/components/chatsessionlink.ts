@@ -34,7 +34,7 @@ export type ChatSessionLink = {
    */
   deviceHostname?: string | undefined;
   /**
-   * Link kind. Currently always 'move'.
+   * Link kind: move for continuations, recall for recalled context, or subagent for a helper session.
    */
   kind: string;
   /**
