@@ -104,8 +104,11 @@ type DCRResponse struct {
 // When request carries a TunneledMcpServerID the POST rides that MCP tunnel
 // (tunnels must be non-nil); authorization of the parameter is the caller's
 // responsibility. Callers that never set it may pass a nil tunnels.
-func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, serverURL *url.URL, request ProxyRegisterRequest, telemetry registration.Recorder) (ProxyRegisterResponse, error) {
-	if policy == nil || serverURL == nil {
+//
+// callbackOrigin is the origin of the redirect_uri registered for the client.
+// The client row that stores the result must resolve to the same origin.
+func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, callbackOrigin *url.URL, request ProxyRegisterRequest, telemetry registration.Recorder) (ProxyRegisterResponse, error) {
+	if policy == nil || callbackOrigin == nil {
 		return ProxyRegisterResponse{}, fmt.Errorf("dynamic client registration is not configured")
 	}
 
@@ -132,10 +135,10 @@ func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, tunnels
 		}
 	}
 
-	origin := serverURL.String()
+	origin := callbackOrigin.String()
 	// Register only the callback used by new clients. Successful rotation
 	// clears legacy_callback_url before authorizing with the replacement.
-	redirectURIs := []string{fmt.Sprintf("%s/mcp/remote_login_callback", origin)}
+	redirectURIs := []string{RemoteLoginCallbackURL(callbackOrigin)}
 
 	dcrReq := DCRRequest{
 		RedirectURIs:            redirectURIs,
@@ -353,7 +356,9 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 
-	registered, err := RegisterDynamicClient(ctx, s.policy, s.tunnels, s.serverURL, req, s.registrationTelemetry)
+	// The dashboard stores the result through a project client create, which
+	// records the registration origin, so register the same one here.
+	registered, err := RegisterDynamicClient(ctx, s.policy, s.tunnels, s.origins.ForNewClient(true), req, s.registrationTelemetry)
 	if err != nil {
 		mapped := proxyRegistrationError(err)
 		if mapped.Code == oops.CodeBadRequest {

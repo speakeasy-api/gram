@@ -176,3 +176,9 @@ func (s *Service) List(ctx context.Context, opts ListOptions) (Page, error) {
 }
 
 func (s *Service) Validate(data json.RawMessage) []Issue { return s.validator.Validate(data) }
+
+// ValidateStored applies the stored-record contract, as discovery and
+// publishing do.
+func (s *Service) ValidateStored(data json.RawMessage) []Issue {
+	return s.validator.ValidateStored(data)
+}

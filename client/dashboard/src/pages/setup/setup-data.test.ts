@@ -1,9 +1,11 @@
 import { getCursorInstallCommand } from "@/lib/cursor-install-command";
 import { describe, expect, it } from "vitest";
 import { ACTIVE_AGENT_PROVIDER_IDS } from "@/components/agent-providers/agent-providers";
-import { AGENT_PLATFORMS, platformSteps } from "./setup-data";
+import { getAgentPlatforms, platformSteps } from "./setup-data";
 
-describe("AGENT_PLATFORMS", () => {
+const AGENT_PLATFORMS = getAgentPlatforms("https://app.getgram.ai");
+
+describe("getAgentPlatforms", () => {
   it("does not offer OpenClaw as a setup platform", () => {
     // The other-platforms card is the device agent's rollout and the agent
     // does not cover OpenClaw, so listing it offered a walkthrough nothing
@@ -211,4 +213,37 @@ describe("AGENT_PLATFORMS", () => {
       for (const step of orgSteps) expect(personal).not.toContain(step);
     },
   );
+
+  it("names the host the reader is on in every copy-paste setup value", () => {
+    const platforms = getAgentPlatforms("https://ai.speakeasy.com");
+
+    const claudeSettings = JSON.parse(
+      platforms
+        .find(({ id }) => id === "claude")!
+        .setupSteps.find(({ code }) =>
+          code?.includes("OTEL_EXPORTER_OTLP_ENDPOINT"),
+        )!.code!,
+    ) as { env: Record<string, string> };
+    expect(claudeSettings.env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe(
+      "https://ai.speakeasy.com/otel",
+    );
+
+    const cowork = platforms.find(({ id }) => id === "claude-cowork")!;
+    const fieldValue = (title: string, label: string) =>
+      cowork.setupSteps
+        .find((step) => step.title === title)
+        ?.fields?.find((field) => field.label === label)?.value;
+    expect(fieldValue("Enable OTEL export", "OTLP endpoint")).toBe(
+      "https://ai.speakeasy.com/rpc/hooks.otel",
+    );
+    // The allowlist takes bare hostnames. It keeps app.getgram.ai too, because
+    // published plugin hooks still send to the canonical server URL.
+    expect(
+      cowork.setupSteps
+        .find(
+          (step) => step.title === "Verify hook and bootstrap network access",
+        )
+        ?.fields?.map((field) => field.value),
+    ).toEqual(["ai.speakeasy.com", "app.getgram.ai"]);
+  });
 });

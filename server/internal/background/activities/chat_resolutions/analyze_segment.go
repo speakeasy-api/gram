@@ -323,6 +323,7 @@ If there are no tool calls, return an empty array.`, userPromptText)
 	response, err := a.chatClient.GetObjectCompletion(
 		analysisCtx,
 		openrouter.ObjectCompletionRequest{
+			MaxTokens:              nil,
 			OrgID:                  orgID,
 			ProjectID:              projectID.String(),
 			Model:                  "", // Use default model

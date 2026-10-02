@@ -6,7 +6,6 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 export type WithdrawWorkloadSubjectSecurityOption1 = {
-  projectSlugHeaderGramProject: string;
   sessionHeaderGramSession: string;
 };
 
@@ -41,7 +40,6 @@ export type WithdrawWorkloadSubjectRequest = {
 
 /** @internal */
 export type WithdrawWorkloadSubjectSecurityOption1$Outbound = {
-  "project_slug_header_Gram-Project": string;
   "session_header_Gram-Session": string;
 };
 
@@ -52,12 +50,10 @@ export const WithdrawWorkloadSubjectSecurityOption1$outboundSchema:
     WithdrawWorkloadSubjectSecurityOption1
   > = z.pipe(
     z.object({
-      projectSlugHeaderGramProject: z.string(),
       sessionHeaderGramSession: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
-        projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
         sessionHeaderGramSession: "session_header_Gram-Session",
       });
     }),

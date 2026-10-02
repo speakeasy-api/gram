@@ -2093,6 +2093,57 @@ WHERE c.id = @chat_id
   AND c.organization_id = @organization_id
   AND c.deleted IS FALSE;
 
+-- name: UpsertMCPFindingEvidence :exec
+INSERT INTO risk_finding_evidence (
+    finding_id
+  , organization_id
+  , project_id
+  , match_encrypted
+  , created_at
+  , updated_at
+  , expires_at
+)
+VALUES (
+    @finding_id
+  , @organization_id
+  , @project_id
+  , @match_encrypted
+  , @created_at
+  , clock_timestamp()
+  , @expires_at
+)
+ON CONFLICT (organization_id, project_id, finding_id) DO UPDATE
+SET
+    match_encrypted = EXCLUDED.match_encrypted
+  , created_at = EXCLUDED.created_at
+  , updated_at = clock_timestamp()
+  , expires_at = EXCLUDED.expires_at;
+
+-- name: GetMCPFindingEvidence :one
+SELECT match_encrypted
+FROM risk_finding_evidence
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND finding_id = @finding_id
+  AND expires_at > @now;
+
+-- name: CleanupExpiredMCPFindingEvidenceBatch :execrows
+-- Privileged global maintenance query. The Temporal activity bounds each
+-- transaction and repeats batches up to its per-run limit.
+WITH expired AS (
+  SELECT organization_id, project_id, finding_id
+  FROM risk_finding_evidence
+  WHERE expires_at <= clock_timestamp()
+  ORDER BY expires_at, organization_id, project_id, finding_id
+  LIMIT @batch_size::integer
+  FOR UPDATE SKIP LOCKED
+)
+DELETE FROM risk_finding_evidence AS evidence
+USING expired
+WHERE evidence.organization_id = expired.organization_id
+  AND evidence.project_id = expired.project_id
+  AND evidence.finding_id = expired.finding_id;
+
 -- name: CreateChatForTest :one
 INSERT INTO chats (project_id, organization_id, user_id, external_user_id)
 VALUES (@project_id, @organization_id, @user_id, @external_user_id)

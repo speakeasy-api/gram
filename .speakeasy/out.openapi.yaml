@@ -20320,384 +20320,6 @@ paths:
       x-speakeasy-name-override: updateBySlug
       x-speakeasy-react-hook:
         name: UpdateEnvironment
-  /rpc/explore.createQuery:
-    post:
-      description: Save a query. Any member of the project can. The spec is validated against the catalog before it is stored.
-      operationId: createExploreQuery
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateQueryRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ExploreQuery'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: createQuery explore
-      tags:
-        - explore
-      x-speakeasy-name-override: createQuery
-      x-speakeasy-react-hook:
-        name: CreateExploreQuery
-  /rpc/explore.deleteQuery:
-    delete:
-      description: Delete a saved query. Its creator can; deleting someone else's needs project write access.
-      operationId: deleteExploreQuery
-      parameters:
-        - allowEmptyValue: true
-          description: The query to delete
-          in: query
-          name: id
-          required: true
-          schema:
-            description: The query to delete
-            format: uuid
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: deleteQuery explore
-      tags:
-        - explore
-      x-speakeasy-name-override: deleteQuery
-      x-speakeasy-react-hook:
-        name: DeleteExploreQuery
-  /rpc/explore.listQueries:
-    get:
-      description: List the project's saved queries, most recently updated first. Each is validated against the catalog on read, so a query a catalog change broke says so.
-      operationId: listExploreQueries
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ExploreListQueriesResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: listQueries explore
-      tags:
-        - explore
-      x-speakeasy-name-override: listQueries
-      x-speakeasy-react-hook:
-        name: ExploreQueries
-        type: query
-  /rpc/explore.updateQuery:
-    post:
-      description: Replace a saved query's name, dataset and spec. Any member of the project can.
-      operationId: updateExploreQuery
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateQueryRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ExploreQuery'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: updateQuery explore
-      tags:
-        - explore
-      x-speakeasy-name-override: updateQuery
-      x-speakeasy-react-hook:
-        name: UpdateExploreQuery
   /rpc/external.receiveWorkOSWebhook:
     post:
       description: Receive and enqueue a WorkOS webhook event.
@@ -33864,12 +33486,12 @@ paths:
       operationId: listOktaResourceConnections
       parameters:
         - allowEmptyValue: true
-          description: Include connected and not-applicable servers.
+          description: Include connected, verified and not-applicable servers.
           in: query
           name: include_all
           schema:
             default: false
-            description: Include connected and not-applicable servers.
+            description: Include connected, verified and not-applicable servers.
             type: boolean
         - allowEmptyValue: true
           description: Session header
@@ -34060,6 +33682,308 @@ paths:
       x-speakeasy-name-override: reset
       x-speakeasy-react-hook:
         name: ResetOktaResourceConnection
+  /rpc/oktaServerSuggestions.dismiss:
+    post:
+      description: Dismiss a suggestion currently made to the organization. Remembered until restored, even across Okta reconnects. Requires org:admin and the okta-connections rollout.
+      operationId: dismissOktaServerSuggestion
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DismissOktaServerSuggestionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OktaServerSuggestion'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: dismiss oktaServerSuggestions
+      tags:
+        - oktaServerSuggestions
+      x-speakeasy-name-override: dismiss
+      x-speakeasy-react-hook:
+        name: DismissOktaServerSuggestion
+  /rpc/oktaServerSuggestions.list:
+    get:
+      description: List the catalog servers suggested from the Okta applications snapshot. Requires org:admin, the okta-connections rollout and a verified identity provider connection.
+      operationId: listOktaServerSuggestions
+      parameters:
+        - allowEmptyValue: true
+          description: Include dismissed and installed suggestions.
+          in: query
+          name: include_all
+          schema:
+            default: false
+            description: Include dismissed and installed suggestions.
+            type: boolean
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListOktaServerSuggestionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: list oktaServerSuggestions
+      tags:
+        - oktaServerSuggestions
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: OktaServerSuggestions
+  /rpc/oktaServerSuggestions.restore:
+    post:
+      description: Restore a dismissed suggestion currently made to the organization. Requires org:admin and the okta-connections rollout.
+      operationId: restoreOktaServerSuggestion
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreOktaServerSuggestionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OktaServerSuggestion'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: restore oktaServerSuggestions
+      tags:
+        - oktaServerSuggestions
+      x-speakeasy-name-override: restore
+      x-speakeasy-react-hook:
+        name: RestoreOktaServerSuggestion
   /rpc/organizationAssets.uploadImage:
     post:
       description: Upload an organization-tier image (e.g. a remote identity provider logo). Requires org:admin.
@@ -36158,6 +36082,17 @@ paths:
             description: Page size (default 50, max 100).
             format: int64
             type: integer
+        - allowEmptyValue: true
+          description: 'Only issuers from one tier: organizational (organization), project-specific (project), or from the platform catalog (platform). Omitted lists all three.'
+          in: query
+          name: tier
+          schema:
+            description: 'Only issuers from one tier: organizational (organization), project-specific (project), or from the platform catalog (platform). Omitted lists all three.'
+            enum:
+              - organization
+              - project
+              - platform
+            type: string
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -43618,6 +43553,108 @@ paths:
       x-speakeasy-name-override: removePluginServer
       x-speakeasy-react-hook:
         name: RemovePluginServer
+  /rpc/plugins.rotateObservabilityCredential:
+    post:
+      description: Rotate the observability plugin's hooks-scoped ingest credential. Mints a replacement key, republishes the marketplace when possible so installs pick it up, and either revokes previous plugin hooks keys immediately or keeps them valid for a grace window.
+      operationId: rotateObservabilityCredential
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RotateObservabilityCredentialRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RotateObservabilityCredentialResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: rotateObservabilityCredential plugins
+      tags:
+        - plugins
+      x-speakeasy-name-override: rotateObservabilityCredential
+      x-speakeasy-react-hook:
+        name: RotateObservabilityCredential
   /rpc/plugins.setPluginAssignments:
     put:
       description: Replace all assignments for a plugin with the given list of principal URNs.
@@ -47631,6 +47668,105 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: RemoteSessionClients
+  /rpc/remoteSessionClients.newClientCallbackUrl:
+    get:
+      description: Get the redirect URI a remote_session_client created now in the caller's project registers with its upstream provider.
+      operationId: getNewRemoteSessionClientCallbackUrl
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NewClientCallbackURLResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getNewClientCallbackUrl remoteSessionClients
+      tags:
+        - remoteSessionClients
+      x-speakeasy-name-override: getNewClientCallbackUrl
+      x-speakeasy-react-hook:
+        name: NewRemoteSessionClientCallbackUrl
   /rpc/remoteSessionClients.prepareEMA:
     post:
       description: Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.
@@ -48598,7 +48734,7 @@ paths:
         name: RemoteSessionIssuerDuplicatePreflight
   /rpc/remoteSessionIssuers.list:
     get:
-      description: List remote_session_issuers in the caller's project.
+      description: 'List the remote_session_issuers the caller''s project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search, upstream_host and tier filters narrow the listing without changing its order or cursor.'
       operationId: listRemoteSessionIssuers
       parameters:
         - allowEmptyValue: true
@@ -48616,6 +48752,33 @@ paths:
             description: Page size (default 50, max 100).
             format: int64
             type: integer
+        - allowEmptyValue: true
+          description: Only issuers whose name, slug or issuer URL contains this text, ignoring case.
+          in: query
+          name: search
+          schema:
+            description: Only issuers whose name, slug or issuer URL contains this text, ignoring case.
+            maxLength: 256
+            type: string
+        - allowEmptyValue: true
+          description: 'Only issuers that could sign users in to an upstream at this host (e.g. mcp.linear.app): those whose issuer URL host equals it or is one of its parent domains (linear.app). Host only, optionally with a port; no scheme or path.'
+          in: query
+          name: upstream_host
+          schema:
+            description: 'Only issuers that could sign users in to an upstream at this host (e.g. mcp.linear.app): those whose issuer URL host equals it or is one of its parent domains (linear.app). Host only, optionally with a port; no scheme or path.'
+            maxLength: 260
+            type: string
+        - allowEmptyValue: true
+          description: 'Only issuers from one tier: the project''s own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.'
+          in: query
+          name: tier
+          schema:
+            description: 'Only issuers from one tier: the project''s own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.'
+            enum:
+              - project
+              - organization
+              - platform
+            type: string
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -54776,7 +54939,7 @@ paths:
         type: mutation
   /rpc/risk.unmaskResult:
     post:
-      description: Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.
+      description: Return the plaintext match for a single risk result on demand. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.
       operationId: unmaskRiskResult
       parameters:
         - allowEmptyValue: true
@@ -65721,8 +65884,8 @@ paths:
           name: slug
           required: true
           schema:
-            description: A short url-friendly label that uniquely identifies a resource.
-            maxLength: 40
+            description: The slug of the toolset
+            maxLength: 60
             pattern: ^[a-z0-9_-]{1,128}$
             type: string
         - allowEmptyValue: true
@@ -73427,6 +73590,580 @@ paths:
       x-speakeasy-name-override: upsertGlobal
       x-speakeasy-react-hook:
         name: UpsertGlobalVariation
+  /rpc/widgets.create:
+    post:
+      description: Save a widget. Any member of the project can. The question is validated against the catalog, and the chart against the question, before it is stored.
+      operationId: createWidget
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWidgetRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Widget'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: createWidget widgets
+      tags:
+        - widgets
+      x-speakeasy-name-override: create
+      x-speakeasy-react-hook:
+        name: CreateWidget
+  /rpc/widgets.delete:
+    delete:
+      description: Delete a widget. Its creator can; deleting someone else's needs project write access.
+      operationId: deleteWidget
+      parameters:
+        - allowEmptyValue: true
+          description: The widget to delete
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The widget to delete
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: deleteWidget widgets
+      tags:
+        - widgets
+      x-speakeasy-name-override: delete
+      x-speakeasy-react-hook:
+        name: DeleteWidget
+  /rpc/widgets.duplicate:
+    post:
+      description: 'Copy a widget into a new one the caller owns, named "<name> (copy)". This is how a widget is shared: a teammate duplicates it rather than editing it. Like every save, the copy is validated, so a broken widget cannot be duplicated until it is fixed.'
+      operationId: duplicateWidget
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DuplicateWidgetRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Widget'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: duplicateWidget widgets
+      tags:
+        - widgets
+      x-speakeasy-name-override: duplicate
+      x-speakeasy-react-hook:
+        name: DuplicateWidget
+  /rpc/widgets.get:
+    get:
+      description: Get one widget by id, validated as it is read.
+      operationId: getWidget
+      parameters:
+        - allowEmptyValue: true
+          description: The widget to get
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The widget to get
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Widget'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getWidget widgets
+      tags:
+        - widgets
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: Widget
+        type: query
+  /rpc/widgets.list:
+    get:
+      description: List the project's widgets, most recently updated first. Each is validated as it is read, so a widget a catalog change broke says so.
+      operationId: listWidgets
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListWidgetsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listWidgets widgets
+      tags:
+        - widgets
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: Widgets
+        type: query
+  /rpc/widgets.update:
+    post:
+      description: Replace a widget's name, description, dataset, query and visualization. Its creator can; editing someone else's needs project write access.
+      operationId: updateWidget
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWidgetRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Widget'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: updateWidget widgets
+      tags:
+        - widgets
+      x-speakeasy-name-override: update
+      x-speakeasy-react-hook:
+        name: UpdateWidget
   /rpc/workloadIdentities.admitSubject:
     post:
       description: 'Admit a subject one of the trusted issuers asserts, and assign the agent it inherits its policy from. Both happen in one transaction: a subject admitted without an agent is refused at the token endpoint, so that half-configured state is not reachable. Requires workload:write.'
@@ -73521,8 +74258,7 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
+        - session_header_Gram-Session: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
@@ -73534,7 +74270,7 @@ paths:
         name: AdmitWorkloadSubject
   /rpc/workloadIdentities.list:
     get:
-      description: 'Read the whole trust policy: every trusted issuer and every admitted subject, at both the organization and project tiers, with the agent each subject resolves to. Requires workload:read.'
+      description: 'Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project''s tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.'
       operationId: listWorkloadIdentities
       parameters:
         - allowEmptyValue: true
@@ -73620,8 +74356,7 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
+        - session_header_Gram-Session: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
@@ -73725,8 +74460,7 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
+        - session_header_Gram-Session: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
@@ -73736,6 +74470,214 @@ paths:
       x-speakeasy-name-override: registerIssuer
       x-speakeasy-react-hook:
         name: RegisterWorkloadIssuer
+  /rpc/workloadIdentities.updateIssuer:
+    post:
+      description: Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
+      operationId: updateWorkloadIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWorkloadIssuerForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadIdentityPolicy'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: updateIssuer workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: updateIssuer
+      x-speakeasy-react-hook:
+        name: UpdateWorkloadIssuer
+  /rpc/workloadIdentities.updateSubject:
+    post:
+      description: Edit an admitted subject's label, tags, or assigned agent. Omitted fields are left unchanged. The subject, match kind, issuer, and tier are fixed at admission. The agent assignment is shared by every admission of the same subject under the same issuer, at either tier, so reassigning it through one admission reassigns it for both. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
+      operationId: updateWorkloadSubject
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWorkloadSubjectForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadIdentityPolicy'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: updateSubject workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: updateSubject
+      x-speakeasy-react-hook:
+        name: UpdateWorkloadSubject
   /rpc/workloadIdentities.withdrawIssuer:
     delete:
       description: Stop trusting an issuer. Every subject admitted under it is withdrawn in the same transaction, so no admission can outlive the issuer it names. Requires workload:write.
@@ -73833,8 +74775,7 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
+        - session_header_Gram-Session: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
@@ -73941,8 +74882,7 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
+        - session_header_Gram-Session: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
@@ -75074,11 +76014,16 @@ components:
           minLength: 1
         project_scoped:
           type: boolean
-          description: Admit the subject for the selected project alone rather than the whole organization. Defaults to false.
+          description: Admit the subject for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.
           default: false
         subject:
           type: string
           description: The sub claim the issuer must assert, stored and compared exactly as supplied.
+        tags:
+          type: array
+          items:
+            type: string
+          description: Free-form labels for finding the admitted workload in a long list. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
       description: Form for admitting a workload subject and assigning its agent.
       required:
         - issuer
@@ -79010,26 +79955,6 @@ components:
           $ref: '#/components/schemas/PromptTemplate'
       required:
         - template
-    CreateQueryRequestBody:
-      type: object
-      properties:
-        dataset:
-          type: string
-          description: Catalog dataset the query asks
-          minLength: 1
-        name:
-          type: string
-          description: Display name, at most 200 characters
-          minLength: 1
-          maxLength: 200
-        spec:
-          type: object
-          description: Builder state. Validated against the catalog on save.
-          additionalProperties: true
-      required:
-        - name
-        - dataset
-        - spec
     CreateRemoteSessionClientForm:
       type: object
       properties:
@@ -79326,7 +80251,7 @@ components:
       properties:
         action:
           type: string
-          description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).'
+          description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
           default: flag
           enum:
             - flag
@@ -79801,6 +80726,35 @@ components:
         - slug
         - authn_challenge_mode
         - session_duration_hours
+    CreateWidgetRequestBody:
+      type: object
+      properties:
+        dataset:
+          type: string
+          description: Catalog dataset the widget asks
+          minLength: 1
+        description:
+          type: string
+          description: What the widget is for, at most 2000 characters
+          maxLength: 2000
+        name:
+          type: string
+          description: Display name, at most 200 characters
+          minLength: 1
+          maxLength: 200
+        query:
+          type: object
+          description: The question. Validated against the catalog on save.
+          additionalProperties: true
+        visualization:
+          type: object
+          description: How the question is drawn. Checked against the question on save.
+          additionalProperties: true
+      required:
+        - name
+        - dataset
+        - query
+        - visualization
     CreditUsageResponseBody:
       type: object
       properties:
@@ -80921,6 +81875,15 @@ components:
           format: uuid
       required:
         - remote_mcp_server_id
+    DismissOktaServerSuggestionRequestBody:
+      type: object
+      properties:
+        registry_entry_id:
+          type: string
+          description: Catalog entry of the suggestion to dismiss.
+          format: uuid
+      required:
+        - registry_entry_id
     DismissSkillSuggestionRequestBody:
       type: object
       properties:
@@ -80969,6 +81932,9 @@ components:
     DistributionPlugin:
       type: object
       properties:
+        auto_created:
+          type: boolean
+          description: Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.
         description:
           type: string
         id:
@@ -80983,6 +81949,7 @@ components:
         - id
         - name
         - is_default
+        - auto_created
     DomainDNSConfig:
       type: object
       properties:
@@ -80996,6 +81963,15 @@ components:
           description: The CNAME target subdomain custom domains should point at, if configured
       required:
         - a_records
+    DuplicateWidgetRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The widget to copy
+          format: uuid
+      required:
+        - id
     EmployeeDataFlowEdge:
       type: object
       properties:
@@ -81435,60 +82411,6 @@ components:
           example: dev@acme.corp
       required:
         - email
-    ExploreListQueriesResult:
-      type: object
-      properties:
-        queries:
-          type: array
-          items:
-            $ref: '#/components/schemas/ExploreQuery'
-          description: Queries in the project, most recently updated first
-      required:
-        - queries
-    ExploreQuery:
-      type: object
-      properties:
-        created_at:
-          type: string
-          format: date-time
-        created_by_user_id:
-          type: string
-          description: Who saved it, when known
-        dataset:
-          type: string
-          description: The catalog dataset the query asks
-          example: sessions
-        id:
-          type: string
-          format: uuid
-        invalid_reason:
-          type: string
-          description: Present when the saved spec no longer compiles against the catalog, naming what is wrong, so a catalog change fails visibly rather than returning wrong numbers.
-        name:
-          type: string
-          description: 'Display name. Not unique: two people saving the same name is normal.'
-        organization_id:
-          type: string
-        project_id:
-          type: string
-          format: uuid
-        spec:
-          type: object
-          description: 'Builder state: chart type, window, dimensions, measures, filters, grain, sort and limit. The client interprets it; the server validates the parts the catalog knows.'
-          additionalProperties: true
-        updated_at:
-          type: string
-          format: date-time
-      description: A named, saved question against a catalog dataset, kept with the builder state it was built with. Belongs to a project and is visible to everyone in the organization.
-      required:
-        - id
-        - project_id
-        - organization_id
-        - name
-        - dataset
-        - spec
-        - created_at
-        - updated_at
     ExportMcpMetadataRequestBody:
       type: object
       properties:
@@ -86585,7 +87507,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OktaResourceConnectionServer'
-          description: Pending servers first, then by name. By default only servers with a step left; include_all adds connected and not-applicable ones.
+          description: Pending servers first, then by name. By default only servers with a step left; include_all adds connected, verified and not-applicable ones.
         total_count:
           type: integer
           description: Eligible servers before filtering.
@@ -86600,6 +87522,34 @@ components:
         - total_count
         - undiscovered_count
         - agent_recorded
+    ListOktaServerSuggestionsResult:
+      type: object
+      properties:
+        connection_id:
+          type: string
+          description: The organization's identity provider connection the snapshot came from.
+          format: uuid
+        open_count:
+          type: integer
+          description: Suggestions the administrator has not acted on.
+          format: int64
+        snapshot_at:
+          type: string
+          description: When the applications snapshot was last synced; the suggestions are only as fresh as it.
+          format: date-time
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/OktaServerSuggestion'
+          description: Open suggestions first, then by server name. By default only open ones; include_all adds dismissed and installed.
+        total_count:
+          type: integer
+          description: Matching entries before filtering.
+          format: int64
+      required:
+        - suggestions
+        - open_count
+        - total_count
     ListOrganizationMcpServersResult:
       type: object
       properties:
@@ -87140,7 +88090,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SetupTask'
-          description: Setup tasks in catalog order.
+          description: Setup tasks in catalog order. A group precedes the cards under it.
       required:
         - tasks
     ListShadowMCPInventoryResult:
@@ -87739,6 +88689,16 @@ components:
       required:
         - package
         - versions
+    ListWidgetsResult:
+      type: object
+      properties:
+        widgets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Widget'
+          description: Widgets in the project, most recently updated first
+      required:
+        - widgets
     LiteLLMInstance:
       type: object
       properties:
@@ -89113,6 +90073,16 @@ components:
         ingress:
           $ref: '#/components/schemas/NetworkIngress'
       description: The organization's active private network ingress, when configured.
+    NewClientCallbackURLResult:
+      type: object
+      properties:
+        callback_url:
+          type: string
+          description: The redirect URI to register on the upstream provider's OAuth app.
+          format: uri
+      description: The redirect URI a newly created remote_session_client registers.
+      required:
+        - callback_url
     NotModified:
       type: object
       properties:
@@ -89579,6 +90549,14 @@ components:
         audience:
           type: string
           description: The resource app's Cross App Access issuer URL as configured in the identity provider; the audience of the identity assertion. Present once confirmed.
+        broken_reason:
+          type: string
+          description: 'Present when state is broken. audience_mismatch: legacy value, no longer emitted; the administrator-confirmed Okta audience may differ from the server''s authorization server issuer; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app''s client authentication; downstream_rejected: the identity provider issued the assertion but the server''s authorization server refused it.'
+          enum:
+            - audience_mismatch
+            - scope_not_allowed
+            - client_auth_failed
+            - downstream_rejected
         client_binding:
           type: string
           description: 'bound: an explicit identity chaining binding selects the client; single: the one client attached to the authorization server; ambiguous: more than one candidate and no single binding; missing: no client registered yet.'
@@ -89610,6 +90588,19 @@ components:
           description: 'no_idjag: the server''s authorization server metadata does not advertise the identity assertion grant.'
           enum:
             - no_idjag
+        observed_at:
+          type: string
+          description: When the exchange behind observed_result started.
+          format: date-time
+        observed_result:
+          type: string
+          description: What the latest identity chaining exchange since confirmation showed. connection_missing is inferred from the identity provider's invalid_target error.
+          enum:
+            - verified
+            - downstream_rejected
+            - connection_missing
+            - scope_not_allowed
+            - client_auth_failed
         okta_application_id:
           type: string
           description: The identity provider app instance the administrator picked for this upstream, when recorded.
@@ -89640,12 +90631,14 @@ components:
           type: string
         state:
           type: string
-          description: 'Derived readiness. not_applicable: see not_applicable_reason; needs_agent: no AI agent recorded on the connection; needs_connection: the agent-to-resource connection has not been confirmed for this server''s upstream; connected: the administrator confirmed it. Whether the exchange works is not known here.'
+          description: 'Derived readiness. not_applicable: see not_applicable_reason; needs_agent: no AI agent recorded on the connection; needs_connection: the agent-to-resource connection has not been confirmed for this server''s upstream, or an exchange since confirmation found it missing; broken: confirmed but known not to work, see broken_reason; connected: the administrator confirmed it and no conclusive exchange has run since; verified: an exchange since confirmation succeeded.'
           enum:
             - not_applicable
             - needs_agent
             - needs_connection
+            - broken
             - connected
+            - verified
       description: One MCP server and the Okta resource connection recorded for its upstream, with the derived Cross App Access state and the exact values the administrator enters in the identity provider console. Servers that share an upstream resource share one Okta resource connection.
       required:
         - mcp_server_id
@@ -89658,6 +90651,141 @@ components:
         - resource_indicator
         - scopes
         - client_binding
+    OktaServerSuggestion:
+      type: object
+      properties:
+        description:
+          type: string
+        dismissed_at:
+          type: string
+          description: When the suggestion was dismissed; present while a dismissal is recorded, whatever the state.
+          format: date-time
+        documentation_url:
+          type: string
+          description: Public documentation URL when the entry has one.
+        icon_url:
+          type: string
+          description: HTTPS URL of the entry's icon when it has one.
+          format: uri
+        installed_urls:
+          type: array
+          items:
+            type: string
+          description: The entry URLs the organization already fronts with a live MCP server.
+        okta_applications:
+          type: array
+          items:
+            $ref: '#/components/schemas/OktaServerSuggestionApplication'
+          description: Matching Okta application instances, by label.
+        registry_entry_id:
+          type: string
+          description: Catalog entry id; the key for dismiss and restore.
+          format: uuid
+        remotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/OktaServerSuggestionRemote'
+          description: Remote endpoints in catalog order.
+        server_name:
+          type: string
+          description: Catalog server name, for example io.example/linear; also the registry specifier for catalog lookups.
+        state:
+          type: string
+          description: 'open: not yet acted on; dismissed: an administrator dismissed it; installed: a live MCP server in one of the organization''s projects fronts one of the entry''s URLs (trailing slashes ignored; legacy deployment attachments are not consulted). Installed outranks dismissed.'
+          enum:
+            - open
+            - dismissed
+            - installed
+        supports_dcr:
+          type: boolean
+          description: Whether the catalog records that the server's authorization server supports OAuth dynamic client registration; install flows default to per-user OAuth when true.
+        title:
+          type: string
+          description: Catalog display title when the entry has one.
+        xaa_issuer:
+          type: string
+          description: Vendor Issuer URL for Cross App Access when the catalog knows it.
+      description: A Gram-owned catalog entry whose Okta mapping matches at least one active, assigned application in the organization's Okta snapshot. Suggest only; nothing is created until the administrator accepts through the remote MCP install flow.
+      required:
+        - registry_entry_id
+        - server_name
+        - description
+        - remotes
+        - okta_applications
+        - state
+        - installed_urls
+        - supports_dcr
+    OktaServerSuggestionApplication:
+      type: object
+      properties:
+        group_assignments:
+          type: integer
+          description: Live group assignments.
+          format: int64
+        label:
+          type: string
+          description: Admin-facing label. Admin-editable; never a key.
+        name:
+          type: string
+          description: Okta application template name; the key that matched the catalog entry.
+        okta_app_id:
+          type: string
+          description: Okta application id.
+        sign_on_mode:
+          type: string
+        user_assignments:
+          type: integer
+          description: Live direct and group-derived user assignments.
+          format: int64
+        xaa_supported:
+          type: boolean
+          description: Whether this instance's sign-on mode supports Cross App Access. False for password-vault (SWA) and bookmark instances.
+      description: One synced Okta application instance that maps to the suggested server.
+      required:
+        - okta_app_id
+        - label
+        - name
+        - sign_on_mode
+        - xaa_supported
+        - user_assignments
+        - group_assignments
+    OktaServerSuggestionRemote:
+      type: object
+      properties:
+        headers:
+          type: array
+          items:
+            $ref: '#/components/schemas/OktaServerSuggestionRemoteHeader'
+          description: Headers the endpoint expects, in catalog order.
+        type:
+          type: string
+          description: Transport type, for example streamable-http.
+        url:
+          type: string
+          description: Endpoint URL to create the remote MCP server with.
+          format: uri
+      description: One remote endpoint of the suggested server, as the catalog entry lists it. The administrator picks one when there are several.
+      required:
+        - type
+        - url
+        - headers
+    OktaServerSuggestionRemoteHeader:
+      type: object
+      properties:
+        description:
+          type: string
+        is_required:
+          type: boolean
+        is_secret:
+          type: boolean
+        name:
+          type: string
+          description: Header name.
+      description: A header the remote endpoint expects, as the catalog entry lists it; the install flow collects required ones from the administrator.
+      required:
+        - name
+        - is_required
+        - is_secret
     OnboardingHookEvent:
       type: object
       properties:
@@ -90778,6 +91906,9 @@ components:
           items:
             $ref: '#/components/schemas/PluginAssignment'
           description: Role/user assignments.
+        auto_created:
+          type: boolean
+          description: Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.
         created_at:
           type: string
           format: date-time
@@ -90817,6 +91948,7 @@ components:
         - id
         - name
         - slug
+        - auto_created
         - agent_plugins_v1_compatible
         - created_at
         - updated_at
@@ -91179,6 +92311,9 @@ components:
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
+        automatic_role_distribution:
+          type: boolean
+          description: Whether the staff rollout for automatic role plugin setup is enabled
         consent_tool_filtering_enabled:
           type: boolean
           description: Whether MCP consent screens offer the tool filtering picker for the organization
@@ -91253,6 +92388,7 @@ components:
         - consent_tool_filtering_enabled
         - session_portability_enabled
         - network_ingress_enabled
+        - automatic_role_distribution
         - device_agent
     Project:
       type: object
@@ -92315,8 +93451,10 @@ components:
       properties:
         allow_wildcard_admission:
           type: boolean
-          description: Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to false, and is re-checked on every lookup, so clearing it revokes wildcard rules already written.
-          default: false
+          description: Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Checked when a wildcard rule is admitted and again on every lookup, so clearing it makes wildcard rules already written inert immediately.
+        description:
+          type: string
+          description: What the platform is and what runs on it, in the operator's words. Trimmed on write; blank is stored as none. At most 500 characters after trimming.
         issuer:
           type: string
           description: The issuer identifier the assertion's iss claim must carry. Must be an https URL on a fully qualified domain name, with no query or fragment.
@@ -92332,8 +93470,13 @@ components:
           maxLength: 100
         project_scoped:
           type: boolean
-          description: Register the issuer for the selected project alone rather than the whole organization. Defaults to false.
+          description: Register the issuer for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.
           default: false
+        tags:
+          type: array
+          items:
+            type: string
+          description: Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
       description: Form for trusting an external workload issuer.
       required:
         - name
@@ -92521,6 +93664,10 @@ components:
         audience:
           type: string
           description: Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.
+        callback_url:
+          type: string
+          description: The redirect URI this client registers with its upstream provider. It never changes after the client is created. Absent on global clients.
+          format: uri
         client_id:
           type: string
           description: The client_id used to identify this client at the issuer's token and authorization endpoints.
@@ -92551,6 +93698,9 @@ components:
           type: string
           description: The organization JSON Web Key Set attached to this client, managed through attachKeySet and detachKeySet. Null when no key set is attached.
           format: uuid
+        legacy_callback_url:
+          type: boolean
+          description: Whether the client was registered upstream with the legacy callback URL. The authorize leg then sends that URL and a JSON state instead of the current callback. Cleared when the client is rotated.
         organization_id:
           type: string
           description: The owning organization id. Empty for legacy rows not yet backfilled and global clients.
@@ -92601,6 +93751,7 @@ components:
         - remote_session_issuer_id
         - user_session_issuer_ids
         - client_id
+        - legacy_callback_url
         - created_at
         - updated_at
         - grant_types
@@ -93466,6 +94617,15 @@ components:
         - type
         - status_codes
         - content_types
+    RestoreOktaServerSuggestionRequestBody:
+      type: object
+      properties:
+        registry_entry_id:
+          type: string
+          description: Catalog entry of the suggestion to restore.
+          format: uuid
+      required:
+        - registry_entry_id
     RestoreSkillVersionRequestBody:
       type: object
       properties:
@@ -94030,7 +95190,7 @@ components:
       properties:
         action:
           type: string
-          description: 'Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session).'
+          description: 'Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
           default: flag
           enum:
             - flag
@@ -94927,9 +96087,16 @@ components:
         match:
           type: string
           description: The plaintext matched secret or sensitive data for this result. Empty string when the finding has no top-level match (e.g. a spans-only finding).
+        reveal_state:
+          type: string
+          description: Whether plaintext was revealed or the MCP finding evidence is unavailable or expired.
+          enum:
+            - available
+            - evidence_not_stored
       required:
         - id
         - match
+        - reveal_state
     RiskUserBreakdownResult:
       type: object
       properties:
@@ -95198,6 +96365,57 @@ components:
         - name
         - delegated_grants_version
         - requested_grants
+    RotateObservabilityCredentialRequestBody:
+      type: object
+      properties:
+        previous_key_fate:
+          type: string
+          description: What happens to existing observability plugin hooks keys after the replacement is minted.
+          enum:
+            - revoke_immediately
+            - grace
+      required:
+        - previous_key_fate
+    RotateObservabilityCredentialResult:
+      type: object
+      properties:
+        key:
+          type: string
+          description: The newly minted hooks-scoped API key. Returned only on this response.
+        key_prefix:
+          type: string
+          description: The recognizable prefix of the new key.
+        marketplace_republished:
+          type: boolean
+          description: Whether the published marketplace was updated with the new credential.
+        marketplace_update_deferred:
+          type: boolean
+          description: True when a marketplace exists but could not be updated yet (for example the organization is not approved for the latest hooks version, or GitHub publishing is unavailable). Existing marketplace installs keep the previous credential until the marketplace is republished.
+        previous_key_fate:
+          type: string
+          description: What happened to previous observability plugin hooks keys.
+          enum:
+            - revoke_immediately
+            - grace
+        previous_keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/RotatedObservabilityKey'
+          description: Previous observability plugin hooks keys that were revoked or scheduled to expire.
+        previous_keys_expire_at:
+          type: string
+          description: The latest deadline among previous keys when previous_key_fate is grace. Individual keys can expire earlier, so this is an upper bound rather than a shared deadline; per-key deadlines are on previous_keys.
+          format: date-time
+        previous_keys_retired:
+          type: boolean
+          description: Whether the chosen fate was applied to the previous keys. False means the replacement was created and published but retiring the previous keys failed, so they are still valid and the rotation should be retried.
+      required:
+        - key
+        - key_prefix
+        - previous_key_fate
+        - previous_keys
+        - previous_keys_retired
+        - marketplace_republished
     RotateTunneledMcpServerKeyForm:
       type: object
       properties:
@@ -95220,6 +96438,27 @@ components:
       required:
         - server
         - tunnel_key
+    RotatedObservabilityKey:
+      type: object
+      properties:
+        expires_at:
+          type: string
+          description: When this key stops authenticating. A key already inside a shorter grace window keeps its earlier deadline, so this can precede the rotation's own deadline. Absent when the key was revoked immediately.
+          format: date-time
+        id:
+          type: string
+          description: The API key ID.
+          format: uuid
+        key_prefix:
+          type: string
+          description: The recognizable prefix of the previous key.
+        name:
+          type: string
+          description: The API key name.
+      required:
+        - id
+        - name
+        - key_prefix
     SaveRiskEvalReviewRequestBody:
       type: object
       properties:
@@ -96376,6 +97615,7 @@ components:
             - consent_tool_filtering
             - session_portability
             - network_ingress
+            - automatic-role-distribution
           maxLength: 60
         organization_id:
           type: string
@@ -96662,12 +97902,18 @@ components:
         description:
           type: string
           description: Task description.
+        group:
+          type: boolean
+          description: 'True for a group that nests cards. A group has no card of its own: it is hidden when every card under it is, done when every visible card is, and cannot be assigned or marked by hand.'
         hidden:
           type: boolean
           description: Whether a platform administrator hid the task.
         key:
           type: string
           description: Stable code-owned task key.
+        parent_key:
+          type: string
+          description: Key of the group this card sits under. Absent for a top-level card or a group.
         status:
           type: string
           description: Effective task status.
@@ -96687,6 +97933,7 @@ components:
         - completed_by_fact
         - blocked_by
         - hidden
+        - group
     SetupTaskAssignee:
       type: object
       properties:
@@ -102398,31 +103645,6 @@ components:
           $ref: '#/components/schemas/PromptTemplate'
       required:
         - template
-    UpdateQueryRequestBody:
-      type: object
-      properties:
-        dataset:
-          type: string
-          description: Catalog dataset the query asks
-          minLength: 1
-        id:
-          type: string
-          description: The query to update
-          format: uuid
-        name:
-          type: string
-          description: Display name, at most 200 characters
-          minLength: 1
-          maxLength: 200
-        spec:
-          type: object
-          description: Builder state. Validated against the catalog on save.
-          additionalProperties: true
-      required:
-        - id
-        - name
-        - dataset
-        - spec
     UpdateRemoteSessionClientForm:
       type: object
       properties:
@@ -102438,6 +103660,9 @@ components:
           type: string
           description: The remote_session_client id.
           format: uuid
+        legacy_callback_url:
+          type: boolean
+          description: Platform admins only. Set true to run the client in compatibility mode with the legacy callback URL, or false to migrate it to the current callback URL once that URL is registered with the identity provider. Omit to leave unchanged.
         scope:
           type: array
           items:
@@ -102626,7 +103851,7 @@ components:
       properties:
         action:
           type: string
-          description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).'
+          description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
           enum:
             - flag
             - warn
@@ -103111,6 +104336,89 @@ components:
           type: string
           description: Rename the slug.
       description: Form for updating a user_session_issuer. All non-id fields are optional patches.
+      required:
+        - id
+    UpdateWidgetRequestBody:
+      type: object
+      properties:
+        dataset:
+          type: string
+          description: Catalog dataset the widget asks
+          minLength: 1
+        description:
+          type: string
+          description: What the widget is for, at most 2000 characters
+          maxLength: 2000
+        id:
+          type: string
+          description: The widget to update
+          format: uuid
+        name:
+          type: string
+          description: Display name, at most 200 characters
+          minLength: 1
+          maxLength: 200
+        query:
+          type: object
+          description: The question. Validated against the catalog on save.
+          additionalProperties: true
+        visualization:
+          type: object
+          description: How the question is drawn. Checked against the question on save.
+          additionalProperties: true
+      required:
+        - id
+        - name
+        - dataset
+        - query
+        - visualization
+    UpdateWorkloadIssuerForm:
+      type: object
+      properties:
+        description:
+          type: string
+          description: What the platform is and what runs on it, in the operator's words. Trimmed on write; blank clears it. At most 500 characters after trimming.
+        id:
+          type: string
+          description: The workload issuer id.
+          format: uuid
+        jwks_uri:
+          type: string
+          description: Where the issuer publishes the keys its assertions are signed with. Must be an https URL on a fully qualified domain name.
+          format: uri
+        name:
+          type: string
+          description: The label an operator works with. Unique within its tier.
+          minLength: 1
+          maxLength: 100
+        tags:
+          type: array
+          items:
+            type: string
+          description: Replaces the issuer's tags; an empty list clears them. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
+      description: Form for editing a trusted workload issuer. Every field but id is optional; an omitted field is left unchanged.
+      required:
+        - id
+    UpdateWorkloadSubjectForm:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: The agent whose policy the admitted workload inherits. Shared with any admission of the same subject under the same issuer at the other tier.
+          format: uuid
+        id:
+          type: string
+          description: The admission id.
+          format: uuid
+        name:
+          type: string
+          description: Optional label, for platforms whose subjects are not self-describing. Trimmed on write; blank clears it.
+        tags:
+          type: array
+          items:
+            type: string
+          description: Replaces the admission's tags; an empty list clears them. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
+      description: Form for editing an admitted workload subject. Every field but id is optional; an omitted field is left unchanged.
       required:
         - id
     UploadChatAttachmentResult:
@@ -104244,6 +105552,58 @@ components:
       required:
         - verified
         - message
+    Widget:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        created_by_user_id:
+          type: string
+          description: Who saved it, when known
+        dataset:
+          type: string
+          description: The catalog dataset the widget asks
+          example: sessions
+        description:
+          type: string
+          description: What the widget is for, when its creator said
+        id:
+          type: string
+          format: uuid
+        invalid_reason:
+          type: string
+          description: 'Present when the widget no longer works, naming what is wrong: a field the catalog dropped, or a chart that cannot draw the question. A catalog change fails visibly rather than returning wrong numbers.'
+        name:
+          type: string
+          description: 'Display name. Not unique: two people saving the same name is normal.'
+        organization_id:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        query:
+          type: object
+          description: 'The question: window, grain, dimensions, measures, filters, order and limit. Planned against the catalog on save and on read.'
+          additionalProperties: true
+        updated_at:
+          type: string
+          format: date-time
+        visualization:
+          type: object
+          description: 'How the question is drawn: a chart type and its options. The client owns the chart vocabulary; the server checks only that the chart can draw the question.'
+          additionalProperties: true
+      description: A named question against a catalog dataset together with how it is drawn. Belongs to a project and is visible to everyone in the organization. Widgets are the building block dashboards will place.
+      required:
+        - id
+        - project_id
+        - organization_id
+        - name
+        - dataset
+        - query
+        - visualization
+        - created_at
+        - updated_at
     WorkOSDomainVerificationIntentOptions:
       type: object
       properties:
@@ -104358,6 +105718,11 @@ components:
         subject:
           type: string
           description: The sub claim, exactly as stored.
+        tags:
+          type: array
+          items:
+            type: string
+          description: Free-form labels for finding the admitted workload. Empty rather than absent where none are set.
         updated_at:
           type: string
           format: date-time
@@ -104379,6 +105744,7 @@ components:
         - subject
         - match_kind
         - name
+        - tags
         - agent_id
         - agent_name
         - wildcard_active
@@ -104410,6 +105776,9 @@ components:
         created_at:
           type: string
           format: date-time
+        description:
+          type: string
+          description: What the platform is and what runs on it. Empty rather than absent where none is set.
         id:
           type: string
           description: The workload issuer id.
@@ -104429,6 +105798,11 @@ components:
         project_id:
           type: string
           description: The owning project id; empty for an organization-tier issuer.
+        tags:
+          type: array
+          items:
+            type: string
+          description: Free-form labels for grouping and filtering trusted platforms. Empty rather than absent where none are set.
         updated_at:
           type: string
           format: date-time
@@ -104440,7 +105814,9 @@ components:
         - name
         - issuer
         - jwks_uri
+        - description
         - allow_wildcard_admission
+        - tags
         - created_at
         - updated_at
     KillswitchCapabilityKey: {type: string, enum: [mcp_tool_calls]}
@@ -104585,8 +105961,6 @@ tags:
     description: Manage custom domains for gram.
   - name: environments
     description: Managing toolset environments.
-  - name: explore
-    description: 'Queries: the saved questions Explore keeps. Explore''s only server-side surface; everything it shows comes from the analytics service.'
   - name: externalCredentials
     description: Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.
   - name: externalKeys
@@ -104633,6 +106007,8 @@ tags:
     description: Manage an organization's private network ingress desired state.
   - name: oktaResourceConnections
     description: 'Okta resource connections per MCP server: what the organization administrator still has to do in the identity provider console, what they confirmed, and what the exchange path observed. Advisory only; the exchange path never consults it.'
+  - name: oktaServerSuggestions
+    description: 'MCP servers suggested from the organization''s Okta applications: catalog entries whose staff-curated Okta mapping matches a synced, assigned application. Administrators accept by creating the server through the usual remote MCP flow, or dismiss; dismissals are remembered per organization and audited.'
   - name: organizations
     description: Organization membership, invitations, and directory.
   - name: otel
@@ -104715,6 +106091,8 @@ tags:
     description: Manage organization-owned user_session_issuer records inherited by every project in the caller's organization.
   - name: userSessions
     description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
+  - name: widgets
+    description: 'Widgets: Explore''s saved questions, each kept with the chart that draws it.'
   - name: workloadIdentities
     description: 'Configure which workloads an organization recognises as its own: the issuers it trusts, the subjects those issuers may present, and the agent each admitted workload inherits its policy from.'
   - name: variations

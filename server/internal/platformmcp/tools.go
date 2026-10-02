@@ -215,13 +215,35 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"Before moving any MCP server or gateway to dual or private_only, call get_network_ingress. If ready_for_private_access is false, report its next_action and present its exact setup_url instead of attempting the change; Tailscale credentials are entered only in the dashboard, never in chat. Private access restricts who can reach the AI Control Plane endpoint over the organization's tailnet; it does not change where the upstream MCP server is hosted.",
 			"Creating a data export is a mutation: first show the exact project, endpoint, data source, enabled state, and sensitive-data policy, then ask for explicit confirmation. Never request or accept authorization header values in chat; create the export without headers and send the user to the returned management URL to add authentication securely.",
 			"Dismissing Watchdog findings as false positives, or restoring them, is a mutation: name the exact project and the exact findings, wait for explicit confirmation, then report which findings changed, which were already in that state, and which were not found in the project. A dismissal suppresses only the findings named; a risk exclusion is the tool for a whole class of findings.",
+			"Project-wide chat listings are metadata only: when a conversation was active, how long it ran, which app produced it, whether risk analysis found anything, and a masked participant. Never present a listed chat's title or what was said as known, and send the administrator to the dashboard to read a transcript. Personal session recall is separate: it may present the caller's own sessions by title and their own redacted handoff digest.",
 		}, "\n\n"),
 		PageSize: 32,
+		// Declared rather than inferred. Left unset, the SDK advertises
+		// listChanged for tools and resources because some are registered, which
+		// is a promise this runtime cannot keep: it serves POSTs statelessly, so
+		// every request is its own session and there is no session alive to
+		// receive a list_changed notification. A client that believes the promise
+		// opens a subscriptions/listen stream (protocol 2026-07-28, SEP-2575),
+		// which the SDK answers by blocking on the request context until the peer
+		// goes away — an idle connection the proxy eventually reads as an upstream
+		// timeout. Advertising false lets that stream return immediately instead.
+		Capabilities: &mcp.ServerCapabilities{
+			Tools:     &mcp.ToolCapabilities{ListChanged: false},
+			Resources: &mcp.ResourceCapabilities{ListChanged: false},
+			// Preserved because the SDK only supplies its logging default when
+			// Capabilities is nil, and this server advertised it before.
+			Logging: &mcp.LoggingCapabilities{},
+		},
 	})
 
 	reg := newRegistrar(server)
 
 	registerReadTools(reg, reader, cursorKeyMaterial)
+	var xaaReadiness *xaaReadinessService
+	if postgresReader, ok := reader.(*PostgresReader); ok {
+		xaaReadiness = postgresReader.xaaReadiness
+	}
+	registerXAAReadinessTool(reg, xaaReadiness)
 	var connectionMutationService *MCPConnectionMutationService
 	if len(connectionMutations) > 0 {
 		connectionMutationService = connectionMutations[0]
@@ -401,6 +423,19 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	} else {
 		registerSessionRecallTools(reg, sessionRecall)
 	}
+	// Registered beside session recall: recall serves a caller their own
+	// transcript as a digest, the listing serves an administrator every chat's
+	// metadata, and the two together are the whole of what this server says
+	// about conversations.
+	var chatMetadata *ChatMetadataService
+	if postgresReader, ok := reader.(*PostgresReader); ok {
+		chatMetadata = postgresReader.chatMetadata
+	}
+	if !chatMetadata.valid() {
+		registerUnavailableChatMetadataTools(reg)
+	} else {
+		registerChatMetadataTools(reg, chatMetadata)
+	}
 	if feedback == nil {
 		addTool(reg, &mcp.Tool{
 			Name:        "send_platform_mcp_feedback",
@@ -542,8 +577,6 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 		result = operationBudgetResult{Code: unavailableCode, Reason: "unsupported_lifecycle_target", Message: "This MCP server was not set up through this platform, so it cannot be turned on or off from here. Manage it in the dashboard instead."}
 	case errors.Is(err, ErrOperationBudgetUnavailable), errors.Is(err, ErrRegistrationUnavailable):
 		result = operationBudgetResult{Code: unavailableCode, Message: "That is temporarily unavailable. Try again shortly."}
-	case errors.Is(err, ErrRegistrationCap):
-		result = operationBudgetResult{Code: "conflict", Reason: "active_registration_cap", Message: "This project already holds as many MCP servers as it can. Remove one, or use another project."}
 	case errors.Is(err, ErrRegistrationConflict):
 		result = operationBudgetResult{Code: "conflict", Message: "That MCP server conflicts with something already set up in this project."}
 	case errors.Is(err, ErrTargetIneligible):

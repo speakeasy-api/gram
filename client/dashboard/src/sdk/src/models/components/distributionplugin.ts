@@ -12,6 +12,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  * Minimal plugin metadata for distributing an authorized skill. Does not expose configuration or assignments.
  */
 export type DistributionPlugin = {
+  /**
+   * Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.
+   */
+  autoCreated: boolean;
   description?: string | undefined;
   id: string;
   isDefault: boolean;
@@ -24,6 +28,7 @@ export const DistributionPlugin$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    auto_created: z.boolean(),
     description: z.optional(z.string()),
     id: z.string(),
     is_default: z.boolean(),
@@ -31,6 +36,7 @@ export const DistributionPlugin$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "auto_created": "autoCreated",
       "is_default": "isDefault",
     });
   }),

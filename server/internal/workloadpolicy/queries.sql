@@ -45,8 +45,25 @@ WHERE organization_id = @organization_id
 ORDER BY (project_id IS NULL) DESC, name;
 
 -- name: CreateWorkloadIssuer :one
-INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission)
-VALUES (@organization_id, @project_id, @name, @issuer, @jwks_uri, @allow_wildcard_admission)
+INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission)
+VALUES (@organization_id, @project_id, @name, sqlc.narg(description), @tags, @issuer, @jwks_uri, @allow_wildcard_admission)
+RETURNING *;
+
+-- name: UpdateWorkloadIssuer :one
+-- Writes every editable field, so the caller merges an edit into the row it
+-- read under LockWorkloadIssuerForWrite. Scoped as GetWorkloadIssuer is: a row
+-- the caller cannot list is a row it cannot edit. The issuer URL and the
+-- wildcard setting are deliberately absent.
+UPDATE workload_issuers
+SET name = @name,
+    description = sqlc.narg(description),
+    tags = @tags,
+    jwks_uri = @jwks_uri,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND (project_id IS NULL OR project_id = @project_id)
+  AND id = @id
+  AND deleted IS FALSE
 RETURNING *;
 
 -- name: SoftDeleteWorkloadIssuer :one
@@ -106,8 +123,23 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE;
 
 -- name: CreateWorkloadAdmission :one
-INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind, name)
-VALUES (@organization_id, @project_id, @workload_issuer_id, @subject, @match_kind, @name)
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind, name, tags)
+VALUES (@organization_id, @project_id, @workload_issuer_id, @subject, @match_kind, @name, @tags)
+RETURNING *;
+
+-- name: UpdateWorkloadAdmission :one
+-- Writes every editable field, so the caller merges an edit into the row it
+-- read under LockWorkloadIssuerForWrite. Scoped as GetWorkloadAdmission is: a
+-- row the caller cannot list is a row it cannot edit. The subject, match kind,
+-- issuer, and tier are deliberately absent.
+UPDATE workload_identity_admissions
+SET name = sqlc.narg(name),
+    tags = @tags,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND (project_id IS NULL OR project_id = @project_id)
+  AND deleted IS FALSE
 RETURNING *;
 
 -- name: SoftDeleteWorkloadAdmission :one

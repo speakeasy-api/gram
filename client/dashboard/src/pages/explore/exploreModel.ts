@@ -10,7 +10,7 @@ import type { AnalyticsQueryResult } from "@gram/client/models/components/analyt
 // fields each has, what each field can be filtered or aggregated by. Nothing
 // here knows a dataset by name, so a new dataset ships with no client change.
 
-export type ChartType = "line" | "area" | "bar" | "table" | "number";
+export type ChartType = "line" | "area" | "bar" | "ranked" | "table" | "number";
 export type WindowPreset = "1h" | "24h" | "7d" | "30d" | "90d";
 export type Grain = NonNullable<AnalyticsQueryPayload["grain"]>;
 export type MeasureOp = AnalyticsMeasure["op"];
@@ -33,6 +33,7 @@ export const CHART_TYPE_OPTIONS: { value: ChartType; label: string }[] = [
   { value: "line", label: "Line" },
   { value: "area", label: "Area" },
   { value: "bar", label: "Bar" },
+  { value: "ranked", label: "Ranked" },
   { value: "table", label: "Table" },
   { value: "number", label: "Number" },
 ];
@@ -77,9 +78,15 @@ export interface ExploreSpec {
   measures: MeasureDraft[];
   filters: FilterDraft[];
   dimensions: string[];
-  /** Alias of the measure the summary sorts by; "" keeps the group order. */
+  /**
+   * Alias of the measure a whole-window result sorts by; "" keeps the group
+   * order. A timeseries chart is in time order and ignores it.
+   */
   orderBy: string;
-  /** Row cap for the summary; 0 defers to the server default. */
+  /**
+   * Row cap for a whole-window result; 0 defers to the server default. A
+   * timeseries chart is capped at MAX_LIMIT instead.
+   */
   limit: number;
   window: WindowPreset;
   chartType: ChartType;
@@ -167,6 +174,10 @@ const MEASURE_OP_ORDER: MeasureOp[] = [
   "p99",
 ];
 
+export function isMeasureOp(value: unknown): value is MeasureOp {
+  return MEASURE_OP_ORDER.some((op) => op === value);
+}
+
 /**
  * The aggregations a dataset admits: count (every dataset), then every op
  * at least one measure field declares.
@@ -199,8 +210,18 @@ export const FILTER_OPERATOR_LABELS: Record<FilterOperator, string> = {
   in: "is any of",
 };
 
-function isFilterOperator(operator: string): operator is FilterOperator {
-  return operator in FILTER_OPERATOR_LABELS;
+export function isFilterOperator(value: unknown): value is FilterOperator {
+  return (
+    typeof value === "string" && Object.hasOwn(FILTER_OPERATOR_LABELS, value)
+  );
+}
+
+export function isWindowPreset(value: unknown): value is WindowPreset {
+  return WINDOW_OPTIONS.some((option) => option.value === value);
+}
+
+export function isChartType(value: unknown): value is ChartType {
+  return CHART_TYPE_OPTIONS.some((option) => option.value === value);
 }
 
 /**
@@ -264,17 +285,22 @@ export function completeMeasures(drafts: MeasureDraft[]): MeasureDraft[] {
 /** At most this many values per filter, matching the analytics design. */
 export const MAX_FILTER_VALUES = 100;
 
+/** A filter's values as the query sends them: trimmed, non-blank, once each. */
+function distinctValues(values: string[]): string[] {
+  return values
+    .map((value) => value.trim())
+    .filter(
+      (value, index, all) => value !== "" && all.indexOf(value) === index,
+    );
+}
+
 export function completeFilters(drafts: FilterDraft[]): AnalyticsFilter[] {
   // The server takes at most this many values per filter and rejects the
   // whole query past it, so the builder never asks for more.
   const out: AnalyticsFilter[] = [];
   for (const draft of drafts) {
     if (draft.field === "") continue;
-    const values = draft.values
-      .map((value) => value.trim())
-      .filter(
-        (value, index, all) => value !== "" && all.indexOf(value) === index,
-      );
+    const values = distinctValues(draft.values);
     if (values.length === 0) continue;
     out.push({
       field: draft.field,
@@ -332,6 +358,77 @@ export function initialSpec(datasets: AnalyticsDataset[]): ExploreSpec | null {
   return first ? specForDataset(first) : null;
 }
 
+/**
+ * What a spec asks for that the catalog no longer offers, naming the first
+ * missing piece, or "" when every part of it still resolves. Rows still
+ * being composed — a measure waiting on its field, a filter with no field
+ * yet — are builder state, not breakage, so they pass.
+ */
+export function specProblem(
+  datasets: AnalyticsDataset[],
+  spec: ExploreSpec,
+): string {
+  const dataset = findDataset(datasets, spec.dataset);
+  if (!dataset) return `dataset "${spec.dataset}" does not exist`;
+
+  const ops = opsForDataset(dataset);
+  for (const measure of spec.measures) {
+    if (!ops.includes(measure.op)) {
+      return `${spec.dataset} has no ${measure.op} aggregation`;
+    }
+    // Count takes no field, and a query run would drop one silently.
+    if (measure.op === "count") {
+      if (measure.field !== "") return "count takes no field";
+      continue;
+    }
+    if (measure.field === "") continue;
+    const fields = fieldsForOp(dataset, measure.op).map((field) => field.name);
+    if (!fields.includes(measure.field)) {
+      return `field "${measure.field}" cannot be aggregated by ${measure.op} in ${spec.dataset}`;
+    }
+  }
+
+  // The builder never asks for more dimensions than the cap or one twice,
+  // so a spec that does was not made by it.
+  if (
+    spec.dimensions.length > MAX_DIMENSIONS ||
+    new Set(spec.dimensions).size !== spec.dimensions.length
+  ) {
+    return `query asks for duplicate or more than ${MAX_DIMENSIONS} dimensions`;
+  }
+  const dimensions = dimensionFields(dataset).map((field) => field.name);
+  for (const dimension of spec.dimensions) {
+    if (!dimensions.includes(dimension)) {
+      return `field "${dimension}" is not a dimension of ${spec.dataset}`;
+    }
+  }
+
+  for (const filter of spec.filters) {
+    if (filter.field === "") continue;
+    // Past these bounds the query run would silently drop values, so the
+    // spec is refused rather than answered as a different question.
+    const values = distinctValues(filter.values);
+    if (
+      values.length > MAX_FILTER_VALUES ||
+      (filter.operator === "equals" && values.length > 1)
+    ) {
+      return `filter "${filter.field}" has too many values`;
+    }
+    const field = fieldByName(dataset, filter.field);
+    if (!operatorsForField(field).includes(filter.operator)) {
+      return `field "${filter.field}" cannot be filtered by ${filter.operator} in ${spec.dataset}`;
+    }
+  }
+
+  if (
+    spec.orderBy !== "" &&
+    !completeMeasures(spec.measures).map(measureAlias).includes(spec.orderBy)
+  ) {
+    return `order by "${spec.orderBy}" names no measure in the query`;
+  }
+  return "";
+}
+
 /** Parse the LIMIT control's text into a spec limit (0 = server default). */
 export function parseLimit(raw: string): number {
   const parsed = Number(raw);
@@ -353,23 +450,18 @@ export function queryDimensions(spec: ExploreSpec): string[] {
   return spec.dimensions.slice(0, MAX_DIMENSIONS);
 }
 
-/**
- * The two shapes a spec is asked in. A timeseries chart needs bucketed rows;
- * the summary table under it, and every other chart, needs the whole-window
- * figures the caller's order and limit apply to.
- */
-export type QueryShape = "chart" | "summary";
-
-/** Whether the spec draws a bucketed chart, and so needs the chart shape. */
+/** Whether the spec draws a bucketed timeseries over at least one measure. */
 export function hasChartShape(spec: ExploreSpec): boolean {
   return isTimeseries(spec.chartType) && !isRowsMode(spec);
 }
 
-/** Build the query the spec describes, in one of its shapes. */
-export function queryBodyFromSpec(
-  spec: ExploreSpec,
-  shape: QueryShape,
-): AnalyticsQueryPayload {
+/**
+ * Build the one query the spec runs. A timeseries chart asks for bucketed
+ * rows; every other chart asks for whole-window figures, which the order and
+ * limit apply to. Someone who wants the figures behind a timeseries switches
+ * the chart to a table.
+ */
+export function queryBodyFromSpec(spec: ExploreSpec): AnalyticsQueryPayload {
   const { from, to } = windowRange(spec.window);
   const measures = completeMeasures(spec.measures);
   const dimensions = queryDimensions(spec);
@@ -403,9 +495,9 @@ export function queryBodyFromSpec(
     })),
     filters,
   };
-  if (shape === "chart") {
+  if (hasChartShape(spec)) {
     // Buckets multiply rows: a day of hourly buckets over ten users is 240
-    // of them, so the cap is the server's maximum rather than the summary's
+    // of them, so the cap is the server's maximum rather than the builder's
     // limit. Bucketed rows come back in time order, so no order is sent.
     return { ...base, grain: autoGrain(spec.window), limit: MAX_LIMIT };
   }

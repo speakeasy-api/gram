@@ -3,6 +3,9 @@ package feature
 type Flag string
 
 const (
+	// FlagGramMCPCatalog temporarily selects the Gram MCP catalog per organization.
+	FlagGramMCPCatalog Flag = "gram-mcp-catalog"
+
 	FlagSpeakeasyOpenAPIParserV0 Flag = "speakeasy-openapi-parser-v0"
 	FlagClickhouseToolMetrics    Flag = "clickhouse-tool-metrics"
 	FlagAssistants               Flag = "assistants"
@@ -179,7 +182,8 @@ const (
 	// can't strand it on stale hooks.
 	FlagHooksRollout Flag = "hooks-rollout"
 
-	// FlagOktaConnections gates creating Okta connections while the integration is dogfooded.
+	// FlagOktaConnections gates the Okta integration while it is dogfooded:
+	// creating connections, resource connections and server suggestions.
 	FlagOktaConnections Flag = "okta-connections"
 )
 

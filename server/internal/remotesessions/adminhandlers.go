@@ -1092,6 +1092,9 @@ func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.Cr
 		LegacyCallbackUrl:               false,
 		JsonWebKeySetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		// Global clients are shared across organizations and stay on the
+		// pinned outbound callback origin.
+		CallbackBaseUrl: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create global remote session client").LogError(ctx, logger)
@@ -1229,7 +1232,9 @@ func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.Up
 		TokenEndpointAuthAudienceFormat: pgtype.Text{String: "", Valid: false},
 		Scope:                           payload.Scope,
 		Audience:                        conv.PtrToPGText(payload.Audience),
-		ID:                              clientID,
+		// Global clients were never registered under the legacy callback URL.
+		LegacyCallbackUrl: pgtype.Bool{Bool: false, Valid: false},
+		ID:                clientID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

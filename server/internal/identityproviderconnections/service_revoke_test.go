@@ -30,10 +30,12 @@ func listManagedLeftovers(t *testing.T, ctx context.Context, si *serviceInstance
 	require.NoError(t, err)
 
 	issuers, err := remotesessionsrepo.New(si.conn.conn).ListOrganizationRemoteSessionIssuers(ctx, remotesessionsrepo.ListOrganizationRemoteSessionIssuersParams{
-		OrganizationID: conv.ToPGText(si.orgID),
-		IncludeGlobal:  false,
-		Cursor:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		LimitValue:     100,
+		OrganizationID:         conv.ToPGText(si.orgID),
+		IncludeOrganizational:  true,
+		IncludeProjectSpecific: true,
+		IncludeGlobal:          false,
+		Cursor:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		LimitValue:             100,
 	})
 	require.NoError(t, err)
 	clients, err := remotesessionsrepo.New(si.conn.conn).ListOrganizationRemoteSessionClientsByIssuerID(ctx, remotesessionsrepo.ListOrganizationRemoteSessionClientsByIssuerIDParams{

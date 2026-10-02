@@ -17,13 +17,13 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/workos/workos-go/v6/pkg/events"
 	goahttp "goa.design/goa/v3/http"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -387,14 +387,7 @@ func TestCreateOrganization_SyncCommittingUnderTheSlugLockKeepsItsSlug(t *testin
 		done <- outcome{res: res, err: err}
 	}()
 
-	// The handler calls WorkOS before it opens its transaction, so a recorded
-	// name means it is at or past its first read of the organization and about
-	// to ask for the slug lock this test is holding. Committing earlier than
-	// that cannot fail the test, because the handler would then see the row in
-	// its first read and reach the same slug; it would only prove less.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, fake.names(), 1)
-	}, 10*time.Second, 10*time.Millisecond)
+	testenv.WaitForBackendsBlockedBy(t, ctx, conn, testenv.BackendPID(blocker), 1)
 
 	_, err := blockerQueries.UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
 		ID:          orgid.FromWorkOSID(workosOrgID),
@@ -486,7 +479,10 @@ func TestCreateOrganization_FailureAfterTheUpsertLeavesNothing(t *testing.T) {
 	// is on a feature name the handler supplies as a constant. Each test holds
 	// its own database clone, dropped when the test ends, so this reaches
 	// nothing else.
-	testenv.RejectWritesTo(t, ctx, conn, "organization_features")
+	// The source upsert now seeds its onboarding gate. Allow that initial
+	// write so the injected failure still exercises the later entitlement step.
+	err := repo.New(conn).RejectOrganizationEntitlementsFixture(ctx)
+	require.NoError(t, err)
 
 	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "rollback.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 	require.Error(t, err, "a failure seeding default entitlements must fail the request")

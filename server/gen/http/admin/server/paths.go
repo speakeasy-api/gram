@@ -107,6 +107,16 @@ func ListOrganizationActivityAdminPath() string {
 	return "/admin/organization.activity"
 }
 
+// ListUsersAdminPath returns the URL path to the admin service listUsers HTTP endpoint.
+func ListUsersAdminPath() string {
+	return "/admin/users.list"
+}
+
+// ListUserOrganizationsAdminPath returns the URL path to the admin service listUserOrganizations HTTP endpoint.
+func ListUserOrganizationsAdminPath() string {
+	return "/admin/users.organizations.list"
+}
+
 // ListOrganizationsAdminPath returns the URL path to the admin service listOrganizations HTTP endpoint.
 func ListOrganizationsAdminPath() string {
 	return "/admin/organizations.list"
@@ -180,16 +190,6 @@ func ResumeStripeSubscriptionAdminPath() string {
 // MarkEnterpriseTrialConvertedAdminPath returns the URL path to the admin service markEnterpriseTrialConverted HTTP endpoint.
 func MarkEnterpriseTrialConvertedAdminPath() string {
 	return "/admin/trial.convert"
-}
-
-// GetOrganizationOnboardingAdminPath returns the URL path to the admin service getOrganizationOnboarding HTTP endpoint.
-func GetOrganizationOnboardingAdminPath() string {
-	return "/admin/organization.onboarding"
-}
-
-// SetOrganizationOnboardingAdminPath returns the URL path to the admin service setOrganizationOnboarding HTTP endpoint.
-func SetOrganizationOnboardingAdminPath() string {
-	return "/admin/organization.onboarding"
 }
 
 // CreateGlobalIssuerAdminPath returns the URL path to the admin service createGlobalIssuer HTTP endpoint.
@@ -292,6 +292,16 @@ func GetSupportCoverageAdminPath() string {
 	return "/admin/supportCoverage.get"
 }
 
+// GetRegistryOktaCandidatesAdminPath returns the URL path to the admin service getRegistryOktaCandidates HTTP endpoint.
+func GetRegistryOktaCandidatesAdminPath() string {
+	return "/admin/registry.oktaCandidates"
+}
+
+// ListRegistryOktaUnmappedAdminPath returns the URL path to the admin service listRegistryOktaUnmapped HTTP endpoint.
+func ListRegistryOktaUnmappedAdminPath() string {
+	return "/admin/registry.oktaUnmapped"
+}
+
 // ListRegistryEntriesAdminPath returns the URL path to the admin service listRegistryEntries HTTP endpoint.
 func ListRegistryEntriesAdminPath() string {
 	return "/admin/registry.list"
@@ -315,4 +325,89 @@ func SaveRegistryEntryAdminPath() string {
 // SetRegistryEntryPublishedAdminPath returns the URL path to the admin service setRegistryEntryPublished HTTP endpoint.
 func SetRegistryEntryPublishedAdminPath() string {
 	return "/admin/registry.setPublished"
+}
+
+// ListOnboardingStepsAdminPath returns the URL path to the admin service listOnboardingSteps HTTP endpoint.
+func ListOnboardingStepsAdminPath() string {
+	return "/admin/onboarding.steps"
+}
+
+// GetOnboardingStackOptionsAdminPath returns the URL path to the admin service getOnboardingStackOptions HTTP endpoint.
+func GetOnboardingStackOptionsAdminPath() string {
+	return "/admin/onboarding.stackOptions"
+}
+
+// GetOrganizationOnboardingStackAdminPath returns the URL path to the admin service getOrganizationOnboardingStack HTTP endpoint.
+func GetOrganizationOnboardingStackAdminPath() string {
+	return "/admin/organization.onboardingStack"
+}
+
+// SetOrganizationOnboardingStackAdminPath returns the URL path to the admin service setOrganizationOnboardingStack HTTP endpoint.
+func SetOrganizationOnboardingStackAdminPath() string {
+	return "/admin/organization.onboardingStack"
+}
+
+// ListOnboardingUseCasesAdminPath returns the URL path to the admin service listOnboardingUseCases HTTP endpoint.
+func ListOnboardingUseCasesAdminPath() string {
+	return "/admin/onboarding.useCases"
+}
+
+// CreateOnboardingUseCaseAdminPath returns the URL path to the admin service createOnboardingUseCase HTTP endpoint.
+func CreateOnboardingUseCaseAdminPath() string {
+	return "/admin/onboarding.useCases.create"
+}
+
+// UpdateOnboardingUseCaseAdminPath returns the URL path to the admin service updateOnboardingUseCase HTTP endpoint.
+func UpdateOnboardingUseCaseAdminPath() string {
+	return "/admin/onboarding.useCases.update"
+}
+
+// DeleteOnboardingUseCaseAdminPath returns the URL path to the admin service deleteOnboardingUseCase HTTP endpoint.
+func DeleteOnboardingUseCaseAdminPath() string {
+	return "/admin/onboarding.useCases.delete"
+}
+
+// ListOnboardingPlaybooksAdminPath returns the URL path to the admin service listOnboardingPlaybooks HTTP endpoint.
+func ListOnboardingPlaybooksAdminPath() string {
+	return "/admin/onboarding.playbooks"
+}
+
+// CreateOnboardingPlaybookAdminPath returns the URL path to the admin service createOnboardingPlaybook HTTP endpoint.
+func CreateOnboardingPlaybookAdminPath() string {
+	return "/admin/onboarding.playbooks.create"
+}
+
+// UpdateOnboardingPlaybookAdminPath returns the URL path to the admin service updateOnboardingPlaybook HTTP endpoint.
+func UpdateOnboardingPlaybookAdminPath() string {
+	return "/admin/onboarding.playbooks.update"
+}
+
+// DeleteOnboardingPlaybookAdminPath returns the URL path to the admin service deleteOnboardingPlaybook HTTP endpoint.
+func DeleteOnboardingPlaybookAdminPath() string {
+	return "/admin/onboarding.playbooks.delete"
+}
+
+// CloneOnboardingPlaybookAdminPath returns the URL path to the admin service cloneOnboardingPlaybook HTTP endpoint.
+func CloneOnboardingPlaybookAdminPath() string {
+	return "/admin/onboarding.playbooks.clone"
+}
+
+// GetOrganizationOnboardingPlaybookAdminPath returns the URL path to the admin service getOrganizationOnboardingPlaybook HTTP endpoint.
+func GetOrganizationOnboardingPlaybookAdminPath() string {
+	return "/admin/organization.onboardingPlaybook"
+}
+
+// AssignOrganizationOnboardingPlaybookAdminPath returns the URL path to the admin service assignOrganizationOnboardingPlaybook HTTP endpoint.
+func AssignOrganizationOnboardingPlaybookAdminPath() string {
+	return "/admin/organization.onboardingPlaybook"
+}
+
+// GetStripeSubscriptionCandidateAdminPath returns the URL path to the admin service getStripeSubscriptionCandidate HTTP endpoint.
+func GetStripeSubscriptionCandidateAdminPath() string {
+	return "/admin/organization.stripeSubscriptionCandidate"
+}
+
+// SetStripeSubscriptionAdminPath returns the URL path to the admin service setStripeSubscription HTTP endpoint.
+func SetStripeSubscriptionAdminPath() string {
+	return "/admin/organization.setStripeSubscription"
 }

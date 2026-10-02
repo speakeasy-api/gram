@@ -21,10 +21,11 @@ set -euo pipefail
 #
 # Attribution is the whole trick. Every harness reports the identity of the
 # account signed in at the keyboard and offers no override, so all six users
-# would otherwise land as one. Both honour OTEL_RESOURCE_ATTRIBUTES, though,
-# so each run is marked there and the shared collector rewrites that onto the
-# attribute Gram reads. See local/otel/gram-demo-forward.yaml for the pipeline
-# that does it.
+# would otherwise land as one. Both honour OTEL_RESOURCE_ATTRIBUTES, so each
+# run is marked with gram.demo.user_email. A process this task starts copies
+# that resource value onto the log attribute user.email and forwards only
+# those records to this worktree's hooks ingest. Hooks do not read the
+# resource key, and the server must not trust it: any API key could set it.
 #
 # Every prompt below is read-only work, and both harnesses are held to that --
 # Codex by its read-only sandbox, Claude Code by an allowlist of the tools the
@@ -37,7 +38,9 @@ minutes="${usage_minutes}"
 claude_model="${usage_claude_model}"
 codex_model="${usage_codex_model}"
 
-collector_logs_endpoint="http://localhost:${OTLP_HTTP_PORT}/v1/logs"
+# Filled in once the local rewrite hop is listening. Harnesses post here;
+# the hop forwards to this worktree's hooks ingest.
+collector_logs_endpoint=""
 
 # One turn's share of the budget is capped here as well as by the deadline, so
 # a single session that wedges cannot swallow the whole run before the loop
@@ -58,6 +61,8 @@ org_id=""
 codex_profile_owned=false
 current_turn_pid=""
 current_watchdog_pid=""
+rewrite_pid=""
+rewrite_ready=""
 codex_dropped=false
 codex_consecutive_failures=0
 
@@ -84,6 +89,29 @@ kill_tree() {
   kill "$pid" 2>/dev/null || true
 }
 
+# Codex bakes the logs URL into a profile, so this has to finish before
+# write_codex_profile. The hop copies gram.demo.user_email onto user.email
+# and forwards to this worktree only.
+start_log_rewrite() {
+  rewrite_ready="$(mktemp)"
+  mise exec -- go run ./.mise-tasks/demo/rewritelogs \
+    -upstream "${GRAM_SERVER_URL}/rpc/hooks.otel/v1/logs" \
+    -ready-file "$rewrite_ready" &
+  rewrite_pid=$!
+  local deadline=$((SECONDS + 60))
+  while [ ! -s "$rewrite_ready" ]; do
+    if ! kill -0 "$rewrite_pid" 2>/dev/null; then
+      fail "the demo log rewrite exited before it was ready"
+    fi
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      kill_tree "$rewrite_pid"
+      fail "the demo log rewrite was not ready after 60s"
+    fi
+    sleep 0.2
+  done
+  collector_logs_endpoint="$(tr -d '\n' < "$rewrite_ready")"
+}
+
 # The key is minted for this run and must not outlive it. Revoking at the top
 # of the next run is no help on a machine where this run was the last one, and
 # no help at all if the developer interrupts this one.
@@ -97,6 +125,15 @@ cleanup() {
   fi
   if [ -n "$current_watchdog_pid" ]; then
     kill_tree "$current_watchdog_pid"
+  fi
+  # go run is a parent of the rewrite binary; killing only the parent leaves
+  # the listener behind on the port.
+  if [ -n "$rewrite_pid" ]; then
+    kill_tree "$rewrite_pid"
+    wait "$rewrite_pid" 2>/dev/null || true
+  fi
+  if [ -n "$rewrite_ready" ]; then
+    rm -f "$rewrite_ready" "$rewrite_ready.tmp"
   fi
   # Spelled out rather than `[ ... ] && ...`: a false test there returns
   # non-zero, and under `set -e` that would leave the trap before it got to
@@ -238,8 +275,7 @@ model_reasoning_effort = "low"
 [otel]
 environment = "dev"
 log_user_prompt = true
-# Logs only. Metrics and traces would carry the real account's identity, since
-# only the log pipeline does the rewrite.
+# Logs only. Metrics and traces would carry the real account's identity.
 trace_exporter = "none"
 metrics_exporter = "none"
 
@@ -396,22 +432,6 @@ run_turn() {
 
 # endregion: harnesses
 
-curl -sf -o /dev/null -X POST "$collector_logs_endpoint" \
-  -H 'Content-Type: application/json' -d '{"resourceLogs":[]}' 2>/dev/null ||
-  fail "no OTLP collector on ${collector_logs_endpoint} — run \`mise run infra:start\` first"
-
-# That collector is one container shared by every worktree, and it keeps the
-# forwarding endpoint of whichever worktree started it. A run from a different
-# tree would be attributed correctly and then delivered to someone else's
-# server, so check rather than discover it in the wrong dashboard.
-lgtm_container=$(docker compose -f compose.shared.yml -p gram-shared ps -q lgtm 2>/dev/null || true)
-if [ -n "$lgtm_container" ]; then
-  forwarding_to=$(docker inspect "$lgtm_container" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | sed -n 's/^GRAM_DEMO_OTLP_LOGS_ENDPOINT=//p' | head -1)
-  if [ -n "$forwarding_to" ] && [ "$forwarding_to" != "${GRAM_DEMO_OTLP_LOGS_ENDPOINT:-}" ]; then
-    fail "the shared collector forwards to ${forwarding_to}, which is not this worktree's ${GRAM_DEMO_OTLP_LOGS_ENDPOINT:-<unset>}. It keeps the endpoint of whichever worktree started it — restart it from here with \`mise run infra:start\`."
-  fi
-fi
-
 curl -skf -o /dev/null "${GRAM_SERVER_URL}/health" 2>/dev/null ||
   curl -sk -o /dev/null -w '%{http_code}' --max-time 5 "${GRAM_SERVER_URL}/rpc/hooks.otel/v1/logs" 2>/dev/null | grep -qE '^[0-9]' ||
   fail "the Gram server is not answering on ${GRAM_SERVER_URL} — run \`mise run start\` first"
@@ -486,6 +506,9 @@ if $uses_claude; then
   (cd server && go run ./cmd/export-hook-plugin -out "$plugin_out" >/dev/null)
 fi
 
+echo "Starting the demo log rewrite…"
+start_log_rewrite
+
 if $uses_codex; then
   write_codex_profile
 fi
@@ -516,7 +539,7 @@ done
 
 echo ""
 echo "Driving ${#users[@]} seeded users × ${prompts_per_user} prompts (${total} sessions): ${deal}."
-echo "Attributing through the shared collector at ${collector_logs_endpoint}, stopping after ${minutes}m."
+echo "Posting OTEL logs through ${collector_logs_endpoint} to ${GRAM_SERVER_URL}/rpc/hooks.otel/v1/logs, stopping after ${minutes}m."
 echo ""
 
 # Round index outermost so every user makes progress before anyone finishes:
@@ -569,6 +592,6 @@ session_word="sessions"
 user_word="users"
 [ "$users_touched" -eq 1 ] && user_word="user"
 echo "Done: ${sessions} ${session_word} across ${users_touched} ${user_word}."
-echo "The collector batches, so give it a few seconds before looking."
+echo "Give the server a few seconds to ingest before looking."
 echo "The sessions land wherever this branch reads agent telemetry: the"
 echo "observability pages today, and Explore once agent_events ships."

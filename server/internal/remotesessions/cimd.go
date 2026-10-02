@@ -56,7 +56,7 @@ const cimdClientName = "Speakeasy"
 const clientMetadataDocumentPath = "/.well-known/oauth-client/"
 
 // ClientMetadataDocumentURL builds the platform-canonical CIMD document URL for
-// a client id. serverURL is the Gram deployment's public base URL; the path
+// a client id. serverURL is the client's pinned callback origin; the path
 // component is the client's globally unique primary key. This is the value
 // stored as both client_id and client_id_metadata_uri on a CIMD-mode row and
 // the URL Gram sends upstream as client_id.
@@ -165,15 +165,17 @@ func (m *ChallengeManager) HandleClientMetadataDocument(w http.ResponseWriter, r
 
 	// client_id is the stored canonical URL (== the value sent upstream), not a
 	// host-derived one, so it always matches what the AS dereferenced. The JWKS
-	// URL is likewise built from the configured platform origin rather than the
-	// request host.
+	// URL and redirect_uri are likewise built from the client's pinned origin
+	// rather than the request host or the current server URL.
+	origin := m.origins.ForClient(row.CallbackBaseUrl)
+	redirectURI := RemoteLoginCallbackURL(origin)
 	jwksURI := ""
 	if row.HasJsonWebKeySet {
-		jwksURI = ClientJSONWebKeySetURL(m.serverURL, row.ID)
+		jwksURI = ClientJSONWebKeySetURL(origin, row.ID)
 	}
 	doc := BuildClientMetadataDocumentWithGrants(
 		row.ClientIDMetadataUri.String,
-		m.callbackURL(canonicalCallbackRouteBase),
+		redirectURI,
 		TokenEndpointAuthMethod(row.TokenEndpointAuthMethod),
 		jwksURI,
 		row.Scope,
@@ -184,7 +186,7 @@ func (m *ChallengeManager) HandleClientMetadataDocument(w http.ResponseWriter, r
 		// grants. Preserve its public authorization-code/refresh contract, not
 		// registration evidence: NULL stays unknown in preparation and this
 		// compatibility document never advertises identity-chaining grants.
-		doc = BuildClientMetadataDocument(row.ClientIDMetadataUri.String, m.callbackURL(canonicalCallbackRouteBase), TokenEndpointAuthMethod(row.TokenEndpointAuthMethod), jwksURI, row.Scope)
+		doc = BuildClientMetadataDocument(row.ClientIDMetadataUri.String, redirectURI, TokenEndpointAuthMethod(row.TokenEndpointAuthMethod), jwksURI, row.Scope)
 	}
 
 	body, err := json.Marshal(doc)

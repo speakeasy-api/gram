@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -499,13 +501,7 @@ func TestDemoteExpiredTrials_LocksLifecycleBeforeAllKeysAndRows(t *testing.T) {
 
 	waitCtx, cancelWait := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelWait()
-	requireCondition(t, waitCtx, func() (bool, error) {
-		blocked, err := testrepo.New(ti.conn).IsQueryBlockedOnLockFixture(waitCtx, "%UPDATE trials%")
-		if err != nil {
-			return false, fmt.Errorf("check blocked trial demotion query: %w", err)
-		}
-		return blocked, nil
-	}, "demotion did not block on the trial row")
+	testenv.WaitForBackendsBlockedBy(t, waitCtx, ti.conn, testenv.BackendPID(rowLock), 1)
 
 	probe, err := ti.conn.Acquire(ctx)
 	require.NoError(t, err)
@@ -538,25 +534,13 @@ func TestDemoteExpiredTrials_LocksLifecycleBeforeAllKeysAndRows(t *testing.T) {
 
 	chatHeldCtx, cancelChatHeld := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelChatHeld()
-	requireCondition(t, chatHeldCtx, func() (bool, error) {
-		acquired, err := testrepo.New(probe).TryAcquireOpenRouterKeyBillingLockFixture(chatHeldCtx, testrepo.TryAcquireOpenRouterKeyBillingLockFixtureParams{
-			KeyType: string(openrouter.KeyTypeChat), OrganizationID: orgID,
-		})
-		if err != nil {
-			return false, fmt.Errorf("probe chat billing lock: %w", err)
-		}
-		if !acquired {
-			return true, nil
-		}
-		unlocked, unlockErr := activitiesrepo.New(probe).ReleaseOpenRouterKeyBillingLock(chatHeldCtx, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat)})
-		if unlockErr != nil {
-			return false, fmt.Errorf("release chat billing lock probe: %w", unlockErr)
-		}
-		if !unlocked {
-			return false, errors.New("probe chat lock was not released")
-		}
-		return false, nil
-	}, "chat lock was not acquired before the blocked internal lock")
+	testenv.WaitForBackendsBlockedBy(t, chatHeldCtx, ti.conn, internalLockConn.Conn().PgConn().PID(), 1)
+	chatProbe := testenv.BeginTx(t, ctx, ti.conn)
+	// probeTimeout bounds the server's wait on the chat advisory lock.
+	const probeTimeout = 100 * time.Millisecond
+	testenv.SetLockTimeout(t, ctx, chatProbe, probeTimeout)
+	testenv.RequireLockNotAvailable(t, usagerepo.New(chatProbe).AcquireOpenRouterBillingLock(ctx, usagerepo.AcquireOpenRouterBillingLockParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat)}))
+	require.NoError(t, chatProbe.Rollback(ctx))
 
 	keyProbe := testenv.BeginTx(t, ctx, ti.conn)
 	causesByKey, err := testrepo.New(keyProbe).ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture(ctx, orgID)
@@ -589,25 +573,6 @@ func TestDemoteExpiredTrials_LocksLifecycleBeforeAllKeysAndRows(t *testing.T) {
 	organization, err := ti.orgs.GetOrganizationMetadata(ctx, orgID)
 	require.NoError(t, err)
 	require.Equal(t, "free", organization.GramAccountType)
-}
-
-func requireCondition(t *testing.T, ctx context.Context, condition func() (bool, error), message string) {
-	t.Helper()
-
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		met, err := condition()
-		require.NoError(t, err)
-		if met {
-			return
-		}
-		select {
-		case <-ctx.Done():
-			require.FailNow(t, message, ctx.Err().Error())
-		case <-ticker.C:
-		}
-	}
 }
 
 func TestDemoteExpiredTrials_LocalFixtures(t *testing.T) {

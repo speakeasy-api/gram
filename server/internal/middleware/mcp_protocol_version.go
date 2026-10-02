@@ -74,7 +74,10 @@ func isMCPJSONRPCEndpoint(path string) bool {
 	case "mcp":
 		// /mcp/{mcpSlug} — the hosted toolset endpoint. A further slash means
 		// an OAuth or metadata sub-route, not the MCP endpoint itself.
-		return isEndpointSlug(tail) && !isSlugSiblingRoute(tail)
+		// GET /mcp/remote_login_bind is the remote login browser hop. The consent
+		// page or the bind stop on another platform host navigates here. It is
+		// registered under /mcp/ only, so under /x/mcp/ the name is a slug.
+		return isEndpointSlug(tail) && !isSlugSiblingRoute(tail) && tail != "remote_login_bind"
 	case "x":
 		// /x/mcp/{slug} — toolset-backed, remote-backed, and tunneled. Carries
 		// the same OAuth callback siblings as /mcp/ (internal/xmcp/service.go).

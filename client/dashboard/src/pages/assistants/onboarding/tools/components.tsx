@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/Label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { TextArea } from "@/components/ui/Textarea";
 import { Text } from "@/components/ui/Text";
-import { cn } from "@/lib/utils";
+import { cn, firstPartyHosts } from "@/lib/utils";
 import { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { Icon } from "@/components/ui/Icon";
 import {
@@ -327,7 +327,7 @@ export function ShowSlackAppGuideComponent({
         webhookUrl: a.webhook_url,
         extraScopes: a.bot_scopes,
         extraBotEvents: a.bot_events,
-        unfurlDomain: window.location.hostname,
+        unfurlDomains: firstPartyHosts(window.location.origin),
       }),
     [a.app_name, a.webhook_url, a.bot_scopes, a.bot_events, assistantName],
   );

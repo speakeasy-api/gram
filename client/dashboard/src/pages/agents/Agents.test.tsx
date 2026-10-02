@@ -164,6 +164,7 @@ vi.mock("@/components/page-templates", () => {
     children,
     title,
     description,
+    stage,
     primaryAction,
     search,
     isEmpty = false,
@@ -172,6 +173,7 @@ vi.mock("@/components/page-templates", () => {
     children: ReactNode;
     title: string;
     description: string;
+    stage?: string;
     primaryAction: ReactNode;
     search?: {
       value: string;
@@ -183,6 +185,7 @@ vi.mock("@/components/page-templates", () => {
   }) => (
     <div>
       <h1>{title}</h1>
+      {stage && <span>{stage === "preview" ? "Preview" : stage}</span>}
       <p>{description}</p>
       {primaryAction}
       {!isEmpty && search && (
@@ -266,6 +269,12 @@ describe("Agent management rollout gate", () => {
 });
 
 describe("Agent owner access", () => {
+  it("labels agent identity as preview", () => {
+    setup();
+
+    expect(screen.getByText("Preview")).toBeTruthy();
+  });
+
   it.each(["loading", "disabled", "missing", "error"] as const)(
     "does not request agents while the rollout is %s",
     (status) => {

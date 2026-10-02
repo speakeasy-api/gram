@@ -60,6 +60,9 @@ pitchfork = "2.22.0"
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
 [env]
+# Share Go compilation caches across worktrees, including nested tool builds.
+GOFLAGS = "-trimpath"
+
 ###########################
 ## Runtime configuration ##
 ###########################
@@ -112,12 +115,6 @@ TEMPORAL_TASK_QUEUE = "main"
 ## When using Temporal Cloud, the following variable should like something like:
 ##     "<namespace>.<account>.tmprl.cloud:7233".
 TEMPORAL_ADDRESS = "{{env.TEMPORAL_HOST}}:{{env.TEMPORAL_PORT}}"
-
-##############################
-## Presidio configuration   ##
-##############################
-PRESIDIO_PORT = "5050"
-PRESIDIO_ANALYZER_URL = "http://127.0.0.1:{{env.PRESIDIO_PORT}}"
 
 ## Fine-tuned risk LLM analyzer (OpenAI-compatible chat endpoint, URL includes
 ## /v1). An empty URL disables it; real values belong in mise.local.toml.
@@ -231,14 +228,10 @@ GRAM_PYSTREAMS_DETECT_BLOCKING = "1"
 OTLP_GRPC_HOST = "localhost"
 OTLP_GRPC_PORT = "4317"
 OTLP_HTTP_PORT = "4318"
+## Shared otlp-sink ACKs and drops so exporters do not retry into a closed port.
 OTEL_EXPORTER_OTLP_ENDPOINT = "http://{{env.OTLP_GRPC_HOST}}:{{env.OTLP_GRPC_PORT}}"
 OTEL_EXPORTER_OTLP_PROTOCOL = "grpc"
 OTEL_RESOURCE_ATTRIBUTES = "worktree=main"
-## Where the shared collector's demo-activity pipeline posts rewritten Claude
-## Code logs (see local/otel/gram-demo-forward.yaml). host.docker.internal
-## because localhost inside that container is the container; the port follows
-## this worktree's, which git:workinit remaps for parallel trees.
-GRAM_DEMO_OTLP_LOGS_ENDPOINT = "https://host.docker.internal:{{env.GRAM_SERVER_PORT}}/rpc/hooks.otel/v1/logs"
 ## Change these to 0 to disable OpenTelemetry traces and metrics to be emitted.
 GRAM_ENABLE_OTEL_TRACES = 1
 GRAM_ENABLE_OTEL_METRICS = 1
@@ -246,10 +239,6 @@ GRAM_ENABLE_OTEL_METRICS = 1
 ################################
 ## Local development settings ##
 ################################
-GRAFANA_PORT = "13000"
-TEMPO_HTTP_PORT = "13200"
-LOKI_HTTP_PORT = "13100"
-PROMETHEUS_PORT = "9099"
 LITELLM_PORT = "4001"
 GRAM_LOG_PRETTY = { default = "1" }
 ## Default Gram API URL baked into the dashboard's inlined Elements code and

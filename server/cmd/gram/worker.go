@@ -347,6 +347,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, assistantRuntimeFlags()...)
 	flags = append(flags, identityProviderConnectionFlags()...)
 	flags = append(flags, pluginsFlags()...)
+	flags = append(flags, pluginPublicationEmitFlag())
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, riskReconcileFlags()...)
 	flags = append(flags, riskLLMFlags()...)
@@ -733,7 +734,7 @@ func newWorkerCommand() *cli.Command {
 			// The worker never serves webhook ingress (ProcessWebhook lives in
 			// the HTTP server), so the dashboard site URL used for Slack link
 			// unfurls is not needed here.
-			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL, nil, slackClient, cache.NewRedisCacheAdapter(redisClient))
+			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL, nil, nil, slackClient, cache.NewRedisCacheAdapter(redisClient))
 
 			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
 
@@ -861,6 +862,7 @@ func newWorkerCommand() *cli.Command {
 				CacheAdapter:                 remoteSessionsCache,
 				IssuerMetadataRefresher:      issuerMetadataRefresher,
 				RemoteSessionAssertionSigner: clientAssertionSigner,
+				StartupSeeds:                 startupSeeds(logger, db),
 				AssistantsCore:               assistantsCore,
 				TemporalEnv:                  temporalEnv,
 				PIIScanner:                   piiScanner,
@@ -872,6 +874,7 @@ func newWorkerCommand() *cli.Command {
 				WorkOSClient:                 backgroundWorkOSClient,
 				ProductFeatures:              productFeatures,
 				PluginPublisher:              pluginPublisher,
+				PublicationRequests:          plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)},
 				Publishers:                   publishers,
 				TrialEmailsService:           trialEmailsService,
 				TrialFixtureHandler:          newTrialFixtureHandler(c.String("environment"), db, productFeatures),

@@ -176,6 +176,7 @@ func TestMCPProtocolVersionTelemetryIgnoresSlugSiblingRoutes(t *testing.T) {
 	for _, path := range []string{
 		"/mcp/idp_callback",
 		"/mcp/remote_login_callback",
+		"/mcp/remote_login_bind",
 		"/mcp/install-page-9f86d081.js",
 		"/mcp/consent-page-9f86d081.js",
 		"/mcp/consent-tools-9f86d081.js",
@@ -200,6 +201,8 @@ func TestMCPProtocolVersionTelemetryMatchesSlugsResemblingSiblingRoutes(t *testi
 		"/mcp/my-remote_login_callback",
 		"/platform/mcp/idp_callback",
 		"/platform/mcp/remote_login_callback",
+		// The bind hop is registered under /mcp/ only.
+		"/x/mcp/remote_login_bind",
 	} {
 		got := recordSpanForRequest(t, http.MethodPost, path, mcpversions.Version20250618)
 		require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)], "path %s", path)

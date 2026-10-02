@@ -298,8 +298,8 @@ func BuildGetToolsetPayload(toolsetsGetToolsetSlug string, toolsetsGetToolsetSes
 	{
 		slug = toolsetsGetToolsetSlug
 		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
-		if utf8.RuneCountInString(slug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		if utf8.RuneCountInString(slug) > 60 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 60, false))
 		}
 		if err != nil {
 			return nil, err
@@ -324,7 +324,7 @@ func BuildGetToolsetPayload(toolsetsGetToolsetSlug string, toolsetsGetToolsetSes
 		}
 	}
 	v := &toolsets.GetToolsetPayload{}
-	v.Slug = types.Slug(slug)
+	v.Slug = slug
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

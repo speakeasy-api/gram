@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/infra/pkg/topics"
+
 	gen "github.com/speakeasy-api/gram/server/gen/platform_killswitches"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
@@ -63,7 +65,7 @@ func listOutboxMessages(t *testing.T, conn *pgxpool.Pool, orgID string) [][]byte
 	require.NoError(t, err)
 	var messages [][]byte
 	for _, row := range rows {
-		if row.OrganizationID == orgID {
+		if row.OrganizationID == orgID && row.Topic == string(topics.GramWebhooksV1Event) {
 			messages = append(messages, row.Message)
 		}
 	}
@@ -243,12 +245,14 @@ func TestLifecycleAuditRollback(t *testing.T) {
 	_, err := failingService.ActivatePrescription(t.Context(), activate)
 	require.ErrorContains(t, err, "forced post-audit failure")
 
-	for _, table := range []string{"killswitch_prescriptions", "killswitch_prescription_versions", "killswitch_operations", "audit_logs", "publish_outbox"} {
+	for _, table := range []string{"killswitch_prescriptions", "killswitch_prescription_versions", "killswitch_operations", "audit_logs"} {
 		var count int
 		//nolint:glint // notestingrawsql: counts rows across a dynamic table list to prove rollback atomicity; SQLc cannot parameterize table names
 		require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM `+table+` WHERE organization_id = $1`, orgID).Scan(&count))
 		require.Zero(t, count, "a failed lifecycle transaction must roll back %s together with the mutation", table)
 	}
+
+	require.Empty(t, listOutboxMessages(t, conn, orgID), "a failed lifecycle transaction must roll back its webhook event")
 
 	service := newLifecycleServiceForTest(t, conn, nil, nil, auditHook)
 	activated, err := service.ActivatePrescription(t.Context(), activate)

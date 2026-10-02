@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -685,6 +686,15 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 	}
 	if deletedCount == 0 {
 		return localRole{}, oops.E(oops.CodeNotFound, nil, "role not found").LogError(ctx, r.logger)
+	}
+
+	if err := pluginassignments.RemoveDeletedRole(ctx, tx, r.audit, pluginassignments.RoleDeletion{
+		OrganizationID:   gramOrgID,
+		PrincipalURN:     currentRole.PrincipalURN,
+		Actor:            actor.Principal,
+		ActorDisplayName: actor.DisplayName,
+	}); err != nil {
+		return localRole{}, oops.E(oops.CodeUnexpected, err, "delete plugin assignments for deleted role").LogError(ctx, r.logger)
 	}
 
 	if err := authz.DeleteRoleGrants(ctx, repo.New(tx), gramOrgID, currentRole.PrincipalURN); err != nil {

@@ -452,18 +452,31 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       `[~]` to `[x]`; API-only checks and the separate synthetic consolidation
       blocker demo do not complete this fixture's display verification.
 
-25. **Workload Identities** — open `/<org>/projects/default/workload-identities`
-    (no sidebar entry yet; the page is pre-GA and reached by URL). Two trusted
-    issuers: `Acme Agent Platform` with Wildcards **ALLOWED**, and `Acme CI`
-    with **OFF** — the second must stay off, because its subjects encode a
-    branch ref where a wildcard would admit anyone able to push a branch. Four
-    admitted workloads, exactly one badged **WILDCARD**
-    (`wimse://agents.example.com/org/acme/agent/*`), each resolving to a named
-    agent with no row showing "None assigned". Open **Admit a workload**, pick
-    the agent platform, leave Match on _Exact_ and type a subject containing
-    `*`: the warning appears in destructive red and the submit is disabled.
-    Switching Match to _Wildcard_ clears it. Selecting `Acme CI` instead
-    disables the Wildcard option and says why.
+25. **Access Hub** — open `/<org>/access-hub` (organization sidebar, under
+    **Secure**; the old `/<org>/projects/default/access-hub` URL redirects
+    there) and click **Custom (2)**.
+    Two platform cards: `Acme Agent Platform` and `Acme CI`, each with tags
+    and sharing one. The page shows the organization tier only, so `Acme CI`
+    lists two machines (`Docs publish` and `Payments deploy (all projects)`);
+    the project-tier `Payments deploy` admission stays off this page. Open
+    `Acme Agent Platform`: its machines each resolve to
+    a named agent with no row showing "None assigned", and one is the wildcard
+    rule `wimse://agents.example.com/org/acme/agent/*`. `Acme CI` must keep
+    wildcard admission off, because its subjects encode a branch ref where a
+    wildcard would admit anyone able to push a branch. On `Acme CI`, open
+    **+ Allow a machine** and type a subject ending in `*`: the warning appears
+    in destructive red under the field and **Allow machine** stays disabled.
+
+26. **Explore widgets** — open `/<org>/projects/default/explore` and click
+    the **Widgets** tab, which shows a count of 5. Five widgets, most
+    recently updated first, starting with Amara Okafor's "Sessions by
+    surface" with its description beneath; Hana Sato's widget of the same
+    name sits further down with her name beside it. Each row shows its
+    dataset and chart type, and none carries the broken-widget warning.
+    Clicking "Slowest MCP tools" switches to the Explore tab with the
+    tool_calls dataset, a 7-day window and a table ordered by p95 duration,
+    runs it, and returns rows; the bar names the widget with Priya Raman as
+    its creator and **Save** stays disabled until something is edited.
 
 ## On failure
 

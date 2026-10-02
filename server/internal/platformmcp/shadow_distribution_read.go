@@ -92,6 +92,10 @@ func (s *ShadowDistributionReadService) NotApplicable(ctx context.Context, organ
 	})
 }
 
+// targetCandidatePageSize is how many direct-remote candidates ForTarget reads
+// per query.
+const targetCandidatePageSize = 100
+
 func (s *ShadowDistributionReadService) ForTarget(ctx context.Context, organizationID string, projectID uuid.UUID, targetURL string) DistributionAdmission {
 	canonical, ok := shadowmcp.CanonicalizeInventoryURL(targetURL)
 	if !ok {
@@ -99,12 +103,18 @@ func (s *ShadowDistributionReadService) ForTarget(ctx context.Context, organizat
 	}
 	return s.read(ctx, organizationID, projectID, DistributionAdmissionNotDistributed, func(ctx context.Context, tx pgx.Tx) ([]distributionAdmissionTarget, error) {
 		q := platformrepo.New(tx)
-		candidates, err := q.ListDirectRemoteAdmissionTargetCandidates(ctx, platformrepo.ListDirectRemoteAdmissionTargetCandidatesParams{OrganizationID: organizationID, ProjectID: projectID})
-		if err != nil {
-			return nil, fmt.Errorf("list target distribution candidates: %w", err)
-		}
-		if len(candidates) > 100 {
-			return nil, fmt.Errorf("target distribution candidates are incomplete")
+		var candidates []platformrepo.ListDirectRemoteAdmissionTargetCandidatesRow
+		after := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		for {
+			page, err := q.ListDirectRemoteAdmissionTargetCandidates(ctx, platformrepo.ListDirectRemoteAdmissionTargetCandidatesParams{OrganizationID: organizationID, ProjectID: projectID, AfterMcpServerID: after, PageLimit: targetCandidatePageSize})
+			if err != nil {
+				return nil, fmt.Errorf("list target distribution candidates: %w", err)
+			}
+			candidates = append(candidates, page...)
+			if len(page) < targetCandidatePageSize {
+				break
+			}
+			after = uuid.NullUUID{UUID: page[len(page)-1].McpServerID, Valid: true}
 		}
 
 		result := make([]distributionAdmissionTarget, 0, len(candidates))

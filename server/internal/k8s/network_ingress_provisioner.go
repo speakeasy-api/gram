@@ -27,6 +27,8 @@ const (
 	NetworkIngressErrorUnsupportedProvider = "unsupported_provider"
 	NetworkIngressErrorInvalidCredentials  = "invalid_credentials" // #nosec G101 -- bounded status code, not credential material.
 	NetworkIngressErrorKubernetes          = "kubernetes_api"
+	// Teardown is blocked because the provider refused the saved credentials.
+	NetworkIngressErrorProviderCredentialsRejected = "provider_credentials_rejected" // #nosec G101 -- bounded status code, not credential material.
 )
 
 var (
@@ -36,6 +38,10 @@ var (
 
 	// ErrNetworkIngressDeletionPending means teardown must be retried until resources are absent.
 	ErrNetworkIngressDeletionPending = errors.New("network ingress deletion pending")
+
+	// ErrNetworkIngressProviderCredentialsRejected means the provider refused
+	// the saved credentials, so teardown cannot progress until they work again.
+	ErrNetworkIngressProviderCredentialsRejected = errors.New("network ingress provider rejected credentials")
 )
 
 // NetworkIngressResourceNames is the provider-neutral, persisted identity of

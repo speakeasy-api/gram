@@ -159,6 +159,7 @@ func TestPluginsService_CreatePlugin(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
+	require.False(t, result.AutoCreated)
 	require.Equal(t, "Engineering Tools", result.Name)
 	require.Equal(t, "engineering-tools", result.Slug)
 }
@@ -284,6 +285,9 @@ func TestPluginsService_ListPlugins(t *testing.T) {
 	result, err := ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{})
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(result.Plugins), 2)
+	for _, plugin := range result.Plugins {
+		require.False(t, plugin.AutoCreated)
+	}
 }
 
 func TestPluginsService_UpdatePlugin(t *testing.T) {
@@ -302,6 +306,7 @@ func TestPluginsService_UpdatePlugin(t *testing.T) {
 		Description: &desc,
 	})
 	require.NoError(t, err)
+	require.False(t, updated.AutoCreated)
 	require.Equal(t, "After Update", updated.Name)
 	require.NotNil(t, updated.Description)
 	require.Equal(t, "updated description", *updated.Description)
