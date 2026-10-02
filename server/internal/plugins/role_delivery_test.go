@@ -77,13 +77,31 @@ func TestRoleAudienceDeliversExistingUseGrant(t *testing.T) {
 	// A new explicit assignment can add it again; removal history is not an exclusion.
 	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{}})
 	require.NoError(t, err)
+	beforeEvents, err = testrepo.New(ti.conn).ListPublishOutboxRows(ctx)
+	require.NoError(t, err)
+	for _, event := range beforeEvents {
+		beforeIDs[event.ID] = true
+	}
 	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{role}})
 	require.NoError(t, err)
 	got, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
 	require.NoError(t, err)
 	require.Len(t, got.Servers, 1)
 	require.NotEqual(t, membershipID, got.Servers[0].ID)
-
+	events, err = testrepo.New(ti.conn).ListPublishOutboxRows(ctx)
+	require.NoError(t, err)
+	refreshRequested = false
+	for _, event := range events {
+		if beforeIDs[event.ID] || event.Topic != "gram.plugins.v1.PublicationRequested" {
+			continue
+		}
+		request := &publicationv1.PublicationRequested{}
+		require.NoError(t, proto.Unmarshal(event.Message, request))
+		if request.GetOrganizationId() == ac.ActiveOrganizationID && request.GetProjectId() == ac.ProjectID.String() {
+			refreshRequested = true
+		}
+	}
+	require.True(t, refreshRequested, "explicit re-add requests a new refresh of the affected marketplace")
 }
 
 func TestRoleAudiencePreservesLegacyToolsetMembershipIdentity(t *testing.T) {
