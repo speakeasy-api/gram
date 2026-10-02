@@ -292,6 +292,16 @@ func GetSupportCoverageAdminPath() string {
 	return "/admin/supportCoverage.get"
 }
 
+// GetRegistryOktaCandidatesAdminPath returns the URL path to the admin service getRegistryOktaCandidates HTTP endpoint.
+func GetRegistryOktaCandidatesAdminPath() string {
+	return "/admin/registry.oktaCandidates"
+}
+
+// ListRegistryOktaUnmappedAdminPath returns the URL path to the admin service listRegistryOktaUnmapped HTTP endpoint.
+func ListRegistryOktaUnmappedAdminPath() string {
+	return "/admin/registry.oktaUnmapped"
+}
+
 // ListRegistryEntriesAdminPath returns the URL path to the admin service listRegistryEntries HTTP endpoint.
 func ListRegistryEntriesAdminPath() string {
 	return "/admin/registry.list"

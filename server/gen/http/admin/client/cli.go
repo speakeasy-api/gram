@@ -2039,6 +2039,46 @@ func BuildGetSupportCoveragePayload(adminGetSupportCoverageOrganizationID string
 	return v, nil
 }
 
+// BuildGetRegistryOktaCandidatesPayload builds the payload for the admin
+// getRegistryOktaCandidates endpoint from CLI flags.
+func BuildGetRegistryOktaCandidatesPayload(adminGetRegistryOktaCandidatesID string, adminGetRegistryOktaCandidatesAdminSessionToken string) (*admin.GetRegistryOktaCandidatesPayload, error) {
+	var err error
+	var id string
+	{
+		id = adminGetRegistryOktaCandidatesID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetRegistryOktaCandidatesAdminSessionToken != "" {
+			adminSessionToken = &adminGetRegistryOktaCandidatesAdminSessionToken
+		}
+	}
+	v := &admin.GetRegistryOktaCandidatesPayload{}
+	v.ID = id
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListRegistryOktaUnmappedPayload builds the payload for the admin
+// listRegistryOktaUnmapped endpoint from CLI flags.
+func BuildListRegistryOktaUnmappedPayload(adminListRegistryOktaUnmappedAdminSessionToken string) (*admin.ListRegistryOktaUnmappedPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminListRegistryOktaUnmappedAdminSessionToken != "" {
+			adminSessionToken = &adminListRegistryOktaUnmappedAdminSessionToken
+		}
+	}
+	v := &admin.ListRegistryOktaUnmappedPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildListRegistryEntriesPayload builds the payload for the admin
 // listRegistryEntries endpoint from CLI flags.
 func BuildListRegistryEntriesPayload(adminListRegistryEntriesQuery string, adminListRegistryEntriesPublished string, adminListRegistryEntriesCursor string, adminListRegistryEntriesLimit string, adminListRegistryEntriesAdminSessionToken string) (*admin.ListRegistryEntriesPayload, error) {

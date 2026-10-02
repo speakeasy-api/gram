@@ -4545,6 +4545,152 @@ paths:
       tags:
         - admin
       x-speakeasy-name-override: listRegistryEntries
+  /admin/registry.oktaCandidates:
+    get:
+      description: 'Staff-only registry administration: Okta application names observed across synced tenants that plausibly belong to the entry, for confirmation in the editor.'
+      operationId: adminGetRegistryOktaCandidates
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRegistryOktaCandidates'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getRegistryOktaCandidates admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getRegistryOktaCandidates
+  /admin/registry.oktaUnmapped:
+    get:
+      description: 'Staff-only registry administration: observed Okta application names no entry claims yet, with the entry the heuristic would propose.'
+      operationId: adminListRegistryOktaUnmapped
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRegistryOktaUnmapped'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: listRegistryOktaUnmapped admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listRegistryOktaUnmapped
   /admin/registry.save:
     post:
       description: Staff-only registry administration.
@@ -7411,6 +7557,93 @@ components:
       required:
         - path
         - message
+    AdminRegistryOktaCandidate:
+      type: object
+      properties:
+        integrator:
+          type: boolean
+          description: Whether the name comes from an integrator listing rather than Okta's public catalog; any integrator account can publish under a vendor-like key, so confirm with care.
+        mapped_by:
+          type: string
+          description: Name of the entry that already claims this key, when one does.
+        oin_name:
+          type: string
+          description: Okta application name, the OIN key.
+        organizations:
+          type: integer
+          description: How many organizations have the application.
+          format: int64
+        reason:
+          type: string
+          description: 'domain: the vendor token matches a remote or website host; title: it matches the entry title; label: a tenant''s label equals the entry title.'
+          enum:
+            - domain
+            - title
+            - label
+        sign_on_modes:
+          type: array
+          items:
+            type: string
+          description: Sign-on modes seen for the application.
+      description: An Okta application name observed across synced tenants that plausibly belongs to a catalog entry. A proposal for staff to confirm, never applied automatically.
+      required:
+        - oin_name
+        - organizations
+        - sign_on_modes
+        - reason
+        - integrator
+    AdminRegistryOktaCandidates:
+      type: object
+      properties:
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminRegistryOktaCandidate'
+          description: Strongest reason first, then by organizations.
+      required:
+        - candidates
+    AdminRegistryOktaUnmapped:
+      type: object
+      properties:
+        names:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminRegistryOktaUnmappedName'
+          description: By organizations, most first. Okta's own applications are left out.
+      required:
+        - names
+    AdminRegistryOktaUnmappedName:
+      type: object
+      properties:
+        integrator:
+          type: boolean
+          description: Whether the name comes from an integrator listing rather than Okta's public catalog.
+        oin_name:
+          type: string
+        organizations:
+          type: integer
+          format: int64
+        reason:
+          type: string
+          enum:
+            - domain
+            - title
+            - label
+        sign_on_modes:
+          type: array
+          items:
+            type: string
+        suggested_entry_id:
+          type: string
+          description: The entry the heuristic would map it to, when one matches.
+        suggested_entry_name:
+          type: string
+      description: An observed Okta application name no catalog entry claims.
+      required:
+        - oin_name
+        - organizations
+        - sign_on_modes
+        - integrator
     AdminRegistryPage:
       type: object
       properties:

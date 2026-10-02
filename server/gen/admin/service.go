@@ -215,6 +215,13 @@ type Service interface {
 	// session activity, policy enforcement, identity attribution, token usage and
 	// shadow MCP exposure.
 	GetSupportCoverage(context.Context, *GetSupportCoveragePayload) (res *SupportCoverageResult, err error)
+	// Staff-only registry administration: Okta application names observed across
+	// synced tenants that plausibly belong to the entry, for confirmation in the
+	// editor.
+	GetRegistryOktaCandidates(context.Context, *GetRegistryOktaCandidatesPayload) (res *AdminRegistryOktaCandidates, err error)
+	// Staff-only registry administration: observed Okta application names no entry
+	// claims yet, with the entry the heuristic would propose.
+	ListRegistryOktaUnmapped(context.Context, *ListRegistryOktaUnmappedPayload) (res *AdminRegistryOktaUnmapped, err error)
 	// Staff-only registry administration.
 	ListRegistryEntries(context.Context, *ListRegistryEntriesPayload) (res *AdminRegistryPage, err error)
 	// Staff-only registry administration.
@@ -299,7 +306,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [79]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "getStripeSubscriptionCandidate", "setStripeSubscription"}
+var MethodNames = [81]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "getStripeSubscriptionCandidate", "setStripeSubscription"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -770,6 +777,55 @@ type AdminRegistryEntry struct {
 type AdminRegistryIssue struct {
 	Path    string
 	Message string
+}
+
+// An Okta application name observed across synced tenants that plausibly
+// belongs to a catalog entry. A proposal for staff to confirm, never applied
+// automatically.
+type AdminRegistryOktaCandidate struct {
+	// Okta application name, the OIN key.
+	OinName string
+	// How many organizations have the application.
+	Organizations int
+	// Sign-on modes seen for the application.
+	SignOnModes []string
+	// domain: the vendor token matches a remote or website host; title: it matches
+	// the entry title; label: a tenant's label equals the entry title.
+	Reason string
+	// Whether the name comes from an integrator listing rather than Okta's public
+	// catalog; any integrator account can publish under a vendor-like key, so
+	// confirm with care.
+	Integrator bool
+	// Name of the entry that already claims this key, when one does.
+	MappedBy *string
+}
+
+// AdminRegistryOktaCandidates is the result type of the admin service
+// getRegistryOktaCandidates method.
+type AdminRegistryOktaCandidates struct {
+	// Strongest reason first, then by organizations.
+	Candidates []*AdminRegistryOktaCandidate
+}
+
+// AdminRegistryOktaUnmapped is the result type of the admin service
+// listRegistryOktaUnmapped method.
+type AdminRegistryOktaUnmapped struct {
+	// By organizations, most first. Okta's own applications are left out.
+	Names []*AdminRegistryOktaUnmappedName
+}
+
+// An observed Okta application name no catalog entry claims.
+type AdminRegistryOktaUnmappedName struct {
+	OinName       string
+	Organizations int
+	SignOnModes   []string
+	// Whether the name comes from an integrator listing rather than Okta's public
+	// catalog.
+	Integrator bool
+	// The entry the heuristic would map it to, when one matches.
+	SuggestedEntryID   *string
+	SuggestedEntryName *string
+	Reason             *string
 }
 
 // AdminRegistryPage is the result type of the admin service
@@ -1303,6 +1359,13 @@ type GetRegistryEntryPayload struct {
 	ID                string
 }
 
+// GetRegistryOktaCandidatesPayload is the payload type of the admin service
+// getRegistryOktaCandidates method.
+type GetRegistryOktaCandidatesPayload struct {
+	AdminSessionToken *string
+	ID                string
+}
+
 // GetSessionPayload is the payload type of the admin service getSession method.
 type GetSessionPayload struct {
 	AdminSessionToken *string
@@ -1614,6 +1677,12 @@ type ListRegistryEntriesPayload struct {
 	Cursor *string
 	// Page size; zero uses the server default of 25.
 	Limit *int32
+}
+
+// ListRegistryOktaUnmappedPayload is the payload type of the admin service
+// listRegistryOktaUnmapped method.
+type ListRegistryOktaUnmappedPayload struct {
+	AdminSessionToken *string
 }
 
 // ListUserOrganizationsPayload is the payload type of the admin service

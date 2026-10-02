@@ -1778,6 +1778,20 @@ type GetSupportCoverageResponseBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 }
 
+// GetRegistryOktaCandidatesResponseBody is the type of the "admin" service
+// "getRegistryOktaCandidates" endpoint HTTP response body.
+type GetRegistryOktaCandidatesResponseBody struct {
+	// Strongest reason first, then by organizations.
+	Candidates []*AdminRegistryOktaCandidateResponseBody `form:"candidates,omitempty" json:"candidates,omitempty" xml:"candidates,omitempty"`
+}
+
+// ListRegistryOktaUnmappedResponseBody is the type of the "admin" service
+// "listRegistryOktaUnmapped" endpoint HTTP response body.
+type ListRegistryOktaUnmappedResponseBody struct {
+	// By organizations, most first. Okta's own applications are left out.
+	Names []*AdminRegistryOktaUnmappedNameResponseBody `form:"names,omitempty" json:"names,omitempty" xml:"names,omitempty"`
+}
+
 // ListRegistryEntriesResponseBody is the type of the "admin" service
 // "listRegistryEntries" endpoint HTTP response body.
 type ListRegistryEntriesResponseBody struct {
@@ -13031,6 +13045,386 @@ type GetSupportCoverageGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetRegistryOktaCandidatesUnauthorizedResponseBody is the type of the "admin"
+// service "getRegistryOktaCandidates" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetRegistryOktaCandidatesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryOktaCandidatesForbiddenResponseBody is the type of the "admin"
+// service "getRegistryOktaCandidates" endpoint HTTP response body for the
+// "forbidden" error.
+type GetRegistryOktaCandidatesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryOktaCandidatesBadRequestResponseBody is the type of the "admin"
+// service "getRegistryOktaCandidates" endpoint HTTP response body for the
+// "bad_request" error.
+type GetRegistryOktaCandidatesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryOktaCandidatesNotFoundResponseBody is the type of the "admin"
+// service "getRegistryOktaCandidates" endpoint HTTP response body for the
+// "not_found" error.
+type GetRegistryOktaCandidatesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryOktaCandidatesConflictResponseBody is the type of the "admin"
+// service "getRegistryOktaCandidates" endpoint HTTP response body for the
+// "conflict" error.
+type GetRegistryOktaCandidatesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryOktaCandidatesUnsupportedMediaResponseBody is the type of the
+// "admin" service "getRegistryOktaCandidates" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetRegistryOktaCandidatesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryOktaCandidatesInvalidResponseBody is the type of the "admin"
+// service "getRegistryOktaCandidates" endpoint HTTP response body for the
+// "invalid" error.
+type GetRegistryOktaCandidatesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryOktaCandidatesInvariantViolationResponseBody is the type of the
+// "admin" service "getRegistryOktaCandidates" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetRegistryOktaCandidatesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryOktaCandidatesUnexpectedResponseBody is the type of the "admin"
+// service "getRegistryOktaCandidates" endpoint HTTP response body for the
+// "unexpected" error.
+type GetRegistryOktaCandidatesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryOktaCandidatesGatewayErrorResponseBody is the type of the "admin"
+// service "getRegistryOktaCandidates" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetRegistryOktaCandidatesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryOktaUnmappedUnauthorizedResponseBody is the type of the "admin"
+// service "listRegistryOktaUnmapped" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListRegistryOktaUnmappedUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryOktaUnmappedForbiddenResponseBody is the type of the "admin"
+// service "listRegistryOktaUnmapped" endpoint HTTP response body for the
+// "forbidden" error.
+type ListRegistryOktaUnmappedForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryOktaUnmappedBadRequestResponseBody is the type of the "admin"
+// service "listRegistryOktaUnmapped" endpoint HTTP response body for the
+// "bad_request" error.
+type ListRegistryOktaUnmappedBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryOktaUnmappedNotFoundResponseBody is the type of the "admin"
+// service "listRegistryOktaUnmapped" endpoint HTTP response body for the
+// "not_found" error.
+type ListRegistryOktaUnmappedNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryOktaUnmappedConflictResponseBody is the type of the "admin"
+// service "listRegistryOktaUnmapped" endpoint HTTP response body for the
+// "conflict" error.
+type ListRegistryOktaUnmappedConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryOktaUnmappedUnsupportedMediaResponseBody is the type of the
+// "admin" service "listRegistryOktaUnmapped" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListRegistryOktaUnmappedUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryOktaUnmappedInvalidResponseBody is the type of the "admin"
+// service "listRegistryOktaUnmapped" endpoint HTTP response body for the
+// "invalid" error.
+type ListRegistryOktaUnmappedInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryOktaUnmappedInvariantViolationResponseBody is the type of the
+// "admin" service "listRegistryOktaUnmapped" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListRegistryOktaUnmappedInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryOktaUnmappedUnexpectedResponseBody is the type of the "admin"
+// service "listRegistryOktaUnmapped" endpoint HTTP response body for the
+// "unexpected" error.
+type ListRegistryOktaUnmappedUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryOktaUnmappedGatewayErrorResponseBody is the type of the "admin"
+// service "listRegistryOktaUnmapped" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListRegistryOktaUnmappedGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListRegistryEntriesUnauthorizedResponseBody is the type of the "admin"
 // service "listRegistryEntries" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -17728,6 +18122,41 @@ type SupportCoverageUnmappedResponseBody struct {
 	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
 	// Sessions observed under it inside the window.
 	Sessions *int64 `form:"sessions,omitempty" json:"sessions,omitempty" xml:"sessions,omitempty"`
+}
+
+// AdminRegistryOktaCandidateResponseBody is used to define fields on response
+// body types.
+type AdminRegistryOktaCandidateResponseBody struct {
+	// Okta application name, the OIN key.
+	OinName *string `form:"oin_name,omitempty" json:"oin_name,omitempty" xml:"oin_name,omitempty"`
+	// How many organizations have the application.
+	Organizations *int `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
+	// Sign-on modes seen for the application.
+	SignOnModes []string `form:"sign_on_modes,omitempty" json:"sign_on_modes,omitempty" xml:"sign_on_modes,omitempty"`
+	// domain: the vendor token matches a remote or website host; title: it matches
+	// the entry title; label: a tenant's label equals the entry title.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Whether the name comes from an integrator listing rather than Okta's public
+	// catalog; any integrator account can publish under a vendor-like key, so
+	// confirm with care.
+	Integrator *bool `form:"integrator,omitempty" json:"integrator,omitempty" xml:"integrator,omitempty"`
+	// Name of the entry that already claims this key, when one does.
+	MappedBy *string `form:"mapped_by,omitempty" json:"mapped_by,omitempty" xml:"mapped_by,omitempty"`
+}
+
+// AdminRegistryOktaUnmappedNameResponseBody is used to define fields on
+// response body types.
+type AdminRegistryOktaUnmappedNameResponseBody struct {
+	OinName       *string  `form:"oin_name,omitempty" json:"oin_name,omitempty" xml:"oin_name,omitempty"`
+	Organizations *int     `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
+	SignOnModes   []string `form:"sign_on_modes,omitempty" json:"sign_on_modes,omitempty" xml:"sign_on_modes,omitempty"`
+	// Whether the name comes from an integrator listing rather than Okta's public
+	// catalog.
+	Integrator *bool `form:"integrator,omitempty" json:"integrator,omitempty" xml:"integrator,omitempty"`
+	// The entry the heuristic would map it to, when one matches.
+	SuggestedEntryID   *string `form:"suggested_entry_id,omitempty" json:"suggested_entry_id,omitempty" xml:"suggested_entry_id,omitempty"`
+	SuggestedEntryName *string `form:"suggested_entry_name,omitempty" json:"suggested_entry_name,omitempty" xml:"suggested_entry_name,omitempty"`
+	Reason             *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
 // AdminRegistrySummaryResponseBody is used to define fields on response body
@@ -28641,6 +29070,339 @@ func NewGetSupportCoverageGatewayError(body *GetSupportCoverageGatewayErrorRespo
 	return v
 }
 
+// NewGetRegistryOktaCandidatesAdminRegistryOktaCandidatesOK builds a "admin"
+// service "getRegistryOktaCandidates" endpoint result from a HTTP "OK"
+// response.
+func NewGetRegistryOktaCandidatesAdminRegistryOktaCandidatesOK(body *GetRegistryOktaCandidatesResponseBody) *admin.AdminRegistryOktaCandidates {
+	v := &admin.AdminRegistryOktaCandidates{}
+	v.Candidates = make([]*admin.AdminRegistryOktaCandidate, len(body.Candidates))
+	for i, val := range body.Candidates {
+		if val == nil {
+			v.Candidates[i] = nil
+			continue
+		}
+		v.Candidates[i] = unmarshalAdminRegistryOktaCandidateResponseBodyToAdminAdminRegistryOktaCandidate(val)
+	}
+
+	return v
+}
+
+// NewGetRegistryOktaCandidatesUnauthorized builds a admin service
+// getRegistryOktaCandidates endpoint unauthorized error.
+func NewGetRegistryOktaCandidatesUnauthorized(body *GetRegistryOktaCandidatesUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryOktaCandidatesForbidden builds a admin service
+// getRegistryOktaCandidates endpoint forbidden error.
+func NewGetRegistryOktaCandidatesForbidden(body *GetRegistryOktaCandidatesForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryOktaCandidatesBadRequest builds a admin service
+// getRegistryOktaCandidates endpoint bad_request error.
+func NewGetRegistryOktaCandidatesBadRequest(body *GetRegistryOktaCandidatesBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryOktaCandidatesNotFound builds a admin service
+// getRegistryOktaCandidates endpoint not_found error.
+func NewGetRegistryOktaCandidatesNotFound(body *GetRegistryOktaCandidatesNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryOktaCandidatesConflict builds a admin service
+// getRegistryOktaCandidates endpoint conflict error.
+func NewGetRegistryOktaCandidatesConflict(body *GetRegistryOktaCandidatesConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryOktaCandidatesUnsupportedMedia builds a admin service
+// getRegistryOktaCandidates endpoint unsupported_media error.
+func NewGetRegistryOktaCandidatesUnsupportedMedia(body *GetRegistryOktaCandidatesUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryOktaCandidatesInvalid builds a admin service
+// getRegistryOktaCandidates endpoint invalid error.
+func NewGetRegistryOktaCandidatesInvalid(body *GetRegistryOktaCandidatesInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryOktaCandidatesInvariantViolation builds a admin service
+// getRegistryOktaCandidates endpoint invariant_violation error.
+func NewGetRegistryOktaCandidatesInvariantViolation(body *GetRegistryOktaCandidatesInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryOktaCandidatesUnexpected builds a admin service
+// getRegistryOktaCandidates endpoint unexpected error.
+func NewGetRegistryOktaCandidatesUnexpected(body *GetRegistryOktaCandidatesUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryOktaCandidatesGatewayError builds a admin service
+// getRegistryOktaCandidates endpoint gateway_error error.
+func NewGetRegistryOktaCandidatesGatewayError(body *GetRegistryOktaCandidatesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryOktaUnmappedAdminRegistryOktaUnmappedOK builds a "admin"
+// service "listRegistryOktaUnmapped" endpoint result from a HTTP "OK" response.
+func NewListRegistryOktaUnmappedAdminRegistryOktaUnmappedOK(body *ListRegistryOktaUnmappedResponseBody) *admin.AdminRegistryOktaUnmapped {
+	v := &admin.AdminRegistryOktaUnmapped{}
+	v.Names = make([]*admin.AdminRegistryOktaUnmappedName, len(body.Names))
+	for i, val := range body.Names {
+		if val == nil {
+			v.Names[i] = nil
+			continue
+		}
+		v.Names[i] = unmarshalAdminRegistryOktaUnmappedNameResponseBodyToAdminAdminRegistryOktaUnmappedName(val)
+	}
+
+	return v
+}
+
+// NewListRegistryOktaUnmappedUnauthorized builds a admin service
+// listRegistryOktaUnmapped endpoint unauthorized error.
+func NewListRegistryOktaUnmappedUnauthorized(body *ListRegistryOktaUnmappedUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryOktaUnmappedForbidden builds a admin service
+// listRegistryOktaUnmapped endpoint forbidden error.
+func NewListRegistryOktaUnmappedForbidden(body *ListRegistryOktaUnmappedForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryOktaUnmappedBadRequest builds a admin service
+// listRegistryOktaUnmapped endpoint bad_request error.
+func NewListRegistryOktaUnmappedBadRequest(body *ListRegistryOktaUnmappedBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryOktaUnmappedNotFound builds a admin service
+// listRegistryOktaUnmapped endpoint not_found error.
+func NewListRegistryOktaUnmappedNotFound(body *ListRegistryOktaUnmappedNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryOktaUnmappedConflict builds a admin service
+// listRegistryOktaUnmapped endpoint conflict error.
+func NewListRegistryOktaUnmappedConflict(body *ListRegistryOktaUnmappedConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryOktaUnmappedUnsupportedMedia builds a admin service
+// listRegistryOktaUnmapped endpoint unsupported_media error.
+func NewListRegistryOktaUnmappedUnsupportedMedia(body *ListRegistryOktaUnmappedUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryOktaUnmappedInvalid builds a admin service
+// listRegistryOktaUnmapped endpoint invalid error.
+func NewListRegistryOktaUnmappedInvalid(body *ListRegistryOktaUnmappedInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryOktaUnmappedInvariantViolation builds a admin service
+// listRegistryOktaUnmapped endpoint invariant_violation error.
+func NewListRegistryOktaUnmappedInvariantViolation(body *ListRegistryOktaUnmappedInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryOktaUnmappedUnexpected builds a admin service
+// listRegistryOktaUnmapped endpoint unexpected error.
+func NewListRegistryOktaUnmappedUnexpected(body *ListRegistryOktaUnmappedUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryOktaUnmappedGatewayError builds a admin service
+// listRegistryOktaUnmapped endpoint gateway_error error.
+func NewListRegistryOktaUnmappedGatewayError(body *ListRegistryOktaUnmappedGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListRegistryEntriesAdminRegistryPageOK builds a "admin" service
 // "listRegistryEntries" endpoint result from a HTTP "OK" response.
 func NewListRegistryEntriesAdminRegistryPageOK(body *ListRegistryEntriesResponseBody) *admin.AdminRegistryPage {
@@ -34032,6 +34794,38 @@ func ValidateGetSupportCoverageResponseBody(body *GetSupportCoverageResponseBody
 	}
 	if body.To != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetRegistryOktaCandidatesResponseBody runs the validations defined
+// on GetRegistryOktaCandidatesResponseBody
+func ValidateGetRegistryOktaCandidatesResponseBody(body *GetRegistryOktaCandidatesResponseBody) (err error) {
+	if body.Candidates == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidates", "body"))
+	}
+	for _, e := range body.Candidates {
+		if e != nil {
+			if err2 := ValidateAdminRegistryOktaCandidateResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateListRegistryOktaUnmappedResponseBody runs the validations defined on
+// ListRegistryOktaUnmappedResponseBody
+func ValidateListRegistryOktaUnmappedResponseBody(body *ListRegistryOktaUnmappedResponseBody) (err error) {
+	if body.Names == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("names", "body"))
+	}
+	for _, e := range body.Names {
+		if e != nil {
+			if err2 := ValidateAdminRegistryOktaUnmappedNameResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -48838,6 +49632,490 @@ func ValidateGetSupportCoverageGatewayErrorResponseBody(body *GetSupportCoverage
 	return
 }
 
+// ValidateGetRegistryOktaCandidatesUnauthorizedResponseBody runs the
+// validations defined on getRegistryOktaCandidates_unauthorized_response_body
+func ValidateGetRegistryOktaCandidatesUnauthorizedResponseBody(body *GetRegistryOktaCandidatesUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryOktaCandidatesForbiddenResponseBody runs the validations
+// defined on getRegistryOktaCandidates_forbidden_response_body
+func ValidateGetRegistryOktaCandidatesForbiddenResponseBody(body *GetRegistryOktaCandidatesForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryOktaCandidatesBadRequestResponseBody runs the validations
+// defined on getRegistryOktaCandidates_bad_request_response_body
+func ValidateGetRegistryOktaCandidatesBadRequestResponseBody(body *GetRegistryOktaCandidatesBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryOktaCandidatesNotFoundResponseBody runs the validations
+// defined on getRegistryOktaCandidates_not_found_response_body
+func ValidateGetRegistryOktaCandidatesNotFoundResponseBody(body *GetRegistryOktaCandidatesNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryOktaCandidatesConflictResponseBody runs the validations
+// defined on getRegistryOktaCandidates_conflict_response_body
+func ValidateGetRegistryOktaCandidatesConflictResponseBody(body *GetRegistryOktaCandidatesConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryOktaCandidatesUnsupportedMediaResponseBody runs the
+// validations defined on
+// getRegistryOktaCandidates_unsupported_media_response_body
+func ValidateGetRegistryOktaCandidatesUnsupportedMediaResponseBody(body *GetRegistryOktaCandidatesUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryOktaCandidatesInvalidResponseBody runs the validations
+// defined on getRegistryOktaCandidates_invalid_response_body
+func ValidateGetRegistryOktaCandidatesInvalidResponseBody(body *GetRegistryOktaCandidatesInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryOktaCandidatesInvariantViolationResponseBody runs the
+// validations defined on
+// getRegistryOktaCandidates_invariant_violation_response_body
+func ValidateGetRegistryOktaCandidatesInvariantViolationResponseBody(body *GetRegistryOktaCandidatesInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryOktaCandidatesUnexpectedResponseBody runs the validations
+// defined on getRegistryOktaCandidates_unexpected_response_body
+func ValidateGetRegistryOktaCandidatesUnexpectedResponseBody(body *GetRegistryOktaCandidatesUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryOktaCandidatesGatewayErrorResponseBody runs the
+// validations defined on getRegistryOktaCandidates_gateway_error_response_body
+func ValidateGetRegistryOktaCandidatesGatewayErrorResponseBody(body *GetRegistryOktaCandidatesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryOktaUnmappedUnauthorizedResponseBody runs the
+// validations defined on listRegistryOktaUnmapped_unauthorized_response_body
+func ValidateListRegistryOktaUnmappedUnauthorizedResponseBody(body *ListRegistryOktaUnmappedUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryOktaUnmappedForbiddenResponseBody runs the validations
+// defined on listRegistryOktaUnmapped_forbidden_response_body
+func ValidateListRegistryOktaUnmappedForbiddenResponseBody(body *ListRegistryOktaUnmappedForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryOktaUnmappedBadRequestResponseBody runs the validations
+// defined on listRegistryOktaUnmapped_bad_request_response_body
+func ValidateListRegistryOktaUnmappedBadRequestResponseBody(body *ListRegistryOktaUnmappedBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryOktaUnmappedNotFoundResponseBody runs the validations
+// defined on listRegistryOktaUnmapped_not_found_response_body
+func ValidateListRegistryOktaUnmappedNotFoundResponseBody(body *ListRegistryOktaUnmappedNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryOktaUnmappedConflictResponseBody runs the validations
+// defined on listRegistryOktaUnmapped_conflict_response_body
+func ValidateListRegistryOktaUnmappedConflictResponseBody(body *ListRegistryOktaUnmappedConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryOktaUnmappedUnsupportedMediaResponseBody runs the
+// validations defined on
+// listRegistryOktaUnmapped_unsupported_media_response_body
+func ValidateListRegistryOktaUnmappedUnsupportedMediaResponseBody(body *ListRegistryOktaUnmappedUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryOktaUnmappedInvalidResponseBody runs the validations
+// defined on listRegistryOktaUnmapped_invalid_response_body
+func ValidateListRegistryOktaUnmappedInvalidResponseBody(body *ListRegistryOktaUnmappedInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryOktaUnmappedInvariantViolationResponseBody runs the
+// validations defined on
+// listRegistryOktaUnmapped_invariant_violation_response_body
+func ValidateListRegistryOktaUnmappedInvariantViolationResponseBody(body *ListRegistryOktaUnmappedInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryOktaUnmappedUnexpectedResponseBody runs the validations
+// defined on listRegistryOktaUnmapped_unexpected_response_body
+func ValidateListRegistryOktaUnmappedUnexpectedResponseBody(body *ListRegistryOktaUnmappedUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryOktaUnmappedGatewayErrorResponseBody runs the
+// validations defined on listRegistryOktaUnmapped_gateway_error_response_body
+func ValidateListRegistryOktaUnmappedGatewayErrorResponseBody(body *ListRegistryOktaUnmappedGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListRegistryEntriesUnauthorizedResponseBody runs the validations
 // defined on listRegistryEntries_unauthorized_response_body
 func ValidateListRegistryEntriesUnauthorizedResponseBody(body *ListRegistryEntriesUnauthorizedResponseBody) (err error) {
@@ -55070,6 +56348,55 @@ func ValidateSupportCoverageUnmappedResponseBody(body *SupportCoverageUnmappedRe
 	}
 	if body.Sessions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sessions", "body"))
+	}
+	return
+}
+
+// ValidateAdminRegistryOktaCandidateResponseBody runs the validations defined
+// on AdminRegistryOktaCandidateResponseBody
+func ValidateAdminRegistryOktaCandidateResponseBody(body *AdminRegistryOktaCandidateResponseBody) (err error) {
+	if body.OinName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oin_name", "body"))
+	}
+	if body.Organizations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organizations", "body"))
+	}
+	if body.SignOnModes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sign_on_modes", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.Integrator == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("integrator", "body"))
+	}
+	if body.Reason != nil {
+		if !(*body.Reason == "domain" || *body.Reason == "title" || *body.Reason == "label") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reason", *body.Reason, []any{"domain", "title", "label"}))
+		}
+	}
+	return
+}
+
+// ValidateAdminRegistryOktaUnmappedNameResponseBody runs the validations
+// defined on AdminRegistryOktaUnmappedNameResponseBody
+func ValidateAdminRegistryOktaUnmappedNameResponseBody(body *AdminRegistryOktaUnmappedNameResponseBody) (err error) {
+	if body.OinName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oin_name", "body"))
+	}
+	if body.Organizations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organizations", "body"))
+	}
+	if body.SignOnModes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sign_on_modes", "body"))
+	}
+	if body.Integrator == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("integrator", "body"))
+	}
+	if body.Reason != nil {
+		if !(*body.Reason == "domain" || *body.Reason == "title" || *body.Reason == "label") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reason", *body.Reason, []any{"domain", "title", "label"}))
+		}
 	}
 	return
 }

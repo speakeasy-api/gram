@@ -35,6 +35,7 @@ import { adminGetOrganizationStats } from "../funcs/adminGetOrganizationStats.js
 import { adminGetPaygBillingSummary } from "../funcs/adminGetPaygBillingSummary.js";
 import { adminGetProject } from "../funcs/adminGetProject.js";
 import { adminGetRegistryEntry } from "../funcs/adminGetRegistryEntry.js";
+import { adminGetRegistryOktaCandidates } from "../funcs/adminGetRegistryOktaCandidates.js";
 import { adminGetSession } from "../funcs/adminGetSession.js";
 import { adminGetSpendBreakdown } from "../funcs/adminGetSpendBreakdown.js";
 import { adminGetStripeCustomer } from "../funcs/adminGetStripeCustomer.js";
@@ -53,6 +54,7 @@ import { adminListOrganizationProjects } from "../funcs/adminListOrganizationPro
 import { adminListOrganizations } from "../funcs/adminListOrganizations.js";
 import { adminListProjectMcpServers } from "../funcs/adminListProjectMcpServers.js";
 import { adminListRegistryEntries } from "../funcs/adminListRegistryEntries.js";
+import { adminListRegistryOktaUnmapped } from "../funcs/adminListRegistryOktaUnmapped.js";
 import { adminListUserOrganizations } from "../funcs/adminListUserOrganizations.js";
 import { adminListUsers } from "../funcs/adminListUsers.js";
 import { adminLogout } from "../funcs/adminLogout.js";
@@ -104,6 +106,8 @@ import { AdminOrganizationStats } from "../models/components/adminorganizationst
 import { AdminPaygBillingSummary } from "../models/components/adminpaygbillingsummary.js";
 import { AdminProjectDetail } from "../models/components/adminprojectdetail.js";
 import { AdminRegistryEntry } from "../models/components/adminregistryentry.js";
+import { AdminRegistryOktaCandidates } from "../models/components/adminregistryoktacandidates.js";
+import { AdminRegistryOktaUnmapped } from "../models/components/adminregistryoktaunmapped.js";
 import { AdminRegistryPage } from "../models/components/adminregistrypage.js";
 import { AdminSession } from "../models/components/adminsession.js";
 import { AdminSpendBreakdownResponse } from "../models/components/adminspendbreakdownresponse.js";
@@ -173,6 +177,7 @@ import { AdminGetOrganizationOnboardingStackRequest } from "../models/operations
 import { AdminGetPaygBillingSummaryRequest } from "../models/operations/admingetpaygbillingsummary.js";
 import { AdminGetProjectRequest } from "../models/operations/admingetproject.js";
 import { AdminGetRegistryEntryRequest } from "../models/operations/admingetregistryentry.js";
+import { AdminGetRegistryOktaCandidatesRequest } from "../models/operations/admingetregistryoktacandidates.js";
 import { AdminGetSpendBreakdownRequest } from "../models/operations/admingetspendbreakdown.js";
 import { AdminGetStripeCustomerRequest } from "../models/operations/admingetstripecustomer.js";
 import { AdminGetStripeSubscriptionRequest } from "../models/operations/admingetstripesubscription.js";
@@ -1063,6 +1068,38 @@ export class Admin extends ClientSDK {
     return unwrapAsync(adminListRegistryEntries(
       this,
       request,
+      options,
+    ));
+  }
+
+  /**
+   * getRegistryOktaCandidates admin
+   *
+   * @remarks
+   * Staff-only registry administration: Okta application names observed across synced tenants that plausibly belong to the entry, for confirmation in the editor.
+   */
+  async getRegistryOktaCandidates(
+    request: AdminGetRegistryOktaCandidatesRequest,
+    options?: RequestOptions,
+  ): Promise<AdminRegistryOktaCandidates> {
+    return unwrapAsync(adminGetRegistryOktaCandidates(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listRegistryOktaUnmapped admin
+   *
+   * @remarks
+   * Staff-only registry administration: observed Okta application names no entry claims yet, with the entry the heuristic would propose.
+   */
+  async listRegistryOktaUnmapped(
+    options?: RequestOptions,
+  ): Promise<AdminRegistryOktaUnmapped> {
+    return unwrapAsync(adminListRegistryOktaUnmapped(
+      this,
       options,
     ));
   }

@@ -16,6 +16,8 @@ import type {
 import type { AdminListRegistryEntriesRequest } from "@gram/admin-client/models/operations/adminlistregistryentries";
 import { buildAdminListRegistryEntriesQuery } from "@gram/admin-client/react-query/adminListRegistryEntries.core";
 import { buildAdminGetRegistryEntryQuery } from "@gram/admin-client/react-query/adminGetRegistryEntry.core";
+import { buildAdminGetRegistryOktaCandidatesQuery } from "@gram/admin-client/react-query/adminGetRegistryOktaCandidates.core";
+import { buildAdminListRegistryOktaUnmappedQuery } from "@gram/admin-client/react-query/adminListRegistryOktaUnmapped.core";
 import { buildAdminCreateRegistryEntryMutation } from "@gram/admin-client/react-query/adminCreateRegistryEntry";
 import { buildAdminSaveRegistryEntryMutation } from "@gram/admin-client/react-query/adminSaveRegistryEntry";
 import { buildAdminSetRegistryEntryPublishedMutation } from "@gram/admin-client/react-query/adminSetRegistryEntryPublished";
@@ -855,4 +857,36 @@ export function registryEntryQuery(
   id: string,
 ): ReturnType<typeof createRegistryEntryQuery> {
   return createRegistryEntryQuery(id);
+}
+
+function createRegistryOktaCandidatesQuery(id: string) {
+  const generated = buildAdminGetRegistryOktaCandidatesQuery(
+    redirectingClient,
+    { id },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    enabled: id !== "",
+  });
+}
+
+export function registryOktaCandidatesQuery(
+  id: string,
+): ReturnType<typeof createRegistryOktaCandidatesQuery> {
+  return createRegistryOktaCandidatesQuery(id);
+}
+
+function createRegistryOktaUnmappedQuery() {
+  const generated = buildAdminListRegistryOktaUnmappedQuery(redirectingClient);
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+export function registryOktaUnmappedQuery(): ReturnType<
+  typeof createRegistryOktaUnmappedQuery
+> {
+  return createRegistryOktaUnmappedQuery();
 }
