@@ -17,20 +17,18 @@ WHERE organization_id = @organization_id AND project_id = @project_id
  AND NOT deleted AND status = 'active' AND definition_slug <> 'wake'
 ORDER BY id;
 
--- name: AdvanceAgentEpoch :exec
-UPDATE agents SET identity_epoch = identity_epoch + 1, updated_at = clock_timestamp()
-WHERE organization_id = @organization_id AND project_id = @project_id AND id = @agent_id;
-
 -- name: RevokeDedicatedAdmissions :exec
 UPDATE workload_identity_admissions adm SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE adm.organization_id = @organization_id AND NOT adm.deleted
+WHERE adm.organization_id = @organization_id AND adm.project_id = @project_id AND NOT adm.deleted
  AND EXISTS (SELECT 1 FROM workload_agent_assignments wa
  WHERE wa.organization_id = adm.organization_id AND wa.workload_issuer_id = adm.workload_issuer_id
  AND wa.subject = adm.subject AND wa.agent_id = @agent_id AND NOT wa.deleted);
 
 -- name: RevokeDedicatedAssignments :exec
-UPDATE workload_agent_assignments SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = @organization_id AND agent_id = @agent_id AND NOT deleted;
+UPDATE workload_agent_assignments wa SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE wa.organization_id = @organization_id AND wa.agent_id = @agent_id AND NOT wa.deleted
+ AND NOT EXISTS (SELECT 1 FROM workload_identity_admissions adm WHERE adm.organization_id = wa.organization_id
+ AND adm.workload_issuer_id = wa.workload_issuer_id AND adm.subject = wa.subject AND adm.match_kind = wa.match_kind AND NOT adm.deleted);
 
 -- name: GetTrigger :one
 SELECT id, definition_slug, target_kind, target_ref, status, deleted
@@ -46,9 +44,10 @@ FOR SHARE OF u, m;
 
 -- name: GetAssistantBinding :one
 SELECT b.id, b.original_assistant_id, b.original_agent_id, b.generation, b.deleted,
-  COALESCE(g.identity_epoch, 0)::bigint AS agent_identity_epoch,
+  (b.deleted OR b.project_ref_id IS NULL OR b.assistant_id IS NULL OR b.agent_id IS NULL OR g.deleted OR g.revoked_at IS NOT NULL OR g.owner_reassignment_required_at IS NOT NULL)::boolean AS tombstoned,
   COALESCE(NOT b.deleted AND b.project_ref_id IS NOT NULL AND b.assistant_id IS NOT NULL
-    AND b.agent_id IS NOT NULL AND NOT p.deleted AND NOT a.deleted
+    AND b.agent_id = b.original_agent_id AND b.assistant_id = b.original_assistant_id
+    AND b.project_ref_id = b.project_id AND NOT p.deleted AND NOT a.deleted
     AND NOT g.deleted AND g.suspended_at IS NULL AND g.revoked_at IS NULL
     AND g.owner_reassignment_required_at IS NULL AND u.deleted_at IS NULL
     AND u.workos_deleted_at IS NULL AND NOT m.deleted AND m.user_id IS NOT NULL, false)::boolean AS eligible
@@ -65,11 +64,13 @@ ORDER BY b.generation DESC LIMIT 1;
 SELECT b.id, b.original_trigger_id, b.original_assistant_binding_id, b.original_workload_issuer_id,
  b.assistant_binding_generation, b.generation, b.subject, b.deleted,
  COALESCE(NOT b.deleted AND b.project_ref_id IS NOT NULL AND b.trigger_id IS NOT NULL
-   AND b.assistant_binding_id IS NOT NULL AND b.workload_issuer_id IS NOT NULL
+   AND b.assistant_binding_id = b.original_assistant_binding_id AND b.workload_issuer_id = b.original_workload_issuer_id
+   AND b.trigger_id = b.original_trigger_id AND b.project_ref_id = b.project_id
    AND NOT p.deleted AND NOT t.deleted AND t.status = 'active'
+   AND b.subject = 'assistant-trigger:' || b.original_trigger_id::text
    AND t.definition_slug <> 'wake' AND t.target_kind = 'assistant' AND t.target_ref = ab.original_assistant_id::text
-   AND NOT i.deleted AND i.issuer_kind = 'system' AND NOT i.allow_wildcard_admission
-   AND i.jwks_uri = '' AND i.project_id = b.project_id
+   AND NOT i.deleted AND NOT i.allow_wildcard_admission
+   AND i.issuer = @platform_issuer AND i.jwks_uri = @platform_jwks_uri AND i.project_id = b.project_id
    AND EXISTS (SELECT 1 FROM workload_identity_admissions adm
      WHERE adm.organization_id = b.organization_id AND adm.project_id = b.project_id
        AND adm.workload_issuer_id = b.original_workload_issuer_id AND adm.subject = b.subject
@@ -96,14 +97,14 @@ INSERT INTO assistant_agent_bindings (
  @agent_id, @organization_id, @project_id, @agent_id, 1)
 RETURNING id;
 
--- name: GetSystemIssuer :one
-SELECT id, deleted FROM workload_issuers
-WHERE organization_id = @organization_id AND project_id = @project_id AND issuer_kind = 'system'
-FOR UPDATE;
+-- name: GetPlatformIssuer :one
+SELECT id, deleted, jwks_uri, allow_wildcard_admission FROM workload_issuers
+WHERE organization_id = @organization_id AND project_id = @project_id AND issuer = @platform_issuer AND NOT deleted
+ORDER BY created_at, id LIMIT 1 FOR UPDATE;
 
--- name: CreateSystemIssuer :one
-INSERT INTO workload_issuers (organization_id, project_id, name, issuer, issuer_kind, jwks_uri, allow_wildcard_admission)
-VALUES (@organization_id, @project_id, @name, @issuer, 'system', '', false)
+-- name: CreatePlatformIssuer :one
+INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission)
+VALUES (@organization_id, @project_id, @name, @issuer, @jwks_uri, false)
 RETURNING id;
 
 -- name: CreateTriggerBinding :exec
@@ -112,11 +113,11 @@ INSERT INTO trigger_workload_bindings (
  original_trigger_id, trigger_ref_organization_id, trigger_ref_project_id, trigger_id,
  original_assistant_binding_id, assistant_binding_ref_organization_id, assistant_binding_ref_project_id, assistant_binding_id,
  assistant_binding_generation, original_workload_issuer_id, workload_issuer_ref_organization_id,
- workload_issuer_ref_project_id, workload_issuer_id, workload_issuer_ref_kind, subject, generation
+ workload_issuer_ref_project_id, workload_issuer_id, subject, generation
 ) VALUES (@organization_id, @project_id, @organization_id, @project_id,
  @trigger_id, @organization_id, @project_id, @trigger_id,
  @assistant_binding_id, @organization_id, @project_id, @assistant_binding_id,
- @assistant_generation, @issuer_id, @organization_id, @project_id, @issuer_id, 'system', @subject, @generation);
+ @assistant_generation, @issuer_id, @organization_id, @project_id, @issuer_id, @subject, @generation);
 
 -- name: CreateAdmission :exec
 INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind)
@@ -145,19 +146,26 @@ ORDER BY tb.original_trigger_id;
 
 -- name: RevokeAdmission :exec
 UPDATE workload_identity_admissions SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = @organization_id AND workload_issuer_id = @issuer_id AND subject = @subject AND NOT deleted;
+WHERE organization_id = @organization_id AND project_id = @project_id AND workload_issuer_id = @issuer_id AND subject = @subject AND NOT deleted;
 
 -- name: RevokeAssignment :exec
-UPDATE workload_agent_assignments SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = @organization_id AND workload_issuer_id = @issuer_id AND subject = @subject AND NOT deleted;
+UPDATE workload_agent_assignments wa SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE wa.organization_id = @organization_id AND wa.workload_issuer_id = @issuer_id AND wa.subject = @subject AND NOT wa.deleted
+ AND NOT EXISTS (SELECT 1 FROM workload_identity_admissions adm WHERE adm.organization_id = wa.organization_id AND adm.workload_issuer_id = wa.workload_issuer_id AND adm.subject = wa.subject AND adm.match_kind = wa.match_kind AND NOT adm.deleted);
 
 -- name: RevokeDedicatedAgent :exec
 UPDATE agents SET revoked_at = COALESCE(revoked_at, clock_timestamp()), suspended_at = NULL,
- identity_epoch = identity_epoch + 1, updated_at = clock_timestamp()
+ updated_at = clock_timestamp()
 WHERE organization_id = @organization_id AND project_id = @project_id AND id = @agent_id AND revoked_at IS NULL;
 
 -- name: LockDedicatedAgent :one
-SELECT id FROM agents WHERE organization_id = @organization_id AND project_id = @project_id AND id = @agent_id FOR UPDATE;
+SELECT g.id FROM agents g
+JOIN users u ON u.id = g.owner_user_id
+JOIN organization_user_relationships m ON m.user_id = u.id AND m.organization_id = g.organization_id
+WHERE g.organization_id = @organization_id AND g.project_id = @project_id AND g.id = @agent_id
+ AND NOT g.deleted AND g.suspended_at IS NULL AND g.revoked_at IS NULL AND g.owner_reassignment_required_at IS NULL
+ AND u.deleted_at IS NULL AND u.workos_deleted_at IS NULL AND NOT m.deleted
+FOR UPDATE OF g FOR SHARE OF u, m;
 
 -- name: ListConfiguredMCPServers :many
 SELECT DISTINCT s.id
@@ -277,3 +285,17 @@ DELETE FROM projects WHERE organization_id = @organization_id AND id = @project_
 -- name: FixtureSetTriggerDefinition :exec
 UPDATE trigger_instances SET definition_slug = @definition_slug
 WHERE organization_id = @organization_id AND project_id = @project_id AND id = @trigger_id;
+
+-- name: LockAssistantIssuers :exec
+SELECT i.id FROM workload_issuers i
+WHERE i.organization_id = @organization_id AND i.project_id = @project_id
+AND EXISTS (SELECT 1 FROM trigger_workload_bindings tb
+ JOIN assistant_agent_bindings ab ON ab.id = tb.original_assistant_binding_id
+  AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id
+ WHERE tb.organization_id = i.organization_id AND tb.original_workload_issuer_id = i.id
+ AND ab.original_assistant_id = @assistant_id)
+ORDER BY i.id FOR UPDATE;
+
+-- name: FixtureWithdrawAssignment :exec
+UPDATE workload_agent_assignments SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id AND workload_issuer_id = @issuer_id AND subject = @subject AND NOT deleted;

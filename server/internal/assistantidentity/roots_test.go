@@ -23,7 +23,7 @@ func TestUpgradeNeverMintsContinuationWorkloads(t *testing.T) {
 	q := repo.New(f.db)
 	wake := uuid.New()
 	require.NoError(t, q.FixtureCreateRoot(t.Context(), repo.FixtureCreateRootParams{ID: wake, OrganizationID: f.org, ProjectID: f.project, DefinitionSlug: "wake", TargetRef: f.assistant.String()}))
-	_, err := assistantidentity.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, wake)
+	_, err := testIdentityService.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, wake)
 	require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity)
 	first := f.provision(t)
 	second := f.provision(t)
@@ -33,20 +33,20 @@ func TestUpgradeNeverMintsContinuationWorkloads(t *testing.T) {
 	require.Equal(t, int64(1), counts.Triggers)
 	require.Equal(t, int64(1), counts.Admissions)
 	require.Equal(t, int64(1), counts.Assignments)
-	_, err = q.GetTriggerBinding(t.Context(), repo.GetTriggerBindingParams{OrganizationID: f.org, ProjectID: f.project, TriggerID: wake})
+	_, err = q.GetTriggerBinding(t.Context(), repo.GetTriggerBindingParams{PlatformIssuer: "https://platform.example.invalid", PlatformJwksUri: "https://platform.example.invalid/.well-known/jwks.json", OrganizationID: f.org, ProjectID: f.project, TriggerID: wake})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	err = inTx(t, f.db, func(tx pgx.Tx) error {
-		return assistantidentity.BindRootTrigger(t.Context(), tx, f.org, f.project, wake)
+		return testIdentityService.BindRootTrigger(t.Context(), tx, f.org, f.project, wake)
 	})
 	require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity)
-	_, err = assistantidentity.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, wake)
+	_, err = testIdentityService.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, wake)
 	require.ErrorIs(t, err, assistantidentity.ErrBrokenMapping)
 	// Even a corrupted historic root must not validate as a continuation.
 	require.NoError(t, q.FixtureSetTriggerDefinition(t.Context(), repo.FixtureSetTriggerDefinitionParams{OrganizationID: f.org, ProjectID: f.project, TriggerID: f.trigger, DefinitionSlug: "wake"}))
-	result, err := assistantidentity.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, f.trigger)
+	result, err := testIdentityService.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, f.trigger)
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Tombstoned, result.State)
-	require.ErrorIs(t, assistantidentity.Validate(t.Context(), f.db, first), assistantidentity.ErrInvalidIdentity)
+	require.ErrorIs(t, testIdentityService.Validate(t.Context(), f.db, first), assistantidentity.ErrInvalidIdentity)
 }
 
 func TestRetargetPreservesSubjectAndRetiresOldGeneration(t *testing.T) {
@@ -59,7 +59,7 @@ func TestRetargetPreservesSubjectAndRetiresOldGeneration(t *testing.T) {
 		require.NoError(t, q.FixtureCreateAssistant(t.Context(), repo.FixtureCreateAssistantParams{ID: id, OrganizationID: f.org, ProjectID: f.project, Creator: conv.ToPGText(f.actor)}))
 	}
 	require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
-		_, err := assistantidentity.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: next, ActorUserID: f.actor})
+		_, err := testIdentityService.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: next, ActorUserID: f.actor})
 		if err != nil {
 			return fmt.Errorf("provision retarget fixture: %w", err)
 		}
@@ -74,9 +74,9 @@ func TestRetargetPreservesSubjectAndRetiresOldGeneration(t *testing.T) {
 			if err := q.FixtureRetargetTrigger(t.Context(), repo.FixtureRetargetTriggerParams{OrganizationID: f.org, ProjectID: f.project, TriggerID: f.trigger, TargetRef: target.String()}); err != nil {
 				return fmt.Errorf("retarget fixture: %w", err)
 			}
-			return assistantidentity.RetargetRootTrigger(t.Context(), tx, f.org, f.project, f.trigger)
+			return testIdentityService.RetargetRootTrigger(t.Context(), tx, f.org, f.project, f.trigger)
 		}))
-		result, err := assistantidentity.Resolve(t.Context(), f.db, f.org, f.project, target, f.trigger)
+		result, err := testIdentityService.Resolve(t.Context(), f.db, f.org, f.project, target, f.trigger)
 		require.NoError(t, err)
 		if target == next {
 			require.Equal(t, assistantidentity.Active, result.State)
@@ -87,7 +87,7 @@ func TestRetargetPreservesSubjectAndRetiresOldGeneration(t *testing.T) {
 		} else {
 			require.Equal(t, assistantidentity.Tombstoned, result.State)
 		}
-		require.Error(t, assistantidentity.Validate(t.Context(), f.db, first))
+		require.Error(t, testIdentityService.Validate(t.Context(), f.db, first))
 	}
 }
 
@@ -107,9 +107,9 @@ func sessionForIdentity(t *testing.T, f fixture, id assistantidentity.Identity) 
 	return session.ID
 }
 
-func TestTombstoneAndPauseRevokeCurrentSessionsAtomically(t *testing.T) {
+func TestTombstonesRevokeCurrentSessionsAtomically(t *testing.T) {
 	t.Parallel()
-	for _, operation := range []string{"root", "assistant", "pause"} {
+	for _, operation := range []string{"root", "assistant"} {
 		t.Run(operation, func(t *testing.T) {
 			t.Parallel()
 			f := newFixture(t)
@@ -119,10 +119,8 @@ func TestTombstoneAndPauseRevokeCurrentSessionsAtomically(t *testing.T) {
 				switch operation {
 				case "root":
 					return assistantidentity.TombstoneTrigger(t.Context(), tx, f.org, f.project, f.trigger)
-				case "assistant":
-					return assistantidentity.TombstoneAssistant(t.Context(), tx, f.org, f.project, f.assistant)
 				default:
-					return assistantidentity.InvalidateAssistantAuthority(t.Context(), tx, f.org, f.project, f.assistant)
+					return assistantidentity.TombstoneAssistant(t.Context(), tx, f.org, f.project, f.assistant)
 				}
 			}
 			err := inTx(t, f.db, func(tx pgx.Tx) error {
@@ -135,11 +133,11 @@ func TestTombstoneAndPauseRevokeCurrentSessionsAtomically(t *testing.T) {
 			q := sessionsrepo.New(f.db)
 			_, err = q.GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ID: session, OrganizationID: f.org})
 			require.NoError(t, err, "rollback must restore current authority")
-			require.NoError(t, assistantidentity.Validate(t.Context(), f.db, id))
+			require.NoError(t, testIdentityService.Validate(t.Context(), f.db, id))
 			require.NoError(t, inTx(t, f.db, mutate))
 			_, err = q.GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ID: session, OrganizationID: f.org})
 			require.ErrorIs(t, err, pgx.ErrNoRows)
-			require.ErrorIs(t, assistantidentity.Validate(t.Context(), f.db, id), assistantidentity.ErrInvalidIdentity)
+			require.ErrorIs(t, testIdentityService.Validate(t.Context(), f.db, id), assistantidentity.ErrInvalidIdentity)
 		})
 	}
 }

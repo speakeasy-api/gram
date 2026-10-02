@@ -25,6 +25,10 @@ const maxAssertionBytes = 8 * 1024
 var nonBearerTypes = map[string]struct{}{
 	"wit+jwt": {},
 	"at+jwt":  {},
+	// Private MCP caller assertions and internal execution credentials cannot be
+	// exchanged at the external workload grant, even when issuer keys overlap.
+	"speakeasy-identity+jwt":       {},
+	"gram-assistant-execution+jwt": {},
 }
 
 // Result describes a verified workload assertion. Admission of the subject

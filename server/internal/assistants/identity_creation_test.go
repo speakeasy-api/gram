@@ -1,6 +1,7 @@
 package assistants
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -16,7 +17,6 @@ import (
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -37,7 +37,7 @@ func seedIdentityCreationMembers(t *testing.T, db *pgxpool.Pool) {
 	}
 }
 
-func TestIdentityCreationConcurrentKeyReplayAndReservation(t *testing.T) {
+func TestIdentityCreationConcurrentIndependentRequests(t *testing.T) {
 	t.Parallel()
 	db, err := assistantsInfra.CloneTestDatabase(t, "identity_create_key")
 	require.NoError(t, err)
@@ -47,28 +47,24 @@ func TestIdentityCreationConcurrentKeyReplayAndReservation(t *testing.T) {
 	var group errgroup.Group
 	for i := range results {
 		group.Go(func() error {
-			record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Keyed assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, "request-key")
+			record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", fmt.Sprintf("Assistant %d", i), "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive)
 			results[i] = record
 			return err
 		})
 	}
 	require.NoError(t, group.Wait())
 	for _, record := range results {
-		require.Equal(t, results[0].ID, record.ID)
+		require.NotEmpty(t, record.ID)
 		require.Equal(t, "ACTIVE", record.IdentityState)
 	}
 	rows, err := core.ListAssistants(t.Context(), project)
 	require.NoError(t, err)
-	require.Len(t, rows, 1)
+	require.Len(t, rows, len(results))
 	agents, err := agentrepo.New(db).ListManagedAgents(t.Context(), "org-test")
 	require.NoError(t, err)
-	require.Len(t, agents, 1, "concurrent replay must not orphan dedicated agents")
+	require.Len(t, agents, len(results), "each create owns one dedicated agent")
 
-	_, err = core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Changed payload", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, "request-key")
-	require.ErrorIs(t, err, errAssistantCreateConflict)
 	require.NoError(t, core.DeleteAssistant(t.Context(), project, results[0].ID, urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"), nil))
-	_, err = core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Keyed assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, "request-key")
-	require.ErrorIs(t, err, errAssistantCreateConflict, "deleted result must not release key reservation")
 	binding, err := identityrepo.New(db).GetAssistantBinding(t.Context(), identityrepo.GetAssistantBindingParams{OrganizationID: "org-test", ProjectID: project, AssistantID: results[0].ID})
 	require.NoError(t, err)
 	require.True(t, binding.Deleted)
@@ -83,7 +79,7 @@ func TestIdentityCreationProvisioningFailureRollsBack(t *testing.T) {
 	// The user exists but has no membership, so the mandatory provision step fails.
 	_, err = usersrepo.New(db).UpsertUser(t.Context(), usersrepo.UpsertUserParams{ID: "ineligible-user", Email: "ineligible@example.invalid", DisplayName: "Ineligible", PhotoUrl: pgtype.Text{}, Admin: false})
 	require.NoError(t, err)
-	_, err = core.CreateAssistant(t.Context(), "org-test", project, "ineligible-user", "Rollback assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, "retry-key")
+	_, err = core.CreateAssistant(t.Context(), "org-test", project, "ineligible-user", "Rollback assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive)
 	require.ErrorIs(t, err, assistantidentity.ErrActorIneligible)
 	rows, err := core.ListAssistants(t.Context(), project)
 	require.NoError(t, err)
@@ -98,7 +94,7 @@ func TestIdentityCreationProvisioningFailureRollsBack(t *testing.T) {
 	// The rolled-back reservation can be retried after eligibility is fixed.
 	_, err = orgrepo.New(db).UpsertOrganizationUserRelationship(t.Context(), orgrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: "org-test", UserID: pgtype.Text{String: "ineligible-user", Valid: true}})
 	require.NoError(t, err)
-	record, err := core.CreateAssistant(t.Context(), "org-test", project, "ineligible-user", "Rollback assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, "retry-key")
+	record, err := core.CreateAssistant(t.Context(), "org-test", project, "ineligible-user", "Rollback assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive)
 	require.NoError(t, err)
 	require.Equal(t, "ACTIVE", record.IdentityState)
 }
@@ -126,22 +122,21 @@ func TestIdentityCreationAPIUpgradeRequiresAuthorizationAndIsIdempotent(t *testi
 	require.Error(t, err, "idempotent retry must reauthorize")
 }
 
-func TestIdentityCreationAPICreateReplayReauthorizes(t *testing.T) {
+func TestIdentityCreationAPICreatePreservesSemantics(t *testing.T) {
 	t.Parallel()
 	svc, ctx, project, _ := newRBACServiceWithConn(t, "identity_api_create")
 	granted := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectWrite, project.String()))
-	key := "api-create-key"
-	payload := &gen.CreateAssistantPayload{SessionToken: nil, ProjectSlugInput: nil, Name: "API assistant", Model: "openai/gpt-4o-mini", Instructions: "", Toolsets: nil, McpServers: nil, WarmTTLSeconds: nil, MaxConcurrency: nil, Status: nil, IdempotencyKey: &key}
+	payload := &gen.CreateAssistantPayload{SessionToken: nil, ProjectSlugInput: nil, Name: "API assistant", Model: "openai/gpt-4o-mini", Instructions: "", Toolsets: nil, McpServers: nil, WarmTTLSeconds: nil, MaxConcurrency: nil, Status: nil}
 	first, err := svc.CreateAssistant(granted, payload)
 	require.NoError(t, err)
+	_, err = svc.CreateAssistant(granted, payload)
+	require.Error(t, err, "existing same-name uniqueness remains unchanged")
+	payload.Name = "Another API assistant"
 	second, err := svc.CreateAssistant(granted, payload)
 	require.NoError(t, err)
-	require.Equal(t, first.ID, second.ID)
+	require.NotEqual(t, first.ID, second.ID)
 	_, err = svc.CreateAssistant(authztest.WithExactGrants(t, ctx), payload)
 	require.Error(t, err)
-	payload.Name = "Conflicting name"
-	_, err = svc.CreateAssistant(granted, payload)
-	requireOopsCode(t, err, oops.CodeConflict)
 }
 
 func TestIdentityCreationManagedLegacyAndCanonicalDashboard(t *testing.T) {
@@ -166,18 +161,18 @@ func TestIdentityCreationManagedLegacyAndCanonicalDashboard(t *testing.T) {
 	reused, err := core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, legacy.ID, legacy.Name)
 	require.NoError(t, err)
 	require.Equal(t, canonical, reused)
-	resolution, err := assistantidentity.Resolve(t.Context(), db, "org-test", project, legacy.ID, canonical)
+	resolution, err := testIdentityService.Resolve(t.Context(), db, "org-test", project, legacy.ID, canonical)
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Active, resolution.State)
 	require.NoError(t, core.DisableManagedAssistant(t.Context(), project, urn.NewPrincipal(urn.PrincipalTypeUser, "user-2"), nil))
-	require.Error(t, assistantidentity.Validate(t.Context(), db, *resolution.Identity))
+	require.Error(t, testIdentityService.Validate(t.Context(), db, *resolution.Identity))
 	fresh, err := core.EnableManagedAssistant(t.Context(), "org-test", project, "user-1")
 	require.NoError(t, err)
 	require.NotEqual(t, legacy.ID, fresh.ID)
 	require.Equal(t, "ACTIVE", fresh.IdentityState)
 }
 
-func TestIdentityCreationPauseResumeInvalidatesEpochAndDeleteTombstones(t *testing.T) {
+func TestIdentityCreationPauseResumePreservesBindingAndDeleteTombstones(t *testing.T) {
 	t.Parallel()
 	db, err := assistantsInfra.CloneTestDatabase(t, "identity_assistant_lifecycle")
 	require.NoError(t, err)
@@ -187,25 +182,33 @@ func TestIdentityCreationPauseResumeInvalidatesEpochAndDeleteTombstones(t *testi
 	require.NoError(t, err)
 	root, err := core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, record.ID, record.Name)
 	require.NoError(t, err)
-	before, err := assistantidentity.Resolve(t.Context(), db, "org-test", project, record.ID, root)
+	before, err := testIdentityService.Resolve(t.Context(), db, "org-test", project, record.ID, root)
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Active, before.State)
 	paused := "paused"
 	_, err = core.UpdateAssistant(t.Context(), project, record.ID, nil, nil, nil, nil, nil, nil, nil, &paused)
 	require.NoError(t, err)
-	require.Error(t, assistantidentity.Validate(t.Context(), db, *before.Identity))
+	require.Error(t, testIdentityService.Validate(t.Context(), db, *before.Identity))
 	active := StatusActive
 	_, err = core.UpdateAssistant(t.Context(), project, record.ID, nil, nil, nil, nil, nil, nil, nil, &active)
 	require.NoError(t, err)
-	after, err := assistantidentity.Resolve(t.Context(), db, "org-test", project, record.ID, root)
+	after, err := testIdentityService.Resolve(t.Context(), db, "org-test", project, record.ID, root)
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Active, after.State)
-	require.Greater(t, after.Identity.AgentIdentityEpoch, before.Identity.AgentIdentityEpoch)
+	require.Equal(t, before.Identity, after.Identity)
 	require.Equal(t, before.Identity.AgentID, after.Identity.AgentID)
-	require.Error(t, assistantidentity.Validate(t.Context(), db, *before.Identity))
+	require.NoError(t, testIdentityService.Validate(t.Context(), db, *before.Identity))
 	require.NoError(t, core.DeleteAssistant(t.Context(), project, record.ID, urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"), nil))
-	deleted, err := assistantidentity.Resolve(t.Context(), db, "org-test", project, record.ID, root)
+	deleted, err := testIdentityService.Resolve(t.Context(), db, "org-test", project, record.ID, root)
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Tombstoned, deleted.State)
-	require.Error(t, assistantidentity.Validate(t.Context(), db, *after.Identity))
+	require.Error(t, testIdentityService.Validate(t.Context(), db, *after.Identity))
 }
+
+var testIdentityService = func() *assistantidentity.Service {
+	service, err := assistantidentity.New("https://platform.example.invalid", false)
+	if err != nil {
+		panic(err)
+	}
+	return service
+}()

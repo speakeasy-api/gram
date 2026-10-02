@@ -1585,10 +1585,6 @@ SELECT id FROM agents
 WHERE organization_id = @organization_id AND id = ANY(@agent_ids::uuid[]) AND deleted IS FALSE
 ORDER BY id FOR UPDATE;
 
--- name: AdvanceAuthorityAgentEpochs :exec
-UPDATE agents SET identity_epoch = identity_epoch + 1, updated_at = clock_timestamp()
-WHERE organization_id = @organization_id AND id = ANY(@agent_ids::uuid[]) AND deleted IS FALSE;
-
 -- name: RevokeAuthorityWorkloadSessions :exec
 UPDATE user_sessions s
 SET deleted_at = clock_timestamp()
@@ -1606,7 +1602,7 @@ WHERE si.id = s.user_session_issuer_id
     JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id
     WHERE wa.organization_id = @organization_id::text AND wa.deleted IS FALSE
       AND ((wa.match_kind = 'exact' AND s.subject_urn = 'workload:' || wa.workload_issuer_id::text || ':' || wa.subject)
-        OR (wa.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
+        OR (wa.match_kind = 'wildcard' AND wi.allow_wildcard_admission
             AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
             AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
     ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC

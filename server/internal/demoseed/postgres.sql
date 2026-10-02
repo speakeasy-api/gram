@@ -1401,11 +1401,13 @@ BEGIN
     ('legacy', demo.det_uuid('gram-demo-assistant-legacy'), 'Legacy assistant')
   ) AS roots(fixture, id, name);
 
+  -- Inert display fixture: runtime provisioning uses GRAM_AUTHZ_ISSUER_URL and
+  -- the existing Gram JWKS endpoint; this example cannot sign or run work.
   INSERT INTO workload_issuers
-    (id, organization_id, project_id, name, issuer, issuer_kind, jwks_uri, allow_wildcard_admission)
-  VALUES (demo.det_uuid('gram-demo-assistant-system-issuer'), demo_org, proj_a,
-          'Assistant roots ' || proj_a::text, 'urn:gram:assistant-roots:' || proj_a::text,
-          'system', '', FALSE);
+    (id, organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission)
+  VALUES (demo.det_uuid('gram-demo-assistant-platform-trust'), demo_org, proj_a,
+          'Assistant roots ' || proj_a::text, 'https://platform.example.invalid',
+          'https://platform.example.invalid/.well-known/jwks.json', FALSE);
 
   INSERT INTO assistant_agent_bindings
     (id, organization_id, project_id, project_ref_organization_id, project_ref_id,
@@ -1422,13 +1424,13 @@ BEGIN
      original_assistant_binding_id, assistant_binding_ref_organization_id,
      assistant_binding_ref_project_id, assistant_binding_id, assistant_binding_generation,
      original_workload_issuer_id, workload_issuer_ref_organization_id, workload_issuer_ref_project_id,
-     workload_issuer_id, workload_issuer_ref_kind, subject, generation)
+     workload_issuer_id, subject, generation)
   SELECT demo.det_uuid('gram-demo-assistant-root-binding'), demo_org, proj_a, demo_org, proj_a,
          id, demo_org, proj_a, id,
          demo.det_uuid('gram-demo-assistant-binding'), demo_org, proj_a,
          demo.det_uuid('gram-demo-assistant-binding'), 1,
-         demo.det_uuid('gram-demo-assistant-system-issuer'), demo_org, proj_a,
-         demo.det_uuid('gram-demo-assistant-system-issuer'), 'system', 'assistant-trigger:' || id::text, 1
+         demo.det_uuid('gram-demo-assistant-platform-trust'), demo_org, proj_a,
+         demo.det_uuid('gram-demo-assistant-platform-trust'), 'assistant-trigger:' || id::text, 1
   FROM trigger_instances
   WHERE organization_id = demo_org AND project_id = proj_a
     AND definition_slug = 'dashboard' AND target_kind = 'assistant'
@@ -3542,8 +3544,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     AND t.generation = 1 AND b.generation = 1 AND t.assistant_binding_generation = b.generation
     AND a.id = demo.det_uuid('gram-demo-assistant-bound')
     AND ag.project_id = proj_a AND ag.owner_user_id = demo_user_ids[1]
-    AND ag.identity_epoch = 1 AND ag.suspended_at IS NULL AND ag.revoked_at IS NULL
-    AND i.issuer_kind = 'system' AND i.jwks_uri = '' AND i.allow_wildcard_admission IS FALSE
+    AND ag.suspended_at IS NULL AND ag.revoked_at IS NULL
+    AND i.issuer = 'https://platform.example.invalid' AND i.jwks_uri = 'https://platform.example.invalid/.well-known/jwks.json' AND i.allow_wildcard_admission IS FALSE
     AND r.definition_slug = 'dashboard' AND r.target_kind = 'assistant' AND r.target_ref = a.id::text
     AND t.subject = 'assistant-trigger:' || r.id::text
     AND NOT EXISTS (SELECT 1 FROM principal_grants g

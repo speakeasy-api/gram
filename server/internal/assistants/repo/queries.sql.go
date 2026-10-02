@@ -988,33 +988,6 @@ func (q *Queries) GetAssistant(ctx context.Context, arg GetAssistantParams) (Get
 	return i, err
 }
 
-const getAssistantCreateRequest = `-- name: GetAssistantCreateRequest :one
-SELECT id, create_request_hash, deleted
-FROM assistants
-WHERE organization_id = $1 AND project_id = $2
-  AND create_request_key = $3
-FOR UPDATE
-`
-
-type GetAssistantCreateRequestParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	RequestKey     pgtype.Text
-}
-
-type GetAssistantCreateRequestRow struct {
-	ID                uuid.UUID
-	CreateRequestHash pgtype.Text
-	Deleted           bool
-}
-
-func (q *Queries) GetAssistantCreateRequest(ctx context.Context, arg GetAssistantCreateRequestParams) (GetAssistantCreateRequestRow, error) {
-	row := q.db.QueryRow(ctx, getAssistantCreateRequest, arg.OrganizationID, arg.ProjectID, arg.RequestKey)
-	var i GetAssistantCreateRequestRow
-	err := row.Scan(&i.ID, &i.CreateRequestHash, &i.Deleted)
-	return i, err
-}
-
 const getAssistantForClientMetadataDocument = `-- name: GetAssistantForClientMetadataDocument :one
 SELECT
   a.id,
@@ -2954,15 +2927,6 @@ func (q *Queries) LoadThreadContextV2(ctx context.Context, arg LoadThreadContext
 	return i, err
 }
 
-const lockAssistantCreateRequest = `-- name: LockAssistantCreateRequest :exec
-SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
-`
-
-func (q *Queries) LockAssistantCreateRequest(ctx context.Context, requestKey string) error {
-	_, err := q.db.Exec(ctx, lockAssistantCreateRequest, requestKey)
-	return err
-}
-
 const lockAssistantIdentityAnchor = `-- name: LockAssistantIdentityAnchor :one
 SELECT id, organization_id, name, created_by_user_id, status
 FROM assistants WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
@@ -3811,30 +3775,6 @@ func (q *Queries) RevokeSkillDistributionsByAssistant(ctx context.Context, arg R
 		return nil, err
 	}
 	return items, nil
-}
-
-const setAssistantCreateRequest = `-- name: SetAssistantCreateRequest :exec
-UPDATE assistants SET create_request_key = $1, create_request_hash = $2
-WHERE id = $3 AND project_id = $4 AND organization_id = $5
-`
-
-type SetAssistantCreateRequestParams struct {
-	RequestKey     pgtype.Text
-	RequestHash    pgtype.Text
-	AssistantID    uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-}
-
-func (q *Queries) SetAssistantCreateRequest(ctx context.Context, arg SetAssistantCreateRequestParams) error {
-	_, err := q.db.Exec(ctx, setAssistantCreateRequest,
-		arg.RequestKey,
-		arg.RequestHash,
-		arg.AssistantID,
-		arg.ProjectID,
-		arg.OrganizationID,
-	)
-	return err
 }
 
 const setAssistantRuntimeActive = `-- name: SetAssistantRuntimeActive :exec

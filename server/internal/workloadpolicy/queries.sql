@@ -45,8 +45,8 @@ WHERE organization_id = @organization_id
 ORDER BY (project_id IS NULL) DESC, name;
 
 -- name: CreateWorkloadIssuer :one
-INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, issuer_kind)
-VALUES (@organization_id, @project_id, @name, sqlc.narg(description), @tags, @issuer, @jwks_uri, @allow_wildcard_admission, 'remote')
+INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission)
+VALUES (@organization_id, @project_id, @name, sqlc.narg(description), @tags, @issuer, @jwks_uri, @allow_wildcard_admission)
 RETURNING *;
 
 -- name: UpdateWorkloadIssuer :one
@@ -54,29 +54,71 @@ RETURNING *;
 -- read under LockWorkloadIssuerForWrite. Scoped as GetWorkloadIssuer is: a row
 -- the caller cannot list is a row it cannot edit. The issuer URL and the
 -- wildcard setting are deliberately absent.
+WITH invalidated_bindings AS (
+ UPDATE trigger_workload_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ WHERE b.organization_id = @organization_id AND NOT b.deleted
+ AND EXISTS (SELECT 1 FROM workload_issuers i WHERE i.organization_id = b.organization_id
+ AND i.id = b.original_workload_issuer_id AND i.id = @id AND NOT i.deleted
+ AND (i.project_id IS NULL OR i.project_id = @project_id) AND i.jwks_uri IS DISTINCT FROM @jwks_uri)
+ RETURNING b.organization_id, b.original_workload_issuer_id, b.subject
+), retired_binding_sessions AS (
+ UPDATE user_sessions s SET deleted_at = clock_timestamp()
+ FROM invalidated_bindings b, user_session_issuers si
+ WHERE si.id = s.user_session_issuer_id AND NOT s.deleted
+ AND COALESCE(s.organization_id, si.organization_id,
+   (SELECT organization_id FROM projects WHERE id = s.project_id),
+   (SELECT organization_id FROM projects WHERE id = si.project_id)) = b.organization_id
+ AND (s.organization_id IS NULL OR s.organization_id = b.organization_id)
+ AND (si.organization_id IS NULL OR si.organization_id = b.organization_id)
+ AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id IN (s.project_id, si.project_id) AND p.organization_id <> b.organization_id)
+ AND s.subject_urn = 'workload:' || b.original_workload_issuer_id::text || ':' || b.subject
+ RETURNING s.id
+)
 UPDATE workload_issuers
 SET name = @name,
     description = sqlc.narg(description),
     tags = @tags,
     jwks_uri = @jwks_uri,
     updated_at = clock_timestamp()
-WHERE organization_id = @organization_id
-  AND (project_id IS NULL OR project_id = @project_id)
-  AND id = @id
-  AND deleted IS FALSE
-RETURNING *;
+WHERE workload_issuers.organization_id = @organization_id
+  AND (workload_issuers.project_id IS NULL OR workload_issuers.project_id = @project_id)
+  AND workload_issuers.id = @id
+  AND workload_issuers.deleted IS FALSE
+RETURNING workload_issuers.*;
 
 -- name: SoftDeleteWorkloadIssuer :one
 -- Carries the same project predicate as the read above rather than trusting the
 -- caller to have gone through it: the withdrawal is the destructive half, and a
 -- row the caller cannot list is a row it cannot withdraw.
+WITH invalidated_bindings AS (
+ UPDATE trigger_workload_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ WHERE b.organization_id = @organization_id AND NOT b.deleted
+ AND EXISTS (SELECT 1 FROM workload_issuers i WHERE i.organization_id = b.organization_id
+ AND i.id = b.original_workload_issuer_id AND i.id = @id AND NOT i.deleted
+ AND (i.project_id IS NULL OR i.project_id = @project_id))
+ RETURNING b.organization_id, b.original_workload_issuer_id, b.subject
+), retired_binding_sessions AS (
+ UPDATE user_sessions s SET deleted_at = clock_timestamp()
+ FROM invalidated_bindings b, user_session_issuers si
+ WHERE si.id = s.user_session_issuer_id AND NOT s.deleted
+ AND COALESCE(s.organization_id, si.organization_id,
+   (SELECT organization_id FROM projects WHERE id = s.project_id),
+   (SELECT organization_id FROM projects WHERE id = si.project_id)) = b.organization_id
+ AND (s.organization_id IS NULL OR s.organization_id = b.organization_id)
+ AND (si.organization_id IS NULL OR si.organization_id = b.organization_id)
+ AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id IN (s.project_id, si.project_id) AND p.organization_id <> b.organization_id)
+ AND s.subject_urn = 'workload:' || b.original_workload_issuer_id::text || ':' || b.subject
+ RETURNING s.id
+)
 UPDATE workload_issuers
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = @organization_id
-  AND (project_id IS NULL OR project_id = @project_id)
-  AND id = @id
-  AND deleted IS FALSE
-RETURNING *;
+WHERE workload_issuers.organization_id = @organization_id
+  AND (workload_issuers.project_id IS NULL OR workload_issuers.project_id = @project_id)
+  AND workload_issuers.id = @id
+  AND workload_issuers.deleted IS FALSE
+RETURNING workload_issuers.*;
 
 -- name: ListWorkloadAdmissions :many
 -- The admitted set as an operator reads it: the subject, the issuer that must
@@ -143,30 +185,93 @@ WHERE organization_id = @organization_id
 RETURNING *;
 
 -- name: SoftDeleteWorkloadAdmission :one
+WITH invalidated_bindings AS (
+ UPDATE trigger_workload_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ WHERE b.organization_id = @organization_id AND NOT b.deleted
+ AND EXISTS (SELECT 1 FROM workload_identity_admissions a WHERE a.organization_id = b.organization_id
+ AND a.workload_issuer_id = b.original_workload_issuer_id AND a.subject = b.subject AND a.match_kind = 'exact'
+ AND a.id = @id AND NOT a.deleted AND a.project_id = b.project_id
+ AND (a.project_id IS NULL OR a.project_id = @project_id))
+ RETURNING b.organization_id, b.original_workload_issuer_id, b.subject
+), retired_binding_sessions AS (
+ UPDATE user_sessions s SET deleted_at = clock_timestamp()
+ FROM invalidated_bindings b, user_session_issuers si
+ WHERE si.id = s.user_session_issuer_id AND NOT s.deleted
+ AND COALESCE(s.organization_id, si.organization_id,
+   (SELECT organization_id FROM projects WHERE id = s.project_id),
+   (SELECT organization_id FROM projects WHERE id = si.project_id)) = b.organization_id
+ AND (s.organization_id IS NULL OR s.organization_id = b.organization_id)
+ AND (si.organization_id IS NULL OR si.organization_id = b.organization_id)
+ AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id IN (s.project_id, si.project_id) AND p.organization_id <> b.organization_id)
+ AND s.subject_urn = 'workload:' || b.original_workload_issuer_id::text || ':' || b.subject
+ RETURNING s.id
+)
 UPDATE workload_identity_admissions
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = @organization_id
-  AND id = @id
-  AND (project_id IS NULL OR project_id = @project_id)
-  AND deleted IS FALSE
-RETURNING *;
+WHERE workload_identity_admissions.organization_id = @organization_id
+  AND workload_identity_admissions.id = @id
+  AND (workload_identity_admissions.project_id IS NULL OR workload_identity_admissions.project_id = @project_id)
+  AND workload_identity_admissions.deleted IS FALSE
+RETURNING workload_identity_admissions.*;
 
 -- name: SoftDeleteWorkloadAdmissionsByIssuer :many
 -- ON DELETE CASCADE only fires on a hard delete, so withdrawing an issuer has
 -- to tombstone its admissions explicitly or they stay in the active set
 -- pointing at a tombstone. Returns the rows so each one can be audited.
+WITH invalidated_bindings AS (
+ UPDATE trigger_workload_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ WHERE b.organization_id = @organization_id AND NOT b.deleted
+ AND b.original_workload_issuer_id = @workload_issuer_id
+ RETURNING b.organization_id, b.original_workload_issuer_id, b.subject
+), retired_binding_sessions AS (
+ UPDATE user_sessions s SET deleted_at = clock_timestamp()
+ FROM invalidated_bindings b, user_session_issuers si
+ WHERE si.id = s.user_session_issuer_id AND NOT s.deleted
+ AND COALESCE(s.organization_id, si.organization_id,
+   (SELECT organization_id FROM projects WHERE id = s.project_id),
+   (SELECT organization_id FROM projects WHERE id = si.project_id)) = b.organization_id
+ AND (s.organization_id IS NULL OR s.organization_id = b.organization_id)
+ AND (si.organization_id IS NULL OR si.organization_id = b.organization_id)
+ AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id IN (s.project_id, si.project_id) AND p.organization_id <> b.organization_id)
+ AND s.subject_urn = 'workload:' || b.original_workload_issuer_id::text || ':' || b.subject
+ RETURNING s.id
+)
 UPDATE workload_identity_admissions
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = @organization_id
-  AND workload_issuer_id = @workload_issuer_id
-  AND deleted IS FALSE
-RETURNING *;
+WHERE workload_identity_admissions.organization_id = @organization_id
+  AND workload_identity_admissions.workload_issuer_id = @workload_issuer_id
+  AND workload_identity_admissions.deleted IS FALSE
+RETURNING workload_identity_admissions.*;
 
 -- name: UpsertWorkloadAgentAssignment :one
 -- One assignment per live (issuer, match_kind, subject). Re-admitting a subject
 -- repoints its agent rather than colliding. The unique index is partial on
 -- deleted IS FALSE, so a withdrawn assignment does not conflict and a fresh row
 -- is inserted beside the tombstone, which is what keeps the withdrawal auditable.
+WITH invalidated_bindings AS (
+ UPDATE trigger_workload_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ WHERE b.organization_id = @organization_id AND NOT b.deleted
+ AND b.original_workload_issuer_id = @workload_issuer_id AND b.subject = @subject AND @match_kind = 'exact'
+ AND EXISTS (SELECT 1 FROM workload_agent_assignments a WHERE a.organization_id = b.organization_id
+ AND a.workload_issuer_id = b.original_workload_issuer_id AND a.subject = b.subject AND a.match_kind = 'exact'
+ AND NOT a.deleted AND a.agent_id IS DISTINCT FROM @agent_id)
+ RETURNING b.organization_id, b.original_workload_issuer_id, b.subject
+), retired_binding_sessions AS (
+ UPDATE user_sessions s SET deleted_at = clock_timestamp()
+ FROM invalidated_bindings b, user_session_issuers si
+ WHERE si.id = s.user_session_issuer_id AND NOT s.deleted
+ AND COALESCE(s.organization_id, si.organization_id,
+   (SELECT organization_id FROM projects WHERE id = s.project_id),
+   (SELECT organization_id FROM projects WHERE id = si.project_id)) = b.organization_id
+ AND (s.organization_id IS NULL OR s.organization_id = b.organization_id)
+ AND (si.organization_id IS NULL OR si.organization_id = b.organization_id)
+ AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id IN (s.project_id, si.project_id) AND p.organization_id <> b.organization_id)
+ AND s.subject_urn = 'workload:' || b.original_workload_issuer_id::text || ':' || b.subject
+ RETURNING s.id
+)
 INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, match_kind, agent_id)
 VALUES (@organization_id, @workload_issuer_id, @subject, @match_kind, @agent_id)
 ON CONFLICT (organization_id, workload_issuer_id, match_kind, subject) WHERE deleted IS FALSE
@@ -192,7 +297,6 @@ FROM workload_issuers
 WHERE organization_id = @organization_id
   AND id = @id
   AND deleted IS FALSE
-  AND issuer_kind = 'remote'
 FOR UPDATE;
 
 -- name: CountLiveAdmissionsForSubject :one
@@ -226,22 +330,60 @@ WHERE organization_id = @organization_id
 -- name: SoftDeleteWorkloadAgentAssignmentForSubject :many
 -- Keyed the way the assignment is, not by admission id. Returns rows so the
 -- withdrawal is auditable, and is a no-op when nothing was assigned.
+WITH invalidated_bindings AS (
+ UPDATE trigger_workload_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ WHERE b.organization_id = @organization_id AND NOT b.deleted
+ AND b.original_workload_issuer_id = @workload_issuer_id AND b.subject = @subject AND @match_kind = 'exact'
+ RETURNING b.organization_id, b.original_workload_issuer_id, b.subject
+), retired_binding_sessions AS (
+ UPDATE user_sessions s SET deleted_at = clock_timestamp()
+ FROM invalidated_bindings b, user_session_issuers si
+ WHERE si.id = s.user_session_issuer_id AND NOT s.deleted
+ AND COALESCE(s.organization_id, si.organization_id,
+   (SELECT organization_id FROM projects WHERE id = s.project_id),
+   (SELECT organization_id FROM projects WHERE id = si.project_id)) = b.organization_id
+ AND (s.organization_id IS NULL OR s.organization_id = b.organization_id)
+ AND (si.organization_id IS NULL OR si.organization_id = b.organization_id)
+ AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id IN (s.project_id, si.project_id) AND p.organization_id <> b.organization_id)
+ AND s.subject_urn = 'workload:' || b.original_workload_issuer_id::text || ':' || b.subject
+ RETURNING s.id
+)
 UPDATE workload_agent_assignments
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = @organization_id
-  AND workload_issuer_id = @workload_issuer_id
-  AND match_kind = @match_kind
-  AND subject = @subject
-  AND deleted IS FALSE
-RETURNING *;
+WHERE workload_agent_assignments.organization_id = @organization_id
+  AND workload_agent_assignments.workload_issuer_id = @workload_issuer_id
+  AND workload_agent_assignments.match_kind = @match_kind
+  AND workload_agent_assignments.subject = @subject
+  AND workload_agent_assignments.deleted IS FALSE
+RETURNING workload_agent_assignments.*;
 
 -- name: SoftDeleteWorkloadAgentAssignmentsByIssuer :many
+WITH invalidated_bindings AS (
+ UPDATE trigger_workload_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ WHERE b.organization_id = @organization_id AND NOT b.deleted
+ AND b.original_workload_issuer_id = @workload_issuer_id
+ RETURNING b.organization_id, b.original_workload_issuer_id, b.subject
+), retired_binding_sessions AS (
+ UPDATE user_sessions s SET deleted_at = clock_timestamp()
+ FROM invalidated_bindings b, user_session_issuers si
+ WHERE si.id = s.user_session_issuer_id AND NOT s.deleted
+ AND COALESCE(s.organization_id, si.organization_id,
+   (SELECT organization_id FROM projects WHERE id = s.project_id),
+   (SELECT organization_id FROM projects WHERE id = si.project_id)) = b.organization_id
+ AND (s.organization_id IS NULL OR s.organization_id = b.organization_id)
+ AND (si.organization_id IS NULL OR si.organization_id = b.organization_id)
+ AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id IN (s.project_id, si.project_id) AND p.organization_id <> b.organization_id)
+ AND s.subject_urn = 'workload:' || b.original_workload_issuer_id::text || ':' || b.subject
+ RETURNING s.id
+)
 UPDATE workload_agent_assignments
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = @organization_id
-  AND workload_issuer_id = @workload_issuer_id
-  AND deleted IS FALSE
-RETURNING *;
+WHERE workload_agent_assignments.organization_id = @organization_id
+  AND workload_agent_assignments.workload_issuer_id = @workload_issuer_id
+  AND workload_agent_assignments.deleted IS FALSE
+RETURNING workload_agent_assignments.*;
 
 -- name: GetOrganizationAgent :one
 -- Resolves the agent an admission assigns, within the caller's organization, so
@@ -276,7 +418,7 @@ WHERE si.id = s.user_session_issuer_id
       AND wa.deleted IS FALSE
       AND (
         (wa.match_kind = 'exact' AND s.subject_urn = 'workload:' || wi.id::text || ':' || wa.subject)
-        OR (wa.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
+        OR (wa.match_kind = 'wildcard' AND wi.allow_wildcard_admission
           AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
           AND starts_with(s.subject_urn, 'workload:' || wi.id::text || ':' || left(wa.subject, length(wa.subject) - 1)))
       )

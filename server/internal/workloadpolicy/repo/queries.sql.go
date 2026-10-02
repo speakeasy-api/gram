@@ -91,9 +91,9 @@ func (q *Queries) CreateWorkloadAdmission(ctx context.Context, arg CreateWorkloa
 }
 
 const createWorkloadIssuer = `-- name: CreateWorkloadIssuer :one
-INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, issuer_kind)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'remote')
-RETURNING id, issuer_kind, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateWorkloadIssuerParams struct {
@@ -121,7 +121,6 @@ func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIs
 	var i WorkloadIssuer
 	err := row.Scan(
 		&i.ID,
-		&i.IssuerKind,
 		&i.OrganizationID,
 		&i.ProjectID,
 		&i.Name,
@@ -140,7 +139,7 @@ func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIs
 }
 
 const findWorkloadIssuersByIssuer = `-- name: FindWorkloadIssuersByIssuer :many
-SELECT id, issuer_kind, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE organization_id = $1
   AND (project_id IS NULL OR project_id = $2)
@@ -175,7 +174,6 @@ func (q *Queries) FindWorkloadIssuersByIssuer(ctx context.Context, arg FindWorkl
 		var i WorkloadIssuer
 		if err := rows.Scan(
 			&i.ID,
-			&i.IssuerKind,
 			&i.OrganizationID,
 			&i.ProjectID,
 			&i.Name,
@@ -321,7 +319,7 @@ func (q *Queries) GetWorkloadAgentAssignmentForSubject(ctx context.Context, arg 
 }
 
 const getWorkloadIssuer = `-- name: GetWorkloadIssuer :one
-SELECT id, issuer_kind, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE organization_id = $1
   AND (project_id IS NULL OR project_id = $2)
@@ -344,7 +342,6 @@ func (q *Queries) GetWorkloadIssuer(ctx context.Context, arg GetWorkloadIssuerPa
 	var i WorkloadIssuer
 	err := row.Scan(
 		&i.ID,
-		&i.IssuerKind,
 		&i.OrganizationID,
 		&i.ProjectID,
 		&i.Name,
@@ -464,7 +461,7 @@ func (q *Queries) ListWorkloadAdmissions(ctx context.Context, arg ListWorkloadAd
 
 const listWorkloadIssuers = `-- name: ListWorkloadIssuers :many
 
-SELECT id, issuer_kind, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE organization_id = $1
   AND (project_id IS NULL OR project_id = $2)
@@ -495,7 +492,6 @@ func (q *Queries) ListWorkloadIssuers(ctx context.Context, arg ListWorkloadIssue
 		var i WorkloadIssuer
 		if err := rows.Scan(
 			&i.ID,
-			&i.IssuerKind,
 			&i.OrganizationID,
 			&i.ProjectID,
 			&i.Name,
@@ -526,7 +522,6 @@ FROM workload_issuers
 WHERE organization_id = $1
   AND id = $2
   AND deleted IS FALSE
-  AND issuer_kind = 'remote'
 FOR UPDATE
 `
 
@@ -576,7 +571,7 @@ WHERE si.id = s.user_session_issuer_id
       AND wa.deleted IS FALSE
       AND (
         (wa.match_kind = 'exact' AND s.subject_urn = 'workload:' || wi.id::text || ':' || wa.subject)
-        OR (wa.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
+        OR (wa.match_kind = 'wildcard' AND wi.allow_wildcard_admission
           AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
           AND starts_with(s.subject_urn, 'workload:' || wi.id::text || ':' || left(wa.subject, length(wa.subject) - 1)))
       )
@@ -606,13 +601,35 @@ func (q *Queries) RevokeWorkloadAssignmentSessions(ctx context.Context, arg Revo
 }
 
 const softDeleteWorkloadAdmission = `-- name: SoftDeleteWorkloadAdmission :one
+WITH invalidated_bindings AS (
+ UPDATE trigger_workload_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ WHERE b.organization_id = $1 AND NOT b.deleted
+ AND EXISTS (SELECT 1 FROM workload_identity_admissions a WHERE a.organization_id = b.organization_id
+ AND a.workload_issuer_id = b.original_workload_issuer_id AND a.subject = b.subject AND a.match_kind = 'exact'
+ AND a.id = $2 AND NOT a.deleted AND a.project_id = b.project_id
+ AND (a.project_id IS NULL OR a.project_id = $3))
+ RETURNING b.organization_id, b.original_workload_issuer_id, b.subject
+), retired_binding_sessions AS (
+ UPDATE user_sessions s SET deleted_at = clock_timestamp()
+ FROM invalidated_bindings b, user_session_issuers si
+ WHERE si.id = s.user_session_issuer_id AND NOT s.deleted
+ AND COALESCE(s.organization_id, si.organization_id,
+   (SELECT organization_id FROM projects WHERE id = s.project_id),
+   (SELECT organization_id FROM projects WHERE id = si.project_id)) = b.organization_id
+ AND (s.organization_id IS NULL OR s.organization_id = b.organization_id)
+ AND (si.organization_id IS NULL OR si.organization_id = b.organization_id)
+ AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id IN (s.project_id, si.project_id) AND p.organization_id <> b.organization_id)
+ AND s.subject_urn = 'workload:' || b.original_workload_issuer_id::text || ':' || b.subject
+ RETURNING s.id
+)
 UPDATE workload_identity_admissions
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = $1
-  AND id = $2
-  AND (project_id IS NULL OR project_id = $3)
-  AND deleted IS FALSE
-RETURNING id, organization_id, project_id, workload_issuer_id, subject, match_kind, name, tags, created_at, updated_at, deleted_at, deleted
+WHERE workload_identity_admissions.organization_id = $1
+  AND workload_identity_admissions.id = $2
+  AND (workload_identity_admissions.project_id IS NULL OR workload_identity_admissions.project_id = $3)
+  AND workload_identity_admissions.deleted IS FALSE
+RETURNING workload_identity_admissions.id, workload_identity_admissions.organization_id, workload_identity_admissions.project_id, workload_identity_admissions.workload_issuer_id, workload_identity_admissions.subject, workload_identity_admissions.match_kind, workload_identity_admissions.name, workload_identity_admissions.tags, workload_identity_admissions.created_at, workload_identity_admissions.updated_at, workload_identity_admissions.deleted_at, workload_identity_admissions.deleted
 `
 
 type SoftDeleteWorkloadAdmissionParams struct {
@@ -642,12 +659,31 @@ func (q *Queries) SoftDeleteWorkloadAdmission(ctx context.Context, arg SoftDelet
 }
 
 const softDeleteWorkloadAdmissionsByIssuer = `-- name: SoftDeleteWorkloadAdmissionsByIssuer :many
+WITH invalidated_bindings AS (
+ UPDATE trigger_workload_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ WHERE b.organization_id = $1 AND NOT b.deleted
+ AND b.original_workload_issuer_id = $2
+ RETURNING b.organization_id, b.original_workload_issuer_id, b.subject
+), retired_binding_sessions AS (
+ UPDATE user_sessions s SET deleted_at = clock_timestamp()
+ FROM invalidated_bindings b, user_session_issuers si
+ WHERE si.id = s.user_session_issuer_id AND NOT s.deleted
+ AND COALESCE(s.organization_id, si.organization_id,
+   (SELECT organization_id FROM projects WHERE id = s.project_id),
+   (SELECT organization_id FROM projects WHERE id = si.project_id)) = b.organization_id
+ AND (s.organization_id IS NULL OR s.organization_id = b.organization_id)
+ AND (si.organization_id IS NULL OR si.organization_id = b.organization_id)
+ AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id IN (s.project_id, si.project_id) AND p.organization_id <> b.organization_id)
+ AND s.subject_urn = 'workload:' || b.original_workload_issuer_id::text || ':' || b.subject
+ RETURNING s.id
+)
 UPDATE workload_identity_admissions
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = $1
-  AND workload_issuer_id = $2
-  AND deleted IS FALSE
-RETURNING id, organization_id, project_id, workload_issuer_id, subject, match_kind, name, tags, created_at, updated_at, deleted_at, deleted
+WHERE workload_identity_admissions.organization_id = $1
+  AND workload_identity_admissions.workload_issuer_id = $2
+  AND workload_identity_admissions.deleted IS FALSE
+RETURNING workload_identity_admissions.id, workload_identity_admissions.organization_id, workload_identity_admissions.project_id, workload_identity_admissions.workload_issuer_id, workload_identity_admissions.subject, workload_identity_admissions.match_kind, workload_identity_admissions.name, workload_identity_admissions.tags, workload_identity_admissions.created_at, workload_identity_admissions.updated_at, workload_identity_admissions.deleted_at, workload_identity_admissions.deleted
 `
 
 type SoftDeleteWorkloadAdmissionsByIssuerParams struct {
@@ -692,14 +728,33 @@ func (q *Queries) SoftDeleteWorkloadAdmissionsByIssuer(ctx context.Context, arg 
 }
 
 const softDeleteWorkloadAgentAssignmentForSubject = `-- name: SoftDeleteWorkloadAgentAssignmentForSubject :many
+WITH invalidated_bindings AS (
+ UPDATE trigger_workload_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ WHERE b.organization_id = $1 AND NOT b.deleted
+ AND b.original_workload_issuer_id = $2 AND b.subject = $4 AND $3 = 'exact'
+ RETURNING b.organization_id, b.original_workload_issuer_id, b.subject
+), retired_binding_sessions AS (
+ UPDATE user_sessions s SET deleted_at = clock_timestamp()
+ FROM invalidated_bindings b, user_session_issuers si
+ WHERE si.id = s.user_session_issuer_id AND NOT s.deleted
+ AND COALESCE(s.organization_id, si.organization_id,
+   (SELECT organization_id FROM projects WHERE id = s.project_id),
+   (SELECT organization_id FROM projects WHERE id = si.project_id)) = b.organization_id
+ AND (s.organization_id IS NULL OR s.organization_id = b.organization_id)
+ AND (si.organization_id IS NULL OR si.organization_id = b.organization_id)
+ AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id IN (s.project_id, si.project_id) AND p.organization_id <> b.organization_id)
+ AND s.subject_urn = 'workload:' || b.original_workload_issuer_id::text || ':' || b.subject
+ RETURNING s.id
+)
 UPDATE workload_agent_assignments
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = $1
-  AND workload_issuer_id = $2
-  AND match_kind = $3
-  AND subject = $4
-  AND deleted IS FALSE
-RETURNING id, organization_id, workload_issuer_id, subject, match_kind, agent_id, created_at, updated_at, deleted_at, deleted
+WHERE workload_agent_assignments.organization_id = $1
+  AND workload_agent_assignments.workload_issuer_id = $2
+  AND workload_agent_assignments.match_kind = $3
+  AND workload_agent_assignments.subject = $4
+  AND workload_agent_assignments.deleted IS FALSE
+RETURNING workload_agent_assignments.id, workload_agent_assignments.organization_id, workload_agent_assignments.workload_issuer_id, workload_agent_assignments.subject, workload_agent_assignments.match_kind, workload_agent_assignments.agent_id, workload_agent_assignments.created_at, workload_agent_assignments.updated_at, workload_agent_assignments.deleted_at, workload_agent_assignments.deleted
 `
 
 type SoftDeleteWorkloadAgentAssignmentForSubjectParams struct {
@@ -748,12 +803,31 @@ func (q *Queries) SoftDeleteWorkloadAgentAssignmentForSubject(ctx context.Contex
 }
 
 const softDeleteWorkloadAgentAssignmentsByIssuer = `-- name: SoftDeleteWorkloadAgentAssignmentsByIssuer :many
+WITH invalidated_bindings AS (
+ UPDATE trigger_workload_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ WHERE b.organization_id = $1 AND NOT b.deleted
+ AND b.original_workload_issuer_id = $2
+ RETURNING b.organization_id, b.original_workload_issuer_id, b.subject
+), retired_binding_sessions AS (
+ UPDATE user_sessions s SET deleted_at = clock_timestamp()
+ FROM invalidated_bindings b, user_session_issuers si
+ WHERE si.id = s.user_session_issuer_id AND NOT s.deleted
+ AND COALESCE(s.organization_id, si.organization_id,
+   (SELECT organization_id FROM projects WHERE id = s.project_id),
+   (SELECT organization_id FROM projects WHERE id = si.project_id)) = b.organization_id
+ AND (s.organization_id IS NULL OR s.organization_id = b.organization_id)
+ AND (si.organization_id IS NULL OR si.organization_id = b.organization_id)
+ AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id IN (s.project_id, si.project_id) AND p.organization_id <> b.organization_id)
+ AND s.subject_urn = 'workload:' || b.original_workload_issuer_id::text || ':' || b.subject
+ RETURNING s.id
+)
 UPDATE workload_agent_assignments
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = $1
-  AND workload_issuer_id = $2
-  AND deleted IS FALSE
-RETURNING id, organization_id, workload_issuer_id, subject, match_kind, agent_id, created_at, updated_at, deleted_at, deleted
+WHERE workload_agent_assignments.organization_id = $1
+  AND workload_agent_assignments.workload_issuer_id = $2
+  AND workload_agent_assignments.deleted IS FALSE
+RETURNING workload_agent_assignments.id, workload_agent_assignments.organization_id, workload_agent_assignments.workload_issuer_id, workload_agent_assignments.subject, workload_agent_assignments.match_kind, workload_agent_assignments.agent_id, workload_agent_assignments.created_at, workload_agent_assignments.updated_at, workload_agent_assignments.deleted_at, workload_agent_assignments.deleted
 `
 
 type SoftDeleteWorkloadAgentAssignmentsByIssuerParams struct {
@@ -793,13 +867,34 @@ func (q *Queries) SoftDeleteWorkloadAgentAssignmentsByIssuer(ctx context.Context
 }
 
 const softDeleteWorkloadIssuer = `-- name: SoftDeleteWorkloadIssuer :one
+WITH invalidated_bindings AS (
+ UPDATE trigger_workload_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ WHERE b.organization_id = $1 AND NOT b.deleted
+ AND EXISTS (SELECT 1 FROM workload_issuers i WHERE i.organization_id = b.organization_id
+ AND i.id = b.original_workload_issuer_id AND i.id = $3 AND NOT i.deleted
+ AND (i.project_id IS NULL OR i.project_id = $2))
+ RETURNING b.organization_id, b.original_workload_issuer_id, b.subject
+), retired_binding_sessions AS (
+ UPDATE user_sessions s SET deleted_at = clock_timestamp()
+ FROM invalidated_bindings b, user_session_issuers si
+ WHERE si.id = s.user_session_issuer_id AND NOT s.deleted
+ AND COALESCE(s.organization_id, si.organization_id,
+   (SELECT organization_id FROM projects WHERE id = s.project_id),
+   (SELECT organization_id FROM projects WHERE id = si.project_id)) = b.organization_id
+ AND (s.organization_id IS NULL OR s.organization_id = b.organization_id)
+ AND (si.organization_id IS NULL OR si.organization_id = b.organization_id)
+ AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id IN (s.project_id, si.project_id) AND p.organization_id <> b.organization_id)
+ AND s.subject_urn = 'workload:' || b.original_workload_issuer_id::text || ':' || b.subject
+ RETURNING s.id
+)
 UPDATE workload_issuers
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = $1
-  AND (project_id IS NULL OR project_id = $2)
-  AND id = $3
-  AND deleted IS FALSE
-RETURNING id, issuer_kind, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+WHERE workload_issuers.organization_id = $1
+  AND (workload_issuers.project_id IS NULL OR workload_issuers.project_id = $2)
+  AND workload_issuers.id = $3
+  AND workload_issuers.deleted IS FALSE
+RETURNING workload_issuers.id, workload_issuers.organization_id, workload_issuers.project_id, workload_issuers.name, workload_issuers.description, workload_issuers.tags, workload_issuers.issuer, workload_issuers.jwks_uri, workload_issuers.allow_wildcard_admission, workload_issuers.metadata, workload_issuers.created_at, workload_issuers.updated_at, workload_issuers.deleted_at, workload_issuers.deleted
 `
 
 type SoftDeleteWorkloadIssuerParams struct {
@@ -816,7 +911,6 @@ func (q *Queries) SoftDeleteWorkloadIssuer(ctx context.Context, arg SoftDeleteWo
 	var i WorkloadIssuer
 	err := row.Scan(
 		&i.ID,
-		&i.IssuerKind,
 		&i.OrganizationID,
 		&i.ProjectID,
 		&i.Name,
@@ -885,17 +979,38 @@ func (q *Queries) UpdateWorkloadAdmission(ctx context.Context, arg UpdateWorkloa
 }
 
 const updateWorkloadIssuer = `-- name: UpdateWorkloadIssuer :one
+WITH invalidated_bindings AS (
+ UPDATE trigger_workload_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ WHERE b.organization_id = $5 AND NOT b.deleted
+ AND EXISTS (SELECT 1 FROM workload_issuers i WHERE i.organization_id = b.organization_id
+ AND i.id = b.original_workload_issuer_id AND i.id = $7 AND NOT i.deleted
+ AND (i.project_id IS NULL OR i.project_id = $6) AND i.jwks_uri IS DISTINCT FROM $4)
+ RETURNING b.organization_id, b.original_workload_issuer_id, b.subject
+), retired_binding_sessions AS (
+ UPDATE user_sessions s SET deleted_at = clock_timestamp()
+ FROM invalidated_bindings b, user_session_issuers si
+ WHERE si.id = s.user_session_issuer_id AND NOT s.deleted
+ AND COALESCE(s.organization_id, si.organization_id,
+   (SELECT organization_id FROM projects WHERE id = s.project_id),
+   (SELECT organization_id FROM projects WHERE id = si.project_id)) = b.organization_id
+ AND (s.organization_id IS NULL OR s.organization_id = b.organization_id)
+ AND (si.organization_id IS NULL OR si.organization_id = b.organization_id)
+ AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id IN (s.project_id, si.project_id) AND p.organization_id <> b.organization_id)
+ AND s.subject_urn = 'workload:' || b.original_workload_issuer_id::text || ':' || b.subject
+ RETURNING s.id
+)
 UPDATE workload_issuers
 SET name = $1,
     description = $2,
     tags = $3,
     jwks_uri = $4,
     updated_at = clock_timestamp()
-WHERE organization_id = $5
-  AND (project_id IS NULL OR project_id = $6)
-  AND id = $7
-  AND deleted IS FALSE
-RETURNING id, issuer_kind, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+WHERE workload_issuers.organization_id = $5
+  AND (workload_issuers.project_id IS NULL OR workload_issuers.project_id = $6)
+  AND workload_issuers.id = $7
+  AND workload_issuers.deleted IS FALSE
+RETURNING workload_issuers.id, workload_issuers.organization_id, workload_issuers.project_id, workload_issuers.name, workload_issuers.description, workload_issuers.tags, workload_issuers.issuer, workload_issuers.jwks_uri, workload_issuers.allow_wildcard_admission, workload_issuers.metadata, workload_issuers.created_at, workload_issuers.updated_at, workload_issuers.deleted_at, workload_issuers.deleted
 `
 
 type UpdateWorkloadIssuerParams struct {
@@ -925,7 +1040,6 @@ func (q *Queries) UpdateWorkloadIssuer(ctx context.Context, arg UpdateWorkloadIs
 	var i WorkloadIssuer
 	err := row.Scan(
 		&i.ID,
-		&i.IssuerKind,
 		&i.OrganizationID,
 		&i.ProjectID,
 		&i.Name,
@@ -944,6 +1058,28 @@ func (q *Queries) UpdateWorkloadIssuer(ctx context.Context, arg UpdateWorkloadIs
 }
 
 const upsertWorkloadAgentAssignment = `-- name: UpsertWorkloadAgentAssignment :one
+WITH invalidated_bindings AS (
+ UPDATE trigger_workload_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ WHERE b.organization_id = $1 AND NOT b.deleted
+ AND b.original_workload_issuer_id = $2 AND b.subject = $3 AND $4 = 'exact'
+ AND EXISTS (SELECT 1 FROM workload_agent_assignments a WHERE a.organization_id = b.organization_id
+ AND a.workload_issuer_id = b.original_workload_issuer_id AND a.subject = b.subject AND a.match_kind = 'exact'
+ AND NOT a.deleted AND a.agent_id IS DISTINCT FROM $5)
+ RETURNING b.organization_id, b.original_workload_issuer_id, b.subject
+), retired_binding_sessions AS (
+ UPDATE user_sessions s SET deleted_at = clock_timestamp()
+ FROM invalidated_bindings b, user_session_issuers si
+ WHERE si.id = s.user_session_issuer_id AND NOT s.deleted
+ AND COALESCE(s.organization_id, si.organization_id,
+   (SELECT organization_id FROM projects WHERE id = s.project_id),
+   (SELECT organization_id FROM projects WHERE id = si.project_id)) = b.organization_id
+ AND (s.organization_id IS NULL OR s.organization_id = b.organization_id)
+ AND (si.organization_id IS NULL OR si.organization_id = b.organization_id)
+ AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id IN (s.project_id, si.project_id) AND p.organization_id <> b.organization_id)
+ AND s.subject_urn = 'workload:' || b.original_workload_issuer_id::text || ':' || b.subject
+ RETURNING s.id
+)
 INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, match_kind, agent_id)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (organization_id, workload_issuer_id, match_kind, subject) WHERE deleted IS FALSE

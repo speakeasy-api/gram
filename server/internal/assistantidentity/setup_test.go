@@ -82,13 +82,13 @@ func inTx(t *testing.T, db *pgxpool.Pool, fn func(pgx.Tx) error) error {
 func (f fixture) provision(t *testing.T) assistantidentity.Identity {
 	t.Helper()
 	require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
-		_, err := assistantidentity.Upgrade(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
+		_, err := testIdentityService.Upgrade(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
 		if err != nil {
 			return fmt.Errorf("upgrade fixture: %w", err)
 		}
 		return nil
 	}))
-	result, err := assistantidentity.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, f.trigger)
+	result, err := testIdentityService.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, f.trigger)
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Active, result.State)
 	require.NotNil(t, result.Identity)
@@ -141,3 +141,11 @@ func (tx failureTx) QueryRow(ctx context.Context, query string, args ...any) pgx
 	}
 	return tx.Tx.QueryRow(ctx, query, args...) //nolint:glint // notestingrawsql: fault-injection adapter forwards SQLc's query unchanged.
 }
+
+var testIdentityService = func() *assistantidentity.Service {
+	service, err := assistantidentity.New("https://platform.example.invalid", false)
+	if err != nil {
+		panic(err)
+	}
+	return service
+}()

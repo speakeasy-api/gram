@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
@@ -152,9 +153,20 @@ func (s *Service) UpdatePolicyGrant(ctx context.Context, payload *gen.UpdatePoli
 		if err != nil {
 			return err
 		}
-		if err := invalidatePolicyAuthority(ctx, tx, agent); err != nil {
-			return err
+		beforeSelector, err := authz.SelectorFromRow(before.Selectors)
+		if err != nil {
+			return fmt.Errorf("decode prior policy selector: %w", err)
 		}
+		afterSelector, err := authz.SelectorFromRow(after.Selectors)
+		if err != nil {
+			return fmt.Errorf("decode updated policy selector: %w", err)
+		}
+		if before.Scope != after.Scope || !maps.Equal(beforeSelector, afterSelector) {
+			if err := invalidatePolicyAuthority(ctx, tx, agent); err != nil {
+				return err
+			}
+		}
+
 		return s.logPolicyGrant(ctx, tx, human, agent, audit.ActionAgentPolicyGrantUpdate, policyGrantAuditSnapshot(before), policyGrantAuditSnapshot(after))
 	})
 	if err != nil {
@@ -308,9 +320,6 @@ func parseGrantID(raw string) (uuid.UUID, error) {
 func invalidatePolicyAuthority(ctx context.Context, tx pgx.Tx, agent repo.Agent) error {
 	if err := workloadidentity.RevokeAgentWorkloadSessionsTx(ctx, tx, agent.OrganizationID, agent.ID); err != nil {
 		return fmt.Errorf("invalidate agent authority: %w", err)
-	}
-	if err := repo.New(tx).AdvanceAgentIdentityEpoch(ctx, repo.AdvanceAgentIdentityEpochParams{OrganizationID: agent.OrganizationID, AgentID: agent.ID}); err != nil {
-		return fmt.Errorf("advance agent policy identity epoch: %w", err)
 	}
 	return nil
 }

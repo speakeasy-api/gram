@@ -513,10 +513,6 @@ func EncodeCreateAssistantRequest(encoder func(*http.Request) goahttp.Encoder) f
 		if !ok {
 			return goahttp.ErrInvalidType("assistants", "createAssistant", "*assistants.CreateAssistantPayload", v)
 		}
-		if p.IdempotencyKey != nil {
-			head := *p.IdempotencyKey
-			req.Header.Set("Idempotency-Key", head)
-		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)

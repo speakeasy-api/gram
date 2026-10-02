@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -16,7 +17,7 @@ import (
 
 // invalidateAgentAuthorityTx fences issuance before policy or membership writes.
 // Role membership locks stabilize the affected set, then agent row locks are
-// acquired in UUID order. Epochs and sessions are updated in two batch writes,
+// acquired in UUID order. Sessions are revoked in a batch write,
 // rather than rescanning tenant sessions once per agent in a large role.
 func invalidateAgentAuthorityTx(ctx context.Context, tx pgx.Tx, organizationID string, principals []string, agentIDs []uuid.UUID) error {
 	principals = slices.Clone(principals)
@@ -56,9 +57,6 @@ func invalidateAgentAuthorityTx(ctx context.Context, tx pgx.Tx, organizationID s
 	if len(locked) == 0 {
 		return nil
 	}
-	if err := repo.New(tx).AdvanceAuthorityAgentEpochs(ctx, repo.AdvanceAuthorityAgentEpochsParams{OrganizationID: organizationID, AgentIds: locked}); err != nil {
-		return fmt.Errorf("advance authority agent epochs: %w", err)
-	}
 	if err := repo.New(tx).RevokeAuthorityWorkloadSessions(ctx, repo.RevokeAuthorityWorkloadSessionsParams{OrganizationID: organizationID, AgentIds: locked}); err != nil {
 		return fmt.Errorf("revoke authority workload sessions: %w", err)
 	}
@@ -68,30 +66,28 @@ func invalidateAgentAuthorityTx(ctx context.Context, tx pgx.Tx, organizationID s
 // changedRoleAgentIDs only fences membership changes; retaining an agent in an
 // otherwise unchanged role must not revoke that agent's existing sessions.
 func changedRoleAgentIDs(before, after []string) ([]uuid.UUID, error) {
-	changed := make(map[string]bool, len(before)+len(after))
-	for _, id := range before {
-		changed[id] = true
-	}
-	seen := make(map[string]bool, len(after))
-	for _, id := range after {
-		if seen[id] {
-			continue
+	sets := [2]map[uuid.UUID]bool{{}, {}}
+	for i, values := range [][]string{before, after} {
+		for _, raw := range values {
+			id, err := uuid.Parse(raw)
+			if err != nil {
+				return nil, fmt.Errorf("parse authority agent ID: %w", err)
+			}
+			sets[i][id] = true
 		}
-		seen[id] = true
-		changed[id] = !changed[id]
 	}
-	ids := make([]uuid.UUID, 0, len(changed))
-	for raw, differs := range changed {
-		if !differs {
-			continue
+	var changed []uuid.UUID
+	for id := range sets[0] {
+		if !sets[1][id] {
+			changed = append(changed, id)
 		}
-		id, err := uuid.Parse(raw)
-		if err != nil {
-			return nil, fmt.Errorf("parse authority agent ID: %w", err)
-		}
-		ids = append(ids, id)
 	}
-	return ids, nil
+	for id := range sets[1] {
+		if !sets[0][id] {
+			changed = append(changed, id)
+		}
+	}
+	return changed, nil
 }
 
 // changedAudiencePrincipalsTx compares the exact rules this save replaces.
@@ -139,4 +135,24 @@ func changedAudiencePrincipalsTx(ctx context.Context, tx pgx.Tx, organizationID,
 		changed = append(changed, principal)
 	}
 	return changed, nil
+}
+
+// sameRoleGrantPolicy compares effective scope/selector sets, not request shape.
+func sameRoleGrantPolicy(before, after []*authz.ScopedGrant) bool {
+	sets := [2]map[string]bool{{}, {}}
+	for i, grants := range [][]*authz.ScopedGrant{before, after} {
+		for _, grant := range grants {
+			if len(grant.Selectors) == 0 {
+				sets[i][grant.Scope+":null"] = true
+			}
+			for _, selector := range grant.Selectors {
+				encoded, err := json.Marshal(selector)
+				if err != nil {
+					return false
+				}
+				sets[i][grant.Scope+":"+string(encoded)] = true
+			}
+		}
+	}
+	return maps.Equal(sets[0], sets[1])
 }

@@ -13,7 +13,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"unicode/utf8"
 
 	assistants "github.com/speakeasy-api/gram/server/gen/assistants"
 	types "github.com/speakeasy-api/gram/server/gen/types"
@@ -479,24 +478,9 @@ func DecodeCreateAssistantRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		}
 
 		var (
-			idempotencyKey   *string
 			sessionToken     *string
 			projectSlugInput *string
 		)
-		idempotencyKeyRaw := r.Header.Get("Idempotency-Key")
-		if idempotencyKeyRaw != "" {
-			idempotencyKey = &idempotencyKeyRaw
-		}
-		if idempotencyKey != nil {
-			if utf8.RuneCountInString(*idempotencyKey) < 1 {
-				err = goa.MergeErrors(err, goa.InvalidLengthError("idempotency_key", *idempotencyKey, utf8.RuneCountInString(*idempotencyKey), 1, true))
-			}
-		}
-		if idempotencyKey != nil {
-			if utf8.RuneCountInString(*idempotencyKey) > 256 {
-				err = goa.MergeErrors(err, goa.InvalidLengthError("idempotency_key", *idempotencyKey, utf8.RuneCountInString(*idempotencyKey), 256, false))
-			}
-		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -505,10 +489,7 @@ func DecodeCreateAssistantRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		if err != nil {
-			return payload, err
-		}
-		payload = NewCreateAssistantPayload(&body, idempotencyKey, sessionToken, projectSlugInput)
+		payload = NewCreateAssistantPayload(&body, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

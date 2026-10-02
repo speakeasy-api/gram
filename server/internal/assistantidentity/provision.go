@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/google/uuid"
@@ -15,12 +16,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
 // Provision creates one dedicated identity, or returns the existing eligible
 // binding. The caller owns the transaction, including assistant configuration.
 // A failed call must roll back the transaction, never commit its partial writes.
-func Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (Binding, error) {
+func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (Binding, error) {
+	if s == nil {
+		return Binding{}, ErrInvalidIdentity
+	}
 	q := repo.New(tx)
 	if p.ActorUserID == "" || p.ActorUserID == urn.AllUsersPrincipalID {
 		return Binding{}, ErrActorIneligible
@@ -54,7 +59,7 @@ func Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (Binding, erro
 		if !old.Eligible {
 			return Binding{}, ErrTombstoned
 		}
-		if err := bindExistingRoots(ctx, tx, p); err != nil {
+		if err := s.bindExistingRoots(ctx, tx, p); err != nil {
 			return Binding{}, err
 		}
 		return bindingFromRow(p.OrganizationID, p.ProjectID, old), nil
@@ -117,16 +122,16 @@ func Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (Binding, erro
 	}); err != nil {
 		return Binding{}, fmt.Errorf("record provisioning provenance: %w", err)
 	}
-	if err := bindExistingRoots(ctx, tx, p); err != nil {
+	if err := s.bindExistingRoots(ctx, tx, p); err != nil {
 		return Binding{}, err
 	}
-	return Binding{OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, AssistantID: p.AssistantID, AgentID: agent.ID, Generation: 1, AgentIdentityEpoch: agent.IdentityEpoch}, nil
+	return Binding{OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, AssistantID: p.AssistantID, AgentID: agent.ID, Generation: 1}, nil
 }
 
 // Upgrade is explicit consent to provision a legacy assistant. Management
 // authorization is checked by the caller; permanent tombstones are never reused.
-func Upgrade(ctx context.Context, tx pgx.Tx, p ProvisionParams) (Binding, error) {
-	return Provision(ctx, tx, p)
+func (s *Service) Upgrade(ctx context.Context, tx pgx.Tx, p ProvisionParams) (Binding, error) {
+	return s.Provision(ctx, tx, p)
 }
 
 // ConfiguredCapabilities derives only concrete runtime capabilities from the
@@ -152,19 +157,22 @@ func ConfiguredCapabilities(ctx context.Context, tx pgx.Tx, org string, project,
 	for _, id := range servers {
 		grants = append(grants, authz.NewGrant(authz.ScopeMCPConnect, id.String()), authz.NewGrant(authz.ScopeMCPRead, id.String()))
 	}
+	if len(skills) > 0 {
+		grants = append(grants, authz.NewGrant(authz.ScopeSkillRead, project.String()))
+	}
 	for _, id := range skills {
 		grants = append(grants, authz.NewGrant(authz.ScopeSkillRead, id.String()))
 	}
 	return grants, nil
 }
 
-func bindExistingRoots(ctx context.Context, tx pgx.Tx, p ProvisionParams) error {
+func (s *Service) bindExistingRoots(ctx context.Context, tx pgx.Tx, p ProvisionParams) error {
 	roots, err := repo.New(tx).ListAssistantRoots(ctx, repo.ListAssistantRootsParams{OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, AssistantID: p.AssistantID.String()})
 	if err != nil {
 		return fmt.Errorf("list assistant roots: %w", err)
 	}
 	for _, root := range roots {
-		if err := BindRootTrigger(ctx, tx, p.OrganizationID, p.ProjectID, root); err != nil {
+		if err := s.BindRootTrigger(ctx, tx, p.OrganizationID, p.ProjectID, root); err != nil {
 			return err
 		}
 	}
@@ -196,5 +204,30 @@ func nullableString(value string, valid bool) *string {
 }
 
 func bindingFromRow(org string, project uuid.UUID, b repo.GetAssistantBindingRow) Binding {
-	return Binding{OrganizationID: org, ProjectID: project, AssistantID: b.OriginalAssistantID, AgentID: b.OriginalAgentID, Generation: b.Generation, AgentIdentityEpoch: b.AgentIdentityEpoch}
+	return Binding{OrganizationID: org, ProjectID: project, AssistantID: b.OriginalAssistantID, AgentID: b.OriginalAgentID, Generation: b.Generation}
+}
+
+// RevokeIfCapabilitiesChanged retires sessions whose captured capability ceiling
+// may no longer be valid. Direct policy grants are edited through policy APIs;
+// SnapshotCeiling intersects them with the current configured capabilities.
+// A no-op configuration update does not revoke sessions or change generations.
+func RevokeIfCapabilitiesChanged(ctx context.Context, tx pgx.Tx, org string, project, assistant uuid.UUID, before []authz.Grant) error {
+	after, err := ConfiguredCapabilities(ctx, tx, org, project, assistant)
+	if err != nil {
+		return err
+	}
+	if slices.EqualFunc(before, after, func(a, b authz.Grant) bool { return a.Scope == b.Scope && maps.Equal(a.Selector, b.Selector) }) {
+		return nil
+	}
+	binding, err := repo.New(tx).GetAssistantBinding(ctx, repo.GetAssistantBindingParams{OrganizationID: org, ProjectID: project, AssistantID: assistant})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("load changed capability binding: %w", err)
+	}
+	if err := workloadidentity.RevokeAgentWorkloadSessionsTx(ctx, tx, org, binding.OriginalAgentID); err != nil {
+		return fmt.Errorf("retire changed capability sessions: %w", err)
+	}
+	return nil
 }

@@ -15,17 +15,20 @@ import (
 // Only root trigger instances belong here; continuations reuse their root.
 // Untouched legacy assistants remain untouched. Existing tombstones cannot be
 // revived by ensure/retry; retarget is a separate, explicit operation.
-func BindRootTrigger(ctx context.Context, tx pgx.Tx, org string, project, trigger uuid.UUID) error {
-	return bindRoot(ctx, tx, org, project, trigger, false)
+func (s *Service) BindRootTrigger(ctx context.Context, tx pgx.Tx, org string, project, trigger uuid.UUID) error {
+	return s.bindRoot(ctx, tx, org, project, trigger, false)
 }
 
 // RetargetRootTrigger runs after the caller changes the trigger target in the
 // same transaction. It withdraws old authority and allocates a new incarnation.
-func RetargetRootTrigger(ctx context.Context, tx pgx.Tx, org string, project, trigger uuid.UUID) error {
-	return bindRoot(ctx, tx, org, project, trigger, true)
+func (s *Service) RetargetRootTrigger(ctx context.Context, tx pgx.Tx, org string, project, trigger uuid.UUID) error {
+	return s.bindRoot(ctx, tx, org, project, trigger, true)
 }
 
-func bindRoot(ctx context.Context, tx pgx.Tx, org string, project, trigger uuid.UUID, retarget bool) error {
+func (s *Service) bindRoot(ctx context.Context, tx pgx.Tx, org string, project, trigger uuid.UUID, retarget bool) error {
+	if s == nil {
+		return ErrInvalidIdentity
+	}
 	q := repo.New(tx)
 	if err := lockProject(ctx, q, org, project); err != nil {
 		return err
@@ -40,7 +43,7 @@ func bindRoot(ctx context.Context, tx pgx.Tx, org string, project, trigger uuid.
 	if root.Deleted || root.Status != "active" {
 		return ErrTombstoned
 	}
-	old, historyErr := q.GetTriggerBinding(ctx, repo.GetTriggerBindingParams{OrganizationID: org, ProjectID: project, TriggerID: trigger})
+	old, historyErr := q.GetTriggerBinding(ctx, repo.GetTriggerBindingParams{PlatformIssuer: s.issuer, PlatformJwksUri: s.jwksURI, OrganizationID: org, ProjectID: project, TriggerID: trigger})
 	hasHistory := historyErr == nil
 	if historyErr != nil && !errors.Is(historyErr, pgx.ErrNoRows) {
 		return fmt.Errorf("load root history: %w", historyErr)
@@ -93,7 +96,7 @@ func bindRoot(ctx context.Context, tx pgx.Tx, org string, project, trigger uuid.
 		}
 		return ErrBrokenMapping
 	}
-	issuer, err := systemIssuer(ctx, q, org, project)
+	issuer, err := s.platformIssuer(ctx, q, org, project)
 	if err != nil {
 		return err
 	}
@@ -128,23 +131,23 @@ func bindRoot(ctx context.Context, tx pgx.Tx, org string, project, trigger uuid.
 	return nil
 }
 
-func systemIssuer(ctx context.Context, q *repo.Queries, org string, project uuid.UUID) (uuid.UUID, error) {
-	issuer, err := q.GetSystemIssuer(ctx, repo.GetSystemIssuerParams{OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}})
+func (s *Service) platformIssuer(ctx context.Context, q *repo.Queries, org string, project uuid.UUID) (uuid.UUID, error) {
+	issuer, err := q.GetPlatformIssuer(ctx, repo.GetPlatformIssuerParams{PlatformIssuer: s.issuer, OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}})
 	if err == nil {
-		if issuer.Deleted {
+		if issuer.Deleted || issuer.JwksUri != s.jwksURI || issuer.AllowWildcardAdmission {
 			return uuid.Nil, ErrTombstoned
 		}
 		return issuer.ID, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return uuid.Nil, fmt.Errorf("load system issuer: %w", err)
+		return uuid.Nil, fmt.Errorf("load platform trust registration: %w", err)
 	}
-	id, err := q.CreateSystemIssuer(ctx, repo.CreateSystemIssuerParams{
+	id, err := q.CreatePlatformIssuer(ctx, repo.CreatePlatformIssuerParams{
 		OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true},
-		Name: "Assistant roots " + project.String(), Issuer: "urn:gram:assistant-roots:" + project.String(),
+		Name: "Assistant roots " + project.String(), Issuer: s.issuer, JwksUri: s.jwksURI,
 	})
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("create system issuer: %w", err)
+		return uuid.Nil, fmt.Errorf("create platform trust registration: %w", err)
 	}
 	return id, nil
 }
@@ -160,7 +163,7 @@ func TombstoneTrigger(ctx context.Context, tx pgx.Tx, org string, project, trigg
 
 func tombstoneTrigger(ctx context.Context, tx pgx.Tx, org string, project, trigger uuid.UUID) error {
 	q := repo.New(tx)
-	old, err := q.GetTriggerBinding(ctx, repo.GetTriggerBindingParams{OrganizationID: org, ProjectID: project, TriggerID: trigger})
+	old, err := q.GetTriggerBinding(ctx, repo.GetTriggerBindingParams{PlatformIssuer: "", PlatformJwksUri: "", OrganizationID: org, ProjectID: project, TriggerID: trigger})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -170,7 +173,7 @@ func tombstoneTrigger(ctx context.Context, tx pgx.Tx, org string, project, trigg
 	if err := workloadidentity.RevokeWorkloadSessionsTx(ctx, tx, org, old.OriginalWorkloadIssuerID, old.Subject); err != nil {
 		return fmt.Errorf("revoke root sessions: %w", err)
 	}
-	if err := q.RevokeAdmission(ctx, repo.RevokeAdmissionParams{OrganizationID: org, IssuerID: old.OriginalWorkloadIssuerID, Subject: old.Subject}); err != nil {
+	if err := q.RevokeAdmission(ctx, repo.RevokeAdmissionParams{OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}, IssuerID: old.OriginalWorkloadIssuerID, Subject: old.Subject}); err != nil {
 		return fmt.Errorf("withdraw root admission: %w", err)
 	}
 	if err := q.RevokeAssignment(ctx, repo.RevokeAssignmentParams{OrganizationID: org, IssuerID: old.OriginalWorkloadIssuerID, Subject: old.Subject}); err != nil {
@@ -178,32 +181,6 @@ func tombstoneTrigger(ctx context.Context, tx pgx.Tx, org string, project, trigg
 	}
 	if err := q.TombstoneTriggerBinding(ctx, repo.TombstoneTriggerBindingParams{OrganizationID: org, ProjectID: project, TriggerID: trigger}); err != nil {
 		return fmt.Errorf("tombstone root mapping: %w", err)
-	}
-	return nil
-}
-
-// InvalidateAssistantAuthority invalidates captured identities on status changes
-// without destroying the binding, so a later explicit resume retains identity.
-func InvalidateAssistantAuthority(ctx context.Context, tx pgx.Tx, org string, project, assistant uuid.UUID) error {
-	q := repo.New(tx)
-	if err := lockProject(ctx, q, org, project); err != nil {
-		return err
-	}
-	b, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{OrganizationID: org, ProjectID: project, AssistantID: assistant})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("load assistant authority: %w", err)
-	}
-	if b.Deleted {
-		return ErrTombstoned
-	}
-	if err := q.AdvanceAgentEpoch(ctx, repo.AdvanceAgentEpochParams{OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}, AgentID: b.OriginalAgentID}); err != nil {
-		return fmt.Errorf("advance assistant agent epoch: %w", err)
-	}
-	if err := workloadidentity.RevokeAgentWorkloadSessionsTx(ctx, tx, org, b.OriginalAgentID); err != nil {
-		return fmt.Errorf("revoke assistant sessions: %w", err)
 	}
 	return nil
 }
@@ -224,7 +201,7 @@ func TombstoneAssistant(ctx context.Context, tx pgx.Tx, org string, project, ass
 	}
 	// Session issuance locks issuer before agent. Preserve that order even when
 	// withdrawing all roots at once; missing hard-deleted issuer is harmless.
-	if _, err := q.GetSystemIssuer(ctx, repo.GetSystemIssuerParams{OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if err := q.LockAssistantIssuers(ctx, repo.LockAssistantIssuersParams{OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}, AssistantID: assistant}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("lock assistant issuer for withdrawal: %w", err)
 	}
 	if err := q.RevokeDedicatedAgent(ctx, repo.RevokeDedicatedAgentParams{OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}, AgentID: b.OriginalAgentID}); err != nil {
@@ -242,7 +219,7 @@ func TombstoneAssistant(ctx context.Context, tx pgx.Tx, org string, project, ass
 			return err
 		}
 	}
-	if err := q.RevokeDedicatedAdmissions(ctx, repo.RevokeDedicatedAdmissionsParams{OrganizationID: org, AgentID: b.OriginalAgentID}); err != nil {
+	if err := q.RevokeDedicatedAdmissions(ctx, repo.RevokeDedicatedAdmissionsParams{OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}, AgentID: b.OriginalAgentID}); err != nil {
 		return fmt.Errorf("revoke dedicated admissions: %w", err)
 	}
 	if err := q.RevokeDedicatedAssignments(ctx, repo.RevokeDedicatedAssignmentsParams{OrganizationID: org, AgentID: b.OriginalAgentID}); err != nil {

@@ -103,10 +103,22 @@ func TestRevokeAgentWorkloadSessionsTx_UsesWinningAssignment(t *testing.T) {
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	_, err = q.GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ID: exact.ID, OrganizationID: f.tenant.organizationID})
 	require.NoError(t, err)
-	_, err = policyrepo.New(conn).SoftDeleteWorkloadAgentAssignmentForSubject(t.Context(), policyrepo.SoftDeleteWorkloadAgentAssignmentForSubjectParams{
-		OrganizationID: f.tenant.organizationID, WorkloadIssuerID: f.issuerID, MatchKind: "wildcard", Subject: "subject:*",
-	})
+	wildcardAfter, err := q.CreateUserSession(t.Context(), workloadSessionParams(issuer, f.issuerID, "subject:later"))
 	require.NoError(t, err)
+	require.NoError(t, pgx.BeginFunc(t.Context(), conn, func(tx pgx.Tx) error {
+		policy := policyrepo.New(tx)
+		if err := policy.RevokeWorkloadAssignmentSessions(t.Context(), policyrepo.RevokeWorkloadAssignmentSessionsParams{OrganizationID: f.tenant.organizationID, WorkloadIssuerID: f.issuerID, MatchKind: "wildcard", Subject: "subject:*"}); err != nil {
+			return fmt.Errorf("revoke wildcard assignment sessions: %w", err)
+		}
+		_, err := policy.SoftDeleteWorkloadAgentAssignmentForSubject(t.Context(), policyrepo.SoftDeleteWorkloadAgentAssignmentForSubjectParams{OrganizationID: f.tenant.organizationID, WorkloadIssuerID: f.issuerID, MatchKind: "wildcard", Subject: "subject:*"})
+		if err != nil {
+			return fmt.Errorf("withdraw wildcard assignment: %w", err)
+		}
+		return nil
+	}))
+	_, err = q.GetUserSessionByID(t.Context(), sessionsrepo.GetUserSessionByIDParams{ID: wildcardAfter.ID, OrganizationID: f.tenant.organizationID})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
 	_, err = q.GetUserSessionPrincipalCredentialByJTI(t.Context(), sessionsrepo.GetUserSessionPrincipalCredentialByJTIParams{UserSessionIssuerID: issuer, Jti: exact.Jti})
 	require.NoError(t, err, "withdrawing the broad rule must preserve the unchanged exact exception's session")
 }

@@ -73,7 +73,7 @@ func BuildGetAssistantPayload(assistantsGetAssistantID string, assistantsGetAssi
 
 // BuildCreateAssistantPayload builds the payload for the assistants
 // createAssistant endpoint from CLI flags.
-func BuildCreateAssistantPayload(assistantsCreateAssistantBody string, assistantsCreateAssistantIdempotencyKey string, assistantsCreateAssistantSessionToken string, assistantsCreateAssistantProjectSlugInput string) (*assistants.CreateAssistantPayload, error) {
+func BuildCreateAssistantPayload(assistantsCreateAssistantBody string, assistantsCreateAssistantSessionToken string, assistantsCreateAssistantProjectSlugInput string) (*assistants.CreateAssistantPayload, error) {
 	var err error
 	var body CreateAssistantRequestBody
 	{
@@ -91,21 +91,6 @@ func BuildCreateAssistantPayload(assistantsCreateAssistantBody string, assistant
 		}
 		if err != nil {
 			return nil, err
-		}
-	}
-	var idempotencyKey *string
-	{
-		if assistantsCreateAssistantIdempotencyKey != "" {
-			idempotencyKey = &assistantsCreateAssistantIdempotencyKey
-			if utf8.RuneCountInString(*idempotencyKey) < 1 {
-				err = goa.MergeErrors(err, goa.InvalidLengthError("idempotency_key", *idempotencyKey, utf8.RuneCountInString(*idempotencyKey), 1, true))
-			}
-			if utf8.RuneCountInString(*idempotencyKey) > 256 {
-				err = goa.MergeErrors(err, goa.InvalidLengthError("idempotency_key", *idempotencyKey, utf8.RuneCountInString(*idempotencyKey), 256, false))
-			}
-			if err != nil {
-				return nil, err
-			}
 		}
 	}
 	var sessionToken *string
@@ -150,7 +135,6 @@ func BuildCreateAssistantPayload(assistantsCreateAssistantBody string, assistant
 			v.McpServers[i] = marshalAssistantMCPServerRefRequestBodyToTypesAssistantMCPServerRef(val)
 		}
 	}
-	v.IdempotencyKey = idempotencyKey
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

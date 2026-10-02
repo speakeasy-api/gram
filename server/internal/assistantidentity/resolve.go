@@ -17,13 +17,13 @@ import (
 
 // Resolve reads tenant-pinned history and every live authority dependency from
 // one repeatable-read snapshot. Storage failures are never legacy fallbacks.
-func Resolve(ctx context.Context, db DB, org string, project, assistant, trigger uuid.UUID) (Resolution, error) {
+func (s *Service) Resolve(ctx context.Context, db DB, org string, project, assistant, trigger uuid.UUID) (Resolution, error) {
 	tx, err := readSnapshot(ctx, db)
 	if err != nil {
 		return Resolution{}, err
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	result, err := resolve(ctx, tx, org, project, assistant, trigger)
+	result, err := s.resolve(ctx, tx, org, project, assistant, trigger)
 	if err != nil {
 		return Resolution{}, err
 	}
@@ -33,8 +33,8 @@ func Resolve(ctx context.Context, db DB, org string, project, assistant, trigger
 	return result, nil
 }
 
-func resolve(ctx context.Context, tx pgx.Tx, org string, project, assistant, trigger uuid.UUID) (Resolution, error) {
-	if org == "" || project == uuid.Nil || assistant == uuid.Nil || trigger == uuid.Nil {
+func (s *Service) resolve(ctx context.Context, tx pgx.Tx, org string, project, assistant, trigger uuid.UUID) (Resolution, error) {
+	if s == nil || org == "" || project == uuid.Nil || assistant == uuid.Nil || trigger == uuid.Nil {
 		return Resolution{}, ErrInvalidIdentity
 	}
 	q := repo.New(tx)
@@ -42,17 +42,20 @@ func resolve(ctx context.Context, tx pgx.Tx, org string, project, assistant, tri
 	if aerr != nil && !errors.Is(aerr, pgx.ErrNoRows) {
 		return Resolution{}, fmt.Errorf("resolve assistant history: %w", aerr)
 	}
-	tb, terr := q.GetTriggerBinding(ctx, repo.GetTriggerBindingParams{OrganizationID: org, ProjectID: project, TriggerID: trigger})
+	tb, terr := q.GetTriggerBinding(ctx, repo.GetTriggerBindingParams{PlatformIssuer: s.issuer, PlatformJwksUri: s.jwksURI, OrganizationID: org, ProjectID: project, TriggerID: trigger})
 	if terr != nil && !errors.Is(terr, pgx.ErrNoRows) {
 		return Resolution{}, fmt.Errorf("resolve trigger history: %w", terr)
 	}
 	// Original identifiers remain authoritative even when all FK mirrors were
 	// nulled by hard deletes. Never reinterpret retained history as legacy.
-	if aerr == nil && !ab.Eligible {
+	if aerr == nil && ab.Tombstoned {
 		return Resolution{State: Tombstoned, Identity: nil}, nil
 	}
 	if terr == nil && (tb.Deleted || !tb.Eligible) {
 		return Resolution{State: Tombstoned, Identity: nil}, nil
+	}
+	if aerr == nil && !ab.Eligible {
+		return Resolution{State: Unavailable, Identity: nil}, nil
 	}
 	if aerr == nil && errors.Is(terr, pgx.ErrNoRows) {
 		return Resolution{}, ErrBrokenMapping
@@ -63,14 +66,14 @@ func resolve(ctx context.Context, tx pgx.Tx, org string, project, assistant, tri
 			return Resolution{}, resourceError("resolve bound assistant lifecycle", err)
 		}
 		if a.Status != "active" {
-			return Resolution{State: Tombstoned, Identity: nil}, nil
+			return Resolution{State: Unavailable, Identity: nil}, nil
 		}
 		if tb.OriginalAssistantBindingID != ab.ID || tb.AssistantBindingGeneration != ab.Generation {
 			return Resolution{}, ErrBrokenMapping
 		}
 		id := Identity{OrganizationID: org, ProjectID: project, AssistantID: assistant, AgentID: ab.OriginalAgentID,
 			TriggerID: trigger, IssuerID: tb.OriginalWorkloadIssuerID, Subject: tb.Subject,
-			AssistantGeneration: ab.Generation, TriggerGeneration: tb.Generation, AgentIdentityEpoch: ab.AgentIdentityEpoch}
+			AssistantGeneration: ab.Generation, TriggerGeneration: tb.Generation}
 		return Resolution{State: Active, Identity: &id}, nil
 	}
 	if terr == nil {
@@ -97,10 +100,10 @@ func resolve(ctx context.Context, tx pgx.Tx, org string, project, assistant, tri
 	return Resolution{State: NeverConfigured, Identity: nil}, nil
 }
 
-// Validate rejects stale generations, owner-transfer ABA epochs, and any live
+// Validate rejects stale generations, owner transfers, and any live
 // lifecycle, target, assignment, admission, issuer, or tenancy inconsistency.
-func Validate(ctx context.Context, db DB, expected Identity) error {
-	resolved, err := Resolve(ctx, db, expected.OrganizationID, expected.ProjectID, expected.AssistantID, expected.TriggerID)
+func (s *Service) Validate(ctx context.Context, db DB, expected Identity) error {
+	resolved, err := s.Resolve(ctx, db, expected.OrganizationID, expected.ProjectID, expected.AssistantID, expected.TriggerID)
 	if err != nil {
 		return err
 	}
@@ -116,13 +119,13 @@ func matchExpected(resolved Resolution, expected Identity) error {
 
 // SnapshotCeiling validates and derives the bounded policy within the same
 // snapshot. Subsequent grant expansion cannot mutate these canonical bytes.
-func SnapshotCeiling(ctx context.Context, db DB, expected Identity) (CeilingSnapshot, error) {
+func (s *Service) SnapshotCeiling(ctx context.Context, db DB, expected Identity) (CeilingSnapshot, error) {
 	tx, err := readSnapshot(ctx, db)
 	if err != nil {
 		return CeilingSnapshot{}, err
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	resolved, err := resolve(ctx, tx, expected.OrganizationID, expected.ProjectID, expected.AssistantID, expected.TriggerID)
+	resolved, err := s.resolve(ctx, tx, expected.OrganizationID, expected.ProjectID, expected.AssistantID, expected.TriggerID)
 	if err != nil {
 		return CeilingSnapshot{}, err
 	}

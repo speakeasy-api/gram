@@ -20,7 +20,7 @@ import (
 
 func (f identityFixture) resolve(t *testing.T, assistantID, triggerID uuid.UUID) assistantidentity.Resolution {
 	t.Helper()
-	result, err := assistantidentity.Resolve(t.Context(), f.db, "org-trigger-test", f.projectID, assistantID, triggerID)
+	result, err := testIdentityService.Resolve(t.Context(), f.db, "org-trigger-test", f.projectID, assistantID, triggerID)
 	require.NoError(t, err)
 	return result
 }
@@ -42,11 +42,11 @@ func TestRootIdentityCreateRetargetPauseDelete(t *testing.T) {
 	require.Equal(t, assistantidentity.Active, next.State)
 	require.Equal(t, first.Identity.Subject, next.Identity.Subject)
 	require.Greater(t, next.Identity.TriggerGeneration, first.Identity.TriggerGeneration)
-	require.Error(t, assistantidentity.Validate(ctx, f.db, *first.Identity))
+	require.Error(t, testIdentityService.Validate(ctx, f.db, *first.Identity))
 	_, err = f.app.SetStatus(ctx, f.projectID, item.ID, triggers.StatusPaused)
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Tombstoned, f.resolve(t, nextAssistant, item.ID).State)
-	require.Error(t, assistantidentity.Validate(ctx, f.db, *next.Identity))
+	require.Error(t, testIdentityService.Validate(ctx, f.db, *next.Identity))
 	_, err = f.app.SetStatus(ctx, f.projectID, item.ID, triggers.StatusActive)
 	require.NoError(t, err)
 	resumed := f.resolve(t, nextAssistant, item.ID)
@@ -55,7 +55,7 @@ func TestRootIdentityCreateRetargetPauseDelete(t *testing.T) {
 	require.Equal(t, next.Identity.Subject, resumed.Identity.Subject)
 	require.NoError(t, f.app.Delete(ctx, f.projectID, item.ID))
 	require.Equal(t, assistantidentity.Tombstoned, f.resolve(t, nextAssistant, item.ID).State)
-	require.Error(t, assistantidentity.Validate(ctx, f.db, *resumed.Identity))
+	require.Error(t, testIdentityService.Validate(ctx, f.db, *resumed.Identity))
 }
 
 func TestRootIdentityRetargetLegacyDoesNotFallback(t *testing.T) {
@@ -68,7 +68,7 @@ func TestRootIdentityRetargetLegacyDoesNotFallback(t *testing.T) {
 	_, err = f.app.Update(t.Context(), triggers.UpdateParams{ID: item.ID, ProjectID: f.projectID, DefinitionSlug: item.DefinitionSlug, Name: item.Name, EnvironmentID: item.EnvironmentID, TargetKind: item.TargetKind, TargetRef: legacyID.String(), TargetDisplay: item.TargetDisplay, Config: map[string]any{}, Status: item.Status})
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Tombstoned, f.resolve(t, legacyID, item.ID).State)
-	require.Error(t, assistantidentity.Validate(t.Context(), f.db, *original.Identity))
+	require.Error(t, testIdentityService.Validate(t.Context(), f.db, *original.Identity))
 }
 
 func TestRootIdentityConcurrentResumeIsIdempotent(t *testing.T) {
@@ -123,7 +123,7 @@ func TestContinuationCreateNeverMintsRootIdentity(t *testing.T) {
 	var wakeID uuid.UUID
 	_, err = f.app.CreateWakeInstance(t.Context(), triggers.CreateWakeInstanceParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, Name: "Follow up", AssistantID: f.assistantID, TargetDisplay: "Assistant", FireAt: time.Now().Add(time.Hour), Note: nil, CorrelationID: "thread-identity"}, func(ctx context.Context, tx pgx.Tx, item triggerrepo.TriggerInstance) error {
 		wakeID = item.ID
-		_, err := identityrepo.New(tx).GetTriggerBinding(ctx, identityrepo.GetTriggerBindingParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, TriggerID: item.ID})
+		_, err := identityrepo.New(tx).GetTriggerBinding(ctx, identityrepo.GetTriggerBindingParams{PlatformIssuer: "https://platform.example.invalid", PlatformJwksUri: "https://platform.example.invalid/.well-known/jwks.json", OrganizationID: "org-trigger-test", ProjectID: f.projectID, TriggerID: item.ID})
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return errors.New("wake unexpectedly acquired a root binding")
 		}
@@ -131,7 +131,7 @@ func TestContinuationCreateNeverMintsRootIdentity(t *testing.T) {
 	})
 	require.Error(t, err, "no Temporal client forces workflow compensation")
 	require.NotEqual(t, uuid.Nil, wakeID)
-	_, err = identityrepo.New(f.db).GetTriggerBinding(t.Context(), identityrepo.GetTriggerBindingParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, TriggerID: wakeID})
+	_, err = identityrepo.New(f.db).GetTriggerBinding(t.Context(), identityrepo.GetTriggerBindingParams{PlatformIssuer: "https://platform.example.invalid", PlatformJwksUri: "https://platform.example.invalid/.well-known/jwks.json", OrganizationID: "org-trigger-test", ProjectID: f.projectID, TriggerID: wakeID})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	after := f.resolve(t, f.assistantID, root.ID)
 	require.Equal(t, before, after)
@@ -144,7 +144,7 @@ func TestRootIdentityPausedCreateAndMutationRollback(t *testing.T) {
 	params.Status = triggers.StatusPaused
 	item, err := f.app.Create(t.Context(), params)
 	require.NoError(t, err)
-	_, err = identityrepo.New(f.db).GetTriggerBinding(t.Context(), identityrepo.GetTriggerBindingParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, TriggerID: item.ID})
+	_, err = identityrepo.New(f.db).GetTriggerBinding(t.Context(), identityrepo.GetTriggerBindingParams{PlatformIssuer: "https://platform.example.invalid", PlatformJwksUri: "https://platform.example.invalid/.well-known/jwks.json", OrganizationID: "org-trigger-test", ProjectID: f.projectID, TriggerID: item.ID})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	_, err = f.app.SetStatus(t.Context(), f.projectID, item.ID, triggers.StatusActive)
 	require.NoError(t, err)

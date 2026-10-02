@@ -15,7 +15,7 @@ func workloadTestEndpoint(issuerID uuid.UUID) *ResolvedMcpEndpoint {
 }
 
 func workloadTestIssuer(name string, jwksURI string) *workloadidentity_repo.WorkloadIssuer {
-	return &workloadidentity_repo.WorkloadIssuer{IssuerKind: "remote", Name: name, JwksUri: jwksURI}
+	return &workloadidentity_repo.WorkloadIssuer{Name: name, JwksUri: jwksURI}
 }
 
 func TestWorkloadIssuerKeySource_BuildsRemoteSource(t *testing.T) {
@@ -79,27 +79,4 @@ func TestWorkloadFetchScope_IsPerAuthorizationServerAndSeparateFromClientAuth(t 
 		"keyed by the authorization server, prefixed so this grant's budget is separate from client auth's on the same endpoint")
 	require.NotEqual(t, workloadFetchScope(workloadTestEndpoint(first)), workloadFetchScope(workloadTestEndpoint(second)),
 		"one endpoint's issuers must not be able to exhaust another's budget")
-}
-
-func TestWorkloadIssuerKeySource_RejectsNonRemoteKindsBeforeJWKSValidation(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name   string
-		issuer *workloadidentity_repo.WorkloadIssuer
-	}{
-		{name: "nil", issuer: nil},
-		{name: "system", issuer: &workloadidentity_repo.WorkloadIssuer{IssuerKind: "system", JwksUri: ""}},
-		{name: "system_with_remote_keys", issuer: &workloadidentity_repo.WorkloadIssuer{IssuerKind: "system", JwksUri: "https://example.test/keys"}},
-		{name: "unknown", issuer: &workloadidentity_repo.WorkloadIssuer{IssuerKind: "unknown", JwksUri: "https://example.test/keys"}},
-		{name: "empty", issuer: &workloadidentity_repo.WorkloadIssuer{IssuerKind: "", JwksUri: "https://example.test/keys"}},
-		{name: "unknown_invalid_keys", issuer: &workloadidentity_repo.WorkloadIssuer{IssuerKind: "unknown", JwksUri: "http://example.test/keys"}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			// A nil endpoint also proves that rejected kinds never build fetch scope.
-			source, err := workloadIssuerKeySource(nil, tc.issuer)
-			require.EqualError(t, err, "workload issuer does not support external assertions")
-			require.Zero(t, source)
-		})
-	}
 }

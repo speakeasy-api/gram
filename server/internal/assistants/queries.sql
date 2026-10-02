@@ -1620,20 +1620,6 @@ WHERE project_id = @project_id::uuid
   AND kind = 'chat_attachment'
   AND deleted IS FALSE;
 
--- name: LockAssistantCreateRequest :exec
-SELECT pg_advisory_xact_lock(hashtextextended(sqlc.arg(request_key)::text, 0));
-
--- name: GetAssistantCreateRequest :one
-SELECT id, create_request_hash, deleted
-FROM assistants
-WHERE organization_id = @organization_id AND project_id = @project_id
-  AND create_request_key = @request_key
-FOR UPDATE;
-
--- name: SetAssistantCreateRequest :exec
-UPDATE assistants SET create_request_key = @request_key, create_request_hash = @request_hash
-WHERE id = @assistant_id AND project_id = @project_id AND organization_id = @organization_id;
-
 -- name: LockAssistantIdentityAnchor :one
 SELECT id, organization_id, name, created_by_user_id, status
 FROM assistants WHERE id = @assistant_id AND project_id = @project_id AND deleted IS FALSE

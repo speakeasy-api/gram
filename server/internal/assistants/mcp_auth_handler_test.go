@@ -43,7 +43,7 @@ func newMCPAuthTestService(t *testing.T, conn *pgxpool.Pool) *Service {
 		telemetry.NewStub(logger),
 		nil,
 		newTestAuditLogger(),
-	)
+	).SetIdentityService(testIdentityService)
 	return &Service{
 		tracer:           tracerProvider.Tracer("test"),
 		logger:           logger,

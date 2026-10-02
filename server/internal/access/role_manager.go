@@ -495,14 +495,8 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid agent ID").LogError(ctx, r.logger)
 		}
 	}
-	var changedPrincipals []string
-	// The dashboard sends empty grant arrays on metadata and membership edits.
-	// Those carry no policy change; only the changed membership needs fencing.
-	if len(addGrants) > 0 || len(removeGrants) > 0 {
-		changedPrincipals = []string{currentRole.PrincipalURN}
-	}
-	if err := invalidateAgentAuthorityTx(ctx, tx, gramOrgID, changedPrincipals, changedAgents); err != nil {
-		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "invalidate role agent authority").LogError(ctx, r.logger)
+	if err := invalidateAgentAuthorityTx(ctx, tx, gramOrgID, nil, changedAgents); err != nil {
+		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "invalidate role membership authority").LogError(ctx, r.logger)
 	}
 
 	updatedRole := currentRole
@@ -570,6 +564,11 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 		syncedGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, addGrants, removeGrants)
 		if err != nil {
 			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "patch grants for updated role").LogError(ctx, r.logger)
+		}
+		if !sameRoleGrantPolicy(currentGrants, syncedGrants) {
+			if err := invalidateAgentAuthorityTx(ctx, tx, gramOrgID, []string{currentRole.PrincipalURN}, nil); err != nil {
+				return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "invalidate changed role grants").LogError(ctx, r.logger)
+			}
 		}
 		updatedGrants = make([]*gen.RoleGrant, 0, len(syncedGrants))
 		for _, grant := range syncedGrants {

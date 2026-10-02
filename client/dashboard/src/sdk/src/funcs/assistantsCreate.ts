@@ -119,11 +119,6 @@ async function $do(
       explode: false,
       charEncoding: "none",
     }),
-    "Idempotency-Key": encodeSimple(
-      "Idempotency-Key",
-      payload["Idempotency-Key"],
-      { explode: false, charEncoding: "none" },
-    ),
   }));
 
   const requestSecurity = resolveSecurity(

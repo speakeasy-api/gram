@@ -75,7 +75,7 @@ func ResolveIssuerByURL(ctx context.Context, db repo.DBTX, params ResolveIssuerP
 	}
 
 	match, found := resolveByPrecedence(candidates)
-	if !found || match.IssuerKind != "remote" {
+	if !found {
 		return repo.WorkloadIssuer{}, ErrIssuerNotFound
 	}
 

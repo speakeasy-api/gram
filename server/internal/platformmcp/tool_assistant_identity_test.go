@@ -13,6 +13,7 @@ import (
 
 	genassistants "github.com/speakeasy-api/gram/server/gen/assistants"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -140,12 +141,16 @@ func TestAssistantIdentityUpgradeRejectsAmbiguousUnconfirmedAndHiddenTargets(t *
 		{ProjectID: uuid.Nil.String(), AssistantID: assistantID, Confirmed: true},
 	} {
 		_, err := service.upgrade(ctx, principal, input)
-		require.Error(t, err)
+		var shared *oops.ShareableError
+		require.ErrorAs(t, err, &shared)
+		require.Equal(t, oops.CodeBadRequest, shared.Code)
 	}
 	require.Zero(t, resolutions)
 	valid := UpgradeAssistantIdentityInput{ProjectID: projectID, AssistantID: assistantID, Confirmed: true}
 	_, err := service.upgrade(t.Context(), principal, valid)
-	require.Error(t, err)
+	var shared *oops.ShareableError
+	require.ErrorAs(t, err, &shared)
+	require.Equal(t, oops.CodeUnauthorized, shared.Code)
 	require.Zero(t, resolutions)
 	_, err = service.upgrade(ctx, principal, valid)
 	require.ErrorIs(t, err, ErrForbidden)
@@ -210,6 +215,9 @@ func TestAssistantIdentityTrustedOAuthUpgradeMatchesAPI(t *testing.T) {
 	engine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	tracer, meter := testenv.NewTracerProvider(t), testenv.NewMeterProvider(t)
 	core := assistants.NewServiceCore(logger, tracer, meter, db, nil, nil, nil, nil, nil, nil, telemetry.NewStub(logger), nil, audit.NewLogger())
+	identities, err := assistantidentity.New("https://platform.example.invalid", false)
+	require.NoError(t, err)
+	core.SetIdentityService(identities)
 	management := assistants.NewService(logger, tracer, meter, db, &sessions.Manager{}, engine, core, nil, nil)
 	reader := NewPostgresReader(logger, db).WithAssistantIdentityManagement(management)
 	ctx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))

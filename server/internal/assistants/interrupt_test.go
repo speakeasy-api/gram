@@ -100,7 +100,7 @@ func newInterruptTestCore(t *testing.T, conn *pgxpool.Pool, backend testRuntimeB
 		telemetry.NewStub(logger),
 		nil,
 		newTestAuditLogger(),
-	)
+	).SetIdentityService(testIdentityService)
 }
 
 // A stop pressed while the runtime is still cold has no generation to cancel:

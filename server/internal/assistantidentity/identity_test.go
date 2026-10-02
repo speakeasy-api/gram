@@ -23,7 +23,7 @@ import (
 func TestLegacyUpgradeAndConcurrentRetries(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	result, err := assistantidentity.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, f.trigger)
+	result, err := testIdentityService.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, f.trigger)
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.NeverConfigured, result.State)
 	const workers = 6
@@ -35,7 +35,7 @@ func TestLegacyUpgradeAndConcurrentRetries(t *testing.T) {
 			var binding assistantidentity.Binding
 			err := inTx(t, f.db, func(tx pgx.Tx) error {
 				var err error
-				binding, err = assistantidentity.Upgrade(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
+				binding, err = testIdentityService.Upgrade(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
 				if err != nil {
 					return fmt.Errorf("fixture operation: %w", err)
 				}
@@ -68,7 +68,7 @@ func TestLegacyUpgradeAndConcurrentRetries(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), counts.Agents)
 	require.Equal(t, int64(1), counts.Triggers)
-	snapshot, err := assistantidentity.SnapshotCeiling(t.Context(), f.db, id)
+	snapshot, err := testIdentityService.SnapshotCeiling(t.Context(), f.db, id)
 	require.NoError(t, err)
 	require.JSONEq(t, `{"requested":[],"effective":[]}`, string(snapshot.Policy))
 }
@@ -82,7 +82,7 @@ func TestProvisionRollsBackEveryAuthorityWrite(t *testing.T) {
 			server := f.attachMCP(t)
 			f.grant(t, urn.NewPrincipal(urn.PrincipalTypeUser, f.actor), authz.ScopeMCPRead, server.String())
 			err := inTx(t, f.db, func(tx pgx.Tx) error {
-				_, err := assistantidentity.Provision(t.Context(), failureTx{Tx: tx, table: table}, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
+				_, err := testIdentityService.Provision(t.Context(), failureTx{Tx: tx, table: table}, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
 				if err != nil {
 					return fmt.Errorf("fixture operation: %w", err)
 				}
@@ -105,7 +105,7 @@ func TestPolicyIsConfiguredActorSubsetAndFrozen(t *testing.T) {
 	f.grant(t, actor, authz.ScopeSkillRead, "*")
 	f.grant(t, actor, authz.ScopeOrgAdmin, "*")
 	id := f.provision(t)
-	before, err := assistantidentity.SnapshotCeiling(t.Context(), f.db, id)
+	before, err := testIdentityService.SnapshotCeiling(t.Context(), f.db, id)
 	require.NoError(t, err)
 	var decoded runtimepolicy.DelegatedPolicy
 	require.NoError(t, json.Unmarshal(before.Policy, &decoded))
@@ -116,17 +116,17 @@ func TestPolicyIsConfiguredActorSubsetAndFrozen(t *testing.T) {
 	}
 	frozen := string(before.Policy)
 	f.grant(t, urn.NewPrincipal(urn.PrincipalTypeAgent, id.AgentID.String()), authz.ScopeMCPRead, "*")
-	after, err := assistantidentity.SnapshotCeiling(t.Context(), f.db, id)
+	after, err := testIdentityService.SnapshotCeiling(t.Context(), f.db, id)
 	require.NoError(t, err)
-	require.Equal(t, frozen, string(before.Policy))
+	require.Equal(t, frozen, string(after.Policy))
 	require.Equal(t, before.Digest, after.Digest, "unconfigured expansion cannot widen a ceiling")
 	require.Equal(t, runtimepolicy.CurrentDelegatedPolicyVersion, before.EncodingVersion)
 	secondServer := f.attachMCP(t)
-	expanded, err := assistantidentity.SnapshotCeiling(t.Context(), f.db, id)
+	expanded, err := testIdentityService.SnapshotCeiling(t.Context(), f.db, id)
 	require.NoError(t, err)
 	require.Contains(t, string(expanded.Policy), secondServer.String())
 	require.NotEqual(t, before.Digest, expanded.Digest)
-	require.Equal(t, frozen, string(before.Policy), "previous snapshots never track later configuration or grants")
+	require.NotEqual(t, frozen, string(expanded.Policy), "a later snapshot reflects newly configured capabilities without changing the captured policy")
 
 }
 
@@ -139,7 +139,7 @@ func TestExplicitDenyCannotBecomeAssistantGrant(t *testing.T) {
 	f.grant(t, actor, authz.ScopeMCPBlockedRead, server.String())
 	f.grant(t, actor, authz.ScopeMCPBlockedConnect, server.String())
 	id := f.provision(t)
-	snapshot, err := assistantidentity.SnapshotCeiling(t.Context(), f.db, id)
+	snapshot, err := testIdentityService.SnapshotCeiling(t.Context(), f.db, id)
 	require.NoError(t, err)
 	require.JSONEq(t, `{"requested":[],"effective":[]}`, string(snapshot.Policy))
 }
@@ -153,7 +153,7 @@ func TestCreatorAndConsentProvenanceRemainDistinct(t *testing.T) {
 	server := f.attachMCP(t)
 	f.grant(t, urn.NewPrincipal(urn.PrincipalTypeUser, f.actor), authz.ScopeMCPRead, "*")
 	require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
-		_, err := assistantidentity.Upgrade(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: upgrader})
+		_, err := testIdentityService.Upgrade(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: upgrader})
 		if err != nil {
 			return fmt.Errorf("fixture operation: %w", err)
 		}
@@ -170,7 +170,7 @@ func TestCreatorAndConsentProvenanceRemainDistinct(t *testing.T) {
 	require.Equal(t, f.actor, metadata["creator_user_id"])
 	require.Equal(t, upgrader, metadata["consent_user_id"])
 	require.Equal(t, upgrader, metadata["provisioning_actor_user_id"])
-	snapshot, err := assistantidentity.SnapshotCeiling(t.Context(), f.db, id)
+	snapshot, err := testIdentityService.SnapshotCeiling(t.Context(), f.db, id)
 	require.NoError(t, err)
 	require.NotContains(t, string(snapshot.Policy), server.String(), "creator policy must not replace actor consent")
 }
@@ -179,21 +179,21 @@ func TestTenantAndMissingMappingFailClosed(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	id := f.provision(t)
-	_, err := assistantidentity.Resolve(t.Context(), f.db, "another-organization", f.project, f.assistant, f.trigger)
+	_, err := testIdentityService.Resolve(t.Context(), f.db, "another-organization", f.project, f.assistant, f.trigger)
 	require.ErrorIs(t, err, assistantidentity.ErrNotFound)
-	_, err = assistantidentity.Resolve(t.Context(), f.db, f.org, uuid.New(), f.assistant, f.trigger)
+	_, err = testIdentityService.Resolve(t.Context(), f.db, f.org, uuid.New(), f.assistant, f.trigger)
 	require.ErrorIs(t, err, assistantidentity.ErrNotFound)
-	_, err = assistantidentity.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, uuid.New())
+	_, err = testIdentityService.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, uuid.New())
 	require.ErrorIs(t, err, assistantidentity.ErrBrokenMapping)
 	stale := id
-	stale.AgentIdentityEpoch++
-	require.ErrorIs(t, assistantidentity.Validate(t.Context(), f.db, stale), assistantidentity.ErrInvalidIdentity)
-	stale = id
 	stale.AssistantGeneration++
-	require.ErrorIs(t, assistantidentity.Validate(t.Context(), f.db, stale), assistantidentity.ErrInvalidIdentity)
+	require.ErrorIs(t, testIdentityService.Validate(t.Context(), f.db, stale), assistantidentity.ErrInvalidIdentity)
 	stale = id
 	stale.TriggerGeneration++
-	_, err = assistantidentity.SnapshotCeiling(t.Context(), f.db, stale)
+	require.ErrorIs(t, testIdentityService.Validate(t.Context(), f.db, stale), assistantidentity.ErrInvalidIdentity)
+	stale = id
+	stale.TriggerGeneration++
+	_, err = testIdentityService.SnapshotCeiling(t.Context(), f.db, stale)
 	require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity)
 }
 
@@ -221,9 +221,9 @@ func TestLiveAuthorityDependenciesAndHardDeletes(t *testing.T) {
 			case "issuer delete":
 				err = q.FixtureWithdrawIssuer(ctx, repo.FixtureWithdrawIssuerParams{OrganizationID: f.org, IssuerID: id.IssuerID})
 			case "admission":
-				err = q.RevokeAdmission(ctx, repo.RevokeAdmissionParams{OrganizationID: f.org, IssuerID: id.IssuerID, Subject: id.Subject})
+				err = q.RevokeAdmission(ctx, repo.RevokeAdmissionParams{OrganizationID: f.org, ProjectID: uuid.NullUUID{UUID: f.project, Valid: true}, IssuerID: id.IssuerID, Subject: id.Subject})
 			case "assignment":
-				err = q.RevokeAssignment(ctx, repo.RevokeAssignmentParams{OrganizationID: f.org, IssuerID: id.IssuerID, Subject: id.Subject})
+				err = q.FixtureWithdrawAssignment(ctx, repo.FixtureWithdrawAssignmentParams{OrganizationID: f.org, IssuerID: id.IssuerID, Subject: id.Subject})
 			case "hard assistant":
 				err = q.FixtureDeleteAssistant(ctx, repo.FixtureDeleteAssistantParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant})
 			case "hard agent":
@@ -236,10 +236,11 @@ func TestLiveAuthorityDependenciesAndHardDeletes(t *testing.T) {
 				err = q.FixtureDeleteProject(ctx, repo.FixtureDeleteProjectParams{OrganizationID: f.org, ProjectID: f.project})
 			}
 			require.NoError(t, err)
-			require.Error(t, assistantidentity.Validate(ctx, f.db, id))
-			resolution, err := assistantidentity.Resolve(ctx, f.db, f.org, f.project, f.assistant, f.trigger)
+			require.Error(t, testIdentityService.Validate(ctx, f.db, id))
+			resolution, err := testIdentityService.Resolve(ctx, f.db, f.org, f.project, f.assistant, f.trigger)
 			require.NoError(t, err)
-			require.Equal(t, assistantidentity.Tombstoned, resolution.State)
+			require.NotEqual(t, assistantidentity.Active, resolution.State)
+			require.NotEqual(t, assistantidentity.NeverConfigured, resolution.State)
 			require.Nil(t, resolution.Identity)
 			original, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant})
 			require.NoError(t, err)
@@ -248,20 +249,20 @@ func TestLiveAuthorityDependenciesAndHardDeletes(t *testing.T) {
 	}
 }
 
-func TestAssistantPauseResumeEpochAndPausedProvisioning(t *testing.T) {
+func TestAssistantPauseResumePreservesIdentityAndPausedProvisioning(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	require.NoError(t, repo.New(f.db).FixtureSetAssistantStatus(t.Context(), repo.FixtureSetAssistantStatusParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, Status: "paused"}))
 	require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
-		_, err := assistantidentity.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
+		_, err := testIdentityService.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
 		if err != nil {
 			return fmt.Errorf("fixture operation: %w", err)
 		}
 		return nil
 	}))
-	result, err := assistantidentity.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, f.trigger)
+	result, err := testIdentityService.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, f.trigger)
 	require.NoError(t, err)
-	require.Equal(t, assistantidentity.Tombstoned, result.State)
+	require.Equal(t, assistantidentity.Unavailable, result.State)
 	require.NoError(t, repo.New(f.db).FixtureSetAssistantStatus(t.Context(), repo.FixtureSetAssistantStatusParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, Status: "active"}))
 	id := f.provision(t)
 	for _, status := range []string{"paused", "active"} {
@@ -272,14 +273,14 @@ func TestAssistantPauseResumeEpochAndPausedProvisioning(t *testing.T) {
 				}
 				return nil
 			}
-			return assistantidentity.InvalidateAssistantAuthority(t.Context(), tx, f.org, f.project, f.assistant)
+			return nil
 		}))
 	}
-	require.ErrorIs(t, assistantidentity.Validate(t.Context(), f.db, id), assistantidentity.ErrInvalidIdentity)
-	result, err = assistantidentity.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, f.trigger)
+	require.NoError(t, testIdentityService.Validate(t.Context(), f.db, id))
+	result, err = testIdentityService.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, f.trigger)
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Active, result.State)
-	require.Equal(t, id.AgentIdentityEpoch+2, result.Identity.AgentIdentityEpoch)
+	require.Equal(t, id, *result.Identity)
 	require.Equal(t, id.AssistantGeneration, result.Identity.AssistantGeneration)
 	require.Equal(t, id.TriggerGeneration, result.Identity.TriggerGeneration)
 }
@@ -292,23 +293,23 @@ func TestRootExplicitResumeAndPermanentAssistantTombstone(t *testing.T) {
 		return assistantidentity.TombstoneTrigger(t.Context(), tx, f.org, f.project, f.trigger)
 	}))
 	err := inTx(t, f.db, func(tx pgx.Tx) error {
-		return assistantidentity.BindRootTrigger(t.Context(), tx, f.org, f.project, f.trigger)
+		return testIdentityService.BindRootTrigger(t.Context(), tx, f.org, f.project, f.trigger)
 	})
 	require.ErrorIs(t, err, assistantidentity.ErrTombstoned)
 	require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
-		return assistantidentity.RetargetRootTrigger(t.Context(), tx, f.org, f.project, f.trigger)
+		return testIdentityService.RetargetRootTrigger(t.Context(), tx, f.org, f.project, f.trigger)
 	}))
-	resumed, err := assistantidentity.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, f.trigger)
+	resumed, err := testIdentityService.Resolve(t.Context(), f.db, f.org, f.project, f.assistant, f.trigger)
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Active, resumed.State)
 	require.Equal(t, id.Subject, resumed.Identity.Subject)
 	require.Equal(t, id.TriggerGeneration+1, resumed.Identity.TriggerGeneration)
-	require.ErrorIs(t, assistantidentity.Validate(t.Context(), f.db, id), assistantidentity.ErrInvalidIdentity)
+	require.ErrorIs(t, testIdentityService.Validate(t.Context(), f.db, id), assistantidentity.ErrInvalidIdentity)
 	require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
 		return assistantidentity.TombstoneAssistant(t.Context(), tx, f.org, f.project, f.assistant)
 	}))
 	err = inTx(t, f.db, func(tx pgx.Tx) error {
-		_, err := assistantidentity.Upgrade(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
+		_, err := testIdentityService.Upgrade(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
 		if err != nil {
 			return fmt.Errorf("fixture operation: %w", err)
 		}
@@ -320,7 +321,7 @@ func TestRootExplicitResumeAndPermanentAssistantTombstone(t *testing.T) {
 	require.Zero(t, live)
 }
 
-func TestSystemIssuerReservationAndUntrustedActor(t *testing.T) {
+func TestOrdinaryIssuerRenewalAndUntrustedActor(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	id := f.provision(t)
@@ -328,12 +329,13 @@ func TestSystemIssuerReservationAndUntrustedActor(t *testing.T) {
 	root := uuid.New()
 	require.NoError(t, repo.New(f.db).FixtureCreateRoot(t.Context(), repo.FixtureCreateRootParams{ID: root, OrganizationID: f.org, ProjectID: f.project, DefinitionSlug: "schedule", TargetRef: f.assistant.String()}))
 	err := inTx(t, f.db, func(tx pgx.Tx) error {
-		return assistantidentity.BindRootTrigger(t.Context(), tx, f.org, f.project, root)
+		return testIdentityService.BindRootTrigger(t.Context(), tx, f.org, f.project, root)
 	})
-	require.ErrorIs(t, err, assistantidentity.ErrTombstoned)
+	require.NoError(t, err)
+	require.Error(t, testIdentityService.Validate(t.Context(), f.db, id), "renewed trust cannot revive the old mapping")
 	require.NoError(t, repo.New(f.db).FixtureWithdrawMembership(t.Context(), repo.FixtureWithdrawMembershipParams{OrganizationID: f.org, UserID: conv.ToPGText(f.actor)}))
 	err = inTx(t, f.db, func(tx pgx.Tx) error {
-		_, err := assistantidentity.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
+		_, err := testIdentityService.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
 		if err != nil {
 			return fmt.Errorf("fixture operation: %w", err)
 		}
@@ -347,7 +349,7 @@ func TestOperationalErrorsRemainErrors(t *testing.T) {
 	f := newFixture(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	result, err := assistantidentity.Resolve(ctx, f.db, f.org, f.project, f.assistant, f.trigger)
+	result, err := testIdentityService.Resolve(ctx, f.db, f.org, f.project, f.assistant, f.trigger)
 	require.Error(t, err)
 	require.Empty(t, result.State)
 }
@@ -365,7 +367,7 @@ func TestUnrepresentableToolExclusionDropsBroadCapability(t *testing.T) {
 	_, err = accessrepo.New(f.db).InsertPrincipalGrantIfAbsent(t.Context(), accessrepo.InsertPrincipalGrantIfAbsentParams{OrganizationID: f.org, PrincipalUrn: actor, Scope: string(authz.ScopeMCPBlockedConnect), Selectors: encoded})
 	require.NoError(t, err)
 	id := f.provision(t)
-	ceiling, err := assistantidentity.SnapshotCeiling(t.Context(), f.db, id)
+	ceiling, err := testIdentityService.SnapshotCeiling(t.Context(), f.db, id)
 	require.NoError(t, err)
 	require.JSONEq(t, `{"requested":[],"effective":[]}`, string(ceiling.Policy))
 }

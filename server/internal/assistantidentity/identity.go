@@ -18,6 +18,7 @@ type State string
 const (
 	NeverConfigured State = "NEVER_CONFIGURED"
 	Active          State = "ACTIVE"
+	Unavailable     State = "UNAVAILABLE"
 	Tombstoned      State = "TOMBSTONED"
 )
 
@@ -41,12 +42,11 @@ type ProvisionParams struct {
 
 // Binding identifies the exclusive, project-scoped agent for an assistant.
 type Binding struct {
-	OrganizationID     string
-	ProjectID          uuid.UUID
-	AssistantID        uuid.UUID
-	AgentID            uuid.UUID
-	Generation         int64
-	AgentIdentityEpoch int64
+	OrganizationID string
+	ProjectID      uuid.UUID
+	AssistantID    uuid.UUID
+	AgentID        uuid.UUID
+	Generation     int64
 }
 
 // Identity is a captured authority incarnation, not a bearer credential.
@@ -60,7 +60,6 @@ type Identity struct {
 	Subject             string
 	AssistantGeneration int64
 	TriggerGeneration   int64
-	AgentIdentityEpoch  int64
 }
 
 // Resolution has an identity only in the active state.

@@ -4186,7 +4186,7 @@ func NewGetAssistantPayload(id string, sessionToken *string, projectSlugInput *s
 
 // NewCreateAssistantPayload builds a assistants service createAssistant
 // endpoint payload.
-func NewCreateAssistantPayload(body *CreateAssistantRequestBody, idempotencyKey *string, sessionToken *string, projectSlugInput *string) *assistants.CreateAssistantPayload {
+func NewCreateAssistantPayload(body *CreateAssistantRequestBody, sessionToken *string, projectSlugInput *string) *assistants.CreateAssistantPayload {
 	v := &assistants.CreateAssistantPayload{
 		Name:           *body.Name,
 		Model:          *body.Model,
@@ -4213,7 +4213,6 @@ func NewCreateAssistantPayload(body *CreateAssistantRequestBody, idempotencyKey 
 			v.McpServers[i] = unmarshalAssistantMCPServerRefRequestBodyToTypesAssistantMCPServerRef(val)
 		}
 	}
-	v.IdempotencyKey = idempotencyKey
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

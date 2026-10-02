@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -24,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+	policyrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
 const workloadSessionSubject = "repo:acme/payments-api:ref:refs/heads/main"
@@ -328,7 +331,7 @@ func TestApplyIssuerGate_WorkloadSessionDoesNotInheritAnUnassignedAgentsPolicy(t
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, urn.AllUsersPrincipalID), fx.target.MCPResourceID)
 
 	issuerID := seedWorkloadIssuer(t, ctx, ti, fx.orgID)
-	assignment := assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, workloadSessionSubject, assigned.ID)
+	assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, workloadSessionSubject, assigned.ID)
 
 	subject := urn.NewWorkloadSubject(issuerID, workloadSessionSubject)
 	session := seedWorkloadSession(t, ctx, ti, fx, subject)
@@ -342,11 +345,24 @@ func TestApplyIssuerGate_WorkloadSessionDoesNotInheritAnUnassignedAgentsPolicy(t
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 
-	unassignWorkloadAgent(t, ctx, ti, assignment)
-	assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, workloadSessionSubject, unrelated.ID)
+	// This credential has never been presented, so a prior durable rejection
+	// cannot explain its refusal after the transactional assignment change.
+	unpresented := seedWorkloadSession(t, ctx, ti, fx, subject)
+	oldToken := mintSessionBearerExpiringAt(t, ti, fx, unpresented, unpresented.ExpiresAt.Time)
+	require.NoError(t, pgx.BeginFunc(ctx, ti.conn, func(tx pgx.Tx) error {
+		q := policyrepo.New(tx)
+		if err := q.RevokeWorkloadAssignmentSessions(ctx, policyrepo.RevokeWorkloadAssignmentSessionsParams{OrganizationID: fx.orgID, WorkloadIssuerID: issuerID, Subject: workloadSessionSubject, MatchKind: "exact"}); err != nil {
+			return fmt.Errorf("revoke reassigned sessions: %w", err)
+		}
+		_, err := q.UpsertWorkloadAgentAssignment(ctx, policyrepo.UpsertWorkloadAgentAssignmentParams{OrganizationID: fx.orgID, WorkloadIssuerID: issuerID, Subject: workloadSessionSubject, MatchKind: "exact", AgentID: unrelated.ID})
+		if err != nil {
+			return fmt.Errorf("change workload assignment: %w", err)
+		}
+		return nil
+	}))
 
 	w = httptest.NewRecorder()
-	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, oldToken, ti.serverURL.String(), endpoint)
 	require.Error(t, err, "an old session must not inherit a replacement agent's authority")
 
 	fresh := seedWorkloadSession(t, ctx, ti, fx, subject)

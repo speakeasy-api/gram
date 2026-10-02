@@ -1465,7 +1465,7 @@ WHERE user_session_issuer_id = @user_session_issuer_id
           )
           AND (
             (retired.match_kind = 'exact' AND user_sessions.subject_urn = 'workload:' || wi.id::text || ':' || retired.subject)
-            OR (retired.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
+            OR (retired.match_kind = 'wildcard' AND wi.allow_wildcard_admission
               AND length(retired.subject) > 1 AND right(retired.subject, 1) = '*'
               AND starts_with(user_sessions.subject_urn, 'workload:' || wi.id::text || ':' || left(retired.subject, length(retired.subject) - 1)))
           )
@@ -1478,10 +1478,10 @@ WHERE user_session_issuer_id = @user_session_issuer_id
          WHERE si.id = user_sessions.user_session_issuer_id),
         (SELECT organization_id FROM projects WHERE id = user_sessions.project_id))
       AND wa.deleted IS FALSE AND wi.deleted IS FALSE
-      AND wi.issuer_kind IN ('remote', 'system')
+
       AND (
         (wa.match_kind = 'exact' AND user_sessions.subject_urn = 'workload:' || wi.id::text || ':' || wa.subject)
-        OR (wa.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
+        OR (wa.match_kind = 'wildcard' AND wi.allow_wildcard_admission
           AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
           AND starts_with(user_sessions.subject_urn, 'workload:' || wi.id::text || ':' || left(wa.subject, length(wa.subject) - 1)))
       )
@@ -1796,11 +1796,11 @@ WITH issuer AS (
 ), workload_issuer AS MATERIALIZED (
     -- Serialize workload issuance with admission/assignment mutations before
     -- locking the assigned agent. Non-workload sessions do not take these locks.
-    SELECT wi.id, wi.organization_id, wi.issuer_kind, wi.allow_wildcard_admission
+    SELECT wi.id, wi.organization_id, wi.allow_wildcard_admission
     FROM workload_issuers wi, issuer
     WHERE wi.organization_id = issuer.organization_id
       AND starts_with(@subject_urn::text, 'workload:' || wi.id::text || ':')
-      AND wi.issuer_kind IN ('remote', 'system')
+
       AND wi.deleted IS FALSE
     FOR UPDATE OF wi
 ), workload_assignment AS MATERIALIZED (
@@ -1810,7 +1810,7 @@ WITH issuer AS (
     WHERE wa.deleted IS FALSE
       AND (
         (wa.match_kind = 'exact' AND @subject_urn::text = 'workload:' || wi.id::text || ':' || wa.subject)
-        OR (wa.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
+        OR (wa.match_kind = 'wildcard' AND wi.allow_wildcard_admission
           AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
           AND starts_with(@subject_urn::text, 'workload:' || wi.id::text || ':' || left(wa.subject, length(wa.subject) - 1)))
       )

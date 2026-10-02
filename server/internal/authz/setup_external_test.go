@@ -18,6 +18,7 @@ func TestMain(m *testing.M) {
 	}
 	chContainer, chFactory, err := testenv.NewTestClickhouse(ctx)
 	if err != nil {
+		_ = pgContainer.Terminate(ctx)
 		log.Fatalf("launch test clickhouse: %v", err)
 	}
 	authz.SetTestInfrastructure(authz.TestInfrastructure{

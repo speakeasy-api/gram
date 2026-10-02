@@ -13,21 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const advanceAuthorityAgentEpochs = `-- name: AdvanceAuthorityAgentEpochs :exec
-UPDATE agents SET identity_epoch = identity_epoch + 1, updated_at = clock_timestamp()
-WHERE organization_id = $1 AND id = ANY($2::uuid[]) AND deleted IS FALSE
-`
-
-type AdvanceAuthorityAgentEpochsParams struct {
-	OrganizationID string
-	AgentIds       []uuid.UUID
-}
-
-func (q *Queries) AdvanceAuthorityAgentEpochs(ctx context.Context, arg AdvanceAuthorityAgentEpochsParams) error {
-	_, err := q.db.Exec(ctx, advanceAuthorityAgentEpochs, arg.OrganizationID, arg.AgentIds)
-	return err
-}
-
 const createOrganizationRoleWithRequests = `-- name: CreateOrganizationRoleWithRequests :one
 WITH created AS (
 INSERT INTO organization_roles (
@@ -3044,7 +3029,7 @@ WHERE si.id = s.user_session_issuer_id
     JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id
     WHERE wa.organization_id = $1::text AND wa.deleted IS FALSE
       AND ((wa.match_kind = 'exact' AND s.subject_urn = 'workload:' || wa.workload_issuer_id::text || ':' || wa.subject)
-        OR (wa.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
+        OR (wa.match_kind = 'wildcard' AND wi.allow_wildcard_admission
             AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
             AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
     ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC

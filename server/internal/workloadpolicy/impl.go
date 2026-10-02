@@ -1043,7 +1043,7 @@ func (s *Service) UpdateSubject(ctx context.Context, payload *gen.UpdateSubjectP
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating the admitted subject").LogError(ctx, s.logger)
 	}
 
-	if agent != nil {
+	if agent != nil && agent.ID.String() != agentBefore {
 		if err := q.RevokeWorkloadAssignmentSessions(ctx, repo.RevokeWorkloadAssignmentSessionsParams{
 			OrganizationID: t.organizationID, WorkloadIssuerID: existing.WorkloadIssuerID,
 			MatchKind: existing.MatchKind, Subject: existing.Subject,

@@ -411,6 +411,7 @@ type DashboardIngestor interface {
 }
 
 type ServiceCore struct {
+	identities        *assistantidentity.Service
 	logger            *slog.Logger
 	tracer            trace.Tracer
 	db                *pgxpool.Pool
@@ -461,6 +462,7 @@ func NewServiceCore(
 	}
 
 	return &ServiceCore{
+		identities:        nil,
 		logger:            logger,
 		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
 		db:                db,
@@ -1267,7 +1269,6 @@ func (s *ServiceCore) CreateAssistant(
 	warmTTLSeconds int,
 	maxConcurrency int,
 	status string,
-	idempotencyKeys ...string,
 ) (assistantRecord, error) {
 	if createdByUserID == "" {
 		return assistantRecord{}, fmt.Errorf("create assistant: missing user id")
@@ -1280,38 +1281,6 @@ func (s *ServiceCore) CreateAssistant(
 	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err := triggerrepo.New(tx).LockTriggerProject(ctx, projectID); err != nil {
 		return assistantRecord{}, fmt.Errorf("lock assistant project: %w", err)
-	}
-
-	if len(idempotencyKeys) > 1 {
-		return assistantRecord{}, assistantValidationError("at most one idempotency key is permitted")
-	}
-	var requestKey, requestHash string
-	if len(idempotencyKeys) == 1 && idempotencyKeys[0] != "" {
-		requestKey, err = assistantCreateRequestKey(organizationID, projectID, createdByUserID, idempotencyKeys[0])
-		if err != nil {
-			return assistantRecord{}, err
-		}
-		requestHash, err = assistantCreateRequestHash(assistantCreateFingerprint{Version: 1, Name: name, Model: model, Instructions: instructions, Toolsets: toolsets, MCPServers: mcpServers, WarmTTLSeconds: warmTTLSeconds, MaxConcurrency: maxConcurrency, Status: status})
-		if err != nil {
-			return assistantRecord{}, err
-		}
-		queries := assistantrepo.New(tx)
-		if err = queries.LockAssistantCreateRequest(ctx, requestKey); err != nil {
-			return assistantRecord{}, fmt.Errorf("lock assistant create request: %w", err)
-		}
-		prior, readErr := queries.GetAssistantCreateRequest(ctx, assistantrepo.GetAssistantCreateRequestParams{OrganizationID: organizationID, ProjectID: projectID, RequestKey: conv.ToPGText(requestKey)})
-		if readErr == nil {
-			if prior.Deleted || !prior.CreateRequestHash.Valid || prior.CreateRequestHash.String != requestHash {
-				return assistantRecord{}, errAssistantCreateConflict
-			}
-			if err = tx.Commit(ctx); err != nil {
-				return assistantRecord{}, fmt.Errorf("commit assistant create replay: %w", err)
-			}
-			return s.GetAssistant(ctx, projectID, prior.ID)
-		}
-		if !errors.Is(readErr, pgx.ErrNoRows) {
-			return assistantRecord{}, fmt.Errorf("read assistant create request: %w", readErr)
-		}
 	}
 
 	resolved, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets)
@@ -1347,12 +1316,7 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, err
 	}
 
-	if requestKey != "" {
-		if err := queries.SetAssistantCreateRequest(ctx, assistantrepo.SetAssistantCreateRequestParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, RequestKey: conv.ToPGText(requestKey), RequestHash: conv.ToPGText(requestHash)}); err != nil {
-			return assistantRecord{}, fmt.Errorf("reserve assistant create request: %w", err)
-		}
-	}
-	if _, err := assistantidentity.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID}); err != nil {
+	if _, err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID}); err != nil {
 		return assistantRecord{}, fmt.Errorf("assistant identity Provision: %w", err)
 	}
 	if _, err := s.ensureDashboardRootTx(ctx, tx, organizationID, projectID, record.ID, name); err != nil {
@@ -1482,9 +1446,13 @@ func (s *ServiceCore) UpdateAssistant(
 	}
 
 	queries := assistantrepo.New(tx)
-	prior, err := queries.LockAssistantIdentityAnchor(ctx, assistantrepo.LockAssistantIdentityAnchorParams{ProjectID: projectID, AssistantID: assistantID})
+	anchor, err := queries.LockAssistantIdentityAnchor(ctx, assistantrepo.LockAssistantIdentityAnchorParams{ProjectID: projectID, AssistantID: assistantID})
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("lock assistant for update: %w", err)
+	}
+	beforeCapabilities, err := assistantidentity.ConfiguredCapabilities(ctx, tx, anchor.OrganizationID, projectID, assistantID)
+	if err != nil {
+		return assistantRecord{}, fmt.Errorf("load assistant capability ceiling: %w", err)
 	}
 	updated, err := queries.UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
 		Name:           conv.PtrToPGText(name),
@@ -1512,10 +1480,8 @@ func (s *ServiceCore) UpdateAssistant(
 		}
 	}
 
-	if prior.Status != record.Status {
-		if err := assistantidentity.InvalidateAssistantAuthority(ctx, tx, record.OrganizationID, projectID, assistantID); err != nil {
-			return assistantRecord{}, fmt.Errorf("assistant identity InvalidateAssistantAuthority: %w", err)
-		}
+	if err := assistantidentity.RevokeIfCapabilitiesChanged(ctx, tx, record.OrganizationID, projectID, assistantID, beforeCapabilities); err != nil {
+		return assistantRecord{}, fmt.Errorf("invalidate changed assistant capabilities: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return assistantRecord{}, fmt.Errorf("commit assistant tx: %w", err)
@@ -3932,4 +3898,10 @@ func (s *ServiceCore) stopRuntimeRecord(ctx context.Context, projectID, runtimeI
 		return fmt.Errorf("stop assistant runtime: %w", err)
 	}
 	return nil
+}
+
+// SetIdentityService configures the deployment platform trust before serving requests.
+func (s *ServiceCore) SetIdentityService(identities *assistantidentity.Service) *ServiceCore {
+	s.identities = identities
+	return s
 }

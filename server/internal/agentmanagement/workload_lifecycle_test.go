@@ -43,13 +43,6 @@ func requireLifecycleWorkloadRevoked(t *testing.T, db *pgxpool.Pool, sessionID u
 	require.ErrorIs(t, err, pgx.ErrNoRows, "the existing workload session must remain revoked")
 }
 
-func requireLifecycleEpoch(t *testing.T, db *pgxpool.Pool, agentID uuid.UUID, epoch int64) {
-	t.Helper()
-	stored, err := agentsrepo.New(db).GetAgentByID(t.Context(), agentsrepo.GetAgentByIDParams{OrganizationID: "org-a", ID: agentID})
-	require.NoError(t, err)
-	require.Equal(t, epoch, stored.IdentityEpoch)
-}
-
 func TestWorkloadLifecycleTransferRoundTrip(t *testing.T) {
 	t.Parallel()
 	db := newTestDB(t)
@@ -64,18 +57,15 @@ func TestWorkloadLifecycleTransferRoundTrip(t *testing.T) {
 	moved, err := service.Transfer(validatedHumanContext(t, "org-a", "owner"), &gen.TransferPayload{AgentID: agent.ID.String(), OwnerUserID: "replacement"})
 	require.NoError(t, err)
 	require.Equal(t, "replacement", moved.OwnerUserID)
-	requireLifecycleEpoch(t, db, agent.ID, agent.IdentityEpoch+1)
 	requireLifecycleWorkloadRevoked(t, db, session)
 	replacementSession := seedLifecycleWorkloadSession(t, db, agent.ID)
 	restored, err := service.Transfer(validatedHumanContext(t, "org-a", "replacement"), &gen.TransferPayload{AgentID: agent.ID.String(), OwnerUserID: "owner"})
 	require.NoError(t, err)
 	require.Equal(t, "owner", restored.OwnerUserID)
-	requireLifecycleEpoch(t, db, agent.ID, agent.IdentityEpoch+2)
 	requireLifecycleWorkloadRevoked(t, db, session)
 	requireLifecycleWorkloadRevoked(t, db, replacementSession)
 	_, err = liveUserSession(t.Context(), db, "org-a", unaffected)
 	require.NoError(t, err, "another agent's workload session must survive")
-	requireLifecycleEpoch(t, db, other.ID, other.IdentityEpoch)
 }
 
 func TestWorkloadLifecycleOwnerLossReassignment(t *testing.T) {
@@ -88,7 +78,6 @@ func TestWorkloadLifecycleOwnerLossReassignment(t *testing.T) {
 	session := seedLifecycleWorkloadSession(t, db, agent.ID)
 	require.NoError(t, orgrepo.New(db).DeleteOrganizationUserRelationship(t.Context(), orgrepo.DeleteOrganizationUserRelationshipParams{OrganizationID: "org-a", UserID: conv.ToPGText("owner")}))
 	require.NoError(t, agentownership.LatchOwnerLossByMembership(t.Context(), db, "org-a", "owner", agentownership.OwnerReassignmentReasonMembershipLost, agentownership.SystemActor, nil))
-	requireLifecycleEpoch(t, db, agent.ID, agent.IdentityEpoch+1)
 	requireLifecycleWorkloadRevoked(t, db, session)
 	seedOrganizationUser(t, db, "org-a", "owner")
 	requireLifecycleWorkloadRevoked(t, db, session)
@@ -99,7 +88,6 @@ func TestWorkloadLifecycleOwnerLossReassignment(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "owner", restored.OwnerUserID)
 	require.Nil(t, restored.OwnerReassignmentRequiredAt)
-	requireLifecycleEpoch(t, db, agent.ID, agent.IdentityEpoch+2)
 	requireLifecycleWorkloadRevoked(t, db, session)
 }
 
@@ -114,13 +102,13 @@ func TestWorkloadLifecycleSuspendResume(t *testing.T) {
 	ctx := validatedHumanContext(t, "org-a", "owner")
 	_, err := service.Suspend(ctx, &gen.SuspendPayload{AgentID: agent.ID.String()})
 	require.NoError(t, err)
-	requireLifecycleEpoch(t, db, agent.ID, agent.IdentityEpoch+1)
-	requireLifecycleWorkloadRevoked(t, db, session)
+	_, err = liveUserSession(t.Context(), db, "org-a", session)
+	require.NoError(t, err, "temporary suspension does not retire the stored credential")
 	restored, err := service.Resume(ctx, &gen.ResumePayload{AgentID: agent.ID.String()})
 	require.NoError(t, err)
 	require.Equal(t, gen.AgentLifecycle("active"), restored.Lifecycle)
-	requireLifecycleEpoch(t, db, agent.ID, agent.IdentityEpoch+2)
-	requireLifecycleWorkloadRevoked(t, db, session)
+	_, err = liveUserSession(t.Context(), db, "org-a", session)
+	require.NoError(t, err, "temporary suspension does not retire the stored credential")
 }
 
 func TestWorkloadLifecycleTerminalMutations(t *testing.T) {
@@ -138,7 +126,6 @@ func TestWorkloadLifecycleTerminalMutations(t *testing.T) {
 			if operation == "revoke" {
 				_, err := service.Revoke(ctx, &gen.RevokePayload{AgentID: agent.ID.String()})
 				require.NoError(t, err)
-				requireLifecycleEpoch(t, db, agent.ID, agent.IdentityEpoch+1)
 			} else {
 				require.NoError(t, service.Delete(ctx, &gen.DeletePayload{AgentID: agent.ID.String()}))
 				_, err := agentsrepo.New(db).GetAgentByID(ctx, agentsrepo.GetAgentByIDParams{OrganizationID: "org-a", ID: agent.ID})
@@ -161,17 +148,19 @@ func TestWorkloadLifecyclePolicyMutations(t *testing.T) {
 	selector := &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "project-one"}
 	grant, err := service.CreatePolicyGrant(ctx, &gen.CreatePolicyGrantPayload{AgentID: agent.ID.String(), Scope: string(authz.ScopeProjectRead), Effect: "allow", Selector: selector})
 	require.NoError(t, err)
-	requireLifecycleEpoch(t, db, agent.ID, agent.IdentityEpoch+1)
 	requireLifecycleWorkloadRevoked(t, db, session)
 	afterCreate := seedLifecycleWorkloadSession(t, db, agent.ID)
+	_, err = service.UpdatePolicyGrant(ctx, &gen.UpdatePolicyGrantPayload{AgentID: agent.ID.String(), GrantID: grant.ID, Scope: string(authz.ScopeProjectRead), Effect: "allow", Selector: selector})
+	require.NoError(t, err)
+	_, err = liveUserSession(t.Context(), db, "org-a", afterCreate)
+	require.NoError(t, err, "a no-op policy update preserves the session")
+
 	_, err = service.UpdatePolicyGrant(ctx, &gen.UpdatePolicyGrantPayload{AgentID: agent.ID.String(), GrantID: grant.ID, Scope: string(authz.ScopeProjectWrite), Effect: "allow", Selector: selector})
 	require.NoError(t, err)
-	requireLifecycleEpoch(t, db, agent.ID, agent.IdentityEpoch+2)
 	requireLifecycleWorkloadRevoked(t, db, session)
 	requireLifecycleWorkloadRevoked(t, db, afterCreate)
 	afterUpdate := seedLifecycleWorkloadSession(t, db, agent.ID)
 	require.NoError(t, service.DeletePolicyGrant(ctx, &gen.DeletePolicyGrantPayload{AgentID: agent.ID.String(), GrantID: grant.ID}))
-	requireLifecycleEpoch(t, db, agent.ID, agent.IdentityEpoch+3)
 	requireLifecycleWorkloadRevoked(t, db, session)
 	requireLifecycleWorkloadRevoked(t, db, afterCreate)
 	requireLifecycleWorkloadRevoked(t, db, afterUpdate)
@@ -191,7 +180,6 @@ func TestWorkloadLifecycleAuditFailureRollsBack(t *testing.T) {
 	stored, err := agentsrepo.New(db).GetAgentByID(t.Context(), agentsrepo.GetAgentByIDParams{OrganizationID: "org-a", ID: agent.ID})
 	require.NoError(t, err)
 	require.False(t, stored.SuspendedAt.Valid)
-	require.Equal(t, agent.IdentityEpoch, stored.IdentityEpoch)
 	_, err = liveUserSession(t.Context(), db, "org-a", session)
 	require.NoError(t, err, "session revocation must roll back with the failed lifecycle transaction")
 }
@@ -209,7 +197,6 @@ func TestWorkloadLifecycleOwnerLossAuditFailureRollsBack(t *testing.T) {
 	stored, err := agentsrepo.New(db).GetAgentByID(t.Context(), agentsrepo.GetAgentByIDParams{OrganizationID: "org-a", ID: agent.ID})
 	require.NoError(t, err)
 	require.False(t, stored.OwnerReassignmentRequiredAt.Valid)
-	require.Equal(t, agent.IdentityEpoch, stored.IdentityEpoch)
 	_, err = liveUserSession(t.Context(), db, "org-a", session)
 	require.NoError(t, err, "pool-based owner-loss must roll back session revocation with its audit")
 }

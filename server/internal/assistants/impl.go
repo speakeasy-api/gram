@@ -170,7 +170,6 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 		normalizeWarmTTLSeconds(payload.WarmTTLSeconds),
 		normalizeMaxConcurrency(payload.MaxConcurrency),
 		conv.PtrValOrEmpty(payload.Status, StatusActive),
-		conv.PtrValOr(payload.IdempotencyKey, ""),
 	)
 	if err != nil {
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "create assistant")
@@ -512,7 +511,7 @@ func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error,
 		return oops.E(oops.CodeNotFound, err, "%s", message).LogError(ctx, logger)
 	case errors.Is(err, assistantidentity.ErrActorIneligible):
 		return oops.E(oops.CodeForbidden, err, "%s", message).LogError(ctx, logger)
-	case errors.Is(err, errAssistantCreateConflict), errors.Is(err, assistantidentity.ErrTombstoned), errors.Is(err, assistantidentity.ErrBrokenMapping), errors.Is(err, assistantidentity.ErrInvalidIdentity):
+	case errors.Is(err, assistantidentity.ErrTombstoned), errors.Is(err, assistantidentity.ErrBrokenMapping), errors.Is(err, assistantidentity.ErrInvalidIdentity):
 		return oops.E(oops.CodeConflict, err, "%s", message).LogError(ctx, logger)
 	case errors.Is(err, errAssistantValidation):
 		return oops.E(oops.CodeBadRequest, err, "%s", message).LogError(ctx, logger)

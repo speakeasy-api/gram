@@ -2,6 +2,7 @@ package access
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -57,11 +58,11 @@ func seedAuthoritySubjectSession(t *testing.T, ctx context.Context, ti *testInst
 	return session.ID
 }
 
-func requireAuthorityState(t *testing.T, ctx context.Context, ti *testInstance, agent agentsrepo.Agent, epochDelta int64, session uuid.UUID, revoked bool) {
+func requireAuthorityState(t *testing.T, ctx context.Context, ti *testInstance, agent agentsrepo.Agent, session uuid.UUID, revoked bool) {
 	t.Helper()
 	stored, err := agentsrepo.New(ti.conn).GetAgentByID(ctx, agentsrepo.GetAgentByIDParams{OrganizationID: agent.OrganizationID, ID: agent.ID})
 	require.NoError(t, err)
-	require.Equal(t, agent.IdentityEpoch+epochDelta, stored.IdentityEpoch)
+	require.Equal(t, agent.ID, stored.ID)
 	_, err = usersessionsrepo.New(ti.conn).GetUserSessionByID(ctx, usersessionsrepo.GetUserSessionByIDParams{OrganizationID: agent.OrganizationID, ID: session})
 	if revoked {
 		require.ErrorIs(t, err, pgx.ErrNoRows)
@@ -99,17 +100,17 @@ func TestAgentAuthorityResourceAudienceRoundTrip(t *testing.T) {
 				Entries: []*gen.SetResourceAudienceEntry{{PrincipalUrn: otherPrincipal.String(), Level: "use"}},
 			})
 			require.NoError(t, err)
-			requireAuthorityState(t, ctx, ti, agent, 1, session, true)
-			requireAuthorityState(t, ctx, ti, other, 0, otherSession, false)
+			requireAuthorityState(t, ctx, ti, agent, session, true)
+			requireAuthorityState(t, ctx, ti, other, otherSession, false)
 			replacementSession := seedAuthoritySession(t, ctx, ti, agent)
 			_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
 				ResourceKind: "mcp", ResourceID: serverID, ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
 				Entries: []*gen.SetResourceAudienceEntry{{PrincipalUrn: principal.String(), Level: "use"}, {PrincipalUrn: otherPrincipal.String(), Level: "use"}},
 			})
 			require.NoError(t, err)
-			requireAuthorityState(t, ctx, ti, agent, 2, session, true)
-			requireAuthorityState(t, ctx, ti, agent, 2, replacementSession, true)
-			requireAuthorityState(t, ctx, ti, other, 0, otherSession, false)
+			requireAuthorityState(t, ctx, ti, agent, session, true)
+			requireAuthorityState(t, ctx, ti, agent, replacementSession, true)
+			requireAuthorityState(t, ctx, ti, other, otherSession, false)
 		})
 	}
 }
@@ -128,15 +129,20 @@ func TestAgentAuthorityRoleGrantRoundTrip(t *testing.T) {
 	seedGrant(t, ctx, ti.conn, agent.OrganizationID, principal, authz.ScopeProjectRead, "project-one")
 	grant := &gen.RoleGrant{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-one"}}}
 	actor := RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, agent.OwnerUserID)}
-	for i, payload := range []*gen.UpdateRolePayload{{ID: roleID, RemoveGrants: []*gen.RoleGrant{grant}}, {ID: roleID, AddGrants: []*gen.RoleGrant{grant}}} {
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	_, _, err = ti.service.roleMgr.UpdateRoleTx(ctx, tx, agent.OrganizationID, "", actor, &gen.UpdateRolePayload{ID: roleID, AddGrants: []*gen.RoleGrant{grant}})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+	requireAuthorityState(t, ctx, ti, agent, session, false)
+	for _, payload := range []*gen.UpdateRolePayload{{ID: roleID, RemoveGrants: []*gen.RoleGrant{grant}}, {ID: roleID, AddGrants: []*gen.RoleGrant{grant}}} {
 		currentSession := seedAuthoritySession(t, ctx, ti, agent)
 		tx := testenv.BeginTx(t, ctx, ti.conn)
 		_, _, err := ti.service.roleMgr.UpdateRoleTx(ctx, tx, agent.OrganizationID, "", actor, payload)
 		require.NoError(t, err)
 		require.NoError(t, tx.Commit(ctx))
-		requireAuthorityState(t, ctx, ti, agent, int64(i+1), session, true)
-		requireAuthorityState(t, ctx, ti, agent, int64(i+1), currentSession, true)
-		requireAuthorityState(t, ctx, ti, other, 0, otherSession, false)
+		requireAuthorityState(t, ctx, ti, agent, session, true)
+		requireAuthorityState(t, ctx, ti, agent, currentSession, true)
+		requireAuthorityState(t, ctx, ti, other, otherSession, false)
 	}
 }
 
@@ -154,15 +160,15 @@ func TestAgentAuthorityRoleMembershipRoundTrip(t *testing.T) {
 		require.NoError(t, err)
 	}
 	actor := RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, agent.OwnerUserID)}
-	for i, ids := range [][]string{{retained.ID.String()}, {retained.ID.String(), agent.ID.String()}} {
+	for _, ids := range [][]string{{retained.ID.String()}, {retained.ID.String(), agent.ID.String()}} {
 		currentSession := seedAuthoritySession(t, ctx, ti, agent)
 		tx := testenv.BeginTx(t, ctx, ti.conn)
 		_, _, err := ti.service.roleMgr.UpdateRoleTx(ctx, tx, agent.OrganizationID, "", actor, &gen.UpdateRolePayload{ID: roleID, AgentIds: ids, AddGrants: []*gen.RoleGrant{}, RemoveGrants: []*gen.RoleGrant{}})
 		require.NoError(t, err)
 		require.NoError(t, tx.Commit(ctx))
-		requireAuthorityState(t, ctx, ti, agent, int64(i+1), session, true)
-		requireAuthorityState(t, ctx, ti, agent, int64(i+1), currentSession, true)
-		requireAuthorityState(t, ctx, ti, retained, 0, retainedSession, false)
+		requireAuthorityState(t, ctx, ti, agent, session, true)
+		requireAuthorityState(t, ctx, ti, agent, currentSession, true)
+		requireAuthorityState(t, ctx, ti, retained, retainedSession, false)
 	}
 }
 
@@ -180,7 +186,7 @@ func TestAgentAuthorityRoleAuditFailureRollsBack(t *testing.T) {
 	_, _, err = ti.service.roleMgr.UpdateRoleTx(ctx, tx, agent.OrganizationID, "", RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, agent.OwnerUserID)}, &gen.UpdateRolePayload{ID: roleID, AgentIds: []string{}})
 	require.Error(t, err)
 	require.NoError(t, tx.Rollback(ctx))
-	requireAuthorityState(t, ctx, ti, agent, 0, session, false)
+	requireAuthorityState(t, ctx, ti, agent, session, false)
 	roles, err := accessrepo.New(ti.conn).ListAgentRolePrincipals(ctx, accessrepo.ListAgentRolePrincipalsParams{OrganizationID: agent.OrganizationID, AgentID: agent.ID})
 	require.NoError(t, err)
 	require.Contains(t, roles, principal.String())
@@ -197,7 +203,7 @@ func TestAgentAuthorityRoleDeletion(t *testing.T) {
 	require.NoError(t, err)
 	ti.roles.On("DeleteRole", mock.Anything, mock.Anything, "deleted-authority").Return(nil).Once()
 	require.NoError(t, ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: roleID}))
-	requireAuthorityState(t, ctx, ti, agent, 1, session, true)
+	requireAuthorityState(t, ctx, ti, agent, session, true)
 }
 
 func TestAgentAuthorityRoleCreation(t *testing.T) {
@@ -213,8 +219,8 @@ func TestAgentAuthorityRoleCreation(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
-	requireAuthorityState(t, ctx, ti, agent, 1, session, true)
-	requireAuthorityState(t, ctx, ti, other, 0, otherSession, false)
+	requireAuthorityState(t, ctx, ti, agent, session, true)
+	requireAuthorityState(t, ctx, ti, other, otherSession, false)
 }
 
 func TestAgentAuthorityBatchPreservesWinningAssignmentSpecificity(t *testing.T) {
@@ -244,9 +250,9 @@ func TestAgentAuthorityBatchPreservesWinningAssignmentSpecificity(t *testing.T) 
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, invalidateAgentAuthorityTx(ctx, tx, broad.OrganizationID, nil, []uuid.UUID{narrow.ID, broad.ID, broad.ID}))
 	require.NoError(t, tx.Commit(ctx))
-	requireAuthorityState(t, ctx, ti, broad, 1, broadSession, true)
-	requireAuthorityState(t, ctx, ti, narrow, 1, narrowSession, true)
-	requireAuthorityState(t, ctx, ti, exact, 0, exactSession, false)
+	requireAuthorityState(t, ctx, ti, broad, broadSession, true)
+	requireAuthorityState(t, ctx, ti, narrow, narrowSession, true)
+	requireAuthorityState(t, ctx, ti, exact, exactSession, false)
 }
 
 func TestAgentAuthorityResourceAudienceNoop(t *testing.T) {
@@ -262,7 +268,7 @@ func TestAgentAuthorityResourceAudienceNoop(t *testing.T) {
 		Entries: []*gen.SetResourceAudienceEntry{{PrincipalUrn: principal.String(), Level: "use"}},
 	})
 	require.NoError(t, err)
-	requireAuthorityState(t, ctx, ti, agent, 0, session, false)
+	requireAuthorityState(t, ctx, ti, agent, session, false)
 }
 
 func TestAgentAuthorityRoleEmptyGrantArraysPreserveAuthority(t *testing.T) {
@@ -301,7 +307,15 @@ func TestAgentAuthorityRoleEmptyGrantArraysPreserveAuthority(t *testing.T) {
 				require.Equal(t, *payload.Description, updated.After.Description)
 			}
 			require.Equal(t, updated.Before.Grants, updated.After.Grants)
-			requireAuthorityState(t, ctx, ti, agent, 0, session, false)
+			requireAuthorityState(t, ctx, ti, agent, session, false)
 		})
 	}
+}
+
+func TestChangedRoleAgentIDsCanonicalUUIDs(t *testing.T) {
+	t.Parallel()
+	id := uuid.NewString()
+	changed, err := changedRoleAgentIDs([]string{id}, []string{strings.ToUpper(id), id})
+	require.NoError(t, err)
+	require.Empty(t, changed)
 }

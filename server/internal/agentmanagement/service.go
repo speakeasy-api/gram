@@ -33,7 +33,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
 type sessionAuthorizer interface {
@@ -281,11 +280,6 @@ func (s *Service) changeOwner(ctx context.Context, rawID, ownerUserID string, ex
 		if err != nil {
 			return fmt.Errorf("change agent owner: %w", err)
 		}
-		if after.IdentityEpoch != before.IdentityEpoch {
-			if err := workloadidentity.RevokeAgentWorkloadSessionsTx(ctx, tx, after.OrganizationID, after.ID); err != nil {
-				return fmt.Errorf("invalidate agent authority: %w", err)
-			}
-		}
 		if err := s.logAgent(ctx, tx, human, action, &before, &after); err != nil {
 			return err
 		}
@@ -343,11 +337,6 @@ func (s *Service) mutate(ctx context.Context, rawID string, action audit.Action,
 		}
 		if err != nil {
 			return mapWriteError(err, "agent name is already in use")
-		}
-		if after.IdentityEpoch != before.IdentityEpoch {
-			if err := workloadidentity.RevokeAgentWorkloadSessionsTx(ctx, tx, after.OrganizationID, after.ID); err != nil {
-				return fmt.Errorf("invalidate agent authority: %w", err)
-			}
 		}
 		if err := s.logAgent(ctx, tx, human, action, &before, &after); err != nil {
 			return err

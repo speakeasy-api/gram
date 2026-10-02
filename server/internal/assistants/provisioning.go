@@ -83,8 +83,8 @@ func managedAssistantName(projectName string) string {
 // mapping now exists, so the re-read returns it) or a non-managed assistant
 // already holding the name (no mapping, so we surface ErrManagedAssistantNameTaken).
 //
-// createdByUserID may be empty for system-initiated enablement; it is recorded
-// as NULL in that case.
+// Creating an assistant requires an eligible consenting actor. System callers
+// may read an existing managed assistant, but cannot fabricate creation consent.
 func (s *ServiceCore) EnableManagedAssistant(
 	ctx context.Context,
 	organizationID string,
@@ -286,7 +286,7 @@ func (s *ServiceCore) ensureDashboardRootTx(ctx context.Context, tx pgx.Tx, orga
 	if len(roots) != 1 {
 		return uuid.Nil, fmt.Errorf("expected one canonical dashboard trigger, got %d", len(roots))
 	}
-	if err = assistantidentity.BindRootTrigger(ctx, tx, organizationID, projectID, roots[0].ID); err != nil {
+	if err = s.identities.BindRootTrigger(ctx, tx, organizationID, projectID, roots[0].ID); err != nil {
 		return uuid.Nil, fmt.Errorf("assistant identity BindRootTrigger: %w", err)
 	}
 	return roots[0].ID, nil
@@ -306,6 +306,10 @@ func (s *ServiceCore) createManagedAssistant(
 	var createdBy pgtype.Text
 	if createdByUserID != "" {
 		createdBy = conv.ToPGText(createdByUserID)
+	}
+
+	if createdByUserID == "" {
+		return assistantRecord{}, assistantidentity.ErrActorIneligible
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -341,7 +345,7 @@ func (s *ServiceCore) createManagedAssistant(
 		return assistantRecord{}, fmt.Errorf("insert managed assistant mapping: %w", err)
 	}
 
-	if _, err := assistantidentity.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID}); err != nil {
+	if _, err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID}); err != nil {
 		return assistantRecord{}, fmt.Errorf("assistant identity Provision: %w", err)
 	}
 	if err := s.ensureDashboardTrigger(ctx, tx, organizationID, projectID, record.ID, name); err != nil {

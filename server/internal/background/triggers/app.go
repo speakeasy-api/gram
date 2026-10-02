@@ -141,6 +141,7 @@ func (l *triggerDeliveryLogger) LogTriggerDelivery(
 }
 
 type App struct {
+	identities     *assistantidentity.Service
 	logger         *slog.Logger
 	db             *pgxpool.Pool
 	repo           *triggerrepo.Queries
@@ -217,6 +218,7 @@ func NewApp(
 	}
 
 	return &App{
+		identities:     nil,
 		logger:         logger,
 		db:             db,
 		repo:           triggerrepo.New(db),
@@ -259,11 +261,11 @@ func (a *App) GetInstance(ctx context.Context, projectID uuid.UUID, id uuid.UUID
 
 // bindRootIdentity deliberately excludes continuation wakes: their authority belongs
 // to the durable origin trigger, never a newly minted per-wake workload.
-func bindRootIdentity(ctx context.Context, tx pgx.Tx, item triggerrepo.TriggerInstance) error {
+func (a *App) bindRootIdentity(ctx context.Context, tx pgx.Tx, item triggerrepo.TriggerInstance) error {
 	if item.DefinitionSlug == DefinitionSlugWake || item.Status != StatusActive || item.TargetKind != TargetKindAssistant {
 		return nil
 	}
-	if err := assistantidentity.BindRootTrigger(ctx, tx, item.OrganizationID, item.ProjectID, item.ID); err != nil {
+	if err := a.identities.BindRootTrigger(ctx, tx, item.OrganizationID, item.ProjectID, item.ID); err != nil {
 		return fmt.Errorf("bind root trigger identity: %w", err)
 	}
 	return nil
@@ -319,7 +321,7 @@ func (a *App) Create(ctx context.Context, params CreateParams, hooks ...Instance
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("create trigger instance: %w", err)
 	}
 
-	if err := bindRootIdentity(ctx, tx, item); err != nil {
+	if err := a.bindRootIdentity(ctx, tx, item); err != nil {
 		return triggerrepo.TriggerInstance{}, err
 	}
 
@@ -406,10 +408,10 @@ func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...Instance
 	}
 
 	if item.Status == StatusActive && (existing.TargetKind != item.TargetKind || existing.TargetRef != item.TargetRef || existing.Status != item.Status) {
-		if err := assistantidentity.RetargetRootTrigger(ctx, tx, item.OrganizationID, item.ProjectID, item.ID); err != nil {
+		if err := a.identities.RetargetRootTrigger(ctx, tx, item.OrganizationID, item.ProjectID, item.ID); err != nil {
 			return triggerrepo.TriggerInstance{}, fmt.Errorf("rebind updated root trigger identity: %w", err)
 		}
-	} else if err := bindRootIdentity(ctx, tx, item); err != nil {
+	} else if err := a.bindRootIdentity(ctx, tx, item); err != nil {
 		return triggerrepo.TriggerInstance{}, err
 	}
 
@@ -525,10 +527,10 @@ func (a *App) SetStatus(ctx context.Context, projectID uuid.UUID, id uuid.UUID, 
 	}
 
 	if existing.Status != item.Status && item.Status == StatusActive && item.DefinitionSlug != DefinitionSlugWake {
-		if err := assistantidentity.RetargetRootTrigger(ctx, tx, item.OrganizationID, item.ProjectID, item.ID); err != nil {
+		if err := a.identities.RetargetRootTrigger(ctx, tx, item.OrganizationID, item.ProjectID, item.ID); err != nil {
 			return triggerrepo.TriggerInstance{}, fmt.Errorf("rebind root trigger identity after status change: %w", err)
 		}
-	} else if err := bindRootIdentity(ctx, tx, item); err != nil {
+	} else if err := a.bindRootIdentity(ctx, tx, item); err != nil {
 		return triggerrepo.TriggerInstance{}, err
 	}
 
@@ -1265,4 +1267,10 @@ func nullUUIDToUUID(value uuid.NullUUID) uuid.UUID {
 		return uuid.Nil
 	}
 	return value.UUID
+}
+
+// SetIdentityService configures the deployment platform trust before serving requests.
+func (a *App) SetIdentityService(identities *assistantidentity.Service) *App {
+	a.identities = identities
+	return a
 }

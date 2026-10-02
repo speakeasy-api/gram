@@ -12,21 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const advanceAgentIdentityEpoch = `-- name: AdvanceAgentIdentityEpoch :exec
-UPDATE agents SET identity_epoch = identity_epoch + 1, updated_at = clock_timestamp()
-WHERE organization_id = $1 AND id = $2
-`
-
-type AdvanceAgentIdentityEpochParams struct {
-	OrganizationID string
-	AgentID        uuid.UUID
-}
-
-func (q *Queries) AdvanceAgentIdentityEpoch(ctx context.Context, arg AdvanceAgentIdentityEpochParams) error {
-	_, err := q.db.Exec(ctx, advanceAgentIdentityEpoch, arg.OrganizationID, arg.AgentID)
-	return err
-}
-
 const createAgent = `-- name: CreateAgent :one
 INSERT INTO agents (
   organization_id,
@@ -39,7 +24,7 @@ INSERT INTO agents (
   $3,
   $4
 )
-RETURNING id, identity_epoch, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateAgentParams struct {
@@ -62,7 +47,6 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 	var i Agent
 	err := row.Scan(
 		&i.ID,
-		&i.IdentityEpoch,
 		&i.OrganizationID,
 		&i.OwnerUserID,
 		&i.ProjectID,
@@ -132,7 +116,7 @@ INSERT INTO agents (
   $4,
   $5
 )
-RETURNING id, identity_epoch, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateAgentWithIDParams struct {
@@ -154,7 +138,6 @@ func (q *Queries) CreateAgentWithID(ctx context.Context, arg CreateAgentWithIDPa
 	var i Agent
 	err := row.Scan(
 		&i.ID,
-		&i.IdentityEpoch,
 		&i.OrganizationID,
 		&i.OwnerUserID,
 		&i.ProjectID,
@@ -179,6 +162,12 @@ WITH target AS MATERIALIZED (
   AND a.deleted IS FALSE
   ORDER BY a.id
   FOR UPDATE
+), tombstoned_bindings AS (
+ UPDATE assistant_agent_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ FROM target WHERE b.organization_id = target.organization_id
+ AND b.original_agent_id = target.id AND NOT b.deleted
+ RETURNING b.id
 ), revoked AS (
   UPDATE user_sessions s
   SET deleted_at = clock_timestamp()
@@ -193,10 +182,10 @@ LEFT JOIN projects ip ON ip.id = si.project_id
   AND (ip.organization_id IS NULL OR ip.organization_id = target.organization_id)
     AND (SELECT wa.agent_id
     FROM workload_agent_assignments wa
-    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id
+    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id AND NOT wi.deleted
     WHERE wa.organization_id = target.organization_id AND wa.deleted IS FALSE
       AND ((wa.match_kind = 'exact' AND s.subject_urn = 'workload:' || wa.workload_issuer_id::text || ':' || wa.subject)
-        OR (wa.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
+        OR (wa.match_kind = 'wildcard' AND wi.allow_wildcard_admission
             AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
             AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
     ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
@@ -205,10 +194,9 @@ LEFT JOIN projects ip ON ip.id = si.project_id
 )
 UPDATE agents
 SET deleted_at = clock_timestamp(),
-    identity_epoch = identity_epoch + 1,
     updated_at = clock_timestamp()
 WHERE id IN (SELECT id FROM target)
-RETURNING id, identity_epoch, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteAgentParams struct {
@@ -221,7 +209,6 @@ func (q *Queries) DeleteAgent(ctx context.Context, arg DeleteAgentParams) (Agent
 	var i Agent
 	err := row.Scan(
 		&i.ID,
-		&i.IdentityEpoch,
 		&i.OrganizationID,
 		&i.OwnerUserID,
 		&i.ProjectID,
@@ -275,7 +262,7 @@ func (q *Queries) DeleteAgentPolicyGrant(ctx context.Context, arg DeleteAgentPol
 }
 
 const getAgentByID = `-- name: GetAgentByID :one
-SELECT id, identity_epoch, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 FROM agents
 WHERE organization_id = $1
   AND id = $2
@@ -293,7 +280,6 @@ func (q *Queries) GetAgentByID(ctx context.Context, arg GetAgentByIDParams) (Age
 	var i Agent
 	err := row.Scan(
 		&i.ID,
-		&i.IdentityEpoch,
 		&i.OrganizationID,
 		&i.OwnerUserID,
 		&i.ProjectID,
@@ -311,7 +297,7 @@ func (q *Queries) GetAgentByID(ctx context.Context, arg GetAgentByIDParams) (Age
 }
 
 const getAgentByIDForUpdate = `-- name: GetAgentByIDForUpdate :one
-SELECT id, identity_epoch, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 FROM agents
 WHERE organization_id = $1
   AND id = $2
@@ -330,7 +316,6 @@ func (q *Queries) GetAgentByIDForUpdate(ctx context.Context, arg GetAgentByIDFor
 	var i Agent
 	err := row.Scan(
 		&i.ID,
-		&i.IdentityEpoch,
 		&i.OrganizationID,
 		&i.OwnerUserID,
 		&i.ProjectID,
@@ -420,6 +405,12 @@ WITH target AS MATERIALIZED (
   AND a.owner_reassignment_required_at IS NULL
   ORDER BY a.id
   FOR UPDATE
+), tombstoned_bindings AS (
+ UPDATE assistant_agent_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ FROM target WHERE b.organization_id = target.organization_id
+ AND b.original_agent_id = target.id AND NOT b.deleted
+ RETURNING b.id
 ), revoked AS (
   UPDATE user_sessions s
   SET deleted_at = clock_timestamp()
@@ -434,10 +425,10 @@ LEFT JOIN projects ip ON ip.id = si.project_id
   AND (ip.organization_id IS NULL OR ip.organization_id = target.organization_id)
     AND (SELECT wa.agent_id
     FROM workload_agent_assignments wa
-    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id
+    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id AND NOT wi.deleted
     WHERE wa.organization_id = target.organization_id AND wa.deleted IS FALSE
       AND ((wa.match_kind = 'exact' AND s.subject_urn = 'workload:' || wa.workload_issuer_id::text || ':' || wa.subject)
-        OR (wa.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
+        OR (wa.match_kind = 'wildcard' AND wi.allow_wildcard_admission
             AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
             AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
     ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
@@ -447,10 +438,9 @@ LEFT JOIN projects ip ON ip.id = si.project_id
 UPDATE agents
 SET owner_reassignment_required_at = clock_timestamp(),
     owner_reassignment_reason = $1,
-    identity_epoch = identity_epoch + 1,
     updated_at = clock_timestamp()
 WHERE id IN (SELECT id FROM target)
-RETURNING id, identity_epoch, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type LatchAgentsForOwnerLossByMembershipParams struct {
@@ -470,7 +460,6 @@ func (q *Queries) LatchAgentsForOwnerLossByMembership(ctx context.Context, arg L
 		var i Agent
 		if err := rows.Scan(
 			&i.ID,
-			&i.IdentityEpoch,
 			&i.OrganizationID,
 			&i.OwnerUserID,
 			&i.ProjectID,
@@ -501,6 +490,12 @@ WITH target AS MATERIALIZED (
   AND a.owner_reassignment_required_at IS NULL
   ORDER BY a.id
   FOR UPDATE
+), tombstoned_bindings AS (
+ UPDATE assistant_agent_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ FROM target WHERE b.organization_id = target.organization_id
+ AND b.original_agent_id = target.id AND NOT b.deleted
+ RETURNING b.id
 ), revoked AS (
   UPDATE user_sessions s
   SET deleted_at = clock_timestamp()
@@ -515,10 +510,10 @@ LEFT JOIN projects ip ON ip.id = si.project_id
   AND (ip.organization_id IS NULL OR ip.organization_id = target.organization_id)
     AND (SELECT wa.agent_id
     FROM workload_agent_assignments wa
-    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id
+    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id AND NOT wi.deleted
     WHERE wa.organization_id = target.organization_id AND wa.deleted IS FALSE
       AND ((wa.match_kind = 'exact' AND s.subject_urn = 'workload:' || wa.workload_issuer_id::text || ':' || wa.subject)
-        OR (wa.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
+        OR (wa.match_kind = 'wildcard' AND wi.allow_wildcard_admission
             AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
             AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
     ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
@@ -528,10 +523,9 @@ LEFT JOIN projects ip ON ip.id = si.project_id
 UPDATE agents
 SET owner_reassignment_required_at = clock_timestamp(),
     owner_reassignment_reason = $1,
-    identity_epoch = identity_epoch + 1,
     updated_at = clock_timestamp()
 WHERE id IN (SELECT id FROM target)
-RETURNING id, identity_epoch, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type LatchAgentsForOwnerLossByUserParams struct {
@@ -550,7 +544,6 @@ func (q *Queries) LatchAgentsForOwnerLossByUser(ctx context.Context, arg LatchAg
 		var i Agent
 		if err := rows.Scan(
 			&i.ID,
-			&i.IdentityEpoch,
 			&i.OrganizationID,
 			&i.OwnerUserID,
 			&i.ProjectID,
@@ -575,7 +568,7 @@ func (q *Queries) LatchAgentsForOwnerLossByUser(ctx context.Context, arg LatchAg
 }
 
 const listActiveAgentsForAuthorization = `-- name: ListActiveAgentsForAuthorization :many
-SELECT a.id, a.identity_epoch, a.organization_id, a.owner_user_id, a.project_id, a.name, a.suspended_at, a.revoked_at, a.owner_reassignment_required_at, a.owner_reassignment_reason, a.created_at, a.updated_at, a.deleted_at, a.deleted
+SELECT a.id, a.organization_id, a.owner_user_id, a.project_id, a.name, a.suspended_at, a.revoked_at, a.owner_reassignment_required_at, a.owner_reassignment_reason, a.created_at, a.updated_at, a.deleted_at, a.deleted
 FROM agents AS a
 JOIN users AS u ON u.id = a.owner_user_id
 JOIN organization_user_relationships AS our
@@ -605,7 +598,6 @@ func (q *Queries) ListActiveAgentsForAuthorization(ctx context.Context, organiza
 		var i Agent
 		if err := rows.Scan(
 			&i.ID,
-			&i.IdentityEpoch,
 			&i.OrganizationID,
 			&i.OwnerUserID,
 			&i.ProjectID,
@@ -800,7 +792,7 @@ func (q *Queries) ListManagedAgentSessions(ctx context.Context, arg ListManagedA
 }
 
 const listManagedAgents = `-- name: ListManagedAgents :many
-SELECT id, identity_epoch, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted FROM agents
+SELECT id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted FROM agents
 WHERE organization_id = $1 AND deleted IS FALSE
 ORDER BY LOWER(name), id
 `
@@ -816,7 +808,6 @@ func (q *Queries) ListManagedAgents(ctx context.Context, organizationID string) 
 		var i Agent
 		if err := rows.Scan(
 			&i.ID,
-			&i.IdentityEpoch,
 			&i.OrganizationID,
 			&i.OwnerUserID,
 			&i.ProjectID,
@@ -849,6 +840,12 @@ WITH target AS MATERIALIZED (
   AND a.owner_reassignment_required_at IS NOT NULL
   ORDER BY a.id
   FOR UPDATE
+), tombstoned_bindings AS (
+ UPDATE assistant_agent_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ FROM target WHERE b.organization_id = target.organization_id
+ AND b.original_agent_id = target.id AND NOT b.deleted
+ RETURNING b.id
 ), revoked AS (
   UPDATE user_sessions s
   SET deleted_at = clock_timestamp()
@@ -863,10 +860,10 @@ LEFT JOIN projects ip ON ip.id = si.project_id
   AND (ip.organization_id IS NULL OR ip.organization_id = target.organization_id)
     AND (SELECT wa.agent_id
     FROM workload_agent_assignments wa
-    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id
+    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id AND NOT wi.deleted
     WHERE wa.organization_id = target.organization_id AND wa.deleted IS FALSE
       AND ((wa.match_kind = 'exact' AND s.subject_urn = 'workload:' || wa.workload_issuer_id::text || ':' || wa.subject)
-        OR (wa.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
+        OR (wa.match_kind = 'wildcard' AND wi.allow_wildcard_admission
             AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
             AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
     ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
@@ -877,10 +874,9 @@ UPDATE agents
 SET owner_user_id = $1,
     owner_reassignment_required_at = NULL,
     owner_reassignment_reason = NULL,
-    identity_epoch = identity_epoch + 1,
     updated_at = clock_timestamp()
 WHERE id IN (SELECT id FROM target)
-RETURNING id, identity_epoch, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type ReassignAgentParams struct {
@@ -894,7 +890,6 @@ func (q *Queries) ReassignAgent(ctx context.Context, arg ReassignAgentParams) (A
 	var i Agent
 	err := row.Scan(
 		&i.ID,
-		&i.IdentityEpoch,
 		&i.OrganizationID,
 		&i.OwnerUserID,
 		&i.ProjectID,
@@ -918,7 +913,7 @@ SET name = $1,
 WHERE organization_id = $2
   AND id = $3
   AND deleted IS FALSE
-RETURNING id, identity_epoch, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type RenameAgentParams struct {
@@ -932,7 +927,6 @@ func (q *Queries) RenameAgent(ctx context.Context, arg RenameAgentParams) (Agent
 	var i Agent
 	err := row.Scan(
 		&i.ID,
-		&i.IdentityEpoch,
 		&i.OrganizationID,
 		&i.OwnerUserID,
 		&i.ProjectID,
@@ -950,45 +944,15 @@ func (q *Queries) RenameAgent(ctx context.Context, arg RenameAgentParams) (Agent
 }
 
 const resumeAgent = `-- name: ResumeAgent :one
-WITH target AS MATERIALIZED (
-  SELECT a.id, a.organization_id FROM agents a
-  WHERE a.organization_id = $1
-  AND a.id = $2
-  AND a.deleted IS FALSE
-  AND a.suspended_at IS NOT NULL
-  AND a.revoked_at IS NULL
-  ORDER BY a.id
-  FOR UPDATE
-), revoked AS (
-  UPDATE user_sessions s
-  SET deleted_at = clock_timestamp()
-  FROM target, user_session_issuers si
-LEFT JOIN projects ip ON ip.id = si.project_id
-  WHERE si.id = s.user_session_issuer_id
-    AND s.deleted IS FALSE
-  AND COALESCE(s.organization_id, si.organization_id, (SELECT organization_id FROM projects WHERE id = s.project_id), ip.organization_id) = target.organization_id
-  AND (s.organization_id IS NULL OR s.organization_id = target.organization_id)
-  AND (si.organization_id IS NULL OR si.organization_id = target.organization_id)
-  AND ((SELECT organization_id FROM projects WHERE id = s.project_id) IS NULL OR (SELECT organization_id FROM projects WHERE id = s.project_id) = target.organization_id)
-  AND (ip.organization_id IS NULL OR ip.organization_id = target.organization_id)
-    AND (SELECT wa.agent_id
-    FROM workload_agent_assignments wa
-    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id
-    WHERE wa.organization_id = target.organization_id AND wa.deleted IS FALSE
-      AND ((wa.match_kind = 'exact' AND s.subject_urn = 'workload:' || wa.workload_issuer_id::text || ':' || wa.subject)
-        OR (wa.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
-            AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
-            AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
-    ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
-    LIMIT 1) = target.id
-  RETURNING s.id
-)
 UPDATE agents
 SET suspended_at = NULL,
-    identity_epoch = identity_epoch + 1,
     updated_at = clock_timestamp()
-WHERE id IN (SELECT id FROM target)
-RETURNING id, identity_epoch, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+WHERE organization_id = $1
+  AND id = $2
+  AND deleted IS FALSE
+  AND suspended_at IS NOT NULL
+  AND revoked_at IS NULL
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type ResumeAgentParams struct {
@@ -1001,7 +965,6 @@ func (q *Queries) ResumeAgent(ctx context.Context, arg ResumeAgentParams) (Agent
 	var i Agent
 	err := row.Scan(
 		&i.ID,
-		&i.IdentityEpoch,
 		&i.OrganizationID,
 		&i.OwnerUserID,
 		&i.ProjectID,
@@ -1027,6 +990,12 @@ WITH target AS MATERIALIZED (
   AND a.revoked_at IS NULL
   ORDER BY a.id
   FOR UPDATE
+), tombstoned_bindings AS (
+ UPDATE assistant_agent_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ FROM target WHERE b.organization_id = target.organization_id
+ AND b.original_agent_id = target.id AND NOT b.deleted
+ RETURNING b.id
 ), revoked AS (
   UPDATE user_sessions s
   SET deleted_at = clock_timestamp()
@@ -1041,10 +1010,10 @@ LEFT JOIN projects ip ON ip.id = si.project_id
   AND (ip.organization_id IS NULL OR ip.organization_id = target.organization_id)
     AND (SELECT wa.agent_id
     FROM workload_agent_assignments wa
-    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id
+    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id AND NOT wi.deleted
     WHERE wa.organization_id = target.organization_id AND wa.deleted IS FALSE
       AND ((wa.match_kind = 'exact' AND s.subject_urn = 'workload:' || wa.workload_issuer_id::text || ':' || wa.subject)
-        OR (wa.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
+        OR (wa.match_kind = 'wildcard' AND wi.allow_wildcard_admission
             AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
             AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
     ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
@@ -1054,10 +1023,9 @@ LEFT JOIN projects ip ON ip.id = si.project_id
 UPDATE agents
 SET suspended_at = NULL,
     revoked_at = clock_timestamp(),
-    identity_epoch = identity_epoch + 1,
     updated_at = clock_timestamp()
 WHERE id IN (SELECT id FROM target)
-RETURNING id, identity_epoch, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type RevokeAgentParams struct {
@@ -1070,7 +1038,6 @@ func (q *Queries) RevokeAgent(ctx context.Context, arg RevokeAgentParams) (Agent
 	var i Agent
 	err := row.Scan(
 		&i.ID,
-		&i.IdentityEpoch,
 		&i.OrganizationID,
 		&i.OwnerUserID,
 		&i.ProjectID,
@@ -1144,45 +1111,15 @@ func (q *Queries) RevokeManagedAgentSession(ctx context.Context, arg RevokeManag
 }
 
 const suspendAgent = `-- name: SuspendAgent :one
-WITH target AS MATERIALIZED (
-  SELECT a.id, a.organization_id FROM agents a
-  WHERE a.organization_id = $1
-  AND a.id = $2
-  AND a.deleted IS FALSE
-  AND a.suspended_at IS NULL
-  AND a.revoked_at IS NULL
-  ORDER BY a.id
-  FOR UPDATE
-), revoked AS (
-  UPDATE user_sessions s
-  SET deleted_at = clock_timestamp()
-  FROM target, user_session_issuers si
-LEFT JOIN projects ip ON ip.id = si.project_id
-  WHERE si.id = s.user_session_issuer_id
-    AND s.deleted IS FALSE
-  AND COALESCE(s.organization_id, si.organization_id, (SELECT organization_id FROM projects WHERE id = s.project_id), ip.organization_id) = target.organization_id
-  AND (s.organization_id IS NULL OR s.organization_id = target.organization_id)
-  AND (si.organization_id IS NULL OR si.organization_id = target.organization_id)
-  AND ((SELECT organization_id FROM projects WHERE id = s.project_id) IS NULL OR (SELECT organization_id FROM projects WHERE id = s.project_id) = target.organization_id)
-  AND (ip.organization_id IS NULL OR ip.organization_id = target.organization_id)
-    AND (SELECT wa.agent_id
-    FROM workload_agent_assignments wa
-    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id
-    WHERE wa.organization_id = target.organization_id AND wa.deleted IS FALSE
-      AND ((wa.match_kind = 'exact' AND s.subject_urn = 'workload:' || wa.workload_issuer_id::text || ':' || wa.subject)
-        OR (wa.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
-            AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
-            AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
-    ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
-    LIMIT 1) = target.id
-  RETURNING s.id
-)
 UPDATE agents
 SET suspended_at = clock_timestamp(),
-    identity_epoch = identity_epoch + 1,
     updated_at = clock_timestamp()
-WHERE id IN (SELECT id FROM target)
-RETURNING id, identity_epoch, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+WHERE organization_id = $1
+  AND id = $2
+  AND deleted IS FALSE
+  AND suspended_at IS NULL
+  AND revoked_at IS NULL
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type SuspendAgentParams struct {
@@ -1195,7 +1132,6 @@ func (q *Queries) SuspendAgent(ctx context.Context, arg SuspendAgentParams) (Age
 	var i Agent
 	err := row.Scan(
 		&i.ID,
-		&i.IdentityEpoch,
 		&i.OrganizationID,
 		&i.OwnerUserID,
 		&i.ProjectID,
@@ -1222,6 +1158,12 @@ WITH target AS MATERIALIZED (
   AND a.owner_user_id <> $1
   ORDER BY a.id
   FOR UPDATE
+), tombstoned_bindings AS (
+ UPDATE assistant_agent_bindings b
+ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+ FROM target WHERE b.organization_id = target.organization_id
+ AND b.original_agent_id = target.id AND NOT b.deleted
+ RETURNING b.id
 ), revoked AS (
   UPDATE user_sessions s
   SET deleted_at = clock_timestamp()
@@ -1236,10 +1178,10 @@ LEFT JOIN projects ip ON ip.id = si.project_id
   AND (ip.organization_id IS NULL OR ip.organization_id = target.organization_id)
     AND (SELECT wa.agent_id
     FROM workload_agent_assignments wa
-    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id
+    JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id AND NOT wi.deleted
     WHERE wa.organization_id = target.organization_id AND wa.deleted IS FALSE
       AND ((wa.match_kind = 'exact' AND s.subject_urn = 'workload:' || wa.workload_issuer_id::text || ':' || wa.subject)
-        OR (wa.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
+        OR (wa.match_kind = 'wildcard' AND wi.allow_wildcard_admission
             AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
             AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
     ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
@@ -1248,10 +1190,9 @@ LEFT JOIN projects ip ON ip.id = si.project_id
 )
 UPDATE agents
 SET owner_user_id = $1,
-    identity_epoch = identity_epoch + 1,
     updated_at = clock_timestamp()
 WHERE id IN (SELECT id FROM target)
-RETURNING id, identity_epoch, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type TransferAgentParams struct {
@@ -1265,7 +1206,6 @@ func (q *Queries) TransferAgent(ctx context.Context, arg TransferAgentParams) (A
 	var i Agent
 	err := row.Scan(
 		&i.ID,
-		&i.IdentityEpoch,
 		&i.OrganizationID,
 		&i.OwnerUserID,
 		&i.ProjectID,

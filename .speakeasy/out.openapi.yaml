@@ -11709,15 +11709,6 @@ paths:
       operationId: createAssistant
       parameters:
         - allowEmptyValue: true
-          description: Optional retry key, scoped to the caller and project. Reusing it with a different request or a deleted result is a conflict.
-          in: header
-          name: Idempotency-Key
-          schema:
-            description: Optional retry key, scoped to the caller and project. Reusing it with a different request or a deleted result is a conflict.
-            maxLength: 256
-            minLength: 1
-            type: string
-        - allowEmptyValue: true
           description: Session header
           in: header
           name: Gram-Session

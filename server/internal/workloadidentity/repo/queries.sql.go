@@ -12,7 +12,7 @@ import (
 )
 
 const listWorkloadIssuersByIssuerURL = `-- name: ListWorkloadIssuersByIssuerURL :many
-SELECT id, issuer_kind, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE issuer = ANY($1::text[])
   AND organization_id = $2
@@ -63,7 +63,6 @@ func (q *Queries) ListWorkloadIssuersByIssuerURL(ctx context.Context, arg ListWo
 		var i WorkloadIssuer
 		if err := rows.Scan(
 			&i.ID,
-			&i.IssuerKind,
 			&i.OrganizationID,
 			&i.ProjectID,
 			&i.Name,
@@ -130,12 +129,11 @@ WHERE a.organization_id = $1
   AND a.workload_issuer_id = $2
   AND a.deleted IS FALSE
   AND i.deleted IS FALSE
-    AND i.issuer_kind IN ('remote', 'system')
   AND (
     (a.match_kind = 'exact' AND a.subject = $3)
     OR (
       a.match_kind = 'wildcard'
-      AND i.issuer_kind = 'remote'
+
         AND i.allow_wildcard_admission
       AND a.subject LIKE '%*'
       AND length(a.subject) > 1
@@ -206,7 +204,7 @@ WHERE si.id = s.user_session_issuer_id
     JOIN workload_issuers wi ON wi.id = wa.workload_issuer_id AND wi.organization_id = wa.organization_id
     WHERE wa.organization_id = $1::text AND wa.deleted IS FALSE
       AND ((wa.match_kind = 'exact' AND s.subject_urn = 'workload:' || wa.workload_issuer_id::text || ':' || wa.subject)
-        OR (wa.match_kind = 'wildcard' AND wi.issuer_kind = 'remote' AND wi.allow_wildcard_admission
+        OR (wa.match_kind = 'wildcard' AND wi.allow_wildcard_admission
             AND length(wa.subject) > 1 AND right(wa.subject, 1) = '*'
             AND starts_with(s.subject_urn, 'workload:' || wa.workload_issuer_id::text || ':' || left(wa.subject, length(wa.subject) - 1))))
     ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
@@ -267,12 +265,11 @@ SELECT EXISTS (
     AND (a.project_id = $3 OR a.project_id IS NULL)
     AND a.deleted IS FALSE
     AND i.deleted IS FALSE
-    AND i.issuer_kind IN ('remote', 'system')
     AND (
       (a.match_kind = 'exact' AND a.subject = $4)
       OR (
         a.match_kind = 'wildcard'
-        AND i.issuer_kind = 'remote'
+
         AND i.allow_wildcard_admission
         AND a.subject LIKE '%*'
         AND length(a.subject) > 1

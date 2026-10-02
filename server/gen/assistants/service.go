@@ -77,9 +77,6 @@ var MethodNames = [10]string{"listAssistants", "getAssistant", "createAssistant"
 // CreateAssistantPayload is the payload type of the assistants service
 // createAssistant method.
 type CreateAssistantPayload struct {
-	// Optional retry key, scoped to the caller and project. Reusing it with a
-	// different request or a deleted result is a conflict.
-	IdempotencyKey   *string
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The assistant name.

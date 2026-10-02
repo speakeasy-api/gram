@@ -65,10 +65,6 @@ var _ = Service("assistants", func() {
 
 		Payload(func() {
 			Extend(CreateAssistantForm)
-			Attribute("idempotency_key", String, "Optional retry key, scoped to the caller and project. Reusing it with a different request or a deleted result is a conflict.", func() {
-				MinLength(1)
-				MaxLength(256)
-			})
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -77,7 +73,6 @@ var _ = Service("assistants", func() {
 
 		HTTP(func() {
 			POST("/rpc/assistants.create")
-			Header("idempotency_key:Idempotency-Key")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
