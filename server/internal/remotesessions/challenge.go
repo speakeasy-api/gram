@@ -429,7 +429,7 @@ type Client struct {
 	IssuerScopesSupported []string
 
 	// IssuerScopeOverride is the operator-pinned scope request on the issuer.
-	// Empty when unset; set, it is requested verbatim.
+	// Empty when unset; set, it is requested verbatim when ClientScope is empty.
 	IssuerScopeOverride []string
 
 	// IssuerResourceIndicatorSupported is an operator's answer to whether the
@@ -497,16 +497,15 @@ func (c Client) needsRegistrationRotation(now time.Time) (RotationTrigger, bool)
 // identity; offline_access for a refresh token.
 var standardScopes = []string{"openid", "email", "profile", "offline_access"}
 
-// RequestedScopes resolves the authorize scope set: IssuerScopeOverride
-// verbatim; else ClientScope (or IssuerScopesSupported when empty) plus each
-// standard scope the issuer advertises. widened is what was appended to a
-// client scope.
+// RequestedScopes resolves the authorize scope set: ClientScope plus each
+// standard scope the issuer advertises; else IssuerScopeOverride verbatim;
+// else IssuerScopesSupported. widened is what was appended to a client scope.
 func (c Client) RequestedScopes() (scopes []string, widened []string) {
-	if len(c.IssuerScopeOverride) > 0 {
+	narrowed := len(c.ClientScope) > 0
+	if !narrowed && len(c.IssuerScopeOverride) > 0 {
 		return slices.Clone(c.IssuerScopeOverride), nil
 	}
 	base := c.IssuerScopesSupported
-	narrowed := len(c.ClientScope) > 0
 	if narrowed {
 		base = c.ClientScope
 	}
@@ -926,6 +925,15 @@ func (m *ChallengeManager) mintAuthorization(
 	}
 
 	scopes, widened := client.RequestedScopes()
+	if len(client.ClientScope) > 0 && len(client.IssuerScopeOverride) > 0 {
+		m.logger.InfoContext(ctx, "client scope takes precedence over the issuer's scope override",
+			attr.SlogProjectID(parent.ProjectID.String()),
+			attr.SlogOrganizationID(parent.OrganizationID),
+			attr.SlogOAuthIssuer(client.IssuerURL),
+			attr.SlogRemoteSessionClientID(client.ID.String()),
+			attr.SlogOAuthScope(strings.Join(scopes, " ")),
+		)
+	}
 	if len(widened) > 0 {
 		m.logger.DebugContext(ctx, "requested scope widens the client's configured scope",
 			attr.SlogProjectID(parent.ProjectID.String()),

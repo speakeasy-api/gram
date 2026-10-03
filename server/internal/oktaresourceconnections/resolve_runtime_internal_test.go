@@ -55,9 +55,11 @@ func TestResolveClientRuntimeScopesAndAttachments(t *testing.T) {
 
 	client.IssuerScopeOverride = []string{"pinned"}
 	_, scopes, _ = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, nil)
+	require.Equal(t, []string{"read", "openid", "offline_access"}, scopes)
+	client.Scope = nil
+	_, scopes, _ = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, nil)
 	require.Equal(t, []string{"pinned"}, scopes)
 	client.IssuerScopeOverride = nil
-	client.Scope = nil
 	_, scopes, _ = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, nil)
 	require.Equal(t, client.IssuerScopesSupported, scopes)
 

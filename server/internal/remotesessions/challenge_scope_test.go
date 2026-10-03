@@ -79,14 +79,24 @@ func TestClientRequestedScopes(t *testing.T) {
 			wantWidened: []string{"email"},
 		},
 		{
-			name: "the issuer's scope override is requested verbatim",
+			name: "the issuer's scope override is requested verbatim when the client has no scope",
 			client: Client{
-				ClientScope:           []string{"read:tools"},
+				ClientScope:           nil,
 				IssuerScopesSupported: []string{"openid", "email", "offline_access"},
 				IssuerScopeOverride:   []string{"custom:one", "custom:two"},
 			},
 			wantScopes:  []string{"custom:one", "custom:two"},
 			wantWidened: nil,
+		},
+		{
+			name: "the client scope wins over the issuer's scope override",
+			client: Client{
+				ClientScope:           []string{"read:tools"},
+				IssuerScopesSupported: []string{"openid", "email", "offline_access"},
+				IssuerScopeOverride:   []string{"custom:one", "custom:two"},
+			},
+			wantScopes:  []string{"read:tools", "openid", "email", "offline_access"},
+			wantWidened: []string{"openid", "email", "offline_access"},
 		},
 		{
 			name: "an empty override is unset and falls through to the base path",

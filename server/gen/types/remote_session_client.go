@@ -50,7 +50,7 @@ type RemoteSessionClient struct {
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
-	// falls back to the issuer's scopes_supported.
+	// falls back to the issuer's scope_override, then its scopes_supported.
 	Scope []string
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.

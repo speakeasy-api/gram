@@ -35,10 +35,7 @@ import { Stack } from "@/components/ui/Stack";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import {
-  IssuerScopeOverrideAlert,
-  LegacyCallbackAlert,
-} from "@/pages/remote-identity-providers/clientAlerts";
+import { LegacyCallbackAlert } from "@/pages/remote-identity-providers/clientAlerts";
 import {
   ClientAssertionAudienceField,
   ClientCredentialsFields,
@@ -282,6 +279,7 @@ function ModifyRemoteIdentityProviderSheetBody({
     AuthAudienceFormat | undefined
   >();
   const [scopeOverride, setScopeOverride] = useState("");
+  const [scopeEdited, setScopeEdited] = useState(false);
   const [audienceOverride, setAudienceOverride] = useState("");
 
   const handleTokenEndpointAuthMethodChange = (
@@ -371,13 +369,8 @@ function ModifyRemoteIdentityProviderSheetBody({
           )
             ? authAudienceFormat
             : undefined,
-          // Backend update uses COALESCE — omitting (undefined) keeps the
-          // stored value, sending an empty array would clear it. Mirror the
-          // audience handling here: only send when non-empty so the Modify
-          // UI never silently wipes existing overrides. Clearing today
-          // requires the operator to detach + re-attach the identity
-          // provider with new settings.
-          scope: parsedScopes.length > 0 ? parsedScopes : undefined,
+          // Only explicit edits may clear scope; URL resets must preserve it.
+          scope: scopeEdited ? parsedScopes : undefined,
           audience: trimmedAudience || undefined,
         },
       });
@@ -482,6 +475,7 @@ function ModifyRemoteIdentityProviderSheetBody({
               resetEndpointState();
               setClientSecret("");
               setScopeOverride("");
+              setScopeEdited(false);
               setAudienceOverride("");
             }
           }}
@@ -589,9 +583,11 @@ function ModifyRemoteIdentityProviderSheetBody({
         <OverridesFields
           scopeOverride={scopeOverride}
           audienceOverride={audienceOverride}
-          onScopeOverrideChange={setScopeOverride}
+          onScopeOverrideChange={(value) => {
+            setScopeOverride(value);
+            setScopeEdited(true);
+          }}
           onAudienceOverrideChange={setAudienceOverride}
-          scopeWarning={<IssuerScopeOverrideAlert issuer={issuer} />}
         />
 
         {submitError && (

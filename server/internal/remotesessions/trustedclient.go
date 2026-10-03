@@ -19,7 +19,7 @@ var errTrustedIdentityProviderClientIneligible = errors.New("trusted identity-pr
 // scopes requested by an MCP server.
 func ValidateTrustedIdentityProviderClient(client repo.RemoteSessionClient, issuer repo.RemoteSessionIssuer) error {
 	effectiveScopes := client.Scope
-	if len(issuer.ScopeOverride) > 0 {
+	if len(effectiveScopes) == 0 {
 		effectiveScopes = issuer.ScopeOverride
 	}
 

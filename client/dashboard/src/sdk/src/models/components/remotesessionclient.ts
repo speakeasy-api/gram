@@ -94,7 +94,7 @@ export type RemoteSessionClient = {
    */
   remoteSessionIssuerId: string;
   /**
-   * Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.
+   * Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scope_override, then its scopes_supported.
    */
   scope?: Array<string> | undefined;
   /**

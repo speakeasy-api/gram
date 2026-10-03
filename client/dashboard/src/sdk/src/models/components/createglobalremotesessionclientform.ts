@@ -42,7 +42,7 @@ export type CreateGlobalRemoteSessionClientForm = {
    */
   remoteSessionIssuerId: string;
   /**
-   * Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+   * Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scope_override, then its scopes_supported.
    */
   scope?: Array<string> | undefined;
   /**

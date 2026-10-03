@@ -98,7 +98,7 @@ type RemoteSessionIssuer struct {
 	// responses. Null until discovery captures the field.
 	AuthorizationResponseIssParameterSupported *bool
 	// Operator-pinned scope request, sent verbatim on the upstream authorize
-	// redirect in place of the resolved scope set. Null when unset.
+	// redirect for clients that have no scope of their own. Null when unset.
 	ScopeOverride []string `json:"scope_override"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.

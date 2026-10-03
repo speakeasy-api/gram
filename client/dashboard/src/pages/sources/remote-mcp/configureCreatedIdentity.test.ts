@@ -248,6 +248,55 @@ describe("configureCreatedRemoteMcpIdentity", () => {
     });
     expect(mocks.commit).toHaveBeenCalledOnce();
   });
+  it.each([
+    {
+      resourceScopes: undefined,
+      scopeOverride: ["pinned.read"],
+      expected: undefined,
+    },
+    { resourceScopes: [], scopeOverride: ["pinned.read"], expected: undefined },
+    {
+      resourceScopes: ["resource.read"],
+      scopeOverride: ["pinned.read"],
+      expected: undefined,
+    },
+    { resourceScopes: undefined, scopeOverride: [], expected: ["saved.read"] },
+  ])(
+    "resolves saved-provider scopes: %j",
+    async ({ resourceScopes, scopeOverride, expected }) => {
+      mocks.discover.mockResolvedValue({
+        available: true,
+        metadata: {
+          authorizationServers: ["https://id.example.com"],
+          scopesSupported: resourceScopes,
+        },
+      });
+      mocks.getIssuer.mockResolvedValue({
+        id: "issuer-saved",
+        issuer: "https://id.example.com",
+        authorizationEndpoint: "https://id.example.com/authorize",
+        tokenEndpoint: "https://id.example.com/token",
+        scopesSupported: ["saved.read"],
+        scopeOverride,
+        tokenEndpointAuthMethodsSupported: ["client_secret_post"],
+      });
+
+      const result = await configureCreatedRemoteMcpIdentity({
+        client,
+        remoteMcpServer: remoteServer(),
+        mcpServer: mcpServer(),
+        identityMode: "user",
+      });
+
+      expect(result.status).toBe("configured");
+      expect(mocks.commit).toHaveBeenCalledOnce();
+      expect(
+        mocks.commit.mock.calls[0]![0].commitServerIdentityConfigurationForm
+          .clientConfiguration.scope,
+      ).toEqual(expected);
+    },
+  );
+
   it("reuses a saved provider without discovering its metadata", async () => {
     // A private issuer cannot be reached from the browser at all. Asking for a
     // saved provider first is what makes one reusable: if this fetched

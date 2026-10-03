@@ -229,6 +229,7 @@ export async function configureCreatedRemoteMcpIdentity({
   const scopes = preferredScopes(
     protectedResource.metadata?.scopesSupported,
     issuerScopes,
+    provider?.scopeOverride,
   );
   let result: CommitServerIdentityConfigurationResult;
   try {

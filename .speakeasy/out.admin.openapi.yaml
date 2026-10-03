@@ -8805,7 +8805,7 @@ components:
           type: array
           items:
             type: string
-          description: Operator-pinned scope request. When set, it is sent verbatim on the upstream authorize redirect in place of the resolved scope set. Omit or send an empty array to leave it unset.
+          description: Operator-pinned scope request. When set, it is sent verbatim on the upstream authorize redirect for clients that have no scope of their own. Omit or send an empty array to leave it unset.
         scopes_supported:
           type: array
           items:
@@ -9378,7 +9378,7 @@ components:
           type: array
           items:
             type: string
-          description: Operator-pinned scope request, sent verbatim on the upstream authorize redirect in place of the resolved scope set. Null when unset.
+          description: Operator-pinned scope request, sent verbatim on the upstream authorize redirect for clients that have no scope of their own. Null when unset.
           nullable: true
         scopes_supported:
           type: array

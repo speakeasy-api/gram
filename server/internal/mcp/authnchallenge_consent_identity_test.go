@@ -96,6 +96,15 @@ func TestServeConsent_NoIdentityReconnectWhenOverrideOmitsOpenID(t *testing.T) {
 
 	grantScoped(t, ctx, fx, clientID, []string{"read"})
 	expectIdentityHint(t, fx, false)
+
+	// A client scope wins over the override, so advertised openid is requested again.
+	_, err = remotesessions_repo.New(fx.ti.conn).UpdateRemoteSessionClient(ctx, remotesessions_repo.UpdateRemoteSessionClientParams{
+		Scope:     []string{"read"},
+		ID:        clientID,
+		ProjectID: conv.ToNullUUID(fx.projectID),
+	})
+	require.NoError(t, err)
+	expectIdentityHint(t, fx, true)
 }
 
 // A grant whose stored scope set is empty carries no identity either, so an

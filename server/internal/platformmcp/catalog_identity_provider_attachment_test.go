@@ -15,6 +15,31 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
+func TestAttachmentClientScopes(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name     string
+		override []string
+		want     []string
+	}{
+		{name: "new issuer", override: nil, want: []string{"resource:read"}},
+		{name: "reused issuer without override", override: []string{}, want: []string{"resource:read"}},
+		{name: "reused issuer with override", override: []string{"openid", "profile"}, want: nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			resourceScopes := []string{"resource:read"}
+			scopes := attachmentClientScopes(resourceScopes, tt.override)
+			require.Equal(t, tt.want, scopes)
+			if len(scopes) > 0 {
+				scopes[0] = "changed"
+				require.Equal(t, []string{"resource:read"}, resourceScopes, "client scopes must not alias discovery metadata")
+			}
+		})
+	}
+}
+
 func TestValidDynamicClientRegistrationEndpoint(t *testing.T) {
 	t.Parallel()
 

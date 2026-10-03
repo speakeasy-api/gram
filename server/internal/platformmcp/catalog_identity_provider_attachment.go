@@ -175,7 +175,7 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 		UserSessionIssuerID: registration.UserSessionIssuerID.UUID,
 		Provider:            provider,
 		Client: remotesessions.RegisterClient(remotesessions.RegistrationPolicy{
-			Scope:                   append([]string(nil), resourceMetadata.ScopesSupported...),
+			Scope:                   attachmentClientScopes(resourceMetadata.ScopesSupported, existing.ScopeOverride),
 			Audience:                nil,
 			TokenEndpointAuthMethod: optionalString(browserCatalogDCRAuthMethod),
 			RequireClientSecret:     true,
@@ -210,6 +210,15 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 		return CatalogIdentityProviderAttachmentResult{}, attachmentCommitError("commit identity-provider attachment", err)
 	}
 	return CatalogIdentityProviderAttachmentResult{Attached: true, ProviderURL: metadata.Issuer}, nil
+}
+
+// Keep client scope unset when an issuer override exists so authorization can
+// inherit that override rather than prefer the resource's advertised scopes.
+func attachmentClientScopes(resourceScopes, issuerScopeOverride []string) []string {
+	if len(issuerScopeOverride) > 0 {
+		return nil
+	}
+	return append([]string(nil), resourceScopes...)
 }
 
 func (s *CatalogIdentityProviderAttachmentService) discoverSupportedIssuerMetadata(ctx context.Context, authorizationServers []string) (remotesessions.DiscoveredIssuerMetadata, error) {

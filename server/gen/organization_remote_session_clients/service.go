@@ -132,7 +132,7 @@ type CreateCimdClientPayload struct {
 	// project) under an organization-level issuer.
 	ProjectID *string
 	// Explicit upstream OAuth scopes the dance should request for this client.
-	// Omit to fall back to the issuer's scopes_supported.
+	// Omit to fall back to the issuer's scope_override, then its scopes_supported.
 	Scope []string
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
@@ -165,7 +165,7 @@ type CreateClientPayload struct {
 	// require the token endpoint URL.
 	TokenEndpointAuthAudienceFormat *string
 	// Explicit upstream OAuth scopes the dance should request for this client.
-	// Omit to fall back to the issuer's scopes_supported.
+	// Omit to fall back to the issuer's scope_override, then its scopes_supported.
 	Scope []string
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.

@@ -88,16 +88,27 @@ func TestRemoteLogin_OfflineAccessRequestedOnlyWhenAdvertised(t *testing.T) {
 	require.Equal(t, "read", scopeOf(t, silent.authURL))
 }
 
-func TestRemoteLogin_ScopeOverrideIsRequestedVerbatim(t *testing.T) {
+func TestRemoteLogin_ScopeOverrideIsRequestedVerbatimWithoutClientScope(t *testing.T) {
 	t.Parallel()
 
 	_, env := newSyntheticExpiryEnv(t, "scope-override", scopelessToken,
 		withIssuerScopes("channels:history", "openid", "offline_access"),
-		withClientScope("channels:history"),
 		withScopeOverride("custom:one", "custom:two"),
 	)
 	require.Equal(t, "custom:one custom:two", scopeOf(t, env.authURL))
 	require.Equal(t, []string{"custom:one", "custom:two"}, env.session.Scopes)
+}
+
+func TestRemoteLogin_ClientScopeWinsOverScopeOverride(t *testing.T) {
+	t.Parallel()
+
+	_, env := newSyntheticExpiryEnv(t, "scope-override-client", scopelessToken,
+		withIssuerScopes("channels:history", "openid", "offline_access"),
+		withClientScope("channels:history"),
+		withScopeOverride("custom:one", "custom:two"),
+	)
+	require.Equal(t, "channels:history openid offline_access", scopeOf(t, env.authURL))
+	require.Equal(t, []string{"channels:history", "openid", "offline_access"}, env.session.Scopes)
 }
 
 // Empty scopes_supported adds nothing; the NULL case exists only on Client (TestClientRequestedScopes).
