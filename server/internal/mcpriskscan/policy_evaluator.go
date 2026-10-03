@@ -172,7 +172,8 @@ func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decisio
 	}
 
 	blockPolicies, flagPolicies := partitionPolicies(policies)
-	defer p.scheduleFlagLane(ctx, subject, flagPolicies)
+	payloadStored := false
+	defer func() { p.scheduleFlagLane(ctx, subject, flagPolicies, payloadStored) }()
 	if len(blockPolicies) == 0 {
 		return Allow()
 	}
@@ -187,7 +188,7 @@ func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decisio
 		if event.Phase() == PhaseResponse {
 			outcome = riskv1.Finding_ENFORCEMENT_OUTCOME_WITHHELD
 		}
-		p.publish(scanCtx, subject.Event, match.policy, match.findings, outcome, request.Text)
+		payloadStored = p.publish(scanCtx, subject.Event, match.policy, match.findings, outcome, request.Text)
 		return deniedDecision(subject.Event.Phase(), match.policy, match.findings[0])
 	}
 	if scanErr != nil || scanCtx.Err() != nil {
@@ -246,7 +247,9 @@ func (p *policyEvaluator) scanBlockPolicies(ctx context.Context, policies []poli
 	return match, scanErr
 }
 
-func (p *policyEvaluator) scheduleFlagLane(parent context.Context, subject Subject, policies []policycore.Policy) {
+// scheduleFlagLane scans flag policies off the request path. payloadStored
+// reports that the block lane already persisted this phase's payload.
+func (p *policyEvaluator) scheduleFlagLane(parent context.Context, subject Subject, policies []policycore.Policy, payloadStored bool) {
 	if len(policies) == 0 {
 		return
 	}
@@ -276,6 +279,9 @@ func (p *policyEvaluator) scheduleFlagLane(parent context.Context, subject Subje
 		// Every policy scans the same text, so it is stored with the first
 		// persisted findings only.
 		unstoredPayload := request.Text
+		if payloadStored {
+			unstoredPayload = ""
+		}
 		for _, policy := range policies {
 			findings, err := p.detector.ScanMCPPolicy(ctx, policy, request)
 			if len(findings) > 0 && p.publish(ctx, subject.Event, policy, findings, riskv1.Finding_ENFORCEMENT_OUTCOME_LOGGED, unstoredPayload) {

@@ -282,6 +282,28 @@ func TestPolicyEvaluator_FlagLaneStoresPayloadOncePerPhase(t *testing.T) {
 	require.Nil(t, stored[1].Execution)
 }
 
+func TestPolicyEvaluator_FlagLaneSkipsPayloadStoredByBlockLane(t *testing.T) {
+	t.Parallel()
+	projectID := uuid.New()
+	serverID := uuid.New()
+	publisher := &findingPublisher{}
+	evidence := &evidenceWriter{}
+	evaluator := newPolicyEvaluator(t, staticPolicies(
+		policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Block policy", Action: "block", Version: 1},
+		policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Flag policy", Action: "flag", Version: 1},
+	), policyDetectorFunc(func(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
+		return []scanners.Finding{{RuleID: "flag.rule", Description: "Flagged", Match: "flag", StartPos: 10, EndPos: 14, Tags: []string{}, Source: "gitleaks", Confidence: 1}}, nil
+	}), publisher, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithMCPFindingEvidenceWriter(evidence))
+
+	require.True(t, evaluator.Scan(t.Context(), requestSubject(t.Context(), projectID, serverID, `{"query":"flag"}`)).Denied())
+	require.NoError(t, evaluator.Drain(t.Context()))
+
+	stored := evidence.snapshot()
+	require.Len(t, stored, 2)
+	require.NotNil(t, stored[0].Execution)
+	require.Nil(t, stored[1].Execution)
+}
+
 func TestPolicyEvaluator_FlagLaneRetriesPayloadAfterFailedStore(t *testing.T) {
 	t.Parallel()
 	projectID := uuid.New()
