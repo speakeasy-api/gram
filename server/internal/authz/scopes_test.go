@@ -545,7 +545,7 @@ func TestWorkloadScopeShape(t *testing.T) {
 	require.Equal(t, ResourceKindWorkload, ResourceKindForScope(ScopeWorkloadRead))
 }
 
-func TestWorkloadScopeIsAdminDefaultAndNotMemberDefault(t *testing.T) {
+func TestWorkloadScopeIsAdminAndMemberDefault(t *testing.T) {
 	t.Parallel()
 
 	// Administrators configure workload identity, beside agent:authorize: both
@@ -553,9 +553,9 @@ func TestWorkloadScopeIsAdminDefaultAndNotMemberDefault(t *testing.T) {
 	require.True(t, slices.Contains(adminScopes, ScopeWorkloadRead))
 	require.True(t, slices.Contains(adminScopes, ScopeWorkloadWrite))
 
-	// Not a member default in either direction. Read alone discloses which
-	// machines the organization recognises, which is its trust policy, so a
-	// member who needs it gets an explicit grant through a custom role.
-	require.False(t, slices.Contains(memberScopes, ScopeWorkloadRead))
+	// workload:read is a member default so that team members can view the Access
+	// Hub in preview deployments. workload:write remains admin-only since it
+	// allows granting machine access.
+	require.True(t, slices.Contains(memberScopes, ScopeWorkloadRead))
 	require.False(t, slices.Contains(memberScopes, ScopeWorkloadWrite))
 }
