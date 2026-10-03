@@ -181,9 +181,21 @@ async fn thread_turn_inner(
         return Ok(Json(ThreadTurnResponse::deduped()));
     }
 
+    // Independent idempotency keys must not race to claim a freshly bootstrapped
+    // invocation. Hold this through reconcile and enqueue; never rotate the
+    // credentials of an earlier accepted event.
+    let _turn_admission = host.turn_admission.lock().await;
+
     let thread = ensure_thread(&host, &thread_id, request.auth_token)
         .await
-        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+        .map_err(|e| {
+            let status = if matches!(e, crate::errors::RunnerError::InvocationBusy) {
+                StatusCode::TOO_MANY_REQUESTS
+            } else {
+                StatusCode::SERVICE_UNAVAILABLE
+            };
+            (status, e.to_string())
+        })?;
 
     // Hand reconcile to the actor and proceed to enqueue. The actor runs
     // concurrently with the agent loop, so a server added by this /turn

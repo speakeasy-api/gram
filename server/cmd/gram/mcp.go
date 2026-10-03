@@ -335,6 +335,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	triggerApp := newTriggersApp(logger, db, enc, nil, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cacheImpl)
 	triggerApp.SetIdentityService(assistantIdentities)
 	assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
+	assistantTokenManager.ConfigureExecutionIdentity(callerAssertions, assistantIdentities)
 	platformExtras := append([]platformtools.ExternalTool{}, platformtoolsruntime.MemoryExternalTools(memoryService)...)
 	platformExtras = append(platformExtras, platformtoolsruntime.AssistantSkillTools(logger, db)...)
 

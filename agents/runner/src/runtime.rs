@@ -67,6 +67,8 @@ pub struct RuntimeHost {
     /// retries with the same key serialize. A failed admission drops the
     /// guard with `false`, leaving the slot retryable.
     pub seen: DashMap<String, Arc<tokio::sync::Mutex<bool>>>,
+    /// Serializes admission only; queued work stays durable on the server.
+    pub turn_admission: tokio::sync::Mutex<()>,
     pub threads: DashMap<String, Arc<OnceCell<Arc<ConfiguredThread>>>>,
     pub gram_client: GramBootstrapClient,
     pub thread_idle_ttl: Duration,
@@ -86,7 +88,6 @@ pub struct ConfiguredThread {
     pub idle_since: Arc<Mutex<Option<Instant>>>,
     pub inbox_tx: UnboundedSender<RunnerContent>,
     pub task_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
-    pub tokens: TokenRegistry,
     pub mcp_cmd_tx: mpsc::Sender<McpCmd>,
     /// Broadcasts user interrupts into the thread's agent loop. Bumping the
     /// generation cancels whatever checkpoint the turn in flight captured at
@@ -173,6 +174,7 @@ pub async fn build_host(
         identity,
         started_at: Instant::now(),
         seen: DashMap::new(),
+        turn_admission: tokio::sync::Mutex::new(()),
         threads: DashMap::new(),
         gram_client,
         thread_idle_ttl,
@@ -225,6 +227,7 @@ pub fn snapshot_threads(host: &RuntimeHost) -> Vec<(String, String, Duration)> {
 }
 
 async fn sweep_idle(host: &Arc<RuntimeHost>) {
+    let _admission = host.turn_admission.lock().await;
     let ttl = host.thread_idle_ttl;
     let mut to_evict = Vec::new();
     for entry in host.threads.iter() {
@@ -279,12 +282,27 @@ fn reap_oldest_idle(host: &RuntimeHost) {
 
 /// First-turn bootstrap path. Concurrent /turn requests for the same thread
 /// race through the `OnceCell`; only one wins the bootstrap fetch and task
-/// spawn. Subsequent turns rotate the existing thread's bearer slot.
+/// spawn. A live invocation rejects later turns with retryable backpressure;
+/// its immutable credentials and actor are never reused for another event.
 pub async fn ensure_thread(
     host: &Arc<RuntimeHost>,
     thread_id: &str,
     auth_token: Option<String>,
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
+    // A completed invocation can leave only an idle host entry. Rebuild all
+    // clients/actor/driver from durable bootstrap, retaining dedup history until
+    // ordinary idle eviction. There is no credential rotation on a warm driver.
+    if let Some(previous) = lookup_thread(host, thread_id)
+        && previous.idle_for() > Duration::ZERO
+        && previous
+            .task_handle
+            .lock()
+            .ok()
+            .and_then(|slot| slot.as_ref().map(|task| task.is_finished()))
+            == Some(true)
+    {
+        host.threads.remove(thread_id);
+    }
     let cell = host
         .threads
         .entry(thread_id.to_string())
@@ -312,8 +330,10 @@ pub async fn ensure_thread(
         })
         .await?;
 
-    if !initialized && !bearer.is_empty() {
-        thread.tokens.rotate(&bearer)?;
+    if !initialized {
+        // Never exchange credentials or MCP state on a live invocation. The
+        // server retries its durable event after this invocation finishes.
+        return Err(RunnerError::InvocationBusy);
     }
     Ok(thread.clone())
 }
@@ -328,9 +348,10 @@ async fn spawn_thread(
     tokens: TokenRegistry,
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
     let (inbox_tx, inbox_rx) = mpsc::unbounded_channel::<RunnerContent>();
+    let (notice_tx, notice_rx) = mpsc::unbounded_channel::<RunnerContent>();
     let (mcp_inbox_tx, mut mcp_inbox_rx) = mpsc::unbounded_channel::<String>();
 
-    let notice_inbox_tx = inbox_tx.clone();
+    let notice_inbox_tx = notice_tx.clone();
     tokio::spawn(async move {
         while let Some(notice) = mcp_inbox_rx.recv().await {
             if notice_inbox_tx.send(RunnerContent::Text(notice)).is_err() {
@@ -441,7 +462,7 @@ async fn spawn_thread(
             mcp_cmd_tx.clone(),
         ))
         .with(tools::inspect_asset::InspectAssetTool::new(
-            inbox_tx.clone(),
+            notice_tx.clone(),
         ));
 
     // MCP tools resolve by name but are never advertised: the declared tool
@@ -508,7 +529,7 @@ async fn spawn_thread(
         .await
         .map_err(|e| RunnerError::AgentStart(e.to_string()))?;
 
-    let idle_since = Arc::new(Mutex::new(Some(Instant::now())));
+    let idle_since = Arc::new(Mutex::new(None));
     let loop_idle = Arc::clone(&idle_since);
     let log_thread_id = thread_id.clone();
     let host_for_eviction = Arc::clone(host);
@@ -519,12 +540,14 @@ async fn spawn_thread(
         let outcome = AssertUnwindSafe(run_loop(
             driver,
             inbox_rx,
+            notice_rx,
             loop_idle,
             turn_end_compactor,
             loop_thread_id,
         ))
         .catch_unwind()
         .await;
+        let finished = matches!(&outcome, Ok(Ok("invocation finished")));
         match outcome {
             Ok(Ok(reason)) => {
                 tracing::info!(thread_id = %log_thread_id, reason = %reason, "thread loop exited")
@@ -541,9 +564,12 @@ async fn spawn_thread(
                 tracing::error!(thread_id = %log_thread_id, panic = %msg, "thread loop panicked");
             }
         }
-        // Drop the entry on exit so a stale ConfiguredThread doesn't keep
-        // holding state for a dead task.
-        host_for_eviction.threads.remove(&evict_thread_id);
+        // Retain successful idle entries for normal TTL/dedup eviction. The
+        // next admitted invocation replaces the whole driver and actor. Failed
+        // tasks must not leave a busy entry that prevents future admission.
+        if !finished {
+            host_for_eviction.threads.remove(&evict_thread_id);
+        }
     });
 
     let configured = Arc::new(ConfiguredThread {
@@ -552,7 +578,6 @@ async fn spawn_thread(
         idle_since,
         inbox_tx,
         task_handle: Mutex::new(Some(task_handle)),
-        tokens,
         mcp_cmd_tx,
         cancellation,
     });
@@ -575,6 +600,7 @@ fn mcp_disclosure_item(servers: &[McpServer]) -> String {
 async fn run_loop<S>(
     mut driver: LoopDriver<S>,
     mut inbox: UnboundedReceiver<RunnerContent>,
+    mut notices: UnboundedReceiver<RunnerContent>,
     idle_since: Arc<Mutex<Option<Instant>>>,
     turn_end_compactor: Option<PersistingCompactor>,
     thread_id: String,
@@ -605,22 +631,20 @@ where
                     compact_at_turn_end(compactor, &driver).await;
                 }
                 mark_idle(&idle_since);
+                return Ok("invocation finished");
             }
             LoopStep::Interrupt(LoopInterrupt::AwaitingInput(req)) => {
-                let drained = drain(&mut inbox);
-                let items = if !drained.is_empty() {
-                    drained_into_items(drained)
-                } else {
-                    match inbox.recv().await {
-                        Some(msg) => vec![user_content_item(&msg)],
-                        None => return Ok("inbox closed"),
-                    }
+                // Exactly one invocation owns this driver, immutable bearer,
+                // actor and compactor. Never coalesce separate event inputs.
+                let items = match inbox.recv().await {
+                    Some(msg) => vec![user_content_item(&msg)],
+                    None => return Ok("inbox closed"),
                 };
                 mark_busy(&idle_since);
                 req.submit(&mut driver, items)?;
             }
             LoopStep::Interrupt(LoopInterrupt::AfterToolResult(info)) => {
-                let drained = drain(&mut inbox);
+                let drained = drain(&mut notices);
                 if !drained.is_empty() {
                     info.submit(&mut driver, drained_into_items(drained))?;
                 }
@@ -821,6 +845,7 @@ mod tests {
             identity,
             started_at: Instant::now(),
             seen: DashMap::new(),
+            turn_admission: tokio::sync::Mutex::new(()),
             threads: DashMap::new(),
             gram_client,
             thread_idle_ttl: Duration::from_secs(60 * 30),
@@ -843,7 +868,6 @@ mod tests {
             idle_since: Arc::new(Mutex::new(idle_since)),
             inbox_tx,
             task_handle: Mutex::new(Some(handle)),
-            tokens: TokenRegistry::new(""),
             mcp_cmd_tx,
             cancellation: CancellationController::new(),
         });
@@ -852,6 +876,39 @@ mod tests {
             .map_err(|_| ())
             .expect("OnceCell should accept first set");
         host.threads.insert(thread_id.to_string(), cell);
+    }
+
+    #[tokio::test]
+    async fn another_invocation_cannot_reuse_or_rotate_an_active_thread() {
+        let host = empty_host();
+        insert_thread(&host, "shared-thread", None);
+        let original = lookup_thread(&host, "shared-thread").unwrap();
+        let (a, b) = tokio::join!(
+            ensure_thread(&host, "shared-thread", Some("user-a".into())),
+            ensure_thread(&host, "shared-thread", Some("user-b".into())),
+        );
+        assert!(a.is_err());
+        assert!(b.is_err());
+        assert!(Arc::ptr_eq(
+            &original,
+            &lookup_thread(&host, "shared-thread").unwrap()
+        ));
+    }
+
+    #[tokio::test]
+    async fn queued_invocation_cannot_change_an_earlier_client_snapshot() {
+        let first = TokenRegistry::new("human-a");
+        let model = first.clone();
+        let actor = first.clone();
+        let compactor = first.clone();
+        let second = TokenRegistry::new("workload-b");
+        let (a, b) = tokio::join!(async { model.current().unwrap() }, async {
+            second.current().unwrap()
+        });
+        assert_eq!(a, "human-a");
+        assert_eq!(b, "workload-b");
+        assert_eq!(actor.current().unwrap(), "human-a");
+        assert_eq!(compactor.current().unwrap(), "human-a");
     }
 
     #[tokio::test]

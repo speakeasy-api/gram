@@ -470,6 +470,9 @@ var ErrRuntimeUnhealthy = errors.New("assistant runtime unhealthy")
 // fail the event and leave the VM warm to handle subsequent events.
 var ErrCompletionFailed = errors.New("assistant completion failed")
 
+// ErrRuntimeInvocationBusy is backpressure, not a failed execution attempt.
+var ErrRuntimeInvocationBusy = errors.New("assistant invocation busy")
+
 // ErrHistoryCorrupted signals the upstream provider rejected the replayed
 // transcript as malformed or oversize. Distinct from ErrCompletionFailed:
 // trimming history and retrying typically clears it, so callers self-heal
@@ -519,6 +522,10 @@ var runnerHistoryRejectMarkers = []string{
 func classifyTurnError(err error) error {
 	if err == nil {
 		return nil
+	}
+	var busy *runtimeResponseError
+	if errors.As(err, &busy) && busy.StatusCode == http.StatusTooManyRequests && busy.Body == ErrRuntimeInvocationBusy.Error() {
+		return ErrRuntimeInvocationBusy
 	}
 	if chat.IsHistoryCorrupted(err) {
 		return ErrHistoryCorrupted

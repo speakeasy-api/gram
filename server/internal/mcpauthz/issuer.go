@@ -31,9 +31,10 @@ const Lifetime = time.Minute
 
 // Issuer holds an immutable signing key initialized by New.
 type Issuer struct {
-	key    *rsa.PrivateKey
-	kid    string
-	issuer string
+	executionVerificationKeys map[string]*rsa.PublicKey
+	key                       *rsa.PrivateKey
+	kid                       string
+	issuer                    string
 }
 
 // Target identifies the actual destination using server-owned metadata.
@@ -82,7 +83,11 @@ func New(privatePEM, publicPEM, issuerURL string, allowHTTP bool) (*Issuer, erro
 	if !publicKeys.Contains(active.KeyID) {
 		return nil, errors.New("active caller assertion public key is missing from GRAM_AUTHZ_PUBLIC_KEYS")
 	}
-	return &Issuer{key: key, kid: active.KeyID, issuer: strings.TrimRight(issuerURL, "/")}, nil
+	verificationKeys, err := executionPublicKeys(publicPEM)
+	if err != nil {
+		return nil, err
+	}
+	return &Issuer{key: key, kid: active.KeyID, issuer: strings.TrimRight(issuerURL, "/"), executionVerificationKeys: verificationKeys}, nil
 }
 
 // ReservedHeader also matches spellings with underscores for any dash: some

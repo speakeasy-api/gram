@@ -2076,6 +2076,11 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		return EnqueueResult{}, fmt.Errorf("upsert assistant thread: %w", err)
 	}
 
+	normalizedPayloadJSON, err = s.captureExecution(ctx, assistant, sourceKind, threadID, triggerInstanceID, task.EventID, normalizedPayloadJSON)
+	if err != nil {
+		return EnqueueResult{}, err
+	}
+
 	_, err = queries.InsertAssistantThreadEvent(ctx, assistantrepo.InsertAssistantThreadEventParams{
 		AssistantThreadID:     threadID,
 		AssistantID:           assistant.ID,
@@ -2774,7 +2779,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 
 			// Terminal failure after maxEventAttempts — stop retrying this
 			// event. The warm runtime stays up for subsequent events.
-			if event.Attempts >= maxEventAttempts {
+			if event.Attempts >= maxEventAttempts && !errors.Is(runErr, ErrRuntimeInvocationBusy) {
 				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event exceeded max attempts", "ERROR", runErr)
 				if err := s.failEvent(ctx, thread.ProjectID, event.ID, fmt.Errorf("exceeded %d attempts: %w", maxEventAttempts, runErr)); err != nil {
 					return ProcessThreadEventsResult{}, err
@@ -2856,6 +2861,9 @@ func (s *ServiceCore) processEventTurn(
 	runtime assistantRuntimeRecord,
 	event assistantThreadEventRecord,
 ) ([]byte, error) {
+	if err := s.checkExecutionDispatch(ctx, assistant, thread, event); err != nil {
+		return nil, err
+	}
 	skills, err := s.loadAssistantSkills(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
 	if err != nil {
 		return nil, err
@@ -2879,8 +2887,18 @@ func (s *ServiceCore) processEventTurn(
 	prompt, actorUserID := "", assistant.CreatedByUserID
 	var inputParts []runtimeContentPart
 	if mcpAuthPrompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
-		// MCP auth resumption is a system event with no human sender — act as
-		// the assistant's creator.
+		// Signed callback state retains the initiating actor. Only historical
+		// persisted callbacks without this field retain legacy owner behavior.
+		var resume mcpAuthEventPayload
+		if err := json.Unmarshal(event.NormalizedPayloadJSON, &resume); err != nil {
+			return nil, fmt.Errorf("decode OAuth continuation: %w", err)
+		}
+		if resume.ActorUserID != "" {
+			if err := s.checkTurnUser(ctx, assistant, resume.ActorUserID); err != nil {
+				return nil, err
+			}
+			actorUserID = resume.ActorUserID
+		}
 		prompt = mcpAuthPrompt
 	} else {
 		adapter, err := getSourceAdapter(thread.SourceKind)
@@ -3853,10 +3871,11 @@ func (s *ServiceCore) failEvent(ctx context.Context, projectID, eventID uuid.UUI
 
 func (s *ServiceCore) resetEventToPending(ctx context.Context, projectID, eventID uuid.UUID, runErr error) error {
 	err := assistantrepo.New(s.db).ResetAssistantThreadEventToPending(ctx, assistantrepo.ResetAssistantThreadEventToPendingParams{
-		PendingStatus: eventStatusPending,
-		LastError:     conv.ToPGText(runErr.Error()),
-		EventID:       eventID,
-		ProjectID:     projectID,
+		RestoreAttempt: errors.Is(runErr, ErrRuntimeInvocationBusy),
+		PendingStatus:  eventStatusPending,
+		LastError:      conv.ToPGText(runErr.Error()),
+		EventID:        eventID,
+		ProjectID:      projectID,
 	})
 	if err != nil {
 		return fmt.Errorf("reset assistant thread event to pending: %w", err)

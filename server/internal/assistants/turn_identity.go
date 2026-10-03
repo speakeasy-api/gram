@@ -87,29 +87,36 @@ func (s *ServiceCore) turnUserID(ctx context.Context, assistant assistantRecord,
 	if err != nil {
 		return "", fmt.Errorf("resolve turn identity: %w", err)
 	}
+	if err := s.checkTurnUser(ctx, assistant, user); err != nil {
+		return "", err
+	}
+	return user, nil
+}
+
+func (s *ServiceCore) checkTurnUser(ctx context.Context, assistant assistantRecord, user string) error {
 	active, err := orgrepo.New(s.db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{OrganizationID: assistant.OrganizationID, UserID: user})
 	if err != nil {
-		return "", fmt.Errorf("check turn user eligibility: %w", err)
+		return fmt.Errorf("check turn user eligibility: %w", err)
 	}
 	if !active {
-		return "", fmt.Errorf("turn user is not an active organization member")
+		return fmt.Errorf("turn user is not an active organization member")
 	}
 	// Resolve the selected identity's current grants, never the transport actor's
 	// grants. Trusted event provenance establishes identity, not project access.
 	principals, err := authz.ResolveUserPrincipals(ctx, s.db, assistant.OrganizationID, user)
 	if err != nil {
-		return "", fmt.Errorf("resolve turn user principals: %w", err)
+		return fmt.Errorf("resolve turn user principals: %w", err)
 	}
 	grants, err := authz.LoadGrants(ctx, s.db, assistant.OrganizationID, principals)
 	if err != nil {
-		return "", fmt.Errorf("load turn user grants: %w", err)
+		return fmt.Errorf("load turn user grants: %w", err)
 	}
 	allowed, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: assistant.ProjectID.String(), Dimensions: nil})
 	if err != nil {
-		return "", fmt.Errorf("check turn user project access: %w", err)
+		return fmt.Errorf("check turn user project access: %w", err)
 	}
 	if !allowed {
-		return "", fmt.Errorf("turn user does not have access to assistant project")
+		return fmt.Errorf("turn user does not have access to assistant project")
 	}
-	return user, nil
+	return nil
 }

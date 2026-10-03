@@ -51,15 +51,15 @@ type Binding struct {
 
 // Identity is a captured authority incarnation, not a bearer credential.
 type Identity struct {
-	OrganizationID      string
-	ProjectID           uuid.UUID
-	AssistantID         uuid.UUID
-	AgentID             uuid.UUID
-	TriggerID           uuid.UUID
-	IssuerID            uuid.UUID
-	Subject             string
-	AssistantGeneration int64
-	TriggerGeneration   int64
+	OrganizationID      string    `json:"organization_id"`
+	ProjectID           uuid.UUID `json:"project_id"`
+	AssistantID         uuid.UUID `json:"assistant_id"`
+	AgentID             uuid.UUID `json:"agent_id"`
+	TriggerID           uuid.UUID `json:"trigger_id"`
+	IssuerID            uuid.UUID `json:"issuer_id"`
+	Subject             string    `json:"subject"`
+	AssistantGeneration int64     `json:"assistant_generation"`
+	TriggerGeneration   int64     `json:"trigger_generation"`
 }
 
 // Resolution has an identity only in the active state.
@@ -76,7 +76,7 @@ type DB interface {
 // CeilingSnapshot owns canonical delegated-policy bytes. It is detached from
 // later database changes; callers persist it as immutable execution input.
 type CeilingSnapshot struct {
-	EncodingVersion runtimepolicy.DelegatedPolicyVersion
-	Policy          json.RawMessage
-	Digest          string
+	EncodingVersion runtimepolicy.DelegatedPolicyVersion `json:"encoding_version"`
+	Policy          json.RawMessage                      `json:"policy"`
+	Digest          string                               `json:"digest"`
 }

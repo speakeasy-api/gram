@@ -13,10 +13,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -49,6 +51,7 @@ type Claims struct {
 const mcpAuthFlowIssuer = "gram-assistants-mcp-auth-flow"
 
 type MCPAuthFlowInput struct {
+	Execution   *assistantidentity.Execution
 	OrgID       string
 	ProjectID   uuid.UUID
 	UserID      string
@@ -70,20 +73,21 @@ type MCPAuthFlowInput struct {
 }
 
 type MCPAuthFlowClaims struct {
-	OrgID             string `json:"org_id"`
-	ProjectID         string `json:"project_id"`
-	UserID            string `json:"user_id"`
-	AssistantID       string `json:"assistant_id"`
-	ThreadID          string `json:"thread_id"`
-	FlowID            string `json:"flow_id"`
-	ServerID          string `json:"server_id"`
-	McpURL            string `json:"mcp_url"`
-	ClientID          string `json:"client_id"`
-	ClientSecret      string `json:"client_secret,omitempty"`
-	RedirectURI       string `json:"redirect_uri"`
-	CodeVerifier      string `json:"code_verifier"`
-	TokenEndpoint     string `json:"token_endpoint"`
-	OAuthServerIssuer string `json:"oauth_server_issuer,omitempty"`
+	Execution         *assistantidentity.Execution `json:"execution,omitempty"`
+	OrgID             string                       `json:"org_id"`
+	ProjectID         string                       `json:"project_id"`
+	UserID            string                       `json:"user_id"`
+	AssistantID       string                       `json:"assistant_id"`
+	ThreadID          string                       `json:"thread_id"`
+	FlowID            string                       `json:"flow_id"`
+	ServerID          string                       `json:"server_id"`
+	McpURL            string                       `json:"mcp_url"`
+	ClientID          string                       `json:"client_id"`
+	ClientSecret      string                       `json:"client_secret,omitempty"`
+	RedirectURI       string                       `json:"redirect_uri"`
+	CodeVerifier      string                       `json:"code_verifier"`
+	TokenEndpoint     string                       `json:"token_endpoint"`
+	OAuthServerIssuer string                       `json:"oauth_server_issuer,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -98,24 +102,29 @@ type GenerateInput struct {
 }
 
 type Manager struct {
-	jwtSecret  string
-	tokens     *tokenrepo.Queries
-	orgs       *organizationsrepo.Queries
-	projects   *projectsrepo.Queries
-	users      *usersrepo.Queries
-	authz      *authz.Engine
-	revocation *revocationCache
+	executionDB         *pgxpool.Pool
+	executionIssuer     *mcpauthz.Issuer
+	executionIdentities *assistantidentity.Service
+	jwtSecret           string
+	tokens              *tokenrepo.Queries
+	orgs                *organizationsrepo.Queries
+	projects            *projectsrepo.Queries
+	users               *usersrepo.Queries
+	authz               *authz.Engine
+	revocation          *revocationCache
 }
 
 func New(jwtSecret string, db *pgxpool.Pool, authzEngine *authz.Engine) *Manager {
 	return &Manager{
-		jwtSecret:  jwtSecret,
-		tokens:     tokenrepo.New(db),
-		orgs:       organizationsrepo.New(db),
-		projects:   projectsrepo.New(db),
-		users:      usersrepo.New(db),
-		authz:      authzEngine,
-		revocation: newRevocationCache(revocationCacheTTL),
+		executionIssuer: nil, executionIdentities: nil,
+		executionDB: db,
+		jwtSecret:   jwtSecret,
+		tokens:      tokenrepo.New(db),
+		orgs:        organizationsrepo.New(db),
+		projects:    projectsrepo.New(db),
+		users:       usersrepo.New(db),
+		authz:       authzEngine,
+		revocation:  newRevocationCache(revocationCacheTTL),
 	}
 }
 
@@ -156,6 +165,13 @@ func (m *Manager) Generate(input GenerateInput) (string, error) {
 }
 
 func (m *Manager) GenerateMCPAuthFlow(input MCPAuthFlowInput) (string, error) {
+	if input.Execution != nil {
+		return "", assistantidentity.ErrInvalidIdentity
+	}
+	return m.generateMCPAuthFlow(input)
+}
+
+func (m *Manager) generateMCPAuthFlow(input MCPAuthFlowInput) (string, error) {
 	now := time.Now()
 	ttl := input.TTL
 	if ttl <= 0 {
@@ -167,6 +183,7 @@ func (m *Manager) GenerateMCPAuthFlow(input MCPAuthFlowInput) (string, error) {
 		attemptID = input.FlowID
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, MCPAuthFlowClaims{
+		Execution:         input.Execution,
 		OrgID:             input.OrgID,
 		ProjectID:         input.ProjectID.String(),
 		UserID:            input.UserID,
@@ -206,6 +223,7 @@ func (m *Manager) ValidateMCPAuthFlow(tokenString string) (*MCPAuthFlowClaims, e
 	}
 
 	token, err := jwt.ParseWithClaims(tokenString, &MCPAuthFlowClaims{
+		Execution:         nil,
 		OrgID:             "",
 		ProjectID:         "",
 		UserID:            "",
