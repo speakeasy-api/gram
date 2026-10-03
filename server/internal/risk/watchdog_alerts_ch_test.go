@@ -19,7 +19,14 @@ func TestWatchdogAlertsClickHouse(t *testing.T) {
 	q := chrepo.New(ti.chConn)
 	base := time.Now().UTC().Add(-24 * time.Hour).Truncate(time.Second)
 	from, to := base.Add(123456789*time.Nanosecond), base.Add(987654321*time.Nanosecond)
-	p := chrepo.RiskSignalWindowParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: auth.ProjectID.String(), From: from, To: to, WideFrom: base.Add(-time.Hour)}
+	p := chrepo.RiskSignalWindowParams{
+		OrganizationID: auth.ActiveOrganizationID,
+		ProjectID:      auth.ProjectID.String(),
+		MCPServerID:    "",
+		WideFrom:       base.Add(-time.Hour),
+		From:           from,
+		To:             to,
+	}
 	const layout = "2006-01-02 15:04:05.000000000"
 	// Bind timestamp strings so ingestion cannot erase the boundary regression.
 	insert := func(id uuid.UUID, org, project, rule, policy, external, user, app, sample string, detected, message time.Time, state string) {
@@ -75,6 +82,61 @@ func TestWatchdogAlertsClickHouse(t *testing.T) {
 	require.Equal(t, []chrepo.WatchdogAlertGroup{{RuleID: "rule-a", Value: "pii", Count: 4}, {RuleID: "rule-b", Value: "pii", Count: 1}}, groups)
 }
 
+func TestWatchdogAlertsClickHouseMCPServerScope(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	projectID := *auth.ProjectID
+	from := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	to := from.Add(2 * time.Hour)
+	serverA := uuid.NewString()
+	serverB := uuid.NewString()
+
+	findingA := chOverviewFinding(t, projectID, auth.ActiveOrganizationID, uuid.New(), uuid.New(), from.Add(10*time.Minute), "gitleaks", "rule-a", "user-a@example.com")
+	findingA.MCPServerID = serverA
+	findingB := chOverviewFinding(t, projectID, auth.ActiveOrganizationID, uuid.New(), uuid.New(), from.Add(20*time.Minute), "gitleaks", "rule-b", "user-b@example.com")
+	findingB.MCPServerID = serverB
+	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{findingA, findingB}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	q := chrepo.New(ti.chConn)
+	params := chrepo.RiskSignalWindowParams{
+		OrganizationID: auth.ActiveOrganizationID,
+		ProjectID:      projectID.String(),
+		MCPServerID:    serverA,
+		From:           from,
+		To:             to,
+	}
+	alerts, err := q.ListWatchdogAlerts(ctx, params, chrepo.WatchdogAlertLimit)
+	require.NoError(t, err)
+	require.Len(t, alerts, 1)
+	require.Equal(t, "rule-a", alerts[0].RuleID)
+	require.Equal(t, uint64(1), alerts[0].FindingCount)
+
+	groups, err := q.GroupWatchdogAlerts(ctx, params, []string{"rule-a", "rule-b"}, "user")
+	require.NoError(t, err)
+	require.Equal(t, []chrepo.WatchdogAlertGroup{{RuleID: "rule-a", Value: "user-a@example.com", Count: 1}}, groups)
+
+	params.MCPServerID = serverB
+	alerts, err = q.ListWatchdogAlerts(ctx, params, chrepo.WatchdogAlertLimit)
+	require.NoError(t, err)
+	require.Len(t, alerts, 1)
+	require.Equal(t, "rule-b", alerts[0].RuleID)
+	require.Equal(t, uint64(1), alerts[0].FindingCount)
+
+	groups, err = q.GroupWatchdogAlerts(ctx, params, []string{"rule-a", "rule-b"}, "user")
+	require.NoError(t, err)
+	require.Equal(t, []chrepo.WatchdogAlertGroup{{RuleID: "rule-b", Value: "user-b@example.com", Count: 1}}, groups)
+
+	params.MCPServerID = uuid.NewString()
+	alerts, err = q.ListWatchdogAlerts(ctx, params, chrepo.WatchdogAlertLimit)
+	require.NoError(t, err)
+	require.Empty(t, alerts)
+	groups, err = q.GroupWatchdogAlerts(ctx, params, []string{"rule-a", "rule-b"}, "user")
+	require.NoError(t, err)
+	require.Empty(t, groups)
+}
+
 func TestWatchdogAlertsClickHouseArrayOverflow(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -94,7 +156,14 @@ func TestWatchdogAlertsClickHouseArrayOverflow(t *testing.T) {
     SELECT generateUUIDv4(), ?, ?, 'overflow', if(? = 'policy', toString(number), ''), if(? = 'client', toString(number), ''), ?, ? FROM numbers(201)`,
 				auth.ActiveOrganizationID, auth.ProjectID.String(), dimension, dimension, window, window))
 			testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-			rows, err := q.ListWatchdogAlerts(ctx, chrepo.RiskSignalWindowParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: auth.ProjectID.String(), From: window, To: window.Add(time.Second)}, chrepo.WatchdogAlertLimit)
+			rows, err := q.ListWatchdogAlerts(ctx, chrepo.RiskSignalWindowParams{
+				OrganizationID: auth.ActiveOrganizationID,
+				ProjectID:      auth.ProjectID.String(),
+				MCPServerID:    "",
+				WideFrom:       time.Time{},
+				From:           window,
+				To:             window.Add(time.Second),
+			}, chrepo.WatchdogAlertLimit)
 			require.ErrorContains(t, err, "distinct client or policy limit")
 			require.Nil(t, rows)
 		})
@@ -111,7 +180,14 @@ func TestWatchdogAlertGroupsClickHousePerRuleLimit(t *testing.T) {
   SELECT generateUUIDv4(), ?, ?, concat('rule-', toString(intDiv(number, 210))), leftPad(toString(number % 210), 3, '0'), ?, ? FROM numbers(630)`,
 		auth.ActiveOrganizationID, auth.ProjectID.String(), from, from))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-	p := chrepo.RiskSignalWindowParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: auth.ProjectID.String(), From: from, To: from.Add(time.Second)}
+	p := chrepo.RiskSignalWindowParams{
+		OrganizationID: auth.ActiveOrganizationID,
+		ProjectID:      auth.ProjectID.String(),
+		MCPServerID:    "",
+		WideFrom:       time.Time{},
+		From:           from,
+		To:             from.Add(time.Second),
+	}
 	groups, err := chrepo.New(ti.chConn).GroupWatchdogAlerts(ctx, p, []string{"rule-0", "rule-1"}, "team")
 	require.NoError(t, err)
 	require.Len(t, groups, 402)

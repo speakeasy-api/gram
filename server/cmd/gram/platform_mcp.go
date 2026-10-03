@@ -111,6 +111,9 @@ type platformMCPConfig struct {
 	// RiskFindingList is the ClickHouse read path for individual findings.
 	// Nil serves every organization's per-finding reads from Postgres.
 	RiskFindingList platformmcp.RiskFindingListReader
+	// RiskFalsePositiveFindings receives dismissal state copies. Nil makes
+	// the dismiss and restore tools fail rather than skip ClickHouse.
+	RiskFalsePositiveFindings risk.FalsePositiveFindingsStore
 	// Telemetry is the Gram-owned ClickHouse read model the diagnostics tools
 	// answer from. Nil disables them rather than serving an empty answer, which
 	// a caller would read as "nothing is wrong".
@@ -463,7 +466,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		riskMutationControls,
 		risk.NewPolicyMutationCore(config.DB, config.AuditLogger, config.RiskPolicyApprovals, config.RiskPolicySignaler, config.RiskPolicyCache),
 		risk.NewExclusionMutationCore(config.Logger, config.DB, config.AuditLogger, config.RiskExclusionReconciler, config.JWTSigningKey),
-		risk.NewFalsePositiveCore(config.AuditLogger),
+		risk.NewFalsePositiveCore(config.AuditLogger, config.RiskFalsePositiveFindings),
 	)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP risk policy mutations: %w", err)
@@ -972,7 +975,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		riskMutationControls,
 		risk.NewPolicyMutationCore(config.DB, config.AuditLogger, config.RiskPolicyApprovals, config.RiskPolicySignaler, config.RiskPolicyCache),
 		risk.NewExclusionMutationCore(config.Logger, config.DB, config.AuditLogger, config.RiskExclusionReconciler, config.JWTSigningKey),
-		risk.NewFalsePositiveCore(config.AuditLogger),
+		risk.NewFalsePositiveCore(config.AuditLogger, config.RiskFalsePositiveFindings),
 	)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create browser Platform MCP risk policy mutations: %w", err)
