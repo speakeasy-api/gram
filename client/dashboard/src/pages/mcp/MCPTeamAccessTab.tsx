@@ -17,6 +17,7 @@ import type { ResourceAudienceEntry } from "@gram/client/models/components/resou
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { useMemo, type ReactElement } from "react";
+import { CheckAccess } from "./access/CheckAccess";
 import { ManageAccess } from "./access/ManageAccess";
 import { RoleLink } from "./access/RoleLink";
 import {
@@ -79,11 +80,17 @@ export function MCPTeamAccessTab({
   resourceId,
   serverName,
   tools,
+  checkAccess = true,
 }: {
   resourceId: string;
   serverName?: string;
   /** The server's tools, when the backend exposes a catalogue for it. */
   tools?: Tool[];
+  /**
+   * Whether to offer Check access. A gateway turns it off: nothing checks
+   * access on a gateway's own id, each server it fronts is checked instead.
+   */
+  checkAccess?: boolean;
 }): ReactElement | null {
   const {
     data: audienceData,
@@ -268,6 +275,15 @@ export function MCPTeamAccessTab({
         this server only.
       </Page.Section.Description>
       <Page.Section.Body>
+        {checkAccess && (
+          <div className="mb-8">
+            <CheckAccess
+              resourceId={resourceId}
+              serverName={serverName ?? "this server"}
+            />
+          </div>
+        )}
+
         {audienceFailed ? (
           <Text muted small>
             Access rules could not be loaded, so they cannot be changed here

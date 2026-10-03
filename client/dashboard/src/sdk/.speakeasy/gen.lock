@@ -37,6 +37,7 @@ trackedFiles:
   src/funcs/accessCreateRole.ts: {}
   src/funcs/accessDeleteDirectoryRoleMapping.ts: {}
   src/funcs/accessDeleteRole.ts: {}
+  src/funcs/accessExplainResourceAccess.ts: {}
   src/funcs/accessGetRole.ts: {}
   src/funcs/accessGetShadowMCPInventoryServer.ts: {}
   src/funcs/accessListAIDetectionUsers.ts: {}
@@ -1043,6 +1044,10 @@ trackedFiles:
   src/models/components/evolveform.ts: {}
   src/models/components/evolveresult.ts: {}
   src/models/components/exchangerequestbody.ts: {}
+  src/models/components/explainedaccessdirectorysource.ts: {}
+  src/models/components/explainedaccesslevel.ts: {}
+  src/models/components/explainedaccessrule.ts: {}
+  src/models/components/explainresourceaccessresult.ts: {}
   src/models/components/exportmcpmetadatarequestbody.ts: {}
   src/models/components/exprcompileresult.ts: {}
   src/models/components/externalcredentialsummary.ts: {}
@@ -2110,6 +2115,7 @@ trackedFiles:
   src/models/operations/enterdemo.ts: {}
   src/models/operations/evaluatepromptguardrail.ts: {}
   src/models/operations/evolvedeployment.ts: {}
+  src/models/operations/explainresourceaccess.ts: {}
   src/models/operations/exportmcpmetadata.ts: {}
   src/models/operations/fetchglobalremotesessionissuermetadata.ts: {}
   src/models/operations/fetchimagefromurl.ts: {}
@@ -2923,6 +2929,8 @@ trackedFiles:
   src/react-query/ensureMcpServerReview.ts: {}
   src/react-query/enterDemo.ts: {}
   src/react-query/evolveDeployment.ts: {}
+  src/react-query/explainResourceAccess.core.ts: {}
+  src/react-query/explainResourceAccess.ts: {}
   src/react-query/exportMcpMetadata.ts: {}
   src/react-query/featuresSet.ts: {}
   src/react-query/fetchGlobalRemoteSessionIssuerMetadata.ts: {}
@@ -6183,6 +6191,20 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  explainResourceAccess:
+    speakeasy-default-explain-resource-access:
+      parameters:
+        query:
+          resource_kind: "mcp"
+          resource_id: "<id>"
+          user_id: "<id>"
+      responses:
+        "200":
+          application/json: {"levels": [], "visibility": "disabled"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   exportMcpMetadata:
     speakeasy-default-export-mcp-metadata:
       requestBody:
