@@ -121,6 +121,25 @@ func authedConfig(t *testing.T, serverURL string) Config {
 	return Config{ServerURL: serverURL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 }
 
+func TestAnthropicEmailFallbackReachesIngest(t *testing.T) { //nolint:paralleltest // mutates process environment with t.Setenv
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", filepath.Join(t.TempDir(), "missing-agent"))
+	t.Setenv("CLAUDE_CODE_USER_EMAIL", " anthropic@example.com ")
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	for _, variant := range []string{"cli", "ide", "cloud", "cowork", "remote"} {
+		t.Run(variant, func(t *testing.T) {
+			fs := newFakeServer(t, nil)
+			runner := NewRunner(authedConfig(t, fs.URL))
+			payload := agenthookstest.Fixture(t, "claude/pre_tool_use.json")
+			res := agenthookstest.Invoke(t, runner, agenthooks.ProviderClaudeCode, payload, "--variant="+variant)
+
+			require.Equal(t, 0, res.ExitCode)
+			require.Positive(t, fs.count())
+			require.NotNil(t, fs.last().Source.UserEmail)
+			require.Equal(t, "anthropic@example.com", *fs.last().Source.UserEmail)
+		})
+	}
+}
+
 func TestEnvelopeClaudePreToolUse(t *testing.T) {
 	payload := agenthookstest.Fixture(t, "claude/pre_tool_use.json")
 	runner := agenthooks.New()

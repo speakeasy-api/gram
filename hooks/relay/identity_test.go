@@ -10,6 +10,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/speakeasy-api/agenthooks"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,6 +31,42 @@ func TestDeviceAgentEmail(t *testing.T) {
 	t.Setenv("GRAM_DEVICE_AGENT_TIMEOUT_TENTHS", "20")
 
 	require.Equal(t, "device@example.com", deviceAgentEmail(t.Context()))
+
+	t.Setenv("CLAUDE_CODE_USER_EMAIL", "anthropic@example.com")
+	event := &agenthooks.ToolPreEvent{Event: agenthooks.Event{Provider: agenthooks.ProviderClaudeCode}}
+	require.Equal(t, "device@example.com", resolveUserEmail(t.Context(), event))
+}
+
+func TestResolveUserEmailAnthropicFallback(t *testing.T) { //nolint:paralleltest // mutates process environment with t.Setenv
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", filepath.Join(t.TempDir(), "missing-agent"))
+	cases := []struct {
+		name     string
+		provider agenthooks.Provider
+		email    string
+		payload  string
+		want     string
+	}{
+		{"environment email", agenthooks.ProviderClaudeCode, "anthropic@example.com", `{}`, "anthropic@example.com"},
+		{"trim whitespace", agenthooks.ProviderClaudeCode, " \tanthropic@example.com\n", `{}`, "anthropic@example.com"},
+		{"environment precedes payload", agenthooks.ProviderClaudeCode, "anthropic@example.com", `{"user_email":"payload@example.com"}`, "anthropic@example.com"},
+		{"invalid environment uses payload", agenthooks.ProviderClaudeCode, "not-an-email", `{"user_email":"payload@example.com"}`, "payload@example.com"},
+		{"empty environment uses payload", agenthooks.ProviderClaudeCode, "", `{"user_email":"payload@example.com"}`, "payload@example.com"},
+		{"whitespace only", agenthooks.ProviderClaudeCode, " \t\n", `{}`, ""},
+		{"invalid environment without payload", agenthooks.ProviderClaudeCode, "not-an-email", `{}`, ""},
+		{"cursor ignores environment", agenthooks.ProviderCursor, "anthropic@example.com", `{"user_email":"cursor@example.com"}`, "cursor@example.com"},
+		{"codex ignores environment", agenthooks.ProviderCodex, "anthropic@example.com", `{}`, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("CLAUDE_CODE_USER_EMAIL", tc.email)
+			event := &agenthooks.ToolPreEvent{Event: agenthooks.Event{
+				Provider: tc.provider,
+				Kind:     agenthooks.KindToolPre,
+				Raw:      []byte(tc.payload),
+			}}
+			require.Equal(t, tc.want, resolveUserEmail(t.Context(), event))
+		})
+	}
 }
 
 func TestDeviceAgentCommandsEnvOverrideIsExclusive(t *testing.T) {
