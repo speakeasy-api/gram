@@ -550,7 +550,9 @@ async fn spawn_thread(
     }
     // Membership changes per turn; keep only discovery guidance in the system
     // prompt. Reconciliation supplies current attachment changes with the turn.
-    transcript.push(Item::text(ItemKind::System, mcp_discovery_guidance()));
+    if !bootstrap.mcp_servers.is_empty() {
+        transcript.push(Item::text(ItemKind::System, mcp_discovery_guidance()));
+    }
     transcript.extend(normalize_history(&bootstrap.history)?);
 
     let permissions = CompositePermissionChecker::new(PermissionDecision::Allow).with_policy(
