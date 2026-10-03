@@ -510,6 +510,7 @@ BEGIN
   DELETE FROM workload_agent_assignments WHERE organization_id = demo_org;
   DELETE FROM workload_identity_admissions WHERE organization_id = demo_org;
   DELETE FROM workload_issuers WHERE organization_id = demo_org;
+  -- Participant project IDs are NOT NULL, so delete them before SET NULL project deletion.
   DELETE FROM chat_message_participants WHERE project_id IN (SELECT id FROM projects WHERE organization_id = demo_org);
   DELETE FROM projects WHERE organization_id = demo_org;
 
