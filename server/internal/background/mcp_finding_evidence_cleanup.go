@@ -52,28 +52,23 @@ func (a *Activities) CleanupMCPFindingEvidence(ctx context.Context) error {
 
 func cleanupMCPEvidence(ctx context.Context, findings, executions func(context.Context, int32) (int64, error)) error {
 	// A saturated finding table must not starve payload cleanup.
-	findingsErr := cleanupMCPFindingEvidenceBatches(ctx, findings)
-	if findingsErr != nil {
-		findingsErr = fmt.Errorf("finding matches: %w", findingsErr)
-	}
-	executionsErr := cleanupMCPFindingEvidenceBatches(ctx, executions)
-	if executionsErr != nil {
-		executionsErr = fmt.Errorf("execution payloads: %w", executionsErr)
-	}
-	return errors.Join(findingsErr, executionsErr)
+	return errors.Join(
+		cleanupMCPFindingEvidenceBatches(ctx, "finding matches", findings),
+		cleanupMCPFindingEvidenceBatches(ctx, "execution payloads", executions),
+	)
 }
 
-func cleanupMCPFindingEvidenceBatches(ctx context.Context, cleanup func(context.Context, int32) (int64, error)) error {
+func cleanupMCPFindingEvidenceBatches(ctx context.Context, table string, cleanup func(context.Context, int32) (int64, error)) error {
 	for range mcpFindingEvidenceCleanupMaxBatchesPerAttempt {
 		n, err := cleanup(ctx, mcpFindingEvidenceCleanupBatchSize)
 		if err != nil {
-			return fmt.Errorf("cleanup MCP evidence batch: %w", err)
+			return fmt.Errorf("cleanup MCP %s batch: %w", table, err)
 		}
 		if n < int64(mcpFindingEvidenceCleanupBatchSize) {
 			return nil
 		}
 	}
-	return fmt.Errorf("MCP evidence cleanup per-attempt batch budget exhausted")
+	return fmt.Errorf("MCP %s cleanup per-attempt batch budget exhausted", table)
 }
 
 // Include every attempt, intervening backoff, and queue/workflow-task headroom.
