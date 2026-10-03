@@ -175,8 +175,13 @@ function ServerSummary({ server }: { server: ShadowMCPInventoryServer }) {
 
   return (
     <MetricCard.Group className="flex-wrap">
+      {/* "Access", not "Status": the review beside this strip has a status of
+          its own — unreviewed, approved, denied — and two tiles reading
+          "Blocked" and "Unreviewed" under the same word made the page look as
+          though it disagreed with itself. This one is what the gateway does
+          with a call today; that one is what anyone has decided about it. */}
       <MetricCard
-        label="Status"
+        label="Access"
         value={shadowMCPInventoryStatusLabel(status)}
         tone={statusTone(status)}
         size="xs"
