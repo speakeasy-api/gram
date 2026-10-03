@@ -193,6 +193,20 @@ func (s *ServiceCore) checkExecutionDispatch(ctx context.Context, assistant assi
 		return fmt.Errorf("assistant execution payload: %w: %w", assistantidentity.ErrInvalidIdentity, err)
 	}
 	if execution == nil {
+		// A persisted legacy event cannot bypass a binding added since capture.
+		// History includes suspended/revoked bindings; only true absence permits
+		// the legacy credential path.
+		_, err := identityrepo.New(s.db).GetAssistantBinding(ctx, identityrepo.GetAssistantBindingParams{
+			CaptureSuspended: false, OrganizationID: assistant.OrganizationID,
+			ProjectID: assistant.ProjectID, AssistantID: assistant.ID,
+		})
+		if err == nil {
+			return assistantidentity.ErrInvalidIdentity
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("read legacy assistant binding: %w", err)
+		}
+
 		// Legacy envelopes do not have live identity validation. Re-read the
 		// lifecycle here: an already admitted turn may outlive a pause, and
 		// the assistant record passed by the processing loop can be stale.

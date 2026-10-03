@@ -95,6 +95,7 @@ func TestExecutionCapturePersistsSelectionAndGatesDispatch(t *testing.T) {
 	require.Empty(t, execution.HumanUserID)
 	event := assistantThreadEventRecord{EventID: "event-a", NormalizedPayloadJSON: workload}
 	require.NoError(t, core.checkExecutionDispatch(t.Context(), assistant, thread, event))
+
 	// Independent messages capture independent humans; persisted earlier events
 	// remain unchanged on retry rather than consulting a new sender or owner.
 	adminRows, err := accessrepo.New(db).ListPrincipalGrantsByOrg(t.Context(), accessrepo.ListPrincipalGrantsByOrgParams{OrganizationID: "org-test", PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, "user-2").String()})
@@ -131,7 +132,7 @@ func TestExecutionCapturePersistsSelectionAndGatesDispatch(t *testing.T) {
 	// Corrupt metadata cannot downgrade to legacy, and actual binding deletion
 	// invalidates the queued envelope before the model-admission gate is reached.
 	require.Error(t, core.checkExecutionDispatch(t.Context(), assistant, thread, assistantThreadEventRecord{NormalizedPayloadJSON: []byte(`{"_gram_execution":null}`)}))
-	require.NoError(t, core.checkExecutionDispatch(t.Context(), assistant, thread, assistantThreadEventRecord{NormalizedPayloadJSON: []byte(`{}`)}))
+	require.ErrorIs(t, core.checkExecutionDispatch(t.Context(), assistant, thread, assistantThreadEventRecord{NormalizedPayloadJSON: []byte(`{}`)}), assistantidentity.ErrInvalidIdentity, "bound assistants must not fall back to legacy credentials")
 
 	// Mint/validate uses the existing stable signing infrastructure and fresh live
 	// authority checks. Cryptographic identity is never business authorization.
