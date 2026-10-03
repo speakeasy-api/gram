@@ -94,6 +94,25 @@ func (q *Queries) DeleteProjectEMATombstones(ctx context.Context, arg DeleteProj
 	return err
 }
 
+const deleteProjectRiskExecutionEvidence = `-- name: DeleteProjectRiskExecutionEvidence :execrows
+DELETE FROM risk_execution_evidence
+WHERE project_id = $1
+  AND organization_id = $2
+`
+
+type DeleteProjectRiskExecutionEvidenceParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DeleteProjectRiskExecutionEvidence(ctx context.Context, arg DeleteProjectRiskExecutionEvidenceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteProjectRiskExecutionEvidence, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteProjectRiskFindingEvidence = `-- name: DeleteProjectRiskFindingEvidence :execrows
 DELETE FROM risk_finding_evidence
 WHERE project_id = $1

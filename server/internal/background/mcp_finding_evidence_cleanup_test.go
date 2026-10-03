@@ -55,7 +55,7 @@ func TestCleanupMCPFindingEvidenceBatches(t *testing.T) {
 	t.Run("drains partial batch", func(t *testing.T) {
 		t.Parallel()
 		calls := 0
-		err := cleanupMCPFindingEvidenceBatches(t.Context(), func(_ context.Context, limit int32) (int64, error) {
+		err := cleanupMCPFindingEvidenceBatches(t.Context(), "finding matches", func(_ context.Context, limit int32) (int64, error) {
 			require.Equal(t, int32(500), limit)
 			calls++
 			if calls == 1 {
@@ -69,7 +69,7 @@ func TestCleanupMCPFindingEvidenceBatches(t *testing.T) {
 	t.Run("per-attempt saturation", func(t *testing.T) {
 		t.Parallel()
 		calls := 0
-		err := cleanupMCPFindingEvidenceBatches(t.Context(), func(context.Context, int32) (int64, error) {
+		err := cleanupMCPFindingEvidenceBatches(t.Context(), "finding matches", func(context.Context, int32) (int64, error) {
 			calls++
 			return 500, nil
 		})
@@ -79,10 +79,57 @@ func TestCleanupMCPFindingEvidenceBatches(t *testing.T) {
 	t.Run("database failure", func(t *testing.T) {
 		t.Parallel()
 		failure := errors.New("database unavailable")
-		err := cleanupMCPFindingEvidenceBatches(t.Context(), func(context.Context, int32) (int64, error) {
+		err := cleanupMCPFindingEvidenceBatches(t.Context(), "finding matches", func(context.Context, int32) (int64, error) {
 			return 0, failure
 		})
 		require.ErrorIs(t, err, failure)
+	})
+}
+
+func TestCleanupMCPEvidenceDrainsBothTables(t *testing.T) {
+	t.Parallel()
+	t.Run("both tables", func(t *testing.T) {
+		t.Parallel()
+		var findings, executions int
+		err := cleanupMCPEvidence(t.Context(),
+			func(context.Context, int32) (int64, error) { findings++; return 0, nil },
+			func(context.Context, int32) (int64, error) { executions++; return 0, nil },
+		)
+		require.NoError(t, err)
+		require.Equal(t, 1, findings)
+		require.Equal(t, 1, executions)
+	})
+	t.Run("finding failure does not starve payloads", func(t *testing.T) {
+		t.Parallel()
+		failure := errors.New("database unavailable")
+		executions := 0
+		err := cleanupMCPEvidence(t.Context(),
+			func(context.Context, int32) (int64, error) { return 0, failure },
+			func(context.Context, int32) (int64, error) { executions++; return 0, nil },
+		)
+		require.ErrorIs(t, err, failure)
+		require.Equal(t, 1, executions)
+	})
+	t.Run("finding saturation does not starve payloads", func(t *testing.T) {
+		t.Parallel()
+		executions := 0
+		err := cleanupMCPEvidence(t.Context(),
+			func(_ context.Context, limit int32) (int64, error) { return int64(limit), nil },
+			func(context.Context, int32) (int64, error) { executions++; return 0, nil },
+		)
+		require.ErrorContains(t, err, "finding matches")
+		require.ErrorContains(t, err, "budget exhausted")
+		require.Equal(t, 1, executions)
+	})
+	t.Run("payload failure", func(t *testing.T) {
+		t.Parallel()
+		failure := errors.New("database unavailable")
+		err := cleanupMCPEvidence(t.Context(),
+			func(context.Context, int32) (int64, error) { return 0, nil },
+			func(context.Context, int32) (int64, error) { return 0, failure },
+		)
+		require.ErrorIs(t, err, failure)
+		require.ErrorContains(t, err, "execution payloads")
 	})
 }
 

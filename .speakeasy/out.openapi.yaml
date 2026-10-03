@@ -52893,6 +52893,21 @@ paths:
             format: uuid
             type: string
         - allowEmptyValue: true
+          description: Optional risk result ID; returns at most that one finding. Used to resolve a deep link to a finding that is not on a loaded page.
+          in: query
+          name: result_id
+          schema:
+            description: Optional risk result ID; returns at most that one finding. Used to resolve a deep link to a finding that is not on a loaded page.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Optional mediated execution ID; returns every finding raised on that one MCP call.
+          in: query
+          name: execution_id
+          schema:
+            description: Optional mediated execution ID; returns every finding raised on that one MCP call.
+            type: string
+        - allowEmptyValue: true
           description: Optional rule category key to filter by (e.g. secrets, pii, financial).
           in: query
           name: category
@@ -53814,6 +53829,113 @@ paths:
       x-speakeasy-name-override: releaseSessionQuarantine
       x-speakeasy-react-hook:
         name: RiskReleaseSessionQuarantine
+        type: mutation
+  /rpc/risk.revealResultPayload:
+    post:
+      description: Return the full scanned payload of the MCP tool call phase a risk result was raised on, so its findings can be shown in context. Positions of every finding with the same execution_id and phase index into the returned payload. Requires an unrestricted chat:read grant. Every successful reveal is audited.
+      operationId: revealRiskResultPayload
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskIDRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskRevealPayloadResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: revealRiskResultPayload risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.results
+      x-speakeasy-name-override: revealPayload
+      x-speakeasy-react-hook:
+        name: RiskRevealResultPayload
         type: mutation
   /rpc/risk.revokePolicyBypassRequest:
     post:
@@ -95178,6 +95300,36 @@ components:
         - created_at
         - match_redacted
         - position_known
+    RiskRevealPayloadResult:
+      type: object
+      properties:
+        execution_id:
+          type: string
+          description: The mediated execution the payload belongs to.
+        expires_at:
+          type: string
+          description: When the stored payload is deleted. Absent when reveal_state is evidence_not_stored.
+          format: date-time
+        id:
+          type: string
+          description: The risk result ID.
+          format: uuid
+        payload:
+          type: string
+          description: 'The exact text the scanners inspected: the tools/call arguments JSON for a request, or the extracted result text for a response. Empty when reveal_state is evidence_not_stored.'
+        phase:
+          type: string
+          description: Execution phase the payload was scanned in (request or response).
+        reveal_state:
+          type: string
+          description: Whether the payload was revealed or its evidence is unavailable or expired.
+          enum:
+            - available
+            - evidence_not_stored
+      required:
+        - id
+        - reveal_state
+        - payload
     RiskRuleBreakdownEntry:
       type: object
       properties:

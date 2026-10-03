@@ -185,6 +185,97 @@ export function RevealAllToggle({
   );
 }
 
+// The inline red redaction chip for a masked value inside a dark payload block
+// or a transcript excerpt. Shared by the finding drawer's payload and context
+// views so masked spans read identically everywhere.
+export function RedactionChip({
+  label,
+  title,
+  locked = false,
+  selected = false,
+  onClick,
+}: {
+  label: string;
+  /** Usually the redaction fingerprint. */
+  title?: string;
+  /** The caller lacks chat:read, so the value can never be revealed. */
+  locked?: boolean;
+  /** Outlines the chip for the finding currently in view. */
+  selected?: boolean;
+  onClick?: () => void;
+}): JSX.Element {
+  const className = cn(
+    "bg-destructive inline-flex items-center gap-1 px-1.5 align-[1px] font-mono text-[10px] leading-[1.6] tracking-[0.06em] text-white uppercase",
+    selected &&
+      "outline-1 outline-offset-2 outline-[var(--color-feedback-orange-400)] outline-solid",
+    onClick && "hover:bg-destructive/80 cursor-pointer",
+  );
+  const content = (
+    <>
+      {locked && (
+        <Lock
+          role="img"
+          aria-label={REVEAL_DENIED_REASON}
+          className="size-2.5 shrink-0"
+        />
+      )}
+      <span>{label}</span>
+    </>
+  );
+  if (!onClick) {
+    return (
+      <span className={className} title={title}>
+        {content}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className={className}
+      title={title}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+    >
+      {content}
+    </button>
+  );
+}
+
+// A revealed flagged value: orange underline with a wash that is stronger for
+// the finding currently in view.
+export function RevealedSpan({
+  children,
+  selected = false,
+  onClick,
+}: {
+  children: ReactNode;
+  selected?: boolean;
+  onClick?: () => void;
+}): JSX.Element {
+  const className = cn(
+    "border-b border-[var(--color-feedback-orange-400)] px-px",
+    selected
+      ? "bg-[var(--color-feedback-orange-400)]/32"
+      : "bg-[var(--color-feedback-orange-400)]/12",
+  );
+  if (!onClick) return <span className={className}>{children}</span>;
+  return (
+    <button
+      type="button"
+      className={cn(className, "cursor-pointer text-left")}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function MaskedMatch({
   resultId,
   matchRedacted,

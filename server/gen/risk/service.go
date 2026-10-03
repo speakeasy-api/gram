@@ -54,6 +54,12 @@ type Service interface {
 	// invalid chat ID require an unrestricted chat:read grant and use encrypted
 	// stored evidence. Every successful reveal is audited.
 	UnmaskRiskResult(context.Context, *UnmaskRiskResultPayload) (res *RiskUnmaskResultResult, err error)
+	// Return the full scanned payload of the MCP tool call phase a risk result was
+	// raised on, so its findings can be shown in context. Positions of every
+	// finding with the same execution_id and phase index into the returned
+	// payload. Requires an unrestricted chat:read grant. Every successful reveal
+	// is audited.
+	RevealRiskResultPayload(context.Context, *RevealRiskResultPayloadPayload) (res *RiskRevealPayloadResult, err error)
 	// List risk results grouped by chat session for the current project.
 	ListRiskResultsByChat(context.Context, *ListRiskResultsByChatPayload) (res *ListRiskResultsByChatResult, err error)
 	// Mark one or more risk results as manually-reviewed false positives. Distinct
@@ -214,7 +220,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [53]string{"createRiskPolicy", "listRiskPolicies", "listMCPPlatformToolsets", "listRiskPoliciesForMcpServer", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listSessionQuarantines", "releaseSessionQuarantine", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskSignals", "getRiskMcpServerCounts", "getRiskAnalysisStatus", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
+var MethodNames = [54]string{"createRiskPolicy", "listRiskPolicies", "listMCPPlatformToolsets", "listRiskPoliciesForMcpServer", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listSessionQuarantines", "releaseSessionQuarantine", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "revealRiskResultPayload", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskSignals", "getRiskMcpServerCounts", "getRiskAnalysisStatus", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
 
 // AcknowledgeRiskPolicyChallengePayload is the payload type of the risk
 // service acknowledgeRiskPolicyChallenge method.
@@ -888,6 +894,12 @@ type ListRiskResultsPayload struct {
 	ChatID *string
 	// Optional concrete MCP server ID to match exactly.
 	McpServerID *string
+	// Optional risk result ID; returns at most that one finding. Used to resolve a
+	// deep link to a finding that is not on a loaded page.
+	ResultID *string
+	// Optional mediated execution ID; returns every finding raised on that one MCP
+	// call.
+	ExecutionID *string
 	// Optional rule category key to filter by (e.g. secrets, pii, financial).
 	Category *string
 	// Optional rule identifier substring to filter by (case-insensitive, e.g.
@@ -1030,6 +1042,16 @@ type ReleaseSessionQuarantinePayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The session quarantine ID.
+	ID string
+}
+
+// RevealRiskResultPayloadPayload is the payload type of the risk service
+// revealRiskResultPayload method.
+type RevealRiskResultPayloadPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The risk result ID.
 	ID string
 }
 
@@ -1256,6 +1278,26 @@ type RiskPolicyBypassRequest struct {
 	CreatedAt string
 	// Last update timestamp.
 	UpdatedAt string
+}
+
+// RiskRevealPayloadResult is the result type of the risk service
+// revealRiskResultPayload method.
+type RiskRevealPayloadResult struct {
+	// The risk result ID.
+	ID string
+	// Whether the payload was revealed or its evidence is unavailable or expired.
+	RevealState string
+	// The mediated execution the payload belongs to.
+	ExecutionID *string
+	// Execution phase the payload was scanned in (request or response).
+	Phase *string
+	// The exact text the scanners inspected: the tools/call arguments JSON for a
+	// request, or the extracted result text for a response. Empty when
+	// reveal_state is evidence_not_stored.
+	Payload string
+	// When the stored payload is deleted. Absent when reveal_state is
+	// evidence_not_stored.
+	ExpiresAt *string
 }
 
 type RiskRuleBreakdownEntry struct {

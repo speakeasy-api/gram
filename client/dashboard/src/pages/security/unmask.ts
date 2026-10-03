@@ -50,10 +50,12 @@ export function isRedactionFingerprint(
 export function useUnmaskedMatch(resultId: string): {
   value: string | null;
   isLoading: boolean;
+  /** The last reveal failed; calling reveal() again retries. */
+  isError: boolean;
   evidenceNotStored: boolean;
   reveal: () => void;
 } {
-  const { mutate, isPending } = useRiskUnmaskResultMutation();
+  const { mutate, isPending, isError } = useRiskUnmaskResultMutation();
   const [value, setValue] = useState<string | null>(null);
   const [evidenceNotStored, setEvidenceNotStored] = useState(false);
   const reveal = useCallback(() => {
@@ -71,5 +73,5 @@ export function useUnmaskedMatch(resultId: string): {
       },
     );
   }, [mutate, resultId, value, evidenceNotStored, isPending]);
-  return { value, evidenceNotStored, isLoading: isPending, reveal };
+  return { value, evidenceNotStored, isLoading: isPending, isError, reveal };
 }

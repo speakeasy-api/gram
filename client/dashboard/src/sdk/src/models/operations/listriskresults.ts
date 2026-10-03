@@ -34,6 +34,14 @@ export type ListRiskResultsRequest = {
    */
   mcpServerId?: string | undefined;
   /**
+   * Optional risk result ID; returns at most that one finding. Used to resolve a deep link to a finding that is not on a loaded page.
+   */
+  resultId?: string | undefined;
+  /**
+   * Optional mediated execution ID; returns every finding raised on that one MCP call.
+   */
+  executionId?: string | undefined;
+  /**
    * Optional rule category key to filter by (e.g. secrets, pii, financial).
    */
   category?: string | undefined;
@@ -197,6 +205,8 @@ export type ListRiskResultsRequest$Outbound = {
   policy_id?: string | undefined;
   chat_id?: string | undefined;
   mcp_server_id?: string | undefined;
+  result_id?: string | undefined;
+  execution_id?: string | undefined;
   category?: string | undefined;
   rule_id?: string | undefined;
   user_id?: string | undefined;
@@ -222,6 +232,8 @@ export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
     policyId: z.optional(z.string()),
     chatId: z.optional(z.string()),
     mcpServerId: z.optional(z.string()),
+    resultId: z.optional(z.string()),
+    executionId: z.optional(z.string()),
     category: z.optional(z.string()),
     ruleId: z.optional(z.string()),
     userId: z.optional(z.string()),
@@ -242,6 +254,8 @@ export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
       policyId: "policy_id",
       chatId: "chat_id",
       mcpServerId: "mcp_server_id",
+      resultId: "result_id",
+      executionId: "execution_id",
       ruleId: "rule_id",
       userId: "user_id",
       externalUserIds: "external_user_ids",
