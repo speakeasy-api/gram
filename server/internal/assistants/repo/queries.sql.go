@@ -899,6 +899,37 @@ func (q *Queries) FailAssistantThreadEvent(ctx context.Context, arg FailAssistan
 	return err
 }
 
+const failPendingExecutionEvent = `-- name: FailPendingExecutionEvent :execrows
+UPDATE assistant_thread_events
+SET status = $1, last_error = $2, updated_at = clock_timestamp()
+WHERE id = $3 AND project_id = $4 AND assistant_thread_id = $5
+  AND status = $6 AND deleted IS FALSE
+`
+
+type FailPendingExecutionEventParams struct {
+	FailedStatus  string
+	LastError     pgtype.Text
+	EventID       uuid.UUID
+	ProjectID     uuid.UUID
+	ThreadID      uuid.UUID
+	PendingStatus string
+}
+
+func (q *Queries) FailPendingExecutionEvent(ctx context.Context, arg FailPendingExecutionEventParams) (int64, error) {
+	result, err := q.db.Exec(ctx, failPendingExecutionEvent,
+		arg.FailedStatus,
+		arg.LastError,
+		arg.EventID,
+		arg.ProjectID,
+		arg.ThreadID,
+		arg.PendingStatus,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const findLegacyWakeRequester = `-- name: FindLegacyWakeRequester :many
 SELECT DISTINCT actor_id::text
 FROM audit_logs
@@ -1568,6 +1599,34 @@ func (q *Queries) GetManagedAssistantByProject(ctx context.Context, projectID uu
 		&i.UpdatedAt,
 		&i.DeletedAt,
 	)
+	return i, err
+}
+
+const getNextPendingExecutionEvent = `-- name: GetNextPendingExecutionEvent :one
+SELECT id, event_id, normalized_payload_json
+FROM assistant_thread_events
+WHERE project_id = $1 AND assistant_thread_id = $2
+  AND status = $3 AND deleted IS FALSE
+ORDER BY created_at ASC
+LIMIT 1
+`
+
+type GetNextPendingExecutionEventParams struct {
+	ProjectID     uuid.UUID
+	ThreadID      uuid.UUID
+	PendingStatus string
+}
+
+type GetNextPendingExecutionEventRow struct {
+	ID                    uuid.UUID
+	EventID               string
+	NormalizedPayloadJson []byte
+}
+
+func (q *Queries) GetNextPendingExecutionEvent(ctx context.Context, arg GetNextPendingExecutionEventParams) (GetNextPendingExecutionEventRow, error) {
+	row := q.db.QueryRow(ctx, getNextPendingExecutionEvent, arg.ProjectID, arg.ThreadID, arg.PendingStatus)
+	var i GetNextPendingExecutionEventRow
+	err := row.Scan(&i.ID, &i.EventID, &i.NormalizedPayloadJson)
 	return i, err
 }
 

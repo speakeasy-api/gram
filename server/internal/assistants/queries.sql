@@ -970,6 +970,20 @@ WHERE t.id = @thread_id
 ORDER BY r.created_at DESC
 LIMIT 1;
 
+-- name: FailPendingExecutionEvent :execrows
+UPDATE assistant_thread_events
+SET status = @failed_status, last_error = @last_error, updated_at = clock_timestamp()
+WHERE id = @event_id AND project_id = @project_id AND assistant_thread_id = @thread_id
+  AND status = @pending_status AND deleted IS FALSE;
+
+-- name: GetNextPendingExecutionEvent :one
+SELECT id, event_id, normalized_payload_json
+FROM assistant_thread_events
+WHERE project_id = @project_id AND assistant_thread_id = @thread_id
+  AND status = @pending_status AND deleted IS FALSE
+ORDER BY created_at ASC
+LIMIT 1;
+
 -- name: ClaimNextPendingEvent :one
 WITH next_event AS (
   SELECT e.id, t.skill_set_snapshot

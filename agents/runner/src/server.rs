@@ -128,14 +128,6 @@ async fn thread_turn(
     headers: HeaderMap,
     Json(request): Json<ThreadTurnRequest>,
 ) -> Result<Json<ThreadTurnResponse>, (StatusCode, String)> {
-    // Bind identity from the request before opening the span so the span
-    // processor stamps this turn's own spans too — a warm-pool sandbox
-    // learns its identity from the first turn that carries it. Nothing is
-    // authenticated yet, so bind_request commits only well-formed UUIDs to
-    // the permanent cells; a stray malformed POST leaves them open for the
-    // real first turn.
-    SpanIdentity::bind_request(&host.identity.assistant_id, request.assistant_id.as_deref());
-    SpanIdentity::bind_request(&host.identity.project_id, request.project_id.as_deref());
     let span = tracing::info_span!("thread_turn", thread_id = %thread_id);
     thread_turn_inner(host, thread_id, headers, request)
         .instrument(span)
@@ -151,6 +143,36 @@ async fn thread_turn_inner(
     if thread_id.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "missing thread_id".to_string()));
     }
+
+    // Bootstrap is the existing management API authentication boundary. It
+    // validates the bearer and pins the thread to its assistant/project. Do not
+    // allocate dedup slots, admission locks, actors, or identity cells before it.
+    let bearer = request
+        .auth_token
+        .as_deref()
+        .filter(|token| !token.is_empty())
+        .ok_or_else(|| {
+            (
+                StatusCode::UNAUTHORIZED,
+                "missing invocation token".to_string(),
+            )
+        })?;
+    let tokens = crate::http_layer::TokenRegistry::new(bearer);
+    let bootstrap = host
+        .gram_client
+        .fetch_bootstrap(&thread_id, &tokens)
+        .await
+        .map_err(|error| {
+            let status = match &error {
+                crate::gram_client::GramClientError::Status {
+                    status: 401 | 403, ..
+                } => StatusCode::UNAUTHORIZED,
+                _ => StatusCode::SERVICE_UNAVAILABLE,
+            };
+            (status, "invocation authentication unavailable".to_string())
+        })?;
+    SpanIdentity::bind_request(&host.identity.assistant_id, request.assistant_id.as_deref());
+    SpanIdentity::bind_request(&host.identity.project_id, request.project_id.as_deref());
 
     // Idempotency key is namespaced by thread so two threads sharing an
     // event_id namespace can't collide.
@@ -187,7 +209,7 @@ async fn thread_turn_inner(
     let admission = crate::runtime::admission_lock(&host, &thread_id);
     let _turn_admission = admission.lock().await;
 
-    let thread = ensure_thread(&host, &thread_id, request.auth_token)
+    let thread = ensure_thread(&host, &thread_id, bootstrap, tokens)
         .await
         .map_err(|e| {
             let status = if matches!(e, crate::errors::RunnerError::InvocationBusy) {
@@ -251,4 +273,88 @@ async fn thread_turn_inner(
     // backend's RunTurn activity can mark the event processed without
     // blocking on the turn.
     Ok(Json(ThreadTurnResponse::accepted()))
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn unauthenticated_request_cannot_hold_same_thread_admission() {
+        let started = Arc::new(Notify::new());
+        let release = Arc::new(Notify::new());
+        let app = Router::new().route("/rpc/assistants.getThreadBootstrap", post({
+            let started = started.clone();
+            let release = release.clone();
+            move |headers: HeaderMap| {
+                let started = started.clone();
+                let release = release.clone();
+                async move {
+                    if headers.get("authorization").unwrap() != "Bearer valid" {
+                        started.notify_one();
+                        release.notified().await;
+                        return (StatusCode::UNAUTHORIZED, "invalid");
+                    }
+                    (StatusCode::OK, r#"{"model":"test","completions_url":"http://localhost","chat_id":"chat"}"#)
+                }
+            }
+        }));
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let host = build_host(
+            Arc::new(SpanIdentity::default()),
+            url,
+            "ambient-must-not-authenticate".into(),
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
+        let missing = serde_json::from_str(r#"{"input":"test"}"#).unwrap();
+        let error = thread_turn_inner(host.clone(), "shared".into(), HeaderMap::new(), missing)
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(error.0, StatusCode::UNAUTHORIZED);
+        assert!(host.seen.is_empty());
+        assert!(host.turn_admissions.is_empty());
+        let invalid_host = host.clone();
+        let invalid = tokio::spawn(async move {
+            let request =
+                serde_json::from_str(r#"{"input":"test","auth_token":"invalid"}"#).unwrap();
+            thread_turn_inner(invalid_host, "shared".into(), HeaderMap::new(), request).await
+        });
+        started.notified().await;
+        assert!(host.seen.is_empty());
+        assert!(host.turn_admissions.is_empty());
+        assert!(host.threads.is_empty());
+        // A valid retry of an already accepted event can finish authentication
+        // and dedup while the unauthenticated request remains stuck upstream.
+        host.seen
+            .insert("shared:accepted".into(), Arc::new(Mutex::new(true)));
+        let mut headers = HeaderMap::new();
+        headers.insert(IDEMPOTENCY_HEADER, "accepted".parse().unwrap());
+        let valid = serde_json::from_str(r#"{"input":"test","auth_token":"valid"}"#).unwrap();
+        assert!(
+            tokio::time::timeout(
+                Duration::from_secs(2),
+                thread_turn_inner(host.clone(), "shared".into(), headers, valid)
+            )
+            .await
+            .unwrap()
+            .is_ok()
+        );
+        release.notify_one();
+        assert_eq!(
+            invalid.await.unwrap().err().unwrap().0,
+            StatusCode::UNAUTHORIZED
+        );
+        assert!(host.turn_admissions.is_empty());
+        assert!(host.threads.is_empty());
+        server.abort();
+    }
 }

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -353,6 +354,8 @@ func TestExecutionDenialRecordedOnceWithoutAdmissionRetry(t *testing.T) {
 	require.NoError(t, err)
 	project, assistantID, _, threadID := insertAssistantFixture(t, db)
 	core := newProvisioningCore(t, db)
+	var ensures atomic.Int64
+	core.runtime = testRuntimeBackend{backend: runtimeBackendFlyIO, ensureCalls: &ensures}
 	// Invalid persisted envelope exercises the same permanent-denial boundary
 	// as the explicitly closed AIM-411 admission gate, before any runner call.
 	queries := assistantrepo.New(db)
@@ -363,16 +366,20 @@ func TestExecutionDenialRecordedOnceWithoutAdmissionRetry(t *testing.T) {
 	require.NoError(t, err)
 	_, err = core.AdmitPendingThreads(t.Context(), assistantID)
 	require.NoError(t, err)
-	for range 2 {
+	for range 1 {
 		result, err := core.ProcessThreadEvents(t.Context(), project, threadID)
 		require.NoError(t, err)
 		require.False(t, result.RetryAdmission)
 		row, err := assistantrepo.New(db).GetLatestAssistantThreadEventByThreadID(t.Context(), assistantrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: threadID, ProjectID: project})
 		require.NoError(t, err)
 		require.Equal(t, eventStatusFailed, row.Status)
-		require.EqualValues(t, 1, row.Attempts)
+		require.Zero(t, row.Attempts)
 		require.Contains(t, row.LastError.String, errExecutionDenied.Error())
 	}
+	require.Zero(t, ensures.Load(), "cold denial must not provision a runtime")
+	_, claimable, err := core.claimNextPendingEvent(t.Context(), project, threadID)
+	require.NoError(t, err)
+	require.False(t, claimable, "terminal event must not be claimable again")
 }
 
 func TestExecutionAdmissionGateIsTerminal(t *testing.T) {
@@ -381,6 +388,8 @@ func TestExecutionAdmissionGateIsTerminal(t *testing.T) {
 	require.NoError(t, err)
 	project := newProvisioningProject(t, db, "execution-gate-terminal")
 	core := newProvisioningCore(t, db)
+	var ensures atomic.Int64
+	core.runtime = testRuntimeBackend{backend: runtimeBackendFlyIO, ensureCalls: &ensures}
 	assistant, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Execution gate", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive)
 	require.NoError(t, err)
 	root, err := core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, assistant.ID, assistant.Name)
@@ -396,14 +405,48 @@ func TestExecutionAdmissionGateIsTerminal(t *testing.T) {
 	require.NoError(t, err)
 	_, err = core.AdmitPendingThreads(t.Context(), assistant.ID)
 	require.NoError(t, err)
-	for range 2 {
+	for range 1 {
 		result, err := core.ProcessThreadEvents(t.Context(), project, threadID)
 		require.NoError(t, err)
 		require.False(t, result.RetryAdmission)
 		row, err = assistantrepo.New(db).GetLatestAssistantThreadEventByThreadID(t.Context(), params)
 		require.NoError(t, err)
 		require.Equal(t, eventStatusFailed, row.Status)
-		require.EqualValues(t, 1, row.Attempts)
+		require.Zero(t, row.Attempts)
 		require.Contains(t, row.LastError.String, assistantidentity.ErrExecutionAdmissionRequired.Error())
 	}
+	require.Zero(t, ensures.Load(), "cold denial must not provision a runtime")
+	_, claimable, err := core.claimNextPendingEvent(t.Context(), project, threadID)
+	require.NoError(t, err)
+	require.False(t, claimable, "terminal event must not be claimable again")
+}
+
+func TestColdAdmissionSkipsDeniedEventAndContinuesEligibleEvent(t *testing.T) {
+	t.Parallel()
+	db, err := assistantsInfra.CloneTestDatabase(t, "cold_mixed_execution")
+	require.NoError(t, err)
+	project, assistant, _, thread := insertAssistantFixture(t, db)
+	core := newProvisioningCore(t, db)
+	var ensures atomic.Int64
+	core.runtime = testRuntimeBackend{backend: runtimeBackendFlyIO, ensureCalls: &ensures, ensureErr: errors.New("transient provisioning failure")}
+	q := assistantrepo.New(db)
+	params := assistantrepo.GetLatestAssistantThreadEventByThreadIDParams{ProjectID: project, AssistantThreadID: thread}
+	original, err := q.GetLatestAssistantThreadEventByThreadID(t.Context(), params)
+	require.NoError(t, err)
+	require.NoError(t, q.SetAssistantThreadEventStatus(t.Context(), assistantrepo.SetAssistantThreadEventStatusParams{ID: original.ID, ProjectID: project, Status: eventStatusCompleted, UpdatedAt: original.UpdatedAt}))
+	for _, event := range []struct{ id, payload string }{{"denied", `{"_gram_execution":{"version":99}}`}, {"eligible", `{}`}} {
+		_, err = q.InsertAssistantThreadEvent(t.Context(), assistantrepo.InsertAssistantThreadEventParams{AssistantThreadID: thread, AssistantID: assistant, ProjectID: project, EventID: event.id, CorrelationID: "mixed", Status: eventStatusPending, NormalizedPayloadJson: []byte(event.payload), SourcePayloadJson: []byte(`{}`)})
+		require.NoError(t, err)
+	}
+	_, err = core.AdmitPendingThreads(t.Context(), assistant)
+	require.NoError(t, err)
+	result, err := core.ProcessThreadEvents(t.Context(), project, thread)
+	require.NoError(t, err)
+	require.True(t, result.RetryAdmission, "provisioning errors remain retryable")
+	require.EqualValues(t, 1, ensures.Load(), "eligible event after denial still provisions")
+	latest, err := q.GetLatestAssistantThreadEventByThreadID(t.Context(), params)
+	require.NoError(t, err)
+	require.Equal(t, "eligible", latest.EventID)
+	require.Equal(t, eventStatusPending, latest.Status)
+	require.Zero(t, latest.Attempts, "preflight must not claim or consume eligible event")
 }

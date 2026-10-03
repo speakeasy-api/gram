@@ -2600,6 +2600,44 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		Attempt:           0,
 	})
 
+	// Cold admission must not provision a VM for an event we already know
+	// cannot execute. Keep the execution-time recheck below for lifecycle races.
+	preflightProcessed := false
+	if runtimeRecord.State == runtimeStateStarting && thread.CorrelationID != warmupCorrelationID {
+		for {
+			pending, err := assistantrepo.New(s.db).GetNextPendingExecutionEvent(ctx, assistantrepo.GetNextPendingExecutionEventParams{ProjectID: projectID, ThreadID: threadID, PendingStatus: eventStatusPending})
+			if errors.Is(err, pgx.ErrNoRows) {
+				if err := s.stopRuntimeRecord(ctx, projectID, runtimeRecord.ID, runtimeStateStopped); err != nil {
+					return ProcessThreadEventsResult{}, err
+				}
+				return ProcessThreadEventsResult{AssistantID: assistant.ID, ProcessedAnyEvent: preflightProcessed, WarmUntil: time.Time{}, WarmTTLSeconds: assistant.WarmTTLSeconds, RuntimeActive: false, RetryAdmission: false, BootstrappedRuntime: false}, nil
+			}
+			if err != nil {
+				return ProcessThreadEventsResult{}, fmt.Errorf("read cold execution event: %w", err)
+			}
+			var event assistantThreadEventRecord
+			event.ID = pending.ID
+			event.EventID = pending.EventID
+			event.NormalizedPayloadJSON = pending.NormalizedPayloadJson
+			err = classifyExecutionDispatchError(s.checkExecutionDispatch(ctx, assistant, thread, event))
+			if err == nil {
+				break
+			}
+			if !errors.Is(err, errExecutionDenied) {
+				return ProcessThreadEventsResult{}, err
+			}
+			changed, failErr := assistantrepo.New(s.db).FailPendingExecutionEvent(ctx, assistantrepo.FailPendingExecutionEventParams{EventID: event.ID, ProjectID: projectID, ThreadID: threadID, PendingStatus: eventStatusPending, FailedStatus: eventStatusFailed, LastError: conv.ToPGText(err.Error())})
+			if failErr != nil {
+				return ProcessThreadEventsResult{}, fmt.Errorf("fail pending cold execution: %w", failErr)
+			}
+			if changed == 0 {
+				continue
+			}
+			s.emitAssistantTelemetry(ctx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant cold execution denied", "ERROR", err)
+			preflightProcessed = true
+		}
+	}
+
 	ensureResult, err := s.runtime.Ensure(ctx, runtimeRecord)
 	if err != nil {
 		// Ensure failed: mark the runtime row failed so the coordinator's
@@ -2630,7 +2668,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		bootstrappedRuntime = true
 	}
 
-	processedAny := false
+	processedAny := preflightProcessed
 	for {
 		event, ok, err := s.claimNextPendingEvent(ctx, thread.ProjectID, thread.ID)
 		if err != nil {

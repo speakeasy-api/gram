@@ -74,9 +74,6 @@ pub struct RuntimeHost {
     pub thread_idle_ttl: Duration,
     pub mcp_http_client: reqwest::Client,
     pub spill_root: PathBuf,
-    /// Fallback bearer used only when `/threads/turn` arrives with no
-    /// `auth_token` so the bootstrap fetch still has a credential.
-    pub initial_token: String,
 }
 
 /// Live per-thread state. Concurrent first-turn requests for the same
@@ -145,7 +142,7 @@ impl ConfiguredThread {
 pub async fn build_host(
     identity: Arc<SpanIdentity>,
     server_url: String,
-    initial_token: String,
+    _initial_token: String,
     thread_idle_ttl: Duration,
 ) -> Result<Arc<RuntimeHost>, RunnerError> {
     let mut default_headers = http::HeaderMap::new();
@@ -181,7 +178,6 @@ pub async fn build_host(
         thread_idle_ttl,
         mcp_http_client,
         spill_root,
-        initial_token,
     });
 
     // Background eviction task: walks the threads map and drops any whose
@@ -373,7 +369,8 @@ pub async fn discard_unclaimed(host: &RuntimeHost, thread: &Arc<ConfiguredThread
 pub async fn ensure_thread(
     host: &Arc<RuntimeHost>,
     thread_id: &str,
-    auth_token: Option<String>,
+    bootstrap: ThreadBootstrap,
+    tokens: TokenRegistry,
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
     // A completed invocation can leave only an idle host entry. Rebuild all
     // clients/actor/driver from durable bootstrap, retaining dedup history until
@@ -395,10 +392,6 @@ pub async fn ensure_thread(
         .or_insert_with(|| Arc::new(OnceCell::new()))
         .clone();
 
-    let bearer = auth_token
-        .filter(|t| !t.is_empty())
-        .unwrap_or_else(|| host.initial_token.clone());
-
     let mut initialized = false;
     let thread = cell
         .get_or_try_init(|| async {
@@ -406,12 +399,6 @@ pub async fn ensure_thread(
             // Reap skips busy threads and our own (still-uninitialized)
             // OnceCell, so worst case is a no-op.
             reap_oldest_idle(host);
-            let tokens = TokenRegistry::new(bearer.clone());
-            let bootstrap = host
-                .gram_client
-                .fetch_bootstrap(thread_id, &tokens)
-                .await
-                .map_err(|e| RunnerError::Loop(format!("bootstrap fetch failed: {e}")))?;
             spawn_thread(host, thread_id.to_string(), bootstrap, tokens).await
         })
         .await?;
@@ -935,6 +922,13 @@ mod tests {
     use super::*;
     use crate::http_layer::{TokenRegistry, build_bootstrap_client};
 
+    fn test_bootstrap() -> ThreadBootstrap {
+        serde_json::from_str(
+            r#"{"model":"test","completions_url":"http://localhost","chat_id":"chat"}"#,
+        )
+        .unwrap()
+    }
+
     fn empty_host() -> Arc<RuntimeHost> {
         let http_client = reqwest::Client::new();
         let gram_client = GramBootstrapClient::new(
@@ -956,7 +950,6 @@ mod tests {
                 .build()
                 .expect("MCP HTTP client should build"),
             spill_root: PathBuf::from("/tmp/runtime-test-spill"),
-            initial_token: String::new(),
         })
     }
 
@@ -1041,8 +1034,18 @@ mod tests {
         insert_thread(&host, "shared-thread", None);
         let original = lookup_thread(&host, "shared-thread").unwrap();
         let (a, b) = tokio::join!(
-            ensure_thread(&host, "shared-thread", Some("user-a".into())),
-            ensure_thread(&host, "shared-thread", Some("user-b".into())),
+            ensure_thread(
+                &host,
+                "shared-thread",
+                test_bootstrap(),
+                TokenRegistry::new("user-a")
+            ),
+            ensure_thread(
+                &host,
+                "shared-thread",
+                test_bootstrap(),
+                TokenRegistry::new("user-b")
+            ),
         );
         assert!(a.is_err());
         assert!(b.is_err());

@@ -2406,6 +2406,7 @@ type testRuntimeBackend struct {
 	backend           string
 	ensureResult      RuntimeBackendEnsureResult
 	ensureErr         error
+	ensureCalls       *atomic.Int64
 	runTurnErr        error
 	runTurnMCPServers *atomic.Pointer[[]runtimeMCPServer]
 	runTurnPrompt     *atomic.Pointer[string]
@@ -2443,6 +2444,9 @@ func (t testRuntimeBackend) ServerURL() *url.URL {
 }
 
 func (t testRuntimeBackend) Ensure(context.Context, assistantRuntimeRecord) (RuntimeBackendEnsureResult, error) {
+	if t.ensureCalls != nil {
+		t.ensureCalls.Add(1)
+	}
 	if t.ensureErr != nil {
 		return RuntimeBackendEnsureResult{}, t.ensureErr
 	}
