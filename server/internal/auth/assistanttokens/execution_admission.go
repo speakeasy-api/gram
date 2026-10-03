@@ -81,6 +81,8 @@ func (m *Manager) executionContext(ctx context.Context, e assistantidentity.Exec
 		return ctx, nil, oops.C(oops.CodeUnauthorized)
 	}
 	ctx = context.WithValue(ctx, executionChatKey{}, thread.ChatID)
+	ctx = context.WithValue(ctx, executionEnvelopeKey{}, e)
+	ctx = contextvalues.WithAssistantInvocationEvent(ctx, e.EventID)
 	org, err := m.orgs.GetOrganizationMetadata(ctx, e.Identity.OrganizationID)
 	if err != nil {
 		return ctx, nil, fmt.Errorf("authorize assistant execution: %w", err)
@@ -96,6 +98,7 @@ func (m *Manager) executionContext(ctx context.Context, e assistantidentity.Exec
 // token validator. Instead, the concrete server resource is authorized using
 // the existing workload ceiling/live-agent admission and subsequent tool checks.
 func (m *Manager) AuthorizeBusiness(ctx context.Context, raw string, resource uuid.UUID, restriction BusinessPolicyRestriction) (context.Context, error) {
+	requestCtx := ctx
 	if resource == uuid.Nil || m.authz == nil {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
@@ -123,6 +126,17 @@ func (m *Manager) AuthorizeBusiness(ctx context.Context, raw string, resource uu
 	if err != nil {
 		return ctx, fmt.Errorf("authorize assistant business execution: %w", err)
 	}
+	if e.Mode == assistantidentity.ExecutionWorkloadHuman {
+		// v1 did not capture mapping provenance or delegate human credentials.
+		if e.Version < 2 {
+			return ctx, oops.C(oops.CodeForbidden)
+		}
+		grants, err := assistantidentity.HumanBusinessPolicy(ctx, m.executionDB, *e)
+		if err != nil {
+			return ctx, fmt.Errorf("authorize invoker business policy: %w", err)
+		}
+		ctx = authz.RestrictContext(ctx, grants)
+	}
 	// A trusted server hook may only intersect an additional policy. It cannot
 	// choose another principal, credential, resource or platform route.
 	if restriction != nil {
@@ -135,6 +149,10 @@ func (m *Manager) AuthorizeBusiness(ctx context.Context, raw string, resource uu
 	if err := m.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, resource.String(), e.Identity.ProjectID.String())); err != nil {
 		return ctx, fmt.Errorf("authorize assistant business execution: %w", err)
 	}
+	ctx = contextvalues.WithAssistantBusinessInvocation(ctx, e.Identity.OrganizationID, e.Identity.ProjectID, e.HumanUserID, func() error {
+		_, err := m.AuthorizeBusiness(requestCtx, raw, resource, restriction)
+		return err
+	})
 	return ctx, nil
 }
 
@@ -187,4 +205,26 @@ func executionRuntimeClaims(e assistantidentity.Execution, userID string) *Claim
 	claims.ThreadID = e.ThreadID.String()
 	claims.UserID = userID
 	return &claims
+}
+
+// BusinessExecution is server-validated invocation metadata. Credential selection
+// reads it only after AuthorizeBusiness; callers cannot supply this context key.
+type executionEnvelopeKey struct{}
+
+func BusinessExecution(ctx context.Context) (assistantidentity.Execution, bool) {
+	e, ok := ctx.Value(executionEnvelopeKey{}).(assistantidentity.Execution)
+	return e, ok
+}
+
+// RevalidateBusinessExecution checks the originally admitted resource again
+// after an upstream refresh, without reselecting a caller or credential.
+func RevalidateBusinessExecution(ctx context.Context) error {
+	invocation, ok := contextvalues.AssistantBusinessInvocationFromContext(ctx)
+	if !ok {
+		return assistantidentity.ErrInvalidIdentity
+	}
+	if err := invocation.Revalidate(); err != nil {
+		return fmt.Errorf("revalidate execution business context: %w", err)
+	}
+	return nil
 }

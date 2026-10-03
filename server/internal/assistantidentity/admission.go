@@ -39,6 +39,9 @@ func (s *Service) AdmitModel(ctx context.Context, db DB, e Execution) error {
 		return ErrInvalidIdentity
 	}
 	if e.Mode == ExecutionWorkloadHuman {
+		if err := ValidateSlackDelegation(ctx, tx, e); err != nil {
+			return err
+		}
 		active, err := orgrepo.New(tx).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{OrganizationID: e.Identity.OrganizationID, UserID: e.HumanUserID})
 		if err != nil {
 			return fmt.Errorf("load human membership: %w", err)

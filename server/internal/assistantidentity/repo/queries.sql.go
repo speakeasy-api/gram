@@ -431,6 +431,35 @@ func (q *Queries) FixtureDeleteTrigger(ctx context.Context, arg FixtureDeleteTri
 	return err
 }
 
+const fixtureInvalidateSlackExecutionMembership = `-- name: FixtureInvalidateSlackExecutionMembership :exec
+UPDATE slack_directory_memberships SET status = $1, member_type = $2,
+ mapping_revision = $3, mapping_conflict_reason = $4
+WHERE organization_id = $5 AND slack_team_id = $6 AND slack_user_id = $7
+`
+
+type FixtureInvalidateSlackExecutionMembershipParams struct {
+	Status          string
+	MemberType      string
+	MappingRevision int64
+	ConflictReason  pgtype.Text
+	OrganizationID  string
+	SlackTeamID     string
+	SlackUserID     string
+}
+
+func (q *Queries) FixtureInvalidateSlackExecutionMembership(ctx context.Context, arg FixtureInvalidateSlackExecutionMembershipParams) error {
+	_, err := q.db.Exec(ctx, fixtureInvalidateSlackExecutionMembership,
+		arg.Status,
+		arg.MemberType,
+		arg.MappingRevision,
+		arg.ConflictReason,
+		arg.OrganizationID,
+		arg.SlackTeamID,
+		arg.SlackUserID,
+	)
+	return err
+}
+
 const fixtureLatchOwner = `-- name: FixtureLatchOwner :exec
 UPDATE agents SET owner_reassignment_required_at=clock_timestamp(),owner_reassignment_reason='test' WHERE organization_id = $1 AND id = $2
 `
@@ -558,6 +587,39 @@ func (q *Queries) FixtureSetTriggerStatus(ctx context.Context, arg FixtureSetTri
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.TriggerID,
+	)
+	return err
+}
+
+const fixtureSlackExecutionMapping = `-- name: FixtureSlackExecutionMapping :exec
+WITH connection AS (
+ INSERT INTO slack_directory_connections (organization_id, slack_team_id, generation, last_full_sync_generation, last_full_sync_succeeded_at)
+ VALUES ($2, $3, $4, $4, statement_timestamp())
+ ON CONFLICT (organization_id, slack_team_id) DO UPDATE SET organization_id = EXCLUDED.organization_id
+ RETURNING organization_id, slack_team_id, last_full_sync_succeeded_at
+), membership AS (
+ INSERT INTO slack_directory_memberships (organization_id, slack_team_id, slack_user_id, status, member_type, mapping_revision, last_seen_at)
+ SELECT organization_id, slack_team_id, $5, 'active', 'person', 1, last_full_sync_succeeded_at FROM connection RETURNING organization_id, slack_team_id, slack_user_id
+)
+INSERT INTO slack_identity_mappings (organization_id, slack_team_id, slack_user_id, user_id)
+SELECT organization_id, slack_team_id, slack_user_id, $1 FROM membership
+`
+
+type FixtureSlackExecutionMappingParams struct {
+	UserID         string
+	OrganizationID string
+	SlackTeamID    string
+	Generation     uuid.UUID
+	SlackUserID    string
+}
+
+func (q *Queries) FixtureSlackExecutionMapping(ctx context.Context, arg FixtureSlackExecutionMappingParams) error {
+	_, err := q.db.Exec(ctx, fixtureSlackExecutionMapping,
+		arg.UserID,
+		arg.OrganizationID,
+		arg.SlackTeamID,
+		arg.Generation,
+		arg.SlackUserID,
 	)
 	return err
 }
@@ -753,6 +815,58 @@ func (q *Queries) GetPlatformIssuer(ctx context.Context, arg GetPlatformIssuerPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const getSlackExecutionMapping = `-- name: GetSlackExecutionMapping :one
+SELECT m.id AS membership_id, m.mapping_revision, c.generation AS connection_generation,
+  im.id AS mapping_id, im.user_id,
+  coalesce(c.disconnected_at IS NULL AND c.last_full_sync_generation = c.generation
+    AND m.last_seen_at = c.last_full_sync_succeeded_at
+    AND m.status = 'active' AND m.member_type = 'person' AND m.mapping_conflict_reason IS NULL
+    AND NOT EXISTS (SELECT 1 FROM slack_identity_mappings conflict WHERE conflict.organization_id = im.organization_id AND conflict.slack_team_id = im.slack_team_id AND conflict.user_id = im.user_id AND conflict.slack_user_id <> im.slack_user_id AND conflict.revoked_at IS NULL)
+    AND im.revoked_at IS NULL AND u.id IS NOT NULL AND u.deleted_at IS NULL AND u.workos_deleted_at IS NULL
+    AND our.user_id IS NOT NULL AND NOT our.deleted AND our.deleted_at IS NULL, false)::boolean AS eligible
+FROM slack_directory_memberships m
+JOIN slack_directory_connections c ON c.organization_id = m.organization_id AND c.slack_team_id = m.slack_team_id
+JOIN LATERAL (
+ SELECT h.id, h.organization_id, h.slack_team_id, h.slack_user_id, h.user_id, h.created_at, h.updated_at, h.revoked_at FROM slack_identity_mappings h
+ WHERE h.organization_id = m.organization_id AND h.slack_team_id = m.slack_team_id AND h.slack_user_id = m.slack_user_id
+ ORDER BY h.created_at DESC, h.id DESC LIMIT 1
+) im ON true
+LEFT JOIN users u ON u.id = im.user_id
+LEFT JOIN organization_user_relationships our ON our.organization_id = m.organization_id AND our.user_id = im.user_id
+WHERE m.organization_id = $1 AND m.slack_team_id = $2 AND m.slack_user_id = $3
+`
+
+type GetSlackExecutionMappingParams struct {
+	OrganizationID string
+	SlackTeamID    string
+	SlackUserID    string
+}
+
+type GetSlackExecutionMappingRow struct {
+	MembershipID         uuid.UUID
+	MappingRevision      int64
+	ConnectionGeneration uuid.UUID
+	MappingID            uuid.UUID
+	UserID               string
+	Eligible             bool
+}
+
+// Return known history even when no mapping is eligible. Absence alone permits
+// workload selection; revoked or ineligible history must never become absence.
+func (q *Queries) GetSlackExecutionMapping(ctx context.Context, arg GetSlackExecutionMappingParams) (GetSlackExecutionMappingRow, error) {
+	row := q.db.QueryRow(ctx, getSlackExecutionMapping, arg.OrganizationID, arg.SlackTeamID, arg.SlackUserID)
+	var i GetSlackExecutionMappingRow
+	err := row.Scan(
+		&i.MembershipID,
+		&i.MappingRevision,
+		&i.ConnectionGeneration,
+		&i.MappingID,
+		&i.UserID,
+		&i.Eligible,
+	)
+	return i, err
 }
 
 const getTrigger = `-- name: GetTrigger :one
@@ -1238,6 +1352,23 @@ type RevokeDedicatedAssignmentsParams struct {
 func (q *Queries) RevokeDedicatedAssignments(ctx context.Context, arg RevokeDedicatedAssignmentsParams) error {
 	_, err := q.db.Exec(ctx, revokeDedicatedAssignments, arg.OrganizationID, arg.AgentID)
 	return err
+}
+
+const slackExecutionWorkspaceDisconnected = `-- name: SlackExecutionWorkspaceDisconnected :one
+SELECT (disconnected_at IS NOT NULL)::boolean AS disconnected
+FROM slack_directory_connections WHERE organization_id = $1 AND slack_team_id = $2
+`
+
+type SlackExecutionWorkspaceDisconnectedParams struct {
+	OrganizationID string
+	SlackTeamID    string
+}
+
+func (q *Queries) SlackExecutionWorkspaceDisconnected(ctx context.Context, arg SlackExecutionWorkspaceDisconnectedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, slackExecutionWorkspaceDisconnected, arg.OrganizationID, arg.SlackTeamID)
+	var disconnected bool
+	err := row.Scan(&disconnected)
+	return disconnected, err
 }
 
 const tombstoneAssistantBinding = `-- name: TombstoneAssistantBinding :exec

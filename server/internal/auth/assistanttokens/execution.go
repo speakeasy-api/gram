@@ -94,6 +94,9 @@ func (m *Manager) validateExecutionAuthority(ctx context.Context, e assistantide
 	}
 
 	if e.HumanUserID != "" {
+		if err := assistantidentity.ValidateSlackDelegation(ctx, m.executionDB, e); err != nil {
+			return fmt.Errorf("validate Slack execution: %w", err)
+		}
 		active, err := m.orgs.HasActiveOrganizationUser(ctx, organizationsrepo.HasActiveOrganizationUserParams{OrganizationID: e.Identity.OrganizationID, UserID: e.HumanUserID})
 		if err != nil {
 			return fmt.Errorf("assistant execution: %w", err)

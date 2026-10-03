@@ -93,9 +93,29 @@ func (s *ServiceCore) captureExecution(ctx context.Context, assistant assistantR
 	var event assistantThreadEventRecord
 	event.NormalizedPayloadJSON = clean
 	event.TriggerInstanceID = trigger
-	mode, human, fallback, err := selectExecutionActor(ctx, assistant, source, event, slackrepo.New(s.db).ResolveSlackMappingUser, assistantrepo.New(s.db).FindLegacyWakeRequester)
-	if err != nil {
-		return nil, fmt.Errorf("assistant execution: %w", err)
+	mode, human, fallback := assistantidentity.ExecutionWorkload, "", ""
+	if source != sourceKindSlack {
+		mode, human, fallback, err = selectExecutionActor(ctx, assistant, source, event, slackrepo.New(s.db).ResolveSlackMappingUser, assistantrepo.New(s.db).FindLegacyWakeRequester)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var delegation *assistantidentity.SlackDelegation
+	if source == sourceKindSlack {
+		var slack slackEventPayload
+		if err := json.Unmarshal(clean, &slack); err != nil {
+			return nil, fmt.Errorf("decode Slack execution source: %w", err)
+		}
+		mode, human, fallback = assistantidentity.ExecutionWorkload, "", "slack_non_user_event"
+		if slack.BotID == "" && slack.AppID == "" && slack.Subtype != "bot_message" {
+			delegation, human, fallback, err = assistantidentity.CaptureSlackDelegation(ctx, s.db, assistant.OrganizationID, slack.TeamID, slack.UserID)
+			if err != nil {
+				return nil, fmt.Errorf("capture Slack delegation: %w", err)
+			}
+			if delegation != nil {
+				mode = assistantidentity.ExecutionWorkloadHuman
+			}
+		}
 	}
 	// Capture identity now; independently recheck selected-user eligibility at
 	// token issuance and dispatch. Never reselect an owner after a denial.
@@ -103,7 +123,7 @@ func (s *ServiceCore) captureExecution(ctx context.Context, assistant assistantR
 	if err != nil {
 		return nil, fmt.Errorf("assistant execution: %w", err)
 	}
-	execution := assistantidentity.Execution{ContinuationEventID: "", Version: assistantidentity.ExecutionVersion, Identity: *resolved.Identity, Issuer: s.identities.Issuer(), ThreadID: threadID, EventID: eventID, Mode: mode, HumanUserID: human, FallbackReason: fallback, Ceiling: ceiling}
+	execution := assistantidentity.Execution{Slack: delegation, ContinuationEventID: "", Version: assistantidentity.ExecutionVersion, Identity: *resolved.Identity, Issuer: s.identities.Issuer(), ThreadID: threadID, EventID: eventID, Mode: mode, HumanUserID: human, FallbackReason: fallback, Ceiling: ceiling}
 	if err := execution.Check(); err != nil {
 		return nil, fmt.Errorf("assistant execution: %w", err)
 	}

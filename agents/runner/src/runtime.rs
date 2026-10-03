@@ -1490,7 +1490,11 @@ mod tests {
         admitted.await.unwrap();
         assert!(accepted.load(Ordering::Acquire));
         assert_eq!(second.0, "token-b");
-        assert_eq!(second.1.last().unwrap(), "message-b");
+        assert_eq!(
+            second.1,
+            vec!["message-a".to_string(), "message-b".to_string()],
+            "changing the opaque invoker token preserves shared conversation history"
+        );
         finish.add_permits(1);
         drop(tx);
         assert_eq!(

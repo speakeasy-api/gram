@@ -67,10 +67,13 @@ func TestExecutionAuthorizationLivePolicyAndPlatformIsolation(t *testing.T) {
 	require.NoError(t, q.FixtureAttachMCPServer(t.Context(), identityrepo.FixtureAttachMCPServerParams{AssistantID: assistant.ID, ServerID: server, ProjectID: project}))
 	businessGrant := authz.NewGrant(authz.ScopeMCPConnect, server.String())
 	putExecutionTestGrant(t, db, principal, businessGrant)
+	putExecutionTestGrant(t, db, urn.NewPrincipal(urn.PrincipalTypeUser, "user-2"), businessGrant)
 	engine := authz.NewEngine(testenv.NewLogger(t), db, authztest.ChallengeLoggingAlwaysDisabled, nil, authz.EngineOpts{AdmitWorkloadSession: runtimepolicy.AdmitWorkloadSession})
 	manager := assistanttokens.New("test-secret", db, engine)
 	manager.ConfigureExecutionIdentity(executionTestIssuer(t), testIdentityService)
 	core.assistantTokens = manager
+	putExecutionTestGrant(t, db, urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"), businessGrant)
+	exerciseInvocationCredentials(t, db, core, manager, assistant, root, thread, server)
 	var dispatched atomic.Pointer[string]
 	core.runtime = testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnToken: &dispatched}
 	for _, mode := range []string{sourceKindCron, sourceKindDashboard} {
@@ -101,6 +104,9 @@ func TestExecutionAuthorizationLivePolicyAndPlatformIsolation(t *testing.T) {
 			require.Error(t, err, "execution audience is not legacy assistant audience")
 			bctx, err := manager.AuthorizeBusiness(t.Context(), token, server, nil)
 			require.NoError(t, err)
+			require.NoError(t, assistanttokens.RevalidateBusinessExecution(bctx))
+			_, err = manager.AuthorizeBusiness(bctx, token, server, nil)
+			require.NoError(t, err, "nested MCP routing preserves independent business restrictions")
 			require.NoError(t, engine.Require(bctx, authz.MCPToolCallCheck(server.String(), authz.MCPToolCallDimensions{Tool: "read", ProjectID: project.String()})))
 			_, err = manager.AuthorizeBusiness(t.Context(), token, uuid.New(), nil)
 			require.Error(t, err)
@@ -139,6 +145,11 @@ func TestExecutionAuthorizationLivePolicyAndPlatformIsolation(t *testing.T) {
 			_, err = manager.AuthorizeBusiness(t.Context(), token, expandedResource, nil)
 			require.Error(t, err, "live policy expansion cannot widen captured business ceiling")
 			if mode == sourceKindDashboard {
+				deleteExecutionTestScope(t, db, urn.NewPrincipal(urn.PrincipalTypeUser, "user-2"), authz.ScopeMCPConnect)
+				_, err = manager.AuthorizeBusiness(t.Context(), token, server, nil)
+				require.Error(t, err, "live human revocation denies despite intact agent grants")
+				require.Error(t, assistanttokens.RevalidateBusinessExecution(bctx), "refresh revalidation uses live human policy")
+				putExecutionTestGrant(t, db, urn.NewPrincipal(urn.PrincipalTypeUser, "user-2"), businessGrant)
 				deleteExecutionTestScope(t, db, urn.NewPrincipal(urn.PrincipalTypeUser, "user-2"), authz.ScopeProjectWrite)
 				_, _, err = manager.AuthorizeRuntime(t.Context(), token)
 				require.Error(t, err)

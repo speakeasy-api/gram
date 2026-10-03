@@ -45,6 +45,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -217,6 +218,11 @@ func (m *ChallengeManager) resolveUpstreamToken(
 ) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
 
+	if invocation, ok := contextvalues.AssistantBusinessInvocationFromContext(ctx); ok && invocation.UserID != "" {
+		// Delegated credentials require the tenant-scoped resolver and its
+		// explicit selected-source and post-refresh revalidation checks.
+		return zero, ErrInvalidAuthorizationRequest
+	}
 	if _, attached, err := remoteSessionCallerPrincipal(ctx, subject); err != nil {
 		return zero, err
 	} else if attached {

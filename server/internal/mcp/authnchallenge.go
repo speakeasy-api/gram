@@ -918,6 +918,9 @@ func (s *Service) authenticateIssuerGate(
 			return ctx, nil, nil, rejectExecution(oops.C(oops.CodeUnauthorized))
 		}
 		selected := urn.NewWorkloadSubject(workloadIssuer, workloadSubject)
+		if execution, ok := assistanttokens.BusinessExecution(executionCtx); ok && execution.HumanUserID != "" {
+			selected = urn.NewUserSubject(execution.HumanUserID)
+		}
 		newCtx, subject = s.identityValidator.StampAssistant(executionCtx), &selected
 	}
 	if subject == nil {

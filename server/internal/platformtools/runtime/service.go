@@ -152,6 +152,7 @@ func TriggerExternalTools(db *pgxpool.Pool, app *bgtriggers.App, auditLogger *au
 		{Executor: platformtriggers.NewAssistantListTriggersTool(db, app), RequiredFeature: ""},
 		{Executor: platformtriggers.NewAssistantConfigureTriggerTool(db, app, auditLogger), RequiredFeature: ""},
 		{Executor: platformtriggers.NewUnsubscribeThreadTool(app), RequiredFeature: ""},
+		{Executor: platformtriggers.NewExecutionDeniedReplyTool(app), RequiredFeature: ""},
 	}
 }
 
