@@ -76,12 +76,14 @@ function PayloadCode({
   payload,
   result,
   siblings,
+  siblingsComplete,
   revealed,
   onSelect,
 }: {
   payload: string;
   result: RiskResult;
   siblings: RiskResult[];
+  siblingsComplete: boolean;
   revealed: boolean;
   onSelect: (id: string) => void;
 }): JSX.Element {
@@ -92,7 +94,7 @@ function PayloadCode({
       ),
     [result, siblings],
   );
-  const ranges = useMemo(
+  const { ranges, complete } = useMemo(
     () => buildSpanRanges(payload, samePhase.flatMap(findingByteSpans)),
     [payload, samePhase],
   );
@@ -104,6 +106,11 @@ function PayloadCode({
     (id: string) => samePhase.find((s) => s.id === id)?.matchRedacted,
     [samePhase],
   );
+
+  // Masking needs every finding's span; without them, stay on the match view.
+  if (!revealed && !(complete && siblingsComplete)) {
+    return <MatchFallback result={result} />;
+  }
 
   return (
     <div className="bg-foreground dark:bg-card overflow-x-auto py-3.5 font-mono text-xs leading-[1.7]">
@@ -181,6 +188,7 @@ function EvidenceNotStoredBlock({
 function PayloadBody({
   result,
   siblings,
+  siblingsComplete,
   revealed,
   canReveal,
   payload,
@@ -188,6 +196,7 @@ function PayloadBody({
 }: {
   result: RiskResult;
   siblings: RiskResult[];
+  siblingsComplete: boolean;
   revealed: boolean;
   canReveal: boolean;
   payload: ExecutionPayload;
@@ -203,6 +212,7 @@ function PayloadBody({
         payload={payload.data.payload}
         result={result}
         siblings={siblings}
+        siblingsComplete={siblingsComplete}
         revealed={revealed}
         onSelect={onSelect}
       />
@@ -222,6 +232,7 @@ function PayloadBody({
 export function FindingPayload({
   result,
   siblings,
+  siblingsComplete,
   revealed,
   canReveal,
   payload,
@@ -230,6 +241,8 @@ export function FindingPayload({
 }: {
   result: RiskResult;
   siblings: RiskResult[];
+  /** Every finding in the call is loaded, so the masked view can trust it. */
+  siblingsComplete: boolean;
   revealed: boolean;
   canReveal: boolean;
   payload: ExecutionPayload;
@@ -256,6 +269,7 @@ export function FindingPayload({
       <PayloadBody
         result={result}
         siblings={siblings}
+        siblingsComplete={siblingsComplete}
         revealed={revealed}
         canReveal={canReveal}
         payload={payload}

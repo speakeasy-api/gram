@@ -62,22 +62,28 @@ export function findingByteSpans(result: RiskResult): ByteSpan[] {
 
 /**
  * Converts byte spans to merged string-index ranges over `payload`. Spans that
- * fall outside the payload or are empty are dropped: some sources index a
- * different string than the one stored.
+ * fall outside the payload are dropped and reported through `complete`: some
+ * sources index a different string than the one stored, so a masked view must
+ * not trust the payload once a span is lost. Empty spans are dropped silently.
  */
 export function buildSpanRanges(
   payload: string,
   spans: readonly ByteSpan[],
-): SpanRange[] {
+): { ranges: SpanRange[]; complete: boolean } {
   const index = byteOffsetsToIndices(
     payload,
     spans.flatMap((s) => [s.startByte, s.endByte]),
   );
+  let complete = true;
   const mapped: SpanRange[] = [];
   for (const span of spans) {
+    if (span.endByte === span.startByte) continue;
     const start = index.get(span.startByte);
     const end = index.get(span.endByte);
-    if (start === undefined || end === undefined || end <= start) continue;
+    if (start === undefined || end === undefined || end <= start) {
+      complete = false;
+      continue;
+    }
     mapped.push({ start, end, ids: [span.id] });
   }
   mapped.sort((a, b) => a.start - b.start || a.end - b.end);
@@ -94,7 +100,7 @@ export function buildSpanRanges(
       merged.push({ ...range, ids: [...range.ids] });
     }
   }
-  return merged;
+  return { ranges: merged, complete };
 }
 
 export type PayloadTokenKind = "key" | "str" | "num" | "punc" | "text";
@@ -218,6 +224,8 @@ export function layoutPayload(
 ): PayloadLine[] {
   const tokens = isJsonPayload(payload) ? tokenizeJson(payload) : null;
   const lines = tokens ? jsonLines(payload, tokens) : textLines(payload);
+  // A range opening in reflowed whitespace opens at its first emitted segment.
+  const opened = new Set<number>();
   return lines.map((pieces) => {
     const out: PayloadSegment[] = [];
     for (const piece of pieces) {
@@ -237,8 +245,9 @@ export function layoutPayload(
           text: payload.slice(s, e),
           kind: piece.kind,
           range: ri,
-          rangeStart: s === r.start,
+          rangeStart: !opened.has(ri),
         });
+        opened.add(ri);
         pos = e;
       });
       if (pos < piece.end) {

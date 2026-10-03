@@ -47,24 +47,33 @@ describe("buildSpanRanges", () => {
   it("maps byte spans after multibyte text to the right substring", () => {
     const payload = '{"note":"café ☕","key":"AKIA123"}';
     const startByte = bytes(payload.slice(0, payload.indexOf("AKIA")));
-    const ranges = buildSpanRanges(payload, [
+    const { ranges, complete } = buildSpanRanges(payload, [
       { id: "f1", startByte, endByte: startByte + 7 },
     ]);
+    expect(complete).toBe(true);
     expect(ranges).toHaveLength(1);
     expect(payload.slice(ranges[0]!.start, ranges[0]!.end)).toBe("AKIA123");
   });
 
   it("skips spans outside the payload and empty spans", () => {
-    const ranges = buildSpanRanges("short", [
+    const { ranges, complete } = buildSpanRanges("short", [
       { id: "a", startByte: 2, endByte: 40 },
       { id: "b", startByte: 3, endByte: 3 },
       { id: "c", startByte: 0, endByte: 2 },
     ]);
     expect(ranges).toEqual([{ start: 0, end: 2, ids: ["c"] }]);
+    expect(complete).toBe(false);
+  });
+
+  it("stays complete when only empty spans are dropped", () => {
+    const { complete } = buildSpanRanges("short", [
+      { id: "b", startByte: 3, endByte: 3 },
+    ]);
+    expect(complete).toBe(true);
   });
 
   it("merges overlapping spans and keeps every finding id", () => {
-    const ranges = buildSpanRanges("0123456789", [
+    const { ranges } = buildSpanRanges("0123456789", [
       { id: "a", startByte: 1, endByte: 5 },
       { id: "b", startByte: 3, endByte: 7 },
       { id: "c", startByte: 7, endByte: 9 },
@@ -132,6 +141,17 @@ describe("layoutPayload", () => {
     ]);
     const hit = lines.flat().find((s) => s.range === 0);
     expect(hit).toMatchObject({ text: "me@x.io", rangeStart: true });
+  });
+
+  it("opens a range that starts in reflowed JSON whitespace", () => {
+    const payload = '{"a": "x"}';
+    const start = payload.indexOf(" ");
+    const lines = layoutPayload(payload, [
+      { start, end: payload.indexOf("}"), ids: ["f1"] },
+    ]);
+    const hits = lines.flat().filter((s) => s.range === 0);
+    expect(hits[0]).toMatchObject({ text: '"x"', rangeStart: true });
+    expect(hits.filter((s) => s.rangeStart)).toHaveLength(1);
   });
 
   it("renders non-JSON as plain lines and splits a range across them", () => {
