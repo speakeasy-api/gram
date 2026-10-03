@@ -1926,6 +1926,7 @@ const listAssistantIdentityRoots = `-- name: ListAssistantIdentityRoots :many
 SELECT t.id, t.definition_slug, t.status, COALESCE(b.generation, 0)::bigint AS generation,
  CASE WHEN b.id IS NULL THEN 'missing'
  WHEN b.deleted OR b.trigger_id IS NULL OR b.project_ref_id IS NULL
+   OR b.subject <> ('assistant-trigger:' || b.original_trigger_id::text)
    OR NOT EXISTS (SELECT 1 FROM projects p WHERE p.organization_id = t.organization_id AND p.id = b.project_ref_id AND NOT p.deleted)
    OR b.assistant_binding_id IS NULL OR b.workload_issuer_id IS NULL
    OR ab.deleted OR ab.agent_id IS NULL OR b.assistant_binding_generation <> ab.generation

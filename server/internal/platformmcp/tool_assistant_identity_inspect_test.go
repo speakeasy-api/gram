@@ -11,6 +11,7 @@ import (
 
 	genassistants "github.com/speakeasy-api/gram/server/gen/assistants"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -36,6 +37,7 @@ func TestAssistantIdentityInspectionContract(t *testing.T) {
 	require.Equal(t, ExternalAuthorizationMember, a.Meta.Authorization)
 	require.Equal(t, externalOnly, a.Meta.Audiences)
 	require.Equal(t, ProjectScopeExplicit, a.Meta.ProjectScope)
+	require.Equal(t, discoveryProjectRead, a.Meta.DiscoveryScopes)
 	require.Contains(t, a.Description, "project:read")
 	require.Contains(t, a.Description, "OAuth consent")
 	require.NotContains(t, string(a.InputSchema), "token")
@@ -53,6 +55,8 @@ func TestAssistantIdentityInspectionUsesExactAuthorizedReadAndSafeProjection(t *
 	project, id := uuid.New(), uuid.New()
 	principal := Principal{OrganizationID: "org-example", UserID: "user-example"}
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID})
+	grants := []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, project.String())}
+	ctx = authz.GrantsToContext(ctx, grants)
 	calls := 0
 	service := &assistantIdentityService{
 		resolveProject: func(_ context.Context, org string, in FindMCPInput) (ResolvedProject, error) {
@@ -68,6 +72,9 @@ func TestAssistantIdentityInspectionUsesExactAuthorizedReadAndSafeProjection(t *
 			ac, ok := contextvalues.GetAuthContext(ctx)
 			require.True(t, ok)
 			require.Equal(t, project, *ac.ProjectID)
+			gotGrants, ok := authz.GrantsFromContext(ctx)
+			require.True(t, ok)
+			require.Equal(t, grants, gotGrants)
 			require.Equal(t, id.String(), p.ID)
 			return &types.Assistant{ID: id.String(), ProjectID: project.String(), Instructions: "private-system-prompt", IdentityDiagnostics: &types.AssistantIdentityDiagnostics{Health: "suspended", Bindings: []*types.AssistantIdentityBinding{}}}, nil
 		}},
