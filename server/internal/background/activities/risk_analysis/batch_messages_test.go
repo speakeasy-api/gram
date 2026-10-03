@@ -159,7 +159,6 @@ func TestRecordBatchResultsContinuesAfterPublishFailure(t *testing.T) {
 		gitleaksScanner:        nil,
 		stokenCodec:            stokens.NewCodec(),
 		piiScanner:             nil,
-		promptInjectionScanner: nil,
 		shadowMCPScanner:       nil,
 		judge:                  nil,
 		flags:                  nil,
