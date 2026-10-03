@@ -577,26 +577,31 @@ const (
 	// remote session's access token.
 	RemoteSessionAccessExpiresAtKey = attribute.Key("gram.remote_session.access_expires_at")
 
-	RiskPolicyCountKey             = attribute.Key("gram.risk.policy_count")
-	RiskPolicyIDKey                = attribute.Key("gram.risk.policy_id")
-	RiskPolicyNameKey              = attribute.Key("gram.risk.policy_name")
-	RiskPolicyTypeKey              = attribute.Key("gram.risk.policy_type")
-	RiskMessageTypeKey             = attribute.Key("gram.risk.message_type")
-	RiskRuleIDKey                  = attribute.Key("gram.risk.rule_id")
-	RiskExclusionIDKey             = attribute.Key("gram.risk.exclusion_id")
-	RiskExclusionMatchTypeKey      = attribute.Key("gram.risk.exclusion_match_type")
-	RiskReconcileRowCountKey       = attribute.Key("gram.risk.reconcile_row_count")
-	RiskReconcileRowsKeptKey       = attribute.Key("gram.risk.reconcile_rows_kept")
-	SpendRuleIDKey                 = attribute.Key("gram.spend.rule_id")
-	RiskSourceKey                  = attribute.Key("gram.risk.source")
-	RiskScanAttemptKey             = attribute.Key("gram.risk.scan.attempt")
-	RiskScanMaxAttemptsKey         = attribute.Key("gram.risk.scan.max_attempts")
-	RiskScanBatchIndexKey          = attribute.Key("gram.risk.scan.batch_index")
-	RiskScanTextSizeKey            = attribute.Key("gram.risk.scan.text_size_bytes")
-	RiskScanLimitBytesKey          = attribute.Key("gram.risk.scan.limit_bytes")
-	RiskScanRequestIDKey           = attribute.Key("gram.risk.scan.request_id")
-	RiskScanEngineKey              = attribute.Key("gram.risk.scan.engine")
-	RiskScanGateReasonKey          = attribute.Key("gram.risk.scan.gate_reason")
+	RiskPolicyCountKey        = attribute.Key("gram.risk.policy_count")
+	RiskPolicyIDKey           = attribute.Key("gram.risk.policy_id")
+	RiskPolicyNameKey         = attribute.Key("gram.risk.policy_name")
+	RiskPolicyTypeKey         = attribute.Key("gram.risk.policy_type")
+	RiskMessageTypeKey        = attribute.Key("gram.risk.message_type")
+	RiskRuleIDKey             = attribute.Key("gram.risk.rule_id")
+	RiskExclusionIDKey        = attribute.Key("gram.risk.exclusion_id")
+	RiskExclusionMatchTypeKey = attribute.Key("gram.risk.exclusion_match_type")
+	RiskReconcileRowCountKey  = attribute.Key("gram.risk.reconcile_row_count")
+	RiskReconcileRowsKeptKey  = attribute.Key("gram.risk.reconcile_rows_kept")
+	SpendRuleIDKey            = attribute.Key("gram.spend.rule_id")
+	RiskSourceKey             = attribute.Key("gram.risk.source")
+	RiskScanAttemptKey        = attribute.Key("gram.risk.scan.attempt")
+	RiskScanMaxAttemptsKey    = attribute.Key("gram.risk.scan.max_attempts")
+	RiskScanBatchIndexKey     = attribute.Key("gram.risk.scan.batch_index")
+	RiskScanTextSizeKey       = attribute.Key("gram.risk.scan.text_size_bytes")
+	RiskScanLimitBytesKey     = attribute.Key("gram.risk.scan.limit_bytes")
+	RiskScanRequestIDKey      = attribute.Key("gram.risk.scan.request_id")
+	RiskScanEngineKey         = attribute.Key("gram.risk.scan.engine")
+	RiskScanGateReasonKey     = attribute.Key("gram.risk.scan.gate_reason")
+	// RiskComponentKey names the part of risk analysis an evaluation ran in
+	// on risk.analysis.evaluations, and RiskDegradationReasonKey says why one
+	// produced no verdict. See internal/riskhealth for the allowed values.
+	RiskComponentKey               = attribute.Key("gram.risk.component")
+	RiskDegradationReasonKey       = attribute.Key("gram.risk.degradation_reason")
 	RiskFindingIDKey               = attribute.Key("gram.risk.finding.id")
 	RiskPolicyVersionKey           = attribute.Key("gram.risk.policy.version")
 	RiskConfidenceKey              = attribute.Key("gram.risk.confidence")
@@ -2522,6 +2527,22 @@ func RiskScanGateReason[V ~string](v V) attribute.KeyValue {
 
 func SlogRiskScanGateReason(v string) slog.Attr {
 	return slog.String(string(RiskScanGateReasonKey), v)
+}
+
+func RiskComponent[V ~string](v V) attribute.KeyValue {
+	return RiskComponentKey.String(string(v))
+}
+
+func SlogRiskComponent(v string) slog.Attr {
+	return slog.String(string(RiskComponentKey), v)
+}
+
+func RiskDegradationReason[V ~string](v V) attribute.KeyValue {
+	return RiskDegradationReasonKey.String(string(v))
+}
+
+func SlogRiskDegradationReason(v string) slog.Attr {
+	return slog.String(string(RiskDegradationReasonKey), v)
 }
 
 func RiskFindingID(v string) attribute.KeyValue { return RiskFindingIDKey.String(v) }

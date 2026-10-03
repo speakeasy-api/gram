@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/riskhealth"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -123,6 +124,7 @@ type Engine struct {
 	logger      *slog.Logger
 	tracer      trace.Tracer
 	metrics     *metrics
+	health      *riskhealth.Metrics
 	client      gramopenrouter.CompletionClient
 	limiter     *ratelimit.Limiter
 	model       string
@@ -165,6 +167,7 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 		logger:      logger,
 		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"),
 		metrics:     newMetrics(meterProvider, logger),
+		health:      riskhealth.NewMetrics(meterProvider, logger),
 		client:      client,
 		limiter:     limiter,
 		model:       Model,
@@ -266,7 +269,8 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 	// Bail before spending a rate-limit token (or making the call) on a context
 	// that is already canceled — otherwise a cancellation burst can drain the
 	// org's budget and throttle real requests into fail-open verdicts. (cubic)
-	if ctx.Err() != nil {
+	if err := ctx.Err(); err != nil {
+		c.health.RecordResult(ctx, req.OrgID, riskhealth.ComponentPromptInjectionJudge, err)
 		return unavailableResult
 	}
 
@@ -280,6 +284,7 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 		)
 	case !res.Allowed:
 		c.metrics.RecordRateLimited(ctx, req.OrgID, c.model, c.reasoning)
+		c.health.RecordDegraded(ctx, req.OrgID, riskhealth.ComponentPromptInjectionJudge, riskhealth.ReasonThrottled)
 		c.logger.WarnContext(ctx, "pi judge rate limited; failing open",
 			attr.SlogOrganizationID(req.OrgID),
 		)
@@ -427,6 +432,7 @@ func (c *Engine) judge(ctx context.Context, req promptinjection.Request, prepare
 	reason := typedFailureReason(err, outcome)
 	c.metrics.RecordPhysicalCall(ctx, req.OrgID, c.model, c.reasoning, outcome, reason, duration)
 	c.metrics.RecordClassification(ctx, req.OrgID, labelFor(IsInjection(verdict), err), c.model, c.reasoning, outcome, duration)
+	c.recordHealth(ctx, req.OrgID, err)
 	if err != nil {
 		c.metrics.RecordFailOpen(ctx, req.OrgID, c.model, c.reasoning, reason)
 		if outcome != o11y.OutcomeCanceled {
@@ -464,7 +470,31 @@ func typedFailureReason(err error, outcome o11y.Outcome) string {
 	if errors.Is(err, errMalformedVerdict) {
 		return "malformed"
 	}
+	// A drained credit balance, a revoked key and an overloaded provider used
+	// to share the "error" bucket, which is how prompt-injection scanning sat
+	// dark on an empty balance without anything pointing at the cause. Keep
+	// the provider's own classification when it has one.
+	if reason := gramopenrouter.Classify(err); reason != gramopenrouter.ReasonError {
+		return string(reason)
+	}
 	return "error"
+}
+
+// recordHealth reports this judge call on the cross-engine availability
+// counter. The typed fail-open counter already carries a richer breakdown;
+// this one exists so a single Datadog query can ask whether risk analysis is
+// running at all, across engines that each have their own vocabulary.
+func (c *Engine) recordHealth(ctx context.Context, orgID string, err error) {
+	switch {
+	case err == nil:
+		c.health.RecordCompleted(ctx, orgID, riskhealth.ComponentPromptInjectionJudge)
+	case riskhealth.IsCanceled(err):
+		c.health.RecordCanceled(ctx, orgID, riskhealth.ComponentPromptInjectionJudge)
+	case errors.Is(err, errMalformedVerdict):
+		c.health.RecordDegraded(ctx, orgID, riskhealth.ComponentPromptInjectionJudge, riskhealth.ReasonMalformedResponse)
+	default:
+		c.health.RecordDegraded(ctx, orgID, riskhealth.ComponentPromptInjectionJudge, riskhealth.ReasonFromError(err))
+	}
 }
 
 // judgePayload is the user turn: the captured event rendered as a structured
