@@ -497,6 +497,7 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 	})
 	require.NoError(t, err)
 	projectID := proj.ID
+	seedProvisioningAccess(t, conn, projectID, "user-test")
 	projectSlug := proj.Slug
 
 	logger := testenv.NewLogger(t)

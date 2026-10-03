@@ -181,9 +181,9 @@ func decodeExecution(raw []byte) (*assistantidentity.Execution, error) {
 	return &execution, nil
 }
 
-// checkExecutionDispatch preserves unversioned turns. New identities fail closed
-// until AIM-411 implements positive mode-aware admission. Never mint an owner
-// token as a substitute for an unavailable workload admission capability.
+// checkExecutionDispatch preserves unversioned turns and positively admits
+// bound turns against live agent policy intersected with the saved ceiling.
+// Denial must never mint an owner token or reselect an invoker.
 func (s *ServiceCore) checkExecutionDispatch(ctx context.Context, assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) error {
 	execution, err := decodeExecution(event.NormalizedPayloadJSON)
 	if err != nil {
@@ -216,7 +216,7 @@ func (s *ServiceCore) checkExecutionDispatch(ctx context.Context, assistant assi
 			return fmt.Errorf("assistant execution: %w", err)
 		}
 	}
-	if err := assistantidentity.AdmitExecution(*execution); err != nil {
+	if err := s.identities.AdmitModel(ctx, s.db, *execution); err != nil {
 		return fmt.Errorf("assistant execution admission: %w", err)
 	}
 	return nil

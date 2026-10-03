@@ -104,7 +104,8 @@ func TestIdentityCreationProvisioningFailureRollsBack(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, agents, "failed provisioning must not leave an orphan agent")
 
-	// The rolled-back reservation can be retried after eligibility is fixed.
+	// The rolled-back reservation can be retried after eligibility and authority are fixed.
+	seedProvisioningAccess(t, db, project, "ineligible-user")
 	_, err = orgrepo.New(db).UpsertOrganizationUserRelationship(t.Context(), orgrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: "org-test", UserID: pgtype.Text{String: "ineligible-user", Valid: true}})
 	require.NoError(t, err)
 	record, err := core.CreateAssistant(t.Context(), "org-test", project, "ineligible-user", "Rollback assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive)

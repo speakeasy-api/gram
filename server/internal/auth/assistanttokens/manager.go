@@ -327,6 +327,10 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 		return ctx, nil, err
 	}
 
+	return m.authorizeClaims(ctx, claims)
+}
+
+func (m *Manager) authorizeClaims(ctx context.Context, claims *Claims) (context.Context, *Claims, error) {
 	projectID, err := uuid.Parse(claims.ProjectID)
 	if err != nil {
 		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "invalid assistant token project")

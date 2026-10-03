@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
@@ -93,9 +94,15 @@ func TestExecutionCapturePersistsSelectionAndGatesDispatch(t *testing.T) {
 	require.Equal(t, assistantidentity.ExecutionWorkload, execution.Mode)
 	require.Empty(t, execution.HumanUserID)
 	event := assistantThreadEventRecord{EventID: "event-a", NormalizedPayloadJSON: workload}
-	require.ErrorIs(t, core.checkExecutionDispatch(t.Context(), assistant, thread, event), assistantidentity.ErrExecutionAdmissionRequired)
+	require.NoError(t, core.checkExecutionDispatch(t.Context(), assistant, thread, event))
 	// Independent messages capture independent humans; persisted earlier events
 	// remain unchanged on retry rather than consulting a new sender or owner.
+	adminRows, err := accessrepo.New(db).ListPrincipalGrantsByOrg(t.Context(), accessrepo.ListPrincipalGrantsByOrgParams{OrganizationID: "org-test", PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, "user-2").String()})
+	require.NoError(t, err)
+	for _, row := range adminRows {
+		_, err = accessrepo.New(db).DeletePrincipalGrant(t.Context(), accessrepo.DeletePrincipalGrantParams{ID: row.ID, OrganizationID: "org-test"})
+		require.NoError(t, err)
+	}
 	grantIDs := make(map[string]uuid.UUID)
 	for _, user := range []string{"user-1", "user-2"} {
 		grantIDs[user] = seedTurnProjectAccess(t, db, "org-test", user, project)
@@ -137,7 +144,7 @@ func TestExecutionCapturePersistsSelectionAndGatesDispatch(t *testing.T) {
 	admitted, err := manager.ValidateExecution(t.Context(), token, target)
 	require.NoError(t, err)
 	require.Equal(t, *execution, *admitted)
-	require.ErrorIs(t, manager.AuthorizeExecution(t.Context(), token, target), assistantidentity.ErrExecutionAdmissionRequired)
+	require.NoError(t, manager.AuthorizeExecution(t.Context(), token, target))
 	_, err = manager.Validate(token)
 	require.Error(t, err, "execution token must not enter legacy UserID authorization")
 	wrongTarget := target
@@ -217,7 +224,7 @@ func TestExecutionCapturePersistsSelectionAndGatesDispatch(t *testing.T) {
 	require.Empty(t, continued.HumanUserID, "consent owner cannot become execution human")
 	require.Equal(t, mcpAuthEventKind+":attempt-test", continued.ContinuationEventID)
 	require.Equal(t, *execution, *claims.Execution, "continuation does not mutate source envelope")
-	require.ErrorIs(t, core.checkExecutionDispatch(t.Context(), assistant, thread, assistantThreadEventRecord{EventID: row.EventID, NormalizedPayloadJSON: row.NormalizedPayloadJson}), assistantidentity.ErrExecutionAdmissionRequired)
+	require.NoError(t, core.checkExecutionDispatch(t.Context(), assistant, thread, assistantThreadEventRecord{EventID: row.EventID, NormalizedPayloadJSON: row.NormalizedPayloadJson}))
 
 	paused := StatusPaused
 	_, err = core.UpdateAssistant(t.Context(), project, assistant.ID, nil, nil, nil, nil, nil, nil, nil, &paused)
@@ -232,7 +239,7 @@ func TestExecutionCapturePersistsSelectionAndGatesDispatch(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, retry.ShouldSignal)
 	require.Equal(t, thread.ID, retry.ThreadID, "active retry must signal original stored envelope despite changed authority")
-	require.ErrorIs(t, core.checkExecutionDispatch(t.Context(), assistant, thread, event), assistantidentity.ErrExecutionAdmissionRequired, "temporary pause must not invalidate identity incarnation")
+	require.NoError(t, core.checkExecutionDispatch(t.Context(), assistant, thread, event), "temporary pause must not invalidate identity incarnation")
 	require.NoError(t, core.DeleteAssistant(t.Context(), project, assistant.ID, urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"), nil))
 	require.ErrorIs(t, manager.ValidateExecutionMCPAuthFlow(t.Context(), claims), assistantidentity.ErrInvalidIdentity, "retired authority cannot resume old flow")
 	require.ErrorIs(t, core.checkExecutionDispatch(t.Context(), assistant, thread, event), assistantidentity.ErrInvalidIdentity)
@@ -433,6 +440,10 @@ func TestExecutionAdmissionGateIsTerminal(t *testing.T) {
 	params := assistantrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: threadID, ProjectID: project}
 	row, err := assistantrepo.New(db).GetLatestAssistantThreadEventByThreadID(t.Context(), params)
 	require.NoError(t, err)
+	identity, err := testIdentityService.Resolve(t.Context(), db, "org-test", project, assistant.ID, root)
+	require.NoError(t, err)
+	deleteExecutionTestScope(t, db, urn.NewPrincipal(urn.PrincipalTypeAgent, identity.Identity.AgentID.String()), authz.ScopeAssistantExecute)
+
 	raw, err := core.captureExecution(t.Context(), assistant, sourceKindCron, threadID, uuid.NullUUID{UUID: root, Valid: true}, "denied-event", []byte(`{}`))
 	require.NoError(t, err)
 	require.NoError(t, assistantrepo.New(db).SetAssistantThreadEventStatus(t.Context(), assistantrepo.SetAssistantThreadEventStatusParams{ID: row.ID, ProjectID: project, Status: eventStatusCompleted, UpdatedAt: row.UpdatedAt}))

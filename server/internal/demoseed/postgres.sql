@@ -1386,11 +1386,18 @@ BEGIN
     (demo.det_uuid('gram-demo-assistant-legacy'), demo_org, proj_a, demo_user_ids[1],
      'Legacy assistant', 'anthropic/claude-sonnet-4.6', 'Help summarize project activity.');
 
-  -- Dedicated project agent with an intentionally empty capability ceiling:
-  -- no principal grants, role assignments, or upstream credential attachments.
+  -- Dedicated project agent with one exact model-execution capability. No
+  -- business grants, role assignments, or upstream credential attachments.
   INSERT INTO agents (id, organization_id, project_id, owner_user_id, name)
   VALUES (demo.det_uuid('gram-demo-assistant-agent'), demo_org, proj_a,
           demo_user_ids[1], 'Identity-bound assistant agent');
+  INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+  VALUES (demo_org, 'agent:' || demo.det_uuid('gram-demo-assistant-agent')::text,
+          'assistant:execute', jsonb_build_object(
+            'resource_kind', 'assistant',
+            'resource_id', demo.det_uuid('gram-demo-assistant-bound')::text,
+            'project_id', proj_a::text));
+
 
   INSERT INTO trigger_instances
     (id, organization_id, project_id, definition_slug, name, target_kind, target_ref, target_display)
@@ -3309,8 +3316,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
 
   SELECT count(*) INTO stray FROM principal_grants
   WHERE organization_id = demo_org AND principal_urn LIKE 'agent:%';
-  IF stray <> 2 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 2 scoped agent grants, found %', stray;
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 scoped agent grants, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM principal_grants
@@ -3578,8 +3585,12 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     AND i.issuer = 'https://platform.example.invalid' AND i.jwks_uri = 'https://platform.example.invalid/.well-known/jwks.json' AND i.allow_wildcard_admission IS FALSE
     AND r.definition_slug = 'dashboard' AND r.target_kind = 'assistant' AND r.target_ref = a.id::text
     AND t.subject = 'assistant-trigger:' || r.id::text
-    AND NOT EXISTS (SELECT 1 FROM principal_grants g
-      WHERE g.organization_id = demo_org AND g.principal_urn = 'agent:' || ag.id::text)
+    AND (SELECT count(*) FROM principal_grants g
+      WHERE g.organization_id = demo_org AND g.principal_urn = 'agent:' || ag.id::text) = 1
+    AND EXISTS (SELECT 1 FROM principal_grants g
+      WHERE g.organization_id = demo_org AND g.principal_urn = 'agent:' || ag.id::text
+        AND g.scope = 'assistant:execute'
+        AND g.selectors = jsonb_build_object('resource_kind', 'assistant', 'resource_id', a.id::text, 'project_id', proj_a::text))
     AND NOT EXISTS (SELECT 1 FROM agent_role_assignments g
       WHERE g.organization_id = demo_org AND g.agent_id = ag.id);
   IF stray <> 1 THEN

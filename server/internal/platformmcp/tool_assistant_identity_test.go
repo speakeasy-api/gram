@@ -13,6 +13,7 @@ import (
 
 	genassistants "github.com/speakeasy-api/gram/server/gen/assistants"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
@@ -226,6 +227,10 @@ func TestAssistantIdentityTrustedOAuthUpgradeMatchesAPI(t *testing.T) {
 	clientID, ok := contextvalues.GetOAuthClientID(ctx)
 	require.True(t, ok)
 	require.Equal(t, principal.ClientID, clientID)
+	selector, err := json.Marshal(authz.NewSelector(authz.ScopeProjectWrite, project.ID.String()))
+	require.NoError(t, err)
+	_, err = accessrepo.New(db).InsertPrincipalGrantIfAbsent(t.Context(), accessrepo.InsertPrincipalGrantIfAbsentParams{OrganizationID: principal.OrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), Scope: string(authz.ScopeProjectWrite), Selectors: selector})
+	require.NoError(t, err)
 	output, err := reader.assistantIdentity.upgrade(ctx, principal, UpgradeAssistantIdentityInput{ProjectID: project.ID.String(), AssistantID: legacy.ID.String(), Confirmed: true})
 	require.NoError(t, err, "trusted Platform MCP OAuth attribution must not reject the ordinary user")
 	require.Equal(t, "ACTIVE", *output.IdentityState)

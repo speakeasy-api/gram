@@ -34,6 +34,9 @@ var (
 // supplied by the authorized service, never taken from a request body. The
 // original creator is independently loaded from the assistant's durable row.
 type ProvisionParams struct {
+	// GrantExecution is set only by the explicit authorized upgrade path.
+	// Routine provisioning retries never elevate an existing binding.
+	GrantExecution bool
 	OrganizationID string
 	ProjectID      uuid.UUID
 	AssistantID    uuid.UUID

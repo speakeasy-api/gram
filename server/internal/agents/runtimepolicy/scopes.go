@@ -14,7 +14,9 @@ const (
 	RuntimeScopeRegistryVersion1 RuntimeScopeRegistryVersion = 1
 	RuntimeScopeRegistryVersion2 RuntimeScopeRegistryVersion = 2
 
-	CurrentRuntimeScopeRegistryVersion = RuntimeScopeRegistryVersion2
+	RuntimeScopeRegistryVersion3 RuntimeScopeRegistryVersion = 3
+
+	CurrentRuntimeScopeRegistryVersion = RuntimeScopeRegistryVersion3
 )
 
 // RuntimeScopeLifecycle distinguishes active scope registrations from retained
@@ -68,6 +70,7 @@ func retiredRuntimeScope() runtimeScopeDefinition {
 // runtimeScopeDefinitions is the application-owned overlay that determines
 // which authorization scopes agent direct and delegated policy may use.
 var runtimeScopeDefinitions = map[authz.Scope]runtimeScopeDefinition{
+	authz.ScopeAssistantExecute:        safeRuntimeScopeSince(RuntimeScopeRegistryVersion3),
 	authz.ScopeRoot:                    activeRuntimeScope(),
 	authz.ScopeOrgRead:                 activeRuntimeScope(),
 	authz.ScopeOrgBlockedRead:          activeRuntimeScope(),

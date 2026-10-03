@@ -15,6 +15,7 @@ import (
 )
 
 var expectedFullAccessScopes = []string{
+	string(authz.ScopeAssistantExecute),
 	string(authz.ScopeOrgRead),
 	string(authz.ScopeOrgAdmin),
 	string(authz.ScopeProjectRead),

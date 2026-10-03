@@ -68,6 +68,22 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (
 		if !old.Eligible {
 			return Binding{}, ErrTombstoned
 		}
+		if p.GrantExecution {
+			changed, err := grantExecution(ctx, tx, p, old.OriginalAgentID)
+			if err != nil {
+				return Binding{}, err
+			}
+			if changed {
+				metadata, err := json.Marshal(provisioningMetadata{CreatorUserID: nullableString(assistant.CreatedByUserID.String, assistant.CreatedByUserID.Valid), ConsentUserID: p.ActorUserID, ProvisioningActorUserID: p.ActorUserID, AgentID: old.OriginalAgentID, Generation: old.Generation})
+				if err != nil {
+					return Binding{}, fmt.Errorf("encode execution upgrade provenance: %w", err)
+				}
+				if err := q.RecordProvisioning(ctx, repo.RecordProvisioningParams{OrganizationID: p.OrganizationID, ProjectID: uuid.NullUUID{UUID: p.ProjectID, Valid: true}, ActorUserID: p.ActorUserID, AssistantID: p.AssistantID.String(), Metadata: metadata}); err != nil {
+					return Binding{}, fmt.Errorf("record execution upgrade: %w", err)
+				}
+			}
+
+		}
 		if err := s.bindExistingRoots(ctx, tx, p); err != nil {
 			return Binding{}, err
 		}
@@ -98,6 +114,9 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (
 	})
 	if err != nil {
 		return Binding{}, fmt.Errorf("create dedicated assistant agent: %w", err)
+	}
+	if _, err := grantExecution(ctx, tx, p, agent.ID); err != nil {
+		return Binding{}, err
 	}
 	principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
 	for _, grant := range grants {
@@ -151,7 +170,7 @@ func ConfiguredCapabilities(ctx context.Context, tx pgx.Tx, org string, project,
 	if err != nil {
 		return nil, fmt.Errorf("load configured skills: %w", err)
 	}
-	grants := make([]authz.Grant, 0, len(servers)*2+len(skills))
+	grants := []authz.Grant{ExecutionGrant(assistant, project)}
 	for _, id := range servers {
 		grants = append(grants, authz.NewGrant(authz.ScopeMCPConnect, id.String()), authz.NewGrant(authz.ScopeMCPRead, id.String()))
 	}

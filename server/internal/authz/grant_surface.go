@@ -14,6 +14,7 @@ const (
 )
 
 var scopeGrantSurfaces = map[Scope]GrantSurface{
+	ScopeAssistantExecute:        GrantSurfaceAccess,
 	ScopeRoot:                    GrantSurfaceAccess,
 	ScopeOrgRead:                 GrantSurfaceAccess,
 	ScopeOrgBlockedRead:          GrantSurfaceAccess,

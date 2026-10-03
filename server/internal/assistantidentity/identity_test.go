@@ -70,7 +70,7 @@ func TestLegacyUpgradeAndConcurrentRetries(t *testing.T) {
 	require.Equal(t, int64(1), counts.Triggers)
 	snapshot, err := testIdentityService.SnapshotCeiling(t.Context(), f.db, id)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"requested":[],"effective":[]}`, string(snapshot.Policy))
+	requireExecutionOnlyPolicy(t, snapshot)
 }
 
 func TestProvisionRollsBackEveryAuthorityWrite(t *testing.T) {
@@ -113,6 +113,10 @@ func TestPolicyIsConfiguredActorSubsetAndFrozen(t *testing.T) {
 	require.NoError(t, json.Unmarshal(before.Policy, &decoded))
 	require.NotEmpty(t, decoded.Effective)
 	for _, grant := range decoded.Effective {
+		if grant.Scope == authz.ScopeAssistantExecute {
+			require.Equal(t, f.assistant.String(), grant.Selector.ResourceID())
+			continue
+		}
 		require.Equal(t, server.String(), grant.Selector.ResourceID())
 		require.Contains(t, []authz.Scope{authz.ScopeMCPRead, authz.ScopeMCPConnect}, grant.Scope)
 	}
@@ -143,7 +147,7 @@ func TestExplicitDenyCannotBecomeAssistantGrant(t *testing.T) {
 	id := f.provision(t)
 	snapshot, err := testIdentityService.SnapshotCeiling(t.Context(), f.db, id)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"requested":[],"effective":[]}`, string(snapshot.Policy))
+	requireExecutionOnlyPolicy(t, snapshot)
 }
 
 func TestCreatorAndConsentProvenanceRemainDistinct(t *testing.T) {
@@ -153,6 +157,7 @@ func TestCreatorAndConsentProvenanceRemainDistinct(t *testing.T) {
 	require.NoError(t, repo.New(f.db).FixtureCreateUser(t.Context(), repo.FixtureCreateUserParams{ID: upgrader, Email: "upgrader@example.com"}))
 	require.NoError(t, repo.New(f.db).FixtureCreateMembership(t.Context(), repo.FixtureCreateMembershipParams{OrganizationID: f.org, UserID: conv.ToPGText(upgrader)}))
 	server := f.attachMCP(t)
+	f.grant(t, urn.NewPrincipal(urn.PrincipalTypeUser, upgrader), authz.ScopeProjectWrite, f.project.String())
 	f.grant(t, urn.NewPrincipal(urn.PrincipalTypeUser, f.actor), authz.ScopeMCPRead, "*")
 	require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
 		_, err := testIdentityService.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: upgrader})
@@ -376,7 +381,7 @@ func TestUnrepresentableToolExclusionDropsBroadCapability(t *testing.T) {
 	id := f.provision(t)
 	ceiling, err := testIdentityService.SnapshotCeiling(t.Context(), f.db, id)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"requested":[],"effective":[]}`, string(ceiling.Policy))
+	requireExecutionOnlyPolicy(t, ceiling)
 }
 
 func TestProvisionRejectsAmbiguousPlatformTrust(t *testing.T) {
@@ -400,4 +405,12 @@ func TestProvisionRejectsAmbiguousPlatformTrust(t *testing.T) {
 	after, err := q.FixtureAuthorityCounts(t.Context(), f.org)
 	require.NoError(t, err)
 	require.Equal(t, before, after)
+}
+
+func requireExecutionOnlyPolicy(t *testing.T, snapshot assistantidentity.CeilingSnapshot) {
+	t.Helper()
+	policy, err := runtimepolicy.DecodeDelegatedPolicy(snapshot.EncodingVersion, snapshot.Policy)
+	require.NoError(t, err)
+	require.Len(t, policy.RuntimeGrants(), 1)
+	require.Equal(t, authz.ScopeAssistantExecute, policy.RuntimeGrants()[0].Scope)
 }

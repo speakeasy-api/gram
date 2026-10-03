@@ -63,6 +63,7 @@ func newFixture(t *testing.T) fixture {
 	require.NoError(t, q.FixtureCreateProject(t.Context(), repo.FixtureCreateProjectParams{ID: f.project, OrganizationID: f.org}))
 	require.NoError(t, q.FixtureCreateAssistant(t.Context(), repo.FixtureCreateAssistantParams{ID: f.assistant, OrganizationID: f.org, ProjectID: f.project, Creator: conv.ToPGText(f.actor)}))
 	require.NoError(t, q.FixtureCreateRoot(t.Context(), repo.FixtureCreateRootParams{ID: f.trigger, OrganizationID: f.org, ProjectID: f.project, DefinitionSlug: "dashboard", TargetRef: f.assistant.String()}))
+	f.grant(t, urn.NewPrincipal(urn.PrincipalTypeUser, f.actor), authz.ScopeProjectWrite, f.project.String())
 	return f
 }
 
@@ -81,6 +82,7 @@ func inTx(t *testing.T, db *pgxpool.Pool, fn func(pgx.Tx) error) error {
 
 func (f fixture) provision(t *testing.T) assistantidentity.Identity {
 	t.Helper()
+	f.grant(t, urn.NewPrincipal(urn.PrincipalTypeUser, f.actor), authz.ScopeProjectWrite, f.project.String())
 	require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
 		_, err := testIdentityService.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor})
 		if err != nil {

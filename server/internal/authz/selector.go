@@ -78,6 +78,8 @@ func ResourceKindForScope(scope Scope) string {
 		return ResourceKindSkill
 	case "risk_policy":
 		return ResourceKindRiskPolicy
+	case "assistant":
+		return ResourceKindAssistant
 	case "chat":
 		return ResourceKindChat
 	case "agent":
@@ -109,6 +111,7 @@ var validDispositions = map[string]bool{
 // resource_id) are valid for each scope family. Scope families not listed here
 // allow no extra keys.
 var allowedSelectorKeys = map[string]map[string]bool{
+	ResourceKindAssistant: {SelectorKeyProjectID: true},
 	ResourceKindMCP: {
 		SelectorKeyTool:        true,
 		SelectorKeyDisposition: true,

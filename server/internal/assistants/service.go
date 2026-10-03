@@ -1340,7 +1340,7 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, err
 	}
 
-	if _, err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID}); err != nil {
+	if _, err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{GrantExecution: false, OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID}); err != nil {
 		return assistantRecord{}, fmt.Errorf("assistant identity Provision: %w", err)
 	}
 	if _, err := s.ensureDashboardRootTx(ctx, tx, organizationID, projectID, record.ID, name); err != nil {
