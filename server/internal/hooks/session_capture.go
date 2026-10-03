@@ -79,6 +79,11 @@ func (s *Service) ensureHookChat(
 		if existing != projectID {
 			return errChatProjectMismatch
 		}
+		if metadata.SessionID != "" && sessionIDToUUID(metadata.SessionID) == chatID {
+			if err := queries.RecordCapturedSessionID(ctx, repo.RecordCapturedSessionIDParams{ChatID: chatID, ProjectID: projectID, SessionID: metadata.SessionID}); err != nil {
+				return fmt.Errorf("record captured session id: %w", err)
+			}
+		}
 		return nil
 	case !errors.Is(err, pgx.ErrNoRows):
 		return fmt.Errorf("get chat project: %w", err)
@@ -99,6 +104,11 @@ func (s *Service) ensureHookChat(
 		return errChatProjectMismatch
 	case err != nil:
 		return fmt.Errorf("upsert claude code session: %w", err)
+	}
+	if metadata.SessionID != "" && sessionIDToUUID(metadata.SessionID) == chatID {
+		if err := queries.RecordCapturedSessionID(ctx, repo.RecordCapturedSessionIDParams{ChatID: chatID, ProjectID: projectID, SessionID: metadata.SessionID}); err != nil {
+			return fmt.Errorf("record captured session id: %w", err)
+		}
 	}
 	return nil
 }
