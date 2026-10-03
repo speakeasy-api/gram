@@ -223,6 +223,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"Before moving any MCP server or gateway to dual or private_only, call get_network_ingress. If ready_for_private_access is false, report its next_action and present its exact setup_url instead of attempting the change; Tailscale credentials are entered only in the dashboard, never in chat. Private access restricts who can reach the AI Control Plane endpoint over the organization's tailnet; it does not change where the upstream MCP server is hosted.",
 			"Which tools an MCP server puts in front of people is a separate decision from which plugin carries the server. Pushing a new tool to a project does not put it on any server. To expose one, list the project's tools, read the exact server, and then add the named tools to it after the user confirms the exact server and tools. Say before acting that everyone holding a plugin that carries the server gets the change immediately, and name those plugins. Removing a tool takes it away from those same people. Never guess a tool from its name; use the exact one the project's tool list returned, and if a tool is missing from that list, say the deployment that produces it has not finished rather than adding something else.",
 			"Creating a data export is a mutation: first show the exact project, endpoint, data source, enabled state, and sensitive-data policy, then ask for explicit confirmation. Never request or accept authorization header values in chat; create the export without headers and send the user to the returned management URL to add authentication securely.",
+			"When an administrator describes a risk in their own words, call suggest_risk_policy with that description before choosing detectors yourself; list_risk_presets explains the presets it draws from. Present the draft as what it detects, what happens when it fires, how severe findings are, and that it is enabled the moment it is created unless they want it off, then create it with create_risk_policy only after explicit confirmation, passing the preset id and any agreed overrides including enabled. Read the result, then call get_risk_policy with the returned policy id and confirm the stored policy matches what the administrator approved.",
 			"Dismissing Watchdog findings as false positives, or restoring them, is a mutation: name the exact project and the exact findings, wait for explicit confirmation, then report which findings changed, which were already in that state, and which were not found in the project. A dismissal suppresses only the findings named; a risk exclusion is the tool for a whole class of findings.",
 			"Project-wide chat listings are metadata only: when a conversation was active, how long it ran, which app produced it, whether risk analysis found anything, and a masked participant. Never present a listed chat's title or what was said as known, and send the administrator to the dashboard to read a transcript. Personal session recall is separate: it may present the caller's own sessions by title and their own redacted handoff digest.",
 		}, "\n\n"),
@@ -273,6 +274,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		}
 		registerRiskToolsWithMutations(reg, postgresReader.riskReads, postgresReader.riskAnalysisStatus, riskMutations)
 		registerRiskFindingsTool(reg, postgresReader.riskFindings)
+		registerRiskPresetTools(reg)
 		registerRiskFindingListTools(reg, postgresReader.riskFindingList)
 		if postgresReader.dataExports == nil {
 			registerUnavailableDataExportTools(reg)
@@ -310,6 +312,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerUnavailableReviewRequestTools(reg)
 		registerRiskAnalysisStatusTool(reg, nil)
 		registerRiskFindingsTool(reg, nil)
+		registerRiskPresetTools(reg)
 		registerRiskFindingListTools(reg, nil)
 		registerUnavailableRiskToolsWithMutations(reg, riskMutations)
 		registerUnavailableDataExportTools(reg)

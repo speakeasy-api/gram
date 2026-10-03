@@ -78,9 +78,20 @@ import {
   useRef,
   useState,
 } from "react";
-import { useLocation, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { useQueryState } from "nuqs";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { useRiskPresets } from "@gram/client/react-query/riskPresets.js";
+import { useRiskSuggestPolicyMutation } from "@gram/client/react-query/riskSuggestPolicy.js";
+import type { RiskPreset } from "@gram/client/models/components/riskpreset.js";
+import {
+  draftFromPreset,
+  draftFromSuggestion,
+  draftKind,
+  type PolicyDraft,
+  readPolicyDraft,
+} from "./policy-draft";
 import {
   parsePolicyNewPrefill,
   type PolicyNewPrefill,
@@ -344,6 +355,8 @@ export function PolicyNew(): JSX.Element {
 function PolicyNewContent(): JSX.Element {
   const [kind] = useQueryState("kind");
   const [category] = useQueryState("category");
+  const location = useLocation();
+  const draft = readPolicyDraft(location.state);
   // Read once: the editor seeds its state on mount and owns it from there.
   const [prefill] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -357,7 +370,11 @@ function PolicyNewContent(): JSX.Element {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <StandardPolicyEditor policy={null} prefill={prefill} />
+          <StandardPolicyEditor
+            policy={null}
+            prefill={prefill}
+            draft={draft?.policyType === "standard" ? draft : null}
+          />
         </Page.Body>
       </Page>
     );
@@ -369,63 +386,212 @@ function PolicyNewContent(): JSX.Element {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <PromptPolicyEditor policy={null} />
+          <PromptPolicyEditor
+            policy={null}
+            draft={draft?.policyType === "prompt_based" ? draft : null}
+          />
         </Page.Body>
       </Page>
     );
   }
-  return <PolicyKindChooser />;
+  return <PolicyStartChooser />;
 }
 
-// Kind chooser shown when the create page is opened without a `?kind=` hint
-// (e.g. a direct navigation). Mirrors PolicyCenter's modal chooser.
-function PolicyKindChooser(): JSX.Element {
+const startCardClass =
+  "hover:bg-muted/40 border p-5 text-left transition-colors disabled:opacity-60";
+
+const PRESET_ACTION_LABEL: Record<string, string> = {
+  flag: "Logs for review",
+  warn: "Warns and confirms",
+  block: "Blocks",
+  quarantine: "Quarantines the session",
+};
+
+// Intent screen shown when the create page is opened without a `?kind=` hint.
+// The administrator starts from what they want to protect against, or
+// describes it; either path lands in the wizard with a draft already filled
+// in. The detector/prompt choice stays reachable for anyone who wants to
+// build from scratch.
+function PolicyStartChooser(): JSX.Element {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const telemetry = useTelemetry();
+  const promptPoliciesEnabled =
+    telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
   const [, setKind] = useQueryState("kind");
+  const [description, setDescription] = useState("");
+  const { data, isLoading, isError, refetch } = useRiskPresets();
+  const presets = (data?.presets ?? []).filter(
+    (preset) => promptPoliciesEnabled || preset.policyType !== "prompt_based",
+  );
+
+  const openDraft = (draft: PolicyDraft) => {
+    if (draft.policyType === "prompt_based" && !promptPoliciesEnabled) {
+      toast.error(
+        "Prompt-based policies aren't switched on for this project yet. Start from a built-in preset instead.",
+      );
+      return;
+    }
+    void navigate(
+      { pathname: location.pathname, search: `?kind=${draftKind(draft)}` },
+      { state: { draft } },
+    );
+  };
+
+  const suggest = useRiskSuggestPolicyMutation({
+    onSuccess: (result) => openDraft(draftFromSuggestion(result)),
+    onError: () =>
+      toast.error(
+        "Couldn't draft a policy from that description. Try again, or start from a preset.",
+      ),
+  });
+  const trimmed = description.trim();
+  const canDescribe = trimmed.length >= 3 && !suggest.isPending;
+  const submitDescription = () => {
+    if (!canDescribe) return;
+    suggest.mutate({
+      request: { suggestRiskPolicyRequestBody: { prompt: trimmed } },
+    });
+  };
+
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Stack gap={4} className="mx-auto w-full max-w-2xl">
+        <Stack gap={6} className="mx-auto w-full max-w-3xl">
           <Stack gap={1}>
             <Heading variant="h3" className="normal-case">
-              Choose policy type
+              What do you want to protect against?
             </Heading>
             <Text small muted>
-              Start with a built-in detector policy or define criteria in plain
-              language.
+              Pick a use case or describe the risk in your own words. Either way
+              you land in the wizard with the detectors, action and severity
+              already filled in.
             </Text>
           </Stack>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <button
+
+          <Stack gap={2}>
+            <Label htmlFor="policy-describe">Describe it</Label>
+            <TextArea
+              id="policy-describe"
+              value={description}
+              onChange={setDescription}
+              rows={3}
+              placeholder="e.g. Stop agents deleting anything in production, or flag customer card numbers in tool results."
+            />
+            <div className="flex items-center justify-between gap-3">
+              <Text small muted>
+                The draft is yours to review before anything is created.
+              </Text>
+              <Button
+                type="button"
+                onClick={submitDescription}
+                disabled={!canDescribe}
+              >
+                {suggest.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                Draft policy
+              </Button>
+            </div>
+          </Stack>
+
+          <Stack gap={2}>
+            <Text small muted className="uppercase tracking-wide">
+              Or start from a use case
+            </Text>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {isError ? (
+                <div className="flex flex-wrap items-center gap-3 border p-4 sm:col-span-2">
+                  <Text small muted>
+                    The presets could not be loaded.
+                  </Text>
+                  <Button
+                    type="button"
+                    variant="tertiary"
+                    onClick={() => void refetch()}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              ) : isLoading ? (
+                Array.from({ length: 4 }, (_, index) => (
+                  <div
+                    key={index}
+                    className="bg-muted/30 h-32 animate-pulse border"
+                  />
+                ))
+              ) : (
+                presets.map((preset) => (
+                  <PresetStartCard
+                    key={preset.id}
+                    preset={preset}
+                    onSelect={() => openDraft(draftFromPreset(preset))}
+                  />
+                ))
+              )}
+            </div>
+          </Stack>
+
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <Text small muted>
+              Start from scratch:
+            </Text>
+            <Button
               type="button"
+              variant="tertiary"
               onClick={() => void setKind("standard")}
-              className="hover:bg-muted/40 border p-5 text-left transition-colors"
             >
-              <Shield className="text-muted-foreground mb-3 h-5 w-5" />
-              <Text className="font-medium">Built-in detector</Text>
-              <Text small muted className="mt-1">
-                Scan for secrets, PII, and risky tool calls with built-in and
-                custom detection rules.
-              </Text>
-            </button>
-            <button
-              type="button"
-              onClick={() => void setKind("prompt")}
-              className="hover:bg-muted/40 border p-5 text-left transition-colors"
-            >
-              <Sparkles className="text-muted-foreground mb-3 h-5 w-5" />
-              <Text className="font-medium">Prompt-based</Text>
-              <Text small muted className="mt-1">
-                Describe the behavior to catch in plain language; an LLM judge
-                evaluates each in-scope message.
-              </Text>
-            </button>
+              <Shield className="h-4 w-4" />
+              Built-in detector
+            </Button>
+            {promptPoliciesEnabled ? (
+              <Button
+                type="button"
+                variant="tertiary"
+                onClick={() => void setKind("prompt")}
+              >
+                <Sparkles className="h-4 w-4" />
+                Prompt-based
+              </Button>
+            ) : null}
           </div>
         </Stack>
       </Page.Body>
     </Page>
+  );
+}
+
+function PresetStartCard({
+  preset,
+  onSelect,
+}: {
+  preset: RiskPreset;
+  onSelect: () => void;
+}): JSX.Element {
+  const Icon = preset.policyType === "prompt_based" ? Sparkles : Shield;
+  return (
+    <button type="button" onClick={onSelect} className={startCardClass}>
+      <Icon className="text-muted-foreground mb-3 h-5 w-5" />
+      <Text className="font-medium">{preset.label}</Text>
+      <Text small muted className="mt-1">
+        {preset.description}
+      </Text>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Badge variant={preset.action === "flag" ? "neutral" : "warning"}>
+          {PRESET_ACTION_LABEL[preset.action] ?? preset.action}
+        </Badge>
+        <Badge variant="neutral">
+          {preset.policyType === "prompt_based"
+            ? "Judged by the policy model"
+            : "Built-in detectors"}
+        </Badge>
+      </div>
+    </button>
   );
 }
 
@@ -746,8 +912,10 @@ function SectionHeader({
 
 function PromptPolicyEditor({
   policy,
+  draft = null,
 }: {
   policy: RiskPolicy | null;
+  draft?: PolicyDraft | null;
 }): JSX.Element {
   const routes = useRoutes();
   const queryClient = useQueryClient();
@@ -756,10 +924,11 @@ function PromptPolicyEditor({
   const [step, setStep] = useStepParam(PROMPT_STEPS);
   const [nameGenerating, setNameGenerating] = useState(false);
 
-  // Editable guardrail definition, seeded from the loaded policy (edit) or
-  // defaults (create). Kept local so the author can iterate freely.
-  const [name, setName] = useState(policy?.name ?? "");
-  const [prompt, setPrompt] = useState(policy?.prompt ?? "");
+  // Editable guardrail definition, seeded from the loaded policy (edit), a
+  // draft from the intent screen, or defaults (create). Kept local so the
+  // author can iterate freely.
+  const [name, setName] = useState(policy?.name ?? draft?.name ?? "");
+  const [prompt, setPrompt] = useState(policy?.prompt ?? draft?.prompt ?? "");
   const [temperature, setTemperature] = useState(
     policy?.modelConfig?.temperature ?? 0,
   );
@@ -773,7 +942,7 @@ function PromptPolicyEditor({
     policyMCPScopeValue(policy?.mcpScope),
   );
   const [action, setAction] = useState<PolicyAction>(() => {
-    const initial = policy?.action ?? "flag";
+    const initial = policy?.action ?? draft?.action ?? "flag";
     return mcpScope.mode === "mcp" ? mcpCompatibleAction(initial) : initial;
   });
   const updateMCPScope = (next: PolicyMCPScopeValue) => {
@@ -792,8 +961,10 @@ function PromptPolicyEditor({
       ? new Set(policy.audiencePrincipalUrns ?? [])
       : new Set<string>(),
   );
-  const [userMessage, setUserMessage] = useState(policy?.userMessage ?? "");
-  const [score, setScore] = useState(policy?.score ?? 5);
+  const [userMessage, setUserMessage] = useState(
+    policy?.userMessage ?? draft?.userMessage ?? "",
+  );
+  const [score, setScore] = useState(policy?.score ?? draft?.score ?? 5);
   const [reviewVerdictFilter, setReviewVerdictFilter] =
     useState<EvalVerdict | null>(null);
   const mcpScopePayload = policyMCPScopePayload(mcpScope);
@@ -3523,10 +3694,12 @@ function ReviewAgreementControl({
 export function StandardPolicyEditor({
   policy,
   prefill,
+  draft = null,
 }: {
   policy: RiskPolicy | null;
   /** Starting values for a new policy; ignored when editing one. */
   prefill?: PolicyNewPrefill;
+  draft?: PolicyDraft | null;
 }): JSX.Element {
   const routes = useRoutes();
   const project = useProject();
@@ -3575,12 +3748,23 @@ export function StandardPolicyEditor({
     };
   }, [policy, mode]);
 
-  // ── Local form state, seeded from the policy (edit) or defaults (create). ──
+  // ── Local form state, seeded from the policy (edit), a draft from the
+  // intent screen, or prefill and defaults (create). ──
   const seed = policy ? undefined : prefill;
-  const [name, setName] = useState(policy?.name ?? seed?.name ?? "");
+  const [name, setName] = useState(
+    policy?.name ?? draft?.name ?? seed?.name ?? "",
+  );
   const [selectedCategories, setSelectedCategories] = useState<
     Set<RuleCategory>
-  >(() => new Set(orig?.categories ?? seed?.categories));
+  >(
+    () =>
+      new Set(
+        orig?.categories ??
+          (draft
+            ? policyToCategories(draft.sources, draft.presidioEntities, mode)
+            : seed?.categories),
+      ),
+  );
   // The flag behind `mode` resolves asynchronously, so the seed above may
   // predate it; fold any legacy personal-data selection into `pii` once the
   // LLM analyzer applies, or the collapsed card would hide it and a save
@@ -3608,7 +3792,7 @@ export function StandardPolicyEditor({
     Set<string>
   >(() => new Set(policy?.customRuleIds ?? []));
   const initialAction =
-    (policy?.action as PolicyAction) ?? seed?.action ?? "flag";
+    (policy?.action as PolicyAction) ?? draft?.action ?? seed?.action ?? "flag";
   const [action, setAction] = useState<PolicyAction>(
     mcpScope.mode === "mcp"
       ? mcpCompatibleAction(initialAction)
@@ -3632,7 +3816,9 @@ export function StandardPolicyEditor({
       () =>
         (policy?.shadowMcpDisposition as ShadowMCPDisposition) ?? "block_all",
     );
-  const [userMessage, setUserMessage] = useState(policy?.userMessage ?? "");
+  const [userMessage, setUserMessage] = useState(
+    policy?.userMessage ?? draft?.userMessage ?? "",
+  );
   const [audienceType, setAudienceType] = useState<"everyone" | "targeted">(
     policy?.audienceType === "targeted" ? "targeted" : "everyone",
   );
@@ -3651,7 +3837,9 @@ export function StandardPolicyEditor({
   const [customizeCategory, setCustomizeCategory] =
     useState<RuleCategory | null>(null);
   const [detectionExpanded, setDetectionExpanded] = useState(true);
-  const [score, setScore] = useState(policy?.score ?? seed?.score ?? 5);
+  const [score, setScore] = useState(
+    policy?.score ?? draft?.score ?? seed?.score ?? 5,
+  );
   const [presidioThreshold, setPresidioThreshold] = useState<number>(
     policy?.presidioScoreThreshold ?? DEFAULT_PRESIDIO_THRESHOLD,
   );
