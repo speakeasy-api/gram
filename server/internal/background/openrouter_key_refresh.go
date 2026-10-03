@@ -166,15 +166,6 @@ func executeOpenRouterSpendCapWorkflow(ctx workflow.Context, params OpenRouterSp
 	return monthlyCredits, nil
 }
 
-func (w *OpenRouterKeyRefresher) ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) error {
-	_, err := ExecuteOpenrouterKeyRefreshWorkflow(ctx, w.TemporalEnv, OpenRouterKeyRefreshParams{
-		OrgID:   orgID,
-		Limit:   limit,
-		KeyType: string(keyType),
-	})
-	return err
-}
-
 // SchedulePaygOpenRouterChatKeyReconciliation uses the durable outbox event ID
 // as the workflow identity, so Pub/Sub redelivery cannot start the same
 // reconciliation twice. The workflow reads current billing state instead of
@@ -276,30 +267,6 @@ func EnterpriseTrialConversionKeyReconcileWorkflow(ctx workflow.Context, params 
 		return fmt.Errorf("reconcile enterprise trial conversion keys: %w", err)
 	}
 	return nil
-}
-
-// Called by your service to start (or restart) the workflow
-func ExecuteOpenrouterKeyRefreshWorkflow(ctx context.Context, temporalEnv *tenv.Environment, params OpenRouterKeyRefreshParams) (client.WorkflowRun, error) {
-	if temporalEnv == nil {
-		return nil, tenv.ErrNotConfigured
-	}
-	// A typoed key type must fail here, before the terminate-if-running id
-	// below can clobber the real chat refresh workflow.
-	if err := openrouter.KeyType(params.KeyType).Validate(); err != nil {
-		return nil, fmt.Errorf("refresh openrouter key workflow: %w", err)
-	}
-	// The chat key keeps the historical id format: cancel semantics and the
-	// manual-trigger docs reference it. Only internal keys get a suffix.
-	id := fmt.Sprintf("v1:openrouter-key-refresh:%s", params.OrgID)
-	if openrouter.KeyType(params.KeyType) == openrouter.KeyTypeInternal {
-		id += ":internal"
-	}
-	return temporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                    id,
-		TaskQueue:             string(temporalEnv.Queue()),
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
-		WorkflowRunTimeout:    3 * time.Minute, // slightly longer workflow timeout
-	}, OpenrouterKeyRefreshWorkflow, params)
 }
 
 func OpenrouterKeyRefreshWorkflow(ctx workflow.Context, params OpenRouterKeyRefreshParams) error {

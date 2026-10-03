@@ -1799,6 +1799,15 @@ WHERE locks.locktype = 'advisory' AND locks.granted
   AND locks.objid = (hashtextextended(@key::text, 0) & 4294967295)::oid
   AND locks.objsubid = 1;
 
+-- name: CountAdvisoryLockWaitersFixture :one
+-- Count sessions blocked on an advisory lock by its exact application key.
+SELECT count(*)::integer FROM pg_catalog.pg_locks AS locks
+WHERE locks.locktype = 'advisory' AND NOT locks.granted
+  AND locks.database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database())
+  AND locks.classid = ((hashtextextended(@key::text, 0) >> 32) & 4294967295)::oid
+  AND locks.objid = (hashtextextended(@key::text, 0) & 4294967295)::oid
+  AND locks.objsubid = 1;
+
 -- name: BackendPIDFixture :one
 -- Identify a holder exposed only through a transaction-enlisted query interface.
 SELECT pg_backend_pid();

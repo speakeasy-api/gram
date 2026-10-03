@@ -849,7 +849,6 @@ func newStartCommand() *cli.Command {
 					db,
 					c.String("environment"),
 					c.String("openrouter-provisioning-key"),
-					openRouterKeyRefresher,
 					productFeatures,
 					billingTracker,
 					encryptionClient,

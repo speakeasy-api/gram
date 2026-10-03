@@ -153,6 +153,23 @@ func (q *Queries) CorruptDeviceIntegrationCredentialsFixture(ctx context.Context
 	return err
 }
 
+const countAdvisoryLockWaitersFixture = `-- name: CountAdvisoryLockWaitersFixture :one
+SELECT count(*)::integer FROM pg_catalog.pg_locks AS locks
+WHERE locks.locktype = 'advisory' AND NOT locks.granted
+  AND locks.database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database())
+  AND locks.classid = ((hashtextextended($1::text, 0) >> 32) & 4294967295)::oid
+  AND locks.objid = (hashtextextended($1::text, 0) & 4294967295)::oid
+  AND locks.objsubid = 1
+`
+
+// Count sessions blocked on an advisory lock by its exact application key.
+func (q *Queries) CountAdvisoryLockWaitersFixture(ctx context.Context, key string) (int32, error) {
+	row := q.db.QueryRow(ctx, countAdvisoryLockWaitersFixture, key)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countAssistantAttachments = `-- name: CountAssistantAttachments :one
 SELECT
   (SELECT count(*) FROM assistant_toolsets at
