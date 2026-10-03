@@ -1232,8 +1232,7 @@ function ChatDetailPanel({
     (capturedSource === "litellm" &&
       !!capturedChat?.originatingClient?.startsWith("claude-code"));
   const isClaudeTag =
-    capturedSource === "claude-tag" ||
-    (claudeSource && tagMetadata.detected);
+    capturedSource === "claude-tag" || (claudeSource && tagMetadata.detected);
   const chat = useMemo(() => {
     if (!capturedChat || !isClaudeTag) return capturedChat;
     const title =

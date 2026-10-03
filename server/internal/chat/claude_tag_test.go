@@ -1,12 +1,15 @@
 package chat_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+
+	gen "github.com/speakeasy-api/gram/server/gen/chat"
 
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -217,7 +220,7 @@ func TestClaudeTagHelperLinkSurvivesCaptureOrder(t *testing.T) {
 	require.NoError(t, err)
 	child, err := q.GetChat(ctx, repo.GetChatParams{ID: childID, ProjectID: ti.projectID})
 	require.NoError(t, err)
-	require.Equal(t, "claude-tag", child.SessionSurface.String)
+	require.Equal(t, "claude-tag", child.CapturedSurface)
 	links, err = q.ListChatSessionLinks(ctx, repo.ListChatSessionLinksParams{ProjectID: ti.projectID, ChatIds: []uuid.UUID{parentID}, ExternalUserID: "", UserID: ""})
 	require.NoError(t, err)
 	require.Len(t, links, 1)
@@ -294,4 +297,42 @@ func TestClaudeTagEnvelopeSupportsClaudeProxy(t *testing.T) {
 	got, err := repo.New(ti.conn).GetChat(ctx, repo.GetChatParams{ID: id, ProjectID: ti.projectID})
 	require.NoError(t, err)
 	require.Equal(t, "claude-tag", got.SessionSurface.String)
+}
+
+func TestClaudeTagHelperLinkDoesNotLockChildChat(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	parentID := seedChat(t, ctx, ti, "", "", "Parent")
+	childID := seedChat(t, ctx, ti, "", "", "Helper")
+	// A concurrent child capture may already hold its row lock. Recording
+	// parent-delivered evidence must complete without updating that child row.
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	err := repo.New(tx).LockChatRowForTest(ctx, repo.LockChatRowForTestParams{ID: childID, ProjectID: ti.projectID})
+	require.NoError(t, err)
+	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	_, err = tagWriter(t, ti).Write(writeCtx, ti.projectID, []chat.MessageWrite{tagWrite(t, ti, parentID,
+		`<cross-session-message from-session="`+childID.String()+`" standing-audience="parent">Done.</cross-session-message>`)})
+	require.NoError(t, err)
+	child, err := repo.New(ti.conn).GetChat(ctx, repo.GetChatParams{ID: childID, ProjectID: ti.projectID})
+	require.NoError(t, err)
+	require.Equal(t, "claude-tag", child.CapturedSurface)
+	require.False(t, child.SessionSurface.Valid)
+	payload := defaultPayload()
+	payload.Source = conv.PtrEmpty("claude-tag")
+	listed, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 2, listed.Total)
+	foundChild := false
+	for _, row := range listed.Chats {
+		if row.ID == childID.String() {
+			foundChild = true
+			require.Equal(t, "claude-tag", conv.PtrValOr(row.Source, ""))
+		}
+	}
+	require.True(t, foundChild)
+	sources, err := ti.service.ListSources(ctx, &gen.ListSourcesPayload{SessionToken: nil, ProjectSlugInput: nil, ChatSessionsToken: nil})
+	require.NoError(t, err)
+	require.Contains(t, sources.Sources, "claude-tag")
 }

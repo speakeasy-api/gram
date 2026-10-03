@@ -679,6 +679,16 @@ func (q *Queries) DeleteChatResolutionsAfterMessage(ctx context.Context, arg Del
 	return err
 }
 
+const disableRiskPoliciesForTest = `-- name: DisableRiskPoliciesForTest :exec
+UPDATE risk_policies SET enabled = FALSE WHERE project_id = $1
+`
+
+// Test fixture: retire findings by disabling the test project's risk policies.
+func (q *Queries) DisableRiskPoliciesForTest(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, disableRiskPoliciesForTest, projectID)
+	return err
+}
+
 const findInferenceChatsByNewestMessageIdentity = `-- name: FindInferenceChatsByNewestMessageIdentity :many
 SELECT cm.chat_id, cm.external_message_id
 FROM chat_messages cm
@@ -2851,38 +2861,39 @@ candidate_chats AS (
   -- Join users table to enable searching by resolved user identity
   LEFT JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
   WHERE c.project_id = $1
+    AND ($4::uuid IS NULL OR c.id = $4::uuid)
     AND c.deleted IS FALSE
-    AND ($4 = '' OR c.external_user_id = $4)
-    AND ($5 = '' OR c.user_id = $5)
+    AND ($5 = '' OR c.external_user_id = $5)
+    AND ($6 = '' OR c.user_id = $6)
     AND (
-      $6::text = ''
-      OR ($6::text = 'true' AND c.pinned_at IS NOT NULL)
-      OR ($6::text = 'false' AND c.pinned_at IS NULL)
-    )
-    AND (
-      $7 = ''
-      OR c.id::text ILIKE '%' || $7 || '%'
-      OR c.external_user_id ILIKE '%' || $7 || '%'
-      OR c.title ILIKE '%' || $7 || '%'
-      OR u.display_name ILIKE '%' || $7 || '%'
-      OR u.email ILIKE '%' || $7 || '%'
-      OR ua.email ILIKE '%' || $7 || '%'
+      $7::text = ''
+      OR ($7::text = 'true' AND c.pinned_at IS NOT NULL)
+      OR ($7::text = 'false' AND c.pinned_at IS NULL)
     )
     AND (
       $8 = ''
+      OR c.id::text ILIKE '%' || $8 || '%'
+      OR c.external_user_id ILIKE '%' || $8 || '%'
+      OR c.title ILIKE '%' || $8 || '%'
+      OR u.display_name ILIKE '%' || $8 || '%'
+      OR u.email ILIKE '%' || $8 || '%'
+      OR ua.email ILIKE '%' || $8 || '%'
+    )
+    AND (
+      $9 = ''
       OR EXISTS (
         SELECT 1 FROM assistant_threads at
         WHERE at.chat_id = c.id
           AND at.project_id = $1
-          AND at.assistant_id = $8::uuid
+          AND at.assistant_id = $9::uuid
           AND at.deleted IS FALSE
           -- Optional source-kind dimension so setup/onboarding and runtime
           -- threads for the same assistant don't pollute each other's listing.
           -- @source_kind keeps only threads of that kind (onboarding passes
           -- 'setup'); @exclude_source_kind drops threads of that kind (runtime
           -- views pass 'setup'). Empty string on either disables that side.
-          AND ($9::text = '' OR at.source_kind = $9::text)
-          AND ($10::text = '' OR at.source_kind <> $10::text)
+          AND ($10::text = '' OR at.source_kind = $10::text)
+          AND ($11::text = '' OR at.source_kind <> $11::text)
       )
     )
     AND (
@@ -2891,12 +2902,12 @@ candidate_chats AS (
       OR ($2::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
     )
     AND (
-      $11::text = ''
-      OR ua.account_type = $11::text
+      $12::text = ''
+      OR ua.account_type = $12::text
       -- Rows without a classified account type are treated as 'team' so the
       -- team filter stays backwards-compatible with pre-classification chats.
       OR (
-        $11::text = 'team'
+        $12::text = 'team'
         AND (ua.account_type IS NULL OR ua.account_type = '')
       )
     )
@@ -2905,11 +2916,11 @@ candidate_chats AS (
       OR COALESCE(rc.cnt, 0) >= $3::int
     )
     AND (
-      coalesce(cardinality($12::text[]), 0) = 0
+      coalesce(cardinality($13::text[]), 0) = 0
       -- Proxied sessions match the LiteLLM filter even when a native hook
       -- stream owns every transcript row (proxied rows are suppressed as
       -- duplicates, so the message-source probe alone would miss them).
-      OR ('litellm' = ANY ($12::text[]) AND c.litellm_proxied)
+      OR ('litellm' = ANY ($13::text[]) AND c.litellm_proxied)
       OR coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = $1::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
@@ -2919,7 +2930,7 @@ candidate_chats AS (
           AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
         LIMIT 1
-      )) = ANY ($12::text[])
+      )) = ANY ($13::text[])
     )
 ),
 chat_stats AS (
@@ -2931,7 +2942,7 @@ chat_stats AS (
   -- inflating either value.
   SELECT
     cc.id,
-    CASE WHEN $13 = 'num_messages' THEN (
+    CASE WHEN $14 = 'num_messages' THEN (
       -- COUNT(*) rather than COUNT(cm.id) so the probe stays index-only.
       SELECT COUNT(*)::integer
       FROM chat_messages cm
@@ -2971,8 +2982,8 @@ filtered_chats AS (
   -- would evict an actively-writing chat the moment a new message lands past
   -- the caller's @to — the dashboard freezes @to when a range is picked, so
   -- running sessions would flicker out of the list until the next reload.
-  WHERE ($14::timestamptz IS NULL OR cs.last_message_timestamp >= $14)
-    AND ($15::timestamptz IS NULL OR cc.created_at <= $15)
+  WHERE ($15::timestamptz IS NULL OR cs.last_message_timestamp >= $15)
+    AND ($16::timestamptz IS NULL OR cc.created_at <= $16)
 ),
 limited_chats AS (
   -- Only ordering, paging and the total run over every filtered chat; the
@@ -3003,17 +3014,17 @@ limited_chats AS (
         -- deliberate: listings are a timeline of when conversations happened,
         -- and folding in updated_at would let title renames and pin toggles
         -- reorder recency.
-        CASE WHEN $13 = 'last_message_timestamp' AND $16 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
-        CASE WHEN $13 = 'last_message_timestamp' AND $16 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
-        CASE WHEN $13 = 'num_messages' AND $16 = 'desc' THEN fc.sort_num_messages END DESC NULLS LAST,
-        CASE WHEN $13 = 'num_messages' AND $16 = 'asc' THEN fc.sort_num_messages END ASC NULLS LAST,
+        CASE WHEN $14 = 'last_message_timestamp' AND $17 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
+        CASE WHEN $14 = 'last_message_timestamp' AND $17 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+        CASE WHEN $14 = 'num_messages' AND $17 = 'desc' THEN fc.sort_num_messages END DESC NULLS LAST,
+        CASE WHEN $14 = 'num_messages' AND $17 = 'asc' THEN fc.sort_num_messages END ASC NULLS LAST,
         fc.last_message_timestamp DESC,
         fc.id DESC
     ) AS page_position
   FROM filtered_chats fc
   ORDER BY page_position
-  LIMIT $18
-  OFFSET $17
+  LIMIT $19
+  OFFSET $18
 ),
 page_chats AS (
   SELECT
@@ -3055,7 +3066,7 @@ page_chats AS (
     SELECT at.id AS thread_id
     FROM assistant_threads at
     WHERE at.chat_id = lc.id AND at.project_id = $1 AND at.deleted IS FALSE
-    ORDER BY ($8 <> '' AND at.assistant_id::text = $8) DESC, at.last_event_at DESC, at.id DESC
+    ORDER BY ($9 <> '' AND at.assistant_id::text = $9) DESC, at.last_event_at DESC, at.id DESC
     LIMIT 1
   ) picked ON TRUE
   LEFT JOIN assistant_threads thread ON thread.id = picked.thread_id AND thread.project_id = $1
@@ -3117,6 +3128,7 @@ type ListChatsParams struct {
 	ProjectID         uuid.UUID
 	HasRiskFilter     string
 	MinRiskScore      int32
+	ChatID            uuid.NullUUID
 	ExternalUserID    interface{}
 	UserID            interface{}
 	Pinned            string
@@ -3169,6 +3181,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		arg.ProjectID,
 		arg.HasRiskFilter,
 		arg.MinRiskScore,
+		arg.ChatID,
 		arg.ExternalUserID,
 		arg.UserID,
 		arg.Pinned,
@@ -3772,6 +3785,21 @@ func (q *Queries) ListUserFeedbackForChat(ctx context.Context, arg ListUserFeedb
 	return items, nil
 }
 
+const lockChatRowForTest = `-- name: LockChatRowForTest :exec
+SELECT id FROM chats WHERE id = $1 AND project_id = $2 FOR NO KEY UPDATE
+`
+
+type LockChatRowForTestParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Test fixture: hold the lock an ordinary helper capture takes on its own row.
+func (q *Queries) LockChatRowForTest(ctx context.Context, arg LockChatRowForTestParams) error {
+	_, err := q.db.Exec(ctx, lockChatRowForTest, arg.ID, arg.ProjectID)
+	return err
+}
+
 const lockSubsessionLinks = `-- name: LockSubsessionLinks :exec
 SELECT pg_advisory_xact_lock(hashtextextended('subsession:' || CAST($1 AS text), 0))
 `
@@ -3815,24 +3843,6 @@ type MarkClaudeTagMessagesParams struct {
 
 func (q *Queries) MarkClaudeTagMessages(ctx context.Context, arg MarkClaudeTagMessagesParams) error {
 	_, err := q.db.Exec(ctx, markClaudeTagMessages, arg.ProjectID, arg.ChatID)
-	return err
-}
-
-const markKnownClaudeTagSubsession = `-- name: MarkKnownClaudeTagSubsession :exec
-UPDATE chats c SET session_surface = 'claude-tag'
-WHERE c.project_id = $1 AND c.id = $2
- AND c.session_surface IS DISTINCT FROM 'claude-tag'
- AND EXISTS (SELECT 1 FROM chat_session_links l WHERE l.project_id = c.project_id
-   AND l.child_chat_id = c.id AND l.kind = 'subagent' AND l.source_surface = 'claude-tag')
-`
-
-type MarkKnownClaudeTagSubsessionParams struct {
-	ProjectID uuid.UUID
-	ChatID    uuid.UUID
-}
-
-func (q *Queries) MarkKnownClaudeTagSubsession(ctx context.Context, arg MarkKnownClaudeTagSubsessionParams) error {
-	_, err := q.db.Exec(ctx, markKnownClaudeTagSubsession, arg.ProjectID, arg.ChatID)
 	return err
 }
 

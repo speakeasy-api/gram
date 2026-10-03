@@ -1,5 +1,5 @@
 import { useGramContext } from "@gram/client/react-query/_context.js";
-import { buildListChatsQuery } from "@gram/client/react-query/listChats.js";
+import { buildLoadChatOverviewQuery } from "@gram/client/react-query/loadChatOverview.js";
 import { buildListChatSessionLinksQuery } from "@gram/client/react-query/listChatSessionLinks.js";
 import { SlackChannelLink } from "@/components/slack-channel-link";
 import { IdentityAvatar } from "@/components/identity-avatar";
@@ -322,13 +322,10 @@ export function ChatLogsTable({
         for (let offset = 0; offset < ids.length; offset += 8) {
           const loaded = await Promise.allSettled(
             ids.slice(offset, offset + 8).map((id) => {
-              const query = buildListChatsQuery(client, {
-                search: id,
-                limit: 100,
+              const query = buildLoadChatOverviewQuery(client, {
+                id,
               });
-              return queryClient
-                .fetchQuery({ ...query, staleTime: 60_000 })
-                .then((result) => result.chats.find((chat) => chat.id === id));
+              return queryClient.fetchQuery({ ...query, staleTime: 60_000 });
             }),
           );
           for (const result of loaded)

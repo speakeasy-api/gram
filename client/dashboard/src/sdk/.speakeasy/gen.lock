@@ -183,6 +183,7 @@ trackedFiles:
   src/funcs/chatListSessionLinks.ts: {}
   src/funcs/chatListSources.ts: {}
   src/funcs/chatLoad.ts: {}
+  src/funcs/chatLoadOverview.ts: {}
   src/funcs/chatSessionsCreate.ts: {}
   src/funcs/chatSessionsRevoke.ts: {}
   src/funcs/chatSetPinned.ts: {}
@@ -2434,6 +2435,7 @@ trackedFiles:
   src/models/operations/listwidgets.ts: {}
   src/models/operations/listworkloadidentities.ts: {}
   src/models/operations/loadchat.ts: {}
+  src/models/operations/loadchatoverview.ts: {}
   src/models/operations/logout.ts: {}
   src/models/operations/markriskresultsfalsepositive.ts: {}
   src/models/operations/migrateorganizationremotesessionissuer.ts: {}
@@ -3219,6 +3221,8 @@ trackedFiles:
   src/react-query/liteLLMInstances.ts: {}
   src/react-query/loadChat.core.ts: {}
   src/react-query/loadChat.ts: {}
+  src/react-query/loadChatOverview.core.ts: {}
+  src/react-query/loadChatOverview.ts: {}
   src/react-query/logout.ts: {}
   src/react-query/managedDevices.core.ts: {}
   src/react-query/managedDevices.ts: {}
@@ -10008,6 +10012,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  loadChatOverview:
+    speakeasy-default-load-chat-overview:
+      parameters:
+        query:
+          id: "<id>"
+      responses:
+        "200":
+          application/json: {"created_at": "2024-05-09T08:14:27.583Z", "id": "<id>", "last_message_timestamp": "2024-04-22T18:34:22.441Z", "num_messages": 700522, "title": "<value>", "updated_at": "2025-07-09T08:42:49.462Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   logout:
     speakeasy-default-logout:
       responses:

@@ -697,6 +697,7 @@ candidate_chats AS (
   -- Join users table to enable searching by resolved user identity
   LEFT JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
   WHERE c.project_id = @project_id
+    AND (sqlc.narg(chat_id)::uuid IS NULL OR c.id = sqlc.narg(chat_id)::uuid)
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
     AND (@user_id = '' OR c.user_id = @user_id)
@@ -1888,6 +1889,10 @@ INSERT INTO risk_policies (project_id, organization_id, name, sources, enabled, 
 VALUES (@project_id, @organization_id, 'test-policy', '{}', TRUE, 'flag', TRUE, 1)
 RETURNING id;
 
+-- name: DisableRiskPoliciesForTest :exec
+-- Test fixture: retire findings by disabling the test project's risk policies.
+UPDATE risk_policies SET enabled = FALSE WHERE project_id = @project_id;
+
 -- name: SeedDisabledRiskPolicy :one
 -- Test fixture: insert a disabled risk policy and return its id. Findings under
 -- a disabled (or deleted) policy must drop out of every risk surface — the
@@ -2122,13 +2127,6 @@ FROM projects p WHERE p.id = @project_id
  AND NOT EXISTS (SELECT 1 FROM chat_session_links WHERE project_id = @project_id AND child_chat_id = @child_chat_id AND kind = 'subagent')
 ON CONFLICT (project_id, parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL DO NOTHING;
 
--- name: MarkKnownClaudeTagSubsession :exec
-UPDATE chats c SET session_surface = 'claude-tag'
-WHERE c.project_id = @project_id AND c.id = @chat_id
- AND c.session_surface IS DISTINCT FROM 'claude-tag'
- AND EXISTS (SELECT 1 FROM chat_session_links l WHERE l.project_id = c.project_id
-   AND l.child_chat_id = c.id AND l.kind = 'subagent' AND l.source_surface = 'claude-tag');
-
 -- name: ListChatParticipantRollups :many
 -- One face per Slack identity; message snapshots retain their historical names.
 SELECT DISTINCT ON (p.chat_id, p.provider, coalesce(p.provider_team_id, ''), p.provider_user_id)
@@ -2174,3 +2172,7 @@ SELECT DISTINCT ON (root_id) root_id AS id,
  coalesce(slack_channel_id, '')::text AS slack_channel_id,
  coalesce(slack_channel_name, '')::text AS slack_channel_name
 FROM ancestry ORDER BY root_id, (slack_channel_id IS NULL), depth;
+
+-- name: LockChatRowForTest :exec
+-- Test fixture: hold the lock an ordinary helper capture takes on its own row.
+SELECT id FROM chats WHERE id = @id AND project_id = @project_id FOR NO KEY UPDATE;
