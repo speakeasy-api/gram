@@ -33,6 +33,7 @@ func TestAssistantExecutionTokenNamespacesAndGate(t *testing.T) {
 	claims, err := issuer.ValidateAssistantExecution(raw)
 	require.NoError(t, err)
 	require.Equal(t, execution, claims.Execution)
+	require.Equal(t, 60*time.Minute, claims.ExpiresAt.Sub(claims.IssuedAt.Time))
 	require.Equal(t, execution.Identity.Subject, claims.Subject)
 	require.Equal(t, jwt.ClaimStrings{AssistantExecutionAudience}, claims.Audience)
 	parsed, _, err := jwt.NewParser().ParseUnverified(raw, jwt.MapClaims{})

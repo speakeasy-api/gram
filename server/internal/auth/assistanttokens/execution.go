@@ -32,7 +32,15 @@ func (m *Manager) ConfigureExecutionIdentity(issuer *mcpauthz.Issuer, identities
 	m.executionIdentities = identities
 }
 
+// GenerateExecution is a server-only signer, not an HTTP input boundary.
+// Production dispatch passes only the envelope loaded from its persisted event:
+// captureExecution strips caller metadata and snapshots policy before enqueue.
+// Comparing against a new snapshot here would widen old events after upgrades.
 func (m *Manager) GenerateExecution(ctx context.Context, e assistantidentity.Execution) (string, error) {
+	if m.executionIssuer == nil {
+		return "", fmt.Errorf("assistant execution signer unavailable")
+	}
+
 	if err := m.validateExecutionAuthority(ctx, e); err != nil {
 		return "", fmt.Errorf("assistant execution: %w", err)
 	}
@@ -61,7 +69,7 @@ func (m *Manager) ValidateExecution(ctx context.Context, raw string, target Exec
 	return &e, nil
 }
 
-func (m *Manager) validateExecutionAuthority(ctx context.Context, e assistantidentity.Execution) error {
+func (m *Manager) validateExecutionWorkloadAuthority(ctx context.Context, e assistantidentity.Execution) error {
 	if m.executionIssuer == nil || m.executionIdentities == nil || m.executionDB == nil {
 		return assistantidentity.ErrInvalidIdentity
 	}
@@ -77,6 +85,14 @@ func (m *Manager) validateExecutionAuthority(ctx context.Context, e assistantide
 	if row.ThreadDeleted || row.AssistantDeleted || row.AssistantStatus != "active" {
 		return assistantidentity.ErrInvalidIdentity
 	}
+	return nil
+}
+
+func (m *Manager) validateExecutionAuthority(ctx context.Context, e assistantidentity.Execution) error {
+	if err := m.validateExecutionWorkloadAuthority(ctx, e); err != nil {
+		return err
+	}
+
 	if e.HumanUserID != "" {
 		active, err := m.orgs.HasActiveOrganizationUser(ctx, organizationsrepo.HasActiveOrganizationUserParams{OrganizationID: e.Identity.OrganizationID, UserID: e.HumanUserID})
 		if err != nil {
@@ -104,15 +120,14 @@ func (m *Manager) validateExecutionAuthority(ctx context.Context, e assistantide
 	return nil
 }
 
-// AuthorizeExecution is intentionally closed during AIM-410 rollout. Identity
-// tokens must not enter the legacy user authorization path. AIM-411 replaces
-// this gate with positive mode-aware model/business admission.
+// AuthorizeExecution validates independent target pins and performs positive
+// model admission without entering the legacy user authorization path.
 func (m *Manager) AuthorizeExecution(ctx context.Context, raw string, target ExecutionTarget) error {
 	e, err := m.ValidateExecution(ctx, raw, target)
 	if err != nil {
 		return fmt.Errorf("assistant execution: %w", err)
 	}
-	if err := assistantidentity.AdmitExecution(*e); err != nil {
+	if err := m.executionIdentities.AdmitModel(ctx, m.executionDB, *e); err != nil {
 		return fmt.Errorf("assistant execution admission: %w", err)
 	}
 	return nil

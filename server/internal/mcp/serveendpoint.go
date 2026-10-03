@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
@@ -181,6 +182,25 @@ func (s *Service) serveResolvedMCPEndpoint(
 	slug, mcpRouteBase string,
 ) error {
 	ctx := r.Context()
+	publicTunnel := isTunneledPublic(mcpServer)
+	// Bound executions use business policy even on otherwise public resources.
+	// Keep the database row untouched; visibility here selects request-local
+	// policy interceptors, never grants, credentials, or a platform context.
+	if assistanttokens.IsExecutionToken(httpheaders.AuthorizationOrChatSessionToken(r)) {
+		boundCtx, err := s.assistantTokens.AuthorizeBusiness(ctx, httpheaders.AuthorizationOrChatSessionToken(r), mcpServer.ID, nil)
+		if err != nil {
+			return fmt.Errorf("authorize business endpoint: %w", err)
+		}
+		ac, ok := contextvalues.GetAuthContext(boundCtx)
+		if !ok || ac == nil || ac.ProjectID == nil || *ac.ProjectID != mcpEndpoint.ProjectID {
+			return oops.C(oops.CodeForbidden)
+		}
+		isolated := *mcpServer
+		isolated.Visibility = mcpservers.VisibilityPrivate
+		mcpServer = &isolated
+		ctx = boundCtx
+		r = r.WithContext(ctx)
+	}
 
 	s.recordMCPNetworkRequest(ctx, mcpEndpoint.ProjectID, mcpServer.ID, uuid.Nil, "")
 	logger = logger.With(attr.SlogMcpServerID(mcpServer.ID.String()))
@@ -208,7 +228,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 	// issuer gate is skipped even though the issuer column is populated.
 	// Gate on owner consent before dispatch so ungated callers are never
 	// challenged for a server that will not serve them.
-	if isTunneledPublic(mcpServer) {
+	if publicTunnel {
 		if _, err := s.requireTunneledPublicConsent(ctx, logger, mcpEndpoint, mcpServer); err != nil {
 			return err
 		}
@@ -232,7 +252,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return err
 		}
 		upstreamResource = resolvedEndpoint.UpstreamResource
-		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
+		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, httpheaders.AuthorizationOrChatSessionToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
 			return fmt.Errorf("apply issuer gate: %w", err)
 		}

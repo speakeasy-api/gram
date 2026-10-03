@@ -63,7 +63,7 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (
 			return Binding{}, fmt.Errorf("lock provisioning membership: %w", err)
 		}
 	}
-	old, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, AssistantID: p.AssistantID})
+	old, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{CaptureSuspended: false, OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, AssistantID: p.AssistantID})
 	if err == nil {
 		if !old.Eligible {
 			return Binding{}, ErrTombstoned

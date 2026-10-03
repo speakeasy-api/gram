@@ -96,9 +96,9 @@ func (s *Service) ValidateExecution(ctx context.Context, db DB, e Execution) err
 
 func (s *Service) Issuer() string { return s.issuer }
 
-// AdmitExecution is deliberately closed until mode-aware positive admission is
-// implemented. Keeping the gate in code prevents a configuration switch from
-// activating a workload with only identity validation or an issuance ceiling.
+// AdmitExecution cannot authorize from an envelope alone. Runtime callers use
+// Service.AdmitModel, which checks live workload and delegator eligibility. This
+// identity-only helper remains fail-closed for callers holding only a snapshot.
 func AdmitExecution(e Execution) error {
 	if err := e.Check(); err != nil {
 		return err

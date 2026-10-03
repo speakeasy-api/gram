@@ -70,7 +70,7 @@ func (s *Service) bindRoot(ctx context.Context, tx pgx.Tx, org string, project, 
 	if a.Deleted || !a.ProjectLive {
 		return ErrTombstoned
 	}
-	binding, bindingErr := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{OrganizationID: org, ProjectID: project, AssistantID: assistant})
+	binding, bindingErr := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{CaptureSuspended: false, OrganizationID: org, ProjectID: project, AssistantID: assistant})
 	if bindingErr != nil && !errors.Is(bindingErr, pgx.ErrNoRows) {
 		return fmt.Errorf("load root assistant binding: %w", bindingErr)
 	}
@@ -108,7 +108,7 @@ func (s *Service) bindRoot(ctx context.Context, tx pgx.Tx, org string, project, 
 	// Eligibility was first read before locking the agent. Re-read after the
 	// lock so a concurrent owner transfer cannot leave a tombstoned assistant
 	// binding behind an otherwise active agent row.
-	current, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{OrganizationID: org, ProjectID: project, AssistantID: assistant})
+	current, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{CaptureSuspended: false, OrganizationID: org, ProjectID: project, AssistantID: assistant})
 	if err != nil {
 		return resourceError("revalidate locked assistant binding", err)
 	}
@@ -218,7 +218,7 @@ func TombstoneAssistant(ctx context.Context, tx pgx.Tx, org string, project, ass
 	if err := lockAssistant(ctx, q, org, project, assistant); err != nil {
 		return err
 	}
-	b, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{OrganizationID: org, ProjectID: project, AssistantID: assistant})
+	b, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{CaptureSuspended: false, OrganizationID: org, ProjectID: project, AssistantID: assistant})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}

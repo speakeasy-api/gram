@@ -100,6 +100,7 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
+	assistantTokens     *assistanttokens.Manager
 	service             *mcp.Service
 	conn                *pgxpool.Pool
 	sessionManager      *sessions.Manager
@@ -495,6 +496,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](logger, cacheAdapter, cache.SuffixNone)
 
 	return ctx, &testInstance{
+		assistantTokens:     assistantTokens,
 		service:             svc,
 		conn:                conn,
 		sessionManager:      sessionManager,

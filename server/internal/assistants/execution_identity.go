@@ -59,7 +59,7 @@ func (s *ServiceCore) captureExecution(ctx context.Context, assistant assistantR
 	if !trigger.Valid {
 		// Older ingress did not always carry a trigger. Absence is compatible only
 		// when durable assistant binding history is genuinely absent.
-		_, err := identityrepo.New(s.db).GetAssistantBinding(ctx, identityrepo.GetAssistantBindingParams{OrganizationID: assistant.OrganizationID, ProjectID: assistant.ProjectID, AssistantID: assistant.ID})
+		_, err := identityrepo.New(s.db).GetAssistantBinding(ctx, identityrepo.GetAssistantBindingParams{CaptureSuspended: false, OrganizationID: assistant.OrganizationID, ProjectID: assistant.ProjectID, AssistantID: assistant.ID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return marshalExecutionPayload(payload)
 		}
@@ -76,7 +76,7 @@ func (s *ServiceCore) captureExecution(ctx context.Context, assistant assistantR
 		}
 		trigger = uuid.NullUUID{UUID: id, Valid: true}
 	}
-	resolved, err := s.identities.Resolve(ctx, s.db, assistant.OrganizationID, assistant.ProjectID, assistant.ID, trigger.UUID)
+	resolved, err := s.identities.ResolveForCapture(ctx, s.db, assistant.OrganizationID, assistant.ProjectID, assistant.ID, trigger.UUID)
 	if err != nil {
 		return nil, fmt.Errorf("assistant execution: %w", err)
 	}
@@ -99,7 +99,7 @@ func (s *ServiceCore) captureExecution(ctx context.Context, assistant assistantR
 	}
 	// Capture identity now; independently recheck selected-user eligibility at
 	// token issuance and dispatch. Never reselect an owner after a denial.
-	ceiling, err := s.identities.SnapshotCeiling(ctx, s.db, *resolved.Identity)
+	ceiling, err := s.identities.SnapshotCeilingForCapture(ctx, s.db, *resolved.Identity)
 	if err != nil {
 		return nil, fmt.Errorf("assistant execution: %w", err)
 	}
@@ -162,6 +162,9 @@ func decodeExecution(raw []byte) (*assistantidentity.Execution, error) {
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return nil, fmt.Errorf("assistant execution: %w", err)
 	}
+	if payload == nil {
+		return nil, assistantidentity.ErrInvalidIdentity
+	}
 	for key := range payload {
 		if canonical := reservedExecutionKey(key); canonical != "" && key != canonical {
 			return nil, assistantidentity.ErrInvalidIdentity
@@ -181,15 +184,29 @@ func decodeExecution(raw []byte) (*assistantidentity.Execution, error) {
 	return &execution, nil
 }
 
-// checkExecutionDispatch preserves unversioned turns. New identities fail closed
-// until AIM-411 implements positive mode-aware admission. Never mint an owner
-// token as a substitute for an unavailable workload admission capability.
+// checkExecutionDispatch validates persisted routing before dispatch. Bound
+// lifecycle and selected-human admission happen in GenerateExecution: suspension
+// must fail token issuance, not prevent an execution attempt or pause the assistant.
 func (s *ServiceCore) checkExecutionDispatch(ctx context.Context, assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) error {
 	execution, err := decodeExecution(event.NormalizedPayloadJSON)
 	if err != nil {
 		return fmt.Errorf("assistant execution payload: %w: %w", assistantidentity.ErrInvalidIdentity, err)
 	}
 	if execution == nil {
+		// A persisted legacy event cannot bypass a binding added since capture.
+		// History includes suspended/revoked bindings; only true absence permits
+		// the legacy credential path.
+		_, err := identityrepo.New(s.db).GetAssistantBinding(ctx, identityrepo.GetAssistantBindingParams{
+			CaptureSuspended: false, OrganizationID: assistant.OrganizationID,
+			ProjectID: assistant.ProjectID, AssistantID: assistant.ID,
+		})
+		if err == nil {
+			return assistantidentity.ErrInvalidIdentity
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("read legacy assistant binding: %w", err)
+		}
+
 		// Legacy envelopes do not have live identity validation. Re-read the
 		// lifecycle here: an already admitted turn may outlive a pause, and
 		// the assistant record passed by the processing loop can be stale.
@@ -207,17 +224,6 @@ func (s *ServiceCore) checkExecutionDispatch(ctx context.Context, assistant assi
 	}
 	if execution.Identity.OrganizationID != assistant.OrganizationID || execution.Identity.ProjectID != assistant.ProjectID || execution.Identity.AssistantID != assistant.ID || execution.ThreadID != thread.ID || execution.InvocationEventID() != event.EventID {
 		return assistantidentity.ErrInvalidIdentity
-	}
-	if err := s.identities.ValidateExecution(ctx, s.db, *execution); err != nil {
-		return fmt.Errorf("assistant execution: %w", err)
-	}
-	if execution.HumanUserID != "" {
-		if err := s.checkTurnUser(ctx, assistant, execution.HumanUserID); err != nil {
-			return fmt.Errorf("assistant execution: %w", err)
-		}
-	}
-	if err := assistantidentity.AdmitExecution(*execution); err != nil {
-		return fmt.Errorf("assistant execution admission: %w", err)
 	}
 	return nil
 }

@@ -660,7 +660,7 @@ SELECT b.id, b.original_assistant_id, b.original_agent_id, b.generation, b.delet
   COALESCE(NOT b.deleted AND b.project_ref_id IS NOT NULL AND b.assistant_id IS NOT NULL
     AND b.agent_id = b.original_agent_id AND b.assistant_id = b.original_assistant_id
     AND b.project_ref_id = b.project_id AND NOT p.deleted AND NOT a.deleted
-    AND NOT g.deleted AND g.suspended_at IS NULL AND g.revoked_at IS NULL
+    AND NOT g.deleted AND (g.suspended_at IS NULL OR $1::boolean) AND g.revoked_at IS NULL
     AND g.owner_reassignment_required_at IS NULL
     AND (a.created_by_user_id IS NULL OR g.owner_user_id = a.created_by_user_id) AND u.deleted_at IS NULL
     AND u.workos_deleted_at IS NULL AND NOT m.deleted AND m.user_id IS NOT NULL, false)::boolean AS eligible
@@ -670,14 +670,15 @@ LEFT JOIN assistants a ON a.organization_id = b.organization_id AND a.project_id
 LEFT JOIN agents g ON g.organization_id = b.organization_id AND g.project_id = b.project_id AND g.id = b.agent_id
 LEFT JOIN users u ON u.id = g.owner_user_id
 LEFT JOIN organization_user_relationships m ON m.organization_id = b.organization_id AND m.user_id = u.id
-WHERE b.organization_id = $1 AND b.project_id = $2 AND b.original_assistant_id = $3
+WHERE b.organization_id = $2 AND b.project_id = $3 AND b.original_assistant_id = $4
 ORDER BY b.generation DESC LIMIT 1
 `
 
 type GetAssistantBindingParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	AssistantID    uuid.UUID
+	CaptureSuspended bool
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	AssistantID      uuid.UUID
 }
 
 type GetAssistantBindingRow struct {
@@ -691,7 +692,12 @@ type GetAssistantBindingRow struct {
 }
 
 func (q *Queries) GetAssistantBinding(ctx context.Context, arg GetAssistantBindingParams) (GetAssistantBindingRow, error) {
-	row := q.db.QueryRow(ctx, getAssistantBinding, arg.OrganizationID, arg.ProjectID, arg.AssistantID)
+	row := q.db.QueryRow(ctx, getAssistantBinding,
+		arg.CaptureSuspended,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.AssistantID,
+	)
 	var i GetAssistantBindingRow
 	err := row.Scan(
 		&i.ID,

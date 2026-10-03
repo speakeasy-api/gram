@@ -23,6 +23,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
@@ -92,6 +93,12 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	agentID uuid.UUID,
 ) error {
 	ctx := r.Context()
+	// Execution credentials have an exact configured business-server ceiling,
+	// not an ambient meta-server/resource audience. Never reinterpret them as
+	// user-session or owner credentials on this aggregation surface.
+	if assistanttokens.IsExecutionToken(r.Header.Get("Authorization")) || assistanttokens.IsExecutionToken(r.Header.Get("Gram-Chat-Session")) {
+		return oops.C(oops.CodeUnauthorized)
+	}
 
 	if shouldRecordMetaMCPNetworkRequest(agentID) {
 		s.recordMCPNetworkRequest(ctx, mcpEndpoint.ProjectID, uuid.Nil, metaServer.ID, metaServer.OrganizationID)

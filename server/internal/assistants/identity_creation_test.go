@@ -78,7 +78,7 @@ func TestIdentityCreationConcurrentIndependentRequests(t *testing.T) {
 	}
 
 	require.NoError(t, core.DeleteAssistant(t.Context(), project, results[0].ID, urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"), nil))
-	binding, err := identityrepo.New(db).GetAssistantBinding(t.Context(), identityrepo.GetAssistantBindingParams{OrganizationID: "org-test", ProjectID: project, AssistantID: results[0].ID})
+	binding, err := identityrepo.New(db).GetAssistantBinding(t.Context(), identityrepo.GetAssistantBindingParams{CaptureSuspended: false, OrganizationID: "org-test", ProjectID: project, AssistantID: results[0].ID})
 	require.NoError(t, err)
 	require.True(t, binding.Deleted)
 }
@@ -104,7 +104,8 @@ func TestIdentityCreationProvisioningFailureRollsBack(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, agents, "failed provisioning must not leave an orphan agent")
 
-	// The rolled-back reservation can be retried after eligibility is fixed.
+	// The rolled-back reservation can be retried after eligibility and authority are fixed.
+	seedProvisioningAccess(t, db, project, "ineligible-user")
 	_, err = orgrepo.New(db).UpsertOrganizationUserRelationship(t.Context(), orgrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: "org-test", UserID: pgtype.Text{String: "ineligible-user", Valid: true}})
 	require.NoError(t, err)
 	record, err := core.CreateAssistant(t.Context(), "org-test", project, "ineligible-user", "Rollback assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive)
@@ -120,7 +121,7 @@ func TestIdentityCreationAPIUpgradeRequiresAuthorizationAndIsIdempotent(t *testi
 	payload := &gen.UpgradeAssistantIdentityPayload{ID: legacy.ID.String(), SessionToken: nil, ProjectSlugInput: nil}
 	_, err = svc.UpgradeAssistantIdentity(authztest.WithExactGrants(t, ctx), payload)
 	require.Error(t, err)
-	_, err = identityrepo.New(db).GetAssistantBinding(ctx, identityrepo.GetAssistantBindingParams{OrganizationID: "org-test", ProjectID: project, AssistantID: legacy.ID})
+	_, err = identityrepo.New(db).GetAssistantBinding(ctx, identityrepo.GetAssistantBindingParams{CaptureSuspended: false, OrganizationID: "org-test", ProjectID: project, AssistantID: legacy.ID})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	granted := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectWrite, project.String()))
 	first, err := svc.UpgradeAssistantIdentity(granted, payload)
@@ -128,7 +129,7 @@ func TestIdentityCreationAPIUpgradeRequiresAuthorizationAndIsIdempotent(t *testi
 	second, err := svc.UpgradeAssistantIdentity(granted, payload)
 	require.NoError(t, err)
 	require.Equal(t, first.ID, second.ID)
-	binding, err := identityrepo.New(db).GetAssistantBinding(ctx, identityrepo.GetAssistantBindingParams{OrganizationID: "org-test", ProjectID: project, AssistantID: legacy.ID})
+	binding, err := identityrepo.New(db).GetAssistantBinding(ctx, identityrepo.GetAssistantBindingParams{CaptureSuspended: false, OrganizationID: "org-test", ProjectID: project, AssistantID: legacy.ID})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, binding.Generation)
 	_, err = svc.UpgradeAssistantIdentity(authztest.WithExactGrants(t, ctx), payload)
@@ -165,7 +166,7 @@ func TestIdentityCreationManagedLegacyAndCanonicalDashboard(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, legacy.ID, ensured.ID)
 	require.Equal(t, "NEVER_CONFIGURED", ensured.IdentityState)
-	_, err = identityrepo.New(db).GetAssistantBinding(t.Context(), identityrepo.GetAssistantBindingParams{OrganizationID: "org-test", ProjectID: project, AssistantID: legacy.ID})
+	_, err = identityrepo.New(db).GetAssistantBinding(t.Context(), identityrepo.GetAssistantBindingParams{CaptureSuspended: false, OrganizationID: "org-test", ProjectID: project, AssistantID: legacy.ID})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	canonical, err := core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, legacy.ID, legacy.Name)
 	require.NoError(t, err)
@@ -238,7 +239,7 @@ func TestDisableLegacyManagedAssistantWithoutBinding(t *testing.T) {
 	require.NoError(t, q.CreateProjectManagedAssistant(t.Context(), assistantrepo.CreateProjectManagedAssistantParams{ProjectID: project, AssistantID: legacy.ID}))
 	_, err = core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, legacy.ID, legacy.Name)
 	require.NoError(t, err)
-	_, err = identityrepo.New(db).GetAssistantBinding(t.Context(), identityrepo.GetAssistantBindingParams{OrganizationID: "org-test", ProjectID: project, AssistantID: legacy.ID})
+	_, err = identityrepo.New(db).GetAssistantBinding(t.Context(), identityrepo.GetAssistantBindingParams{CaptureSuspended: false, OrganizationID: "org-test", ProjectID: project, AssistantID: legacy.ID})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	require.NoError(t, core.DisableManagedAssistant(t.Context(), project, urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"), nil))
 	_, err = q.GetManagedAssistantByProject(t.Context(), project)
@@ -259,7 +260,7 @@ func TestIdentityPresentationIncludesAgentOwnerBarrier(t *testing.T) {
 	core := newProvisioningCore(t, db)
 	item, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Identity presentation", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive)
 	require.NoError(t, err)
-	binding, err := identityrepo.New(db).GetAssistantBinding(t.Context(), identityrepo.GetAssistantBindingParams{OrganizationID: "org-test", ProjectID: project, AssistantID: item.ID})
+	binding, err := identityrepo.New(db).GetAssistantBinding(t.Context(), identityrepo.GetAssistantBindingParams{CaptureSuspended: false, OrganizationID: "org-test", ProjectID: project, AssistantID: item.ID})
 	require.NoError(t, err)
 	require.NoError(t, identityrepo.New(db).FixtureLatchOwner(t.Context(), identityrepo.FixtureLatchOwnerParams{OrganizationID: "org-test", AgentID: binding.OriginalAgentID}))
 	rows, err := core.ListAssistants(t.Context(), project)

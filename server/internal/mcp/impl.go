@@ -1147,6 +1147,27 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// - authToken: from Authorization header (for OAuth flows)
 	// - sessionToken: from Gram-Chat-Session header (for chat session fallback on non-OAuth endpoints)
 	authToken := httpheaders.AuthorizationBearerToken(r)
+	if assistanttokens.IsExecutionToken(httpheaders.AuthorizationOrChatSessionToken(r)) {
+		authToken = httpheaders.AuthorizationOrChatSessionToken(r)
+		// Never forward an execution envelope as an external OAuth bearer. Those
+		// flows remain closed until confidential invocation-bound consent exists.
+		if toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid {
+			return oops.C(oops.CodeUnauthorized)
+		}
+		boundCtx, err := s.assistantTokens.AuthorizeBusiness(ctx, httpheaders.AuthorizationOrChatSessionToken(r), cfg.rbacResourceID, nil)
+		if err != nil {
+			return fmt.Errorf("authorize business runtime request: %w", err)
+		}
+		ac, ok := contextvalues.GetAuthContext(boundCtx)
+		if !ok || ac == nil || ac.ProjectID == nil || *ac.ProjectID != toolset.ProjectID || ac.ActiveOrganizationID != toolset.OrganizationID {
+			return oops.C(oops.CodeForbidden)
+		}
+		isolated := *cfg
+		isolated.isPublic = false
+		cfg = &isolated
+		ctx = boundCtx
+		r = r.WithContext(ctx)
+	}
 
 	var tokenInputs []oauthTokenInputs
 
@@ -1228,7 +1249,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 				})
 			}
 		case !cfg.isPublic:
-			ctx, err = s.RequirePrivateIdentityAuth(ctx, w, r, false, toolset.ID, oauthProtectedResourceURL)
+			ctx, err = s.RequirePrivateIdentityAuth(ctx, w, r, false, cfg.rbacResourceID, oauthProtectedResourceURL)
 			if err != nil {
 				return err
 			}
@@ -1367,7 +1388,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// described toolset, unchanged.
 	var wrapperRBACResourceID string
 	var wrapperIsPublic *bool
-	if cfg.mcpServerID != nil {
+	if cfg.mcpServerID != nil || assistanttokens.IsExecutionToken(httpheaders.AuthorizationOrChatSessionToken(r)) {
 		wrapperRBACResourceID = cfg.rbacResourceID.String()
 		isPublic := cfg.isPublic
 		wrapperIsPublic = &isPublic
@@ -1898,6 +1919,14 @@ func (s *Service) TryPublicIdentityAuth(ctx context.Context, r *http.Request, is
 func (s *Service) authenticateToken(ctx context.Context, token string, oauthResourceID uuid.UUID, isOAuthCapable bool) (context.Context, error) {
 	if token == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+
+	if assistanttokens.IsExecutionToken(token) {
+		authorizedCtx, err := s.assistantTokens.AuthorizeBusiness(ctx, token, oauthResourceID, nil)
+		if err != nil {
+			return ctx, fmt.Errorf("authorize business credential: %w", err)
+		}
+		return s.identityValidator.StampAssistant(authorizedCtx), nil
 	}
 
 	if authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token); err == nil {

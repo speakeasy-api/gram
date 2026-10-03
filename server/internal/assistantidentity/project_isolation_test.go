@@ -36,7 +36,7 @@ func TestBindingTransactionRejectsSameOrganizationForeignProjectAuthority(t *tes
 			// Use an unbound foreign agent so uniqueness does not mask the project FK.
 			foreignAgent, err := agentrepo.New(f.db).CreateAgent(t.Context(), agentrepo.CreateAgentParams{OrganizationID: f.org, OwnerUserID: f.actor, ProjectID: uuid.NullUUID{UUID: other.project, Valid: true}, Name: "Unbound foreign agent"})
 			require.NoError(t, err)
-			binding, err := q.GetAssistantBinding(t.Context(), repo.GetAssistantBindingParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant})
+			binding, err := q.GetAssistantBinding(t.Context(), repo.GetAssistantBindingParams{CaptureSuspended: false, OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant})
 			require.NoError(t, err)
 			root, unbound := uuid.New(), uuid.New()
 			require.NoError(t, q.FixtureCreateAssistant(t.Context(), repo.FixtureCreateAssistantParams{ID: unbound, OrganizationID: f.org, ProjectID: f.project, Creator: conv.ToPGText(f.actor)}))

@@ -16,6 +16,10 @@ import (
 const AssistantExecutionType = "gram-assistant-execution+jwt"
 const AssistantExecutionAudience = "urn:gram:assistant-execution"
 
+// AssistantRuntimeTokenTTL covers queue wait and model/tool work for both legacy
+// and workload runner credentials. The runtime consumes either token opaquely.
+const AssistantRuntimeTokenTTL = 60 * time.Minute
+
 // AssistantExecutionClaims is distinct from outbound identity assertions and
 // legacy user-backed assistant tokens. No synthetic user claim is emitted.
 type AssistantExecutionClaims struct {
@@ -25,7 +29,7 @@ type AssistantExecutionClaims struct {
 
 // MintAssistantExecution signs validated identity metadata, not a permission.
 // Callers must revalidate live bindings before minting and on every use. Actual
-// model/business admission remains closed until AIM-411 supplies authorization.
+// business access is checked independently at resource-specific boundaries.
 func (s *Issuer) MintAssistantExecution(e assistantidentity.Execution) (string, error) {
 	if s == nil || e.Issuer != s.issuer {
 		return "", assistantidentity.ErrInvalidIdentity
@@ -36,7 +40,7 @@ func (s *Issuer) MintAssistantExecution(e assistantidentity.Execution) (string, 
 	now := time.Now()
 	claims := AssistantExecutionClaims{Execution: e, RegisteredClaims: jwt.RegisteredClaims{
 		Issuer: s.issuer, Subject: e.Identity.Subject, Audience: jwt.ClaimStrings{AssistantExecutionAudience},
-		NotBefore: nil, ID: "", IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(15 * time.Minute)),
+		NotBefore: nil, ID: "", IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(AssistantRuntimeTokenTTL)),
 	}}
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	token.Header["typ"] = AssistantExecutionType

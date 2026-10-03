@@ -2,8 +2,6 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum RunnerError {
-    #[error("assistant invocation busy")]
-    InvocationBusy,
     #[error("invalid mcp server header name for {server}: {name}: {source}")]
     McpHeaderName {
         server: String,

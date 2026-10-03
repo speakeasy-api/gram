@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -2932,6 +2933,11 @@ func (s *ServiceCore) processEventTurn(
 	if err := s.checkExecutionDispatch(ctx, assistant, thread, event); err != nil {
 		return nil, classifyExecutionDispatchError(err)
 	}
+	// Only the persisted server-captured envelope may select workload authority.
+	execution, err := decodeExecution(event.NormalizedPayloadJSON)
+	if err != nil {
+		return nil, err
+	}
 	skills, err := s.loadAssistantSkills(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
 	if err != nil {
 		return nil, err
@@ -2977,9 +2983,11 @@ func (s *ServiceCore) processEventTurn(
 		if err != nil {
 			return nil, fmt.Errorf("decode assistant turn: %w", err)
 		}
-		actorUserID, err = s.turnUserID(ctx, assistant, thread, event)
-		if err != nil {
-			return nil, err
+		if execution == nil {
+			actorUserID, err = s.turnUserID(ctx, assistant, thread, event)
+			if err != nil {
+				return nil, err
+			}
 		}
 		// Best-effort: files attached to the triggering message ride along as
 		// vision/text content. Failures degrade to the metadata-only turn.
@@ -2994,7 +3002,13 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return nil, err
 	}
-	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, actorUserID)
+	var turnToken string
+	if execution != nil {
+		turnToken, err = s.assistantTokens.GenerateExecution(ctx, *execution)
+		err = classifyExecutionDispatchError(err)
+	} else {
+		turnToken, err = s.MintThreadScopedRuntimeToken(assistant, thread.ID, actorUserID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -3285,7 +3299,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 // enough that a leaked token ages out well before the thread retires. Fresh
 // tokens are pushed on /configure and on every /turn, so this is the upper
 // bound between refreshes for an idle runtime.
-const assistantRuntimeTokenTTL = 60 * time.Minute
+const assistantRuntimeTokenTTL = mcpauthz.AssistantRuntimeTokenTTL
 
 // mcpAuthAddendum is source-agnostic framing for MCP auth: who may see an
 // AuthURL, when auth events appear, and what each event carries. Per-source

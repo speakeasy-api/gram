@@ -6,7 +6,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use tokio::net::TcpListener;
-use tokio::sync::Notify;
+use tokio::sync::{Mutex, Notify};
 use tracing::Instrument;
 
 use crate::mcp_actor::McpCmd;
@@ -128,7 +128,18 @@ async fn thread_turn(
     headers: HeaderMap,
     Json(request): Json<ThreadTurnRequest>,
 ) -> Result<Json<ThreadTurnResponse>, (StatusCode, String)> {
-    thread_turn_inner(host, thread_id, headers, request).await
+    // Bind identity from the request before opening the span so the span
+    // processor stamps this turn's own spans too — a warm-pool sandbox
+    // learns its identity from the first turn that carries it. Nothing is
+    // authenticated yet, so bind_request commits only well-formed UUIDs to
+    // the permanent cells; a stray malformed POST leaves them open for the
+    // real first turn.
+    SpanIdentity::bind_request(&host.identity.assistant_id, request.assistant_id.as_deref());
+    SpanIdentity::bind_request(&host.identity.project_id, request.project_id.as_deref());
+    let span = tracing::info_span!("thread_turn", thread_id = %thread_id);
+    thread_turn_inner(host, thread_id, headers, request)
+        .instrument(span)
+        .await
 }
 
 async fn thread_turn_inner(
@@ -141,88 +152,6 @@ async fn thread_turn_inner(
         return Err((StatusCode::BAD_REQUEST, "missing thread_id".to_string()));
     }
 
-    // Bootstrap is the existing management API authentication boundary. It
-    // validates the bearer and pins the thread to its assistant/project. Do not
-    // allocate dedup slots, admission locks, actors, or identity cells before it.
-    let bearer = request
-        .auth_token
-        .as_deref()
-        .filter(|token| !token.is_empty())
-        .ok_or_else(|| {
-            (
-                StatusCode::UNAUTHORIZED,
-                "missing invocation token".to_string(),
-            )
-        })?;
-    let tokens = crate::http_layer::TokenRegistry::new(bearer);
-    let bootstrap = host
-        .gram_client
-        .fetch_bootstrap(&thread_id, &tokens)
-        .await
-        .map_err(|error| {
-            let status = match &error {
-                crate::gram_client::GramClientError::Status {
-                    status: 401 | 403, ..
-                } => StatusCode::UNAUTHORIZED,
-                _ => StatusCode::SERVICE_UNAVAILABLE,
-            };
-            (status, "invocation authentication unavailable".to_string())
-        })?;
-    // Only authenticated bootstrap may establish permanent runtime identity.
-    // Older servers omit these fields; never substitute untrusted request hints.
-    for (cell, authenticated, hint) in [
-        (
-            &host.identity.assistant_id,
-            bootstrap.assistant_id.as_deref(),
-            request.assistant_id.as_deref(),
-        ),
-        (
-            &host.identity.project_id,
-            bootstrap.project_id.as_deref(),
-            request.project_id.as_deref(),
-        ),
-    ] {
-        if let Some(id) = authenticated
-            && (hint.is_some_and(|hint| hint != id)
-                || cell.get().is_some_and(|existing| existing != id))
-        {
-            return Err((
-                StatusCode::UNAUTHORIZED,
-                "invocation identity mismatch".into(),
-            ));
-        }
-    }
-    for (cell, authenticated) in [
-        (
-            &host.identity.assistant_id,
-            bootstrap.assistant_id.as_deref(),
-        ),
-        (&host.identity.project_id, bootstrap.project_id.as_deref()),
-    ] {
-        if let Some(id) = authenticated {
-            SpanIdentity::bind_request(cell, Some(id));
-            if cell.get().is_none_or(|bound| bound != id) {
-                return Err((
-                    StatusCode::UNAUTHORIZED,
-                    "invocation identity mismatch".into(),
-                ));
-            }
-        }
-    }
-    let span = tracing::info_span!("thread_turn", thread_id = %thread_id);
-    admit_authenticated_turn(host, thread_id, headers, request, bootstrap, tokens)
-        .instrument(span)
-        .await
-}
-
-async fn admit_authenticated_turn(
-    host: AppState,
-    thread_id: String,
-    headers: HeaderMap,
-    request: ThreadTurnRequest,
-    bootstrap: crate::wire::ThreadBootstrap,
-    tokens: crate::http_layer::TokenRegistry,
-) -> Result<Json<ThreadTurnResponse>, (StatusCode, String)> {
     // Idempotency key is namespaced by thread so two threads sharing an
     // event_id namespace can't collide.
     let idempotency_key = headers
@@ -230,14 +159,18 @@ async fn admit_authenticated_turn(
         .and_then(|v| v.to_str().ok())
         .map(|s| format!("{thread_id}:{s}"));
 
-    // Declare the slot owner before the borrowed mutex guard: on every return
-    // or cancellation the lock drops first, then the last unsuccessful owner
-    // can retire the slot without separating existing waiters from new retries.
-    let event_admission = idempotency_key
-        .as_ref()
-        .map(|key| crate::runtime::EventAdmission::new(host.clone(), key.clone()));
-    let mut admission_guard = if let Some(ref admission) = event_admission {
-        Some(admission.slot.lock().await)
+    // Per-key admission lock: serialize concurrent retries with the same
+    // key across the bootstrap + enqueue window so we can't enqueue twice.
+    // A failed admission drops the guard with `*done == false`, leaving
+    // the slot available for a fresh retry.
+    let admission = idempotency_key.as_ref().map(|key| {
+        host.seen
+            .entry(key.clone())
+            .or_insert_with(|| Arc::new(Mutex::new(false)))
+            .clone()
+    });
+    let mut admission_guard = if let Some(ref slot) = admission {
+        Some(slot.lock().await)
     } else {
         None
     };
@@ -248,66 +181,42 @@ async fn admit_authenticated_turn(
         return Ok(Json(ThreadTurnResponse::deduped()));
     }
 
-    // Independent idempotency keys must not race to claim a freshly bootstrapped
-    // invocation. Hold this through reconcile and enqueue; never rotate the
-    // credentials of an earlier accepted event.
-    let admission = crate::runtime::admission_lock(&host, &thread_id);
-    let _turn_admission = admission.lock().await;
-
-    let thread = ensure_thread(&host, &thread_id, bootstrap, tokens)
+    let token = request
+        .auth_token
+        .filter(|t| !t.is_empty())
+        .unwrap_or_else(|| host.initial_token.clone());
+    let thread = ensure_thread(&host, &thread_id, Some(token.clone()))
         .await
-        .map_err(|e| {
-            let status = if matches!(e, crate::errors::RunnerError::InvocationBusy) {
-                StatusCode::TOO_MANY_REQUESTS
-            } else {
-                StatusCode::SERVICE_UNAVAILABLE
-            };
-            (status, e.to_string())
-        })?;
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
 
-    let mut unclaimed = crate::runtime::UnclaimedInvocation::new(host.clone(), thread.clone());
-
-    // Reconciliation belongs to this invocation and completes before its first
-    // model step. Its notice travels with input even when no tool is called.
-    let notice = if let Some(desired) = request.mcp_servers {
-        let (reply, response) = tokio::sync::oneshot::channel();
-        let reconcile = async {
-            thread
-                .mcp_cmd_tx
-                .send(McpCmd::Reconcile { desired, reply })
-                .await
-                .map_err(|_| "mcp reconcile actor unavailable")?;
-            response
-                .await
-                .map_err(|_| "mcp reconcile response unavailable")
-        };
-        let result = tokio::time::timeout(std::time::Duration::from_secs(30), reconcile)
+    // Hand reconcile to the actor and proceed to enqueue. The actor runs
+    // concurrently with the agent loop, so a server added by this /turn
+    // may surface on the very next model step or on the one after,
+    // depending on whether the connect finishes before tool catalog is
+    // sampled. Either way it lands before the user notices.
+    if let Some(desired) = request.mcp_servers
+        && thread
+            .mcp_cmd_tx
+            .send(McpCmd::Reconcile { desired })
             .await
-            .unwrap_or(Err("mcp reconciliation timed out"));
-        match result {
-            Ok(notice) => notice,
-            Err(reason) => {
-                tracing::warn!(thread_id = %thread_id, failure = reason, "mcp reconciliation failed before enqueue");
-                crate::runtime::discard_unclaimed(&host, &thread).await;
-                return Err((
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    "mcp reconciliation unavailable".into(),
-                ));
-            }
-        }
-    } else {
-        None
-    };
-
-    if let Err(err) = thread.enqueue(
-        RunnerContent::from_turn(request.input, request.input_parts),
-        notice,
-    ) {
-        crate::runtime::discard_unclaimed(&host, &thread).await;
-        return Err((StatusCode::SERVICE_UNAVAILABLE, err.to_string()));
+            .is_err()
+    {
+        // The MCP actor is gone, so we can't reconcile the thread's server set
+        // for this turn. Don't accept the turn on stale state — fail so the
+        // backend retries instead of silently running with the wrong tools.
+        tracing::warn!(thread_id = %thread_id, "mcp reconcile failed: actor channel closed");
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "mcp reconcile actor unavailable".to_string(),
+        ));
     }
 
-    unclaimed.accept();
+    thread
+        .enqueue(
+            RunnerContent::from_turn(request.input, request.input_parts),
+            token,
+        )
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
 
     if let Some(ref mut guard) = admission_guard {
         **guard = true;
@@ -318,108 +227,4 @@ async fn admit_authenticated_turn(
     // backend's RunTurn activity can mark the event processed without
     // blocking on the turn.
     Ok(Json(ThreadTurnResponse::accepted()))
-}
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-mod tests {
-    use super::*;
-    use std::time::Duration;
-    use tokio::sync::Mutex;
-
-    #[tokio::test]
-    async fn unauthenticated_request_cannot_hold_same_thread_admission() {
-        let started = Arc::new(Notify::new());
-        let release = Arc::new(Notify::new());
-        let app = Router::new().route("/rpc/assistants.getThreadBootstrap", post({
-            let started = started.clone();
-            let release = release.clone();
-            move |headers: HeaderMap| {
-                let started = started.clone();
-                let release = release.clone();
-                async move {
-                    if headers.get("authorization").unwrap() != "Bearer valid" {
-                        started.notify_one();
-                        release.notified().await;
-                        return (StatusCode::UNAUTHORIZED, "invalid");
-                    }
-                    (StatusCode::OK, r#"{"model":"test","completions_url":"http://localhost","chat_id":"chat","assistant_id":"11111111-1111-4111-8111-111111111111","project_id":"22222222-2222-4222-8222-222222222222"}"#)
-                }
-            }
-        }));
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let url = format!("http://{}", listener.local_addr().unwrap());
-        let server = tokio::spawn(async move {
-            axum::serve(listener, app).await.unwrap();
-        });
-        let host = build_host(
-            Arc::new(SpanIdentity::default()),
-            url,
-            "ambient-must-not-authenticate".into(),
-            Duration::from_secs(60),
-        )
-        .await
-        .unwrap();
-        let missing = serde_json::from_str(r#"{"input":"test"}"#).unwrap();
-        let error = thread_turn_inner(host.clone(), "shared".into(), HeaderMap::new(), missing)
-            .await
-            .err()
-            .unwrap();
-        assert_eq!(error.0, StatusCode::UNAUTHORIZED);
-        assert!(host.seen.is_empty());
-        assert!(host.turn_admissions.is_empty());
-        let forged = serde_json::from_str(r#"{"input":"test","auth_token":"valid","assistant_id":"33333333-3333-4333-8333-333333333333"}"#).unwrap();
-        assert_eq!(
-            thread_turn_inner(host.clone(), "shared".into(), HeaderMap::new(), forged)
-                .await
-                .err()
-                .unwrap()
-                .0,
-            StatusCode::UNAUTHORIZED
-        );
-        assert!(host.identity.assistant_id.get().is_none());
-        assert!(host.identity.project_id.get().is_none());
-        let invalid_host = host.clone();
-        let invalid = tokio::spawn(async move {
-            let request =
-                serde_json::from_str(r#"{"input":"test","auth_token":"invalid"}"#).unwrap();
-            thread_turn_inner(invalid_host, "shared".into(), HeaderMap::new(), request).await
-        });
-        started.notified().await;
-        assert!(host.seen.is_empty());
-        assert!(host.turn_admissions.is_empty());
-        assert!(host.threads.is_empty());
-        // A valid retry of an already accepted event can finish authentication
-        // and dedup while the unauthenticated request remains stuck upstream.
-        host.seen
-            .insert("shared:accepted".into(), Arc::new(Mutex::new(true)));
-        let mut headers = HeaderMap::new();
-        headers.insert(IDEMPOTENCY_HEADER, "accepted".parse().unwrap());
-        let valid = serde_json::from_str(r#"{"input":"test","auth_token":"valid"}"#).unwrap();
-        assert!(
-            tokio::time::timeout(
-                Duration::from_secs(2),
-                thread_turn_inner(host.clone(), "shared".into(), headers, valid)
-            )
-            .await
-            .unwrap()
-            .is_ok()
-        );
-        assert_eq!(
-            host.identity.assistant_id.get().unwrap(),
-            "11111111-1111-4111-8111-111111111111"
-        );
-        assert_eq!(
-            host.identity.project_id.get().unwrap(),
-            "22222222-2222-4222-8222-222222222222"
-        );
-        release.notify_one();
-        assert_eq!(
-            invalid.await.unwrap().err().unwrap().0,
-            StatusCode::UNAUTHORIZED
-        );
-        assert!(host.turn_admissions.is_empty());
-        assert!(host.threads.is_empty());
-        server.abort();
-    }
 }

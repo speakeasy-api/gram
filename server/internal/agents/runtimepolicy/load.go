@@ -12,6 +12,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// LoadAgentPolicy reads live grants, not an immutable delegated ceiling. Assistant
+// execution callers must intersect them with the saved ceiling decoded at its stored version.
+// Loading a newly runtime-safe scope does not add it to a previously saved ceiling.
+//
 // LoadAgentPolicy resolves one exact tenant-scoped agent principal and loads its
 // agent-runtime-safe policy and MCP restrictions: its own grants plus the grants
 // of the roles it has been assigned. It deliberately does not add user:all,

@@ -244,7 +244,7 @@ func TestLiveAuthorityDependenciesAndHardDeletes(t *testing.T) {
 			require.NotEqual(t, assistantidentity.Active, resolution.State)
 			require.NotEqual(t, assistantidentity.NeverConfigured, resolution.State)
 			require.Nil(t, resolution.Identity)
-			original, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant})
+			original, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{CaptureSuspended: false, OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant})
 			require.NoError(t, err)
 			require.Equal(t, id.AgentID, original.OriginalAgentID)
 		})

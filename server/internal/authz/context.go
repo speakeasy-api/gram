@@ -2,6 +2,7 @@ package authz
 
 import (
 	"context"
+	"maps"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
@@ -9,7 +10,8 @@ import (
 type contextKey string
 
 const (
-	grantsContextKey contextKey = "authz_grants"
+	grantsContextKey       contextKey = "authz_grants"
+	restrictionsContextKey contextKey = "authz_restrictions"
 	// admittedPoliciesContextKey holds the policy sets of whichever admission
 	// ran last. Principal credential and workload admission share it, so a
 	// later admission always replaces an earlier one instead of being shadowed
@@ -44,7 +46,7 @@ func admittedPoliciesToContext(ctx context.Context, sets ...[]Grant) context.Con
 
 func grantAuthorizationFromContext(ctx context.Context) (grantAuthorization, bool) {
 	if policies, ok := ctx.Value(admittedPoliciesContextKey).(grantAuthorization); ok {
-		return policies, true
+		return appendRestrictions(ctx, policies), true
 	}
 	if _, principalCredential := contextvalues.PrincipalCredentialAuthorization(ctx); principalCredential {
 		return grantAuthorization{policies: nil}, false
@@ -56,7 +58,7 @@ func grantAuthorizationFromContext(ctx context.Context) (grantAuthorization, boo
 	if !ok {
 		return grantAuthorization{policies: nil}, false
 	}
-	return grantAuthorization{policies: [][]Grant{grants}}, true
+	return appendRestrictions(ctx, grantAuthorization{policies: [][]Grant{grants}}), true
 }
 
 func loadedGrantAuthorization(grants []Grant) grantAuthorization {
@@ -97,4 +99,24 @@ func (a grantAuthorization) evaluate(check Check) (grantCheckEvaluation, error) 
 		return grantCheckEvaluation{Grant: nil, Check: nil, Denied: denied}, nil
 	}
 	return representative, nil
+}
+
+// RestrictContext adds an independent policy ceiling. It cannot establish
+// admission or replace existing policies, and survives live re-admission.
+func RestrictContext(ctx context.Context, grants []Grant) context.Context {
+	old, _ := ctx.Value(restrictionsContextKey).([][]Grant)
+	sets := append([][]Grant(nil), old...)
+	copied := make([]Grant, len(grants))
+	for i, g := range grants {
+		copied[i] = g
+		copied[i].Selector = make(Selector, len(g.Selector))
+		maps.Copy(copied[i].Selector, g.Selector)
+	}
+	return context.WithValue(ctx, restrictionsContextKey, append(sets, copied))
+}
+
+func appendRestrictions(ctx context.Context, authorization grantAuthorization) grantAuthorization {
+	restrictions, _ := ctx.Value(restrictionsContextKey).([][]Grant)
+	policies := append([][]Grant(nil), authorization.policies...)
+	return grantAuthorization{policies: append(policies, restrictions...)}
 }
