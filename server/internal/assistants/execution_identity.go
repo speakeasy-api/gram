@@ -162,7 +162,7 @@ func (s *ServiceCore) checkExecutionDispatch(ctx context.Context, assistant assi
 		// Legacy envelopes do not have live identity validation. Re-read the
 		// lifecycle here: an already admitted turn may outlive a pause, and
 		// the assistant record passed by the processing loop can be stale.
-		current, err := assistantrepo.New(s.db).GetAssistantForDispatch(ctx, assistant.ID)
+		current, err := assistantrepo.New(s.db).GetAssistant(ctx, assistantrepo.GetAssistantParams{AssistantID: assistant.ID, ProjectID: assistant.ProjectID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return assistantidentity.ErrInvalidIdentity
 		}

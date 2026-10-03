@@ -295,4 +295,7 @@ func TestLegacyRetryHonorsCurrentAssistantLifecycle(t *testing.T) {
 	unchanged, err := queries.GetLatestAssistantThreadEventByThreadID(t.Context(), params)
 	require.NoError(t, err)
 	require.Equal(t, original, unchanged, "retry must not replace or reattribute the persisted event")
+	wrongProject := assistant
+	wrongProject.ProjectID = uuid.New()
+	require.ErrorIs(t, core.checkExecutionDispatch(t.Context(), wrongProject, thread, event), assistantidentity.ErrInvalidIdentity)
 }
