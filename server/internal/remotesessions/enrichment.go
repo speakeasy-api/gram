@@ -619,7 +619,7 @@ func (e *SessionEnricher) introspect(ctx context.Context, target enrichmentTarge
 		form := url.Values{}
 		form.Set("token", token)
 		form.Set("token_type_hint", hint)
-		req, err := newTokenEndpointRequest(ctx, target.introspectionEndpoint, form, tokenEndpointClientAuth{
+		req, err := NewTokenEndpointRequest(ctx, target.introspectionEndpoint, form, TokenEndpointClientAuth{
 			Method:                authMethod,
 			RemoteSessionClientID: uuid.Nil,
 			OrganizationID:        "",

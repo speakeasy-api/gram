@@ -11,7 +11,9 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+	"unicode"
 	"weak"
 
 	"github.com/google/uuid"
@@ -34,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
@@ -41,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
+	"github.com/speakeasy-api/gram/server/internal/oktacredentials"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -77,6 +81,10 @@ const (
 
 	// listApplicationsLimit bounds one snapshot listing.
 	listApplicationsLimit = 2000
+
+	// maxClientSecretLength bounds an admin-entered client secret. Okta issues
+	// 40 to 64 character secrets; 512 leaves headroom for format changes.
+	maxClientSecretLength = 512
 )
 
 // oktaClientIDPattern matches Okta application client ids.
@@ -110,6 +118,7 @@ type Service struct {
 	features      feature.Provider
 	provisioner   *Provisioner
 	oktaClients   okta.ClientFactory
+	enc           *encryption.Client
 	discover      Discoverer
 	verifyLimiter *ratelimit.Limiter
 	createLimiter *ratelimit.Limiter
@@ -158,6 +167,7 @@ func NewService(
 	features feature.Provider,
 	provisioner *Provisioner,
 	oktaClients okta.ClientFactory,
+	enc *encryption.Client,
 	discover Discoverer,
 	limitStore ratelimit.Store,
 	syncTrigger ApplicationSyncTrigger,
@@ -173,6 +183,7 @@ func NewService(
 		features:    features,
 		provisioner: provisioner,
 		oktaClients: oktaClients,
+		enc:         enc,
 		discover:    discover,
 		verifyLimiter: ratelimit.New(limitStore, "identity-provider-connection-verify",
 			ratelimit.PerMinute(verifyRatePerMinute),
@@ -422,7 +433,8 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		return nil, err
 	}
 
-	metadata, err := s.discoverOktaIssuer(ctx, logger, orgURL)
+	authMethod := listingAuthMethod(listingMode)
+	metadata, err := s.discoverOktaIssuer(ctx, logger, orgURL, authMethod)
 	if err != nil {
 		s.metrics.recordCreate(ctx, ProviderOkta, createOutcomeDiscoveryFailed)
 		return nil, err
@@ -439,12 +451,16 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		ConnectionID:   connection.ID,
 		Provider:       ProviderOkta,
 		IssuerID:       issuerID,
+		AuthMethod:     authMethod,
 	})
 	if err != nil {
 		s.abandonConnection(ctx, logger, authCtx.ActiveOrganizationID, connection.ID, conv.ToNullUUID(issuerID))
 		s.metrics.recordCreate(ctx, ProviderOkta, createOutcomeProvisionFailed)
-		if errors.Is(err, ErrSigningCredentialUnusable) {
+		switch {
+		case errors.Is(err, ErrSigningCredentialUnusable):
 			return nil, oops.E(oops.CodeUnavailable, err, "the signing credential for identity provider connections is unavailable").LogError(ctx, logger)
+		case errors.Is(err, ErrAuthMethodMismatch):
+			return nil, oops.E(oops.CodeConflict, err, "the connection was provisioned for a different setup method; revoke it and start again").LogWarn(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "provision connection credential").LogError(ctx, logger)
 	}
@@ -479,7 +495,7 @@ func (s *Service) requireNoLiveConnection(ctx context.Context, logger *slog.Logg
 
 // discoverOktaIssuer probes the org URL and hard-fails on anything that would
 // let the discovered document steer a signed assertion somewhere else.
-func (s *Service) discoverOktaIssuer(ctx context.Context, logger *slog.Logger, orgURL string) (remotesessions.DiscoveredIssuerMetadata, error) {
+func (s *Service) discoverOktaIssuer(ctx context.Context, logger *slog.Logger, orgURL string, authMethod remotesessions.TokenEndpointAuthMethod) (remotesessions.DiscoveredIssuerMetadata, error) {
 	probeCtx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
@@ -498,11 +514,41 @@ func (s *Service) discoverOktaIssuer(ctx context.Context, logger *slog.Logger, o
 	if strings.ToLower(tokenEndpoint.Host) != strings.TrimPrefix(orgURL, "https://") {
 		return none, oops.E(oops.CodeFailedPrecondition, nil, "the discovered token endpoint is not on the org url host").LogError(ctx, logger)
 	}
-	supportsPrivateKeyJWT := slices.Contains(metadata.TokenEndpointAuthMethodsSupported, string(remotesessions.TokenEndpointAuthMethodPrivateKeyJWT))
-	if !supportsPrivateKeyJWT {
-		return none, oops.E(oops.CodeFailedPrecondition, nil, "the Okta org's authorization server does not advertise private_key_jwt client authentication").LogError(ctx, logger)
+	if !slices.Contains(metadata.TokenEndpointAuthMethodsSupported, string(authMethod)) {
+		return none, oops.E(oops.CodeFailedPrecondition, nil, "the Okta org's authorization server does not advertise %s client authentication", authMethod).LogWarn(ctx, logger)
 	}
 	return metadata, nil
+}
+
+// listingAuthMethod maps a listing mode to its client authentication: an Okta
+// Integration Network install only issues a client secret.
+func listingAuthMethod(listingMode string) remotesessions.TokenEndpointAuthMethod {
+	if listingMode == ListingModeOIN {
+		return remotesessions.TokenEndpointAuthMethodBasic
+	}
+	return remotesessions.TokenEndpointAuthMethodPrivateKeyJWT
+}
+
+// encryptClientSecret validates and encrypts an admin-entered secret; messages
+// never echo the value. A nil secret encrypts to "".
+func (s *Service) encryptClientSecret(ctx context.Context, logger *slog.Logger, secret *string) (string, error) {
+	if secret == nil {
+		return "", nil
+	}
+	trimmed := strings.TrimSpace(*secret)
+	switch {
+	case trimmed == "":
+		return "", oops.E(oops.CodeBadRequest, nil, "client_secret must not be empty")
+	case len(trimmed) > maxClientSecretLength:
+		return "", oops.E(oops.CodeBadRequest, nil, "client_secret is longer than %d characters", maxClientSecretLength)
+	case strings.ContainsFunc(trimmed, unicode.IsSpace):
+		return "", oops.E(oops.CodeBadRequest, nil, "client_secret must not contain whitespace")
+	}
+	encrypted, err := s.enc.Encrypt([]byte(trimmed))
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "encrypt client secret").LogError(ctx, logger)
+	}
+	return encrypted, nil
 }
 
 func connectionIssuerSlug(connectionID uuid.UUID) string {
@@ -676,12 +722,14 @@ func (s *Service) abandonConnection(ctx context.Context, logger *slog.Logger, or
 			logger.ErrorContext(ctx, "failed to tombstone client of abandoned connection", attr.SlogError(err))
 			return
 		}
-		if _, err := jwksrepo.New(dbtx).SoftDeleteJsonWebKeySet(cleanupCtx, jwksrepo.SoftDeleteJsonWebKeySetParams{
-			ID:             managed.JSONWebKeySetID,
-			OrganizationID: organizationID,
-		}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			logger.ErrorContext(ctx, "failed to tombstone key set of abandoned connection", attr.SlogError(err))
-			return
+		if managed.JSONWebKeySetID.Valid {
+			if _, err := jwksrepo.New(dbtx).SoftDeleteJsonWebKeySet(cleanupCtx, jwksrepo.SoftDeleteJsonWebKeySetParams{
+				ID:             managed.JSONWebKeySetID.UUID,
+				OrganizationID: organizationID,
+			}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				logger.ErrorContext(ctx, "failed to tombstone key set of abandoned connection", attr.SlogError(err))
+				return
+			}
 		}
 	}
 	if _, err := q.SoftDeleteIdentityProviderConnection(cleanupCtx, repo.SoftDeleteIdentityProviderConnectionParams{
@@ -720,6 +768,11 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 	}
 	logger = logger.With(attr.SlogIdentityProviderConnectionID(id.String()))
 
+	secretEncrypted, err := s.encryptClientSecret(ctx, logger, payload.ClientSecret)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := s.allow(ctx, logger, s.verifyLimiter, authCtx.ActiveOrganizationID, "verify rate limit exceeded, try again shortly"); err != nil {
 		return nil, err
 	}
@@ -743,14 +796,19 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 	}
 
 	managed, err := s.provisioner.SetClientID(ctx, dbtx, SetClientIDParams{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ConnectionID:     id,
-		Provider:         ProviderOkta,
-		ClientID:         clientID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		ConnectionID:          id,
+		Provider:              ProviderOkta,
+		ClientID:              clientID,
+		ClientSecretEncrypted: secretEncrypted,
+		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:      authCtx.Email,
 	})
 	switch {
+	case errors.Is(err, ErrClientSecretRequired):
+		return nil, oops.E(oops.CodeBadRequest, err, "client_secret is required for connections installed from the Okta Integration Network")
+	case errors.Is(err, ErrClientSecretNotAccepted):
+		return nil, oops.E(oops.CodeBadRequest, err, "client_secret is only accepted for connections installed from the Okta Integration Network")
 	case errors.Is(err, ErrClientIDAlreadySet):
 		return nil, oops.E(oops.CodeConflict, err, "the client id was already submitted; revoke the connection to change it")
 	case errors.Is(err, ErrClientIDInUse):
@@ -764,14 +822,16 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 	// The factory memoizes per client row; drop the placeholder configuration.
 	s.oktaClients.Forget(managed.ClientRowID)
 	current := connectionRows{Connection: before.Connection, Okta: before.Okta, Managed: managed}
-	outcome, err := s.runVerification(ctx, logger, current)
+	credentials, finishCredentials := s.verificationCredentials(ctx, logger, dbtx, current)
+	defer finishCredentials()
+	outcome, err := s.runVerification(ctx, logger, credentials, current)
 	if err != nil {
 		// The client id is only persisted once Okta answered for it.
 		if rollbackErr := dbtx.Rollback(ctx); rollbackErr != nil {
 			logger.ErrorContext(ctx, "failed to roll back rejected client id submission", attr.SlogError(rollbackErr))
 		}
 		s.recordFailure(ctx, logger, authCtx, before, err, true)
-		return nil, s.mapVerificationError(ctx, logger, err)
+		return nil, s.mapVerificationError(ctx, logger, err, managed.AuthMethod)
 	}
 
 	after, err := s.persistVerification(ctx, logger, q, current, outcome)
@@ -784,6 +844,92 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit client id submission").LogError(ctx, logger)
+	}
+	s.metrics.recordVerify(ctx, ProviderOkta, outcome.Status)
+	return s.view(ctx, logger, s.db, *after), nil
+}
+
+// ReplaceClientSecret keeps the previous secret and status when Okta rejects
+// the new one, so a mistyped secret never breaks a working connection.
+func (s *Service) ReplaceClientSecret(ctx context.Context, payload *gen.ReplaceClientSecretPayload) (*gen.OktaIdentityProviderConnection, error) {
+	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
+	if err != nil {
+		return nil, err
+	}
+	id, err := parseConnectionID(payload.ID)
+	if err != nil {
+		return nil, err
+	}
+	logger = logger.With(attr.SlogIdentityProviderConnectionID(id.String()))
+
+	secretEncrypted, err := s.encryptClientSecret(ctx, logger, &payload.ClientSecret)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.allow(ctx, logger, s.verifyLimiter, authCtx.ActiveOrganizationID, "verify rate limit exceeded, try again shortly"); err != nil {
+		return nil, err
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	q := repo.New(dbtx)
+
+	before, err := s.lock(ctx, logger, dbtx, authCtx.ActiveOrganizationID, id)
+	if err != nil {
+		return nil, err
+	}
+	if before.authMethod() != remotesessions.TokenEndpointAuthMethodBasic {
+		return nil, oops.E(oops.CodeBadRequest, nil, "only connections installed from the Okta Integration Network use a client secret")
+	}
+	if !before.clientIDSubmitted() || before.Connection.Status == StatusPending {
+		return nil, oops.E(oops.CodeConflict, nil, "submit the client id and client secret before replacing the secret")
+	}
+
+	managed, err := s.provisioner.ReplaceClientSecret(ctx, dbtx, ReplaceClientSecretParams{
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		ConnectionID:          id,
+		Provider:              ProviderOkta,
+		ClientSecretEncrypted: secretEncrypted,
+		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:      authCtx.Email,
+	})
+	switch {
+	case errors.Is(err, ErrClientSecretNotAccepted):
+		return nil, oops.E(oops.CodeBadRequest, err, "only connections installed from the Okta Integration Network use a client secret")
+	case errors.Is(err, ErrNotProvisioned):
+		return nil, oops.E(oops.CodeFailedPrecondition, err, "the connection has no credential to replace")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "replace client secret").LogError(ctx, logger)
+	}
+
+	s.oktaClients.Forget(managed.ClientRowID)
+	current := connectionRows{Connection: before.Connection, Okta: before.Okta, Managed: managed}
+	credentials, finishCredentials := s.verificationCredentials(ctx, logger, dbtx, current)
+	defer finishCredentials()
+	outcome, err := s.runVerification(ctx, logger, credentials, current)
+	if err != nil {
+		if rollbackErr := dbtx.Rollback(ctx); rollbackErr != nil {
+			logger.ErrorContext(ctx, "failed to roll back rejected client secret replacement", attr.SlogError(rollbackErr))
+		}
+		s.oktaClients.Forget(managed.ClientRowID)
+		return nil, s.mapVerificationError(ctx, logger, err, managed.AuthMethod)
+	}
+
+	after, err := s.persistVerification(ctx, logger, q, current, outcome)
+	if err != nil {
+		s.oktaClients.Forget(managed.ClientRowID)
+		return nil, err
+	}
+	if err := s.audit.LogIdentityProviderConnectionReplaceClientSecret(ctx, dbtx, s.auditEvent(authCtx, id, snapshot(*before), snapshot(*after))); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log client secret replacement").LogError(ctx, logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		s.oktaClients.Forget(managed.ClientRowID)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit client secret replacement").LogError(ctx, logger)
 	}
 	s.metrics.recordVerify(ctx, ProviderOkta, outcome.Status)
 	return s.view(ctx, logger, s.db, *after), nil
@@ -819,13 +965,15 @@ func (s *Service) Verify(ctx context.Context, payload *gen.VerifyPayload) (*gen.
 		return nil, oops.E(oops.CodeFailedPrecondition, nil, "submit the Okta client id before verifying")
 	}
 
-	outcome, err := s.runVerification(ctx, logger, *before)
+	credentials, finishCredentials := s.verificationCredentials(ctx, logger, dbtx, *before)
+	defer finishCredentials()
+	outcome, err := s.runVerification(ctx, logger, credentials, *before)
 	if err != nil {
 		if rollbackErr := dbtx.Rollback(ctx); rollbackErr != nil {
 			logger.ErrorContext(ctx, "failed to release connection lock after verification failure", attr.SlogError(rollbackErr))
 		}
 		s.recordFailure(ctx, logger, authCtx, before, err, false)
-		return nil, s.mapVerificationError(ctx, logger, err)
+		return nil, s.mapVerificationError(ctx, logger, err, before.authMethod())
 	}
 
 	after, err := s.persistVerification(ctx, logger, q, *before, outcome)
@@ -842,15 +990,46 @@ func (s *Service) Verify(ctx context.Context, payload *gen.VerifyPayload) (*gen.
 	return s.view(ctx, logger, s.db, *after), nil
 }
 
+// verificationCredentials uses the caller's transaction, including an uncommitted
+// replacement. Binding evidence must survive a later rollback (for example, a
+// failed permission probe). Release that transaction before persisting the pin
+// independently, never while holding its connection lock. The pin write matches
+// the observed client ID, so rolled-back initial submissions cannot pin a
+// placeholder or a later, different client.
+func (s *Service) verificationCredentials(ctx context.Context, logger *slog.Logger, tx pgx.Tx, rows connectionRows) (okta.CredentialProvider, func()) {
+	if rows.authMethod() != remotesessions.TokenEndpointAuthMethodBasic {
+		return nil, func() {}
+	}
+	observed := &atomic.Bool{}
+	provider := oktacredentials.Provider{DB: nil, Tx: tx, ConnectionID: rows.Connection.ID, ObservedDPoP: observed}
+	return provider, func() {
+		if !observed.Load() {
+			return
+		}
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = tx.Rollback(cleanupCtx)
+		if err := repo.New(s.db).PinOktaDPoP(cleanupCtx, repo.PinOktaDPoPParams{ClientID: rows.Managed.ClientID, IdentityProviderConnectionID: rows.Connection.ID, OrganizationID: rows.Connection.OrganizationID}); err != nil {
+			logger.ErrorContext(cleanupCtx, "failed to preserve okta token binding observation", attr.SlogError(err))
+		}
+	}
+}
+
 // runVerification verifies the connection's current credential; any failure forgets the memoized client.
-func (s *Service) runVerification(ctx context.Context, logger *slog.Logger, rows connectionRows) (*verificationOutcome, error) {
+func (s *Service) runVerification(ctx context.Context, logger *slog.Logger, credentials okta.CredentialProvider, rows connectionRows) (*verificationOutcome, error) {
+	// A client-secret connection once seen DPoP-bound must stay bound.
+	dpopPinned := rows.Managed.AuthMethod == remotesessions.TokenEndpointAuthMethodBasic && rows.Okta.DpopRequired
 	client, err := s.oktaClients.Client(okta.Config{
 		OrgURL:                rows.Okta.OrgUrl,
 		ClientID:              rows.Managed.ClientID,
 		AudienceFormat:        string(remotesessions.TokenEndpointAuthAudienceTokenEndpoint),
 		RemoteSessionClientID: rows.Managed.ClientRowID,
 		OrganizationID:        rows.Connection.OrganizationID,
-		JSONWebKeySetID:       rows.Managed.JSONWebKeySetID,
+		AuthMethod:            rows.Managed.AuthMethod,
+		JSONWebKeySetID:       rows.Managed.JSONWebKeySetID.UUID,
+		ClientSecretEncrypted: rows.Managed.ClientSecretEncrypted,
+		Credentials:           credentials,
+		RequireDPoP:           dpopPinned,
 		MaxPages:              verifyMaxPages,
 	})
 	if err != nil {
@@ -860,7 +1039,7 @@ func (s *Service) runVerification(ctx context.Context, logger *slog.Logger, rows
 
 	verifyCtx, cancel := context.WithTimeout(ctx, verifyTimeout)
 	defer cancel()
-	outcome, err := verifyConnection(verifyCtx, client)
+	outcome, err := verifyConnection(verifyCtx, client, rows.Managed.AuthMethod, dpopPinned)
 	if err != nil {
 		s.oktaClients.Forget(rows.Managed.ClientRowID)
 		logger.WarnContext(ctx, "okta connection verification failed", attr.SlogError(err))
@@ -896,7 +1075,7 @@ func (s *Service) recordFailure(ctx context.Context, logger *slog.Logger, authCt
 
 	connection, err := repo.New(dbtx).RecordIdentityProviderConnectionVerificationFailure(writeCtx, repo.RecordIdentityProviderConnectionVerificationFailureParams{
 		Status:            status,
-		LastError:         conv.ToPGText(failureLastError(cause)),
+		LastError:         conv.ToPGText(failureLastError(cause, rows.authMethod())),
 		ID:                rows.Connection.ID,
 		OrganizationID:    rows.Connection.OrganizationID,
 		ExpectedUpdatedAt: rows.Connection.UpdatedAt,
@@ -923,9 +1102,15 @@ func (s *Service) recordFailure(ctx context.Context, logger *slog.Logger, authCt
 	}
 }
 
-func (s *Service) mapVerificationError(ctx context.Context, logger *slog.Logger, err error) error {
+func (s *Service) mapVerificationError(ctx context.Context, logger *slog.Logger, err error, method remotesessions.TokenEndpointAuthMethod) error {
 	if errors.Is(err, ErrCredentialRejected) {
+		if method == remotesessions.TokenEndpointAuthMethodBasic {
+			return oops.E(oops.CodeFailedPrecondition, err, "Okta rejected the connection credential; check the client id and client secret from the Speakeasy integration in Okta")
+		}
 		return oops.E(oops.CodeFailedPrecondition, err, "Okta rejected the connection credential; check the client id and that the app fetches keys from the connection's JWKS URL")
+	}
+	if errors.Is(err, okta.ErrClientSecretUndecryptable) {
+		return oops.E(oops.CodeUnexpected, err, "the stored client secret could not be read; replace it").LogError(ctx, logger)
 	}
 	return oops.E(oops.CodeUnavailable, err, "Okta could not be reached to verify the connection").LogError(ctx, logger)
 }
@@ -946,9 +1131,15 @@ func (s *Service) persistVerification(ctx context.Context, logger *slog.Logger, 
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "record verification").LogError(ctx, logger)
 	}
+	// A client-secret connection's DPoP pin is sticky; private_key_jwt always requires DPoP binding.
+	dpopRequired := outcome.DPoPBound
+	if rows.authMethod() == remotesessions.TokenEndpointAuthMethodBasic {
+		dpopRequired = rows.Okta.DpopRequired || outcome.DPoPBound
+	}
 	oktaRow, err := q.UpdateOktaIdentityProviderConnectionVerification(ctx, repo.UpdateOktaIdentityProviderConnectionVerificationParams{
 		OwnershipClaimed:             outcome.CredentialProven,
-		DpopRequired:                 outcome.DPoPBound,
+		DpopRequired:                 dpopRequired,
+		PreserveDpop:                 rows.authMethod() == remotesessions.TokenEndpointAuthMethodBasic,
 		GrantedScopes:                outcome.Granted,
 		IdentityProviderConnectionID: rows.Connection.ID,
 		OrganizationID:               rows.Connection.OrganizationID,
@@ -1088,6 +1279,12 @@ func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.
 			return nil, err
 		}
 		return s.revokedView(ctx, logger, dbtx, raced)
+	}
+	// Cleared under the lock so a secret replaced after the early revoke cannot outlive the tombstone.
+	if before.authMethod() == remotesessions.TokenEndpointAuthMethodBasic {
+		if err := s.provisioner.ClearClientSecret(ctx, dbtx, authCtx.ActiveOrganizationID, id); err != nil && !errors.Is(err, ErrNotProvisioned) {
+			return nil, oops.E(oops.CodeUnexpected, err, "revoke connection credential").LogError(ctx, logger)
+		}
 	}
 	connection, err := q.RevokeIdentityProviderConnection(ctx, repo.RevokeIdentityProviderConnectionParams{
 		ID:             id,

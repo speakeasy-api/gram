@@ -678,7 +678,7 @@ func (r *ClientRotator) upstreamRecognizesClient(ctx context.Context, row repo.G
 
 	probeCtx, cancel := context.WithTimeout(ctx, registrationProbeTimeout)
 	defer cancel()
-	req, err := newTokenEndpointRequest(probeCtx, tokenEndpoint, form, tokenEndpointClientAuth{
+	req, err := NewTokenEndpointRequest(probeCtx, tokenEndpoint, form, TokenEndpointClientAuth{
 		Method:                method,
 		RemoteSessionClientID: client.ID,
 		OrganizationID:        client.OrganizationID.String,

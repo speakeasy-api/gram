@@ -31,6 +31,63 @@ func (q *Queries) BackdatePendingRotationPublication(ctx context.Context, arg Ba
 	return err
 }
 
+const clearManagedClientSecret = `-- name: ClearManagedClientSecret :one
+UPDATE remote_session_clients
+SET client_secret_encrypted = NULL,
+    upstream_rejected_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND project_id IS NULL
+  AND identity_provider_connection_id = $3
+  AND token_endpoint_auth_method = 'client_secret_basic'
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
+`
+
+type ClearManagedClientSecretParams struct {
+	ID                           uuid.UUID
+	OrganizationID               pgtype.Text
+	IdentityProviderConnectionID uuid.NullUUID
+}
+
+// Revocation withdraws a client-secret client's credential.
+func (q *Queries) ClearManagedClientSecret(ctx context.Context, arg ClearManagedClientSecretParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, clearManagedClientSecret, arg.ID, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.JsonWebKeySetID,
+		&i.Scope,
+		&i.GrantTypes,
+		&i.Audience,
+		&i.TokenEndpointAuthAudienceFormat,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.ResourceIdentifier,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.UpstreamRejectedAt,
+		&i.IdentityProviderConnectionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const countIdentityProviderConnectionsCreatedSince = `-- name: CountIdentityProviderConnectionsCreatedSince :one
 SELECT COUNT(*)
 FROM identity_provider_connections
@@ -156,6 +213,30 @@ func (q *Queries) CreateOktaIdentityProviderConnection(ctx context.Context, arg 
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const forceManagedClientAuthMethodFixture = `-- name: ForceManagedClientAuthMethodFixture :execrows
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = $1
+WHERE id = $2
+  AND organization_id = $3
+  AND project_id IS NULL
+`
+
+type ForceManagedClientAuthMethodFixtureParams struct {
+	TokenEndpointAuthMethod pgtype.Text
+	ID                      uuid.UUID
+	OrganizationID          pgtype.Text
+}
+
+// TEST FIXTURE ONLY. Plants an auth method on a managed client without its
+// matching credential material, which no production path produces.
+func (q *Queries) ForceManagedClientAuthMethodFixture(ctx context.Context, arg ForceManagedClientAuthMethodFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, forceManagedClientAuthMethodFixture, arg.TokenEndpointAuthMethod, arg.ID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getConnectionIssuerBySlug = `-- name: GetConnectionIssuerBySlug :one
@@ -300,7 +381,7 @@ JOIN remote_session_issuers AS i
  AND i.organization_id = c.organization_id
  AND i.project_id IS NULL
  AND i.deleted IS FALSE
-JOIN json_web_key_sets AS s
+LEFT JOIN json_web_key_sets AS s
   ON s.organization_id = c.organization_id
  AND s.id = c.json_web_key_set_id
  AND s.identity_provider_connection_id = c.identity_provider_connection_id
@@ -314,6 +395,7 @@ WHERE c.organization_id = $1
   AND c.project_id IS NULL
   AND c.identity_provider_connection_id = $2
   AND c.deleted IS FALSE
+  AND (s.id IS NOT NULL OR (c.json_web_key_set_id IS NULL AND c.token_endpoint_auth_method = 'client_secret_basic'))
 `
 
 type GetManagedClientParams struct {
@@ -323,8 +405,8 @@ type GetManagedClientParams struct {
 
 type GetManagedClientRow struct {
 	RemoteSessionClient RemoteSessionClient
-	JsonWebKeySetID     uuid.UUID
-	ExternalKeyID       uuid.UUID
+	JsonWebKeySetID     uuid.NullUUID
+	ExternalKeyID       uuid.NullUUID
 	JsonWebKeyID        uuid.NullUUID
 	Kid                 pgtype.Text
 	ActivatedAt         pgtype.Timestamptz
@@ -332,6 +414,8 @@ type GetManagedClientRow struct {
 
 // The managed client, its set, and the set's active key. The key join is LEFT
 // so a revoked connection (live client, live set, no live keys) still resolves.
+// The set join is LEFT for client-secret clients, which have no set; a client
+// that references a set must still find it live.
 // Organization-level only: the client, its issuer, and the set all carry the
 // connection's organization scope, and the set must be marked by the same connection.
 func (q *Queries) GetManagedClient(ctx context.Context, arg GetManagedClientParams) (GetManagedClientRow, error) {
@@ -732,6 +816,35 @@ func (q *Queries) LockOktaIdentityProviderConnection(ctx context.Context, arg Lo
 	return i, err
 }
 
+const lockOktaTokenCredential = `-- name: LockOktaTokenCredential :one
+SELECT client_secret_encrypted, client_id
+FROM remote_session_clients
+WHERE id = $1 AND organization_id = $2
+  AND identity_provider_connection_id = $3
+  AND project_id IS NULL AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockOktaTokenCredentialParams struct {
+	ID                           uuid.UUID
+	OrganizationID               pgtype.Text
+	IdentityProviderConnectionID uuid.NullUUID
+}
+
+type LockOktaTokenCredentialRow struct {
+	ClientSecretEncrypted pgtype.Text
+	ClientID              string
+}
+
+// Token acquisition holds the connection lock before this lock; revoking a
+// secret updates this same row, so it cannot commit during an exchange.
+func (q *Queries) LockOktaTokenCredential(ctx context.Context, arg LockOktaTokenCredentialParams) (LockOktaTokenCredentialRow, error) {
+	row := q.db.QueryRow(ctx, lockOktaTokenCredential, arg.ID, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	var i LockOktaTokenCredentialRow
+	err := row.Scan(&i.ClientSecretEncrypted, &i.ClientID)
+	return i, err
+}
+
 const managedClientIDInUse = `-- name: ManagedClientIDInUse :one
 SELECT EXISTS (
   SELECT 1
@@ -817,6 +930,35 @@ func (q *Queries) ObserveRotationPublication(ctx context.Context, arg ObserveRot
 	var updated_at pgtype.Timestamptz
 	err := row.Scan(&updated_at)
 	return updated_at, err
+}
+
+const pinOktaDPoP = `-- name: PinOktaDPoP :exec
+UPDATE okta_identity_provider_connections AS o
+SET dpop_required = true
+WHERE o.identity_provider_connection_id = $1
+  AND o.organization_id = $2 AND o.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM remote_session_clients AS c
+    WHERE c.id = o.remote_session_client_id
+      AND c.identity_provider_connection_id = o.identity_provider_connection_id
+      AND c.organization_id = o.organization_id AND c.project_id IS NULL
+      AND c.deleted IS FALSE AND c.token_endpoint_auth_method = 'client_secret_basic'
+      AND c.client_id = $3
+  )
+`
+
+type PinOktaDPoPParams struct {
+	IdentityProviderConnectionID uuid.UUID
+	OrganizationID               string
+	ClientID                     string
+}
+
+// Secret binding observations are monotonic, including worker observations.
+// Match the observed client identity so a rolled-back initial submission cannot
+// pin the placeholder (or a later submission of a different client).
+func (q *Queries) PinOktaDPoP(ctx context.Context, arg PinOktaDPoPParams) error {
+	_, err := q.db.Exec(ctx, pinOktaDPoP, arg.IdentityProviderConnectionID, arg.OrganizationID, arg.ClientID)
+	return err
 }
 
 const recordIdentityProviderConnectionVerificationFailure = `-- name: RecordIdentityProviderConnectionVerificationFailure :one
@@ -973,19 +1115,21 @@ func (q *Queries) RotationPublicationReady(ctx context.Context, arg RotationPubl
 const setManagedClientID = `-- name: SetManagedClientID :one
 UPDATE remote_session_clients
 SET client_id = $1,
+    client_secret_encrypted = $2,
     upstream_rejected_at = NULL,
     updated_at = clock_timestamp()
-WHERE id = $2
-  AND organization_id = $3
+WHERE id = $3
+  AND organization_id = $4
   AND project_id IS NULL
-  AND identity_provider_connection_id = $4
-  AND client_id = $5
+  AND identity_provider_connection_id = $5
+  AND client_id = $6
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
 
 type SetManagedClientIDParams struct {
 	ClientID                     string
+	ClientSecretEncrypted        pgtype.Text
 	ID                           uuid.UUID
 	OrganizationID               pgtype.Text
 	IdentityProviderConnectionID uuid.NullUUID
@@ -993,10 +1137,12 @@ type SetManagedClientIDParams struct {
 }
 
 // Only the provisioner writes a managed client's client_id, and only while the
-// provisioning placeholder is still in place.
+// provisioning placeholder is still in place. A client-secret client receives
+// its secret in the same write.
 func (q *Queries) SetManagedClientID(ctx context.Context, arg SetManagedClientIDParams) (RemoteSessionClient, error) {
 	row := q.db.QueryRow(ctx, setManagedClientID,
 		arg.ClientID,
+		arg.ClientSecretEncrypted,
 		arg.ID,
 		arg.OrganizationID,
 		arg.IdentityProviderConnectionID,
@@ -1022,6 +1168,68 @@ func (q *Queries) SetManagedClientID(ctx context.Context, arg SetManagedClientID
 		&i.ClientIDMetadataUri,
 		&i.LegacyCallbackUrl,
 		&i.CallbackBaseUrl,
+		&i.ResourceIdentifier,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.UpstreamRejectedAt,
+		&i.IdentityProviderConnectionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const setManagedClientSecret = `-- name: SetManagedClientSecret :one
+UPDATE remote_session_clients
+SET client_secret_encrypted = $1,
+    upstream_rejected_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND organization_id = $3
+  AND project_id IS NULL
+  AND identity_provider_connection_id = $4
+  AND token_endpoint_auth_method = 'client_secret_basic'
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
+`
+
+type SetManagedClientSecretParams struct {
+	ClientSecretEncrypted        pgtype.Text
+	ID                           uuid.UUID
+	OrganizationID               pgtype.Text
+	IdentityProviderConnectionID uuid.NullUUID
+}
+
+func (q *Queries) SetManagedClientSecret(ctx context.Context, arg SetManagedClientSecretParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, setManagedClientSecret,
+		arg.ClientSecretEncrypted,
+		arg.ID,
+		arg.OrganizationID,
+		arg.IdentityProviderConnectionID,
+	)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.JsonWebKeySetID,
+		&i.Scope,
+		&i.GrantTypes,
+		&i.Audience,
+		&i.TokenEndpointAuthAudienceFormat,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
 		&i.ResourceIdentifier,
 		&i.ResourceName,
 		&i.ResourceDocumentation,
@@ -1215,26 +1423,30 @@ func (q *Queries) UpdateOktaIdentityProviderConnectionAgent(ctx context.Context,
 const updateOktaIdentityProviderConnectionVerification = `-- name: UpdateOktaIdentityProviderConnectionVerification :one
 UPDATE okta_identity_provider_connections
 SET ownership_claimed = ownership_claimed OR $1::boolean,
-    dpop_required = $2,
-    granted_scopes = $3,
+    dpop_required = CASE WHEN $2::boolean THEN dpop_required OR $3::boolean ELSE $3::boolean END,
+    granted_scopes = $4,
     updated_at = clock_timestamp()
-WHERE identity_provider_connection_id = $4
-  AND organization_id = $5
+WHERE identity_provider_connection_id = $5
+  AND organization_id = $6
   AND deleted IS FALSE
 RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, applications_synced_at, applications_sync_requested_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateOktaIdentityProviderConnectionVerificationParams struct {
 	OwnershipClaimed             bool
+	PreserveDpop                 bool
 	DpopRequired                 bool
 	GrantedScopes                []string
 	IdentityProviderConnectionID uuid.UUID
 	OrganizationID               string
 }
 
+// Secret bindings are sticky, but private-key checklist values describe the
+// current verification observation.
 func (q *Queries) UpdateOktaIdentityProviderConnectionVerification(ctx context.Context, arg UpdateOktaIdentityProviderConnectionVerificationParams) (OktaIdentityProviderConnection, error) {
 	row := q.db.QueryRow(ctx, updateOktaIdentityProviderConnectionVerification,
 		arg.OwnershipClaimed,
+		arg.PreserveDpop,
 		arg.DpopRequired,
 		arg.GrantedScopes,
 		arg.IdentityProviderConnectionID,

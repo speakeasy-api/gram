@@ -3120,9 +3120,10 @@ FOR SHARE;
 
 -- name: GetTrustedRemoteSessionClientForOrganization :one
 -- The exact live issuer/client pair eligible for organization identity-provider
--- login. Clients must be organization-owned by the caller; project and global
--- clients are deliberately excluded. The issuer may be organization-owned or
--- global, but the client must belong to that exact issuer.
+-- login. Clients must be organization-owned by the caller; project, global,
+-- and identity-provider-connection managed clients are deliberately excluded.
+-- The issuer may be organization-owned or global, but the client must belong
+-- to that exact issuer.
 SELECT sqlc.embed(c), sqlc.embed(i)
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
@@ -3131,6 +3132,7 @@ WHERE c.id = @client_id::uuid
   AND c.project_id IS NULL
   AND c.organization_id = @organization_id::text
   AND c.deleted IS FALSE
+  AND c.identity_provider_connection_id IS NULL
   AND i.id = @issuer_id::uuid
   AND i.project_id IS NULL
   AND (i.organization_id = @organization_id::text OR i.organization_id IS NULL)
@@ -3148,6 +3150,7 @@ WHERE c.id = @client_id::uuid
   AND c.project_id IS NULL
   AND c.organization_id = @organization_id::text
   AND c.deleted IS FALSE
+  AND c.identity_provider_connection_id IS NULL
   AND i.id = @issuer_id::uuid
   AND i.project_id IS NULL
   AND (i.organization_id = @organization_id::text OR i.organization_id IS NULL)

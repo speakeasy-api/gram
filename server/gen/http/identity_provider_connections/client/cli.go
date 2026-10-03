@@ -58,7 +58,7 @@ func BuildSubmitClientIDPayload(identityProviderConnectionsSubmitClientIDBody st
 	{
 		err = json.Unmarshal([]byte(identityProviderConnectionsSubmitClientIDBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_id\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if err != nil {
@@ -72,8 +72,39 @@ func BuildSubmitClientIDPayload(identityProviderConnectionsSubmitClientIDBody st
 		}
 	}
 	v := &identityproviderconnections.SubmitClientIDPayload{
-		ID:       body.ID,
-		ClientID: body.ClientID,
+		ID:           body.ID,
+		ClientID:     body.ClientID,
+		ClientSecret: body.ClientSecret,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildReplaceClientSecretPayload builds the payload for the
+// identityProviderConnections replaceClientSecret endpoint from CLI flags.
+func BuildReplaceClientSecretPayload(identityProviderConnectionsReplaceClientSecretBody string, identityProviderConnectionsReplaceClientSecretSessionToken string) (*identityproviderconnections.ReplaceClientSecretPayload, error) {
+	var err error
+	var body ReplaceClientSecretRequestBody
+	{
+		err = json.Unmarshal([]byte(identityProviderConnectionsReplaceClientSecretBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if identityProviderConnectionsReplaceClientSecretSessionToken != "" {
+			sessionToken = &identityProviderConnectionsReplaceClientSecretSessionToken
+		}
+	}
+	v := &identityproviderconnections.ReplaceClientSecretPayload{
+		ID:           body.ID,
+		ClientSecret: body.ClientSecret,
 	}
 	v.SessionToken = sessionToken
 

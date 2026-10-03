@@ -23,9 +23,14 @@ type Service interface {
 	// connection per organization; creation is rate limited.
 	Create(context.Context, *CreatePayload) (res *OktaIdentityProviderConnection, err error)
 	// Record the client ID of the Okta API Services application and verify it.
-	// Allowed once, while the connection is pending; revoke and recreate to change
-	// it. Requires org:admin.
+	// Connections installed from the Okta Integration Network also take the client
+	// secret. Allowed once, while the connection is pending; revoke and recreate
+	// to change it. Requires org:admin.
 	SubmitClientID(context.Context, *SubmitClientIDPayload) (res *OktaIdentityProviderConnection, err error)
+	// Replace the client secret of a connection installed from the Okta
+	// Integration Network and re-verify it. The previous secret is kept if Okta
+	// rejects the new one. Requires org:admin.
+	ReplaceClientSecret(context.Context, *ReplaceClientSecretPayload) (res *OktaIdentityProviderConnection, err error)
 	// Re-verify the connection against Okta: mint a token, confirm each required
 	// scope with a read, and record the outcome. Rate limited per organization.
 	// Requires org:admin.
@@ -70,7 +75,7 @@ const ServiceName = "identityProviderConnections"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"create", "submitClientId", "verify", "get", "recordAgent", "revoke", "syncApplications", "listApplications"}
+var MethodNames = [9]string{"create", "submitClientId", "replaceClientSecret", "verify", "get", "recordAgent", "revoke", "syncApplications", "listApplications"}
 
 // CreatePayload is the payload type of the identityProviderConnections service
 // create method.
@@ -235,7 +240,9 @@ type OktaIdentityProviderConnection struct {
 	// catalog.
 	ListingMode string
 	// Public JWKS URL the Okta app is configured to trust for private_key_jwt.
-	JwksURL string
+	// Omitted for connections installed from the Okta Integration Network, which
+	// authenticate with a client secret.
+	JwksURL *string
 	// Okta application client ID. Omitted until submitted.
 	ClientID *string
 	// Whether the real Okta client ID has replaced the provisioning placeholder.
@@ -281,6 +288,17 @@ type RecordAgentPayload struct {
 	AgentAppID *string
 }
 
+// ReplaceClientSecretPayload is the payload type of the
+// identityProviderConnections service replaceClientSecret method.
+type ReplaceClientSecretPayload struct {
+	SessionToken *string
+	// Connection ID.
+	ID string
+	// New client secret from the Speakeasy integration in Okta. Encrypted before
+	// persisting and never returned.
+	ClientSecret string
+}
+
 // RevokePayload is the payload type of the identityProviderConnections service
 // revoke method.
 type RevokePayload struct {
@@ -297,6 +315,10 @@ type SubmitClientIDPayload struct {
 	ID string
 	// Okta application client ID (0oa...).
 	ClientID string
+	// Client secret from the Speakeasy integration installed from the Okta
+	// Integration Network. Required for connections created with listing_mode oin;
+	// rejected otherwise. Encrypted before persisting and never returned.
+	ClientSecret *string
 }
 
 // SyncApplicationsPayload is the payload type of the

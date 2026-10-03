@@ -86,6 +86,7 @@ export const AUDIT_ACTIONS = [
   "gcp_kms_key:update",
   "identity-provider-connection:create",
   "identity-provider-connection:record-agent",
+  "identity-provider-connection:replace-client-secret",
   "identity-provider-connection:revoke",
   "identity-provider-connection:submit-client-id",
   "identity-provider-connection:sync-applications",
@@ -415,6 +416,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "connected identity provider";
     case "identity-provider-connection:submit-client-id":
       return "submitted client ID for identity provider";
+    case "identity-provider-connection:replace-client-secret":
+      return "replaced client secret for identity provider";
     case "identity-provider-connection:verify":
       return "verified identity provider connection to";
     case "identity-provider-connection:record-agent":
