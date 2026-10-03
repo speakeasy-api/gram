@@ -457,6 +457,9 @@ func mcpRuntimeFlags() []cli.Flag {
 		&cli.StringFlag{Name: "authz-private-key", Usage: "PKCS#8 RSA private PEM for private-tunnel caller assertions", EnvVars: []string{"GRAM_AUTHZ_PRIVATE_KEY"}},
 		&cli.StringFlag{Name: "authz-public-keys", Usage: "SubjectPublicKeyInfo RSA PEM bundle for caller assertion verification and rotation", EnvVars: []string{"GRAM_AUTHZ_PUBLIC_KEYS"}},
 		&cli.StringFlag{Name: "authz-issuer-url", Usage: "AICP issuer origin for this deployment", EnvVars: []string{"GRAM_AUTHZ_ISSUER_URL"}},
+		&cli.BoolFlag{Name: "assistant-provisioning-disabled", EnvVars: []string{"GRAM_ASSISTANT_PROVISIONING_DISABLED"}, Usage: "Stop new assistant identities and explicit upgrades; preserve existing bindings"},
+		&cli.BoolFlag{Name: "assistant-execution-disabled", EnvVars: []string{"GRAM_ASSISTANT_EXECUTION_DISABLED"}, Usage: "Deny workload token issuance and use without legacy fallback"},
+		&cli.BoolFlag{Name: "assistant-slack-delegation-disabled", EnvVars: []string{"GRAM_ASSISTANT_SLACK_DELEGATION_DISABLED"}, Usage: "Deny mapped Slack delegation without substituting owner credentials"},
 		&cli.StringFlag{
 			Name:     usersessions.JWTSigningKeyFlag,
 			Usage:    "Key for JWT signing",
@@ -1074,7 +1077,7 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), serverURL)
-			assistantIdentities, err := assistantidentity.New(c.String("authz-issuer-url"), c.String("environment") == "local")
+			assistantIdentities, err := assistantidentity.New(c.String("authz-issuer-url"), c.String("environment") == "local", assistantidentity.Rollout{DisableProvisioning: c.Bool("assistant-provisioning-disabled"), DisableExecution: c.Bool("assistant-execution-disabled"), DisableSlackDelegation: c.Bool("assistant-slack-delegation-disabled")})
 			if err != nil {
 				return fmt.Errorf("configure assistant platform trust: %w", err)
 			}

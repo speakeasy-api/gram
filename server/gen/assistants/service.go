@@ -23,8 +23,10 @@ type Service interface {
 	GetAssistant(context.Context, *GetAssistantPayload) (res *types.Assistant, err error)
 	// Create an assistant.
 	CreateAssistant(context.Context, *CreateAssistantPayload) (res *types.Assistant, err error)
-	// Explicitly upgrade a legacy assistant to a dedicated agent and stable
-	// trigger workload identities. Existing assistants are never upgraded
+	// Explicitly upgrade one legacy assistant or repair missing live trigger
+	// bindings for its existing identity. Requires authorized project write access
+	// and enabled provisioning. Idempotent; never widens existing policy or
+	// restores revoked identities. Existing assistants are never upgraded
 	// implicitly.
 	UpgradeAssistantIdentity(context.Context, *UpgradeAssistantIdentityPayload) (res *types.Assistant, err error)
 	// Update an assistant.

@@ -1401,6 +1401,17 @@ BEGIN
     ('legacy', demo.det_uuid('gram-demo-assistant-legacy'), 'Legacy assistant')
   ) AS roots(fixture, id, name);
 
+  -- Additional inert roots exercise the management binding list. Slack mapping
+  -- examples above include both mapped and unmapped people; mapping is per
+  -- message and does not establish business permission or consent.
+  INSERT INTO trigger_instances
+    (id, organization_id, project_id, definition_slug, name, target_kind, target_ref, target_display, config_json)
+  VALUES
+    (demo.det_uuid('gram-demo-assistant-slack-root'), demo_org, proj_a, 'slack',
+     'Slack per-message delegation', 'assistant', demo.det_uuid('gram-demo-assistant-bound')::text, 'Identity-bound assistant', '{}'),
+    (demo.det_uuid('gram-demo-assistant-scheduled-root'), demo_org, proj_a, 'cron',
+     'Autonomous scheduled work', 'assistant', demo.det_uuid('gram-demo-assistant-bound')::text, 'Identity-bound assistant', '{"schedule":"0 9 * * *"}');
+
   -- Inert display fixture: runtime provisioning uses GRAM_AUTHZ_ISSUER_URL and
   -- the existing Gram JWKS endpoint; this example cannot sign or run work.
   INSERT INTO workload_issuers
@@ -1417,7 +1428,7 @@ BEGIN
           demo.det_uuid('gram-demo-assistant-bound'), demo_org, proj_a, demo.det_uuid('gram-demo-assistant-bound'),
           demo.det_uuid('gram-demo-assistant-agent'), demo_org, proj_a, demo.det_uuid('gram-demo-assistant-agent'), 1);
 
-  -- Bind the existing canonical dashboard root, not an event or human wake.
+  -- Bind canonical roots, never individual events or human wakes.
   INSERT INTO trigger_workload_bindings
     (id, organization_id, project_id, project_ref_organization_id, project_ref_id,
      original_trigger_id, trigger_ref_organization_id, trigger_ref_project_id, trigger_id,
@@ -1425,7 +1436,7 @@ BEGIN
      assistant_binding_ref_project_id, assistant_binding_id, assistant_binding_generation,
      original_workload_issuer_id, workload_issuer_ref_organization_id, workload_issuer_ref_project_id,
      workload_issuer_id, subject, generation)
-  SELECT demo.det_uuid('gram-demo-assistant-root-binding'), demo_org, proj_a, demo_org, proj_a,
+  SELECT demo.det_uuid('gram-demo-assistant-root-binding-' || id::text), demo_org, proj_a, demo_org, proj_a,
          id, demo_org, proj_a, id,
          demo.det_uuid('gram-demo-assistant-binding'), demo_org, proj_a,
          demo.det_uuid('gram-demo-assistant-binding'), 1,
@@ -1433,19 +1444,19 @@ BEGIN
          demo.det_uuid('gram-demo-assistant-platform-trust'), 'assistant-trigger:' || id::text, 1
   FROM trigger_instances
   WHERE organization_id = demo_org AND project_id = proj_a
-    AND definition_slug = 'dashboard' AND target_kind = 'assistant'
+    AND definition_slug IN ('dashboard', 'slack', 'cron') AND target_kind = 'assistant'
     AND target_ref = demo.det_uuid('gram-demo-assistant-bound')::text
     AND status = 'active' AND deleted IS FALSE;
 
   INSERT INTO workload_identity_admissions
     (id, organization_id, project_id, workload_issuer_id, subject, match_kind, name)
-  SELECT demo.det_uuid('gram-demo-assistant-admission'), demo_org, proj_a,
-         workload_issuer_id, subject, 'exact', 'Identity-bound assistant dashboard'
+  SELECT demo.det_uuid('gram-demo-assistant-admission-' || original_trigger_id::text), demo_org, proj_a,
+         workload_issuer_id, subject, 'exact', 'Identity-bound assistant workload'
   FROM trigger_workload_bindings WHERE organization_id = demo_org AND project_id = proj_a;
 
   INSERT INTO workload_agent_assignments
     (id, organization_id, workload_issuer_id, subject, match_kind, agent_id)
-  SELECT demo.det_uuid('gram-demo-assistant-assignment'), demo_org,
+  SELECT demo.det_uuid('gram-demo-assistant-assignment-' || original_trigger_id::text), demo_org,
          workload_issuer_id, subject, 'exact', demo.det_uuid('gram-demo-assistant-agent')
   FROM trigger_workload_bindings WHERE organization_id = demo_org AND project_id = proj_a;
 
@@ -3542,8 +3553,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   END IF;
   SELECT count(*) INTO stray FROM trigger_instances
   WHERE organization_id = demo_org AND project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 2 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 2 dashboard roots, found %', stray;
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 assistant roots, found %', stray;
   END IF;
   SELECT count(*) INTO stray FROM assistant_agent_bindings
   WHERE organization_id = demo_org AND project_id = proj_a;
@@ -3552,8 +3563,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   END IF;
   SELECT count(*) INTO stray FROM trigger_workload_bindings
   WHERE organization_id = demo_org AND project_id = proj_a;
-  IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 1 root binding, found %', stray;
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 root bindings, found %', stray;
   END IF;
   SELECT count(*) INTO stray
   FROM trigger_workload_bindings t
@@ -3576,14 +3587,14 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     AND ag.project_id = proj_a AND ag.owner_user_id = demo_user_ids[1]
     AND ag.suspended_at IS NULL AND ag.revoked_at IS NULL
     AND i.issuer = 'https://platform.example.invalid' AND i.jwks_uri = 'https://platform.example.invalid/.well-known/jwks.json' AND i.allow_wildcard_admission IS FALSE
-    AND r.definition_slug = 'dashboard' AND r.target_kind = 'assistant' AND r.target_ref = a.id::text
+    AND r.definition_slug IN ('dashboard', 'slack', 'cron') AND r.target_kind = 'assistant' AND r.target_ref = a.id::text
     AND t.subject = 'assistant-trigger:' || r.id::text
     AND NOT EXISTS (SELECT 1 FROM principal_grants g
       WHERE g.organization_id = demo_org AND g.principal_urn = 'agent:' || ag.id::text)
     AND NOT EXISTS (SELECT 1 FROM agent_role_assignments g
       WHERE g.organization_id = demo_org AND g.agent_id = ag.id);
-  IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: identity-bound assistant root is incoherent';
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: identity-bound assistant roots are incoherent';
   END IF;
 
   -- Workload sessions, and the trust configuration that labels them. A
@@ -3597,8 +3608,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
 
   SELECT count(*) INTO stray FROM workload_identity_admissions
   WHERE organization_id = demo_org AND deleted IS FALSE;
-  IF stray <> 5 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 5 workload admissions, found %', stray;
+  IF stray <> 7 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 7 workload admissions, found %', stray;
   END IF;
 
   -- The seed writes these tables in raw SQL, so it never passes through
@@ -3646,8 +3657,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
 
   SELECT count(*) INTO stray FROM workload_agent_assignments
   WHERE organization_id = demo_org AND deleted IS FALSE;
-  IF stray <> 4 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 4 workload agent assignments, found %', stray;
+  IF stray <> 6 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 6 workload agent assignments, found %', stray;
   END IF;
 
   -- An admission may not out-reach its issuer's tier: an organization-tier

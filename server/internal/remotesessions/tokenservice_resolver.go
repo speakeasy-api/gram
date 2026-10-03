@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -85,6 +87,12 @@ func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, proje
 		}
 		if err := e.Revalidate(); err != nil {
 			return zero, fmt.Errorf("revalidate invocation authority: %w", err)
+		}
+		if execution, ok := assistanttokens.BusinessExecution(ctx); ok {
+			attribution := audit.AssistantExecutionAttribution{AgentID: execution.Identity.AgentID, TriggerID: execution.Identity.TriggerID, WorkloadIssuerID: execution.Identity.IssuerID, WorkloadSubject: execution.Identity.Subject, EventID: execution.InvocationEventID(), InitiatingUserID: execution.HumanUserID, CredentialOwnerUserID: selected.SubjectUrn.ID}
+			if err := m.auditLogger.LogAssistantCredentialUse(ctx, m.db, organizationID, projectID, execution.Identity.AssistantID, attribution); err != nil {
+				return zero, fmt.Errorf("record assistant credential attribution: %w", err)
+			}
 		}
 		m.touchResolvedCredential(ctx, selected)
 		return resolved, nil

@@ -9,6 +9,10 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  AssistantIdentityDiagnostics,
+  AssistantIdentityDiagnostics$inboundSchema,
+} from "./assistantidentitydiagnostics.js";
+import {
   AssistantMCPServerRef,
   AssistantMCPServerRef$inboundSchema,
 } from "./assistantmcpserverref.js";
@@ -33,6 +37,19 @@ export const IdentityState = {
  * Whether this assistant has never configured, active, or tombstoned workload identity bindings. This is configuration state, not permission to execute.
  */
 export type IdentityState = ClosedEnum<typeof IdentityState>;
+
+/**
+ * Present only on an explicit identity upgrade response: upgraded creates the first binding, repaired provisions missing live roots, unchanged preserves existing bindings. Not a permission grant or OAuth consent.
+ */
+export const IdentityUpgradeOutcome = {
+  Upgraded: "upgraded",
+  Repaired: "repaired",
+  Unchanged: "unchanged",
+} as const;
+/**
+ * Present only on an explicit identity upgrade response: upgraded creates the first binding, repaired provisions missing live roots, unchanged preserves existing bindings. Not a permission grant or OAuth consent.
+ */
+export type IdentityUpgradeOutcome = ClosedEnum<typeof IdentityUpgradeOutcome>;
 
 /**
  * The assistant status.
@@ -64,6 +81,10 @@ export type Assistant = {
    */
   id: string;
   /**
+   * Safe workload configuration diagnostics, not a permission or OAuth consent decision. Shared by the dashboard and Platform MCP.
+   */
+  identityDiagnostics?: AssistantIdentityDiagnostics | undefined;
+  /**
    * The current or last retained assistant identity binding generation.
    */
   identityGeneration?: number | undefined;
@@ -71,6 +92,10 @@ export type Assistant = {
    * Whether this assistant has never configured, active, or tombstoned workload identity bindings. This is configuration state, not permission to execute.
    */
   identityState?: IdentityState | undefined;
+  /**
+   * Present only on an explicit identity upgrade response: upgraded creates the first binding, repaired provisions missing live roots, unchanged preserves existing bindings. Not a permission grant or OAuth consent.
+   */
+  identityUpgradeOutcome?: IdentityUpgradeOutcome | undefined;
   /**
    * The system instructions for the assistant.
    */
@@ -122,6 +147,11 @@ export const IdentityState$inboundSchema: z.ZodMiniEnum<typeof IdentityState> =
   z.enum(IdentityState);
 
 /** @internal */
+export const IdentityUpgradeOutcome$inboundSchema: z.ZodMiniEnum<
+  typeof IdentityUpgradeOutcome
+> = z.enum(IdentityUpgradeOutcome);
+
+/** @internal */
 export const AssistantStatus$inboundSchema: z.ZodMiniEnum<
   typeof AssistantStatus
 > = z.enum(AssistantStatus);
@@ -137,8 +167,14 @@ export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
       ),
       created_by_user_id: z.optional(z.string()),
       id: z.string(),
+      identity_diagnostics: z.optional(
+        AssistantIdentityDiagnostics$inboundSchema,
+      ),
       identity_generation: z.optional(z.int()),
       identity_state: z.optional(IdentityState$inboundSchema),
+      identity_upgrade_outcome: z.optional(
+        IdentityUpgradeOutcome$inboundSchema,
+      ),
       instructions: z.string(),
       max_concurrency: z.int(),
       mcp_servers: z.array(AssistantMCPServerRef$inboundSchema),
@@ -159,8 +195,10 @@ export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
         "agent_id": "agentId",
         "created_at": "createdAt",
         "created_by_user_id": "createdByUserId",
+        "identity_diagnostics": "identityDiagnostics",
         "identity_generation": "identityGeneration",
         "identity_state": "identityState",
+        "identity_upgrade_outcome": "identityUpgradeOutcome",
         "max_concurrency": "maxConcurrency",
         "mcp_servers": "mcpServers",
         "project_id": "projectId",

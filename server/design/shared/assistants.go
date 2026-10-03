@@ -45,6 +45,10 @@ var Assistant = Type("Assistant", func() {
 		Enum("NEVER_CONFIGURED", "ACTIVE", "TOMBSTONED")
 	})
 	Attribute("agent_id", String, "The dedicated agent ID for an active identity binding.", func() { Format(FormatUUID) })
+	Attribute("identity_diagnostics", AssistantIdentityDiagnostics, "Detail-only identity health and rollout information. Configuration is not permission or consent.")
+	Attribute("identity_upgrade_outcome", String, "Present only on an explicit identity upgrade response: upgraded creates the first binding, repaired provisions missing live roots, unchanged preserves existing bindings. Not a permission grant or OAuth consent.", func() {
+		Enum("upgraded", "repaired", "unchanged")
+	})
 	Attribute("identity_generation", Int64, "The current or last retained assistant identity binding generation.")
 	Attribute("name", String, "The assistant name.")
 	Attribute("model", String, "The model identifier used by the assistant.")
@@ -124,4 +128,31 @@ var AssistantMemory = Type("AssistantMemory", func() {
 		"last_access",
 		"valid_at",
 	)
+})
+
+var AssistantIdentityDiagnostics = Type("AssistantIdentityDiagnostics", func() {
+	Meta("struct:pkg:path", "types")
+	Description("Safe workload configuration diagnostics, not a permission or OAuth consent decision. Shared by the dashboard and Platform MCP.")
+	Attribute("health", String, "legacy, ready, suspended, or unavailable; ready only describes identity configuration.", func() { Meta("struct:tag:json", "health"); Enum("legacy", "ready", "suspended", "unavailable") })
+	Attribute("provisioning_enabled", Boolean, "Whether new identities and explicit upgrades are enabled on this serving tier.", func() { Meta("struct:tag:json", "provisioning_enabled") })
+	Attribute("execution_enabled", Boolean, "Whether workload token issuance and use are enabled on this serving tier.", func() { Meta("struct:tag:json", "execution_enabled") })
+	Attribute("slack_delegation_enabled", Boolean, "Whether mapped Slack delegation is enabled on this serving tier.", func() { Meta("struct:tag:json", "slack_delegation_enabled") })
+	Attribute("bindings", ArrayOf(AssistantIdentityBinding), "At most 100 current trigger roots, including roots without a binding.", func() { Meta("struct:tag:json", "bindings") })
+	Attribute("bindings_truncated", Boolean, "More roots exist than are returned.", func() { Meta("struct:tag:json", "bindings_truncated") })
+	Attribute("last_event_id", String, "Most recent persisted event ID; not a token.", func() { Meta("struct:tag:json", "last_event_id,omitempty") })
+	Attribute("last_execution_mode", String, "Captured mode of the most recent event, or legacy. Not a prediction for the next message.", func() { Meta("struct:tag:json", "last_execution_mode,omitempty") })
+	Attribute("last_fallback_reason", String, "Bounded reason for autonomous execution when no delegating user was resolved.", func() { Meta("struct:tag:json", "last_fallback_reason,omitempty") })
+	Attribute("last_event_status", String, "Persisted processing status, not a tool permission or consent verdict.", func() { Meta("struct:tag:json", "last_event_status,omitempty") })
+	Attribute("last_initiating_user_id", String, "Selected human delegator, absent for autonomous work; never the acting agent.", func() { Meta("struct:tag:json", "last_initiating_user_id,omitempty") })
+	Required("health", "provisioning_enabled", "execution_enabled", "slack_delegation_enabled", "bindings", "bindings_truncated")
+})
+
+var AssistantIdentityBinding = Type("AssistantIdentityBinding", func() {
+	Meta("struct:pkg:path", "types")
+	Attribute("trigger_id", String, "Exact trigger root ID.", func() { Meta("struct:tag:json", "trigger_id"); Format(FormatUUID) })
+	Attribute("trigger_kind", String, "Trigger definition slug.", func() { Meta("struct:tag:json", "trigger_kind") })
+	Attribute("trigger_status", String, "Current trigger status.", func() { Meta("struct:tag:json", "trigger_status") })
+	Attribute("state", String, "ready, missing, or unavailable. Never interprets missing authority as legacy.", func() { Meta("struct:tag:json", "state"); Enum("ready", "missing", "unavailable") })
+	Attribute("generation", Int64, "Retained workload binding generation, zero if never configured.", func() { Meta("struct:tag:json", "generation") })
+	Required("trigger_id", "trigger_kind", "trigger_status", "state", "generation")
 })

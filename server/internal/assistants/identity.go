@@ -71,6 +71,12 @@ func (s *ServiceCore) UpgradeAssistantIdentity(ctx context.Context, organization
 	if row.OrganizationID != organizationID {
 		return assistantRecord{}, pgx.ErrNoRows
 	}
+	// Classify under the same row lock as provisioning, never from diagnostics
+	// or an API pre-read. Only publish this outcome if all writes commit.
+	outcome, err := assistantrepo.New(tx).GetAssistantIdentityUpgradeOutcome(ctx, assistantrepo.GetAssistantIdentityUpgradeOutcomeParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: assistantID})
+	if err != nil {
+		return assistantRecord{}, fmt.Errorf("classify assistant identity upgrade: %w", err)
+	}
 	if _, err = s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: assistantID, ActorUserID: actorUserID}); err != nil {
 		return assistantRecord{}, fmt.Errorf("assistant identity Upgrade: %w", err)
 	}
@@ -80,5 +86,10 @@ func (s *ServiceCore) UpgradeAssistantIdentity(ctx context.Context, organization
 	if err = tx.Commit(ctx); err != nil {
 		return assistantRecord{}, fmt.Errorf("commit assistant identity upgrade: %w", err)
 	}
-	return s.GetAssistant(ctx, projectID, assistantID)
+	record, err := s.GetAssistant(ctx, projectID, assistantID)
+	if err != nil {
+		return assistantRecord{}, err
+	}
+	record.IdentityUpgradeOutcome = &outcome
+	return record, nil
 }

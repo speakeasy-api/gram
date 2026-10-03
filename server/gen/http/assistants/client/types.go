@@ -115,6 +115,13 @@ type GetAssistantResponseBody struct {
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
 	// The dedicated agent ID for an active identity binding.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Detail-only identity health and rollout information. Configuration is not
+	// permission or consent.
+	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
+	// Present only on an explicit identity upgrade response: upgraded creates the
+	// first binding, repaired provisions missing live roots, unchanged preserves
+	// existing bindings. Not a permission grant or OAuth consent.
+	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -155,6 +162,13 @@ type CreateAssistantResponseBody struct {
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
 	// The dedicated agent ID for an active identity binding.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Detail-only identity health and rollout information. Configuration is not
+	// permission or consent.
+	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
+	// Present only on an explicit identity upgrade response: upgraded creates the
+	// first binding, repaired provisions missing live roots, unchanged preserves
+	// existing bindings. Not a permission grant or OAuth consent.
+	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -195,6 +209,13 @@ type UpgradeAssistantIdentityResponseBody struct {
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
 	// The dedicated agent ID for an active identity binding.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Detail-only identity health and rollout information. Configuration is not
+	// permission or consent.
+	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
+	// Present only on an explicit identity upgrade response: upgraded creates the
+	// first binding, repaired provisions missing live roots, unchanged preserves
+	// existing bindings. Not a permission grant or OAuth consent.
+	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -235,6 +256,13 @@ type UpdateAssistantResponseBody struct {
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
 	// The dedicated agent ID for an active identity binding.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Detail-only identity health and rollout information. Configuration is not
+	// permission or consent.
+	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
+	// Present only on an explicit identity upgrade response: upgraded creates the
+	// first binding, repaired provisions missing live roots, unchanged preserves
+	// existing bindings. Not a permission grant or OAuth consent.
+	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -300,6 +328,13 @@ type GetManagedAssistantResponseBody struct {
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
 	// The dedicated agent ID for an active identity binding.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Detail-only identity health and rollout information. Configuration is not
+	// permission or consent.
+	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
+	// Present only on an explicit identity upgrade response: upgraded creates the
+	// first binding, repaired provisions missing live roots, unchanged preserves
+	// existing bindings. Not a permission grant or OAuth consent.
+	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -340,6 +375,13 @@ type EnsureManagedAssistantResponseBody struct {
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
 	// The dedicated agent ID for an active identity binding.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Detail-only identity health and rollout information. Configuration is not
+	// permission or consent.
+	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
+	// Present only on an explicit identity upgrade response: upgraded creates the
+	// first binding, repaired provisions missing live roots, unchanged preserves
+	// existing bindings. Not a permission grant or OAuth consent.
+	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -2239,6 +2281,13 @@ type AssistantResponseBody struct {
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
 	// The dedicated agent ID for an active identity binding.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Detail-only identity health and rollout information. Configuration is not
+	// permission or consent.
+	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
+	// Present only on an explicit identity upgrade response: upgraded creates the
+	// first binding, repaired provisions missing live roots, unchanged preserves
+	// existing bindings. Not a permission grant or OAuth consent.
+	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -2263,6 +2312,51 @@ type AssistantResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// Last update timestamp.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// AssistantIdentityDiagnosticsResponseBody is used to define fields on
+// response body types.
+type AssistantIdentityDiagnosticsResponseBody struct {
+	// legacy, ready, suspended, or unavailable; ready only describes identity
+	// configuration.
+	Health *string `json:"health"`
+	// Whether new identities and explicit upgrades are enabled on this serving
+	// tier.
+	ProvisioningEnabled *bool `json:"provisioning_enabled"`
+	// Whether workload token issuance and use are enabled on this serving tier.
+	ExecutionEnabled *bool `json:"execution_enabled"`
+	// Whether mapped Slack delegation is enabled on this serving tier.
+	SlackDelegationEnabled *bool `json:"slack_delegation_enabled"`
+	// At most 100 current trigger roots, including roots without a binding.
+	Bindings []*AssistantIdentityBindingResponseBody `json:"bindings"`
+	// More roots exist than are returned.
+	BindingsTruncated *bool `json:"bindings_truncated"`
+	// Most recent persisted event ID; not a token.
+	LastEventID *string `json:"last_event_id,omitempty"`
+	// Captured mode of the most recent event, or legacy. Not a prediction for the
+	// next message.
+	LastExecutionMode *string `json:"last_execution_mode,omitempty"`
+	// Bounded reason for autonomous execution when no delegating user was resolved.
+	LastFallbackReason *string `json:"last_fallback_reason,omitempty"`
+	// Persisted processing status, not a tool permission or consent verdict.
+	LastEventStatus *string `json:"last_event_status,omitempty"`
+	// Selected human delegator, absent for autonomous work; never the acting agent.
+	LastInitiatingUserID *string `json:"last_initiating_user_id,omitempty"`
+}
+
+// AssistantIdentityBindingResponseBody is used to define fields on response
+// body types.
+type AssistantIdentityBindingResponseBody struct {
+	// Exact trigger root ID.
+	TriggerID *string `json:"trigger_id"`
+	// Trigger definition slug.
+	TriggerKind *string `json:"trigger_kind"`
+	// Current trigger status.
+	TriggerStatus *string `json:"trigger_status"`
+	// ready, missing, or unavailable. Never interprets missing authority as legacy.
+	State *string `json:"state"`
+	// Retained workload binding generation, zero if never configured.
+	Generation *int64 `json:"generation"`
 }
 
 // AssistantToolsetRefResponseBody is used to define fields on response body
@@ -2620,20 +2714,24 @@ func NewListAssistantsGatewayError(body *ListAssistantsGatewayErrorResponseBody)
 // endpoint result from a HTTP "OK" response.
 func NewGetAssistantAssistantOK(body *GetAssistantResponseBody) *types.Assistant {
 	v := &types.Assistant{
-		ID:                 *body.ID,
-		ProjectID:          *body.ProjectID,
-		CreatedByUserID:    body.CreatedByUserID,
-		IdentityState:      body.IdentityState,
-		AgentID:            body.AgentID,
-		IdentityGeneration: body.IdentityGeneration,
-		Name:               *body.Name,
-		Model:              *body.Model,
-		Instructions:       *body.Instructions,
-		WarmTTLSeconds:     *body.WarmTTLSeconds,
-		MaxConcurrency:     *body.MaxConcurrency,
-		Status:             *body.Status,
-		CreatedAt:          *body.CreatedAt,
-		UpdatedAt:          *body.UpdatedAt,
+		ID:                     *body.ID,
+		ProjectID:              *body.ProjectID,
+		CreatedByUserID:        body.CreatedByUserID,
+		IdentityState:          body.IdentityState,
+		AgentID:                body.AgentID,
+		IdentityUpgradeOutcome: body.IdentityUpgradeOutcome,
+		IdentityGeneration:     body.IdentityGeneration,
+		Name:                   *body.Name,
+		Model:                  *body.Model,
+		Instructions:           *body.Instructions,
+		WarmTTLSeconds:         *body.WarmTTLSeconds,
+		MaxConcurrency:         *body.MaxConcurrency,
+		Status:                 *body.Status,
+		CreatedAt:              *body.CreatedAt,
+		UpdatedAt:              *body.UpdatedAt,
+	}
+	if body.IdentityDiagnostics != nil {
+		v.IdentityDiagnostics = unmarshalAssistantIdentityDiagnosticsResponseBodyToTypesAssistantIdentityDiagnostics(body.IdentityDiagnostics)
 	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {
@@ -2817,20 +2915,24 @@ func NewGetAssistantGatewayError(body *GetAssistantGatewayErrorResponseBody) *go
 // "createAssistant" endpoint result from a HTTP "OK" response.
 func NewCreateAssistantAssistantOK(body *CreateAssistantResponseBody) *types.Assistant {
 	v := &types.Assistant{
-		ID:                 *body.ID,
-		ProjectID:          *body.ProjectID,
-		CreatedByUserID:    body.CreatedByUserID,
-		IdentityState:      body.IdentityState,
-		AgentID:            body.AgentID,
-		IdentityGeneration: body.IdentityGeneration,
-		Name:               *body.Name,
-		Model:              *body.Model,
-		Instructions:       *body.Instructions,
-		WarmTTLSeconds:     *body.WarmTTLSeconds,
-		MaxConcurrency:     *body.MaxConcurrency,
-		Status:             *body.Status,
-		CreatedAt:          *body.CreatedAt,
-		UpdatedAt:          *body.UpdatedAt,
+		ID:                     *body.ID,
+		ProjectID:              *body.ProjectID,
+		CreatedByUserID:        body.CreatedByUserID,
+		IdentityState:          body.IdentityState,
+		AgentID:                body.AgentID,
+		IdentityUpgradeOutcome: body.IdentityUpgradeOutcome,
+		IdentityGeneration:     body.IdentityGeneration,
+		Name:                   *body.Name,
+		Model:                  *body.Model,
+		Instructions:           *body.Instructions,
+		WarmTTLSeconds:         *body.WarmTTLSeconds,
+		MaxConcurrency:         *body.MaxConcurrency,
+		Status:                 *body.Status,
+		CreatedAt:              *body.CreatedAt,
+		UpdatedAt:              *body.UpdatedAt,
+	}
+	if body.IdentityDiagnostics != nil {
+		v.IdentityDiagnostics = unmarshalAssistantIdentityDiagnosticsResponseBodyToTypesAssistantIdentityDiagnostics(body.IdentityDiagnostics)
 	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {
@@ -3014,20 +3116,24 @@ func NewCreateAssistantGatewayError(body *CreateAssistantGatewayErrorResponseBod
 // "upgradeAssistantIdentity" endpoint result from a HTTP "OK" response.
 func NewUpgradeAssistantIdentityAssistantOK(body *UpgradeAssistantIdentityResponseBody) *types.Assistant {
 	v := &types.Assistant{
-		ID:                 *body.ID,
-		ProjectID:          *body.ProjectID,
-		CreatedByUserID:    body.CreatedByUserID,
-		IdentityState:      body.IdentityState,
-		AgentID:            body.AgentID,
-		IdentityGeneration: body.IdentityGeneration,
-		Name:               *body.Name,
-		Model:              *body.Model,
-		Instructions:       *body.Instructions,
-		WarmTTLSeconds:     *body.WarmTTLSeconds,
-		MaxConcurrency:     *body.MaxConcurrency,
-		Status:             *body.Status,
-		CreatedAt:          *body.CreatedAt,
-		UpdatedAt:          *body.UpdatedAt,
+		ID:                     *body.ID,
+		ProjectID:              *body.ProjectID,
+		CreatedByUserID:        body.CreatedByUserID,
+		IdentityState:          body.IdentityState,
+		AgentID:                body.AgentID,
+		IdentityUpgradeOutcome: body.IdentityUpgradeOutcome,
+		IdentityGeneration:     body.IdentityGeneration,
+		Name:                   *body.Name,
+		Model:                  *body.Model,
+		Instructions:           *body.Instructions,
+		WarmTTLSeconds:         *body.WarmTTLSeconds,
+		MaxConcurrency:         *body.MaxConcurrency,
+		Status:                 *body.Status,
+		CreatedAt:              *body.CreatedAt,
+		UpdatedAt:              *body.UpdatedAt,
+	}
+	if body.IdentityDiagnostics != nil {
+		v.IdentityDiagnostics = unmarshalAssistantIdentityDiagnosticsResponseBodyToTypesAssistantIdentityDiagnostics(body.IdentityDiagnostics)
 	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {
@@ -3211,20 +3317,24 @@ func NewUpgradeAssistantIdentityGatewayError(body *UpgradeAssistantIdentityGatew
 // "updateAssistant" endpoint result from a HTTP "OK" response.
 func NewUpdateAssistantAssistantOK(body *UpdateAssistantResponseBody) *types.Assistant {
 	v := &types.Assistant{
-		ID:                 *body.ID,
-		ProjectID:          *body.ProjectID,
-		CreatedByUserID:    body.CreatedByUserID,
-		IdentityState:      body.IdentityState,
-		AgentID:            body.AgentID,
-		IdentityGeneration: body.IdentityGeneration,
-		Name:               *body.Name,
-		Model:              *body.Model,
-		Instructions:       *body.Instructions,
-		WarmTTLSeconds:     *body.WarmTTLSeconds,
-		MaxConcurrency:     *body.MaxConcurrency,
-		Status:             *body.Status,
-		CreatedAt:          *body.CreatedAt,
-		UpdatedAt:          *body.UpdatedAt,
+		ID:                     *body.ID,
+		ProjectID:              *body.ProjectID,
+		CreatedByUserID:        body.CreatedByUserID,
+		IdentityState:          body.IdentityState,
+		AgentID:                body.AgentID,
+		IdentityUpgradeOutcome: body.IdentityUpgradeOutcome,
+		IdentityGeneration:     body.IdentityGeneration,
+		Name:                   *body.Name,
+		Model:                  *body.Model,
+		Instructions:           *body.Instructions,
+		WarmTTLSeconds:         *body.WarmTTLSeconds,
+		MaxConcurrency:         *body.MaxConcurrency,
+		Status:                 *body.Status,
+		CreatedAt:              *body.CreatedAt,
+		UpdatedAt:              *body.UpdatedAt,
+	}
+	if body.IdentityDiagnostics != nil {
+		v.IdentityDiagnostics = unmarshalAssistantIdentityDiagnosticsResponseBodyToTypesAssistantIdentityDiagnostics(body.IdentityDiagnostics)
 	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {
@@ -3882,20 +3992,24 @@ func NewInterruptTurnGatewayError(body *InterruptTurnGatewayErrorResponseBody) *
 // "getManagedAssistant" endpoint result from a HTTP "OK" response.
 func NewGetManagedAssistantAssistantOK(body *GetManagedAssistantResponseBody) *types.Assistant {
 	v := &types.Assistant{
-		ID:                 *body.ID,
-		ProjectID:          *body.ProjectID,
-		CreatedByUserID:    body.CreatedByUserID,
-		IdentityState:      body.IdentityState,
-		AgentID:            body.AgentID,
-		IdentityGeneration: body.IdentityGeneration,
-		Name:               *body.Name,
-		Model:              *body.Model,
-		Instructions:       *body.Instructions,
-		WarmTTLSeconds:     *body.WarmTTLSeconds,
-		MaxConcurrency:     *body.MaxConcurrency,
-		Status:             *body.Status,
-		CreatedAt:          *body.CreatedAt,
-		UpdatedAt:          *body.UpdatedAt,
+		ID:                     *body.ID,
+		ProjectID:              *body.ProjectID,
+		CreatedByUserID:        body.CreatedByUserID,
+		IdentityState:          body.IdentityState,
+		AgentID:                body.AgentID,
+		IdentityUpgradeOutcome: body.IdentityUpgradeOutcome,
+		IdentityGeneration:     body.IdentityGeneration,
+		Name:                   *body.Name,
+		Model:                  *body.Model,
+		Instructions:           *body.Instructions,
+		WarmTTLSeconds:         *body.WarmTTLSeconds,
+		MaxConcurrency:         *body.MaxConcurrency,
+		Status:                 *body.Status,
+		CreatedAt:              *body.CreatedAt,
+		UpdatedAt:              *body.UpdatedAt,
+	}
+	if body.IdentityDiagnostics != nil {
+		v.IdentityDiagnostics = unmarshalAssistantIdentityDiagnosticsResponseBodyToTypesAssistantIdentityDiagnostics(body.IdentityDiagnostics)
 	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {
@@ -4079,20 +4193,24 @@ func NewGetManagedAssistantGatewayError(body *GetManagedAssistantGatewayErrorRes
 // "ensureManagedAssistant" endpoint result from a HTTP "OK" response.
 func NewEnsureManagedAssistantAssistantOK(body *EnsureManagedAssistantResponseBody) *types.Assistant {
 	v := &types.Assistant{
-		ID:                 *body.ID,
-		ProjectID:          *body.ProjectID,
-		CreatedByUserID:    body.CreatedByUserID,
-		IdentityState:      body.IdentityState,
-		AgentID:            body.AgentID,
-		IdentityGeneration: body.IdentityGeneration,
-		Name:               *body.Name,
-		Model:              *body.Model,
-		Instructions:       *body.Instructions,
-		WarmTTLSeconds:     *body.WarmTTLSeconds,
-		MaxConcurrency:     *body.MaxConcurrency,
-		Status:             *body.Status,
-		CreatedAt:          *body.CreatedAt,
-		UpdatedAt:          *body.UpdatedAt,
+		ID:                     *body.ID,
+		ProjectID:              *body.ProjectID,
+		CreatedByUserID:        body.CreatedByUserID,
+		IdentityState:          body.IdentityState,
+		AgentID:                body.AgentID,
+		IdentityUpgradeOutcome: body.IdentityUpgradeOutcome,
+		IdentityGeneration:     body.IdentityGeneration,
+		Name:                   *body.Name,
+		Model:                  *body.Model,
+		Instructions:           *body.Instructions,
+		WarmTTLSeconds:         *body.WarmTTLSeconds,
+		MaxConcurrency:         *body.MaxConcurrency,
+		Status:                 *body.Status,
+		CreatedAt:              *body.CreatedAt,
+		UpdatedAt:              *body.UpdatedAt,
+	}
+	if body.IdentityDiagnostics != nil {
+		v.IdentityDiagnostics = unmarshalAssistantIdentityDiagnosticsResponseBodyToTypesAssistantIdentityDiagnostics(body.IdentityDiagnostics)
 	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {
@@ -4344,6 +4462,16 @@ func ValidateGetAssistantResponseBody(body *GetAssistantResponseBody) (err error
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
 	}
+	if body.IdentityDiagnostics != nil {
+		if err2 := ValidateAssistantIdentityDiagnosticsResponseBody(body.IdentityDiagnostics); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.IdentityUpgradeOutcome != nil {
+		if !(*body.IdentityUpgradeOutcome == "upgraded" || *body.IdentityUpgradeOutcome == "repaired" || *body.IdentityUpgradeOutcome == "unchanged") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_upgrade_outcome", *body.IdentityUpgradeOutcome, []any{"upgraded", "repaired", "unchanged"}))
+		}
+	}
 	for _, e := range body.Toolsets {
 		if e != nil {
 			if err2 := ValidateAssistantToolsetRefResponseBody(e); err2 != nil {
@@ -4434,6 +4562,16 @@ func ValidateCreateAssistantResponseBody(body *CreateAssistantResponseBody) (err
 	}
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if body.IdentityDiagnostics != nil {
+		if err2 := ValidateAssistantIdentityDiagnosticsResponseBody(body.IdentityDiagnostics); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.IdentityUpgradeOutcome != nil {
+		if !(*body.IdentityUpgradeOutcome == "upgraded" || *body.IdentityUpgradeOutcome == "repaired" || *body.IdentityUpgradeOutcome == "unchanged") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_upgrade_outcome", *body.IdentityUpgradeOutcome, []any{"upgraded", "repaired", "unchanged"}))
+		}
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {
@@ -4526,6 +4664,16 @@ func ValidateUpgradeAssistantIdentityResponseBody(body *UpgradeAssistantIdentity
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
 	}
+	if body.IdentityDiagnostics != nil {
+		if err2 := ValidateAssistantIdentityDiagnosticsResponseBody(body.IdentityDiagnostics); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.IdentityUpgradeOutcome != nil {
+		if !(*body.IdentityUpgradeOutcome == "upgraded" || *body.IdentityUpgradeOutcome == "repaired" || *body.IdentityUpgradeOutcome == "unchanged") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_upgrade_outcome", *body.IdentityUpgradeOutcome, []any{"upgraded", "repaired", "unchanged"}))
+		}
+	}
 	for _, e := range body.Toolsets {
 		if e != nil {
 			if err2 := ValidateAssistantToolsetRefResponseBody(e); err2 != nil {
@@ -4616,6 +4764,16 @@ func ValidateUpdateAssistantResponseBody(body *UpdateAssistantResponseBody) (err
 	}
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if body.IdentityDiagnostics != nil {
+		if err2 := ValidateAssistantIdentityDiagnosticsResponseBody(body.IdentityDiagnostics); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.IdentityUpgradeOutcome != nil {
+		if !(*body.IdentityUpgradeOutcome == "upgraded" || *body.IdentityUpgradeOutcome == "repaired" || *body.IdentityUpgradeOutcome == "unchanged") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_upgrade_outcome", *body.IdentityUpgradeOutcome, []any{"upgraded", "repaired", "unchanged"}))
+		}
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {
@@ -4741,6 +4899,16 @@ func ValidateGetManagedAssistantResponseBody(body *GetManagedAssistantResponseBo
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
 	}
+	if body.IdentityDiagnostics != nil {
+		if err2 := ValidateAssistantIdentityDiagnosticsResponseBody(body.IdentityDiagnostics); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.IdentityUpgradeOutcome != nil {
+		if !(*body.IdentityUpgradeOutcome == "upgraded" || *body.IdentityUpgradeOutcome == "repaired" || *body.IdentityUpgradeOutcome == "unchanged") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_upgrade_outcome", *body.IdentityUpgradeOutcome, []any{"upgraded", "repaired", "unchanged"}))
+		}
+	}
 	for _, e := range body.Toolsets {
 		if e != nil {
 			if err2 := ValidateAssistantToolsetRefResponseBody(e); err2 != nil {
@@ -4831,6 +4999,16 @@ func ValidateEnsureManagedAssistantResponseBody(body *EnsureManagedAssistantResp
 	}
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if body.IdentityDiagnostics != nil {
+		if err2 := ValidateAssistantIdentityDiagnosticsResponseBody(body.IdentityDiagnostics); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.IdentityUpgradeOutcome != nil {
+		if !(*body.IdentityUpgradeOutcome == "upgraded" || *body.IdentityUpgradeOutcome == "repaired" || *body.IdentityUpgradeOutcome == "unchanged") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_upgrade_outcome", *body.IdentityUpgradeOutcome, []any{"upgraded", "repaired", "unchanged"}))
+		}
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {
@@ -7326,6 +7504,16 @@ func ValidateAssistantResponseBody(body *AssistantResponseBody) (err error) {
 	if body.AgentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
 	}
+	if body.IdentityDiagnostics != nil {
+		if err2 := ValidateAssistantIdentityDiagnosticsResponseBody(body.IdentityDiagnostics); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.IdentityUpgradeOutcome != nil {
+		if !(*body.IdentityUpgradeOutcome == "upgraded" || *body.IdentityUpgradeOutcome == "repaired" || *body.IdentityUpgradeOutcome == "unchanged") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_upgrade_outcome", *body.IdentityUpgradeOutcome, []any{"upgraded", "repaired", "unchanged"}))
+		}
+	}
 	for _, e := range body.Toolsets {
 		if e != nil {
 			if err2 := ValidateAssistantToolsetRefResponseBody(e); err2 != nil {
@@ -7357,6 +7545,71 @@ func ValidateAssistantResponseBody(body *AssistantResponseBody) (err error) {
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAssistantIdentityDiagnosticsResponseBody runs the validations
+// defined on AssistantIdentityDiagnosticsResponseBody
+func ValidateAssistantIdentityDiagnosticsResponseBody(body *AssistantIdentityDiagnosticsResponseBody) (err error) {
+	if body.Health == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("health", "body"))
+	}
+	if body.ProvisioningEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provisioning_enabled", "body"))
+	}
+	if body.ExecutionEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("execution_enabled", "body"))
+	}
+	if body.SlackDelegationEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slack_delegation_enabled", "body"))
+	}
+	if body.Bindings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("bindings", "body"))
+	}
+	if body.BindingsTruncated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("bindings_truncated", "body"))
+	}
+	if body.Health != nil {
+		if !(*body.Health == "legacy" || *body.Health == "ready" || *body.Health == "suspended" || *body.Health == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.health", *body.Health, []any{"legacy", "ready", "suspended", "unavailable"}))
+		}
+	}
+	for _, e := range body.Bindings {
+		if e != nil {
+			if err2 := ValidateAssistantIdentityBindingResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAssistantIdentityBindingResponseBody runs the validations defined on
+// AssistantIdentityBindingResponseBody
+func ValidateAssistantIdentityBindingResponseBody(body *AssistantIdentityBindingResponseBody) (err error) {
+	if body.TriggerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trigger_id", "body"))
+	}
+	if body.TriggerKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trigger_kind", "body"))
+	}
+	if body.TriggerStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trigger_status", "body"))
+	}
+	if body.State == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
+	}
+	if body.Generation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("generation", "body"))
+	}
+	if body.TriggerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trigger_id", *body.TriggerID, goa.FormatUUID))
+	}
+	if body.State != nil {
+		if !(*body.State == "ready" || *body.State == "missing" || *body.State == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"ready", "missing", "unavailable"}))
+		}
 	}
 	return
 }

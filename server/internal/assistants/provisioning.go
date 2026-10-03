@@ -352,8 +352,10 @@ func (s *ServiceCore) createManagedAssistant(
 		return assistantRecord{}, fmt.Errorf("insert managed assistant mapping: %w", err)
 	}
 
-	if _, err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID}); err != nil {
-		return assistantRecord{}, fmt.Errorf("assistant identity Provision: %w", err)
+	if !s.identities.Rollout().DisableProvisioning {
+		if _, err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID}); err != nil {
+			return assistantRecord{}, fmt.Errorf("assistant identity Provision: %w", err)
+		}
 	}
 	if err := s.ensureDashboardTrigger(ctx, tx, organizationID, projectID, record.ID, name); err != nil {
 		return assistantRecord{}, err
@@ -371,25 +373,26 @@ func (s *ServiceCore) createManagedAssistant(
 
 func assistantRecordFromManagedRow(row assistantrepo.GetManagedAssistantByProjectRow) assistantRecord {
 	return assistantRecord{
-		IdentityState:      "",
-		AgentID:            nil,
-		IdentityGeneration: nil,
-		ID:                 row.ID,
-		ProjectID:          row.ProjectID,
-		OrganizationID:     row.OrganizationID,
-		CreatedByUserID:    conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
-		Name:               row.Name,
-		Model:              row.Model,
-		Instructions:       row.Instructions,
-		Toolsets:           nil,
-		MCPServers:         nil,
-		Skills:             nil,
-		WarmTTLSeconds:     conv.SafeInt(row.WarmTtlSeconds),
-		MaxConcurrency:     conv.SafeInt(row.MaxConcurrency),
-		Status:             row.Status,
-		CreatedAt:          row.CreatedAt.Time,
-		UpdatedAt:          row.UpdatedAt.Time,
-		DeletedAt:          row.DeletedAt,
+		IdentityUpgradeOutcome: nil,
+		IdentityState:          "",
+		AgentID:                nil,
+		IdentityGeneration:     nil,
+		ID:                     row.ID,
+		ProjectID:              row.ProjectID,
+		OrganizationID:         row.OrganizationID,
+		CreatedByUserID:        conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:                   row.Name,
+		Model:                  row.Model,
+		Instructions:           row.Instructions,
+		Toolsets:               nil,
+		MCPServers:             nil,
+		Skills:                 nil,
+		WarmTTLSeconds:         conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:         conv.SafeInt(row.MaxConcurrency),
+		Status:                 row.Status,
+		CreatedAt:              row.CreatedAt.Time,
+		UpdatedAt:              row.UpdatedAt.Time,
+		DeletedAt:              row.DeletedAt,
 	}
 }
 

@@ -48,6 +48,7 @@ type LogAssistantToolCallEvent struct {
 	ToolName     string
 	ToolURN      urn.Tool
 	Params       json.RawMessage
+	Identity     *AssistantExecutionAttribution
 }
 
 func (l *Logger) LogAssistantToolCall(ctx context.Context, dbtx repo.DBTX, event LogAssistantToolCallEvent) error {
@@ -59,6 +60,9 @@ func (l *Logger) LogAssistantToolCall(ctx context.Context, dbtx repo.DBTX, event
 		"toolset_slug": event.ToolsetSlug,
 		"tool_name":    event.ToolName,
 		"tool_urn":     event.ToolURN.String(),
+	}
+	if event.Identity != nil {
+		meta["execution_identity"] = event.Identity
 	}
 	if event.Thread != uuid.Nil {
 		meta["thread_id"] = event.Thread.String()

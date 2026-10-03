@@ -2,7 +2,10 @@ package assistants
 
 import (
 	"context"
+	"encoding/json"
 	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"net/http"
 	"net/http/httptest"
@@ -106,6 +109,15 @@ func exerciseInvocationCredentials(t *testing.T, db *pgxpool.Pool, core *Service
 		tokens, err := resolve(user)
 		require.NoError(t, err)
 		require.Equal(t, "private-"+user, tokens[upstream.ID].Token)
+		entry, err := audittest.LatestAuditLogByAction(ctx, db, audit.ActionAssistantCredentialUse)
+		require.NoError(t, err)
+		var metadata audit.AssistantExecutionAttribution
+		require.NoError(t, json.Unmarshal(entry.Metadata, &metadata))
+		require.Equal(t, user, metadata.InitiatingUserID)
+		require.Equal(t, user, metadata.CredentialOwnerUserID)
+		require.Equal(t, identity.Identity.AgentID, metadata.AgentID)
+		require.NotContains(t, string(entry.Metadata), "private-")
+
 		actor, ok := contextvalues.AuthenticatedActor(callers[user])
 		require.True(t, ok)
 		require.Equal(t, urn.PrincipalTypeWorkload, actor.Type)

@@ -54,6 +54,8 @@ func TestAssistantIdentityToolContract(t *testing.T) {
 	for _, field := range []string{"project_id", "assistant_id", "confirmed"} {
 		require.Contains(t, string(a.InputSchema), field)
 	}
+	require.Contains(t, string(a.InputSchema), "missing-active-root repair")
+	require.Contains(t, string(a.InputSchema), "provisioning rollout must be enabled")
 	require.Contains(t, a.Description, "project:write")
 	require.Contains(t, a.Description, "ACTIVE does not prove")
 	ctx := contextWithPrincipal(t.Context(), Principal{OrganizationID: "test-org", UserID: "test-user"})
@@ -94,7 +96,7 @@ func TestAssistantIdentityUpgradeUsesAuthorizedEndpointAndSafeProjection(t *test
 			gotGrants, ok := authz.GrantsFromContext(ctx)
 			require.True(t, ok)
 			require.Equal(t, grants, gotGrants)
-			return &types.Assistant{ID: assistantID.String(), ProjectID: projectID.String(), IdentityState: &state, AgentID: &agentID, IdentityGeneration: &generation, Instructions: "private instructions", CreatedByUserID: new("private creator")}, nil
+			return &types.Assistant{ID: assistantID.String(), ProjectID: projectID.String(), IdentityUpgradeOutcome: new("unchanged"), IdentityState: &state, AgentID: &agentID, IdentityGeneration: &generation, Instructions: "private instructions", CreatedByUserID: new("private creator")}, nil
 		}),
 	}
 	input := UpgradeAssistantIdentityInput{ProjectID: projectID.String(), AssistantID: assistantID.String(), Confirmed: true}
@@ -102,6 +104,7 @@ func TestAssistantIdentityUpgradeUsesAuthorizedEndpointAndSafeProjection(t *test
 		output, err := service.upgrade(ctx, principal, input)
 		require.NoError(t, err)
 		require.Equal(t, &state, output.IdentityState)
+		require.Equal(t, new("unchanged"), output.Outcome)
 		require.Equal(t, &generation, output.IdentityGeneration)
 		encoded, err := json.Marshal(output)
 		require.NoError(t, err)
@@ -156,6 +159,19 @@ func TestAssistantIdentityUpgradeRejectsAmbiguousUnconfirmedAndHiddenTargets(t *
 	_, err = service.upgrade(ctx, principal, valid)
 	require.ErrorIs(t, err, ErrForbidden)
 	require.Equal(t, 1, resolutions)
+}
+
+func TestAssistantIdentityRolloutRefusal(t *testing.T) {
+	t.Parallel()
+	for _, cause := range []error{assistantidentity.ErrProvisioningDisabled, assistantidentity.ErrRolloutDisabled} {
+		result, ok := assistantIdentityToolResult(oops.E(oops.CodeUnavailable, cause, "private backend detail"))
+		require.True(t, ok)
+		require.True(t, result.IsError)
+		content, ok := result.Content[0].(*mcp.TextContent)
+		require.True(t, ok)
+		require.Contains(t, content.Text, "rollout_disabled")
+		require.NotContains(t, content.Text, "private backend detail")
+	}
 }
 
 func TestAssistantIdentityRefusalsDoNotLeakBackendDetails(t *testing.T) {

@@ -144,6 +144,10 @@ func (s *Service) GetAssistant(ctx context.Context, payload *gen.GetAssistantPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").LogError(ctx, s.logger)
 	}
+	view.IdentityDiagnostics, err = s.core.identityDiagnostics(ctx, record)
+	if err != nil {
+		return nil, mapAssistantStoreError(ctx, s.logger, err, "inspect assistant identity")
+	}
 	return view, nil
 }
 
@@ -515,6 +519,8 @@ func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error,
 		return oops.E(oops.CodeNotFound, err, "%s", message).LogError(ctx, logger)
 	case errors.Is(err, assistantidentity.ErrActorIneligible):
 		return oops.E(oops.CodeForbidden, err, "%s", message).LogError(ctx, logger)
+	case errors.Is(err, assistantidentity.ErrProvisioningDisabled), errors.Is(err, assistantidentity.ErrRolloutDisabled):
+		return oops.E(oops.CodeUnavailable, err, "Assistant identity is temporarily disabled by rollout")
 	case errors.Is(err, assistantidentity.ErrTombstoned), errors.Is(err, assistantidentity.ErrBrokenMapping), errors.Is(err, assistantidentity.ErrInvalidIdentity):
 		return oops.E(oops.CodeConflict, err, "%s", message).LogError(ctx, logger)
 	case errors.Is(err, errAssistantValidation):
@@ -575,5 +581,14 @@ func (s *Service) UpgradeAssistantIdentity(ctx context.Context, payload *gen.Upg
 	if err != nil {
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "upgrade assistant identity")
 	}
-	return toHTTPAssistant(record)
+	view, err := toHTTPAssistant(record)
+	if err != nil {
+		return nil, err
+	}
+	view.IdentityUpgradeOutcome = record.IdentityUpgradeOutcome
+	view.IdentityDiagnostics, err = s.core.identityDiagnostics(ctx, record)
+	if err != nil {
+		return nil, mapAssistantStoreError(ctx, s.logger, err, "inspect upgraded assistant identity")
+	}
+	return view, nil
 }

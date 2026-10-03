@@ -1677,3 +1677,74 @@ JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
 WHERE e.assistant_id = @assistant_id AND e.assistant_thread_id = @thread_id
  AND e.project_id = @project_id AND a.organization_id = @organization_id
  AND e.event_id = @event_id AND NOT e.deleted AND NOT a.deleted AND a.deleted_at IS NULL AND a.status = 'active' AND NOT t.deleted AND t.deleted_at IS NULL;
+
+-- name: GetAssistantIdentityHealth :one
+SELECT CASE WHEN b.id IS NULL THEN 'legacy'
+ WHEN b.deleted OR b.agent_id IS NULL OR b.assistant_id IS NULL OR b.project_ref_id IS NULL
+   OR g.id IS NULL OR g.deleted OR g.revoked_at IS NOT NULL OR g.owner_reassignment_required_at IS NOT NULL
+   OR (a.created_by_user_id IS NOT NULL AND g.owner_user_id IS DISTINCT FROM a.created_by_user_id) THEN 'unavailable'
+ WHEN g.suspended_at IS NOT NULL THEN 'suspended'
+ WHEN NOT EXISTS (SELECT 1 FROM users u JOIN organization_user_relationships m ON m.user_id = u.id AND m.organization_id = a.organization_id WHERE u.id = g.owner_user_id AND u.deleted_at IS NULL AND u.workos_deleted_at IS NULL AND NOT m.deleted) THEN 'unavailable'
+ ELSE 'ready' END::text AS health
+FROM assistants a
+LEFT JOIN LATERAL (SELECT * FROM assistant_agent_bindings ab
+ WHERE ab.organization_id = a.organization_id AND ab.project_id = a.project_id AND ab.original_assistant_id = a.id
+ ORDER BY ab.generation DESC LIMIT 1) b ON true
+LEFT JOIN agents g ON g.id = b.agent_id AND g.organization_id = a.organization_id AND g.project_id = a.project_id
+WHERE a.organization_id = @organization_id AND a.project_id = @project_id AND a.id = @assistant_id AND NOT a.deleted;
+
+-- name: ListAssistantIdentityRoots :many
+SELECT t.id, t.definition_slug, t.status, COALESCE(b.generation, 0)::bigint AS generation,
+ CASE WHEN b.id IS NULL THEN 'missing'
+ WHEN b.deleted OR b.trigger_id IS NULL OR b.project_ref_id IS NULL
+   OR b.subject <> ('assistant-trigger:' || b.original_trigger_id::text)
+   OR NOT EXISTS (SELECT 1 FROM projects p WHERE p.organization_id = t.organization_id AND p.id = b.project_ref_id AND NOT p.deleted)
+   OR b.assistant_binding_id IS NULL OR b.workload_issuer_id IS NULL
+   OR ab.deleted OR ab.agent_id IS NULL OR b.assistant_binding_generation <> ab.generation
+   OR i.id IS NULL OR i.deleted OR i.allow_wildcard_admission OR i.issuer <> @platform_issuer OR i.jwks_uri <> @platform_jwks_uri
+   OR NOT EXISTS (SELECT 1 FROM workload_identity_admissions adm WHERE adm.organization_id = t.organization_id AND adm.project_id = t.project_id
+     AND adm.workload_issuer_id = b.workload_issuer_id AND adm.subject = b.subject AND adm.match_kind = 'exact' AND NOT adm.deleted)
+   OR NOT EXISTS (SELECT 1 FROM workload_agent_assignments wa WHERE wa.organization_id = t.organization_id
+     AND wa.workload_issuer_id = b.workload_issuer_id AND wa.subject = b.subject AND wa.match_kind = 'exact' AND NOT wa.deleted AND wa.agent_id = ab.agent_id)
+ THEN 'unavailable' ELSE 'ready' END::text AS state
+FROM trigger_instances t
+LEFT JOIN LATERAL (SELECT * FROM trigger_workload_bindings tb
+ WHERE tb.organization_id = t.organization_id AND tb.project_id = t.project_id AND tb.original_trigger_id = t.id
+ ORDER BY tb.generation DESC LIMIT 1) b ON true
+LEFT JOIN assistant_agent_bindings ab ON ab.id = b.assistant_binding_id AND ab.organization_id = t.organization_id AND ab.project_id = t.project_id
+LEFT JOIN workload_issuers i ON i.id = b.workload_issuer_id AND i.organization_id = t.organization_id AND i.project_id = t.project_id
+WHERE t.organization_id = @organization_id AND t.project_id = @project_id AND t.target_kind = 'assistant' AND t.target_ref = @assistant_id::text
+ AND NOT t.deleted AND t.definition_slug <> 'wake'
+ORDER BY t.id LIMIT 101;
+
+-- name: GetLastAssistantIdentityEvent :one
+SELECT e.event_id, e.status,
+ COALESCE(e.normalized_payload_json->'_gram_execution'->>'mode', 'legacy')::text AS execution_mode,
+ COALESCE(e.normalized_payload_json->'_gram_execution'->>'fallback_reason', '')::text AS fallback_reason,
+ COALESCE(e.normalized_payload_json->'_gram_execution'->>'human_user_id', '')::text AS initiating_user_id
+FROM assistant_thread_events e
+JOIN assistants a ON a.id = e.assistant_id AND a.project_id = e.project_id
+WHERE a.organization_id = @organization_id AND e.project_id = @project_id AND e.assistant_id = @assistant_id
+ AND NOT e.deleted AND NOT a.deleted
+ORDER BY e.created_at DESC, e.id DESC LIMIT 1;
+
+-- name: GetAssistantIdentityUpgradeOutcome :one
+-- Called only after locking the assistant. Retained binding history is never
+-- treated as missing authority; Provision still validates it before commit.
+SELECT CASE
+ WHEN NOT EXISTS (SELECT 1 FROM assistant_agent_bindings b
+   WHERE b.organization_id = @organization_id AND b.project_id = @project_id
+     AND b.original_assistant_id = @assistant_id::uuid) THEN 'upgraded'
+ WHEN EXISTS (SELECT 1 FROM trigger_instances t
+   WHERE t.organization_id = @organization_id AND t.project_id = @project_id
+     AND t.target_kind = 'assistant' AND t.target_ref = @assistant_id::text
+     AND NOT t.deleted AND t.status = 'active' AND t.definition_slug <> 'wake'
+     AND NOT EXISTS (SELECT 1 FROM trigger_workload_bindings b
+       WHERE b.organization_id = t.organization_id AND b.project_id = t.project_id
+         AND b.original_trigger_id = t.id))
+   OR NOT EXISTS (SELECT 1 FROM trigger_instances t
+     WHERE t.organization_id = @organization_id AND t.project_id = @project_id
+       AND t.target_kind = 'assistant' AND t.target_ref = @assistant_id::text
+       AND NOT t.deleted AND t.definition_slug = 'dashboard') THEN 'repaired'
+ ELSE 'unchanged'
+END::text AS outcome;
