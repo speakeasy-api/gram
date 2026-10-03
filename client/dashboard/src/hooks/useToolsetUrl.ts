@@ -50,7 +50,7 @@ export function useCustomDomains(enabled = true): {
 // Returns `undefined` when the endpoint has no slug or when its custom domain
 // hasn't resolved yet (loading or denied), so callers can gracefully render an
 // empty state.
-export function useMcpEndpointUrl(endpoint: McpEndpoint | undefined): {
+function useMcpEndpointUrl(endpoint: McpEndpoint | undefined): {
   mcpUrl: string | undefined;
   installPageUrl: string | undefined;
 } {
