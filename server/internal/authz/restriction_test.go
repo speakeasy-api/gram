@@ -2,15 +2,17 @@ package authz
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestAdditionalRestrictionCannotAuthorizeAndSurvivesAdmission(t *testing.T) {
 	t.Parallel()
 	grant := NewGrant(ScopeMCPConnect, "server")
 	check := MCPToolCallCheck("server", MCPToolCallDimensions{Tool: "read"})
-	ctx := RestrictContext(context.Background(), []Grant{grant})
+	restriction := NewGrant(ScopeMCPConnect, "other-server")
+	ctx := RestrictContext(context.Background(), []Grant{restriction})
 	_, ok := grantAuthorizationFromContext(ctx)
 	require.False(t, ok, "restriction is not admission")
 	ctx = admittedPoliciesToContext(ctx, []Grant{grant}, []Grant{grant})
@@ -18,12 +20,24 @@ func TestAdditionalRestrictionCannotAuthorizeAndSurvivesAdmission(t *testing.T) 
 	require.True(t, ok)
 	result, err := policy.evaluate(check)
 	require.NoError(t, err)
-	require.NotNil(t, result.Grant)
-	ctx = RestrictContext(ctx, nil)
+	require.Nil(t, result.Grant, "restriction denies resource allowed by admission")
+	ctx = RestrictContext(ctx, []Grant{grant})
 	ctx = admittedPoliciesToContext(ctx, []Grant{grant}, []Grant{grant})
 	policy, ok = grantAuthorizationFromContext(ctx)
 	require.True(t, ok)
 	result, err = policy.evaluate(check)
 	require.NoError(t, err)
 	require.Nil(t, result.Grant, "readmission cannot discard human restrictions")
+}
+
+func TestExecutionSelectorRequiresExactAssistantAndProject(t *testing.T) {
+	t.Parallel()
+	selector := NewSelector(ScopeAssistantExecute, "assistant")
+	require.Error(t, ValidateSelector(ScopeAssistantExecute, selector))
+	selector[SelectorKeyProjectID] = WildcardResource
+	require.Error(t, ValidateSelector(ScopeAssistantExecute, selector))
+	selector[SelectorKeyProjectID] = "project"
+	require.NoError(t, ValidateSelector(ScopeAssistantExecute, selector))
+	selector[SelectorKeyResourceID] = WildcardResource
+	require.Error(t, ValidateSelector(ScopeAssistantExecute, selector))
 }

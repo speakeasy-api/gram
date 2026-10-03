@@ -96652,6 +96652,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - assistant:execute
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -96701,6 +96702,7 @@ components:
                             - risk_policy:block
                             - chat:read
                             - chat:write
+                            - assistant:execute
                             - agent:read
                             - agent:write
                             - agent:authorize
@@ -103086,6 +103088,7 @@ components:
                         - risk_policy:bypass
                         - chat:read
                         - chat:write
+                        - assistant:execute
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -105075,6 +105078,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - assistant:execute
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -105390,6 +105394,7 @@ components:
                         - skill
                         - risk_policy
                         - chat
+                        - assistant
                         - agent
                         - workload
                 slug:
@@ -105425,6 +105430,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - assistant:execute
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -105920,6 +105926,7 @@ components:
                         - skill
                         - risk_policy
                         - chat
+                        - assistant
                         - agent
                         - workload
                         - '*'

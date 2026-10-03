@@ -1148,6 +1148,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// - sessionToken: from Gram-Chat-Session header (for chat session fallback on non-OAuth endpoints)
 	authToken := httpheaders.AuthorizationBearerToken(r)
 	if assistanttokens.IsExecutionToken(httpheaders.AuthorizationOrChatSessionToken(r)) {
+		authToken = httpheaders.AuthorizationOrChatSessionToken(r)
 		// Never forward an execution envelope as an external OAuth bearer. Those
 		// flows remain closed until confidential invocation-bound consent exists.
 		if toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid {

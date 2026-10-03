@@ -7,9 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -340,4 +342,20 @@ func requireUnauthorized(t *testing.T, err error) {
 	se := &oops.ShareableError{}
 	require.ErrorAs(t, err, &se)
 	require.Equal(t, oops.CodeUnauthorized, se.Code)
+}
+
+func TestUnconfiguredExecutionAdmissionFailsClosed(t *testing.T) {
+	t.Parallel()
+	manager := New("test", nil, nil)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{})
+	token.Header["typ"] = mcpauthz.AssistantExecutionType
+	raw, err := token.SignedString([]byte("attacker"))
+	require.NoError(t, err)
+	require.True(t, IsExecutionToken(raw))
+	_, _, err = manager.AuthorizeRuntime(t.Context(), raw)
+	require.Error(t, err)
+	_, _, err = manager.AuthorizePlatform(t.Context(), raw)
+	require.Error(t, err)
+	_, err = manager.AuthorizeBusiness(t.Context(), raw, uuid.New(), nil)
+	require.Error(t, err)
 }

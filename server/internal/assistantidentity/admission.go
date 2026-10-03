@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -25,9 +26,18 @@ func ExecutionGrant(assistant, project uuid.UUID) authz.Grant {
 // grantExecution is called only for new provisioning or explicit upgrade. A
 // current assistant administrator may delegate this exact
 // assistant capability; no general chat grant is copied to the agent.
-func grantExecution(ctx context.Context, tx pgx.Tx, p ProvisionParams, agent uuid.UUID) (bool, error) {
+func grantExecution(ctx context.Context, tx pgx.Tx, p ProvisionParams, agent uuid.UUID, expected *repo.GetAssistantBindingRow) (bool, error) {
 	if _, err := repo.New(tx).LockDedicatedAgent(ctx, repo.LockDedicatedAgentParams{OrganizationID: p.OrganizationID, ProjectID: uuid.NullUUID{UUID: p.ProjectID, Valid: true}, AgentID: agent}); err != nil {
 		return false, fmt.Errorf("lock execution agent: %w", err)
+	}
+	if expected != nil {
+		current, err := repo.New(tx).GetAssistantBinding(ctx, repo.GetAssistantBindingParams{OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, AssistantID: p.AssistantID})
+		if err != nil {
+			return false, fmt.Errorf("revalidate execution binding: %w", err)
+		}
+		if !current.Eligible || current.ID != expected.ID || current.Generation != expected.Generation || current.OriginalAgentID != expected.OriginalAgentID || current.OriginalAssistantID != expected.OriginalAssistantID {
+			return false, ErrInvalidIdentity
+		}
 	}
 	principals, err := authz.ResolveUserPrincipals(ctx, tx, p.OrganizationID, p.ActorUserID)
 	if err != nil {
@@ -98,6 +108,13 @@ func (s *Service) AdmitModel(ctx context.Context, db DB, e Execution) error {
 		return fmt.Errorf("assistant execution admission: %w", err)
 	}
 	if e.Mode == ExecutionWorkloadHuman {
+		active, err := orgrepo.New(tx).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{OrganizationID: e.Identity.OrganizationID, UserID: e.HumanUserID})
+		if err != nil {
+			return fmt.Errorf("load human membership: %w", err)
+		}
+		if !active {
+			return ErrInvalidIdentity
+		}
 		principals, err := authz.ResolveUserPrincipals(ctx, tx, e.Identity.OrganizationID, e.HumanUserID)
 		if err != nil {
 			return fmt.Errorf("assistant execution admission: %w", err)

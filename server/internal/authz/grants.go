@@ -425,7 +425,7 @@ func matchingGrant(grants []Grant, checks []Check) (*Grant, *Check) {
 func allScopeGrants() []Grant {
 	grants := make([]Grant, 0, len(scopeVisibilityByScope))
 	for s, visibility := range scopeVisibilityByScope {
-		if visibility != scopeVisibilityUserVisible {
+		if visibility != scopeVisibilityUserVisible || s == ScopeAssistantExecute {
 			continue
 		}
 		grants = append(grants, NewGrant(s, WildcardResource))

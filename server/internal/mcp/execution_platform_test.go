@@ -79,8 +79,10 @@ func TestExecutionPlatformRoutePreservesManagedRestrictionsAfterBusinessDenial(t
 	require.Equal(t, urn.PrincipalTypeWorkload, actor.Type)
 	wrong := *endpoint
 	wrong.McpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
-	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), token, ti.serverURL.String(), &wrong)
+	rejected := httptest.NewRecorder()
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), rejected, token, ti.serverURL.String(), &wrong)
 	require.Error(t, err)
+	require.NotEmpty(t, rejected.Header().Get("WWW-Authenticate"))
 	_, err = ti.assistantTokens.AuthorizeBusiness(t.Context(), token, uuid.New(), nil)
 	require.Error(t, err)
 	_, err = servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, toolsListBody(), token)

@@ -182,6 +182,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 	slug, mcpRouteBase string,
 ) error {
 	ctx := r.Context()
+	publicTunnel := isTunneledPublic(mcpServer)
 	// Bound executions use business policy even on otherwise public resources.
 	// Keep the database row untouched; visibility here selects request-local
 	// policy interceptors, never grants, credentials, or a platform context.
@@ -227,7 +228,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 	// issuer gate is skipped even though the issuer column is populated.
 	// Gate on owner consent before dispatch so ungated callers are never
 	// challenged for a server that will not serve them.
-	if isTunneledPublic(mcpServer) {
+	if publicTunnel {
 		if _, err := s.requireTunneledPublicConsent(ctx, logger, mcpEndpoint, mcpServer); err != nil {
 			return err
 		}
@@ -251,7 +252,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return err
 		}
 		upstreamResource = resolvedEndpoint.UpstreamResource
-		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
+		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, httpheaders.AuthorizationOrChatSessionToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
 			return fmt.Errorf("apply issuer gate: %w", err)
 		}

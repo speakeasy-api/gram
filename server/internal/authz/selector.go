@@ -139,6 +139,13 @@ func ValidateSelector(scope Scope, sel Selector) error {
 		return fmt.Errorf("selector must include both resource_kind and resource_id")
 	}
 
+	if scope == ScopeAssistantExecute {
+		for _, key := range []string{SelectorKeyResourceID, SelectorKeyProjectID} {
+			if sel[key] == "" || sel[key] == WildcardResource {
+				return fmt.Errorf("assistant execution requires an exact %s", key)
+			}
+		}
+	}
 	expectedKind := ResourceKindForScope(scope)
 	if scope == ScopeRoot {
 		if kind != ResourceKindWildcard {

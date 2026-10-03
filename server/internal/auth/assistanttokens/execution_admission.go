@@ -8,7 +8,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
-	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -33,6 +32,9 @@ func executionBearer(raw string) string {
 }
 
 func (m *Manager) executionForUse(ctx context.Context, raw string) (*assistantidentity.Execution, error) {
+	if m.executionIssuer == nil || m.executionIdentities == nil || m.executionDB == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
 	claims, err := m.executionIssuer.ValidateAssistantExecution(executionBearer(raw))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "invalid execution credential")
@@ -123,6 +125,9 @@ func (m *Manager) AuthorizePlatform(ctx context.Context, raw string) (context.Co
 	if !IsExecutionToken(raw) {
 		return m.Authorize(ctx, raw)
 	}
+	if m.executionIssuer == nil || m.executionIdentities == nil || m.executionDB == nil {
+		return ctx, nil, oops.C(oops.CodeUnauthorized)
+	}
 	claims, err := m.executionIssuer.ValidateAssistantExecution(executionBearer(raw))
 	if err != nil {
 		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "invalid platform execution credential")
@@ -135,11 +140,9 @@ func (m *Manager) AuthorizePlatform(ctx context.Context, raw string) (context.Co
 		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "invalid platform authority")
 	}
 
-	assistant, err := identityrepo.New(m.executionDB).GetAssistant(ctx, identityrepo.GetAssistantParams{OrganizationID: e.Identity.OrganizationID, ProjectID: e.Identity.ProjectID, AssistantID: e.Identity.AssistantID})
-	if err != nil || !assistant.CreatedByUserID.Valid || assistant.CreatedByUserID.String == "" {
-		return ctx, nil, oops.C(oops.CodeUnauthorized)
-	}
-	return m.authorizeClaims(ctx, executionRuntimeClaims(*e, assistant.CreatedByUserID.String))
+	// Keep the workload and AssistantPrincipal; platform tools authorize their
+	// own assistant-owned capabilities. Never install creator user grants.
+	return m.executionContext(ctx, *e)
 }
 
 type executionChatKey struct{}

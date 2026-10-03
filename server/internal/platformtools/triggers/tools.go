@@ -521,6 +521,9 @@ func (t *ConfigureTrigger) upsertTrigger(
 	action := "created"
 
 	actorPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok {
+		actorPrincipal = actor
+	}
 
 	var item triggerrepo.TriggerInstance
 	if params.TriggerID == nil || strings.TrimSpace(*params.TriggerID) == "" {
@@ -635,6 +638,9 @@ func (t *ConfigureTrigger) upsertWake(
 
 	envQueries := environmentsrepo.New(t.db)
 	actorPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok {
+		actorPrincipal = actor
+	}
 
 	if params.TriggerID != nil && strings.TrimSpace(*params.TriggerID) != "" {
 		return t.cancelWake(ctx, authCtx, envQueries, actorPrincipal, principal, params)

@@ -69,7 +69,7 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (
 			return Binding{}, ErrTombstoned
 		}
 		if p.GrantExecution {
-			changed, err := grantExecution(ctx, tx, p, old.OriginalAgentID)
+			changed, err := grantExecution(ctx, tx, p, old.OriginalAgentID, &old)
 			if err != nil {
 				return Binding{}, err
 			}
@@ -115,7 +115,7 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (
 	if err != nil {
 		return Binding{}, fmt.Errorf("create dedicated assistant agent: %w", err)
 	}
-	if _, err := grantExecution(ctx, tx, p, agent.ID); err != nil {
+	if _, err := grantExecution(ctx, tx, p, agent.ID, nil); err != nil {
 		return Binding{}, err
 	}
 	principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())

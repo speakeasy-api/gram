@@ -35,6 +35,7 @@ func TestPrepareContext_demoOrgGetsEveryUserVisibleScope(t *testing.T) {
 	grants, ok := GrantsFromContext(ctx)
 	require.True(t, ok)
 	require.NotEmpty(t, grants)
+	require.Error(t, engine.Require(ctx, AssistantExecuteCheck("assistant", "project_demo")))
 
 	// Demo sessions hold the same set access.ListGrants reports to the
 	// dashboard, so no page is offered that the server then refuses.

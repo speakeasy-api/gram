@@ -878,25 +878,32 @@ func (s *Service) authenticateIssuerGate(
 	newCtx, subject, toolSelection, refreshable, valErr := s.validateUserSessionToken(ctx, authToken, baseURL, endpoint)
 	refreshableUserSession := subject != nil && refreshable
 	if subject == nil && assistanttokens.IsExecutionToken(authToken) {
+		rejectExecution := func(err error) error {
+			reason := issuerGateFailureReason(err)
+			s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, surface)
+			endpoint.LogWith(s.logger).WarnContext(ctx, "mcp issuer gate rejected execution credential", attr.SlogOAuthFailureReason(reason), attr.SlogError(err))
+			_ = WriteAuthenticateChallenge(w, protectedResourceURL, "expired or invalid access token")
+			return err
+		}
 		// First-party runtime admission is distinct from an MCP resource JWT.
 		// The server-resolved resource, live agent policy and saved ceiling all
 		// constrain it. Remote credential resolution receives the real workload
 		// subject, never a fabricated user or an assistant-owner fallback.
 		executionCtx, err := s.assistantTokens.AuthorizeBusiness(ctx, authToken, endpoint.connectResourceID(), nil)
 		if err != nil {
-			return ctx, nil, nil, fmt.Errorf("admit assistant business execution: %w", err)
+			return ctx, nil, nil, rejectExecution(fmt.Errorf("admit assistant business execution: %w", err))
 		}
 		ac, ok := contextvalues.GetAuthContext(executionCtx)
 		if !ok || ac == nil || ac.ProjectID == nil || *ac.ProjectID != endpoint.ProjectID || ac.ActiveOrganizationID != endpoint.OrganizationID {
-			return ctx, nil, nil, oops.C(oops.CodeUnauthorized)
+			return ctx, nil, nil, rejectExecution(oops.C(oops.CodeUnauthorized))
 		}
 		actor, ok := contextvalues.AuthenticatedActor(executionCtx)
 		if !ok {
-			return ctx, nil, nil, oops.C(oops.CodeUnauthorized)
+			return ctx, nil, nil, rejectExecution(oops.C(oops.CodeUnauthorized))
 		}
 		workloadIssuer, workloadSubject, err := actor.Workload()
 		if err != nil {
-			return ctx, nil, nil, oops.C(oops.CodeUnauthorized)
+			return ctx, nil, nil, rejectExecution(oops.C(oops.CodeUnauthorized))
 		}
 		selected := urn.NewWorkloadSubject(workloadIssuer, workloadSubject)
 		newCtx, subject = s.identityValidator.StampAssistant(executionCtx), &selected
