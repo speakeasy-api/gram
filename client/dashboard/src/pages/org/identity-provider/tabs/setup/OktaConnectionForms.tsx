@@ -89,9 +89,11 @@ export function CreateConnectionForm(): JSX.Element {
               error={trimmed !== "" && normalizedOrgUrl === undefined}
             />
             <FieldDescription id="okta-org-url-help">
-              Use your organization’s address starting with https:// and ending
-              in .okta.com, .oktapreview.com, .okta-emea.com, or .okta.mil. Do
-              not include a page address after the domain.
+              Use your organization’s address, such as https://example.okta.com,
+              ending in .okta.com, .oktapreview.com, .okta-emea.com, or
+              .okta.mil. This is the address people sign in at, not the admin
+              console (the one with -admin). Do not include a page address after
+              the domain.
             </FieldDescription>
             {trimmed !== "" && normalizedOrgUrl === undefined && (
               <p

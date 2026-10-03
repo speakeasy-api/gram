@@ -489,7 +489,7 @@ func (s *Service) discoverOktaIssuer(ctx context.Context, logger *slog.Logger, o
 		return none, oops.E(oops.CodeFailedPrecondition, err, "could not discover the Okta org's authorization server metadata").LogError(ctx, logger)
 	}
 	if metadata.Issuer != orgURL {
-		return none, oops.E(oops.CodeFailedPrecondition, nil, "the discovered issuer does not match the org url").LogError(ctx, logger)
+		return none, oops.E(oops.CodeFailedPrecondition, nil, "Okta reports a different address for this org than the one entered; enter the org address exactly as Okta shows it, without a page or an -admin suffix").LogError(ctx, logger)
 	}
 	tokenEndpoint, err := url.Parse(metadata.TokenEndpoint)
 	if err != nil || tokenEndpoint.Scheme != "https" || tokenEndpoint.Host == "" {

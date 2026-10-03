@@ -50,17 +50,21 @@ func NormalizeOktaOrgURL(raw string) (string, error) {
 	if strings.HasSuffix(host, ".") || !isPlainHostname(host) {
 		return "", ErrOrgURLHostNotASCII
 	}
-	allowed := false
 	for _, suffix := range oktaOrgHostSuffixes {
-		if strings.HasSuffix(host, "."+suffix) && len(host) > len(suffix)+1 {
-			allowed = true
+		if !strings.HasSuffix(host, "."+suffix) {
+			continue
+		}
+		tenant := strings.TrimSuffix(host, "."+suffix)
+		// Administrators often paste the admin console address, which is the
+		// org hostname with -admin appended; the org itself is what Okta
+		// reports as the issuer.
+		tenant = strings.TrimSuffix(tenant, "-admin")
+		if tenant == "" {
 			break
 		}
+		return "https://" + tenant + "." + suffix, nil
 	}
-	if !allowed {
-		return "", ErrOrgURLHostNotAllowed
-	}
-	return "https://" + host, nil
+	return "", ErrOrgURLHostNotAllowed
 }
 
 func isASCII(s string) bool {
