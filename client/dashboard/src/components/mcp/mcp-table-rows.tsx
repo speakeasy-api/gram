@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/Badge";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { DotRow } from "@/components/ui/DotRow";
 import { Text } from "@/components/ui/Text";
-import { useMcpEndpointUrl, useMcpUrl } from "@/hooks/useToolsetUrl";
+import { useMcpUrl, useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -165,18 +165,15 @@ export function MCPTableRow({
 export function GatewayTableRow({
   gateway,
   endpoints,
+  isLoadingEndpoints,
 }: {
   gateway: MetaMcpServer;
   endpoints: McpEndpoint[];
+  isLoadingEndpoints: boolean;
 }): JSX.Element {
   const routes = useRoutes();
   const memberCount = gateway.memberCount ?? 0;
-  const endpoint = useMemo(
-    () =>
-      endpoints.find((candidate) => candidate.customDomainId) ?? endpoints[0],
-    [endpoints],
-  );
-  const { mcpUrl } = useMcpEndpointUrl(endpoint);
+  const { mcpUrl } = useResolvedMcpServerUrl(endpoints, isLoadingEndpoints);
   return (
     <DotRow
       href={routes.mcp.gateway.overview.href(gateway.id)}

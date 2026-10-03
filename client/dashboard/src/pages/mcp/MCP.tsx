@@ -473,6 +473,7 @@ function MCPOverview() {
                     key={gateway.id}
                     gateway={gateway}
                     endpoints={endpointsByGatewayId.get(gateway.id) ?? []}
+                    isLoadingEndpoints={isLoadingEndpoints}
                   />
                 ))}
                 {filteredToolsets.map((toolset) => (

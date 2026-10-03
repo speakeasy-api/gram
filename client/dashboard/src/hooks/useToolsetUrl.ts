@@ -89,10 +89,10 @@ export function platformEndpointSlug(
 }
 
 // useResolvedMcpServerUrl resolves the runtime MCP URL for an mcp_server from
-// its endpoints, preferring a custom-domain endpoint. While the custom domain
-// is still resolving it falls back to the Gram-hosted `/mcp/<slug>` path so
-// callers always have a usable URL once a slug exists. Listing tools can use
-// that display URL. First-party connect cannot — use platformEndpointSlug.
+// its endpoints, preferring a custom-domain endpoint. While that domain is
+// unresolved, it falls back only to a separately registered platform endpoint;
+// custom-domain slugs are not valid on the Gram origin. First-party connect
+// still needs a platform slug directly — use platformEndpointSlug.
 export function useResolvedMcpServerUrl(
   endpoints: McpEndpoint[],
   isLoadingEndpoints: boolean,
@@ -101,15 +101,17 @@ export function useResolvedMcpServerUrl(
   installPageUrl: string | undefined;
   loading: boolean;
 } {
-  const endpoint = useMemo(
-    () => endpoints.find((e) => e.customDomainId) ?? endpoints[0],
+  const customEndpoint = useMemo(
+    () => endpoints.find((endpoint) => endpoint.customDomainId),
     [endpoints],
   );
-  const { mcpUrl: resolvedUrl } = useMcpEndpointUrl(endpoint);
-  const fallbackUrl = endpoint?.slug
-    ? `${getServerURL()}/mcp/${endpoint.slug}`
-    : undefined;
-  const mcpUrl = resolvedUrl ?? fallbackUrl;
+  const platformEndpoint = useMemo(
+    () => endpoints.find((endpoint) => !endpoint.customDomainId),
+    [endpoints],
+  );
+  const { mcpUrl: customUrl } = useMcpEndpointUrl(customEndpoint);
+  const { mcpUrl: platformUrl } = useMcpEndpointUrl(platformEndpoint);
+  const mcpUrl = customUrl ?? platformUrl;
 
   return {
     mcpUrl,
