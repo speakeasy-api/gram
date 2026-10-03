@@ -2093,7 +2093,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return EnqueueResult{}, fmt.Errorf("find concurrent assistant enqueue: %w", err)
 	}
-	normalizedPayloadJSON, err = s.captureExecution(ctx, assistant, sourceKind, threadID, triggerInstanceID, task.EventID, normalizedPayloadJSON)
+	normalizedPayloadJSON, err = s.captureExecution(ctx, assistant, sourceKind, threadID, triggerInstanceID, task.EventID, normalizedPayloadJSON, task.SlackExecution)
 	if err != nil {
 		return EnqueueResult{}, err
 	}

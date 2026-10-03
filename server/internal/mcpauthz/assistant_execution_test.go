@@ -41,12 +41,10 @@ func TestAssistantExecutionTokenNamespacesAndGate(t *testing.T) {
 	wire, ok := parsed.Claims.(jwt.MapClaims)
 	require.True(t, ok)
 	require.NotContains(t, wire, "user_id")
-	require.ErrorIs(t, assistantidentity.AdmitExecution(execution), assistantidentity.ErrExecutionAdmissionRequired)
 	execution.HumanUserID = "human-a"
 	require.Error(t, execution.Check(), "workload cannot smuggle a human actor")
 	execution.Mode = assistantidentity.ExecutionWorkloadHuman
 	require.NoError(t, execution.Check())
-	require.ErrorIs(t, assistantidentity.AdmitExecution(execution), assistantidentity.ErrExecutionAdmissionRequired)
 }
 
 func TestAssistantExecutionRejectsConfusedOrMalformedSignedClaims(t *testing.T) {

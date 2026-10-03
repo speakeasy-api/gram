@@ -19,12 +19,10 @@ func TestSlackExecutionProvenanceRevocation(t *testing.T) {
 			ctx := t.Context()
 			q := repo.New(f.db)
 			require.NoError(t, q.FixtureSlackExecutionMapping(ctx, repo.FixtureSlackExecutionMappingParams{UserID: f.actor, OrganizationID: f.org, SlackTeamID: "TEXAMPLE", SlackUserID: "UEXAMPLE", Generation: uuid.New()}))
-			d, human, reason, err := assistantidentity.CaptureSlackDelegation(ctx, f.db, f.org, "TEXAMPLE", "UEXAMPLE")
+			row, err := q.GetSlackExecutionMapping(ctx, repo.GetSlackExecutionMappingParams{OrganizationID: f.org, SlackTeamID: "TEXAMPLE", SlackUserID: "UEXAMPLE"})
 			require.NoError(t, err)
-			require.NotNil(t, d)
-			require.Equal(t, f.actor, human)
-			require.Empty(t, reason)
-			e := assistantidentity.Execution{Identity: assistantidentity.Identity{OrganizationID: f.org}, HumanUserID: human, Slack: d}
+			d := &assistantidentity.SlackDelegation{TeamID: "TEXAMPLE", UserID: "UEXAMPLE", MembershipID: row.MembershipID, MappingID: row.MappingID, MappingRevision: row.MappingRevision, ConnectionGeneration: row.ConnectionGeneration}
+			e := assistantidentity.Execution{Identity: assistantidentity.Identity{OrganizationID: f.org}, HumanUserID: row.UserID, Slack: d}
 			require.NoError(t, assistantidentity.ValidateSlackDelegation(ctx, f.db, e))
 			p := repo.FixtureInvalidateSlackExecutionMembershipParams{OrganizationID: f.org, SlackTeamID: d.TeamID, SlackUserID: d.UserID, Status: "active", MemberType: "person", MappingRevision: 1, ConflictReason: pgtype.Text{}}
 			switch change {
@@ -49,20 +47,13 @@ func TestSlackExecutionProvenanceRevocation(t *testing.T) {
 			}
 			require.NoError(t, q.FixtureInvalidateSlackExecutionMembership(ctx, p))
 			require.ErrorIs(t, assistantidentity.ValidateSlackDelegation(ctx, f.db, e), assistantidentity.ErrActorIneligible)
-			if change == "revoke" || change == "inactive" || change == "bot" || change == "conflict" {
-				_, _, _, err = assistantidentity.CaptureSlackDelegation(ctx, f.db, f.org, "TEXAMPLE", "UEXAMPLE")
-				require.ErrorIs(t, err, assistantidentity.ErrActorIneligible, "known ineligible mapping is not workload fallback")
-			}
 		})
 	}
 }
 
-func TestSlackExecutionAbsentMapping(t *testing.T) {
+func TestSlackExecutionValidationRejectsAbsentMapping(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	d, human, reason, err := assistantidentity.CaptureSlackDelegation(t.Context(), f.db, f.org, "TEXAMPLE", "UABSENT")
-	require.NoError(t, err)
-	require.Nil(t, d)
-	require.Empty(t, human)
-	require.Equal(t, "slack_mapping_absent", reason)
+	e := assistantidentity.Execution{Identity: assistantidentity.Identity{OrganizationID: f.org}, HumanUserID: f.actor, Slack: &assistantidentity.SlackDelegation{TeamID: "TEXAMPLE", UserID: "UABSENT", MembershipID: uuid.New(), MappingID: uuid.New(), MappingRevision: 1, ConnectionGeneration: uuid.New()}}
+	require.ErrorIs(t, assistantidentity.ValidateSlackDelegation(t.Context(), f.db, e), assistantidentity.ErrActorIneligible)
 }

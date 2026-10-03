@@ -64,7 +64,7 @@ func exerciseInvocationCredentials(t *testing.T, db *pgxpool.Pool, core *Service
 	callers := map[string]context.Context{}
 	for _, user := range []string{"user-1", "user-2"} {
 		require.NoError(t, identityrepo.New(db).FixtureSlackExecutionMapping(ctx, identityrepo.FixtureSlackExecutionMappingParams{UserID: user, OrganizationID: assistant.OrganizationID, SlackTeamID: "TCREDENTIAL", SlackUserID: "U" + user, Generation: uuid.New()}))
-		raw, err := core.captureExecution(ctx, assistant, sourceKindSlack, thread, uuid.NullUUID{UUID: root, Valid: true}, "credential-"+user, []byte(`{"team_id":"TCREDENTIAL","user_id":"U`+user+`"}`))
+		raw, err := core.captureExecution(ctx, assistant, sourceKindSlack, thread, uuid.NullUUID{UUID: root, Valid: true}, "credential-"+user, []byte(`{"team_id":"TCREDENTIAL","user_id":"U`+user+`"}`), slackSelectionForTest(t, db, "TCREDENTIAL", "U"+user))
 		require.NoError(t, err)
 		e, err := decodeExecution(raw)
 		require.NoError(t, err)

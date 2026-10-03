@@ -21,33 +21,6 @@ type SlackDelegation struct {
 	ConnectionGeneration uuid.UUID `json:"connection_generation"`
 }
 
-// CaptureSlackDelegation selects a human once. Infrastructure failures are
-// best-effort workload selection only here, before any human is selected.
-func CaptureSlackDelegation(ctx context.Context, db repo.DBTX, org, team, sender string) (*SlackDelegation, string, string, error) {
-	if team == "" || sender == "" {
-		return nil, "", "slack_sender_absent", nil
-	}
-	row, err := repo.New(db).GetSlackExecutionMapping(ctx, repo.GetSlackExecutionMappingParams{OrganizationID: org, SlackTeamID: team, SlackUserID: sender})
-	if errors.Is(err, pgx.ErrNoRows) {
-		// Disconnect removes membership rows, but the workspace tombstone remains.
-		disconnected, lookupErr := repo.New(db).SlackExecutionWorkspaceDisconnected(ctx, repo.SlackExecutionWorkspaceDisconnectedParams{OrganizationID: org, SlackTeamID: team})
-		if lookupErr == nil && disconnected {
-			return nil, "", "", ErrActorIneligible
-		}
-		if lookupErr != nil && !errors.Is(lookupErr, pgx.ErrNoRows) {
-			return nil, "", "slack_mapping_unavailable", nil
-		}
-		return nil, "", "slack_mapping_absent", nil
-	}
-	if err != nil {
-		return nil, "", "slack_mapping_unavailable", nil
-	}
-	if !row.Eligible {
-		return nil, "", "", ErrActorIneligible
-	}
-	return &SlackDelegation{TeamID: team, UserID: sender, MembershipID: row.MembershipID, MappingID: row.MappingID, MappingRevision: row.MappingRevision, ConnectionGeneration: row.ConnectionGeneration}, row.UserID, "", nil
-}
-
 // ValidateSlackDelegation never changes principals or falls back on lookup errors.
 func ValidateSlackDelegation(ctx context.Context, db repo.DBTX, e Execution) error {
 	d := e.Slack

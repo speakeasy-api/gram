@@ -19,8 +19,8 @@ const (
 	ExecutionWorkloadHuman ExecutionMode = "WORKLOAD_HUMAN"
 )
 
-// ErrExecutionAdmissionRequired is a rollout boundary, not permission to retry
-// as the assistant owner. AIM-411 supplies positive model/business admission.
+// ErrExecutionAdmissionRequired denotes denied workload authority, never
+// permission to retry as the assistant owner.
 var ErrExecutionAdmissionRequired = errors.New("assistant execution requires workload admission")
 
 // Execution is trusted server metadata persisted with an event. It is not a
@@ -101,16 +101,6 @@ func (s *Service) ValidateExecution(ctx context.Context, db DB, e Execution) err
 }
 
 func (s *Service) Issuer() string { return s.issuer }
-
-// AdmitExecution cannot authorize from an envelope alone. Runtime callers use
-// Service.AdmitModel, which checks live workload and delegator eligibility. This
-// identity-only helper remains fail-closed for callers holding only a snapshot.
-func AdmitExecution(e Execution) error {
-	if err := e.Check(); err != nil {
-		return err
-	}
-	return ErrExecutionAdmissionRequired
-}
 
 // InvocationEventID identifies this delivery while EventID retains its origin.
 func (e Execution) InvocationEventID() string {

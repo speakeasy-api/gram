@@ -58,7 +58,7 @@ func (a *App) NotifyAssistantExecutionDenied(ctx context.Context) error {
 		return fmt.Errorf("decode assistant reply origin: %w", err)
 	}
 	e := payload.Execution
-	if e == nil || e.Version != 2 || e.EventID != event || e.ThreadID != principal.ThreadID || e.Identity.AssistantID != principal.AssistantID || e.Identity.ProjectID != *ac.ProjectID || e.Identity.OrganizationID != ac.ActiveOrganizationID || !row.TriggerInstanceID.Valid || row.TriggerInstanceID.UUID != e.Identity.TriggerID || payload.TeamID == "" || payload.UserID == "" || payload.ChannelID == "" {
+	if e == nil || e.Version != 1 || e.EventID != event || e.ThreadID != principal.ThreadID || e.Identity.AssistantID != principal.AssistantID || e.Identity.ProjectID != *ac.ProjectID || e.Identity.OrganizationID != ac.ActiveOrganizationID || !row.TriggerInstanceID.Valid || row.TriggerInstanceID.UUID != e.Identity.TriggerID || payload.TeamID == "" || payload.UserID == "" || payload.ChannelID == "" {
 		return fmt.Errorf("invalid assistant reply origin")
 	}
 	if e.Slack != nil && (payload.TeamID != e.Slack.TeamID || payload.UserID != e.Slack.UserID) {

@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 )
 
@@ -40,7 +41,7 @@ func classifyExecutionDispatchError(err error) error {
 // captureExecution runs only after ingress normalization. Never copy a caller's
 // reserved metadata, including on legacy paths. An insertion retry cannot replace
 // the original event because InsertAssistantThreadEvent is DO NOTHING.
-func (s *ServiceCore) captureExecution(ctx context.Context, assistant assistantRecord, source string, threadID uuid.UUID, trigger uuid.NullUUID, eventID string, raw []byte) ([]byte, error) {
+func (s *ServiceCore) captureExecution(ctx context.Context, assistant assistantRecord, source string, threadID uuid.UUID, trigger uuid.NullUUID, eventID string, raw []byte, selection *bgtriggers.SlackExecutionSelection) ([]byte, error) {
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &payload); err != nil || payload == nil {
 		return nil, fmt.Errorf("trigger event payload must be a JSON object")
@@ -102,19 +103,21 @@ func (s *ServiceCore) captureExecution(ctx context.Context, assistant assistantR
 	}
 	var delegation *assistantidentity.SlackDelegation
 	if source == sourceKindSlack {
-		var slack slackEventPayload
-		if err := json.Unmarshal(clean, &slack); err != nil {
-			return nil, fmt.Errorf("decode Slack execution source: %w", err)
+		if selection == nil {
+			return nil, fmt.Errorf("slack execution selection missing: %w", assistantidentity.ErrInvalidIdentity)
 		}
-		mode, human, fallback = assistantidentity.ExecutionWorkload, "", "slack_non_user_event"
-		if slack.BotID == "" && (slack.AppID == "" || slack.EventType == "block_actions") && slack.Subtype != "bot_message" {
-			delegation, human, fallback, err = assistantidentity.CaptureSlackDelegation(ctx, s.db, assistant.OrganizationID, slack.TeamID, slack.UserID)
-			if err != nil {
-				return nil, fmt.Errorf("capture Slack delegation: %w", err)
+		if selection.Denied {
+			return nil, assistantidentity.ErrActorIneligible
+		}
+		human, fallback = selection.HumanUserID, selection.FallbackReason
+		if d := selection.Delegation; d != nil {
+			if human == "" || fallback != "" {
+				return nil, assistantidentity.ErrInvalidIdentity
 			}
-			if delegation != nil {
-				mode = assistantidentity.ExecutionWorkloadHuman
-			}
+			delegation = &assistantidentity.SlackDelegation{TeamID: d.TeamID, UserID: d.UserID, MembershipID: d.MembershipID, MappingID: d.MappingID, MappingRevision: d.MappingRevision, ConnectionGeneration: d.ConnectionGeneration}
+			mode = assistantidentity.ExecutionWorkloadHuman
+		} else if human != "" || fallback == "" {
+			return nil, assistantidentity.ErrInvalidIdentity
 		}
 	}
 	// Capture identity now; independently recheck selected-user eligibility at

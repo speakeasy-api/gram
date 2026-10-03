@@ -65,9 +65,6 @@ func (m *Manager) AuthorizeRuntime(ctx context.Context, raw string) (context.Con
 	if err != nil {
 		return ctx, nil, fmt.Errorf("authorize assistant execution: %w", err)
 	}
-	if err := m.executionIdentities.AdmitModel(ctx, m.executionDB, *e); err != nil {
-		return ctx, nil, oops.E(oops.CodeForbidden, err, "assistant model execution denied")
-	}
 	return m.executionContext(ctx, *e)
 }
 
