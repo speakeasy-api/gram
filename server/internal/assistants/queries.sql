@@ -590,6 +590,11 @@ DO UPDATE SET
   updated_at = clock_timestamp()
 RETURNING id;
 
+-- name: GetEnqueuedAssistantThread :one
+SELECT assistant_thread_id FROM assistant_thread_events
+WHERE project_id = @project_id AND assistant_id = @assistant_id
+  AND event_id = @event_id AND deleted IS FALSE;
+
 -- name: InsertAssistantThreadEvent :one
 INSERT INTO assistant_thread_events (
   assistant_thread_id,

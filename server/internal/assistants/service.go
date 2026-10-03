@@ -2007,6 +2007,16 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	case err != nil:
 		return EnqueueResult{}, err
 	}
+	// An ingress retry must signal the original persisted invocation even if
+	// its authority changed after the first insert. Dispatch validates that
+	// envelope; re-resolving here could strand it or change its attribution.
+	existingThread, err := assistantrepo.New(s.db).GetEnqueuedAssistantThread(ctx, assistantrepo.GetEnqueuedAssistantThreadParams{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, EventID: task.EventID})
+	if err == nil {
+		return EnqueueResult{AssistantID: assistant.ID, ThreadID: existingThread, ShouldSignal: true}, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return EnqueueResult{}, fmt.Errorf("find previously enqueued assistant event: %w", err)
+	}
 	if assistant.Status != StatusActive {
 		return EnqueueResult{
 			AssistantID:  assistant.ID,
@@ -2076,6 +2086,18 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		return EnqueueResult{}, fmt.Errorf("upsert assistant thread: %w", err)
 	}
 
+	// UpsertAssistantThread serializes concurrent insertion into this thread;
+	// check again after waiting, before capturing any new authority.
+	existingThread, err = queries.GetEnqueuedAssistantThread(ctx, assistantrepo.GetEnqueuedAssistantThreadParams{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, EventID: task.EventID})
+	if err == nil {
+		if err := tx.Commit(ctx); err != nil {
+			return EnqueueResult{}, fmt.Errorf("commit duplicate assistant enqueue: %w", err)
+		}
+		return EnqueueResult{AssistantID: assistant.ID, ThreadID: existingThread, ShouldSignal: true}, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return EnqueueResult{}, fmt.Errorf("find concurrent assistant enqueue: %w", err)
+	}
 	normalizedPayloadJSON, err = s.captureExecution(ctx, assistant, sourceKind, threadID, triggerInstanceID, task.EventID, normalizedPayloadJSON)
 	if err != nil {
 		return EnqueueResult{}, err
@@ -2095,7 +2117,12 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	// pgx.ErrNoRows means the event was already enqueued by an earlier attempt
 	// (idempotent retry). We still signal: a turn whose earlier coordinator
 	// signal failed must be picked up when the client retries.
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, pgx.ErrNoRows) {
+		threadID, err = queries.GetEnqueuedAssistantThread(ctx, assistantrepo.GetEnqueuedAssistantThreadParams{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, EventID: task.EventID})
+		if err != nil {
+			return EnqueueResult{}, fmt.Errorf("find winning assistant enqueue: %w", err)
+		}
+	} else if err != nil {
 		return EnqueueResult{}, fmt.Errorf("insert assistant thread event: %w", err)
 	}
 

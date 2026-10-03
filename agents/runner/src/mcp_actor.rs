@@ -68,7 +68,10 @@ pub enum McpCmd {
     /// diffs `desired` against the configured set, registering added
     /// servers and disconnecting removed ones. Connects stay deferred to
     /// the next `EnsureConnected`.
-    Reconcile { desired: Vec<McpServer> },
+    Reconcile {
+        desired: Vec<McpServer>,
+        reply: oneshot::Sender<Option<String>>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -169,8 +172,9 @@ impl McpActor {
                     let result = self.reconnect_for_tool(&tool_name).await;
                     let _ = reply.send(result);
                 }
-                McpCmd::Reconcile { desired } => {
-                    self.reconcile(desired).await;
+                McpCmd::Reconcile { desired, reply } => {
+                    let notice = self.reconcile(desired).await;
+                    let _ = reply.send(notice);
                 }
             }
         }
@@ -338,7 +342,7 @@ impl McpActor {
         }
     }
 
-    async fn reconcile(&mut self, desired: Vec<McpServer>) {
+    async fn reconcile(&mut self, desired: Vec<McpServer>) -> Option<String> {
         let desired_map: BTreeMap<String, McpServer> =
             desired.into_iter().map(|s| (s.id.clone(), s)).collect();
 
@@ -399,7 +403,7 @@ impl McpActor {
         self.configured = desired_map;
 
         if attached.is_empty() && detached.is_empty() {
-            return;
+            return None;
         }
         let mut notice =
             String::from("<message-context>\nEventType: assistant_mcp_servers_updated\n");
@@ -411,7 +415,7 @@ impl McpActor {
         }
         notice
             .push_str("Use tool_search to discover tools on attached servers.\n</message-context>");
-        self.send_notice(notice);
+        Some(notice)
     }
 
     /// Creates (or reuses) the auth flow for a server whose connect

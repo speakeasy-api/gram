@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -181,6 +182,18 @@ func TestExecutionCapturePersistsSelectionAndGatesDispatch(t *testing.T) {
 	require.Equal(t, mcpAuthEventKind+":attempt-test", continued.ContinuationEventID)
 	require.Equal(t, *execution, *claims.Execution, "continuation does not mutate source envelope")
 	require.ErrorIs(t, core.checkExecutionDispatch(t.Context(), assistant, thread, assistantThreadEventRecord{EventID: row.EventID, NormalizedPayloadJSON: row.NormalizedPayloadJson}), assistantidentity.ErrExecutionAdmissionRequired)
+
+	paused := StatusPaused
+	_, err = core.UpdateAssistant(t.Context(), project, assistant.ID, nil, nil, nil, nil, nil, nil, nil, &paused)
+	require.NoError(t, err)
+	retry, err := core.EnqueueTriggerTask(t.Context(), bgtriggers.Task{TargetKind: bgtriggers.TargetKindAssistant, TargetRef: assistant.ID.String(), EventID: row.EventID, EventJSON: []byte(`not-json`)})
+	require.NoError(t, err)
+	require.True(t, retry.ShouldSignal)
+	require.Equal(t, thread.ID, retry.ThreadID, "retry must signal original stored envelope despite changed authority")
+	active := StatusActive
+	_, err = core.UpdateAssistant(t.Context(), project, assistant.ID, nil, nil, nil, nil, nil, nil, nil, &active)
+	require.NoError(t, err)
+	require.ErrorIs(t, core.checkExecutionDispatch(t.Context(), assistant, thread, event), assistantidentity.ErrExecutionAdmissionRequired, "temporary pause must not invalidate identity incarnation")
 	require.NoError(t, core.DeleteAssistant(t.Context(), project, assistant.ID, urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"), nil))
 	require.ErrorIs(t, core.checkExecutionDispatch(t.Context(), assistant, thread, event), assistantidentity.ErrInvalidIdentity)
 	_, err = manager.ValidateExecution(t.Context(), token, target)

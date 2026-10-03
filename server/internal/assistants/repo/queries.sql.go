@@ -1426,6 +1426,25 @@ func (q *Queries) GetAssistantThreadIDByCorrelation(ctx context.Context, arg Get
 	return id, err
 }
 
+const getEnqueuedAssistantThread = `-- name: GetEnqueuedAssistantThread :one
+SELECT assistant_thread_id FROM assistant_thread_events
+WHERE project_id = $1 AND assistant_id = $2
+  AND event_id = $3 AND deleted IS FALSE
+`
+
+type GetEnqueuedAssistantThreadParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	EventID     string
+}
+
+func (q *Queries) GetEnqueuedAssistantThread(ctx context.Context, arg GetEnqueuedAssistantThreadParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getEnqueuedAssistantThread, arg.ProjectID, arg.AssistantID, arg.EventID)
+	var assistant_thread_id uuid.UUID
+	err := row.Scan(&assistant_thread_id)
+	return assistant_thread_id, err
+}
+
 const getLatestAssistantRuntimeByThreadID = `-- name: GetLatestAssistantRuntimeByThreadID :one
 SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE assistant_thread_id = $1

@@ -184,7 +184,8 @@ async fn thread_turn_inner(
     // Independent idempotency keys must not race to claim a freshly bootstrapped
     // invocation. Hold this through reconcile and enqueue; never rotate the
     // credentials of an earlier accepted event.
-    let _turn_admission = host.turn_admission.lock().await;
+    let admission = crate::runtime::admission_lock(&host, &thread_id);
+    let _turn_admission = admission.lock().await;
 
     let thread = ensure_thread(&host, &thread_id, request.auth_token)
         .await
@@ -197,31 +198,45 @@ async fn thread_turn_inner(
             (status, e.to_string())
         })?;
 
-    // Hand reconcile to the actor and proceed to enqueue. The actor runs
-    // concurrently with the agent loop, so a server added by this /turn
-    // may surface on the very next model step or on the one after,
-    // depending on whether the connect finishes before tool catalog is
-    // sampled. Either way it lands before the user notices.
-    if let Some(desired) = request.mcp_servers
-        && thread
-            .mcp_cmd_tx
-            .send(McpCmd::Reconcile { desired })
-            .await
-            .is_err()
-    {
-        // The MCP actor is gone, so we can't reconcile the thread's server set
-        // for this turn. Don't accept the turn on stale state — fail so the
-        // backend retries instead of silently running with the wrong tools.
-        tracing::warn!(thread_id = %thread_id, "mcp reconcile failed: actor channel closed");
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            "mcp reconcile actor unavailable".to_string(),
-        ));
+    let mut unclaimed = crate::runtime::UnclaimedInvocation::new(host.clone(), thread.clone());
+
+    // Reconciliation belongs to this invocation and completes before its first
+    // model step. Its notice travels with input even when no tool is called.
+    let notice = if let Some(desired) = request.mcp_servers {
+        let (reply, response) = tokio::sync::oneshot::channel();
+        let reconcile = async {
+            thread
+                .mcp_cmd_tx
+                .send(McpCmd::Reconcile { desired, reply })
+                .await
+                .map_err(|_| "mcp reconcile actor unavailable")?;
+            response
+                .await
+                .map_err(|_| "mcp reconcile response unavailable")
+        };
+        match tokio::time::timeout(std::time::Duration::from_secs(30), reconcile).await {
+            Ok(Ok(notice)) => notice,
+            _ => {
+                crate::runtime::discard_unclaimed(&host, &thread).await;
+                return Err((
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "mcp reconciliation unavailable".into(),
+                ));
+            }
+        }
+    } else {
+        None
+    };
+
+    if let Err(err) = thread.enqueue(
+        RunnerContent::from_turn(request.input, request.input_parts),
+        notice,
+    ) {
+        crate::runtime::discard_unclaimed(&host, &thread).await;
+        return Err((StatusCode::SERVICE_UNAVAILABLE, err.to_string()));
     }
 
-    thread
-        .enqueue(RunnerContent::from_turn(request.input, request.input_parts))
-        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+    unclaimed.accept();
 
     if let Some(ref mut guard) = admission_guard {
         **guard = true;
