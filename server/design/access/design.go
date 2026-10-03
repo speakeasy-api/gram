@@ -955,7 +955,7 @@ var SelectorModel = Type("Selector", func() {
 		Enum("project", "mcp", "org", "environment", "skill", "risk_policy", "chat", "assistant", "agent", "workload", "*")
 	})
 	Attribute("resource_id", String, func() {
-		Description("The resource identifier, or '*' for all resources of this kind.")
+		Description("The resource identifier, or '*' for all resources of this kind. assistant:execute requires an exact assistant ID; wildcards are not allowed.")
 	})
 	Attribute("disposition", String, func() {
 		Description("Tool disposition filter (MCP scopes only).")
@@ -965,7 +965,7 @@ var SelectorModel = Type("Selector", func() {
 		Description("Specific tool name filter (MCP scopes only).")
 	})
 	Attribute("project_id", String, func() {
-		Description("Project filter (MCP scopes only). When set with resource_id='*', grants access to all servers in the project.")
+		Description("Project filter for MCP scopes; with resource_id='*', grants access to all servers in the project. assistant:execute requires this field to be the exact project ID; wildcards are not allowed.")
 	})
 	Attribute("server_url", String, func() {
 		Description("Server URL filter (risk policy scopes only). Include the URI scheme, for example https://api.example.com.")

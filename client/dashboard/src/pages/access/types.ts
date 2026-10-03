@@ -27,6 +27,8 @@ export type ResourceType =
   | "skill"
   | "risk_policy"
   | "chat"
+  // Service-provisioned exact assistant/project grants; not an unrestricted picker.
+  | "assistant"
   | "agent"
   | "workload";
 

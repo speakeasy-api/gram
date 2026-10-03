@@ -45,6 +45,7 @@ export const ResourceType = {
   Skill: "skill",
   RiskPolicy: "risk_policy",
   Chat: "chat",
+  Assistant: "assistant",
   Agent: "agent",
   Workload: "workload",
 } as const;
@@ -86,6 +87,7 @@ export const Slug = {
   RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
   ChatWrite: "chat:write",
+  AssistantExecute: "assistant:execute",
   AgentRead: "agent:read",
   AgentWrite: "agent:write",
   AgentAuthorize: "agent:authorize",

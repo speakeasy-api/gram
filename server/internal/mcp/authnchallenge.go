@@ -880,6 +880,10 @@ func (s *Service) authenticateIssuerGate(
 	if subject == nil && assistanttokens.IsExecutionToken(authToken) {
 		rejectExecution := func(err error) error {
 			reason := issuerGateFailureReason(err)
+			var denied *oops.ShareableError
+			if errors.As(err, &denied) && denied.Code == oops.CodeForbidden {
+				reason = "execution_policy_denied"
+			}
 			s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, surface)
 			endpoint.LogWith(s.logger).WarnContext(ctx, "mcp issuer gate rejected execution credential", attr.SlogOAuthFailureReason(reason), attr.SlogError(err))
 			_ = WriteAuthenticateChallenge(w, protectedResourceURL, "expired or invalid access token")
