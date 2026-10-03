@@ -432,6 +432,12 @@ func TestService_UpdateRole_ExecutionIsRemovalOnly(t *testing.T) {
 	id := seedRole(t, ctx, ti.conn, ac.ActiveOrganizationID, mockRole("role_execution", "Execution", "execution", ""))
 	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: id, AddGrants: []*gen.RoleGrant{{Scope: string(authz.ScopeAssistantExecute), Selectors: []*gen.Selector{{ResourceKind: "assistant", ResourceID: "assistant", ProjectID: new("project")}}}}})
 	require.ErrorContains(t, err, `managed by "assistant_execution" grants`)
+	for _, selectors := range [][]*gen.Selector{nil, {{ResourceKind: "assistant", ResourceID: "assistant"}}, {{ResourceKind: "assistant", ResourceID: "*", ProjectID: new("project")}}} {
+		_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: id, RemoveGrants: []*gen.RoleGrant{{Scope: string(authz.ScopeAssistantExecute), Selectors: selectors}}})
+		var badRequest *oops.ShareableError
+		require.ErrorAs(t, err, &badRequest)
+		require.Equal(t, oops.CodeBadRequest, badRequest.Code)
+	}
 	// Existing exact grants remain removable without regranting.
 	_, err = authz.PatchRoleGrantsTx(ctx, ti.conn, ac.ActiveOrganizationID, "execution", urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+id).String(), []*authz.RoleGrant{{Scope: string(authz.ScopeAssistantExecute), Selectors: []authz.Selector{{"resource_kind": "assistant", "resource_id": "assistant", "project_id": "project"}}}}, nil)
 	require.NoError(t, err)

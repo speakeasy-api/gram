@@ -57,6 +57,8 @@ func TestAssistantIdentityToolContract(t *testing.T) {
 	}
 	require.Contains(t, a.Description, "project:write")
 	require.Contains(t, a.Description, "ACTIVE does not prove")
+	require.Contains(t, a.Description, "grant its exact assistant/project execution capability after provisioning-actor authorization")
+	require.Contains(t, a.Description, "Existing saved execution ceilings do not widen.")
 	ctx := contextWithPrincipal(t.Context(), Principal{OrganizationID: "test-org", UserID: "test-user"})
 	_, err := b.Invoke(ctx, []byte(`{"project_id":"`+uuid.NewString()+`","assistant_id":"`+uuid.NewString()+`","confirmed":true}`))
 	var refusal *ToolRefusalError
