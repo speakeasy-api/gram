@@ -544,6 +544,10 @@ type BusinessMemory struct {
 }
 
 type Chat struct {
+	SessionSurface              pgtype.Text
+	SlackTeamID                 pgtype.Text
+	SlackChannelID              pgtype.Text
+	SlackChannelName            pgtype.Text
 	ID                          uuid.UUID
 	ProjectID                   uuid.UUID
 	OrganizationID              string
@@ -644,6 +648,20 @@ type ChatMessage struct {
 	Replayed          bool
 	CreatedAt         pgtype.Timestamptz
 	RiskAnalyzedAt    pgtype.Timestamptz
+}
+
+type ChatMessageParticipant struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	ChatID         uuid.NullUUID
+	MessageID      uuid.NullUUID
+	Provider       string
+	ProviderUserID string
+	ProviderTeamID pgtype.Text
+	UserID         pgtype.Text
+	DisplayName    pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type ChatResolution struct {

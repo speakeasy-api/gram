@@ -1,4 +1,4 @@
-h1:8gITjes+CuDYp4eF8G/YTpQe4JPzTvzJeJG5uy3tkvg=
+h1:eNT9tBQZLUlNyEmtgBAJZtOD/8W2/2ViKSnjsHPcRQ0=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -453,3 +453,5 @@ h1:8gITjes+CuDYp4eF8G/YTpQe4JPzTvzJeJG5uy3tkvg=
 20261002134357_user-session-issuer-authorization-server-mode.sql h1:pR9v/zc5B07ORkbtcgZSiWQ4EqIObvo3ZUf9ihjeUy4=
 20261002160117_inference-conversation-adoption.sql h1:srTsjRNcord/S5c6jWJIIHpyjmdsixgH6kY+pQo7JV0=
 20261002211059_assistant_identity_bindings.sql h1:v0pdMZYDkEw62HrMC1qGF2TgLkKJcYSnrvGG8epPUt4=
+20261002233734_claude_tag_session_metadata.sql h1:rNSjF6+TZ4nVBSyP3Zc/yxEIPoGWXKDUkDzbfZzdppY=
+20261002235818_chat_message_participants_fk_indexes.sql h1:C+FV8+xyqmCnO1nqFy2RdciLXXVDdByuHfkHw1t5sHc=
