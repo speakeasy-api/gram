@@ -20,6 +20,9 @@ type Resolver interface {
 	LookupNS(ctx context.Context, name string) ([]*net.NS, error)
 	LookupSRV(ctx context.Context, service, proto, name string) (string, []*net.SRV, error)
 	LookupTXT(ctx context.Context, name string) ([]string, error)
+	// LookupCAA is not on [net.Resolver]; custom-domain certificate issuance
+	// needs it to decide whether Let's Encrypt is authorized for a hostname.
+	LookupCAA(ctx context.Context, name string) ([]CAA, error)
 
 	// Resolver returns the underlying *[net.Resolver]. For [NetResolver] this
 	// is the real resolver; for [MockResolver] it is a resolver whose Dial
