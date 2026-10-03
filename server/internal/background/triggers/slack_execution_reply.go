@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
@@ -18,12 +17,7 @@ import (
 // assistant's trigger-owned bot credential. Neither target nor message text can
 // be supplied by the model. Human revocation does not prevent this private,
 // constant-text refusal; it never authorizes business access or result disclosure.
-func (a *App) NotifyAssistantExecutionDenied(ctx context.Context) (err error) {
-	defer func() {
-		if err != nil {
-			a.logger.WarnContext(ctx, "assistant refusal delivery failed", attr.SlogError(err))
-		}
-	}()
+func (a *App) NotifyAssistantExecutionDenied(ctx context.Context) error {
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	principal, bound := contextvalues.GetAssistantPrincipal(ctx)
 	event, origin := contextvalues.AssistantInvocationEvent(ctx)
@@ -105,12 +99,14 @@ func (a *App) NotifyAssistantExecutionDenied(ctx context.Context) (err error) {
 	key := fmt.Sprintf("assistant-execution-denial:%s:%s:%s:%s:%s", ac.ActiveOrganizationID, ac.ProjectID.String(), principal.AssistantID, principal.ThreadID, event)
 	won, err := a.executionDenialSends.Add(ctx, key, time.Hour)
 	if err != nil {
+		a.logger.WarnContext(ctx, "assistant refusal delivery failed: cache unavailable")
 		return fmt.Errorf("reserve assistant reply budget: %w", err)
 	}
 	if !won {
 		return fmt.Errorf("assistant refusal already attempted for this invocation")
 	}
 	if err := a.slackClient.NotifyExecutionDenied(ctx, token, payload.ChannelID, thread, payload.UserID); err != nil {
+		a.logger.WarnContext(ctx, "assistant refusal delivery failed: provider request failed")
 		return fmt.Errorf("send assistant denial reply: %w", err)
 	}
 	return nil
