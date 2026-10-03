@@ -76,6 +76,11 @@ func exerciseInvocationCredentials(t *testing.T, db *pgxpool.Pool, core *Service
 		_, err = q.UpsertRemoteSession(ctx, remoterepo.UpsertRemoteSessionParams{SubjectUrn: urn.NewUserSubject(user), UserSessionIssuerID: issuer.ID, RemoteSessionClientID: client.ID, AccessTokenEncrypted: encrypted, Scopes: []string{}, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Resource: conv.ToPGText("https://api.example/mcp")})
 		require.NoError(t, err)
 	}
+	otherIssuer, err := usersessionsrepo.New(db).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{ProjectID: assistant.ProjectID, OrganizationID: conv.ToPGText("org-test"), Slug: "other-invocation-sessions", AuthnChallengeMode: "interactive", SessionDuration: pgtype.Interval{Microseconds: time.Hour.Microseconds(), Valid: true}})
+	require.NoError(t, err)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remoterepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: otherIssuer.ID}))
+	_, err = sessions.ResolveAccessTokens(callers["user-2"], assistant.ProjectID, "org-test", otherIssuer.ID, urn.NewUserSubject("user-2"))
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "consent from another issuer must not supply delegated credentials")
 	identity, err := testIdentityService.Resolve(ctx, db, assistant.OrganizationID, assistant.ProjectID, assistant.ID, root)
 	require.NoError(t, err)
 	ownerSession, err := q.GetActiveRemoteSession(ctx, remoterepo.GetActiveRemoteSessionParams{SubjectUrn: urn.NewUserSubject("user-1"), RemoteSessionClientID: client.ID})

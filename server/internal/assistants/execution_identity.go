@@ -107,7 +107,7 @@ func (s *ServiceCore) captureExecution(ctx context.Context, assistant assistantR
 			return nil, fmt.Errorf("decode Slack execution source: %w", err)
 		}
 		mode, human, fallback = assistantidentity.ExecutionWorkload, "", "slack_non_user_event"
-		if slack.BotID == "" && slack.AppID == "" && slack.Subtype != "bot_message" {
+		if slack.BotID == "" && (slack.AppID == "" || slack.EventType == "block_actions") && slack.Subtype != "bot_message" {
 			delegation, human, fallback, err = assistantidentity.CaptureSlackDelegation(ctx, s.db, assistant.OrganizationID, slack.TeamID, slack.UserID)
 			if err != nil {
 				return nil, fmt.Errorf("capture Slack delegation: %w", err)

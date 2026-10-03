@@ -184,8 +184,9 @@ const remoteSessionLastUsedCutoff = 5 * time.Minute
 // deadline, decryption failed. The empty string is the "no token"
 // signal; the caller decides whether absence is a challenge or a no-op.
 //
-// Returns a non-nil error only for unexpected failures (database
-// errors). "No token available" is not an error, whatever its cause.
+// Returns errors for unexpected failures and ErrInvalidAuthorizationRequest
+// for delegated callers, which must use the tenant-scoped resolver instead.
+// "No token available" otherwise returns an empty string, not an error.
 //
 // The (subject, remote_session_client_id) pair is uniqueness-enforced
 // by a partial index — at most one active row exists per binding, so

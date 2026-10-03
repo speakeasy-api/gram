@@ -53,8 +53,8 @@ func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, proje
 			return zero, fmt.Errorf("revalidate invocation authority: %w", err)
 		}
 		q := remotesessions_repo.New(m.db)
-		params := remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: caller, RemoteSessionClientID: clientID}
-		selected, err := q.GetActiveRemoteSession(ctx, params)
+		params := remotesessions_repo.GetDelegatedRemoteSessionParams{SubjectUrn: caller, RemoteSessionClientID: clientID, ProjectID: projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID}
+		selected, err := q.GetDelegatedRemoteSession(ctx, params)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return zero, nil
 		}
@@ -69,7 +69,7 @@ func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, proje
 		if err != nil || resolved.Token == "" {
 			return resolved, err
 		}
-		current, err := q.GetActiveRemoteSession(ctx, params)
+		current, err := q.GetDelegatedRemoteSession(ctx, params)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return zero, nil
 		}

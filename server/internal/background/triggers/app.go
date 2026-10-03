@@ -158,7 +158,8 @@ type App struct {
 	audit         *audit.Logger
 	slackClient   *slackclient.SlackClient
 
-	slackBotIdentities cache.TypedCacheObject[slackBotIdentity]
+	slackBotIdentities   cache.TypedCacheObject[slackBotIdentity]
+	executionDenialSends cache.Cache
 }
 
 // InstanceDBHook runs inside the transaction that mutates a trigger instance,
@@ -233,7 +234,8 @@ func NewApp(
 		audit:          auditLogger,
 		slackClient:    slackClient,
 
-		slackBotIdentities: cache.NewTypedObjectCache[slackBotIdentity](logger.With(attr.SlogCacheNamespace("slack_bot_identity")), cacheImpl, cache.SuffixNone),
+		executionDenialSends: cacheImpl,
+		slackBotIdentities:   cache.NewTypedObjectCache[slackBotIdentity](logger.With(attr.SlogCacheNamespace("slack_bot_identity")), cacheImpl, cache.SuffixNone),
 	}
 }
 

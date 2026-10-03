@@ -1676,4 +1676,4 @@ JOIN assistant_threads t ON t.id = e.assistant_thread_id AND t.project_id = e.pr
 JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
 WHERE e.assistant_id = @assistant_id AND e.assistant_thread_id = @thread_id
  AND e.project_id = @project_id AND a.organization_id = @organization_id
- AND e.event_id = @event_id AND NOT a.deleted AND a.deleted_at IS NULL AND a.status = 'active' AND NOT t.deleted AND t.deleted_at IS NULL;
+ AND e.event_id = @event_id AND NOT e.deleted AND NOT a.deleted AND a.deleted_at IS NULL AND a.status = 'active' AND NOT t.deleted AND t.deleted_at IS NULL;

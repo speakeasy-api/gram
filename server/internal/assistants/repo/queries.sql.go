@@ -1064,7 +1064,7 @@ JOIN assistant_threads t ON t.id = e.assistant_thread_id AND t.project_id = e.pr
 JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
 WHERE e.assistant_id = $1 AND e.assistant_thread_id = $2
  AND e.project_id = $3 AND a.organization_id = $4
- AND e.event_id = $5 AND NOT a.deleted AND a.deleted_at IS NULL AND a.status = 'active' AND NOT t.deleted AND t.deleted_at IS NULL
+ AND e.event_id = $5 AND NOT e.deleted AND NOT a.deleted AND a.deleted_at IS NULL AND a.status = 'active' AND NOT t.deleted AND t.deleted_at IS NULL
 `
 
 type GetAssistantExecutionReplyOriginParams struct {

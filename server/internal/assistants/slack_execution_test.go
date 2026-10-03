@@ -6,7 +6,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
+	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -59,6 +61,11 @@ func TestSlackExecutionIngressSharesConversation(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, envelope.Slack)
 	require.Empty(t, envelope.HumanUserID)
+	button, err := core.captureExecution(t.Context(), assistant, sourceKindSlack, b.ThreadID, uuid.NullUUID{UUID: root, Valid: true}, "button", []byte(`{"team_id":"TEXAMPLE","user_id":"UEXAMPLE","app_id":"AEXAMPLE","event_type":"block_actions"}`))
+	require.NoError(t, err)
+	clicked, err := decodeExecution(button)
+	require.NoError(t, err)
+	require.Equal(t, "user-2", clicked.HumanUserID, "application provenance does not erase a human button click")
 	// Persisted retries keep the original mapping reference, not a new selection.
 	encoded, err := json.Marshal(captured)
 	require.NoError(t, err)
@@ -67,4 +74,13 @@ func TestSlackExecutionIngressSharesConversation(t *testing.T) {
 	require.Equal(t, captured.Slack, restored.Slack)
 	require.Equal(t, captured.Ceiling.Digest, restored.Ceiling.Digest)
 	require.NoError(t, restored.Check())
+	manager := assistanttokens.New("test-secret", db, nil)
+	manager.ConfigureExecutionIdentity(executionTestIssuer(t), testIdentityService)
+	restored.ContinuationEventID = "resume-message"
+	_, err = manager.GenerateExecution(t.Context(), restored)
+	require.NoError(t, err, "resume preserves selected human provenance")
+	require.NoError(t, slackrepo.New(db).RevokeSlackIdentityMapping(t.Context(), slackrepo.RevokeSlackIdentityMappingParams{OrganizationID: "org-test", SlackTeamID: "TEXAMPLE", SlackUserID: "UEXAMPLE"}))
+	_, err = manager.GenerateExecution(t.Context(), restored)
+	require.ErrorIs(t, err, assistantidentity.ErrActorIneligible, "resume cannot reselect workload after human mapping revocation")
+
 }

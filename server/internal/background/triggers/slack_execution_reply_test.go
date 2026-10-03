@@ -7,11 +7,14 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
@@ -31,6 +34,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/stretchr/testify/require"
 )
+
+type denialBudget struct {
+	cache.Cache
+	mu   sync.Mutex
+	sent map[string]bool
+}
+
+func (b *denialBudget) Add(_ context.Context, key string, _ time.Duration) (bool, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.sent[key] {
+		return false, nil
+	}
+	b.sent[key] = true
+	return true, nil
+}
 
 type denialEnvironment struct{}
 
@@ -62,7 +81,7 @@ func TestAssistantSlackDenialReplyUsesExactOriginAndStaticPrivateContent(t *test
 	t.Cleanup(server.Close)
 	base, err := url.Parse("https://example.invalid")
 	require.NoError(t, err)
-	app := triggers.NewApp(testenv.NewLogger(t), f.db, nil, denialEnvironment{}, nil, nil, base, base, nil, slackclient.NewSlackClientWithBaseURL(server.URL, server.Client()), cache.NoopCache).SetIdentityService(testIdentityService)
+	app := triggers.NewApp(testenv.NewLogger(t), f.db, nil, denialEnvironment{}, nil, nil, base, base, nil, slackclient.NewSlackClientWithBaseURL(server.URL, server.Client()), &denialBudget{Cache: cache.NoopCache, sent: map[string]bool{}}).SetIdentityService(testIdentityService)
 	p := f.createParams()
 	p.DefinitionSlug = triggers.DefinitionSlugSlack
 	root, err := app.Create(t.Context(), p)
@@ -97,17 +116,42 @@ func TestAssistantSlackDenialReplyUsesExactOriginAndStaticPrivateContent(t *test
 	manager.ConfigureExecutionIdentity(signer, testIdentityService)
 	token, err := manager.GenerateExecution(t.Context(), execution)
 	require.NoError(t, err)
+	require.NoError(t, slackrepo.New(f.db).RevokeSlackIdentityMapping(t.Context(), slackrepo.RevokeSlackIdentityMappingParams{OrganizationID: "org-trigger-test", SlackTeamID: "TEXAMPLE", SlackUserID: "UEXAMPLE"}))
 	_, err = manager.AuthorizeBusiness(t.Context(), token, uuid.New(), nil)
-	require.Error(t, err, "business access is denied")
+	require.Error(t, err, "selected human revocation denies business access")
 	ctx, _, err := manager.AuthorizePlatform(t.Context(), token)
 	require.NoError(t, err, "assistant-owned refusal remains authorized")
 	// No mapping is live in this fixture: refusal delivery does not need human
 	// business authority and cannot disclose any business result.
 	require.NoError(t, app.NotifyAssistantExecutionDenied(ctx))
-	require.Equal(t, int32(1), calls.Load())
+	var concurrent sync.WaitGroup
+	for range 8 {
+		concurrent.Go(func() {
+			if err := app.NotifyAssistantExecutionDenied(ctx); err == nil {
+				t.Error("repeat refusal must not claim another send")
+			}
+		})
+	}
+	concurrent.Wait()
+	require.Equal(t, int32(1), calls.Load(), "duplicate calls share one atomic send budget")
 	require.Error(t, app.NotifyAssistantExecutionDenied(contextvalues.WithAssistantInvocationEvent(ctx, "wrong-event")))
 	wrong := contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: thread})
 	require.Error(t, app.NotifyAssistantExecutionDenied(wrong))
 	require.Equal(t, int32(1), calls.Load())
+	execution.Slack = nil
+	execution.Mode = assistantidentity.ExecutionWorkload
+	execution.HumanUserID = ""
+	execution.FallbackReason = "slack_mapping_absent"
+	execution.EventID = "unmapped-origin"
+	payload, err = json.Marshal(map[string]any{"_gram_execution": execution, "team_id": "TEXAMPLE", "user_id": "UEXAMPLE", "channel_id": "CEXAMPLE", "thread_id": "123"})
+	require.NoError(t, err)
+	_, err = q.InsertAssistantThreadEvent(t.Context(), assistantrepo.InsertAssistantThreadEventParams{AssistantThreadID: thread, AssistantID: f.assistantID, ProjectID: f.projectID, TriggerInstanceID: conv.ToNullUUID(root.ID), EventID: execution.EventID, CorrelationID: "slack-original", Status: "processing", NormalizedPayloadJson: payload, SourcePayloadJson: []byte(`{}`)})
+	require.NoError(t, err)
+	token, err = manager.GenerateExecution(t.Context(), execution)
+	require.NoError(t, err)
+	ctx, _, err = manager.AuthorizePlatform(t.Context(), token)
+	require.NoError(t, err)
+	require.NoError(t, app.NotifyAssistantExecutionDenied(ctx), "trusted unmapped Slack origin can receive a constant refusal")
+	require.Equal(t, int32(2), calls.Load())
 	require.NoError(t, app.SetAssistantThreadRouteState(ctx, triggers.AssistantThread{ProjectID: f.projectID, AssistantID: f.assistantID, ThreadID: thread}, triggers.ThreadRouteUnsubscribed))
 }

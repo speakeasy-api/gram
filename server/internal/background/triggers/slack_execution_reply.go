@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 )
 
 // NotifyAssistantExecutionDenied uses only the originating Slack event and the
@@ -56,8 +58,11 @@ func (a *App) NotifyAssistantExecutionDenied(ctx context.Context) error {
 		return fmt.Errorf("decode assistant reply origin: %w", err)
 	}
 	e := payload.Execution
-	if e == nil || e.Version != 2 || e.Slack == nil || e.EventID != event || e.ThreadID != principal.ThreadID || e.Identity.AssistantID != principal.AssistantID || e.Identity.ProjectID != *ac.ProjectID || e.Identity.OrganizationID != ac.ActiveOrganizationID || !row.TriggerInstanceID.Valid || row.TriggerInstanceID.UUID != e.Identity.TriggerID || payload.TeamID != e.Slack.TeamID || payload.UserID != e.Slack.UserID || payload.ChannelID == "" {
+	if e == nil || e.Version != 2 || e.EventID != event || e.ThreadID != principal.ThreadID || e.Identity.AssistantID != principal.AssistantID || e.Identity.ProjectID != *ac.ProjectID || e.Identity.OrganizationID != ac.ActiveOrganizationID || !row.TriggerInstanceID.Valid || row.TriggerInstanceID.UUID != e.Identity.TriggerID || payload.TeamID == "" || payload.UserID == "" || payload.ChannelID == "" {
 		return fmt.Errorf("invalid assistant reply origin")
+	}
+	if e.Slack != nil && (payload.TeamID != e.Slack.TeamID || payload.UserID != e.Slack.UserID) {
+		return fmt.Errorf("assistant reply sender mismatch")
 	}
 	actor, ok := contextvalues.AuthenticatedActor(ctx)
 	if !ok {
@@ -67,7 +72,7 @@ func (a *App) NotifyAssistantExecutionDenied(ctx context.Context) error {
 	if err != nil || issuer != e.Identity.IssuerID || subject != e.Identity.Subject {
 		return fmt.Errorf("assistant reply actor mismatch")
 	}
-	instance, err := a.repo.GetTriggerInstanceByIDPublic(ctx, e.Identity.TriggerID)
+	instance, err := a.repo.GetTriggerInstanceByID(ctx, triggerrepo.GetTriggerInstanceByIDParams{ID: e.Identity.TriggerID, ProjectID: *ac.ProjectID})
 	if err != nil {
 		return fmt.Errorf("load reply trigger: %w", err)
 	}
@@ -85,6 +90,19 @@ func (a *App) NotifyAssistantExecutionDenied(ctx context.Context) error {
 	thread := payload.ThreadID
 	if thread == "" {
 		thread = payload.Timestamp
+	}
+	// Bound duplicate attempts for the execution-token lifetime. Reserve before
+	// sending, including ambiguous provider failures, rather than risk a flood.
+	if a.executionDenialSends == nil {
+		return fmt.Errorf("assistant reply budget unavailable")
+	}
+	key := fmt.Sprintf("assistant-execution-denial:%s:%s:%s:%s:%s", ac.ActiveOrganizationID, ac.ProjectID.String(), principal.AssistantID, principal.ThreadID, event)
+	won, err := a.executionDenialSends.Add(ctx, key, time.Hour)
+	if err != nil {
+		return fmt.Errorf("reserve assistant reply budget: %w", err)
+	}
+	if !won {
+		return fmt.Errorf("assistant refusal already attempted for this invocation")
 	}
 	if err := a.slackClient.NotifyExecutionDenied(ctx, token, payload.ChannelID, thread, payload.UserID); err != nil {
 		return fmt.Errorf("send assistant denial reply: %w", err)
