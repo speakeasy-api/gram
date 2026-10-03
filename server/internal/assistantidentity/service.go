@@ -21,6 +21,9 @@ type Service struct {
 // HTTP; production configuration must use HTTPS. No tenant-specific issuer or
 // alternate signing infrastructure is created here.
 func New(issuerURL string, allowHTTP bool, rollout ...Rollout) (*Service, error) {
+	if len(rollout) > 1 {
+		return nil, fmt.Errorf("multiple rollout configurations: %w", ErrInvalidIdentity)
+	}
 	u, err := url.Parse(issuerURL)
 	validOrigin := u != nil && u.Hostname() != "" && !strings.Contains(issuerURL, "#") && u.User == nil && !u.ForceQuery && u.RawQuery == "" && u.Fragment == "" && (u.Path == "" || u.Path == "/")
 	validScheme := u != nil && (u.Scheme == "https" || (allowHTTP && u.Scheme == "http"))

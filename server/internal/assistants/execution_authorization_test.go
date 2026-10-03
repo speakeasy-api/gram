@@ -101,6 +101,10 @@ func TestExecutionAuthorizationLivePolicyAndPlatformIsolation(t *testing.T) {
 			require.ErrorIs(t, gateErr, assistantidentity.ErrRolloutDisabled)
 			_, _, gateErr = manager.AuthorizeRuntime(t.Context(), token)
 			require.Error(t, gateErr)
+			dispatched.Store(nil)
+			_, gateErr = core.processEventTurn(t.Context(), assistantThreadRecord{ID: thread, ProjectID: project, AssistantID: assistant.ID, SourceKind: mode}, assistant, assistantRuntimeRecord{}, assistantThreadEventRecord{ID: uuid.New(), EventID: "event-" + mode, NormalizedPayloadJSON: raw})
+			require.ErrorIs(t, gateErr, assistantidentity.ErrRolloutDisabled)
+			require.Nil(t, dispatched.Load(), "disabled bound execution must not invoke the runtime with owner credentials")
 			manager.ConfigureExecutionIdentity(signer, testIdentityService)
 
 			ctx, claims, err := manager.AuthorizeRuntime(t.Context(), "Bearer "+token)

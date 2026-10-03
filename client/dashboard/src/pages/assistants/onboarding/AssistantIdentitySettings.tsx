@@ -49,7 +49,11 @@ export function AssistantIdentitySettings({
     (binding) =>
       binding.state === "missing" && binding.triggerStatus === "active",
   );
-  const repairable = diagnostics?.health === "ready" && missingRoots;
+  // A bounded diagnostic page cannot prove that all active roots exist.
+  // The repair endpoint safely skips existing bindings.
+  const repairable =
+    diagnostics?.health === "ready" &&
+    (missingRoots || diagnostics.bindingsTruncated);
   const canUpgrade =
     hasScope("project:write") &&
     diagnostics?.provisioningEnabled &&

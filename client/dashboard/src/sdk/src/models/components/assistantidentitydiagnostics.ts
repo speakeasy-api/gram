@@ -5,12 +5,27 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
   AssistantIdentityBinding,
   AssistantIdentityBinding$inboundSchema,
 } from "./assistantidentitybinding.js";
+
+/**
+ * legacy, ready, suspended, or unavailable; ready only describes identity configuration.
+ */
+export const Health = {
+  Legacy: "legacy",
+  Ready: "ready",
+  Suspended: "suspended",
+  Unavailable: "unavailable",
+} as const;
+/**
+ * legacy, ready, suspended, or unavailable; ready only describes identity configuration.
+ */
+export type Health = ClosedEnum<typeof Health>;
 
 /**
  * Safe workload configuration diagnostics, not a permission or OAuth consent decision. Shared by the dashboard and Platform MCP.
@@ -31,7 +46,7 @@ export type AssistantIdentityDiagnostics = {
   /**
    * legacy, ready, suspended, or unavailable; ready only describes identity configuration.
    */
-  health: string;
+  health: Health;
   /**
    * Most recent persisted event ID; not a token.
    */
@@ -63,6 +78,11 @@ export type AssistantIdentityDiagnostics = {
 };
 
 /** @internal */
+export const Health$inboundSchema: z.ZodMiniEnum<typeof Health> = z.enum(
+  Health,
+);
+
+/** @internal */
 export const AssistantIdentityDiagnostics$inboundSchema: z.ZodMiniType<
   AssistantIdentityDiagnostics,
   unknown
@@ -71,7 +91,7 @@ export const AssistantIdentityDiagnostics$inboundSchema: z.ZodMiniType<
     bindings: z.array(AssistantIdentityBinding$inboundSchema),
     bindings_truncated: z.boolean(),
     execution_enabled: z.boolean(),
-    health: z.string(),
+    health: Health$inboundSchema,
     last_event_id: z.optional(z.string()),
     last_event_status: z.optional(z.string()),
     last_execution_mode: z.optional(z.string()),

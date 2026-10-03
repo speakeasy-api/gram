@@ -51,9 +51,12 @@ func TestIdentityDiagnosticsAndProvisioningRollback(t *testing.T) {
 	require.Equal(t, bound.AgentID, again.AgentID)
 	repaired, err := core.identityDiagnostics(t.Context(), again)
 	require.NoError(t, err)
+	repairedStates := map[string]string{}
 	for _, b := range repaired.Bindings {
+		repairedStates[b.TriggerID] = b.State
 		require.Equal(t, "ready", b.State)
 	}
+	require.Equal(t, "ready", repairedStates[root.String()])
 	require.NoError(t, identityrepo.New(db).FixtureSuspendAgent(t.Context(), identityrepo.FixtureSuspendAgentParams{OrganizationID: "org-test", AgentID: uuid.MustParse(*again.AgentID)}))
 	suspended, err := core.identityDiagnostics(t.Context(), again)
 	require.NoError(t, err)

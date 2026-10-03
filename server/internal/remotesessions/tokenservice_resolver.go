@@ -91,7 +91,7 @@ func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, proje
 		if execution, ok := assistanttokens.BusinessExecution(ctx); ok {
 			attribution := audit.AssistantExecutionAttribution{AgentID: execution.Identity.AgentID, TriggerID: execution.Identity.TriggerID, WorkloadIssuerID: execution.Identity.IssuerID, WorkloadSubject: execution.Identity.Subject, EventID: execution.InvocationEventID(), InitiatingUserID: execution.HumanUserID, CredentialOwnerUserID: selected.SubjectUrn.ID}
 			if err := m.auditLogger.LogAssistantCredentialUse(ctx, m.db, organizationID, projectID, execution.Identity.AssistantID, attribution); err != nil {
-				m.logger.ErrorContext(ctx, "failed to record assistant credential attribution")
+				return zero, fmt.Errorf("record assistant credential attribution: %w", err)
 			}
 		}
 		m.touchResolvedCredential(ctx, selected)

@@ -40,6 +40,7 @@ export const AUDIT_ACTIONS = [
   "api_key:create",
   "api_key:revoke",
   "asset:create",
+  "assistant:credential_use",
   "assistant:tool_call",
   "aws_iam_credential:create",
   "aws_iam_credential:delete",
@@ -384,6 +385,8 @@ export function staticActionPhrase(action: AuditAction): string {
 
     case "asset:create":
       return "uploaded asset";
+    case "assistant:credential_use":
+      return "used assistant credential";
     case "assistant:tool_call":
       return "ran assistant tool";
 

@@ -25,8 +25,8 @@ type AssistantIdentityManagement interface {
 
 type UpgradeAssistantIdentityInput struct {
 	ProjectID   string `json:"project_id" jsonschema:"exact project UUID owning the assistant; never inferred"`
-	AssistantID string `json:"assistant_id" jsonschema:"exact UUID of the legacy assistant to upgrade"`
-	Confirmed   bool   `json:"confirmed" jsonschema:"true only after the user explicitly confirms upgrading this exact assistant in this exact project"`
+	AssistantID string `json:"assistant_id" jsonschema:"exact assistant UUID for an explicitly requested legacy upgrade or missing-active-root repair; provisioning rollout must be enabled"`
+	Confirmed   bool   `json:"confirmed" jsonschema:"true only after the user explicitly confirms upgrading or repairing missing active trigger roots for this exact assistant in this exact project"`
 }
 
 type UpgradeAssistantIdentityOutput struct {

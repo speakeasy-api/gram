@@ -130,7 +130,7 @@ var AssistantMemory = Type("AssistantMemory", func() {
 var AssistantIdentityDiagnostics = Type("AssistantIdentityDiagnostics", func() {
 	Meta("struct:pkg:path", "types")
 	Description("Safe workload configuration diagnostics, not a permission or OAuth consent decision. Shared by the dashboard and Platform MCP.")
-	Attribute("health", String, "legacy, ready, suspended, or unavailable; ready only describes identity configuration.", func() { Meta("struct:tag:json", "health") })
+	Attribute("health", String, "legacy, ready, suspended, or unavailable; ready only describes identity configuration.", func() { Meta("struct:tag:json", "health"); Enum("legacy", "ready", "suspended", "unavailable") })
 	Attribute("provisioning_enabled", Boolean, "Whether new identities and explicit upgrades are enabled on this serving tier.", func() { Meta("struct:tag:json", "provisioning_enabled") })
 	Attribute("execution_enabled", Boolean, "Whether workload token issuance and use are enabled on this serving tier.", func() { Meta("struct:tag:json", "execution_enabled") })
 	Attribute("slack_delegation_enabled", Boolean, "Whether mapped Slack delegation is enabled on this serving tier.", func() { Meta("struct:tag:json", "slack_delegation_enabled") })
@@ -149,7 +149,7 @@ var AssistantIdentityBinding = Type("AssistantIdentityBinding", func() {
 	Attribute("trigger_id", String, "Exact trigger root ID.", func() { Meta("struct:tag:json", "trigger_id"); Format(FormatUUID) })
 	Attribute("trigger_kind", String, "Trigger definition slug.", func() { Meta("struct:tag:json", "trigger_kind") })
 	Attribute("trigger_status", String, "Current trigger status.", func() { Meta("struct:tag:json", "trigger_status") })
-	Attribute("state", String, "ready, missing, or unavailable. Never interprets missing authority as legacy.", func() { Meta("struct:tag:json", "state") })
+	Attribute("state", String, "ready, missing, or unavailable. Never interprets missing authority as legacy.", func() { Meta("struct:tag:json", "state"); Enum("ready", "missing", "unavailable") })
 	Attribute("generation", Int64, "Retained workload binding generation, zero if never configured.", func() { Meta("struct:tag:json", "generation") })
 	Required("trigger_id", "trigger_kind", "trigger_status", "state", "generation")
 })

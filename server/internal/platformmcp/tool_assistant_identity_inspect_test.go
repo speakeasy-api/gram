@@ -3,14 +3,16 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"testing"
+
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/stretchr/testify/require"
+
 	genassistants "github.com/speakeasy-api/gram/server/gen/assistants"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 type identityInspectionStub struct {
@@ -37,6 +39,13 @@ func TestAssistantIdentityInspectionContract(t *testing.T) {
 	require.Contains(t, a.Description, "project:read")
 	require.Contains(t, a.Description, "OAuth consent")
 	require.NotContains(t, string(a.InputSchema), "token")
+	ctx := contextWithPrincipal(t.Context(), Principal{OrganizationID: "test-org", UserID: "test-user"})
+	_, err := b.Invoke(ctx, []byte(`{"project_id":"`+uuid.NewString()+`","assistant_id":"`+uuid.NewString()+`"}`))
+	var refusal *ToolRefusalError
+	require.ErrorAs(t, err, &refusal)
+	require.Contains(t, refusal.Payload, unavailableCode)
+	require.Contains(t, refusal.Payload, "inspection")
+	require.NotContains(t, refusal.Payload, "upgrade")
 }
 
 func TestAssistantIdentityInspectionUsesExactAuthorizedReadAndSafeProjection(t *testing.T) {
@@ -84,4 +93,38 @@ func TestAssistantIdentityInspectionUsesExactAuthorizedReadAndSafeProjection(t *
 	_, err = service.inspect(ctx, principal, InspectAssistantIdentityInput{ProjectID: project.String(), AssistantID: id.String()})
 	require.Error(t, err)
 	require.Equal(t, 1, calls)
+}
+
+func TestAssistantIdentityInspectionRefusals(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		err     error
+		code    string
+		message string
+	}{
+		{"unavailable", ErrUnavailable, unavailableCode, "inspection is temporarily unavailable"},
+		{"invalid", oops.C(oops.CodeInvalid), "invalid_request", "UUIDs to inspect"},
+		{"bad request", oops.C(oops.CodeBadRequest), "invalid_request", "UUIDs to inspect"},
+		{"forbidden", oops.C(oops.CodeForbidden), "permission_denied", "project:read"},
+		{"unauthorized", oops.C(oops.CodeUnauthorized), "permission_denied", "project:read"},
+		{"hidden", ErrForbidden, "not_found", "not available to you"},
+		{"not found", oops.C(oops.CodeNotFound), "not_found", "not available to you"},
+		{"conflict", oops.C(oops.CodeConflict), "conflict", "cannot be inspected"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result, ok := assistantIdentityInspectionToolResult(tc.err)
+			require.True(t, ok)
+			require.True(t, result.IsError)
+			content, ok := result.Content[0].(*mcp.TextContent)
+			require.True(t, ok)
+			payload := content.Text
+			require.Contains(t, payload, tc.code)
+			require.Contains(t, payload, tc.message)
+			require.NotContains(t, payload, "upgrade")
+			require.NotContains(t, payload, "confirm")
+			require.NotContains(t, payload, "project:write")
+		})
+	}
 }

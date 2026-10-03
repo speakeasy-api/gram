@@ -7501,6 +7501,11 @@ func ValidateAssistantIdentityDiagnosticsResponseBody(body *AssistantIdentityDia
 	if body.BindingsTruncated == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("bindings_truncated", "body"))
 	}
+	if body.Health != nil {
+		if !(*body.Health == "legacy" || *body.Health == "ready" || *body.Health == "suspended" || *body.Health == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.health", *body.Health, []any{"legacy", "ready", "suspended", "unavailable"}))
+		}
+	}
 	for _, e := range body.Bindings {
 		if e != nil {
 			if err2 := ValidateAssistantIdentityBindingResponseBody(e); err2 != nil {
@@ -7531,6 +7536,11 @@ func ValidateAssistantIdentityBindingResponseBody(body *AssistantIdentityBinding
 	}
 	if body.TriggerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trigger_id", *body.TriggerID, goa.FormatUUID))
+	}
+	if body.State != nil {
+		if !(*body.State == "ready" || *body.State == "missing" || *body.State == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"ready", "missing", "unavailable"}))
+		}
 	}
 	return
 }

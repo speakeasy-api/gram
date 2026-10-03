@@ -6,7 +6,9 @@ import type { Assistant } from "@gram/client/models/components/assistant.js";
 import { AssistantIdentitySettings } from "./AssistantIdentitySettings";
 const mocks = vi.hoisted(() => ({ mutate: vi.fn(), canWrite: true }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => mocks.canWrite }),
+  useRBAC: () => ({
+    hasScope: (scope: string) => scope === "project:write" && mocks.canWrite,
+  }),
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
@@ -96,7 +98,7 @@ describe("Assistant identity management", () => {
     ).toBeNull();
   });
   it("does not offer to repair suspended or withdrawn authority", () => {
-    for (const health of ["suspended", "unavailable"]) {
+    for (const health of ["suspended", "unavailable"] as const) {
       cleanup();
       setup({
         ...assistant,
@@ -119,6 +121,73 @@ describe("Assistant identity management", () => {
         screen.queryByRole("button", { name: "Repair missing bindings" }),
       ).toBeNull();
     }
+  });
+  it("offers a confirmed idempotent repair when diagnostics are truncated", () => {
+    setup({
+      ...assistant,
+      identityState: "ACTIVE",
+      identityDiagnostics: {
+        ...assistant.identityDiagnostics!,
+        health: "ready",
+        bindingsTruncated: true,
+        bindings: [
+          {
+            triggerId: "visible-root",
+            triggerKind: "slack",
+            triggerStatus: "active",
+            generation: 1,
+            state: "ready",
+          },
+        ],
+      },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Repair missing bindings" }),
+    );
+    expect(mocks.mutate).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm identity change" }),
+    );
+    expect(mocks.mutate).toHaveBeenCalledWith({
+      request: { riskIDRequestBody: { id: assistant.id } },
+    });
+  });
+  it.each([
+    { canWrite: false, provisioningEnabled: true, health: "ready" },
+    { canWrite: true, provisioningEnabled: false, health: "ready" },
+    { canWrite: true, provisioningEnabled: true, health: "suspended" },
+    { canWrite: true, provisioningEnabled: true, health: "unavailable" },
+  ] as const)(
+    "preserves repair gates for truncated diagnostics: %o",
+    ({ canWrite, provisioningEnabled, health }) => {
+      mocks.canWrite = canWrite;
+      setup({
+        ...assistant,
+        identityState: "ACTIVE",
+        identityDiagnostics: {
+          ...assistant.identityDiagnostics!,
+          health,
+          provisioningEnabled,
+          bindingsTruncated: true,
+        },
+      });
+      expect(
+        screen.queryByRole("button", { name: "Repair missing bindings" }),
+      ).toBeNull();
+    },
+  );
+  it("does not offer repair for complete diagnostics without missing roots", () => {
+    setup({
+      ...assistant,
+      identityState: "ACTIVE",
+      identityDiagnostics: {
+        ...assistant.identityDiagnostics!,
+        health: "ready",
+      },
+    });
+    expect(
+      screen.queryByRole("button", { name: "Repair missing bindings" }),
+    ).toBeNull();
   });
   it("offers repair only for missing roots on a configured identity", () => {
     setup({

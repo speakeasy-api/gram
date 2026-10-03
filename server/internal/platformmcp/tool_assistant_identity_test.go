@@ -54,6 +54,8 @@ func TestAssistantIdentityToolContract(t *testing.T) {
 	for _, field := range []string{"project_id", "assistant_id", "confirmed"} {
 		require.Contains(t, string(a.InputSchema), field)
 	}
+	require.Contains(t, string(a.InputSchema), "missing-active-root repair")
+	require.Contains(t, string(a.InputSchema), "provisioning rollout must be enabled")
 	require.Contains(t, a.Description, "project:write")
 	require.Contains(t, a.Description, "ACTIVE does not prove")
 	ctx := contextWithPrincipal(t.Context(), Principal{OrganizationID: "test-org", UserID: "test-user"})

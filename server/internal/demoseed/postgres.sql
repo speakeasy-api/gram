@@ -1405,12 +1405,12 @@ BEGIN
   -- examples above include both mapped and unmapped people; mapping is per
   -- message and does not establish business permission or consent.
   INSERT INTO trigger_instances
-    (id, organization_id, project_id, definition_slug, name, target_kind, target_ref, target_display)
+    (id, organization_id, project_id, definition_slug, name, target_kind, target_ref, target_display, config_json)
   VALUES
     (demo.det_uuid('gram-demo-assistant-slack-root'), demo_org, proj_a, 'slack',
-     'Slack per-message delegation', 'assistant', demo.det_uuid('gram-demo-assistant-bound')::text, 'Identity-bound assistant'),
+     'Slack per-message delegation', 'assistant', demo.det_uuid('gram-demo-assistant-bound')::text, 'Identity-bound assistant', '{}'),
     (demo.det_uuid('gram-demo-assistant-scheduled-root'), demo_org, proj_a, 'cron',
-     'Autonomous scheduled work', 'assistant', demo.det_uuid('gram-demo-assistant-bound')::text, 'Identity-bound assistant');
+     'Autonomous scheduled work', 'assistant', demo.det_uuid('gram-demo-assistant-bound')::text, 'Identity-bound assistant', '{"schedule":"0 9 * * *"}');
 
   -- Inert display fixture: runtime provisioning uses GRAM_AUTHZ_ISSUER_URL and
   -- the existing Gram JWKS endpoint; this example cannot sign or run work.

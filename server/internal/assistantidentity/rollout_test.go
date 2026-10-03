@@ -10,6 +10,12 @@ import (
 	"testing"
 )
 
+func TestRolloutRejectsMultipleConfigurations(t *testing.T) {
+	t.Parallel()
+	_, err := assistantidentity.New("https://gram.example", false, assistantidentity.Rollout{}, assistantidentity.Rollout{DisableExecution: true})
+	require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity)
+}
+
 func TestRolloutGatesAreIndependentAndDoNotFallback(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

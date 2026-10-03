@@ -1925,7 +1925,9 @@ func (q *Queries) ListActiveAssistantRuntimes(ctx context.Context, activeState s
 const listAssistantIdentityRoots = `-- name: ListAssistantIdentityRoots :many
 SELECT t.id, t.definition_slug, t.status, COALESCE(b.generation, 0)::bigint AS generation,
  CASE WHEN b.id IS NULL THEN 'missing'
- WHEN b.deleted OR b.trigger_id IS NULL OR b.project_ref_id IS NULL OR b.assistant_binding_id IS NULL OR b.workload_issuer_id IS NULL
+ WHEN b.deleted OR b.trigger_id IS NULL OR b.project_ref_id IS NULL
+   OR NOT EXISTS (SELECT 1 FROM projects p WHERE p.organization_id = t.organization_id AND p.id = b.project_ref_id AND NOT p.deleted)
+   OR b.assistant_binding_id IS NULL OR b.workload_issuer_id IS NULL
    OR ab.deleted OR ab.agent_id IS NULL OR b.assistant_binding_generation <> ab.generation
    OR i.id IS NULL OR i.deleted OR i.allow_wildcard_admission OR i.issuer <> $1 OR i.jwks_uri <> $2
    OR NOT EXISTS (SELECT 1 FROM workload_identity_admissions adm WHERE adm.organization_id = t.organization_id AND adm.project_id = t.project_id

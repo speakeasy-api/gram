@@ -85103,6 +85103,10 @@ components:
                 state:
                     type: string
                     description: ready, missing, or unavailable. Never interprets missing authority as legacy.
+                    enum:
+                        - ready
+                        - missing
+                        - unavailable
                 trigger_id:
                     type: string
                     description: Exact trigger root ID.
@@ -85136,6 +85140,11 @@ components:
                 health:
                     type: string
                     description: legacy, ready, suspended, or unavailable; ready only describes identity configuration.
+                    enum:
+                        - legacy
+                        - ready
+                        - suspended
+                        - unavailable
                 last_event_id:
                     type: string
                     description: Most recent persisted event ID; not a token.

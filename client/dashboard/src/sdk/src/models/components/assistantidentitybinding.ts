@@ -5,8 +5,24 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * ready, missing, or unavailable. Never interprets missing authority as legacy.
+ */
+export const AssistantIdentityBindingState = {
+  Ready: "ready",
+  Missing: "missing",
+  Unavailable: "unavailable",
+} as const;
+/**
+ * ready, missing, or unavailable. Never interprets missing authority as legacy.
+ */
+export type AssistantIdentityBindingState = ClosedEnum<
+  typeof AssistantIdentityBindingState
+>;
 
 export type AssistantIdentityBinding = {
   /**
@@ -16,7 +32,7 @@ export type AssistantIdentityBinding = {
   /**
    * ready, missing, or unavailable. Never interprets missing authority as legacy.
    */
-  state: string;
+  state: AssistantIdentityBindingState;
   /**
    * Exact trigger root ID.
    */
@@ -32,13 +48,18 @@ export type AssistantIdentityBinding = {
 };
 
 /** @internal */
+export const AssistantIdentityBindingState$inboundSchema: z.ZodMiniEnum<
+  typeof AssistantIdentityBindingState
+> = z.enum(AssistantIdentityBindingState);
+
+/** @internal */
 export const AssistantIdentityBinding$inboundSchema: z.ZodMiniType<
   AssistantIdentityBinding,
   unknown
 > = z.pipe(
   z.object({
     generation: z.int(),
-    state: z.string(),
+    state: AssistantIdentityBindingState$inboundSchema,
     trigger_id: z.string(),
     trigger_kind: z.string(),
     trigger_status: z.string(),
