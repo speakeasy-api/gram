@@ -810,7 +810,7 @@ func TestIngest_SkillRowSurvivesToolIOScrub(t *testing.T) {
 	require.NoError(t, err)
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
 	disabled := func(context.Context, string) (bool, error) { return false, nil }
-	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, enabled, disabled, nil, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
+	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, enabled, disabled, telemetry.NewUserInfoResolver(testenv.NewLogger(t), ti.conn, testenv.NewMemoryCache()), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 	chClient := telemetryrepo.New(chConn)
 	authCtx := hookAuthContext(t, ctx)
 

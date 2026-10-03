@@ -52,7 +52,7 @@ type NetworkIngressClient struct {
 }
 
 func (c *NetworkIngressClient) start(ctx context.Context, organizationID string, id uuid.UUID) (client.WorkflowRun, error) {
-	if c.Client == nil || c.Queue == "" || organizationID == "" || id == uuid.Nil {
+	if c.Queue == "" || organizationID == "" || id == uuid.Nil {
 		return nil, fmt.Errorf("network ingress reconciliation is unconfigured")
 	}
 	startCtx, cancel := context.WithTimeout(ctx, 10*time.Second)

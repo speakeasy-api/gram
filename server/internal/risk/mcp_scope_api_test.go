@@ -223,6 +223,7 @@ func TestRiskPolicyMCPScopeRejectsAccountIdentity(t *testing.T) {
 	})
 	require.ErrorContains(t, err, `source "account_identity" cannot be used by an MCP-scoped policy`)
 }
+
 func TestRiskPolicyMCPScopeAllowsOnlyFlagAndBlockActions(t *testing.T) {
 	t.Parallel()
 

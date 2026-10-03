@@ -356,11 +356,6 @@ func (s *Service) triggerToolsetIndex(ctx context.Context, toolset *types.Toolse
 // unable to list its tools.
 var ErrToolsetIndexNotRequired = errors.New("toolset needs no search index")
 
-// ErrToolsetIndexUnavailable reports that no rebuild could even be requested,
-// which for a dynamic-mode server means it cannot list its tools until the
-// periodic sweep reaches it.
-var ErrToolsetIndexUnavailable = errors.New("toolset search index rebuild cannot be scheduled")
-
 // TriggerToolsetIndex schedules the search-index rebuild a new toolset version
 // needs, and is called after the transaction that created that version has
 // committed.
@@ -379,25 +374,11 @@ var ErrToolsetIndexUnavailable = errors.New("toolset search index rebuild cannot
 // already committed, the sweep is still the backstop, and failing the call
 // after the fact would misreport a change that did land.
 func TriggerToolsetIndex(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, temporalEnv *tenv.Environment, toolset *types.Toolset) error {
-	if logger == nil || db == nil || toolset == nil {
-		return ErrToolsetIndexUnavailable
-	}
-	// Whether an index is needed is asked BEFORE whether one could be
-	// scheduled, and the order is load-bearing. These two errors mean opposite
-	// things to a caller: "not_required" is a success, while "unavailable"
-	// tells an agent a dynamic-mode server may be unable to list its tools.
-	// Reporting unavailable for a version that needed no index in the first
-	// place sends that agent chasing a failure that did not happen.
-	//
 	// A version with no tools needs no index, and dynamic mode serves it
 	// without one — see ErrToolsetIndexNotRequired. Same for a toolset that is
 	// not MCP-enabled: nothing serves it.
 	if !conv.PtrValOr(toolset.McpEnabled, false) || len(toolset.Tools) == 0 {
 		return ErrToolsetIndexNotRequired
-	}
-	if temporalEnv == nil {
-		logger.ErrorContext(ctx, "no temporal environment to schedule toolset indexing; a dynamic-mode server cannot list its tools until the periodic sweep reaches it")
-		return ErrToolsetIndexUnavailable
 	}
 
 	projectID, err := uuid.Parse(toolset.ProjectID)
@@ -454,9 +435,6 @@ func TriggerToolsetIndex(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 // tool-exposure change. It loads that view by id and then schedules exactly
 // what the dashboard's own update schedules.
 func TriggerToolsetIndexForVersion(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, temporalEnv *tenv.Environment, projectID, toolsetID uuid.UUID) error {
-	if logger == nil || db == nil || projectID == uuid.Nil || toolsetID == uuid.Nil {
-		return ErrToolsetIndexUnavailable
-	}
 	toolset, err := repo.New(db).GetToolsetByIDAndProject(ctx, repo.GetToolsetByIDAndProjectParams{ID: toolsetID, ProjectID: projectID})
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to load toolset for indexing after a tool exposure change", attr.SlogError(err))

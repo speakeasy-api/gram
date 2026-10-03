@@ -2,6 +2,11 @@ package plugins_test
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
 	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -11,10 +16,6 @@ import (
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"testing"
 )
 
 func TestDistributionPluginsHTTPSkillOnlyAuthorization(t *testing.T) {

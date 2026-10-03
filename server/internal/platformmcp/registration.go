@@ -89,15 +89,12 @@ type RegistrationStore struct {
 	db *pgxpool.Pool
 }
 
-func NewRegistrationStore(db *pgxpool.Pool) (*RegistrationStore, error) {
-	if db == nil {
-		return nil, ErrRegistrationInvalid
-	}
-	return &RegistrationStore{db: db}, nil
+func NewRegistrationStore(db *pgxpool.Pool) *RegistrationStore {
+	return &RegistrationStore{db: db}
 }
 
 func (s *RegistrationStore) ResolveProject(ctx context.Context, organizationID, projectSlug string) (ResolvedProject, error) {
-	if s == nil || s.db == nil || organizationID == "" || projectSlug == "" {
+	if organizationID == "" || projectSlug == "" {
 		return ResolvedProject{}, ErrRegistrationInvalid
 	}
 	row, err := platformrepo.New(s.db).ResolvePlatformMCPProjectBySlug(ctx, platformrepo.ResolvePlatformMCPProjectBySlugParams{
@@ -114,7 +111,7 @@ func (s *RegistrationStore) ResolveProject(ctx context.Context, organizationID, 
 }
 
 func (s *RegistrationStore) EligibleCatalogRegistrationTarget(ctx context.Context, organizationID string, project ResolvedProject) (bool, error) {
-	if s == nil || s.db == nil || organizationID == "" || project.ID == uuid.Nil || project.Slug == "" {
+	if organizationID == "" || project.ID == uuid.Nil || project.Slug == "" {
 		return false, ErrTargetIneligible
 	}
 	eligible, err := platformrepo.New(s.db).IsPlatformMCPCatalogRegistrationTargetEligible(ctx, platformrepo.IsPlatformMCPCatalogRegistrationTargetEligibleParams{
@@ -132,7 +129,7 @@ func (s *RegistrationStore) EligibleCatalogRegistrationTarget(ctx context.Contex
 // registration replays so the agent is not sent back to dashboard setup after
 // the user has already completed it there.
 func (s *RegistrationStore) ResolveRegistrationPendingSecretFields(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID, declared []CatalogConfigurationField) ([]CatalogConfigurationField, error) {
-	if s == nil || s.db == nil || registrationID == uuid.Nil {
+	if registrationID == uuid.Nil {
 		return nil, ErrRegistrationInvalid
 	}
 	registration, err := lifecycleRegistration(ctx, platformrepo.New(s.db), principal, project.ID, registrationID)
@@ -166,7 +163,7 @@ func (s *RegistrationStore) ResolveRegistrationPendingSecretFields(ctx context.C
 }
 
 func (s *RegistrationStore) ResolveRegistrationCatalogIdentity(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogCandidate, error) {
-	if s == nil || s.db == nil || registrationID == uuid.Nil {
+	if registrationID == uuid.Nil {
 		return CatalogCandidate{}, ErrRegistrationInvalid
 	}
 	registration, err := lifecycleRegistration(ctx, platformrepo.New(s.db), principal, project.ID, registrationID)
@@ -186,7 +183,7 @@ func (s *RegistrationStore) ResolveRegistrationCatalogIdentity(ctx context.Conte
 // target from the lifecycle-bound private resources. The agent never receives
 // the Remote MCP source URL or configuration values.
 func (s *RegistrationStore) ResolveRegistrationDashboardSetup(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (RegistrationDashboardSetup, error) {
-	if s == nil || s.db == nil || registrationID == uuid.Nil {
+	if registrationID == uuid.Nil {
 		return RegistrationDashboardSetup{}, ErrRegistrationInvalid
 	}
 	registration, err := lifecycleRegistration(ctx, platformrepo.New(s.db), principal, project.ID, registrationID)
@@ -231,9 +228,6 @@ func (s *RegistrationStore) ResolveRegistrationDashboardSetup(ctx context.Contex
 // transaction, then use ConvergeRegistration to create or reuse the desired
 // registration state.
 func (s *RegistrationStore) BeginReceipt(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, now time.Time) (OperationReceipt, error) {
-	if s == nil || s.db == nil {
-		return OperationReceipt{}, ErrUnavailable
-	}
 	if err := validateCatalogRegistrationRequest(principal, project, request); err != nil {
 		return OperationReceipt{}, err
 	}
@@ -317,9 +311,6 @@ func (s *RegistrationStore) BeginReceipt(ctx context.Context, principal Principa
 // later private-component convergence can complete the receipt and record the
 // registration_succeeded milestone.
 func (s *RegistrationStore) ConvergeRegistration(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, receipt OperationReceipt) (OperationReceipt, error) {
-	if s == nil || s.db == nil {
-		return OperationReceipt{}, ErrUnavailable
-	}
 	if err := validateCatalogRegistrationRequest(principal, project, request); err != nil {
 		return OperationReceipt{}, err
 	}
@@ -457,9 +448,6 @@ func (s *RegistrationStore) ConvergeRegistration(ctx context.Context, principal 
 // catalogue configuration. Tests and older internal callers use
 // CompleteRegistrationWithRemoteURL to build the equivalent empty configuration.
 func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, receipt OperationReceipt, configuration resolvedCatalogConfiguration) (OperationReceipt, error) {
-	if s == nil || s.db == nil {
-		return OperationReceipt{}, ErrUnavailable
-	}
 	if err := validateCatalogRegistrationRequest(principal, project, request); err != nil || receipt.ID == uuid.Nil || !receipt.RegistrationID.Valid || !validRegistrationRemoteURL(configuration.remoteURL) || (request.SourceKind == directRemoteSourceKind && !validDirectRemoteRegistrationURL(configuration.remoteURL)) {
 		return OperationReceipt{}, ErrRegistrationInvalid
 	}
@@ -895,9 +883,6 @@ func catalogRegistrationInputHash(projectSlug, sourceKind, catalogProvider, cata
 // FindReceipt performs an existing-only, real-user scoped lookup. It never
 // deletes expired rows or creates a new idempotency boundary.
 func (s *RegistrationStore) FindReceipt(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, now time.Time) (OperationReceipt, bool, error) {
-	if s == nil || s.db == nil {
-		return OperationReceipt{}, false, ErrUnavailable
-	}
 	if err := validateCatalogRegistrationRequest(principal, project, request); err != nil {
 		return OperationReceipt{}, false, err
 	}

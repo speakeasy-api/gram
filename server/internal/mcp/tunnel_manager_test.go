@@ -10,19 +10,49 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan/mcpriskscantest"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/stretchr/testify/require"
 )
+
+func newProxyManagerForTest(t *testing.T) *remotemcp.ProxyManager {
+	t.Helper()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	conn, err := TestInfra.CloneTestDatabase(t, "mcp_tunnel_manager")
+	require.NoError(t, err)
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
+	require.NoError(t, err)
+	return remotemcptest.NewProxyManager(
+		t,
+		logger,
+		tracerProvider,
+		meterProvider,
+		conn,
+		policy,
+		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		telemetry.NewStub(logger),
+		testenv.NewMemoryCache(),
+		mcpriskscantest.NewEvaluator(t, logger, tracerProvider, meterProvider, conn, testenv.NewMemoryCache(), testenv.NewEncryptionClient(t)),
+	)
+}
 
 func TestTunnelManagerCallerAssertionScopeAndMetaDestination(t *testing.T) {
 	t.Parallel()
@@ -35,7 +65,7 @@ func TestTunnelManagerCallerAssertionScopeAndMetaDestination(t *testing.T) {
 	issuer, err := mcpauthz.New(string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: public})), "https://gram.example", false)
 	require.NoError(t, err)
 	logger := testenv.NewLogger(t)
-	proxyManager := remotemcp.NewProxyManager(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	proxyManager := newProxyManagerForTest(t)
 	project, tunnel, wrapper, meta := uuid.New(), uuid.New(), uuid.New(), uuid.NewString()
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_test", ProjectID: &project})
 	ctx = mcpidentity.NewValidatorBoundary().StampAgent(ctx, uuid.New())

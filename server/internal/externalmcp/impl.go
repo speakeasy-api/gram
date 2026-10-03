@@ -171,9 +171,6 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 		}
 		registryID = &parsed
 	}
-	if s.catalog == nil {
-		return nil, oops.E(oops.CodeUnexpected, nil, "catalogue service is not configured").LogError(ctx, s.logger)
-	}
 	servers, err := s.catalog.List(ctx, payload.Search, registryID)
 	if err != nil {
 		if errors.Is(err, ErrCatalogSourceNotFound) || errors.Is(err, ErrCatalogSourceDisabled) {
@@ -208,9 +205,6 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").LogError(ctx, s.logger)
 	}
 
-	if s.catalog == nil {
-		return nil, oops.E(oops.CodeUnexpected, nil, "catalogue service is not configured").LogError(ctx, s.logger)
-	}
 	// Authorize the source through the same reviewed admission boundary as
 	// listCatalog, while retaining the dashboard's existing full-detail shape.
 	source, err := s.catalog.Source(ctx, registryID)

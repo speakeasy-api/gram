@@ -333,7 +333,7 @@ func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.Ingest
 			return nil, false, fmt.Errorf("resolve known skill raw hash: %w", err)
 		}
 		contentRequired := !known
-		if known && s.piScanner != nil {
+		if known {
 			contentRequired, err = s.repo.SkillRawHashNeedsPromptInjectionScan(writeCtx, repo.SkillRawHashNeedsPromptInjectionScanParams{
 				ProjectID: *authCtx.ProjectID,
 				RawSha256: rawSHA256,
@@ -386,9 +386,6 @@ func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.In
 	ctx, span := s.tracer.Start(ctx, "hooks.withOrgSettings")
 	defer span.End()
 
-	if s.productFeatures == nil {
-		return res
-	}
 	// Detach from request cancellation: the feature client answers a canceled
 	// lookup with (false, nil), which would read as a definitive fail-closed
 	// posture rather than an omitted one. Re-bound the detached context — this
@@ -1249,10 +1246,6 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 }
 
 func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, timestamp time.Time, blockReason string) {
-	if s.telemetryLogger == nil {
-		return
-	}
-
 	hookEventName := telemetryHookEventName(payload)
 	toolName := canonicalTelemetryToolName(payload)
 	if toolName == "" {
@@ -1648,7 +1641,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 // a unified-ingest session was seeded with. Claude Tag sessions are skipped:
 // their title is the channel, rewritten on every wake.
 func (s *Service) scheduleCanonicalChatTitle(ctx context.Context, authCtx *contextvalues.AuthContext, chatID uuid.UUID, hookSource string) {
-	if s.chatTitleGenerator == nil || hookSource == "claude-tag" {
+	if hookSource == "claude-tag" {
 		return
 	}
 	// WithoutCancel so a client that hangs up as soon as the hook is
@@ -1802,9 +1795,6 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 	if sessionID == "" {
 		return nil
 	}
-	if s.productFeatures == nil {
-		return nil
-	}
 	// A flag lookup failure defaults to off rather than failing the hook: the
 	// capture is best effort, and the next turn re-ships anything skipped
 	// because the high-water mark only advances on a successful read.
@@ -1940,9 +1930,6 @@ func newPromptAttachmentParentResolver(ctx context.Context, queries *chatRepo.Qu
 }
 
 func (r *promptAttachmentParentResolver) resolve(promptSHA256 string) uuid.NullUUID {
-	if r == nil {
-		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	}
 	if promptSHA256 == "" {
 		return r.latest
 	}

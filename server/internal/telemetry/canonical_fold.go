@@ -53,7 +53,7 @@ func queryTouchesEmail(groupBy string, filters []repo.AttributeMetricsFilter) bo
 // distinct-id-only evaluation when the slug lookup fails, and failing closed
 // (literal behavior) on flag errors.
 func (s *Service) canonicalIdentityMode(ctx context.Context, orgID string) (fold, shadow bool) {
-	if s.featureFlags == nil || orgID == "" {
+	if orgID == "" {
 		return false, false
 	}
 

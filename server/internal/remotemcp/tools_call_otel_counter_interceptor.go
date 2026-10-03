@@ -44,9 +44,6 @@ func (i *ToolsCallOTELCounterInterceptor) Name() string {
 // returns nil — counter recording is best-effort and must not block tool
 // invocation or take ownership of method-parameter validation.
 func (i *ToolsCallOTELCounterInterceptor) InterceptUserRequest(ctx context.Context, req *proxy.UserRequest) error {
-	if i == nil || i.metrics == nil {
-		return nil
-	}
 	toolName, isToolsCall := proxy.ToolsCallName(req)
 	if !isToolsCall {
 		return nil

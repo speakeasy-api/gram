@@ -92,9 +92,6 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 		default:
 			panic(fmt.Sprintf("unsupported private xMCP route id %q", route.ID))
 		}
-		if handler == nil {
-			panic(fmt.Sprintf("private xMCP route %s %s has no handler", route.Method, route.Path))
-		}
 		o11y.AttachHandler(mux, route.Method, route.Path, handler.ServeHTTP)
 	}
 }

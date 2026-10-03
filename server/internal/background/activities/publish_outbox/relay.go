@@ -290,9 +290,7 @@ func (r *Relay) settle(ctx context.Context, q *repo.Queries, rows []repo.ClaimPu
 		}); err != nil {
 			return DrainResult{}, fmt.Errorf("delete published outbox rows: %w", err)
 		}
-		if r.publishedRows != nil {
-			r.publishedRows.Add(ctx, int64(len(published)))
-		}
+		r.publishedRows.Add(ctx, int64(len(published)))
 	}
 
 	if len(deadLetter) > 0 {
@@ -303,9 +301,7 @@ func (r *Relay) settle(ctx context.Context, q *repo.Queries, rows []repo.ClaimPu
 		}); err != nil {
 			return DrainResult{}, fmt.Errorf("dead letter publish outbox rows: %w", err)
 		}
-		if r.deadLetteredRows != nil {
-			r.deadLetteredRows.Add(ctx, int64(len(deadLetter)))
-		}
+		r.deadLetteredRows.Add(ctx, int64(len(deadLetter)))
 	}
 
 	if len(retry) > 0 {

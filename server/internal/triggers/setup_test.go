@@ -20,7 +20,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/triggers"
@@ -29,7 +31,7 @@ import (
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true, Temporal: true})
 	if err != nil {
 		log.Fatalf("launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -99,17 +101,19 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
+	temporalEnv, _ := infra.NewTemporalEnv(t)
+
 	app := bgtriggers.NewApp(
 		logger,
 		conn,
-		nil,
+		temporalEnv,
 		loader,
 		bgtriggers.NewTriggerDeliveryLogger(func(_ context.Context, _ bgtriggers.TriggerDeliveryLog) {}),
 		auditLogger,
 		serverURL,
 		nil,
 		nil,
-		nil,
+		slackclient.NewSlackClient(guardian.NewDefaultPolicy(tracerProvider)),
 		cache.NoopCache,
 	)
 

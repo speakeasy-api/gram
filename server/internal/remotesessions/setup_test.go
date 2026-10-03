@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -98,18 +99,18 @@ type testInstance struct {
 	envEntries     *environments.EnvironmentEntries
 	redisCache     *cache.RedisCacheAdapter
 	tunnelRoutes   *route.RouteTable
+	tunnels        *tunnelrouting.HTTPClient
 	features       *productfeatures.Client
 }
 
 type testServiceConfig struct {
-	tunnelRouting bool
-	maxDBConns    int32
-	lockTimeout   time.Duration
+	maxDBConns  int32
+	lockTimeout time.Duration
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestServiceWithConfig(t, testServiceConfig{tunnelRouting: false})
+	return newTestServiceWithConfig(t, testServiceConfig{maxDBConns: 0, lockTimeout: 0})
 }
 
 func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Context, *testInstance) {
@@ -151,12 +152,8 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 
 	serverURL, err := url.Parse(testServerURL)
 	require.NoError(t, err)
-	var tunnelRoutes *route.RouteTable
-	var tunnels *tunnelrouting.HTTPClient
-	if cfg.tunnelRouting {
-		tunnelRoutes = route.NewRouteTable()
-		tunnels = tunnelrouting.NewHTTPClient(tunnelRoutes, "test-forward-token", guardianPolicy, []string{"127.0.0.0/8"})
-	}
+	tunnelRoutes := route.NewRouteTable()
+	tunnels := tunnelrouting.NewHTTPClient(tunnelRoutes, "test-forward-token", guardianPolicy, []string{"127.0.0.0/8"})
 
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 
@@ -173,7 +170,7 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 		tunnels,
 		audit.NewLogger(),
 		serverURL,
-		remotesessions.NewIdentityCommitter(logger, conn, enc, audit.NewLogger(), serverURL, guardianPolicy, tunnels, nil),
+		remotesessions.NewIdentityCommitter(logger, conn, enc, audit.NewLogger(), serverURL, guardianPolicy, tunnels, registration.NewMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t))),
 		remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), conn, enc, guardianPolicy, tunnels, redisCache),
 		features,
 	)
@@ -185,6 +182,7 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 		envEntries:     envEntries,
 		redisCache:     redisCache,
 		tunnelRoutes:   tunnelRoutes,
+		tunnels:        tunnels,
 		features:       features,
 	}
 }

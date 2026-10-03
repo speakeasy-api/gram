@@ -162,7 +162,6 @@ type MCPToolExposureMutationOutput struct {
 	//   not_required   — this version needs no index (it exposes no tools, or
 	//                    nothing serves it from the index), and dynamic mode
 	//                    serves it without one
-	//   unavailable    — nothing could schedule a rebuild on this deployment
 	//   request_failed — scheduling was attempted and failed
 	IndexSignal string                  `json:"index_signal"`
 	Receipt     RiskMutationToolReceipt `json:"receipt"`
@@ -213,41 +212,16 @@ type MCPToolExposureService struct {
 // tools, and an agent that just added a tool needs to be able to say so.
 type ToolExposureIndexer func(ctx context.Context, projectID, toolsetID uuid.UUID) error
 
-func NewMCPToolExposureService(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, engine *authz.Engine, admin Authorizer, cursorKeyMaterial string, publication plugins.PublicationRequests, publisher plugins.PluginPublishSignaler, reads, changes OperationBudget) (*MCPToolExposureService, error) {
-	if logger == nil || db == nil || auditLogger == nil || engine == nil || admin == nil || !reads.valid() || !changes.valid() {
-		return nil, ErrMCPToolExposureInvalid
-	}
-	cursors, err := newToolInventoryCursorCodec(cursorKeyMaterial)
-	if err != nil {
-		return nil, err
-	}
+func NewMCPToolExposureService(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, engine *authz.Engine, admin Authorizer, cursorKeyMaterial string, publication plugins.PublicationRequests, publisher plugins.PluginPublishSignaler, reads, changes OperationBudget, index ToolExposureIndexer) *MCPToolExposureService {
 	return &MCPToolExposureService{
 		db: db, queries: platformrepo.New(db), logger: logger, audit: auditLogger, engine: engine, admin: admin,
-		cursors: cursors, publication: publication, publisher: publisher, reads: reads, changes: changes, now: time.Now,
-	}, nil
-}
-
-// WithIndexing supplies the post-commit search-index trigger. A deployment
-// without it still serves every tool; its changes just wait for the sweep
-// before a dynamic-mode server can list tools again, so composition logs the
-// absence rather than the tools refusing.
-func (s *MCPToolExposureService) WithIndexing(index ToolExposureIndexer) *MCPToolExposureService {
-	if s != nil {
-		s.index = index
+		cursors: newToolInventoryCursorCodec(cursorKeyMaterial), publication: publication, publisher: publisher, reads: reads, changes: changes, index: index, now: time.Now,
 	}
-	return s
-}
-
-func (s *MCPToolExposureService) valid() bool {
-	return s != nil && s.db != nil && s.queries != nil && s.audit != nil && s.engine != nil && s.admin != nil && s.cursors != nil && s.reads.valid() && s.changes.valid() && s.now != nil
 }
 
 // ListProjectTools reports the tools a project's latest completed deployment
 // generated. The caller must already hold project read.
 func (s *MCPToolExposureService) ListProjectTools(ctx context.Context, principal Principal, project ResolvedProject, input ListProjectToolsInput) (ListProjectToolsOutput, error) {
-	if !s.valid() {
-		return ListProjectToolsOutput{}, ErrUnavailable
-	}
 	sourceKind := strings.ToLower(strings.TrimSpace(input.SourceKind))
 	if sourceKind != "" && sourceKind != "function" && sourceKind != "openapi" {
 		return ListProjectToolsOutput{}, toolExposureInvalid("source_kind must be function or openapi.")
@@ -309,9 +283,6 @@ func (s *MCPToolExposureService) ListProjectTools(ctx context.Context, principal
 // ErrMCPToolExposureMissing when the server has no Gram toolset behind it:
 // a remote, tunneled, or unproxied server's tools come from its upstream.
 func (s *MCPToolExposureService) Exposure(ctx context.Context, principal Principal, projectID, mcpID uuid.UUID) (MCPToolExposure, error) {
-	if !s.valid() {
-		return MCPToolExposure{}, ErrUnavailable
-	}
 	row, err := s.exposureRow(ctx, s.queries, principal, projectID, mcpID)
 	if err != nil {
 		return MCPToolExposure{}, err
@@ -382,10 +353,7 @@ type toolExposureMutationRequest struct {
 }
 
 func (s *MCPToolExposureService) change(ctx context.Context, principal Principal, operation string, input ChangeMCPToolsInput) (MCPToolExposureMutationOutput, error) {
-	if !s.valid() {
-		return MCPToolExposureMutationOutput{}, toolExposureUnavailable(errors.New("tool exposure service is not composed"))
-	}
-	projectID, mcpID, requested, err := s.validate(input)
+	projectID, mcpID, requested, err := validateChangeMCPToolsInput(input)
 	if err != nil {
 		return MCPToolExposureMutationOutput{}, err
 	}
@@ -625,9 +593,6 @@ func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal
 // rebuild that never started leaves a dynamic-mode server unable to list its
 // tools until the sweep, and the caller is the only one who can tell the user.
 func (s *MCPToolExposureService) scheduleIndex(ctx context.Context, projectID uuid.UUID, toolsetID string) string {
-	if s.index == nil {
-		return "unavailable"
-	}
 	parsed, err := uuid.Parse(toolsetID)
 	if err != nil {
 		return "request_failed"
@@ -637,14 +602,12 @@ func (s *MCPToolExposureService) scheduleIndex(ctx context.Context, projectID uu
 		return "requested"
 	case errors.Is(err, toolsets.ErrToolsetIndexNotRequired):
 		return "not_required"
-	case errors.Is(err, toolsets.ErrToolsetIndexUnavailable):
-		return "unavailable"
 	default:
 		return "request_failed"
 	}
 }
 
-func (s *MCPToolExposureService) validate(input ChangeMCPToolsInput) (uuid.UUID, uuid.UUID, []urn.Tool, error) {
+func validateChangeMCPToolsInput(input ChangeMCPToolsInput) (uuid.UUID, uuid.UUID, []urn.Tool, error) {
 	if !input.Confirmed {
 		return uuid.Nil, uuid.Nil, nil, toolExposureInvalid("Confirm the exact project, MCP server, and tool list with the user before changing which tools the server exposes.")
 	}
@@ -1040,16 +1003,13 @@ type toolInventoryCursorCodec struct {
 	key []byte
 }
 
-func newToolInventoryCursorCodec(keyMaterial string) (*toolInventoryCursorCodec, error) {
-	if keyMaterial == "" {
-		return nil, ErrToolInventoryCursor
-	}
+func newToolInventoryCursorCodec(keyMaterial string) *toolInventoryCursorCodec {
 	key := sha256.Sum256([]byte("platform-mcp-tool-inventory-cursor:" + keyMaterial))
-	return &toolInventoryCursorCodec{key: key[:]}, nil
+	return &toolInventoryCursorCodec{key: key[:]}
 }
 
 func (c *toolInventoryCursorCodec) Encode(cursor toolInventoryCursor) (string, error) {
-	if c == nil || len(c.key) == 0 || cursor.OrganizationID == "" || cursor.Binding == "" || cursor.ProjectID == "" || cursor.AfterToolURN == "" {
+	if cursor.OrganizationID == "" || cursor.Binding == "" || cursor.ProjectID == "" || cursor.AfterToolURN == "" {
 		return "", ErrToolInventoryCursor
 	}
 	payload, err := json.Marshal(cursor)
@@ -1066,7 +1026,7 @@ func (c *toolInventoryCursorCodec) Encode(cursor toolInventoryCursor) (string, e
 
 func (c *toolInventoryCursorCodec) Decode(value string, principal Principal, projectID uuid.UUID, query, sourceKind string) (string, error) {
 	binding := principalCursorBinding(principal)
-	if c == nil || len(c.key) == 0 || value == "" || principal.OrganizationID == "" || binding == "" || projectID == uuid.Nil {
+	if value == "" || principal.OrganizationID == "" || binding == "" || projectID == uuid.Nil {
 		return "", ErrToolInventoryCursor
 	}
 	token, err := base64.RawURLEncoding.DecodeString(value)

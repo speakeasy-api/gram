@@ -118,11 +118,7 @@ type Service struct {
 }
 
 func New(db *pgxpool.Pool, enc *encryption.Client, dependencies Dependencies) *Service {
-	now := dependencies.Now
-	if now == nil {
-		now = time.Now
-	}
-	return &Service{store: &delegationRepository{db: db}, enc: enc, now: now, loadBinding: dependencies.LoadBinding, loadProvider: dependencies.LoadProvider, refreshIdentity: dependencies.RefreshIdentity}
+	return &Service{store: &delegationRepository{db: db}, enc: enc, now: dependencies.Now, loadBinding: dependencies.LoadBinding, loadProvider: dependencies.LoadProvider, refreshIdentity: dependencies.RefreshIdentity}
 }
 func delegationBinding(p Provider, humanID string) Binding { return p.Binding(humanID) }
 func validDelegationBinding(b Binding) bool {

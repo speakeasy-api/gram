@@ -57,7 +57,7 @@ func NewPostgresOrganizationSlugResolver(db *pgxpool.Pool) *PostgresOrganization
 }
 
 func (r *PostgresOrganizationSlugResolver) OrganizationSlug(ctx context.Context, organizationID string) (string, error) {
-	if r == nil || r.db == nil || organizationID == "" {
+	if organizationID == "" {
 		return "", ErrRiskMutationUnavailable
 	}
 	organization, err := organizationsrepo.New(r.db).GetOrganizationMetadata(ctx, organizationID)
@@ -79,31 +79,21 @@ type RiskMutationControls struct {
 	versions      *riskVersionCodec
 }
 
-func NewRiskMutationControls(db *pgxpool.Pool, flags feature.Provider, organizations OrganizationSlugResolver, budget OperationBudget, keyMaterial string) (*RiskMutationControls, error) {
-	if db == nil || organizations == nil || keyMaterial == "" {
-		return nil, ErrRiskMutationUnavailable
-	}
-	versions, err := newRiskVersionCodec(keyMaterial)
-	if err != nil {
-		return nil, err
-	}
+func NewRiskMutationControls(db *pgxpool.Pool, flags feature.Provider, organizations OrganizationSlugResolver, budget OperationBudget, keyMaterial string) *RiskMutationControls {
 	return &RiskMutationControls{
 		flags:         flags,
 		organizations: organizations,
 		projects:      postgresRiskProjectResolver{queries: platformrepo.New(db)},
 		budget:        budget,
 		receipts:      NewRiskMutationReceiptStore(db),
-		versions:      versions,
-	}, nil
+		versions:      newRiskVersionCodec(keyMaterial),
+	}
 }
 
 // Admit resolves an explicit project and checks its exact rollout cohort at
 // invocation time. Missing providers, errors, and indeterminate evaluations all
 // fail closed. The mutation budget is consumed only after the kill switch is on.
 func (c *RiskMutationControls) Admit(ctx context.Context, principal Principal, projectSlug string) (ResolvedProject, error) {
-	if c == nil || c.flags == nil || c.organizations == nil || c.projects == nil || !c.budget.valid() || c.receipts == nil || c.versions == nil {
-		return ResolvedProject{}, riskMutationUnavailable()
-	}
 	if principal.OrganizationID == "" || principal.UserID == "" || projectSlug == "" {
 		return ResolvedProject{}, &RiskMutationError{Code: "invalid_request", Message: "An exact project and attributable user are required for risk mutations.", Cause: ErrRiskMutationInvalid}
 	}
@@ -155,15 +145,9 @@ func riskMutationConflict(message string) error {
 }
 
 func (c *RiskMutationControls) Receipts() *RiskMutationReceiptStore {
-	if c == nil {
-		return nil
-	}
 	return c.receipts
 }
 
 func (c *RiskMutationControls) Versions() *riskVersionCodec {
-	if c == nil {
-		return nil
-	}
 	return c.versions
 }

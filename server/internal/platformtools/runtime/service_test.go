@@ -209,10 +209,30 @@ func (s *stubDirectExecutor) Call(_ context.Context, _ toolconfig.ToolCallEnv, p
 	return nil
 }
 
+func newTestService(t *testing.T) *Service {
+	t.Helper()
+
+	serverURL, err := url.Parse("https://gram.test.local")
+	require.NoError(t, err)
+
+	return NewService(
+		testenv.NewLogger(t),
+		nil,
+		nil,
+		audit.NewLogger(),
+		nil,
+		&http.Client{},
+		testenv.NewEncryptionClient(t),
+		serverURL,
+		func(context.Context, string, string) bool { return true },
+		nil,
+	)
+}
+
 func TestService_ExecuteTool_RequiresProjectAuthContext(t *testing.T) {
 	t.Parallel()
 
-	svc := NewService(testenv.NewLogger(t), nil, nil, audit.NewLogger())
+	svc := newTestService(t)
 	projectID := uuid.New()
 
 	_, err := svc.ExecuteTool(context.Background(), &gateway.ToolCallPlan{
@@ -236,7 +256,7 @@ func TestService_ExecuteTool_RequiresProjectAuthContext(t *testing.T) {
 func TestService_ExecuteTool_RejectsMismatchedProjectAuthContext(t *testing.T) {
 	t.Parallel()
 
-	svc := NewService(testenv.NewLogger(t), nil, nil, audit.NewLogger())
+	svc := newTestService(t)
 	descriptorProjectID := uuid.New()
 	authProjectID := uuid.New()
 	ctx := contextvalues.SetAuthContext(context.Background(), &contextvalues.AuthContext{
@@ -277,7 +297,7 @@ func overridePlan(projectID uuid.UUID, exec gateway.PlatformDirectExecutor) *gat
 func TestService_ExecuteTool_UsesPlanExecutorOverride(t *testing.T) {
 	t.Parallel()
 
-	svc := NewService(testenv.NewLogger(t), nil, nil, audit.NewLogger())
+	svc := newTestService(t)
 	projectID := uuid.New()
 	ctx := contextvalues.SetAuthContext(context.Background(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-1",
@@ -300,7 +320,7 @@ func TestService_ExecuteTool_UsesPlanExecutorOverride(t *testing.T) {
 func TestService_ExecuteTool_PlanExecutorOverrideSurfacesError(t *testing.T) {
 	t.Parallel()
 
-	svc := NewService(testenv.NewLogger(t), nil, nil, audit.NewLogger())
+	svc := newTestService(t)
 	projectID := uuid.New()
 	ctx := contextvalues.SetAuthContext(context.Background(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-1",
@@ -354,7 +374,7 @@ func TestService_ExecuteTool_KeepsSlackRefusalAttributedToCaller(t *testing.T) {
 	slackURL, err := url.Parse(slack.URL)
 	require.NoError(t, err)
 
-	svc := NewService(testenv.NewLogger(t), nil, nil, audit.NewLogger())
+	svc := newTestService(t)
 	projectID := uuid.New()
 	ctx := contextvalues.SetAuthContext(context.Background(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-1",

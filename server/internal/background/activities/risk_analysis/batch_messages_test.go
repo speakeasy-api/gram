@@ -1,26 +1,13 @@
 package risk_analysis
 
 import (
-	"context"
-	"errors"
-	"fmt"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
-	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
-	"github.com/speakeasy-api/gram/server/internal/metering"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/message"
-	"github.com/speakeasy-api/gram/server/internal/scanners"
-	"github.com/speakeasy-api/gram/server/internal/stokens"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestScanSurfaceIncludesToolRequestArgs(t *testing.T) {
@@ -134,116 +121,4 @@ func TestContentPartProvenanceUsesRealParentMessage(t *testing.T) {
 	unlinked := batchRiskProvenance(args, msg, inlineBatchExecutionPath, "request")
 	require.Equal(t, uuid.Nil, unlinked.ChatMessageID)
 	require.Equal(t, "content_part_unlinked", unlinked.MessageLinkReason)
-}
-
-func TestRecordBatchResultsContinuesAfterPublishFailure(t *testing.T) {
-	t.Parallel()
-
-	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
-	publisher.On("Publish", mock.Anything, mock.Anything).
-		Return(gcp.NewErrPublishResult(errors.New("meter transport unavailable"))).Once()
-	var published []*meteringv1.MeterReading
-	publisher.On("Publish", mock.Anything, mock.Anything).
-		Return(gcp.NewSuccessPublishResult()).Once().
-		Run(func(args mock.Arguments) {
-			reading, ok := args.Get(1).(*meteringv1.MeterReading)
-			require.True(t, ok)
-			published = append(published, reading)
-		})
-	analyzer := &AnalyzeBatch{
-		logger:                 testenv.NewLogger(t),
-		tracer:                 nil,
-		metrics:                nil,
-		db:                     nil,
-		assetStorage:           nil,
-		gitleaksScanner:        nil,
-		stokenCodec:            stokens.NewCodec(),
-		piiScanner:             nil,
-		promptInjectionScanner: nil,
-		shadowMCPScanner:       nil,
-		judge:                  nil,
-		flags:                  nil,
-		presidioPub:            nil,
-		gitleaksPub:            nil,
-		promptInjectionPub:     nil,
-		promptPolicyPub:        nil,
-		customRulesPub:         nil,
-		findingsPub:            nil,
-		riskRecorder:           metering.NewRiskRecorder(publisher),
-		customRuleScanner:      nil,
-		cliDestructiveScanner:  nil,
-		destructiveToolScanner: nil,
-		celEng:                 nil,
-		builtinPresets:         nil,
-		recommended:            RecommendedSet{},
-	}
-	chatID := uuid.MustParse("00000000-0000-0000-0000-000000000601")
-	messages := []batchMessage{msg(message.User), toolReq("Bash"), msg(message.User), msg(message.Assistant)}
-	for i := range messages {
-		messages[i].ID = uuid.MustParse(fmt.Sprintf("00000000-0000-0000-0000-%012d", i+1))
-		messages[i].ChatID = chatID
-	}
-	args := AnalyzeBatchArgs{
-		ProjectID:              uuid.MustParse("00000000-0000-0000-0000-000000000602"),
-		OrganizationID:         "org",
-		RiskPolicyID:           uuid.MustParse("00000000-0000-0000-0000-000000000603"),
-		PolicyVersion:          4,
-		MessageIDs:             nil,
-		ContentPartIDs:         nil,
-		Sources:                nil,
-		PresidioEntities:       nil,
-		PresidioScoreThreshold: 0,
-		CustomRuleIds:          nil,
-		ApprovedEmailDomains:   nil,
-		BuiltinPresetsEnabled:  false,
-		DetectionScopes:        nil,
-	}
-	results := []scanners.Result{
-		{Findings: []scanners.Finding{}, STokens: 17, Completed: false},
-		{Findings: []scanners.Finding{}, STokens: 5, Completed: true},
-		{Findings: []scanners.Finding{}, STokens: 7, Completed: true},
-		{Findings: []scanners.Finding{}, STokens: 0, Completed: true},
-	}
-
-	analyzer.recordBatchResults(t.Context(), metering.RiskGitleaks(), args, messages, results, time.Now())
-	require.Len(t, published, 1)
-	require.Equal(t, int64(7), published[0].GetValue())
-	require.Equal(t, messages[2].ID.String(), published[0].GetAttributes()[metering.AttributeChatMessageID])
-	publisher.AssertExpectations(t)
-
-	presidioPublisher := gcp.NewMockPublisher[*riskv1.PresidioAnalysis]()
-	var request *riskv1.PresidioAnalysis
-	presidioPublisher.On("Publish", mock.Anything, mock.Anything).
-		Return(gcp.NewSuccessPublishResult()).
-		Run(func(call mock.Arguments) {
-			var ok bool
-			request, ok = call.Get(1).(*riskv1.PresidioAnalysis)
-			require.True(t, ok)
-		})
-	analyzer.presidioPub = presidioPublisher
-	var suite testsuite.WorkflowTestSuite
-	env := suite.NewTestActivityEnvironment()
-	publish := func(ctx context.Context) error {
-		return analyzer.publishPresidioScanRequests(ctx, args, messages[1:2], DefaultPresidioScoreThreshold)
-	}
-	env.RegisterActivity(publish)
-	_, err := env.ExecuteActivity(publish)
-	require.NoError(t, err)
-	require.NotNil(t, request)
-	require.Equal(t, messages[1].scanSurface(), request.GetContent())
-	require.Equal(t, "scan_surface", request.GetFindingSurface())
-	require.Equal(t, batchScanRequestID(args, "standard").String(), request.GetRequestId())
-	require.Equal(t, messages[1].ChatID.String(), request.GetChatId())
-	require.Equal(t, messages[1].UserID, request.GetUserId())
-	require.Equal(t, shadowStreamExecutionPath, request.GetExecutionPath())
-	require.Equal(t, args.RiskPolicyID.String(), request.GetOriginRiskPolicyId())
-	require.Equal(t, args.PolicyVersion, request.GetOriginRiskPolicyVersion())
-
-	var envelope meteringv1.MeterReading
-	require.NoError(t, proto.Unmarshal(request.GetMeterReading(), &envelope))
-	expected, err := stokens.NewCodec().Count(t.Context(), request.GetContent())
-	require.NoError(t, err)
-	require.Equal(t, int64(expected), envelope.GetValue())
-	require.Equal(t, request.GetChatMessageId(), envelope.GetAttributes()[metering.AttributeChatMessageID])
-	require.Equal(t, inlineBatchExecutionPath, published[0].GetAttributes()[metering.AttributeScanExecutionPath])
 }

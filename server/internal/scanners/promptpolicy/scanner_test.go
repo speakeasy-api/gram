@@ -9,13 +9,14 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestScannerScanMatchedReturnsFinding(t *testing.T) {
 	t.Parallel()
 
 	var judged Input
-	scanner := NewScanner(nil, func(_ context.Context, in Input) (*Verdict, error) {
+	scanner := NewScanner(testenv.NewLogger(t), func(_ context.Context, in Input) (*Verdict, error) {
 		judged = in
 		return &Verdict{
 			Matched:          true,
@@ -45,7 +46,7 @@ func TestScannerScanMatchedReturnsFinding(t *testing.T) {
 func TestScannerScanUnmatchedReturnsNoFindings(t *testing.T) {
 	t.Parallel()
 
-	scanner := NewScanner(nil, func(_ context.Context, _ Input) (*Verdict, error) {
+	scanner := NewScanner(testenv.NewLogger(t), func(_ context.Context, _ Input) (*Verdict, error) {
 		return &Verdict{
 			Matched:          false,
 			Confidence:       0.1,
@@ -68,7 +69,7 @@ func TestScannerScanUnmatchedReturnsNoFindings(t *testing.T) {
 func TestScannerScanErrorFailOpenReturnsNoFindings(t *testing.T) {
 	t.Parallel()
 
-	scanner := NewScanner(nil, func(_ context.Context, _ Input) (*Verdict, error) {
+	scanner := NewScanner(testenv.NewLogger(t), func(_ context.Context, _ Input) (*Verdict, error) {
 		return nil, errors.New("judge failed")
 	})
 
@@ -79,7 +80,7 @@ func TestScannerScanErrorFailOpenReturnsNoFindings(t *testing.T) {
 func TestScannerScanErrorFailClosedReturnsFinding(t *testing.T) {
 	t.Parallel()
 
-	scanner := NewScanner(nil, func(_ context.Context, _ Input) (*Verdict, error) {
+	scanner := NewScanner(testenv.NewLogger(t), func(_ context.Context, _ Input) (*Verdict, error) {
 		return nil, errors.New("judge failed")
 	})
 
@@ -93,7 +94,7 @@ func TestScannerScanErrorFailClosedReturnsFinding(t *testing.T) {
 func TestScannerScanBlankPromptFailClosedReturnsFinding(t *testing.T) {
 	t.Parallel()
 
-	scanner := NewScanner(nil, nil)
+	scanner := NewScanner(testenv.NewLogger(t), NoopEvaluator)
 
 	result := scanner.Scan(t.Context(), "org", "proj", "", "   ", Config{Temperature: nil, FailOpen: false}, judgemessage.New(message.User, "", "delete prod"))
 	require.Len(t, result.Findings, 1)

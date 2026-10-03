@@ -9,12 +9,12 @@ import (
 )
 
 // NoopBreaker is a [Breaker] that admits everything and discards outcome
-// reports. The zero value is the default on a [Policy], so breaker policies
-// configured via [WithResilience] are inert until a real breaker is injected
-// with [WithBreaker]. A NoopBreaker built with [NewNoopBreaker] additionally
-// reports the gram.circuit_breaker.instances gauge, counting the breakers a
-// real implementation would hold, so partition cardinality can be observed
-// before enforcement is switched on.
+// reports. It is the default on a [Policy], so breaker policies configured
+// via [WithResilience] are inert until a real breaker is injected with
+// [WithBreaker]. It reports the gram.circuit_breaker.instances gauge,
+// counting the breakers a real implementation would hold, so partition
+// cardinality can be observed before enforcement is switched on. Construct it
+// with [NewNoopBreaker]; the zero value is not usable.
 type NoopBreaker struct {
 	partitions *partitionTracker
 }

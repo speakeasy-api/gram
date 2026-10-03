@@ -101,9 +101,6 @@ type ChatGPTConversationImportService struct {
 }
 
 func NewChatGPTConversationImportService(logger *slog.Logger, store *Store, db *pgxpool.Pool, guardianPolicy *guardian.Policy, writer *chat.ChatMessageWriter, heartbeat func(ctx context.Context, page int)) *ChatGPTConversationImportService {
-	if heartbeat == nil {
-		panic("chatgpt conversation import service requires heartbeat")
-	}
 	return &ChatGPTConversationImportService{
 		logger:         logger.With(attr.SlogComponent("aiintegrations.chatgpt_compliance")),
 		store:          store,

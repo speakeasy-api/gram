@@ -60,7 +60,7 @@ func (s *Service) federatedProvider(ctx context.Context, endpoint *ResolvedMcpEn
 	if !row.TrustedRemoteSessionClientID.Valid {
 		return nil, uuid.Nil, uuid.Nil, "", nil
 	}
-	if row.ProjectID.Valid || !row.OrganizationID.Valid || row.OrganizationID.String != endpoint.OrganizationID || !row.TrustedRemoteSessionIssuerID.Valid || s.remoteChallengeMgr == nil {
+	if row.ProjectID.Valid || !row.OrganizationID.Valid || row.OrganizationID.String != endpoint.OrganizationID || !row.TrustedRemoteSessionIssuerID.Valid {
 		return nil, uuid.Nil, uuid.Nil, "", errors.New("invalid federated issuer configuration")
 	}
 	// Reject an unusable callback before discovery or any provider traffic. This
@@ -179,13 +179,7 @@ func federatedBrowserCookie(id, value string, maxAge int) *http.Cookie {
 func (s *Service) startFederatedLogin(w http.ResponseWriter, r *http.Request, state *AuthnChallengeState, provider *remotesessions.FederatedProvider) error {
 	state.ID = uuid.NewString()
 	state.Federation.StartPhase = "login"
-	var target *url.URL
-	var err error
-	if s.federatedLoginConsumer != nil {
-		target, err = provider.BuildAuthorizationURLWithOffline(state.Federation.CallbackURL, state.ID, state.Federation.Nonce, state.Federation.Verifier, state.Federation.OfflineRequested)
-	} else {
-		target, err = provider.BuildAuthorizationURL(state.Federation.CallbackURL, state.ID, state.Federation.Nonce, state.Federation.Verifier)
-	}
+	target, err := provider.BuildAuthorizationURLWithOffline(state.Federation.CallbackURL, state.ID, state.Federation.Nonce, state.Federation.Verifier, state.Federation.OfflineRequested)
 	if err != nil {
 		return fmt.Errorf("build federated authorization URL: %w", err)
 	}
@@ -226,11 +220,7 @@ func (s *Service) resolveFederatedHuman(ctx context.Context, endpoint *ResolvedM
 	if strings.TrimSpace(identity.Email) == "" || (identity.EmailVerified != nil && !*identity.EmailVerified) {
 		return "", oops.E(oops.CodeForbidden, nil, "Your account is not provisioned for this organization. Contact your administrator")
 	}
-	store, err := idjag.NewPostgresStore(s.db)
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, nil, "Identity verification is temporarily unavailable")
-	}
-	userID, err := store.ResolveUser(ctx, endpoint.OrganizationID, strings.TrimSpace(identity.Email))
+	userID, err := idjag.NewPostgresStore(s.db).ResolveUser(ctx, endpoint.OrganizationID, strings.TrimSpace(identity.Email))
 	if err != nil && !errors.Is(err, idjag.ErrNotProvisioned) {
 		return "", oops.E(oops.CodeUnavailable, nil, "Identity verification is temporarily unavailable. Restart login")
 	}
@@ -280,12 +270,6 @@ type AuthorizedFederatedLogin struct {
 	// OptionalRefused is only an explicit access_denied on a bound optional step.
 	// Identity is nil in that case; update suppression without replacing tokens.
 	OptionalRefused bool
-}
-
-// SetFederatedLoginConsumer installs the optional credential handoff at startup,
-// before serving requests. A failed consumer fails login without minting a session.
-func (s *Service) SetFederatedLoginConsumer(consumer FederatedLoginConsumer) {
-	s.federatedLoginConsumer = consumer
 }
 
 // Only the upstream AICP callback requires HTTPS. Downstream MCP clients retain
@@ -357,7 +341,7 @@ func (s *Service) finishFederatedFailure(w http.ResponseWriter, r *http.Request,
 }
 
 // NewFederatedDelegationConsumer installs the AIM-69 persistence and policy
-// adapter. No changes are made to deployments that leave the consumer unset.
+// adapter.
 func NewFederatedDelegationConsumer(service *remotesessions.DelegationService) FederatedLoginConsumer {
 	return &federatedDelegationConsumer{service: service}
 }
@@ -367,7 +351,7 @@ type federatedDelegationConsumer struct {
 }
 
 func (c *federatedDelegationConsumer) ShouldRequestFederatedOffline(ctx context.Context, request FederatedOfflineRequest) (bool, error) {
-	if c.service == nil || request.Provider == nil || request.UserID == "" || request.ConfigurationHash == "" || request.ConfigurationHash != request.Provider.OfflineConfigurationHash() {
+	if request.Provider == nil || request.UserID == "" || request.ConfigurationHash == "" || request.ConfigurationHash != request.Provider.OfflineConfigurationHash() {
 		return false, remotesessions.ErrFederatedConfiguration
 	}
 	status, err := c.service.OfflineStatus(ctx, request.Provider, request.UserID)
@@ -378,7 +362,7 @@ func (c *federatedDelegationConsumer) ShouldRequestFederatedOffline(ctx context.
 }
 
 func (c *federatedDelegationConsumer) ConsumeFederatedLogin(ctx context.Context, login AuthorizedFederatedLogin) error {
-	if c.service == nil || login.Provider == nil || login.UserID == "" || login.ConfigurationHash == "" || login.ConfigurationHash != login.Provider.OfflineConfigurationHash() {
+	if login.Provider == nil || login.UserID == "" || login.ConfigurationHash == "" || login.ConfigurationHash != login.Provider.OfflineConfigurationHash() {
 		return remotesessions.ErrFederatedConfiguration
 	}
 	if login.OptionalRefused {

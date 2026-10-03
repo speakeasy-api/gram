@@ -47,13 +47,9 @@ func newStripeWebhookMetrics(meterProvider metric.MeterProvider, logger *slog.Lo
 }
 
 func (m *stripeWebhookMetrics) RecordSubscriptionLost(ctx context.Context) {
-	if m.subscriptionLost != nil {
-		m.subscriptionLost.Add(ctx, 1)
-	}
+	m.subscriptionLost.Add(ctx, 1)
 }
 
 func (m *stripeWebhookMetrics) RecordInvoicePaymentFailed(ctx context.Context) {
-	if m.invoicePaymentFailed != nil {
-		m.invoicePaymentFailed.Add(ctx, 1)
-	}
+	m.invoicePaymentFailed.Add(ctx, 1)
 }

@@ -33,7 +33,7 @@ func (s *Scanner) Scan(ctx context.Context, orgID, projectID, userID, prompt str
 // ScanWithVerdict preserves model/provider attribution for the executor that
 // emits usage while keeping fail-mode findings independent from completion.
 func (s *Scanner) ScanWithVerdict(ctx context.Context, orgID, projectID, userID, prompt string, cfg Config, msg judgemessage.Message) (scanners.Result, *Verdict) {
-	if s == nil || s.evaluate == nil || strings.TrimSpace(prompt) == "" {
+	if strings.TrimSpace(prompt) == "" {
 		return scanners.Result{Findings: FindingsFromEvaluation(cfg, nil, nil, true), STokens: 0, Completed: false}, nil
 	}
 
@@ -45,7 +45,7 @@ func (s *Scanner) ScanWithVerdict(ctx context.Context, orgID, projectID, userID,
 		Message:   msg,
 		Config:    cfg,
 	})
-	if err != nil && cfg.FailOpen && s.logger != nil && !errors.Is(err, context.Canceled) {
+	if err != nil && cfg.FailOpen && !errors.Is(err, context.Canceled) {
 		s.logger.WarnContext(ctx, "prompt policy judge failed; returning no findings",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(orgID),

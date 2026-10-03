@@ -34,9 +34,6 @@ type lifecycleTelemetry struct {
 }
 
 func NewLifecycleTelemetry(logger *slog.Logger, meterProvider metric.MeterProvider) LifecycleTelemetry {
-	if logger == nil || meterProvider == nil {
-		return noopLifecycleTelemetry{}
-	}
 	counter, err := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/platformmcp").Int64Counter(
 		platformMCPEventMetric,
 		metric.WithDescription("Bounded Platform MCP lifecycle events"),
@@ -60,9 +57,7 @@ func (t *lifecycleTelemetry) Record(ctx context.Context, event LifecycleEvent) {
 	if event.State != "" {
 		attributes = append(attributes, attribute.String("platform_mcp.readiness_state", string(event.State)))
 	}
-	if t.counter != nil {
-		t.counter.Add(ctx, 1, metric.WithAttributes(attributes...))
-	}
+	t.counter.Add(ctx, 1, metric.WithAttributes(attributes...))
 	t.logger.LogAttrs(ctx, slog.LevelInfo, "platform mcp lifecycle event",
 		attr.SlogEvent("platform_mcp.lifecycle"),
 		attr.SlogName(event.Operation),

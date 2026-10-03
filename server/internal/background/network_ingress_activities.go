@@ -144,7 +144,7 @@ func (w *Workers) RegisterNetworkIngress(executor *networkingress.Executor, queu
 	if queue == "" || queue != string(w.env.Queue()) {
 		return
 	}
-	registerNetworkIngress(w.main, executor, w.opts.DB, queue)
+	registerNetworkIngress(w.main, executor, w.db, queue)
 	w.networkIngressQueue = queue
 }
 
@@ -159,16 +159,10 @@ func NewNetworkIngressWorker(
 	env *tenv.Environment,
 	db *pgxpool.Pool,
 	executor *networkingress.Executor,
-) (*NetworkIngressWorker, error) {
-	if env == nil || env.Client() == nil || env.Queue() == "" {
-		return nil, fmt.Errorf("network ingress Temporal environment and queue are required")
-	}
-	if db == nil || executor == nil {
-		return nil, fmt.Errorf("network ingress database and executor are required")
-	}
+) *NetworkIngressWorker {
 	w := worker.New(env.Client(), string(env.Queue()), worker.Options{Interceptors: newWorkerInterceptors()})
 	registerNetworkIngress(w, executor, db, string(env.Queue()))
-	return &NetworkIngressWorker{worker: w, env: env}, nil
+	return &NetworkIngressWorker{worker: w, env: env}
 }
 
 func (w *NetworkIngressWorker) Start() error {

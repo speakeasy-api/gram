@@ -179,14 +179,14 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	var wf identity.WorkOSClient
-	if fetcher != nil {
-		wf = fetcher
+	if fetcher == nil {
+		fetcher = newMockWorkOSFetcherFromUserInfo(userInfo)
 	}
 
 	authzProvisioner := authz.NewProvisioner(conn)
 	cacheSuffix := testenv.NewCacheSuffix(t, cache.Suffix("auth"))
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, wf, orgRepo.New(conn), usersRepo.New(conn), pylonClient, posthogClient, nil, cacheSuffix)
+	growthEmitter := testenv.NewGrowthEmitter(t, logger, conn)
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, fetcher, orgRepo.New(conn), usersRepo.New(conn), pylonClient, posthogClient, growthEmitter, cacheSuffix)
 	sessionManager := sessions.NewManager(
 		logger, tracerProvider, conn, redisClient, cacheSuffix,
 		idpClient, billingClient, resolver,
@@ -202,7 +202,7 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential})
 	trialNotifier := &fakeTrialNotifier{}
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, nil, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, growthEmitter, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
 
 	ti := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	ti.trialNotifier = trialNotifier
@@ -379,7 +379,6 @@ func TestE2E_Callback_NewUserWithWorkOSOrgMemberships(t *testing.T) {
 	assert.Equal(t, orgName, orgMeta.Name)
 	assert.Equal(t, workosOrgID, orgMeta.WorkosID.String)
 	assert.False(t, orgMeta.Whitelisted, "new org created via login must not be auto-whitelisted")
-
 }
 
 func TestE2E_Callback_NonLatinWorkOSOrganizationUsesDeterministicSlug(t *testing.T) {

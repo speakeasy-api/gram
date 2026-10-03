@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -31,13 +32,10 @@ func TestRiskFindingFalsePositiveHandlersPartitionReplayAndAudit(t *testing.T) {
 
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPRiskMutations, principal.OrganizationID, true)
-	controls, err := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "risk-finding-test-key")
-	require.NoError(t, err)
-	handlers, err := NewRiskMutationHandlers(conn, controls, risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil), nil, risk.NewFalsePositiveCore(audit.NewLogger()))
-	require.NoError(t, err)
+	controls := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "risk-finding-test-key")
+	handlers := NewRiskMutationHandlers(conn, controls, newTestRiskPolicyCore(t, conn, flags), risk.NewExclusionMutationCore(testenv.NewLogger(t), conn, audit.NewLogger(), &recordingRiskExclusionReconciler{}, "risk-exclusion-test-key"), risk.NewFalsePositiveCore(audit.NewLogger()), testRiskPolicyCatalog(t))
 	require.NotNil(t, handlers.MarkFindingsFalsePositive)
 	require.NotNil(t, handlers.UnmarkFindingsFalsePositive)
-	require.Nil(t, handlers.CreateExclusion, "a nil exclusion core leaves exclusion writes stubbed")
 
 	first, second, third := seedRiskFinding(t, ctx, conn, principal.OrganizationID, project.ID), seedRiskFinding(t, ctx, conn, principal.OrganizationID, project.ID), seedRiskFinding(t, ctx, conn, principal.OrganizationID, project.ID)
 	unknown := uuid.New()

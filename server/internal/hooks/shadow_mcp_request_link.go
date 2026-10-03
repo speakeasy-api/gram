@@ -70,7 +70,7 @@ func (s *Service) renderShadowMCPUserBlockReason(ctx context.Context, params sha
 }
 
 func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadowMCPRequestLinkParams) (shadowMCPRequestLink, bool) {
-	if s.siteURL == nil || s.cache == nil || strings.TrimSpace(s.jwtSecret) == "" {
+	if strings.TrimSpace(s.jwtSecret) == "" {
 		return shadowMCPRequestLink{URL: "", Token: "", ExpiresAt: time.Time{}, ServerName: "", ServerURL: ""}, false
 	}
 

@@ -5,31 +5,46 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/workos/workos-go/v6/pkg/usermanagement"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-// newURLResolver builds a Resolver wired only far enough to construct
-// authorization URLs. BuildAuthorizationURL reads idpClientID and idpBaseURL
-// and nothing else — no client, no cache, no database — so the rest is nil.
 func newURLResolver(t *testing.T, idpBaseURL, idpClientID string) *identity.Resolver {
 	t.Helper()
 
+	logger := testenv.NewLogger(t)
+
+	conn, err := infra.CloneTestDatabase(t, "identitytest")
+	require.NoError(t, err)
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+
+	pylonClient, err := pylon.NewPylon(logger, "")
+	require.NoError(t, err)
+
 	return identity.NewResolver(
-		testenv.NewLogger(t),
+		logger,
 		testenv.NewTracerProvider(t),
-		nil, // redisClient
+		cache.NewRedisCacheAdapter(redisClient),
 		idpBaseURL,
 		idpClientID,
-		nil, // idpClient
-		nil, // workosClient
-		nil, // orgRepo
-		nil, // userRepo
-		nil, // pylon
-		nil, // posthog
-		nil, // growth signals
-		"",  // cache suffix
+		identity.NewWorkOSAdapter(usermanagement.NewClient("test-api-key")),
+		workos.NewStubClient(),
+		orgRepo.New(conn),
+		userRepo.New(conn),
+		pylonClient,
+		posthog.New(t.Context(), logger, "", "", ""),
+		testenv.NewGrowthEmitter(t, logger, conn),
+		testenv.NewCacheSuffix(t, cache.Suffix("identity")),
 	)
 }
 

@@ -31,9 +31,6 @@ func (r *ReconcileEnterpriseTrialConversionKeys) Do(ctx context.Context, args Re
 	if args.OrganizationID == "" {
 		return temporal.NewNonRetryableApplicationError("organization ID is required", enterpriseTrialConversionPermanentErrorType, nil)
 	}
-	if r.reconciler == nil {
-		return temporal.NewNonRetryableApplicationError("OpenRouter conversion policy reconciler is unavailable", enterpriseTrialConversionPermanentErrorType, nil)
-	}
 	for _, keyType := range openrouter.AllKeyTypes {
 		if err := r.reconciler.ReconcileAPIKeyConversionPolicy(ctx, args.OrganizationID, keyType); err != nil {
 			wrapped := fmt.Errorf("reconcile %s key conversion policy: %w", keyType, err)

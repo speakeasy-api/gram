@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
 )
 
 const (
@@ -122,27 +123,9 @@ type Runtime struct {
 	server               *mcp.Server
 }
 
-func NewRuntime(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource) *Runtime {
-	return NewRuntimeWithFeedback(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, nil)
-}
-
-func NewRuntimeWithFeedback(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService) *Runtime {
-	return NewRuntimeWithLifecycle(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
-}
-
-// NewRuntimeWithLifecycle wires the Platform MCP onboarding lifecycle. Catalogue
-// selection remains server-validated: callers receive only search/inspect
-// identities and declared configuration fields, never an arbitrary endpoint or
-// provider credential.
-func NewRuntimeWithLifecycle(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) *Runtime {
-	return NewRuntimeWithRiskMutations(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, onboarding, distributions, skills, diagnostics, nil, plugins, sessionRecall, nil, candidate, nil, nil)
-}
-
-func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessReads *AccessReadService, accessRoleMutations *AccessRoleMutationService, connectionMutations ...*MCPConnectionMutationService) *Runtime {
-	if postgresReader, ok := reader.(*PostgresReader); ok {
-		postgresReader.setInventoryCursorKey(cursorKeyMaterial)
-	}
-	server, registrar := newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, workflowRun, plugins, sessionRecall, riskMutations, candidate, accessReads, accessRoleMutations, connectionMutations...)
+func NewRuntime(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, riskPolicyCatalog policycatalog.Catalog, readiness ReadinessRecorder, services Services) *Runtime {
+	services.Reader.configureKeyMaterial(cursorKeyMaterial, riskPolicyCatalog)
+	server, registrar := newServer(services, cursorKeyMaterial)
 	registrar.withExternalAuthorizer(authorizer)
 	runtime := &Runtime{
 		authenticator:        authenticator,
@@ -157,11 +140,7 @@ func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticato
 	// Register both wrappers together so their order is reviewable: readiness is
 	// outside catalogue aggregation and therefore observes one completed external
 	// tools/list call, never the SDK pages the catalogue middleware reads inside.
-	middlewares := []mcp.Middleware{capabilityCatalogueMiddleware(registrar)}
-	if readiness != nil {
-		middlewares = append([]mcp.Middleware{readinessMiddleware(runtime, logger)}, middlewares...)
-	}
-	runtime.server.AddReceivingMiddleware(middlewares...)
+	runtime.server.AddReceivingMiddleware(readinessMiddleware(runtime, logger), capabilityCatalogueMiddleware(registrar))
 	return runtime
 }
 
@@ -255,16 +234,12 @@ func (r *Runtime) WithOAuthTelemetry(telemetry OAuthTelemetry) *Runtime {
 }
 
 func (r *Runtime) WithRiskTelemetry(telemetry RiskTelemetry) *Runtime {
-	if r != nil && r.registrar != nil {
-		r.registrar.withRiskTelemetry(telemetry)
-	}
+	r.registrar.withRiskTelemetry(telemetry)
 	return r
 }
 
 func (r *Runtime) recordAuthOutcome(ctx context.Context, outcome, reason string) {
-	if r.telemetry != nil {
-		r.telemetry.Record(ctx, OAuthEvent{Operation: "runtime_auth", Outcome: outcome, Reason: reason})
-	}
+	r.telemetry.Record(ctx, OAuthEvent{Operation: "runtime_auth", Outcome: outcome, Reason: reason})
 }
 
 func (r *Runtime) Handler() http.Handler {
@@ -336,10 +311,6 @@ func (r *Runtime) Handler() http.Handler {
 }
 
 func (r *Runtime) authenticate(req *http.Request) (Principal, error) {
-	if r.authenticator == nil || r.gate == nil || r.authorizer == nil {
-		return Principal{}, ErrUnavailable
-	}
-
 	kind, token, ok := strings.Cut(req.Header.Get("Authorization"), " ")
 	token = strings.TrimSpace(token)
 	if !ok || !strings.EqualFold(kind, TokenType) || token == "" {
@@ -402,8 +373,5 @@ func PrincipalFromContext(ctx context.Context) (Principal, bool) {
 // assistant. The assistant adapter composes these directly; nothing else in
 // the catalogue reaches it.
 func (r *Runtime) AssistantTools() []Descriptor {
-	if r == nil {
-		return nil
-	}
 	return r.registrar.For(AudienceAssistant)
 }

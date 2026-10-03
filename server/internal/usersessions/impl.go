@@ -105,9 +105,7 @@ var (
 // userSessions and userSessionClients revoke handlers to push revoked jtis
 // into the revocation cache; it is held as a TokenRevoker so tests can
 // substitute a failing revoker.
-// signer + serverURL drive mintUserSession; pass an empty serverURL to
-// disable that handler (it will 503 on call — used in tests that don't
-// need the surface).
+// signer + serverURL drive mintUserSession.
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, enc *encryption.Client, signer *Signer, serverURL string, verifyStore ratelimit.Store, assertionSigners ...remotesessions.TokenEndpointAssertionSigner) *Service {
 	logger = logger.With(attr.SlogComponent("usersessions"))
 

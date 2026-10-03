@@ -62,7 +62,7 @@ import (
 
 type Service struct {
 	registry             *mcpregistry.Service
-	remoteSessions       *remotesessions.Service
+	remoteSessions       *remotesessions.GlobalIssuers
 	assets               *assets.Service
 	tracer               trace.Tracer
 	logger               *slog.Logger
@@ -76,7 +76,7 @@ type Service struct {
 	supportHandoffIssuer supportHandoffIssuer
 
 	// mcpServerURL is the public Gram server origin that platform-domain MCP
-	// URLs are built on. Nil leaves those URLs out.
+	// URLs are built on.
 	mcpServerURL *url.URL
 
 	// workosEnvironmentID scopes WorkOS dashboard links. Empty leaves them out.
@@ -144,14 +144,6 @@ type AdminOpenRouter interface {
 // ErrOpenRouterUnavailable reports a deployment that cannot reach OpenRouter.
 var ErrOpenRouterUnavailable = errors.New("no usable OpenRouter configuration")
 
-var ErrChatAnalysisTriggerUnavailable = errors.New("chat analysis triggering is not configured")
-
-type ChatAnalysisTriggerUnavailable struct{}
-
-func (ChatAnalysisTriggerUnavailable) Signal(context.Context, uuid.UUID) error {
-	return ErrChatAnalysisTriggerUnavailable
-}
-
 // TrialKeysUnavailable lets the admin server boot without OpenRouter.
 type TrialKeysUnavailable struct{}
 
@@ -187,8 +179,10 @@ func (TrialKeysUnavailable) GetCreditsUsed(context.Context, string, openrouter.K
 	return 0, 0, ErrOpenRouterUnavailable
 }
 
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
+var (
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
+)
 
 func NewService(
 	logger *slog.Logger,
@@ -208,13 +202,11 @@ func NewService(
 	supportCoverage SupportCoverageReader,
 	mcpServerHealth MCPServerHealthReader,
 	dashboardURL *url.URL,
+	mcpServerURL *url.URL,
 	registry *mcpregistry.Service,
+	remoteSessions *remotesessions.GlobalIssuers,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
-
-	if trialNotifier == nil {
-		trialNotifier = trialemails.NoopNotifier{}
-	}
 
 	adminCache := cache.NewRedisCacheAdapter(redisClient)
 	sessionStore := NewSessionStore(
@@ -226,7 +218,8 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", registry: registry,
+	return &Service{
+		remoteSessions: remoteSessions, assets: nil, mcpServerURL: mcpServerURL, workosEnvironmentID: "", registry: registry,
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:         logger,
 		db:             db,
@@ -373,9 +366,6 @@ func (s *Service) OpenOrganizationInDashboard(ctx context.Context, payload *gen.
 	if organizationID == "" {
 		return nil, oops.E(oops.CodeInvalid, nil, "organization_id is required")
 	}
-	if s.dashboardURL == nil || s.dashboardURL.Scheme == "" || s.dashboardURL.Host == "" {
-		return nil, oops.E(oops.CodeUnexpected, nil, "dashboard URL is not configured").LogError(ctx, s.logger)
-	}
 	organization, err := orgRepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -454,7 +444,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.GetSupportMatrix = service.preauthorizeAdmin(server.GetSupportMatrix)
 	server.UpdateSupportMatrix = service.strictAdminJSON(server.UpdateSupportMatrix, func() any { return new(adminserver.UpdateSupportMatrixRequestBody) })
 	adminserver.Mount(mux, server)
-
 }
 
 // Keep the dashboard's /admin session cookie unchanged. A successful MCP

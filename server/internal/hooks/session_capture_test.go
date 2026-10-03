@@ -217,7 +217,7 @@ func TestPersistConversationEvent_WritesClickHouseTelemetry(t *testing.T) {
 	ti.service.productFeatures = alwaysEnabledFeatures{}
 
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
-	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.chConn, enabled, enabled, nil, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
+	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.chConn, enabled, enabled, telemetry.NewUserInfoResolver(testenv.NewLogger(t), ti.conn, testenv.NewMemoryCache()), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

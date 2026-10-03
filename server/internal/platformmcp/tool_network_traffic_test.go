@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -25,16 +24,6 @@ type recordingNetworkTrafficReader struct {
 func (r *recordingNetworkTrafficReader) GetMCPNetworkTraffic(_ context.Context, params telemetryrepo.GetMCPNetworkTrafficParams) ([]telemetryrepo.MCPNetworkTrafficRow, error) {
 	r.params = params
 	return r.rows, nil
-}
-
-func TestMCPNetworkTrafficToolSchemaMatchesUnavailable(t *testing.T) {
-	t.Parallel()
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "traffic-live", Version: "0.0.1"}, nil))
-	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "traffic-unavailable", Version: "0.0.1"}, nil))
-	registerMCPNetworkTrafficTool(live, nil)
-	registerUnavailableMCPNetworkTrafficTool(unavailable)
-	require.JSONEq(t, string(live.Descriptors()[0].InputSchema), string(unavailable.Descriptors()[0].InputSchema))
-	require.Equal(t, live.Descriptors()[0].Meta, unavailable.Descriptors()[0].Meta)
 }
 
 func TestMCPNetworkTrafficRequiresTargetReadAndReturnsBoundedSummary(t *testing.T) {

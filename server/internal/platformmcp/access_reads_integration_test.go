@@ -7,6 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,7 +34,7 @@ func TestAccessReadServiceSuppressesSmallMemberSearchAndReturnsMaskedLargeCohort
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_access_members")
 	require.NoError(t, err)
 	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
-	service := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "access-read-key")
+	service := NewAccessReadService(testenv.NewLogger(t), conn, access.NewRoleManager(testenv.NewLogger(t), conn, workos.NewStubClient(), audit.NewLogger()), allowBudget(), "access-read-key")
 
 	_, err = service.ListMembers(ctx, principal, ListAccessMembersInput{Query: "o"})
 	require.ErrorIs(t, err, ErrAccessQueryRequired)
@@ -96,7 +100,7 @@ func TestGetMCPAccessUsesFrontingServerIDAndStoredToolMetadata(t *testing.T) {
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_access_target")
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	service := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "access-read-key")
+	service := NewAccessReadService(testenv.NewLogger(t), conn, access.NewRoleManager(testenv.NewLogger(t), conn, workos.NewStubClient(), audit.NewLogger()), allowBudget(), "access-read-key")
 
 	// seedRegistrationLifecycle creates a remote cohort server; select it through
 	// the same tenant-qualified inventory query the service uses.

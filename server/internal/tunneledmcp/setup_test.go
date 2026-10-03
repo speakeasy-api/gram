@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 var infra *testenv.Environment
@@ -67,7 +68,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), nil, redisClient)
+	svc := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), route.NewRedis(redisClient), redisClient)
 
 	return ctx, &testInstance{
 		service:        svc,

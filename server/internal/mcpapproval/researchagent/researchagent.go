@@ -156,12 +156,9 @@ type Runner struct {
 //
 // The menu must be the same instance the tools share; the runner seeds it
 // from the briefing before each run, which is the only way briefing URLs
-// become fetchable. A nil menu skips seeding, for tests that use fake tools.
+// become fetchable.
 //
-// The judge classifies every page the agent fetches. A nil judge disables
-// that pass entirely, which is a real reduction in what a run can tell an
-// admin: pages that try to manipulate the reviewer stop being reported. It
-// exists for workers wired without a completions client, and for tests.
+// The judge classifies every page the agent fetches.
 func New(completions CompletionProvider, judge InjectionJudge, menu *platformresearch.URLMenu, tools ...RegisteredTool) *Runner {
 	return &Runner{completions: completions, judge: judge, menu: menu, tools: tools}
 }
@@ -236,12 +233,10 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 	// links, the server reference itself — was selected by trusted code, so
 	// these are the run's legitimate starting points. This is the only write
 	// to the menu that does not come from a tool.
-	if r.menu != nil {
-		runID := input.ReportID.String()
-		r.menu.Allow(runID, input.TargetRaw)
-		for _, seed := range harvestHTTPSURLs(briefing) {
-			r.menu.Allow(runID, seed)
-		}
+	runID := input.ReportID.String()
+	r.menu.Allow(runID, input.TargetRaw)
+	for _, seed := range harvestHTTPSURLs(briefing) {
+		r.menu.Allow(runID, seed)
 	}
 
 	messages := []or.ChatMessages{
@@ -592,10 +587,6 @@ func (r *Runner) judgeFetch(
 	injections *[]InjectionFinding,
 	record *ToolCallRecord,
 ) string {
-	if r.judge == nil {
-		return result
-	}
-
 	var page struct {
 		URL      string `json:"url"`
 		FinalURL string `json:"final_url"`

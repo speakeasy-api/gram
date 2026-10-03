@@ -59,10 +59,6 @@ type Store struct {
 
 // NewStore builds a store bounded at cap records per MCP server. A cap of zero
 // or less takes DefaultLiveRecordCap.
-//
-// A nil client yields a store that records nothing and finds nothing, so
-// callers never have to test for one — an environment without Redis simply
-// reports every caller as unknown.
 func NewStore(redisClient *redis.Client, recordCap int) *Store {
 	if recordCap <= 0 {
 		recordCap = DefaultLiveRecordCap
@@ -138,10 +134,6 @@ return value
 //
 // nowMillis is supplied by the caller so ordering is testable.
 func (s *Store) Store(ctx context.Context, projectID uuid.UUID, toolsetSlug, sessionID string, info Info, nowMillis int64) error {
-	if s.redis == nil {
-		return nil
-	}
-
 	payload, err := json.Marshal(info)
 	if err != nil {
 		return fmt.Errorf("marshal session client info: %w", err)
@@ -162,10 +154,6 @@ func (s *Store) Store(ctx context.Context, projectID uuid.UUID, toolsetSlug, ses
 // Load returns the identity recorded for a session and marks it recently used.
 // Returns ErrNotFound when the session has none.
 func (s *Store) Load(ctx context.Context, projectID uuid.UUID, toolsetSlug, sessionID string, nowMillis int64) (Info, error) {
-	if s.redis == nil {
-		return Info{}, ErrNotFound
-	}
-
 	key := member(sessionID)
 	raw, err := loadScript.Run(ctx, s.redis,
 		[]string{recordKeyPrefix(projectID, toolsetSlug) + key, liveSetKey(projectID, toolsetSlug)},

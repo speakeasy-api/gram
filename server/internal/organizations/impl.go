@@ -122,7 +122,7 @@ type Service struct {
 	orgs              OrganizationProvider
 	invite            InviteIdentityProvider
 	features          orgFeatureChecker
-	hooks             HookEventReader // optional; nil disables verifyOnboardingHooksSetup
+	hooks             HookEventReader
 	email             EmailSender
 	trial             trialemails.Notifier
 	trialBundleSeeder auth.EnterpriseTrialBundleSeeder
@@ -140,10 +140,6 @@ var _ gen.Auther = (*Service)(nil)
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService EmailSender, trialNotifier trialemails.Notifier, trialBundleSeeder auth.EnterpriseTrialBundleSeeder, posthog onboardingTelemetry, growthEmitter *growthsignals.Emitter, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
-	if trialNotifier == nil {
-		trialNotifier = trialemails.NoopNotifier{}
-	}
-
 	return &Service{
 		logger:            logger,
 		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/organizations"),
@@ -335,55 +331,50 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		return nil, oops.E(oops.CodeUnexpected, err, "log organization invitation creation").LogError(ctx, logger)
 	}
 
-	inviteLink := ""
-	if s.email != nil {
-		inviteURL, err := url.Parse(s.serverURL + inviteCallbackPath)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "build invite link").LogError(ctx, logger)
-		}
-		q := inviteURL.Query()
-		q.Set("invite_token", rawToken)
-		inviteURL.RawQuery = q.Encode()
-		inviteLink = inviteURL.String()
+	inviteURL, err := url.Parse(s.serverURL + inviteCallbackPath)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build invite link").LogError(ctx, logger)
 	}
+	q := inviteURL.Query()
+	q.Set("invite_token", rawToken)
+	inviteURL.RawQuery = q.Encode()
+	inviteLink := inviteURL.String()
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit invitation").LogError(ctx, logger)
 	}
 
-	if s.email != nil {
-		// Look up inviter display name + email and org name for the email template.
-		inviterName, inviterEmail := ac.UserID, ""
-		if u, err := userrepo.New(s.db).GetUser(ctx, ac.UserID); err == nil {
-			inviterName = strings.TrimSpace(u.DisplayName)
-			inviterEmail = strings.TrimSpace(u.Email)
-			if inviterName == "" {
-				inviterName = inviterEmail
-			}
-			if inviterName == "" {
-				inviterName = ac.UserID
-			}
+	// Look up inviter display name + email and org name for the email template.
+	inviterName, inviterEmail := ac.UserID, ""
+	if u, err := userrepo.New(s.db).GetUser(ctx, ac.UserID); err == nil {
+		inviterName = strings.TrimSpace(u.DisplayName)
+		inviterEmail = strings.TrimSpace(u.Email)
+		if inviterName == "" {
+			inviterName = inviterEmail
 		}
-		orgName := ac.ActiveOrganizationID
-		if org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID); err == nil {
-			orgName = org.Name
+		if inviterName == "" {
+			inviterName = ac.UserID
 		}
-
-		if err := s.email.Send(ctx, row.Email, email.TeamInvite{
-			InviteLink:       inviteLink,
-			OrganizationName: orgName,
-			InviterName:      inviterName,
-			InviterEmail:     inviterEmail,
-		}); err != nil {
-			span.RecordError(err)
-			span.AddEvent("invite.email_failed")
-			// Revoke the invite so the user can retry — the invitee never
-			// received the invite link so the invite is useless.
-			_ = orgrepo.New(s.db).RevokeInvitation(ctx, row.ID)
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to send invite email").LogError(ctx, logger)
-		}
-		span.AddEvent("invite.email_sent")
 	}
+	orgName := ac.ActiveOrganizationID
+	if org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID); err == nil {
+		orgName = org.Name
+	}
+
+	if err := s.email.Send(ctx, row.Email, email.TeamInvite{
+		InviteLink:       inviteLink,
+		OrganizationName: orgName,
+		InviterName:      inviterName,
+		InviterEmail:     inviterEmail,
+	}); err != nil {
+		span.RecordError(err)
+		span.AddEvent("invite.email_failed")
+		// Revoke the invite so the user can retry — the invitee never
+		// received the invite link so the invite is useless.
+		_ = orgrepo.New(s.db).RevokeInvitation(ctx, row.ID)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to send invite email").LogError(ctx, logger)
+	}
+	span.AddEvent("invite.email_sent")
 
 	return dbInvitationToGen(&row, &ac.UserID), nil
 }
@@ -1045,12 +1036,6 @@ func (s *Service) VerifyOnboardingHooksSetup(ctx context.Context, payload *gen.V
 		return nil, err
 	}
 
-	if s.hooks == nil {
-		// Telemetry/ClickHouse is not wired in this binary. Return an empty result
-		// so the wizard can render gracefully on local OSS setups.
-		return &gen.VerifyOnboardingHooksSetupResult{Events: []*gen.OnboardingHookEvent{}, LatestUnixNano: "0", TotalCount: 0}, nil
-	}
-
 	var sinceUnixNano int64
 	if payload.SinceUnixNano != nil && *payload.SinceUnixNano != "" {
 		parsed, parseErr := strconv.ParseInt(*payload.SinceUnixNano, 10, 64)
@@ -1227,10 +1212,6 @@ func (s *Service) SendEnterpriseAdminOnboardingEmail(ctx context.Context, payloa
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
-	}
-
-	if s.email == nil {
-		return nil, oops.E(oops.CodeUnexpected, nil, "email service not configured").LogError(ctx, s.logger)
 	}
 
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
@@ -1535,9 +1516,6 @@ func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, or
 
 	trialArmed := !hasOtherActiveUsers && eligibleInviter && !hasLifecycle
 	if trialArmed {
-		if s.trialBundleSeeder == nil {
-			return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, errors.New("enterprise trial bundle seeder is not configured")
-		}
 		if err := auth.ArmEnterpriseTrialTx(ctx, tx, org, acceptedInvite.InviterUserID.String, inviterEmail, s.trialBundleSeeder, s.audit); err != nil {
 			return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, fmt.Errorf("arm invitation enterprise trial: %w", err)
 		}
@@ -1551,15 +1529,8 @@ func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, or
 }
 
 func (s *Service) capturePlatformAdminInviteTelemetry(ctx context.Context, email string, org orgrepo.OrganizationMetadatum) {
-	// Emitted before the PostHog guard below, because the two are configured
-	// independently: a service with an emitter but no PostHog client would
-	// otherwise drop every platform-admin organization from growth reporting.
-	// Emit is nil-safe, so this is unconditional.
 	s.emitOrganizationCreated(ctx, email, org)
 
-	if s.posthog == nil {
-		return
-	}
 	properties := map[string]any{
 		"action":            "new_org_created",
 		"created_via":       "platform_admin_invite",
@@ -1573,7 +1544,6 @@ func (s *Service) capturePlatformAdminInviteTelemetry(ctx context.Context, email
 	if err := s.posthog.IdentifyUser(ctx, email, map[string]any{"created_via": "platform_admin_invite"}); err != nil {
 		s.logger.ErrorContext(ctx, "failed to set platform admin invite created_via person property", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
 	}
-
 }
 
 func (s *Service) reconcileInvitationWorkOSMembership(ctx context.Context, invite orgrepo.OrganizationInvitation, org orgrepo.OrganizationMetadatum, gramUserID, workosUserID string) {
@@ -1886,6 +1856,7 @@ func fullSvixAppPortalCapabilities() []models.AppPortalCapability {
 		models.APPPORTALCAPABILITY_MANAGE_ENDPOINT,
 	}
 }
+
 func minimumSvixAppPortalCapabilities() []models.AppPortalCapability {
 	return []models.AppPortalCapability{models.APPPORTALCAPABILITY_VIEW_BASE}
 }

@@ -8,11 +8,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattest"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // These tests pin the DNO-536 transcript-order contract: readers and keyset
@@ -178,8 +177,7 @@ func TestChatMessageWriter_BatchKeepsInsertionOrder(t *testing.T) {
 	ctx := initSessionCtx(t, ti)
 
 	chatID := seedChat(t, ctx, ti, "u", "", "batch order")
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	writer := chattest.NewMessageWriter(t, infra, ti.conn)
 
 	roles := []string{"user", "assistant", "user", "assistant"}
 	writes := make([]chat.MessageWrite, 0, len(roles))
@@ -221,8 +219,7 @@ func TestChatMessageWriter_CorrelatedMessageStampsMissingCreatedAt(t *testing.T)
 	ctx := initSessionCtx(t, ti)
 
 	chatID := seedChat(t, ctx, ti, "u", "", "correlated timestamp")
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	writer := chattest.NewMessageWriter(t, infra, ti.conn)
 
 	_, err := writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{
 		Params: repo.CreateChatMessageParams{

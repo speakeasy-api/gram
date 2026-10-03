@@ -46,7 +46,6 @@ func TestReconcileEnterpriseTrialConversionKeysPermanentFailuresAreNonRetryable(
 		reconciler ConversionPolicyReconciler
 	}{
 		{name: "invalid input", args: ReconcileEnterpriseTrialConversionKeysArgs{}, reconciler: &captureConversionPolicyReconciler{}},
-		{name: "missing reconciler", args: ReconcileEnterpriseTrialConversionKeysArgs{OrganizationID: "organization_placeholder"}},
 		{name: "provider 400", args: ReconcileEnterpriseTrialConversionKeysArgs{OrganizationID: "organization_placeholder"}, reconciler: &captureConversionPolicyReconciler{err: &openrouter.HTTPError{StatusCode: http.StatusBadRequest}}},
 		{name: "upstream identity mismatch", args: ReconcileEnterpriseTrialConversionKeysArgs{OrganizationID: "organization_placeholder"}, reconciler: &captureConversionPolicyReconciler{err: openrouter.ErrAPIKeyIdentityMismatch}},
 	}

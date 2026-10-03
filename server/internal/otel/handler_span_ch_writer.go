@@ -86,9 +86,7 @@ func (w *SpanEventCHWriter) HandleBatch(ctx context.Context, messages []*otelv1.
 				attr.SlogReason(skipReason),
 				attr.SlogValueString(hexEventID(message.GetSpanId())),
 			)
-			if w.spansSkipped != nil {
-				w.spansSkipped.Add(ctx, 1, metric.WithAttributes(attr.Reason(skipReason)))
-			}
+			w.spansSkipped.Add(ctx, 1, metric.WithAttributes(attr.Reason(skipReason)))
 			continue
 		}
 		rows = append(rows, row)
@@ -99,9 +97,7 @@ func (w *SpanEventCHWriter) HandleBatch(ctx context.Context, messages []*otelv1.
 	}
 
 	err := w.inserter.InsertOTelTraces(ctx, rows)
-	if w.spansInserted != nil {
-		w.spansInserted.Add(ctx, int64(len(rows)), metric.WithAttributes(attr.Outcome(o11y.OutcomeFromError(err))))
-	}
+	w.spansInserted.Add(ctx, int64(len(rows)), metric.WithAttributes(attr.Outcome(o11y.OutcomeFromError(err))))
 	if err != nil {
 		return fmt.Errorf("insert otel span events: %w", err)
 	}

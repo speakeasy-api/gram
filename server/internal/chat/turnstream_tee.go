@@ -127,9 +127,7 @@ func teeCompletionStream(src io.Reader, onDelta func(string)) (assembledCompleti
 		choice := chunk.Choices[0]
 		if choice.Delta.Content != "" {
 			content.WriteString(choice.Delta.Content)
-			if onDelta != nil {
-				onDelta(choice.Delta.Content)
-			}
+			onDelta(choice.Delta.Content)
 		}
 		for _, tc := range choice.Delta.ToolCalls {
 			existing := toolCalls[tc.Index]

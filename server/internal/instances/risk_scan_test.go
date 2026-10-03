@@ -46,11 +46,11 @@ func TestExecuteInstanceTool_ScanCannotConsumeExecutionPayload(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	var events []mcpriskscan.Event
 	var payloads [][]byte
-	svc.scanEvaluator = mcpriskscan.NewEvaluator(scanObserverFunc(func(_ context.Context, subject mcpriskscan.Subject) {
+	svc.scanEvaluator = mcpriskscan.PrependObserver(scanObserverFunc(func(_ context.Context, subject mcpriskscan.Subject) {
 		require.Empty(t, recorder.Body.String(), "scan must precede response delivery")
 		payloads = append(payloads, append([]byte(nil), subject.Payload.Bytes()...))
 		events = append(events, subject.Event)
-	}))
+	}), svc.scanEvaluator)
 	request := httptest.NewRequestWithContext(ctx, http.MethodPost, "/rpc/instances.invoke/tool?tool_urn="+url.QueryEscape(toolURN.String()), iotest.OneByteReader(strings.NewReader(body)))
 	request.Header.Set(constants.SessionHeader, *authCtx.SessionID)
 	request.Header.Set(constants.ProjectHeader, *authCtx.ProjectSlug)

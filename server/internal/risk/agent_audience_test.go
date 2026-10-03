@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -59,18 +60,17 @@ func agentRequestContextWithID(t *testing.T, ctx context.Context, ti *testInstan
 // change to its wiring updates one place rather than every case.
 func newShadowMCPTestScanner(t *testing.T, ti *testInstance) *risk.Scanner {
 	t.Helper()
-	scanner, err := risk.NewScanner(
+	scanner := risk.NewScanner(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
 		newTestCustomRuleAnalyzer(t, ti.conn),
 		nil,
-		nil,
-		nil,
-		nil,
+		testPIScanner(t),
+		testPromptPolicyScanner(t),
+		&feature.InMemory{},
 		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
-	require.NoError(t, err)
 	return scanner
 }
 
@@ -143,18 +143,17 @@ func TestScanner_LookupShadowMCPBlockingPolicy_EveryoneAudienceBlocksAgent(t *te
 	})
 	require.NoError(t, err)
 
-	scanner, err := risk.NewScanner(
+	scanner := risk.NewScanner(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
 		newTestCustomRuleAnalyzer(t, ti.conn),
 		nil,
-		nil,
-		nil,
-		nil,
+		testPIScanner(t),
+		testPromptPolicyScanner(t),
+		&feature.InMemory{},
 		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
-	require.NoError(t, err)
 
 	agentCtx := agentRequestContext(t, ctx, ti, "Roleless agent", "")
 	policy, err := scanner.LookupShadowMCPBlockingPolicy(agentCtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "")

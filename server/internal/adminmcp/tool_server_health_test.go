@@ -99,7 +99,7 @@ func testServerHealthReads() *recordingServerHealthReader {
 	return &recordingServerHealthReader{recordingProjectReader: projectReads, health: testServerHealth(), calls: testToolCalls()}
 }
 
-func callServerHealthTool(t *testing.T, reads OrganizationReader, alter func(*Principal), args string) (string, json.RawMessage, bool) {
+func callServerHealthTool(t *testing.T, reads Reader, alter func(*Principal), args string) (string, json.RawMessage, bool) {
 	t.Helper()
 	principal := staffPrincipal()
 	principal.staff = &contextvalues.AdminAuthContext{SessionID: "browser-session", OIDCSubject: "staff-subject", Email: principal.Email}
@@ -390,6 +390,4 @@ func TestDescribeMCPServerHealthContextAvailability(t *testing.T) {
 	const workflow = "inspect one MCP server's authentication configuration, session counts and tool call outcomes"
 	_, body, _ := callStaffReadTool(t, testServerHealthReads(), "get_admin_context", `{}`)
 	require.Contains(t, body, workflow)
-	_, body, _ = callStaffReadTool(t, testProjectReads(), "get_admin_context", `{}`)
-	require.NotContains(t, body, workflow)
 }

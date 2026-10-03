@@ -31,6 +31,7 @@ import (
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
@@ -615,7 +616,7 @@ func runFullPoint(
 		_ = inbox.Close()
 		_ = redisClient.Del(context.WithoutCancel(ctx), enforcereply.InboxKey(inbox.ReplicaID())).Err()
 	}()
-	dispatcher, err := enforcereply.NewDispatcher(pointCtx, logger, otel.GetMeterProvider(), loop.broker, inbox, enforcereply.DispatcherConfig{WaitTimeout: cfg.timeout, LaneWaitTimeout: nil, Flags: nil})
+	dispatcher, err := enforcereply.NewDispatcher(pointCtx, logger, otel.GetMeterProvider(), loop.broker, inbox, enforcereply.DispatcherConfig{WaitTimeout: cfg.timeout, LaneWaitTimeout: nil, Flags: &feature.InMemory{}})
 	if err != nil {
 		return sweepResult{}, fmt.Errorf("create dispatcher: %w", err)
 	}

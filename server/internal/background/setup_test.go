@@ -12,10 +12,9 @@ import (
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	// Temporal is the only capability this package's tests need, and the dev
-	// server behind it starts lazily on the first NewTemporalEnv call, so the
-	// workflow tests that run purely in-process pay nothing for it.
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Temporal: true})
+	// The Temporal dev server starts lazily on the first NewTemporalEnv call, so
+	// the workflow tests that run purely in-process pay nothing for it.
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Temporal: true, Postgres: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 	}

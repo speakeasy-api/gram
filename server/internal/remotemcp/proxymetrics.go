@@ -31,8 +31,7 @@ type ProxyMetrics struct {
 }
 
 // NewProxyMetrics constructs the proxy metrics object. Instrument creation
-// failures log and produce a metrics value with a nil counter so callers can
-// record safely without checking for setup errors at every call site.
+// failures are logged; the meter still returns a usable instrument.
 func NewProxyMetrics(meter metric.Meter, logger *slog.Logger) *ProxyMetrics {
 	counter, err := meter.Int64Counter(
 		instrumentMCPToolCall,
@@ -50,8 +49,7 @@ func NewProxyMetrics(meter metric.Meter, logger *slog.Logger) *ProxyMetrics {
 }
 
 // RecordMCPToolCall increments the per-tool MCP call counter with the given
-// dimensions. Safe to call on a metrics value whose counter failed to
-// initialize — the call is a no-op in that case.
+// dimensions.
 //
 // The counter is an attempt counter, not a success counter: the registered
 // interceptor records on every observed tools/call request, including those
@@ -62,10 +60,6 @@ func NewProxyMetrics(meter metric.Meter, logger *slog.Logger) *ProxyMetrics {
 // from rejected attempts should aggregate this counter alongside the
 // proxy-level request status histogram in [proxy.Metrics].
 func (m *ProxyMetrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL string, identity proxy.ServerIdentity, toolName string) {
-	if m.mcpToolCallCounter == nil {
-		return
-	}
-
 	labels := []attribute.KeyValue{
 		attr.OrganizationID(orgID),
 		attr.McpURL(mcpURL),
@@ -79,8 +73,5 @@ func (m *ProxyMetrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpU
 // RecordKillswitchIdentityCoverage records the bounded coverage classes for
 // one private-proxy tools/call checkpoint.
 func (m *ProxyMetrics) RecordKillswitchIdentityCoverage(ctx context.Context, surface mcpmetrics.KillswitchCoverageSurface, identity mcpmetrics.KillswitchIdentityClass, resource mcpmetrics.KillswitchResourceClass) {
-	if m == nil {
-		return
-	}
 	m.identityCoverage.Record(ctx, surface, identity, resource)
 }

@@ -60,8 +60,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
+var (
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
+)
 
 type Service struct {
 	auth             *auth.Auth
@@ -81,16 +83,14 @@ type Service struct {
 	telemetryService *telemetry.Service
 	billingRepo      billing.Repository
 	audit            *audit.Logger
-	// turnStream carries assistant turn frames to dashboard subscribers. Nil
-	// disables streaming — turns still complete and the dashboard falls back
-	// to loading the reply once it lands.
-	turnStream *TurnStream
+	// turnStream carries assistant turn frames to dashboard subscribers.
+	turnStream     *TurnStream
+	titleGenerator TitleGenerator
 }
 
-// WithTurnStream enables streaming assistant turn frames to subscribers.
-func (s *Service) WithTurnStream(stream *TurnStream) *Service {
-	s.turnStream = stream
-	return s
+// TitleGenerator schedules async chat title generation.
+type TitleGenerator interface {
+	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error
 }
 
 func NewService(
@@ -109,6 +109,8 @@ func NewService(
 	assistantTokens *assistanttokens.Manager,
 	billingRepo billing.Repository,
 	auditLogger *audit.Logger,
+	turnStream *TurnStream,
+	titleGenerator TitleGenerator,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
@@ -130,7 +132,8 @@ func NewService(
 		telemetryService: telemetryService,
 		billingRepo:      billingRepo,
 		audit:            auditLogger,
-		turnStream:       nil, // opt in via WithTurnStream
+		turnStream:       turnStream,
+		titleGenerator:   titleGenerator,
 	}
 }
 
@@ -186,7 +189,6 @@ func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context
 	keySlot := billing.ModelUsageSourcePlayground
 
 	authorizedCtx, err := s.auth.Authorize(ctx, r.Header.Get(constants.SessionHeader), &sc)
-
 	// Try API key auth if session auth fails
 	if err != nil {
 		sc := security.APIKeyScheme{
@@ -465,45 +467,43 @@ func (s *Service) GetAssistantSessionSummary(ctx context.Context, payload *gen.G
 		TotalTokens: 0,
 		TotalCost:   0,
 	}
-	if s.telemetryService != nil {
-		afterCorrelationID := ""
-		for {
-			chats, err := s.repo.ListAssistantSessionSummaryChats(ctx, repo.ListAssistantSessionSummaryChatsParams{
-				AssistantID:        assistantID,
-				ProjectID:          *authCtx.ProjectID,
-				AfterCorrelationID: afterCorrelationID,
-				ExternalUserID:     externalUserID,
-				UserID:             userID,
-				PageLimit:          assistantSessionSummaryMetricsBatch,
-			})
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "list assistant sessions for usage summary").LogError(ctx, s.logger)
-			}
-			if len(chats) == 0 {
-				break
-			}
+	afterCorrelationID := ""
+	for {
+		chats, err := s.repo.ListAssistantSessionSummaryChats(ctx, repo.ListAssistantSessionSummaryChatsParams{
+			AssistantID:        assistantID,
+			ProjectID:          *authCtx.ProjectID,
+			AfterCorrelationID: afterCorrelationID,
+			ExternalUserID:     externalUserID,
+			UserID:             userID,
+			PageLimit:          assistantSessionSummaryMetricsBatch,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list assistant sessions for usage summary").LogError(ctx, s.logger)
+		}
+		if len(chats) == 0 {
+			break
+		}
 
-			batch := make([]string, len(chats))
-			for i, chat := range chats {
-				batch[i] = chat.ChatID.String()
-			}
-			batchMetrics, err := s.telemetryService.GetChatMetricsSummaryByIDs(ctx, telemetryrepo.GetChatMetricsSummaryByIDsParams{
-				ProjectID: authCtx.ProjectID.String(),
-				ChatIDs:   batch,
-				From:      from,
-				To:        to,
-			})
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "summarize assistant session usage").LogError(ctx, s.logger)
-			}
-			metrics.TotalTokens += batchMetrics.TotalTokens
-			metrics.TotalCost += batchMetrics.TotalCost
+		batch := make([]string, len(chats))
+		for i, chat := range chats {
+			batch[i] = chat.ChatID.String()
+		}
+		batchMetrics, err := s.telemetryService.GetChatMetricsSummaryByIDs(ctx, telemetryrepo.GetChatMetricsSummaryByIDsParams{
+			ProjectID: authCtx.ProjectID.String(),
+			ChatIDs:   batch,
+			From:      from,
+			To:        to,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "summarize assistant session usage").LogError(ctx, s.logger)
+		}
+		metrics.TotalTokens += batchMetrics.TotalTokens
+		metrics.TotalCost += batchMetrics.TotalCost
 
-			lastChat := chats[len(chats)-1]
-			afterCorrelationID = lastChat.CorrelationID
-			if len(chats) < assistantSessionSummaryMetricsBatch {
-				break
-			}
+		lastChat := chats[len(chats)-1]
+		afterCorrelationID = lastChat.CorrelationID
+		if len(chats) < assistantSessionSummaryMetricsBatch {
+			break
 		}
 	}
 
@@ -590,10 +590,6 @@ func (s *Service) GetWorkUnitsTrend(ctx context.Context, payload *gen.GetWorkUni
 	}
 
 	result := &gen.WorkUnitsTrendResult{ScoresAvailable: false, Buckets: buckets}
-	if s.telemetryService == nil {
-		return result, nil
-	}
-
 	verdicts, err := s.telemetryService.ListChatAnalysisVerdicts(ctx, telemetryrepo.ListChatAnalysisVerdictsParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      projectID,
@@ -1819,7 +1815,15 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		if err != nil {
 			return s.classifyCompletionError(ctx, "get completion stream", err)
 		}
-		defer o11y.NoLogDefer(func() error { return streamBody.Close() })
+		// Closing the stream is what captures the turn, so the title is
+		// scheduled only once the close has run.
+		streamed := false
+		defer func() {
+			o11y.NoLogDefer(func() error { return streamBody.Close() })
+			if streamed {
+				s.scheduleTitleGeneration(ctx, completionReq)
+			}
+		}()
 
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
@@ -1829,7 +1833,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		// the way past, so the dashboard renders text as it is generated. The
 		// bytes still reach this caller untouched; the tee is a side channel.
 		src := io.Reader(streamBody)
-		if s.turnStream != nil && chatID != uuid.Nil {
+		if chatID != uuid.Nil {
 			teed, done := s.teeStreamText(ctx, chatID)
 			src = io.TeeReader(streamBody, teed)
 			defer done()
@@ -1838,6 +1842,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		if err := s.streamCompletion(ctx, w, src, getContextWindow); err != nil {
 			return err
 		}
+		streamed = true
 
 		// The chats row now exists (capture strategy upserted it), so linking is
 		// safe. Runs on the request context after the response is fully streamed.
@@ -1853,10 +1858,9 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// A watchable chat has its tokens streamed upstream and republished as
 	// they pass, so the dashboard can render text while it is still being
 	// generated; this caller still gets back the assembled JSON it asked for.
-	// With no chat to attribute frames to, or no stream to publish on, this is
-	// an ordinary completion.
+	// With no chat to attribute frames to, this is an ordinary completion.
 	var response *openrouter.CompletionResponse
-	if s.turnStream != nil && chatID != uuid.Nil {
+	if chatID != uuid.Nil {
 		teed, teeErr := s.teedCompletion(ctx, completionReq, chatID)
 		if teeErr != nil {
 			return teeErr
@@ -1869,6 +1873,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		}
 		response = plain
 	}
+	s.scheduleTitleGeneration(ctx, completionReq)
 
 	var gramMetadata *openrouter.GramMetadata
 	if cw := getContextWindow(); cw > 0 {
@@ -1905,6 +1910,17 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	eventProperties["success"] = true
 	return nil
+}
+
+// scheduleTitleGeneration queues title generation for a captured chat. It is
+// detached from the request so a caller that disconnects still gets a title.
+func (s *Service) scheduleTitleGeneration(ctx context.Context, req openrouter.CompletionRequest) {
+	if req.ChatID == uuid.Nil {
+		return
+	}
+	if err := s.titleGenerator.ScheduleChatTitleGeneration(context.WithoutCancel(ctx), req.ChatID.String(), req.OrgID, req.ProjectID); err != nil {
+		s.logger.WarnContext(ctx, "failed to schedule chat title generation", attr.SlogError(err))
+	}
 }
 
 func (s *Service) resolveContextWindow(ctx context.Context, requestedModel string) int {
@@ -2262,10 +2278,6 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 		}, nil
 	}
 
-	if s.completionClient == nil {
-		return nil, oops.E(oops.CodeUnexpected, nil, "summarization is unavailable").LogError(ctx, s.logger)
-	}
-
 	messages, err := s.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
 		ChatID:    chatID,
 		ProjectID: chat.ProjectID,
@@ -2445,10 +2457,6 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid tool call").LogError(ctx, s.logger)
 	}
-	if s.completionClient == nil {
-		return nil, oops.E(oops.CodeUnexpected, nil, "summarization is unavailable").LogError(ctx, s.logger)
-	}
-
 	name := toolCall.Name
 	arguments := json.RawMessage(nil)
 	if toolCall.Function != nil {
@@ -3062,11 +3070,6 @@ func (s *Service) enrichChatsWithMetrics(ctx context.Context, projectID string, 
 		return nil
 	}
 
-	// Check if telemetry service is available
-	if s.telemetryService == nil {
-		return nil
-	}
-
 	// Extract chat IDs
 	chatIDs := make([]string, len(chats))
 	for i, chat := range chats {
@@ -3095,11 +3098,6 @@ func (s *Service) enrichChatsWithMetrics(ctx context.Context, projectID string, 
 // enrichChatWithMetrics fetches token and cost metrics from ClickHouse and adds them to a single chat.
 // This is a best-effort operation - if metrics can't be fetched, the chat is returned with zero values.
 func (s *Service) enrichChatWithMetrics(ctx context.Context, projectID string, chat *gen.Chat, eventTimeFrom time.Time) error {
-	// Check if telemetry service is available
-	if s.telemetryService == nil {
-		return nil
-	}
-
 	// Fetch metrics from ClickHouse
 	metricsMap, err := s.telemetryService.GetChatMetricsByIDs(ctx, projectID, []string{chat.ID}, eventTimeFrom)
 	if err != nil {
@@ -3122,7 +3120,7 @@ func (s *Service) enrichChatWithMetrics(ctx context.Context, projectID string, c
 // most organizations have no work-units analysis at all, in which case every
 // chat is simply left without a score.
 func (s *Service) enrichChatsWithWorkUnits(ctx context.Context, organizationID string, projectID string, chats []*gen.ChatOverview) error {
-	if len(chats) == 0 || s.telemetryService == nil {
+	if len(chats) == 0 {
 		return nil
 	}
 
@@ -3149,10 +3147,6 @@ func (s *Service) enrichChatsWithWorkUnits(ctx context.Context, organizationID s
 // and full report JSON — from ClickHouse to a single loaded chat. Best-effort
 // like the metric enrichment.
 func (s *Service) enrichChatWithWorkUnits(ctx context.Context, organizationID string, projectID string, chat *gen.Chat) error {
-	if s.telemetryService == nil {
-		return nil
-	}
-
 	verdicts, err := s.telemetryService.GetChatAnalysisVerdictsByChatIDs(ctx, organizationID, projectID, telemetryrepo.ChatAnalysisJudgeWorkUnits, []string{chat.ID})
 	if err != nil {
 		return fmt.Errorf("get work units verdict from ClickHouse: %w", err)
@@ -3170,10 +3164,6 @@ func (s *Service) enrichChatWithWorkUnits(ctx context.Context, organizationID st
 // and attaches it to chat.load. This is best-effort: missing ClickHouse data
 // simply leaves the optional agent usage payload empty.
 func (s *Service) enrichChatWithClaudeTurnUsage(ctx context.Context, projectID string, chat *gen.Chat, eventTimeFrom time.Time) error {
-	if s.telemetryService == nil {
-		return nil
-	}
-
 	var (
 		usageMap     map[string][]telemetryrepo.ClaudeTurnUsageRow
 		toolUsageMap map[string][]telemetryrepo.ClaudeToolUsageRow

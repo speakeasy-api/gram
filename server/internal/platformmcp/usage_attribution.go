@@ -31,9 +31,6 @@ type QuerySkillUsageOutput struct {
 }
 
 func (s *DiagnosticsService) QuerySkillUsage(ctx context.Context, principal Principal, input QuerySkillUsageInput) (QuerySkillUsageOutput, error) {
-	if s == nil || !s.valid() || s.references == nil || !s.sensitiveBudget.valid() || !s.volume.valid() {
-		return QuerySkillUsageOutput{}, ErrUnavailable
-	}
 	if input.ProjectID == "" {
 		return QuerySkillUsageOutput{}, fmt.Errorf("project_id is required")
 	}
@@ -110,9 +107,6 @@ type ListSkillUsageUsersOutput struct {
 }
 
 func (s *DiagnosticsService) ListSkillUsageUsers(ctx context.Context, principal Principal, input ListSkillUsageUsersInput) (ListSkillUsageUsersOutput, error) {
-	if s == nil || !s.valid() || s.references == nil || !s.sensitiveBudget.valid() || !s.volume.valid() {
-		return ListSkillUsageUsersOutput{}, ErrUnavailable
-	}
 	input.SkillName = strings.TrimSpace(input.SkillName)
 	if input.ProjectID == "" || input.SkillName == "" {
 		return ListSkillUsageUsersOutput{}, fmt.Errorf("project_id and skill_name are required")
@@ -194,9 +188,6 @@ type GetUserSkillStatusOutput struct {
 }
 
 func (s *DiagnosticsService) GetUserSkillStatus(ctx context.Context, principal Principal, input GetUserSkillStatusInput) (GetUserSkillStatusOutput, error) {
-	if s == nil || !s.valid() || s.references == nil || !s.sensitiveBudget.valid() {
-		return GetUserSkillStatusOutput{}, ErrUnavailable
-	}
 	input.SkillName = strings.TrimSpace(input.SkillName)
 	if input.ProjectID == "" || input.SkillName == "" || input.SubjectReference == "" {
 		return GetUserSkillStatusOutput{}, fmt.Errorf("project_id, skill_name, and subject_reference are required")

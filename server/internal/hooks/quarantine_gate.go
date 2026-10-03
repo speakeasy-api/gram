@@ -23,7 +23,7 @@ func (s *Service) checkQuarantineGate(ctx context.Context, ev hookevents.Event) 
 	ctx, span := s.tracer.Start(ctx, "hooks.checkQuarantineGate")
 	defer span.End()
 
-	if s.cache == nil || ev.ConversationID == "" {
+	if ev.ConversationID == "" {
 		return nil
 	}
 	q, err := sessionquarantine.Read(
@@ -52,14 +52,14 @@ func (s *Service) checkQuarantineGate(ctx context.Context, ev hookevents.Event) 
 			RiskPolicyID:   "",
 			RiskPolicyName: "unknown",
 			Reason:         "session quarantine circuit could not be checked",
-			CreatedAt:      s.now().UTC(),
+			CreatedAt:      s.nowFunc().UTC(),
 		}
 	}
 	return nil
 }
 
 func (s *Service) sessionQuarantineFailClosed(ctx context.Context, organizationID string) bool {
-	if organizationID == "" || s.db == nil {
+	if organizationID == "" {
 		return false
 	}
 	failOpen, err := riskrepo.New(s.db).IsOrganizationHooksFailOpenEnabled(ctx, organizationID)

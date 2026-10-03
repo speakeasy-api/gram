@@ -6,7 +6,6 @@ package mcp
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -15,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -49,7 +49,7 @@ type authenticationHostContextKey struct{}
 
 // NewAuthenticationHost validates the configured authentication host URL
 // against the platform server URL. An empty rawURL disables the host.
-func NewAuthenticationHost(rawURL string, serverURL *url.URL, environment string) (*AuthenticationHost, error) {
+func NewAuthenticationHost(rawURL string, serverURL *url.URL, environment string) *AuthenticationHost {
 	router := chi.NewRouter()
 	router.NotFound(http.NotFound)
 	router.MethodNotAllowed(http.NotFound)
@@ -60,36 +60,25 @@ func NewAuthenticationHost(rawURL string, serverURL *url.URL, environment string
 		router:          router,
 	}
 	if rawURL == "" {
-		return authenticationHost, nil
+		return authenticationHost
 	}
 
 	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return nil, fmt.Errorf("parse authentication host url: %w", err)
-	}
-	switch {
-	case parsed.Scheme != "https" && (environment != "local" || parsed.Scheme != "http"):
-		return nil, errors.New("authentication host url must use https outside local development")
-	case parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "":
-		return nil, errors.New("authentication host url must not carry userinfo, query or fragment")
-	case parsed.Path != "" && parsed.Path != "/":
-		return nil, errors.New("authentication host url must not carry a path")
-	}
-	host, err := requestorigin.CanonicalHost(parsed.Host)
-	if err != nil {
-		return nil, fmt.Errorf("authentication host url host: %w", err)
-	}
-	platformHost, err := requestorigin.CanonicalHost(serverURL.Host)
-	if err != nil {
-		return nil, fmt.Errorf("server url host: %w", err)
-	}
-	if host == platformHost {
-		return nil, errors.New("authentication host must differ from the server url host")
-	}
+	inv.Require("authentication host url", "parses", err)
+	host, hostErr := requestorigin.CanonicalHost(parsed.Host)
+	platformHost, platformHostErr := requestorigin.CanonicalHost(serverURL.Host)
+	inv.Require("authentication host url",
+		"uses https outside local development", parsed.Scheme == "https" || (environment == "local" && parsed.Scheme == "http"),
+		"carries no userinfo, query or fragment", parsed.User == nil && parsed.RawQuery == "" && !parsed.ForceQuery && parsed.Fragment == "",
+		"carries no path", parsed.Path == "" || parsed.Path == "/",
+		"host is valid", hostErr,
+		"server url host is valid", platformHostErr,
+		"differs from the server url host", host != platformHost,
+	)
 
 	authenticationHost.host = host
 	authenticationHost.baseURL = (&url.URL{Scheme: parsed.Scheme, Host: parsed.Host}).String()
-	return authenticationHost, nil
+	return authenticationHost
 }
 
 // Host returns the canonical authentication host, or "" when it is disabled.

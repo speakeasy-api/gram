@@ -2,7 +2,6 @@ package mcpapproval_test
 
 import (
 	"encoding/json"
-
 	"testing"
 
 	"github.com/google/uuid"

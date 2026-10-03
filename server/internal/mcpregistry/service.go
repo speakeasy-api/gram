@@ -72,9 +72,6 @@ func New(db *pgxpool.Pool, v *Validator) *Service {
 }
 
 func (s *Service) Ready(ctx context.Context) error {
-	if s.validator == nil || s.validator.schema == nil {
-		return errors.New("registry validator unavailable")
-	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	_, err := repo.New(s.db).RegistryReady(ctx)
@@ -112,9 +109,6 @@ type listCursor struct {
 func samePublished(a, b *bool) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
 
 func (s *Service) List(ctx context.Context, opts ListOptions) (Page, error) {
-	if s.validator == nil || s.validator.schema == nil {
-		return Page{}, errors.New("registry validator unavailable")
-	}
 	if opts.Limit == 0 {
 		opts.Limit = 25
 	}

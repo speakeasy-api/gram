@@ -140,14 +140,10 @@ func TestAgentCheckpointsUseRealEvaluator(t *testing.T) {
 			foreignID := insertAgentPrincipal(t, conn, otherOrg, ownerID)
 			projectID := insertProject(t, conn, orgID, "agent-project", false)
 			serverID := insertMCPServer(t, conn, orgID, projectID, false)
-			registry, err := NewRegistry(conn)
-			require.NoError(t, err)
-			evaluator, err := killswitches.NewEvaluator(conn, registry, time.Second, nil, testenv.NewLogger(t))
-			require.NoError(t, err)
-			private, err := newCheckpoint(registry, evaluator, time.Second)
-			require.NoError(t, err)
-			hosted, err := NewHostedCheckpoint(conn, nil, testenv.NewLogger(t), nil)
-			require.NoError(t, err)
+			registry := NewRegistry(conn)
+			evaluator := killswitches.NewEvaluator(conn, registry, time.Second, testenv.NewMeterProvider(t), testenv.NewLogger(t))
+			private := newCheckpoint(registry, evaluator, time.Second)
+			hosted := NewHostedCheckpoint(conn, testenv.NewMeterProvider(t), testenv.NewLogger(t), &coverageRecorder{})
 			evaluate := func(ctx context.Context) (killswitches.TransportDisposition, error) {
 				if surface == "hosted" {
 					return hosted.Evaluate(ctx, orgID, ServerSource{FrontingServerID: uuid.NullUUID{UUID: serverID, Valid: true}})

@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -20,7 +22,7 @@ func TestReadingsForMessagesLogsAndSkipsMeteringFailure(t *testing.T) {
 	t.Parallel()
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
-	writer, shutdown := NewChatMessageWriter(logger, nil, nil)
+	writer, shutdown := NewChatMessageWriter(logger, nil, assetstest.NewTestBlobStore(t), NewTurnStream(redis.NewClient(&redis.Options{})))
 	t.Cleanup(func() {
 		require.NoError(t, shutdown(context.WithoutCancel(t.Context())))
 	})

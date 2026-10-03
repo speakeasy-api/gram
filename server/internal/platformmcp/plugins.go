@@ -288,7 +288,7 @@ type pluginMembershipCursor struct {
 }
 
 func (s *PluginsService) encodeMembershipCursor(cursor pluginMembershipCursor) (string, error) {
-	if s == nil || s.cursors == nil || len(s.cursors.key) == 0 || cursor.OrganizationID == "" || cursor.Binding == "" || cursor.ProjectID == "" || cursor.PluginID == "" || cursor.Version == "" || cursor.AfterID == "" {
+	if cursor.OrganizationID == "" || cursor.Binding == "" || cursor.ProjectID == "" || cursor.PluginID == "" || cursor.Version == "" || cursor.AfterID == "" {
 		return "", ErrPluginCursorInvalid
 	}
 	payload, err := json.Marshal(cursor)
@@ -307,7 +307,7 @@ func (s *PluginsService) decodeMembershipCursor(value string, principal Principa
 		return pluginMembershipCursor{}, nil
 	}
 	binding := principalCursorBinding(principal)
-	if s == nil || s.cursors == nil || len(s.cursors.key) == 0 || principal.OrganizationID == "" || binding == "" || projectID == uuid.Nil || pluginID == uuid.Nil {
+	if principal.OrganizationID == "" || binding == "" || projectID == uuid.Nil || pluginID == uuid.Nil {
 		return pluginMembershipCursor{}, ErrPluginCursorInvalid
 	}
 	token, err := base64.RawURLEncoding.DecodeString(value)
@@ -372,29 +372,18 @@ type PluginsService struct {
 	distributionAdmissionRead distributionAdmissionReader
 }
 
-func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMaterial string) *PluginsService {
-	cursor, cursorErr := newPluginCursorCodec(cursorKeyMaterial)
-	references, referenceErr := newSubjectReferenceCodec(cursorKeyMaterial)
-	var versionKey []byte
-	if cursorKeyMaterial != "" {
-		digest := sha256.Sum256([]byte("platform-mcp-plugin-assignment-version:" + cursorKeyMaterial))
-		versionKey = digest[:]
-	}
-	if cursorErr != nil {
-		cursor = nil
-	}
-	if referenceErr != nil {
-		references = nil
-	}
+func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMaterial string, distributionAdmission *admission.Guard) *PluginsService {
+	references := newSubjectReferenceCodec(cursorKeyMaterial)
+	versionKey := sha256.Sum256([]byte("platform-mcp-plugin-assignment-version:" + cursorKeyMaterial))
 	return &PluginsService{
 		db:                    db,
 		authorization:         nil,
 		dashboardURL:          nil,
 		serverURL:             nil,
 		budget:                budget,
-		cursors:               cursor,
+		cursors:               newPluginCursorCodec(cursorKeyMaterial),
 		assignmentReferences:  references,
-		assignmentVersionKey:  versionKey,
+		assignmentVersionKey:  versionKey[:],
 		remoteSessions:        nil,
 		now:                   time.Now,
 		mutationFlags:         nil,
@@ -402,42 +391,30 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		audit:                 nil,
 		mutationBudget:        OperationBudget{},
 		mutationReceipts:      nil,
-		distributionAdmission: admission.NewGuard(nil, nil),
+		distributionAdmission: distributionAdmission,
 	}
 }
 
 func (s *PluginsService) WithPublicationEvidence(reader publicationEvidenceReader) *PluginsService {
-	if s != nil {
-		s.publicationEvidence = reader
-	}
+	s.publicationEvidence = reader
 	return s
 }
 
 func (s *PluginsService) WithAuthorization(engine *authz.Engine) *PluginsService {
-	if s != nil {
-		s.authorization = engine
-	}
+	s.authorization = engine
 	return s
 }
 
 func (s *PluginsService) WithRemoteSessions(remoteSessions *remotesessions.ChallengeManager) *PluginsService {
-	if remoteSessions == nil {
-		return s
-	}
 	return s.withMemberMCPConnectionReader(remoteSessions)
 }
 
 func (s *PluginsService) withMemberMCPConnectionReader(reader MemberMCPConnectionReader) *PluginsService {
-	if s != nil {
-		s.remoteSessions = reader
-	}
+	s.remoteSessions = reader
 	return s
 }
 
 func (s *PluginsService) WithInstallLinks(dashboardURL, serverURL *url.URL) *PluginsService {
-	if s == nil {
-		return s
-	}
 	if validDashboardURL(dashboardURL) {
 		copyURL := *dashboardURL
 		s.dashboardURL = &copyURL
@@ -450,27 +427,18 @@ func (s *PluginsService) WithInstallLinks(dashboardURL, serverURL *url.URL) *Plu
 }
 
 func (s *PluginsService) WithDistributionAdmissionReads(read distributionAdmissionReader) *PluginsService {
-	if s != nil {
-		s.distributionAdmissionRead = read
-	}
+	s.distributionAdmissionRead = read
 	return s
 }
 
 // ResolveAssignmentReferences decodes current role/directory audience handles
 // for another Platform MCP access workflow without exposing principal URNs.
 func (s *PluginsService) ResolveAssignmentReferences(ctx context.Context, tx pgx.Tx, principal Principal, project ResolvedProject, references []string) ([]string, []PluginAssignmentSummaryResult, error) {
-	if !s.valid() {
-		return nil, nil, ErrUnavailable
-	}
 	return s.resolveMutationAssignments(ctx, tx, principal, project, references)
 }
 
-func (s *PluginsService) valid() bool {
-	return s != nil && s.db != nil && s.budget.valid() && s.cursors != nil && s.assignmentReferences != nil && len(s.assignmentVersionKey) > 0 && s.now != nil
-}
-
 func (s *PluginsService) requestMCPAccessURL(ctx context.Context, organizationID, mcpID, name string) string {
-	if s == nil || s.dashboardURL == nil || mcpID == "" {
+	if s.dashboardURL == nil || mcpID == "" {
 		return ""
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -483,9 +451,6 @@ func (s *PluginsService) requestMCPAccessURL(ctx context.Context, organizationID
 }
 
 func (s *PluginsService) ListPlugins(ctx context.Context, principal Principal, input ListPluginsInput) (ListPluginsOutput, error) {
-	if !s.valid() {
-		return ListPluginsOutput{}, ErrUnavailable
-	}
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return ListPluginsOutput{}, err
 	}
@@ -552,9 +517,6 @@ func (s *PluginsService) IsOrganizationAdmin(ctx context.Context, principal Prin
 }
 
 func (s *PluginsService) ListAssignedPlugins(ctx context.Context, principal Principal, input ListPluginsInput) (ListPluginsOutput, error) {
-	if !s.valid() || s.authorization == nil {
-		return ListPluginsOutput{}, ErrUnavailable
-	}
 	if err := s.authorization.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: principal.OrganizationID}); err != nil {
 		return ListPluginsOutput{}, err
 	}
@@ -603,9 +565,6 @@ func (s *PluginsService) ListAssignedPlugins(ctx context.Context, principal Prin
 }
 
 func (s *PluginsService) GetAssignedPlugin(ctx context.Context, principal Principal, input GetPluginInput) (GetPluginOutput, error) {
-	if !s.valid() || s.authorization == nil {
-		return GetPluginOutput{}, ErrUnavailable
-	}
 	if strings.TrimSpace(input.Plugin) == "" {
 		return GetPluginOutput{}, ErrPluginNotFound
 	}
@@ -690,9 +649,6 @@ func (s *PluginsService) deliveryPrincipalURNs(ctx context.Context, principal Pr
 }
 
 func (s *PluginsService) ListPluginAssignments(ctx context.Context, principal Principal, input ListPluginAssignmentsInput) (ListPluginAssignmentsOutput, error) {
-	if !s.valid() {
-		return ListPluginAssignmentsOutput{}, ErrUnavailable
-	}
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return ListPluginAssignmentsOutput{}, err
 	}
@@ -713,9 +669,6 @@ func (s *PluginsService) ListPluginAssignments(ctx context.Context, principal Pr
 }
 
 func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, input GetPluginInput) (GetPluginOutput, error) {
-	if !s.valid() {
-		return GetPluginOutput{}, ErrUnavailable
-	}
 	if strings.TrimSpace(input.Plugin) == "" {
 		return GetPluginOutput{}, ErrPluginNotFound
 	}
@@ -865,10 +818,8 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 			}
 		}
 	}
-	if s.distributionAdmissionRead != nil {
-		distributionAdmission := s.distributionAdmissionRead.ForPlugin(ctx, principal.OrganizationID, project.ID, target.ID)
-		output.Plugin.DistributionAdmission = &distributionAdmission
-	}
+	distributionAdmission := s.distributionAdmissionRead.ForPlugin(ctx, principal.OrganizationID, project.ID, target.ID)
+	output.Plugin.DistributionAdmission = &distributionAdmission
 	if !expiresAt.IsZero() {
 		output.ReferencesExpireAt = expiresAt.Format(time.RFC3339)
 	}
@@ -907,9 +858,6 @@ type PluginRef struct {
 // nothing is not_found and a name that matches more than one is ambiguous;
 // neither falls back to the default plugin.
 func (s *PluginsService) ResolvePlugin(ctx context.Context, principal Principal, projectID uuid.UUID, wanted string) (PluginRef, error) {
-	if s == nil || s.db == nil {
-		return PluginRef{}, ErrUnavailable
-	}
 	return s.resolve(ctx, platformrepo.New(s.db), principal, projectID, wanted)
 }
 

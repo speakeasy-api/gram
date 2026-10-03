@@ -36,10 +36,6 @@ func (s *ListOrganizationUsers) Descriptor() core.ToolDescriptor {
 }
 
 func (s *ListOrganizationUsers) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if s.organizations == nil {
-		return fmt.Errorf("organizations service not configured")
-	}
-
 	input := listOrganizationUsersInput{}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err

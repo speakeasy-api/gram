@@ -21,7 +21,7 @@ func TestListProjectsDescriptionDoesNotAdvertiseHiddenResourceSignals(t *testing
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "list-projects-description-test", Version: "0.0.1"}, nil)
 	registrar := newRegistrar(server)
-	registerListProjectsTool(registrar, nil)
+	registerListProjectsTool(registrar, newTestServices(t).Reader)
 
 	descriptor := registrar.Descriptors()[0]
 	require.Equal(t, "list_projects", descriptor.Name)
@@ -31,9 +31,9 @@ func TestListProjectsDescriptionDoesNotAdvertiseHiddenResourceSignals(t *testing
 func TestEveryRegisteredToolDeclaresAnAudience(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newTestServer(t)
 	descriptors := registrar.Descriptors()
-	require.NotEmpty(t, descriptors, "the deployment registers tools even when every dependency is absent")
+	require.NotEmpty(t, descriptors)
 
 	for _, descriptor := range descriptors {
 		require.NotEmpty(t, descriptor.Meta.Audiences, "tool %q declares no audience", descriptor.Name)
@@ -227,7 +227,7 @@ func TestExternalResourceRegistrationRequiresAuthorizationPolicy(t *testing.T) {
 func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newTestServer(t)
 	byName := map[string]ExternalAuthorization{}
 	for _, descriptor := range registrar.For(AudienceExternal) {
 		require.Contains(t, []ExternalAuthorization{ExternalAuthorizationMember, ExternalAuthorizationOrgAdmin}, descriptor.Meta.Authorization, descriptor.Name)
@@ -374,6 +374,7 @@ type denyExternalCallAuthorizer struct {
 func (a denyExternalCallAuthorizer) PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error) {
 	return contextWithPrincipal(ctx, principal), nil
 }
+
 func (a denyExternalCallAuthorizer) AuthorizeExternalCall(context.Context, Principal, ExternalAuthorization) error {
 	return a.err
 }
@@ -395,7 +396,7 @@ func names(descriptors []Descriptor) []string {
 func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newTestServer(t)
 
 	admitted := map[string]bool{}
 	for _, descriptor := range registrar.For(AudienceAssistant) {
@@ -491,7 +492,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 func TestExternalEndpointServesOnlyExternallyAdmittedTools(t *testing.T) {
 	t.Parallel()
 
-	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	server, registrar := newTestServer(t)
 	bindExternalTestPrincipal(server)
 	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 
@@ -535,14 +536,13 @@ func TestExternalEndpointServesOnlyExternallyAdmittedTools(t *testing.T) {
 func TestAdvertisedOutputSchemaMatchesTheSubjectCountWireForm(t *testing.T) {
 	t.Parallel()
 
-	// Registered directly rather than through newServer: with no dependencies
-	// the deployment substitutes the "diagnostics are not enabled" stubs, whose
-	// results carry no subject count. The handler is never called here — only
-	// the schema the registration advertises is under test.
+	// Registered directly: the handler is never called here, only the schema
+	// the registration advertises is under test.
+	diagnostics := newTestServices(t).Diagnostics
 	server := newTestMCPServer()
 	registrar := newRegistrar(server)
-	registerDiagnosticsTools(registrar, nil)
-	registerSkillUsageTools(registrar, nil)
+	registerDiagnosticsTools(registrar, diagnostics)
+	registerSkillUsageTools(registrar, diagnostics)
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(t.Context(), serverTransport, nil)

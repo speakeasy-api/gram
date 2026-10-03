@@ -11,16 +11,12 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
-	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
-	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -92,11 +88,7 @@ func TestRecordCompactedGenerationWritesNewGeneration(t *testing.T) {
 		}))
 	}
 
-	logger := testenv.NewLogger(t)
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger())
-	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { _ = chatWriterShutdown(ctx) })
-	core.SetChatMessageWriter(chatWriter)
+	core := newTestServiceCore(t, conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil})
 
 	// Compacted transcript: one summary + a couple of preserved recent turns.
 	compacted := []runtimeMessage{
@@ -138,7 +130,6 @@ func TestRecordCompactedGenerationWritesNewGeneration(t *testing.T) {
 		require.NotContains(t, reading.GetAttributes(), metering.AttributeMessageUserID)
 		require.NotContains(t, reading.GetAttributes(), metering.AttributeMessageExternalUserID)
 	}
-
 }
 
 func TestRecordCompactedGenerationRejectsForeignAssistant(t *testing.T) {
@@ -150,11 +141,7 @@ func TestRecordCompactedGenerationRejectsForeignAssistant(t *testing.T) {
 	projectID, _, _, threadID := insertAssistantFixture(t, conn)
 	ctx := t.Context()
 
-	logger := testenv.NewLogger(t)
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger())
-	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { _ = chatWriterShutdown(ctx) })
-	core.SetChatMessageWriter(chatWriter)
+	core := newTestServiceCore(t, conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil})
 
 	stranger := uuid.New()
 	compacted := []runtimeMessage{{Role: "user", Content: runtimeTextContent("x")}}
@@ -175,11 +162,7 @@ func recordCompactedGenerationMalformedFixture(t *testing.T, slug string) (*Serv
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
 	ctx := t.Context()
 
-	logger := testenv.NewLogger(t)
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger())
-	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { _ = chatWriterShutdown(ctx) })
-	core.SetChatMessageWriter(chatWriter)
+	core := newTestServiceCore(t, conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil})
 
 	return core, projectID, assistantID, threadID, ctx
 }
@@ -227,11 +210,7 @@ func TestRecordCompactedGenerationRejectsEmptyMessages(t *testing.T) {
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
 	ctx := t.Context()
 
-	logger := testenv.NewLogger(t)
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger())
-	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { _ = chatWriterShutdown(ctx) })
-	core.SetChatMessageWriter(chatWriter)
+	core := newTestServiceCore(t, conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil})
 
 	err = core.RecordCompactedGeneration(ctx, projectID, threadID, assistantID, nil)
 	require.Error(t, err, "empty compacted transcript must be rejected — there is nothing to persist")

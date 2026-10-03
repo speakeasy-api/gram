@@ -31,14 +31,6 @@ const (
 	turnAttachmentSignedURLTTL = 30 * time.Minute
 )
 
-// SetAssetSigningKey wires the secret used to mint short-lived download URLs
-// for turn attachments the runtime cannot read inline (PDFs, audio). Set after
-// construction to match the existing injection pattern; when unset, those
-// attachments are announced with metadata only.
-func (s *ServiceCore) SetAssetSigningKey(key string) {
-	s.assetSigningKey = key
-}
-
 // resolveDashboardTurnAttachments validates the caller's attachment ids against
 // the project's chat attachment assets and returns the metadata the turn
 // carries. Unknown, deleted, or cross-project ids fail the send rather than
@@ -99,10 +91,6 @@ func (s *ServiceCore) resolveDashboardTurnAttachments(ctx context.Context, proje
 // DecodeTurn already wrote. Strictly best-effort — any failure logs and drops
 // that part rather than failing the turn.
 func (s *ServiceCore) dashboardTurnAttachmentParts(ctx context.Context, projectID uuid.UUID, event assistantThreadEventRecord) []runtimeContentPart {
-	if s.assetStorage == nil {
-		return nil
-	}
-
 	var payload dashboardEventPayload
 	if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err != nil {
 		return nil
@@ -225,10 +213,9 @@ func (s *ServiceCore) chatAttachmentURLs(ctx context.Context, projectID uuid.UUI
 
 // dashboardTurnAttachmentLinks mints short-lived download URLs for the given
 // attachments, keyed by asset id, so the turn can hand the assistant something
-// fetchable for files whose bytes it could not carry. Returns nil when no
-// signing key is configured.
+// fetchable for files whose bytes it could not carry.
 func (s *ServiceCore) dashboardTurnAttachmentLinks(ctx context.Context, projectID uuid.UUID, attachments []dashboardTurnAttachment, wanted map[uuid.UUID]struct{}) map[uuid.UUID]string {
-	if s.assetSigningKey == "" || len(wanted) == 0 {
+	if len(wanted) == 0 {
 		return nil
 	}
 	// The runner is the one that fetches this, so address the server the way
@@ -237,9 +224,6 @@ func (s *ServiceCore) dashboardTurnAttachmentLinks(ctx context.Context, projectI
 	base := s.runtime.ServerURL()
 	if base == nil {
 		base = s.serverURL
-	}
-	if base == nil {
-		return nil
 	}
 	links := make(map[uuid.UUID]string, len(wanted))
 	for _, attachment := range attachments {

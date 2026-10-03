@@ -52,48 +52,39 @@ func TestIdentityChainingRequest_OnlyValidatedHumans(t *testing.T) {
 	t.Parallel()
 	project, issuer := uuid.New(), uuid.New()
 	for _, tc := range []struct {
-		name    string
-		ctx     func(t *testing.T) context.Context
-		chainer bool
-		issuer  uuid.UUID
-		want    bool
+		name   string
+		ctx    func(t *testing.T) context.Context
+		issuer uuid.UUID
+		want   bool
 	}{
 		{"validated human", func(t *testing.T) context.Context {
 			t.Helper()
 			return humanChainingContext(t, "user-1", chainingTestOrg)
-		}, true, issuer, true},
-		{"no executor", func(t *testing.T) context.Context {
-			t.Helper()
-			return humanChainingContext(t, "user-1", chainingTestOrg)
-		}, false, issuer, false},
+		}, issuer, true},
 		{"ungated endpoint", func(t *testing.T) context.Context {
 			t.Helper()
 			return humanChainingContext(t, "user-1", chainingTestOrg)
-		}, true, uuid.Nil, false},
-		{"another organization", func(t *testing.T) context.Context { t.Helper(); return humanChainingContext(t, "user-1", "org-other") }, true, issuer, false},
+		}, uuid.Nil, false},
+		{"another organization", func(t *testing.T) context.Context { t.Helper(); return humanChainingContext(t, "user-1", "org-other") }, issuer, false},
 		{"assistant acting for a user", func(t *testing.T) context.Context {
 			t.Helper()
 			ctx := mcpidentity.NewValidatorBoundary().StampAssistant(t.Context())
 			return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{UserID: "user-1", ActiveOrganizationID: chainingTestOrg, OrganizationSlug: "chaining"})
-		}, true, issuer, false},
+		}, issuer, false},
 		{"api key", func(t *testing.T) context.Context {
 			t.Helper()
 			ctx := mcpidentity.NewValidatorBoundary().StampAPIKey(t.Context(), "api-key-1")
 			return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{UserID: "user-1", ActiveOrganizationID: chainingTestOrg, OrganizationSlug: "chaining"})
-		}, true, issuer, false},
+		}, issuer, false},
 		{"auth context for another user", func(t *testing.T) context.Context {
 			t.Helper()
 			ctx := mcpidentity.NewValidatorBoundary().StampValidatedSession(t.Context(), validatedSessionProof(t, urn.NewUserSubject("user-1")))
 			return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{UserID: "user-2", ActiveOrganizationID: chainingTestOrg, OrganizationSlug: "chaining"})
-		}, true, issuer, false},
+		}, issuer, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			var chainer identityChainer
-			if tc.chainer {
-				chainer = &recordingChainer{}
-			}
-			s := chainingService(t, chainer)
+			s := chainingService(t, &recordingChainer{})
 			req, ok := s.identityChainingRequest(tc.ctx(t), chainingTestOrg, project, tc.issuer, "https://upstream.example.test/mcp", false, uuid.NullUUID{})
 			require.Equal(t, tc.want, ok)
 			if tc.want {

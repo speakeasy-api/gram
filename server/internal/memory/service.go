@@ -282,12 +282,10 @@ func (s *MemoryService) Remember(
 
 	embedStart := time.Now()
 	vectors, err := s.completions.CreateEmbeddings(ctx, organizationID, s.embeddingModel, []string{content}, openrouter.WithEmbeddingDimensions(embeddingDimensions))
-	if duration := time.Since(embedStart).Seconds(); s.metrics.embedDuration != nil {
-		s.metrics.embedDuration.Record(ctx, duration, metric.WithAttributes(
-			attr.GenAIRequestModel(s.embeddingModel),
-			attr.Outcome(o11y.OutcomeFromError(err)),
-		))
-	}
+	s.metrics.embedDuration.Record(ctx, time.Since(embedStart).Seconds(), metric.WithAttributes(
+		attr.GenAIRequestModel(s.embeddingModel),
+		attr.Outcome(o11y.OutcomeFromError(err)),
+	))
 	if err != nil {
 		return zero, oops.E(oops.CodeUnexpected, err, "create memory embedding").LogError(ctx, s.logger)
 	}
@@ -344,11 +342,9 @@ func (s *MemoryService) Remember(
 		case nearest.Similarity >= s.dedupeLower:
 			contradicts, contradictErr := s.detectContradiction(ctx, organizationID, projectID.String(), nearest.Content, content)
 			if contradictErr != nil {
-				if s.metrics.contradictionFails != nil {
-					s.metrics.contradictionFails.Add(ctx, 1, metric.WithAttributes(
-						attr.OrganizationID(organizationID),
-					))
-				}
+				s.metrics.contradictionFails.Add(ctx, 1, metric.WithAttributes(
+					attr.OrganizationID(organizationID),
+				))
 				s.logger.WarnContext(ctx, "contradiction detection failed; falling back to additive insert",
 					attr.SlogError(contradictErr))
 			} else if contradicts {
@@ -390,7 +386,7 @@ func (s *MemoryService) Remember(
 		return zero, oops.E(oops.CodeUnexpected, err, "commit remember transaction").LogError(ctx, s.logger)
 	}
 
-	if outcome == rememberOutcomeSuperseded && s.metrics.supersedeDepth != nil {
+	if outcome == rememberOutcomeSuperseded {
 		s.metrics.supersedeDepth.Record(ctx, 1, metric.WithAttributes(
 			attr.OrganizationID(organizationID),
 		))
@@ -414,9 +410,6 @@ func (s *MemoryService) Remember(
 }
 
 func (s *MemoryService) recordRememberOutcome(ctx context.Context, outcome string) {
-	if s.metrics.rememberOutcome == nil {
-		return
-	}
 	s.metrics.rememberOutcome.Add(ctx, 1, metric.WithAttributes(
 		attr.OutcomeKey.String(outcome),
 	))
@@ -438,12 +431,10 @@ func (s *MemoryService) Recall(
 	))
 	start := time.Now()
 	defer func() {
-		if s.metrics.recallDuration != nil {
-			s.metrics.recallDuration.Record(ctx, time.Since(start).Seconds(), metric.WithAttributes(
-				attr.OrganizationID(organizationID),
-				attr.Outcome(o11y.OutcomeFromError(err)),
-			))
-		}
+		s.metrics.recallDuration.Record(ctx, time.Since(start).Seconds(), metric.WithAttributes(
+			attr.OrganizationID(organizationID),
+			attr.Outcome(o11y.OutcomeFromError(err)),
+		))
 		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
 		}
@@ -467,12 +458,10 @@ func (s *MemoryService) Recall(
 
 	embedStart := time.Now()
 	vectors, embedErr := s.completions.CreateEmbeddings(ctx, organizationID, s.embeddingModel, []string{query}, openrouter.WithEmbeddingDimensions(embeddingDimensions))
-	if duration := time.Since(embedStart).Seconds(); s.metrics.embedDuration != nil {
-		s.metrics.embedDuration.Record(ctx, duration, metric.WithAttributes(
-			attr.GenAIRequestModel(s.embeddingModel),
-			attr.Outcome(o11y.OutcomeFromError(embedErr)),
-		))
-	}
+	s.metrics.embedDuration.Record(ctx, time.Since(embedStart).Seconds(), metric.WithAttributes(
+		attr.GenAIRequestModel(s.embeddingModel),
+		attr.Outcome(o11y.OutcomeFromError(embedErr)),
+	))
 	if embedErr != nil {
 		s.logger.WarnContext(ctx, "recall embedding failed; returning empty result",
 			attr.SlogAssistantID(assistantID.String()),
@@ -591,12 +580,10 @@ func (s *MemoryService) Forget(
 
 	embedStart := time.Now()
 	vectors, embedErr := s.completions.CreateEmbeddings(ctx, organizationID, s.embeddingModel, []string{query}, openrouter.WithEmbeddingDimensions(embeddingDimensions))
-	if duration := time.Since(embedStart).Seconds(); s.metrics.embedDuration != nil {
-		s.metrics.embedDuration.Record(ctx, duration, metric.WithAttributes(
-			attr.GenAIRequestModel(s.embeddingModel),
-			attr.Outcome(o11y.OutcomeFromError(embedErr)),
-		))
-	}
+	s.metrics.embedDuration.Record(ctx, time.Since(embedStart).Seconds(), metric.WithAttributes(
+		attr.GenAIRequestModel(s.embeddingModel),
+		attr.Outcome(o11y.OutcomeFromError(embedErr)),
+	))
 	if embedErr != nil {
 		s.logger.WarnContext(ctx, "forget embedding failed; treating as no-match",
 			attr.SlogError(embedErr))
@@ -702,9 +689,6 @@ func decideForgetSelection(rows []repo.ListNearestAssistantMemoriesRow, minSimil
 }
 
 func (s *MemoryService) recordForgetOutcome(ctx context.Context, outcome string) {
-	if s.metrics.forgetInvocations == nil {
-		return
-	}
 	s.metrics.forgetInvocations.Add(ctx, 1, metric.WithAttributes(
 		attr.OutcomeKey.String(outcome),
 	))

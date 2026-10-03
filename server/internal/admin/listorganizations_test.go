@@ -184,7 +184,6 @@ func TestUpdateOrganization_AccountTypeOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "payg", res.AccountType)
 	require.True(t, res.Whitelisted, "whitelisted should be untouched")
-
 }
 
 func TestUpdateOrganization_NoFieldsRejected(t *testing.T) {

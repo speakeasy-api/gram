@@ -78,9 +78,7 @@ type SessionRecallService struct {
 	budget      OperationBudget
 }
 
-// NewSessionRecallService composes the recall entry points. A nil dependency
-// leaves the service invalid, which registers the unavailable stubs rather
-// than tools that always fail.
+// NewSessionRecallService composes the recall entry points.
 func NewSessionRecallService(logger *slog.Logger, db *pgxpool.Pool, repo *platformrepo.Queries, auditor *audit.Logger, portability FeatureChecker, budget OperationBudget) *SessionRecallService {
 	return &SessionRecallService{
 		logger:      logger,
@@ -90,10 +88,6 @@ func NewSessionRecallService(logger *slog.Logger, db *pgxpool.Pool, repo *platfo
 		portability: portability,
 		budget:      budget,
 	}
-}
-
-func (s *SessionRecallService) valid() bool {
-	return s != nil && s.logger != nil && s.db != nil && s.repo != nil && s.auditor != nil && s.portability != nil && s.budget.valid()
 }
 
 type ListMySessionsInput struct {
@@ -132,9 +126,6 @@ type ContinueSessionOutput struct {
 }
 
 func (s *SessionRecallService) ListMySessions(ctx context.Context, principal Principal, input ListMySessionsInput) (ListMySessionsOutput, error) {
-	if !s.valid() {
-		return ListMySessionsOutput{Sessions: nil}, ErrUnavailable
-	}
 	if err := s.requirePortability(ctx, principal); err != nil {
 		return ListMySessionsOutput{Sessions: nil}, err
 	}
@@ -165,9 +156,6 @@ func (s *SessionRecallService) ListMySessions(ctx context.Context, principal Pri
 
 func (s *SessionRecallService) ContinueSession(ctx context.Context, principal Principal, input ContinueSessionInput) (ContinueSessionOutput, error) {
 	empty := ContinueSessionOutput{Digest: "", SourceSessionID: "", ChatID: "", NotCarriedOver: nil, Notes: nil}
-	if !s.valid() {
-		return empty, ErrUnavailable
-	}
 	if err := s.requirePortability(ctx, principal); err != nil {
 		return empty, err
 	}

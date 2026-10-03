@@ -89,9 +89,6 @@ type Readiness struct {
 }
 
 func (s *RegistrationStore) IssueSetupHandoff(ctx context.Context, principal Principal, binding SetupHandoffBinding, now time.Time) (IssuedSetupHandoff, error) {
-	if s == nil || s.db == nil {
-		return IssuedSetupHandoff{}, ErrUnavailable
-	}
 	// A surface acting under assistant identity issues a handoff bound to its
 	// user; the dashboard completing it authenticates under its own session.
 	connectionID, generation, err := parseOptionalConnection(principal)
@@ -186,9 +183,6 @@ func (s *RegistrationStore) IssueSetupHandoff(ctx context.Context, principal Pri
 }
 
 func (s *RegistrationStore) ConsumeSetupHandoff(ctx context.Context, principal Principal, binding SetupHandoffBinding, value string) (SetupHandoff, error) {
-	if s == nil || s.db == nil {
-		return SetupHandoff{}, ErrUnavailable
-	}
 	// A handoff issued by a connection-less surface is redeemed by its user, so
 	// the redemption tolerates the absent pair the same way the lookup does.
 	connectionID, generation, err := parseOptionalConnection(principal)
@@ -255,9 +249,6 @@ func (s *RegistrationStore) ConsumeSetupHandoff(ctx context.Context, principal P
 // BeginProviderSetup redeems a single-use handoff on a trusted surface and
 // dispatches only to the adapter bound to the registration's persisted provider.
 func (s *RegistrationStore) BeginProviderSetup(ctx context.Context, principal Principal, binding SetupHandoffBinding, value string, adapters *ProviderAdapters) (ProviderSetupResult, error) {
-	if s == nil || s.db == nil {
-		return ProviderSetupResult{}, ErrUnavailable
-	}
 	// A handoff issued by a connection-less surface carries no connection to
 	// bind the setup to. The dashboard completing it is authenticated by its own
 	// session, so the setup is identified by the acting user instead.
@@ -329,9 +320,6 @@ func (s *RegistrationStore) BeginProviderSetup(ctx context.Context, principal Pr
 // adapter and browser-catalogue registrations to the persisted Remote MCP
 // source path. Both paths persist only normalized, generation-bound evidence.
 func (s *RegistrationStore) ProbeProviderReadiness(ctx context.Context, principal Principal, projectID, registrationID uuid.UUID, adapters *ProviderAdapters, generic ...CatalogReadinessProber) (Readiness, error) {
-	if s == nil || s.db == nil {
-		return Readiness{}, ErrUnavailable
-	}
 	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return Readiness{}, err
@@ -394,9 +382,6 @@ func (s *RegistrationStore) ProbeProviderReadiness(ctx context.Context, principa
 // principal's active connection generation. It never returns the stored
 // authorization fingerprint or attempts provider egress.
 func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal Principal, projectID, registrationID uuid.UUID) (Readiness, bool, error) {
-	if s == nil || s.db == nil {
-		return Readiness{}, false, ErrUnavailable
-	}
 	connectionID, generation, err := principalConnection(principal)
 	if err != nil {
 		return Readiness{}, false, err
@@ -436,9 +421,6 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 }
 
 func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Principal, binding ReadinessBinding, state ReadinessState, evidenceCode string, checkedAt, expiresAt time.Time) (Readiness, error) {
-	if s == nil || s.db == nil {
-		return Readiness{}, ErrUnavailable
-	}
 	// Only the managed project assistant can persist readiness without an OAuth
 	// connection. External and dashboard setup probes remain connection-bound.
 	if !principal.HasConnection() && principal.surface() != SurfaceProjectAssistant {

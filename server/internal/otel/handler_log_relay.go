@@ -223,18 +223,10 @@ func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMe
 }
 
 func (h *LogRelayHandler) recordDroppedLogs(ctx context.Context, count int, reason relayReason) {
-	if h.recordsDropped == nil {
-		return
-	}
-
 	h.recordsDropped.Add(ctx, int64(count), metric.WithAttributes(attr.Reason(string(reason))))
 }
 
 func (h *LogRelayHandler) recordFailedLogs(ctx context.Context, count int, reason relayReason) {
-	if h.recordsFailed == nil {
-		return
-	}
-
 	h.recordsFailed.Add(ctx, int64(count), metric.WithAttributes(attr.Reason(string(reason))))
 }
 

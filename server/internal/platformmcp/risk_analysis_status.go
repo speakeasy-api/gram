@@ -38,13 +38,7 @@ type RiskAnalysisStatusService struct {
 	now           func() time.Time
 }
 
-// NewRiskAnalysisStatusService returns nil when the analysis run state cannot
-// be described in this deployment, so the registrar serves the tool as a stub
-// rather than reporting a made-up state.
 func NewRiskAnalysisStatusService(logger *slog.Logger, db *pgxpool.Pool, describer analysisstatus.Describer, flags feature.Provider, organizations OrganizationSlugResolver) *RiskAnalysisStatusService {
-	if logger == nil || db == nil || describer == nil || organizations == nil {
-		return nil
-	}
 	return &RiskAnalysisStatusService{
 		logger:        logger.With(attr.SlogComponent("platformmcp")),
 		describer:     describer,
@@ -53,10 +47,6 @@ func NewRiskAnalysisStatusService(logger *slog.Logger, db *pgxpool.Pool, describ
 		projects:      postgresRiskProjectResolver{queries: platformrepo.New(db)},
 		now:           time.Now,
 	}
-}
-
-func (s *RiskAnalysisStatusService) valid() bool {
-	return s != nil && s.logger != nil && s.describer != nil && s.organizations != nil && s.projects != nil && s.now != nil
 }
 
 type GetRiskAnalysisStatusInput struct {
@@ -84,9 +74,6 @@ type GetRiskAnalysisStatusOutput struct {
 // describes the analysis run state. Flag lookups that error or come back
 // indeterminate fail closed, matching the other risk capabilities.
 func (s *RiskAnalysisStatusService) Get(ctx context.Context, principal Principal, input GetRiskAnalysisStatusInput) (GetRiskAnalysisStatusOutput, error) {
-	if !s.valid() {
-		return GetRiskAnalysisStatusOutput{}, ErrUnavailable
-	}
 	project, err := s.projects.Resolve(ctx, principal.OrganizationID, input.ProjectID, input.ProjectSlug)
 	if err != nil {
 		return GetRiskAnalysisStatusOutput{}, fmt.Errorf("resolve risk analysis status project: %w", err)

@@ -5,7 +5,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
-
 	"errors"
 	"fmt"
 	"strings"
@@ -72,15 +71,12 @@ type LifecycleMetadataUpdate struct {
 	Name           string
 }
 
-func NewLifecycleMetadataService(db *pgxpool.Pool, updater LifecycleMetadataUpdater, keyMaterial string) (*LifecycleMetadataService, error) {
-	if db == nil || updater == nil || keyMaterial == "" {
-		return nil, ErrLifecycleMetadataInvalid
-	}
-	return &LifecycleMetadataService{db: db, updater: updater, key: lifecycleMetadataVersionKey(keyMaterial), now: time.Now}, nil
+func NewLifecycleMetadataService(db *pgxpool.Pool, updater LifecycleMetadataUpdater, keyMaterial string) *LifecycleMetadataService {
+	return &LifecycleMetadataService{db: db, updater: updater, key: lifecycleMetadataVersionKey(keyMaterial), now: time.Now}
 }
 
 func (s *LifecycleMetadataService) Update(ctx context.Context, principal Principal, input UpdateMCPMetadataInput) (UpdateMCPMetadataResult, error) {
-	if s == nil || s.db == nil || s.updater == nil || len(s.key) == 0 || principal.OrganizationID == "" || principal.UserID == "" || input.ProjectSlug == "" || input.RegistrationID == "" || input.MCPID == "" || strings.TrimSpace(input.Name) == "" || len(strings.TrimSpace(input.Name)) > 256 || strings.ContainsAny(input.Name, "\r\n") || input.ExpectedVersion == "" || input.IdempotencyKey == "" {
+	if principal.OrganizationID == "" || principal.UserID == "" || input.ProjectSlug == "" || input.RegistrationID == "" || input.MCPID == "" || strings.TrimSpace(input.Name) == "" || len(strings.TrimSpace(input.Name)) > 256 || strings.ContainsAny(input.Name, "\r\n") || input.ExpectedVersion == "" || input.IdempotencyKey == "" {
 		return UpdateMCPMetadataResult{}, ErrLifecycleMetadataInvalid
 	}
 	if len(input.IdempotencyKey) > 128 {
@@ -94,10 +90,7 @@ func (s *LifecycleMetadataService) Update(ctx context.Context, principal Princip
 	if err != nil {
 		return UpdateMCPMetadataResult{}, ErrLifecycleMetadataInvalid
 	}
-	project, err := NewRegistrationStore(s.db)
-	if err != nil {
-		return UpdateMCPMetadataResult{}, err
-	}
+	project := NewRegistrationStore(s.db)
 	resolvedProject, err := project.ResolveProject(ctx, principal.OrganizationID, input.ProjectSlug)
 	if err != nil {
 		return UpdateMCPMetadataResult{}, err

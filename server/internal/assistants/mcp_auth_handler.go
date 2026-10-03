@@ -151,9 +151,6 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 	}
 
 	attemptID := uuid.NewString()
-	if s.core.mcpAuthOrigin() == nil {
-		return oops.E(oops.CodeUnexpected, nil, "assistant mcp auth callback base url not configured").LogError(ctx, s.logger)
-	}
 	redirectURI := s.core.mcpAuthRedirectURI(principal.AssistantID)
 	codeVerifier, codeChallenge, err := newPKCEPair()
 	if err != nil {
@@ -625,9 +622,6 @@ func (s *Service) upsertMCPAuthCIMDClient(
 	usableAfter pgtype.Timestamptz,
 	claimLease pgtype.Interval,
 ) (mcpAuthClientCredentials, error) {
-	if s.core.mcpAuthOrigin() == nil {
-		return mcpAuthClientCredentials{}, fmt.Errorf("assistant mcp auth callback base url not configured")
-	}
 	clientID := AssistantClientMetadataDocumentURL(s.core.mcpAuthOrigin(), assistantID)
 	persistenceCtx, persistenceCancel := context.WithTimeout(context.WithoutCancel(ctx), mcpOAuthPersistenceMax)
 	defer persistenceCancel()

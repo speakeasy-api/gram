@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	killswitchrepo "github.com/speakeasy-api/gram/server/internal/killswitches/repo"
@@ -57,36 +58,20 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, auditLogger *audit.Logger) (*Service, error) {
-	registry, err := mcptoolexecution.NewRegistry(db)
-	if err != nil {
-		return nil, fmt.Errorf("build MCP tool-call killswitch registry: %w", err)
-	}
-	lifecycle, err := killswitches.NewLifecycleService(db, registry, mcptoolexecution.NewCustomerLifecycleValidator(), killswitches.NewAuditBeforeCommitHook(auditLogger))
-	if err != nil {
-		return nil, fmt.Errorf("build killswitch lifecycle service: %w", err)
-	}
-	user, ok := registry.PrincipalAdapter(mcptoolexecution.PrincipalKindUser)
-	if !ok {
-		return nil, errors.New("MCP tool-call killswitch registry has no user adapter")
-	}
-	server, ok := registry.ResourceAdapter(mcptoolexecution.ResourceKindMCPServer)
-	if !ok {
-		return nil, errors.New("MCP tool-call killswitch registry has no server adapter")
-	}
-	facade, err := killswitches.NewFacade(lifecycle)
-	if err != nil {
-		return nil, fmt.Errorf("build killswitch facade: %w", err)
-	}
-	authorized, err := killswitches.NewAuthorizedService(facade, authzEngine)
-	if err != nil {
-		return nil, fmt.Errorf("build authorized killswitch service: %w", err)
-	}
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, auditLogger *audit.Logger) *Service {
+	registry := mcptoolexecution.NewRegistry(db)
+	lifecycle := killswitches.NewLifecycleService(db, registry, mcptoolexecution.NewCustomerLifecycleValidator(), killswitches.NewAuditBeforeCommitHook(auditLogger))
+	user, userOK := registry.PrincipalAdapter(mcptoolexecution.PrincipalKindUser)
+	server, serverOK := registry.ResourceAdapter(mcptoolexecution.ResourceKindMCPServer)
+	inv.Require("MCP tool-call killswitch registry",
+		"has a user adapter", userOK,
+		"has a server adapter", serverOK,
+	)
 	return &Service{
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/killswitchapi"), logger: logger,
-		auth: gramauth.New(logger, db, sessionManager, authzEngine), db: db, authorized: authorized,
+		auth: gramauth.New(logger, db, sessionManager, authzEngine), db: db, authorized: killswitches.NewAuthorizedService(killswitches.NewFacade(lifecycle), authzEngine),
 		user: user, server: server,
-	}, nil
+	}
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {

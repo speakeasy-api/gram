@@ -181,9 +181,7 @@ func WithTimeout(d time.Duration) Option {
 // The global provider is used by default.
 func WithTracerProvider(provider trace.TracerProvider) Option {
 	return func(c *Client) {
-		if provider != nil {
-			c.tracer = provider.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/typesafe")
-		}
+		c.tracer = provider.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/typesafe")
 	}
 }
 
@@ -192,9 +190,6 @@ func WithTracerProvider(provider trace.TracerProvider) Option {
 // provisioned OpenRouter key. The httpClient comes from a guardian.Policy
 // (Client or PooledClient) and must not retry: Ask makes exactly one attempt.
 func NewClient(httpClient *guardian.HTTPClient, logger *slog.Logger, opts ...Option) *Client {
-	if httpClient == nil {
-		panic("typesafe client requires an http client")
-	}
 	c := &Client{
 		httpClient: httpClient,
 		endpoint:   DefaultEndpoint,

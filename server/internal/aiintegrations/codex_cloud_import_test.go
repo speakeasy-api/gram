@@ -14,7 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattest"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -107,11 +107,10 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 	cfg := created.Config
 	cfg.ProjectID = project.ID
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
-	t.Cleanup(func() { _ = shutdown(context.Background()) })
+	writer := chattest.NewMessageWriter(t, infra, conn)
 
 	heartbeats := 0
-	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) { heartbeats++ })
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, newTestGuardianPolicy(t), writer, func(context.Context, int) { heartbeats++ })
 	file := codexCloudFixtureFile(codexCloudFixture)
 	src := &codexCloudSource{
 		client: &stubCodexComplianceClient{
@@ -265,8 +264,7 @@ func TestCodexCloudTitleBackfillsWhenPromptArrivesInLaterFile(t *testing.T) {
 	cfg := created.Config
 	cfg.ProjectID = project.ID
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
-	t.Cleanup(func() { _ = shutdown(context.Background()) })
+	writer := chattest.NewMessageWriter(t, infra, conn)
 
 	responseOnly := `{"event_id":"cdx_r1","type":"CODEX_LOG","actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"grace@example.com"},"timestamp":"2026-07-28T11:00:00Z","client_id":"CODEX_WEB","event_details":{"detail_type":"PROMPT_RESPONSE_RECEIVED","session_id":"22222222-3333-4444-8555-666666666666","model":"gpt-5.5","response_text":"Done, the migration is applied.","status":"completed"}}` + "\n"
 	promptLater := `{"event_id":"cdx_p1","type":"CODEX_LOG","actor":{"type":"ACCOUNT_USER","user_id":"oai_user_1","user_email":"grace@example.com"},"timestamp":"2026-07-28T11:05:00Z","client_id":"CODEX_WEB","event_details":{"detail_type":"PROMPT_SENT","session_id":"22222222-3333-4444-8555-666666666666","model":"gpt-5.5","prompt_text":"Now update the rollback plan"}}` + "\n"
@@ -277,7 +275,7 @@ func TestCodexCloudTitleBackfillsWhenPromptArrivesInLaterFile(t *testing.T) {
 	fileB.ID = "eclf_backfill_b"
 	fileB.EndTime = fileA.EndTime.Add(time.Minute)
 
-	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, newTestGuardianPolicy(t), writer, func(context.Context, int) {})
 	src := &codexCloudSource{
 		client: &stubCodexComplianceClient{
 			listPages:  nil,
@@ -348,8 +346,7 @@ func TestCodexCloudMalformedTimestampCountsOncePerEvent(t *testing.T) {
 	cfg := created.Config
 	cfg.ProjectID = project.ID
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
-	t.Cleanup(func() { _ = shutdown(context.Background()) })
+	writer := chattest.NewMessageWriter(t, infra, conn)
 
 	// A single admitted event whose timestamp is a unix epoch rather than
 	// RFC3339 — the shape an upstream format change would produce.
@@ -357,7 +354,7 @@ func TestCodexCloudMalformedTimestampCountsOncePerEvent(t *testing.T) {
 	file := codexCloudFixtureFile(malformed)
 	file.ID = "eclf_bad_ts"
 
-	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, newTestGuardianPolicy(t), writer, func(context.Context, int) {})
 	src := &codexCloudSource{
 		client: &stubCodexComplianceClient{
 			listPages:  nil,
@@ -396,9 +393,8 @@ func TestSyncCodexCloudSessionsRejectsMisconfiguredIntegrations(t *testing.T) {
 	t.Parallel()
 
 	ctx, conn, store, _ := newStoreTestDB(t)
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
-	t.Cleanup(func() { _ = shutdown(context.Background()) })
-	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+	writer := chattest.NewMessageWriter(t, infra, conn)
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, newTestGuardianPolicy(t), writer, func(context.Context, int) {})
 
 	workspaceID := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
 	now := time.Now().UTC()
@@ -469,8 +465,7 @@ func TestCodexCloudCountsEventsMissingIdentifiers(t *testing.T) {
 	cfg := created.Config
 	cfg.ProjectID = project.ID
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
-	t.Cleanup(func() { _ = shutdown(context.Background()) })
+	writer := chattest.NewMessageWriter(t, infra, conn)
 
 	// Both clear the client and detail-type gates; one lacks session_id, the
 	// other lacks event_id.
@@ -481,7 +476,7 @@ func TestCodexCloudCountsEventsMissingIdentifiers(t *testing.T) {
 	file := codexCloudFixtureFile(body)
 	file.ID = "eclf_missing_ids"
 
-	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, newTestGuardianPolicy(t), writer, func(context.Context, int) {})
 	src := &codexCloudSource{
 		client:         &stubCodexComplianceClient{downloads: map[string][]byte{file.ID: []byte(body)}},
 		svc:            svc,

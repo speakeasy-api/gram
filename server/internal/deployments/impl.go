@@ -65,8 +65,10 @@ type Service struct {
 	audit        *audit.Logger
 }
 
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
+var (
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
+)
 
 func NewService(
 	logger *slog.Logger,
@@ -77,18 +79,12 @@ func NewService(
 	assetStorage assets.BlobStore,
 	posthog *posthog.Posthog,
 	siteURL *url.URL,
-	mcpRegistryClient *externalmcp.RegistryClient,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
-	catalogs ...*externalmcp.CatalogService,
+	catalog *externalmcp.CatalogService,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("deployments"))
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/deployments")
-
-	catalog := externalmcp.NewCatalogService(db, mcpRegistryClient, nil)
-	if len(catalogs) > 0 && catalogs[0] != nil {
-		catalog = catalogs[0]
-	}
 
 	return &Service{
 		logger:       logger,

@@ -99,7 +99,6 @@ type Service struct {
 
 // NewService uses the shared chat writer so captured messages receive the same
 // storage, metering, and asynchronous analysis as other imported conversations.
-// A nil titles leaves archived conversations with their placeholder title.
 func NewService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, writer *chat.ChatMessageWriter, scanner scanner, titles ChatTitleGenerator) *Service {
 	return &Service{logger: logger, store: &postgresStore{db: db, writer: writer, titles: titles, logger: logger}, scanner: scanner, metrics: newMetrics(meterProvider, logger)}
 }
@@ -549,9 +548,6 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 // It runs off the request goroutine: the verdict is on a hard budget and a
 // Temporal round trip must not spend any of it.
 func (s *postgresStore) scheduleTitle(ctx context.Context, config Config, chatID uuid.UUID) {
-	if s.titles == nil {
-		return
-	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), titleScheduleTimeout)
 		defer cancel()

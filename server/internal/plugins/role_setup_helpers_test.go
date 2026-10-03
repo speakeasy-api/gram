@@ -27,7 +27,7 @@ func roleSetupIdentity(t *testing.T, ctx context.Context, ti *testInstance, role
 }
 
 func processRoleSetup(ctx context.Context, ti *testInstance, target roleSetupTarget, publication plugins.PublicationRequests) (int, error) {
-	changed, err := roledistribution.ProcessRoleDistributionSetup(ctx, ti.conn, publication, nil, target.roleURN, target.organizationID)
+	changed, err := roledistribution.ProcessRoleDistributionSetup(ctx, ti.conn, publication, ti.guard, target.roleURN, target.organizationID)
 	if err != nil {
 		return 0, fmt.Errorf("process fixture role distribution: %w", err)
 	}

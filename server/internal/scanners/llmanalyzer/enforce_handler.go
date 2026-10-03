@@ -54,15 +54,6 @@ func WithMaxRequestAge(maxRequestAge time.Duration) EnforceHandlerOption {
 	}
 }
 
-// WithRiskRecorder meters the content of completed analyses under
-// metering.RiskLLMAnalyzer, as the gitleaks enforcer does for its lane. Without
-// it the handler answers requests but records no usage.
-func WithRiskRecorder(recorder *metering.RiskRecorder) EnforceHandlerOption {
-	return func(h *EnforceHandler) {
-		h.riskRecorder = recorder
-	}
-}
-
 // EnforceHandler consumes the LLM enforcement lane: it analyzes one inline
 // request with the fine-tuned risk model and writes a correlated
 // EnforcementReply to the requester's Redis inbox.
@@ -94,6 +85,7 @@ func NewEnforceHandler(
 	meterProvider metric.MeterProvider,
 	analyzer *Analyzer,
 	writer requestreply.ReplyBroker[*riskv1.EnforcementReply],
+	riskRecorder *metering.RiskRecorder,
 	opts ...EnforceHandlerOption,
 ) *EnforceHandler {
 	logger = logger.With(attr.SlogComponent("risk-llm-enforcer"))
@@ -103,7 +95,7 @@ func NewEnforceHandler(
 		analyzer:      analyzer,
 		writer:        writer,
 		metrics:       newEnforceHandlerMetrics(meterProvider, logger),
-		riskRecorder:  nil,
+		riskRecorder:  riskRecorder,
 		consumerID:    uuid.NewString(),
 		maxRequestAge: DefaultMaxRequestAge,
 	}
@@ -244,7 +236,7 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.LLMEnforcement, m
 
 	// The model was consulted whether or not the reply landed, so usage is
 	// metered after the reply attempt rather than gated on it.
-	if h.riskRecorder != nil && analysis.Result.Completed {
+	if analysis.Result.Completed {
 		provenance, provenanceErr := scanners.ParseRiskProvenance(m, m.GetMessageType(), "realtime_streams")
 		if provenanceErr != nil {
 			h.logger.WarnContext(ctx, "skipping llm enforcement usage with invalid attribution", attr.SlogError(provenanceErr))

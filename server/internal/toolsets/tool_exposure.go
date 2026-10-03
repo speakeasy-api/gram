@@ -53,7 +53,7 @@ type ToolExposureResult struct {
 // refuses instead of appending to a list the caller never read. The caller must
 // authorize the target first.
 func ChangeToolsetToolsInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, actor *contextvalues.AuthContext, toolsetID uuid.UUID, expectedVersion int64, change ToolExposureChange) (ToolExposureResult, error) {
-	if actor == nil || actor.ProjectID == nil || auditLogger == nil || logger == nil {
+	if actor == nil || actor.ProjectID == nil {
 		return ToolExposureResult{}, oops.E(oops.CodeUnauthorized, nil, "missing toolset tool exposure actor")
 	}
 	if len(change.Add) == 0 && len(change.Remove) == 0 {

@@ -69,7 +69,7 @@ type SpendBreakdownSummary struct {
 	QueriedAt      string `json:"queried_at"`
 }
 
-func registerBillingDiagnosticTools(server *mcp.Server, organizations OrganizationReader, reads BillingDiagnosticsReader) {
+func registerBillingDiagnosticTools(server *mcp.Server, reader Reader) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "get_organization_inference_key_state", Title: "Get Inference Key State",
 		Description: "Read configured state and usage of up to four platform-managed inference key types for an exact organization. No key material or provider identifiers are returned.",
@@ -79,14 +79,11 @@ func registerBillingDiagnosticTools(server *mcp.Server, organizations Organizati
 		if !verifiedStaff(ctx) {
 			return nil, out, errBillingDiagnosticsUnavailable
 		}
-		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
+		org, err := readExactOrganization(ctx, reader, input.OrganizationID)
 		if err != nil {
 			return nil, out, err
 		}
-		if reads == nil {
-			return nil, out, errBillingDiagnosticsUnavailable
-		}
-		keys, err := reads.GetInferenceKeys(ctx, &gen.GetInferenceKeysPayload{OrganizationID: org.ID})
+		keys, err := reader.GetInferenceKeys(ctx, &gen.GetInferenceKeysPayload{OrganizationID: org.ID})
 		if err != nil || len(keys) > 4 {
 			return nil, out, errBillingDiagnosticsUnavailable
 		}
@@ -115,14 +112,11 @@ func registerBillingDiagnosticTools(server *mcp.Server, organizations Organizati
 		if !verifiedStaff(ctx) {
 			return nil, out, errBillingDiagnosticsUnavailable
 		}
-		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
+		org, err := readExactOrganization(ctx, reader, input.OrganizationID)
 		if err != nil {
 			return nil, out, err
 		}
-		if reads == nil {
-			return nil, out, errBillingDiagnosticsUnavailable
-		}
-		months, err := reads.GetInferenceSpendHistory(ctx, &gen.GetInferenceSpendHistoryPayload{OrganizationID: org.ID})
+		months, err := reader.GetInferenceSpendHistory(ctx, &gen.GetInferenceSpendHistoryPayload{OrganizationID: org.ID})
 		if err != nil || len(months) > 12 {
 			return nil, out, errBillingDiagnosticsUnavailable
 		}
@@ -143,14 +137,11 @@ func registerBillingDiagnosticTools(server *mcp.Server, organizations Organizati
 		if !verifiedStaff(ctx) || (input.Family != "agent_session_storage" && input.Family != "mcp_bandwidth" && input.Family != "risk_content_scans") {
 			return nil, MeterUsageSummary{}, errBillingDiagnosticsUnavailable
 		}
-		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
+		org, err := readExactOrganization(ctx, reader, input.OrganizationID)
 		if err != nil {
 			return nil, MeterUsageSummary{}, err
 		}
-		if reads == nil {
-			return nil, MeterUsageSummary{}, errBillingDiagnosticsUnavailable
-		}
-		report, err := reads.GetMeterUsage(ctx, &gen.GetMeterUsagePayload{OrganizationID: org.ID, Family: input.Family})
+		report, err := reader.GetMeterUsage(ctx, &gen.GetMeterUsagePayload{OrganizationID: org.ID, Family: input.Family})
 		if err != nil || report == nil || report.Window == nil || report.Family != input.Family || len(report.Total) > 64 || len(report.Window.From) > 64 || len(report.Window.To) > 64 || len(report.Unit) > 64 || len(report.QueriedAt) > 64 {
 			return nil, MeterUsageSummary{}, errBillingDiagnosticsUnavailable
 		}
@@ -164,14 +155,11 @@ func registerBillingDiagnosticTools(server *mcp.Server, organizations Organizati
 		if !verifiedStaff(ctx) {
 			return nil, SpendBreakdownSummary{}, errBillingDiagnosticsUnavailable
 		}
-		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
+		org, err := readExactOrganization(ctx, reader, input.OrganizationID)
 		if err != nil {
 			return nil, SpendBreakdownSummary{}, err
 		}
-		if reads == nil {
-			return nil, SpendBreakdownSummary{}, errBillingDiagnosticsUnavailable
-		}
-		report, err := reads.GetSpendBreakdown(ctx, &gen.GetSpendBreakdownPayload{OrganizationID: org.ID})
+		report, err := reader.GetSpendBreakdown(ctx, &gen.GetSpendBreakdownPayload{OrganizationID: org.ID})
 		if err != nil || report == nil || report.Window == nil || len(report.TotalCostUsd) > 64 || len(report.Window.From) > 64 || len(report.Window.To) > 64 || len(report.Currency) > 64 || len(report.PricingBasis) > 64 || len(report.QueriedAt) > 64 {
 			return nil, SpendBreakdownSummary{}, errBillingDiagnosticsUnavailable
 		}

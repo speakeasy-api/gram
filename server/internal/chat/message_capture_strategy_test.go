@@ -12,9 +12,9 @@ import (
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattest"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -24,8 +24,7 @@ import (
 
 func newCaptureStrategy(t *testing.T, conn *pgxpool.Pool) *chat.ChatMessageCaptureStrategy {
 	t.Helper()
-	writer, writerShutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { _ = writerShutdown(t.Context()) })
+	writer := chattest.NewMessageWriter(t, infra, conn)
 	return chat.NewChatMessageCaptureStrategy(
 		testenv.NewLogger(t),
 		testenv.NewMeterProvider(t),

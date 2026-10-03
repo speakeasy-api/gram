@@ -27,10 +27,6 @@ func NewProcessScheduledTrigger(app *bgtriggers.App) *ProcessScheduledTrigger {
 }
 
 func (p *ProcessScheduledTrigger) Do(ctx context.Context, input ProcessScheduledTriggerInput) (*ProcessScheduledTriggerResult, error) {
-	if p.app == nil {
-		return nil, fmt.Errorf("trigger app is not configured")
-	}
-
 	task, err := p.app.ProcessScheduled(ctx, bgtriggers.ProcessScheduledInput{
 		TriggerInstanceID: input.TriggerInstanceID,
 		FiredAt:           input.FiredAt,

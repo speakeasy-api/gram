@@ -70,7 +70,7 @@ func ValidateOrigin(origin *url.URL) error {
 }
 
 func (c *Config) Origin() *url.URL {
-	if c == nil || c.origin == nil {
+	if c.origin == nil {
 		return nil
 	}
 	originCopy := *c.origin
@@ -78,82 +78,67 @@ func (c *Config) Origin() *url.URL {
 }
 
 func (c *Config) Registry() externalmcp.Registry {
-	if c == nil {
-		return externalmcp.Registry{
-			ID:  uuid.Nil,
-			URL: "",
-		}
-	}
 	return c.registry
 }
 
 func (c *Config) RemoteSessionIssuerID() uuid.UUID {
-	if c == nil {
-		return uuid.Nil
-	}
 	return c.remoteSessionIssuerID
 }
 
 func (c *Config) RemoteURL() string {
-	if c == nil {
-		return ""
-	}
 	return c.remoteURL
 }
 
 func (c *Config) OAuthIssuerURL() string {
-	if c == nil || c.origin == nil {
+	if c.origin == nil {
 		return ""
 	}
 	return c.origin.JoinPath(fixtureOAuthPath).String()
 }
 
 func (c *Config) OAuthAuthorizationServerMetadataURL() string {
-	if c == nil || c.origin == nil {
+	if c.origin == nil {
 		return ""
 	}
 	return c.origin.JoinPath(".well-known", "oauth-authorization-server", fixtureOAuthPath).String()
 }
 
 func (c *Config) OAuthAuthorizationURL() string {
-	if c == nil || c.origin == nil {
+	if c.origin == nil {
 		return ""
 	}
 	return c.origin.JoinPath(fixtureOAuthPath, "authorize").String()
 }
 
 func (c *Config) OAuthTokenURL() string {
-	if c == nil || c.origin == nil {
+	if c.origin == nil {
 		return ""
 	}
 	return c.origin.JoinPath(fixtureOAuthPath, "token").String()
 }
 
 func (c *Config) OAuthRegistrationURL() string {
-	if c == nil || c.origin == nil {
+	if c.origin == nil {
 		return ""
 	}
 	return c.origin.JoinPath(fixtureOAuthPath, "register").String()
 }
 
 func (c *Config) OAuthRevocationURL() string {
-	if c == nil || c.origin == nil {
+	if c.origin == nil {
 		return ""
 	}
 	return c.origin.JoinPath(fixtureOAuthPath, "revoke").String()
 }
 
 func (c *Config) RemoteLoginCallbackURL() string {
-	if c == nil || c.origin == nil {
+	if c.origin == nil {
 		return ""
 	}
 	return c.origin.JoinPath("mcp", "remote_login_callback").String()
 }
 
 func (c *Config) RegistryDetailsPath() string {
-	if c == nil {
-		return ""
-	}
 	registryURL, err := url.Parse(c.registry.URL)
 	if err != nil {
 		return ""
@@ -207,15 +192,6 @@ func (c *Config) SetupResources() []platformmcp.SetupResource {
 }
 
 func (c *Config) CatalogDescriptor() platformmcp.CatalogDescriptor {
-	if c == nil {
-		return platformmcp.CatalogDescriptor{
-			ProviderKey:      "",
-			Registry:         externalmcp.Registry{ID: uuid.Nil, URL: ""},
-			CanonicalRef:     "",
-			AllowedRemoteURL: "",
-			SetupIntent:      "",
-		}
-	}
 	return platformmcp.CatalogDescriptor{
 		ProviderKey:      ProviderKey,
 		Registry:         c.registry,

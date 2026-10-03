@@ -117,6 +117,14 @@ func (f *fakeBypassChecker) CanBypassShadowMCP(
 	return results
 }
 
+func noCoverage() *fakeCoverage {
+	return &fakeCoverage{got: nil}
+}
+
+func noBypass() *fakeBypassChecker {
+	return &fakeBypassChecker{allowed: false, policyID: uuid.Nil, requests: nil, calls: 0}
+}
+
 func gramHosted() *fakeHosted {
 	return &fakeHosted{calls: 0, err: nil}
 }
@@ -136,7 +144,7 @@ func TestScanner_HostedProvenanceIsCleanWithoutSignature(t *testing.T) {
 		callCount: 0,
 	}
 	coverage := &fakeCoverage{got: nil}
-	s := NewScanner(discardLogger(), validator, gramHosted(), prov, coverage)
+	s := NewScanner(discardLogger(), validator, gramHosted(), prov, coverage, noBypass())
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
@@ -160,7 +168,7 @@ func TestScanner_ThirdPartyURLProvenanceIsFlagged(t *testing.T) {
 		callCount: 0,
 	}
 	coverage := &fakeCoverage{got: nil}
-	s := NewScanner(discardLogger(), validator, gramHosted(), prov, coverage)
+	s := NewScanner(discardLogger(), validator, gramHosted(), prov, coverage, noBypass())
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
@@ -190,7 +198,7 @@ func TestScanner_URLBypassGrantSuppressesFinding(t *testing.T) {
 		callCount: 0,
 	}
 	bypass := &fakeBypassChecker{allowed: true, policyID: uuid.Nil, requests: nil, calls: 0}
-	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil, WithShadowMCPBypass(bypass))
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, noCoverage(), bypass)
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), policyID, []Message{
 		{UserID: "user-1", ToolCalls: []ToolCall{{ID: "call-1", Name: "MCP:delete_row", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Cursor"}}},
@@ -227,7 +235,7 @@ func TestScanner_BatchesDuplicateBypassChecksAndPreservesURLIdentity(t *testing.
 		callCount: 0,
 	}
 	bypass := &fakeBypassChecker{allowed: true, policyID: uuid.Nil, requests: nil, calls: 0}
-	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil, WithShadowMCPBypass(bypass))
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, noCoverage(), bypass)
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), policyID, []Message{{
 		UserID: "user-1",
@@ -260,8 +268,8 @@ func TestScanner_UnresolvedDeniedCallCanUseWholePolicyDecision(t *testing.T) {
 		&fakeValidator{denied: map[string]bool{"delete": true}, orgIDs: nil},
 		gramHosted(),
 		noProvenance(),
-		nil,
-		WithShadowMCPBypass(bypass),
+		noCoverage(),
+		bypass,
 	)
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.New(), []Message{{
@@ -290,7 +298,7 @@ func TestScanner_UnattributedSessionCannotBypassFinding(t *testing.T) {
 		callCount: 0,
 	}
 	bypass := &fakeBypassChecker{allowed: true, policyID: uuid.Nil, requests: nil, calls: 0}
-	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil, WithShadowMCPBypass(bypass))
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, noCoverage(), bypass)
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.New(), []Message{
 		{UserID: "", ToolCalls: []ToolCall{{ID: "call-1", Name: "MCP:delete_row", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Cursor"}}},
@@ -314,7 +322,7 @@ func TestScanner_StdioCommandProvenanceIsFlagged(t *testing.T) {
 		gotSince:  time.Time{},
 		callCount: 0,
 	}
-	s := NewScanner(discardLogger(), validator, gramHosted(), prov, nil)
+	s := NewScanner(discardLogger(), validator, gramHosted(), prov, noCoverage(), noBypass())
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
@@ -338,7 +346,7 @@ func TestScanner_StdioBypassGrantSuppressesFinding(t *testing.T) {
 		callCount: 0,
 	}
 	bypass := &fakeBypassChecker{allowed: true, policyID: uuid.Nil, requests: nil, calls: 0}
-	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil, WithShadowMCPBypass(bypass))
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, noCoverage(), bypass)
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), policyID, []Message{
 		{UserID: "user-1", ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Codex"}}},
@@ -375,7 +383,7 @@ func TestScanner_BarePrefixProvenanceFallsBackToSignature(t *testing.T) {
 		callCount: 0,
 	}
 	coverage := &fakeCoverage{got: nil}
-	s := NewScanner(discardLogger(), validator, gramHosted(), prov, coverage)
+	s := NewScanner(discardLogger(), validator, gramHosted(), prov, coverage, noBypass())
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
@@ -391,7 +399,7 @@ func TestScanner_UnresolvedProvenanceFallsBackToSignature(t *testing.T) {
 
 	validator := &fakeValidator{denied: map[string]bool{"delete": true}, orgIDs: nil}
 	coverage := &fakeCoverage{got: nil}
-	s := NewScanner(discardLogger(), validator, gramHosted(), noProvenance(), coverage)
+	s := NewScanner(discardLogger(), validator, gramHosted(), noProvenance(), coverage, noBypass())
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Codex"}}},
@@ -426,7 +434,7 @@ func TestScanner_ProvenanceHookSourceWinsOverMessageSender(t *testing.T) {
 		callCount: 0,
 	}
 	coverage := &fakeCoverage{got: nil}
-	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, coverage)
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, coverage, noBypass())
 
 	s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Cursor"}}},
@@ -443,7 +451,7 @@ func TestScanner_ProvenanceErrorFallsBackToSignature(t *testing.T) {
 
 	validator := &fakeValidator{denied: map[string]bool{"delete": true}, orgIDs: nil}
 	prov := &fakeProvenance{found: nil, err: errors.New("boom"), gotIDs: nil, gotSince: time.Time{}, callCount: 0}
-	s := NewScanner(discardLogger(), validator, gramHosted(), prov, nil)
+	s := NewScanner(discardLogger(), validator, gramHosted(), prov, noCoverage(), noBypass())
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
@@ -467,7 +475,7 @@ func TestScanner_ServerURLPreferredOverMatch(t *testing.T) {
 		gotSince:  time.Time{},
 		callCount: 0,
 	}
-	s := NewScanner(discardLogger(), validator, gramHosted(), prov, nil)
+	s := NewScanner(discardLogger(), validator, gramHosted(), prov, noCoverage(), noBypass())
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
@@ -490,7 +498,7 @@ func TestScanner_CursorStyleToolNameUsesProvenance(t *testing.T) {
 		gotSince:  time.Time{},
 		callCount: 0,
 	}
-	s := NewScanner(discardLogger(), validator, gramHosted(), prov, nil)
+	s := NewScanner(discardLogger(), validator, gramHosted(), prov, noCoverage(), noBypass())
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{{ID: "call-1", Name: "MCP:delete_row", Arguments: `{}`, CreatedAt: time.Now()}}},
@@ -505,7 +513,7 @@ func TestScanner_SkipsNonMCPAndNamelessCalls(t *testing.T) {
 
 	validator := &fakeValidator{denied: map[string]bool{"delete": true}, orgIDs: nil}
 	prov := noProvenance()
-	s := NewScanner(discardLogger(), validator, gramHosted(), prov, nil)
+	s := NewScanner(discardLogger(), validator, gramHosted(), prov, noCoverage(), noBypass())
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{
@@ -536,7 +544,7 @@ func TestScanner_BatchPositionalAlignmentAndSingleLookup(t *testing.T) {
 		gotSince:  time.Time{},
 		callCount: 0,
 	}
-	s := NewScanner(discardLogger(), validator, gramHosted(), prov, nil)
+	s := NewScanner(discardLogger(), validator, gramHosted(), prov, noCoverage(), noBypass())
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{{ID: "call-0", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
@@ -562,7 +570,7 @@ func TestScanner_LookupIsBoundedByOldestMessage(t *testing.T) {
 
 	oldest := time.Now().Add(-48 * time.Hour)
 	prov := noProvenance()
-	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil)
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, noCoverage(), noBypass())
 
 	s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{{ID: "call-0", Name: "mcp__db__read", Arguments: `{}`, CreatedAt: time.Now()}}},
@@ -576,7 +584,7 @@ func TestScanner_NoMCPCallsSkipsLookup(t *testing.T) {
 	t.Parallel()
 
 	prov := noProvenance()
-	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil)
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, noCoverage(), noBypass())
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{{ID: "call-1", Name: "Bash", Arguments: `{}`, CreatedAt: time.Now()}}},
@@ -589,7 +597,7 @@ func TestScanner_NoMCPCallsSkipsLookup(t *testing.T) {
 func TestFinding_UsesCanonicalRuleIDAndLeaksNoInternals(t *testing.T) {
 	t.Parallel()
 
-	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), noProvenance(), nil)
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), noProvenance(), noCoverage(), noBypass())
 
 	f := s.finding(ToolCall{ID: "call-1", Name: "mcp__db__delete", Arguments: "", CreatedAt: time.Time{}}, "db")
 	require.Equal(t, Rule, f.RuleID)
@@ -696,7 +704,7 @@ func TestScanner_ResolvesTrustedHostsOncePerScan(t *testing.T) {
 		gotSince:  time.Time{},
 		callCount: 0,
 	}
-	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, hosted, prov, nil)
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, hosted, prov, noCoverage(), noBypass())
 
 	s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{{ID: "call-0", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
@@ -723,7 +731,7 @@ func TestScanner_HostResolutionFailureFallsBackToSignature(t *testing.T) {
 		callCount: 0,
 	}
 	coverage := &fakeCoverage{got: nil}
-	s := NewScanner(discardLogger(), validator, hosted, prov, coverage)
+	s := NewScanner(discardLogger(), validator, hosted, prov, coverage, noBypass())
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Claude"}}},
@@ -749,7 +757,7 @@ func TestScanner_HostResolutionFailureDoesNotFlagSignedCalls(t *testing.T) {
 		gotSince:  time.Time{},
 		callCount: 0,
 	}
-	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, hosted, prov, nil)
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, hosted, prov, noCoverage(), noBypass())
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
@@ -764,7 +772,7 @@ func TestScanner_NoMCPCallsSkipsHostLookup(t *testing.T) {
 	t.Parallel()
 
 	hosted := gramHosted()
-	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, hosted, noProvenance(), nil)
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, hosted, noProvenance(), noCoverage(), noBypass())
 
 	s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{{ID: "call-1", Name: "Bash", Arguments: `{}`, CreatedAt: time.Now()}}},
@@ -788,7 +796,7 @@ func TestScanner_StdioCommandFrontingGramURLIsClean(t *testing.T) {
 		callCount: 0,
 	}
 	coverage := &fakeCoverage{got: nil}
-	s := NewScanner(discardLogger(), validator, gramHosted(), prov, coverage)
+	s := NewScanner(discardLogger(), validator, gramHosted(), prov, coverage, noBypass())
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
@@ -812,7 +820,7 @@ func TestScanner_NonHTTPSchemeGramURLIsClean(t *testing.T) {
 		gotSince:  time.Time{},
 		callCount: 0,
 	}
-	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil)
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, noCoverage(), noBypass())
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
@@ -833,7 +841,7 @@ func TestScanner_UntrimmedServerURLIsClean(t *testing.T) {
 		gotSince:  time.Time{},
 		callCount: 0,
 	}
-	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil)
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, noCoverage(), noBypass())
 
 	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
 		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},

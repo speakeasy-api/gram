@@ -10,13 +10,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
-// NoopLimiter is a [Limiter] that admits everything. The zero value is the
-// default on a [Policy], so rate limits configured via [WithResilience] are
-// inert until a real limiter is injected with [WithLimiter]. A NoopLimiter
-// built with [NewNoopLimiter] additionally reports the
+// NoopLimiter is a [Limiter] that admits everything. It is the default on a
+// [Policy], so rate limits configured via [WithResilience] are inert until a
+// real limiter is injected with [WithLimiter]. It reports the
 // gram.rate_limit.buckets gauge, counting the buckets a real limiter would
 // hold, so partition cardinality can be observed before enforcement is
-// switched on.
+// switched on. Construct it with [NewNoopLimiter]; the zero value is not
+// usable.
 type NoopLimiter struct {
 	partitions *partitionTracker
 }

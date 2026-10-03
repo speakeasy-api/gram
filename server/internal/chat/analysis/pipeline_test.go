@@ -19,9 +19,7 @@ import (
 func testJudges(t *testing.T, judges ...Judge) *Judges {
 	t.Helper()
 
-	roster, err := NewJudges(judges...)
-	require.NoError(t, err)
-	return roster
+	return NewJudges(judges...)
 }
 
 func TestEnqueuePage_EnqueuesEnabledJudgesPerChat(t *testing.T) {
@@ -161,7 +159,7 @@ func TestPublish_ScoresReservedBatch(t *testing.T) {
 	require.Len(t, reserved, 1)
 
 	sink := &captureSink{}
-	publisher := NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, sink, nil, roster)
+	publisher := NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, sink, &captureEventSink{}, roster)
 
 	result, err := publisher.Publish(ctx, fixture.projectID, []uuid.UUID{reserved[0].ID}, nil)
 	require.NoError(t, err)
@@ -198,7 +196,7 @@ func TestPublish_ModelFailureChargesAttempt(t *testing.T) {
 	require.Len(t, reserved, 1)
 
 	sink := &captureSink{}
-	publisher := NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, sink, nil, roster)
+	publisher := NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, sink, &captureEventSink{}, roster)
 
 	// Two failed passes stay reserved; the third terminates the evaluation.
 	for attempt := 1; attempt <= int(MaxModelAttempts); attempt++ {
@@ -243,7 +241,7 @@ func TestPublish_ThrottledJudgeChargesNoAttempt(t *testing.T) {
 	require.Len(t, reserved, 1)
 
 	sink := &captureSink{}
-	publisher := NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, sink, nil, roster)
+	publisher := NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, sink, &captureEventSink{}, roster)
 
 	result, err := publisher.Publish(ctx, fixture.projectID, []uuid.UUID{reserved[0].ID}, nil)
 	require.NoError(t, err)
@@ -274,7 +272,7 @@ func TestPublish_AlreadyPublishedSkipsJudge(t *testing.T) {
 	// The sink already holds this evaluation's score: a crash between insert and
 	// mark. The pass must finish the transition without paying for inference.
 	sink := &captureSink{existing: []string{reserved[0].ID.String()}}
-	publisher := NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, sink, nil, roster)
+	publisher := NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, sink, &captureEventSink{}, roster)
 
 	result, err := publisher.Publish(ctx, fixture.projectID, []uuid.UUID{reserved[0].ID}, nil)
 	require.NoError(t, err)

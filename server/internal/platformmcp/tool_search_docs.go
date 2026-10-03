@@ -119,12 +119,3 @@ func excerptLinkDescription(excerpt DocsExcerpt) string {
 	}
 	return fmt.Sprintf("Full reviewed setup guide containing %q.", excerpt.Heading)
 }
-
-func registerUnavailableSearchDocsTool(reg *Registrar) {
-	addTool(reg, &mcp.Tool{
-		Name:        "search_gram_docs",
-		Title:       "Search Setup Guides",
-		Description: "Search the reviewed Speakeasy setup guides. This is not switched on for your organization yet.",
-		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("docs_search"))
-}

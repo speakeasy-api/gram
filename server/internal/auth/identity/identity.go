@@ -316,14 +316,12 @@ func (r *Resolver) UpsertUserFromIDPWithResult(ctx context.Context, idpUser *IDP
 		return UpsertUserResult{}, err
 	}
 
-	if r.workosClient != nil {
-		if err := r.workosClient.EnsureUserExternalID(ctx, idpUser.Sub, gramUserID); err != nil {
-			r.logger.ErrorContext(ctx, "failed to sync external_id to workos",
-				attr.SlogError(err),
-				attr.SlogWorkOSUserID(idpUser.Sub),
-				attr.SlogAuthUserID(gramUserID),
-			)
-		}
+	if err := r.workosClient.EnsureUserExternalID(ctx, idpUser.Sub, gramUserID); err != nil {
+		r.logger.ErrorContext(ctx, "failed to sync external_id to workos",
+			attr.SlogError(err),
+			attr.SlogWorkOSUserID(idpUser.Sub),
+			attr.SlogAuthUserID(gramUserID),
+		)
 	}
 
 	if user.WasCreated {
@@ -525,7 +523,7 @@ func (r *Resolver) SyncMembershipsFromWorkOSPreservingExisting(ctx context.Conte
 }
 
 func (r *Resolver) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, workosUserID string, preserveExisting bool) error {
-	if r.workosClient == nil || workosUserID == "" {
+	if workosUserID == "" {
 		return nil
 	}
 
@@ -577,7 +575,7 @@ func (r *Resolver) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 }
 
 func (r *Resolver) UpdateOrganizationMembershipRole(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error) {
-	if r.workosClient == nil || workosUserID == "" || workosOrgID == "" || roleSlug == "" {
+	if workosUserID == "" || workosOrgID == "" || roleSlug == "" {
 		return "", nil
 	}
 
@@ -765,11 +763,10 @@ func (r *Resolver) InvalidateUserInfoCache(ctx context.Context, userID string) e
 const workosAuthorizeEndpoint = "https://api.workos.com/user_management/authorize"
 
 // HasWorkOSUser reports whether WorkOS already has an account for email.
-// An unset client is treated as "no such user" so local and test environments
-// keep the current signup flow. Callers must fail open on error: a temporary
-// WorkOS problem must not block new signups.
+// Callers must fail open on error: a temporary WorkOS problem must not block
+// new signups.
 func (r *Resolver) HasWorkOSUser(ctx context.Context, email string) (bool, error) {
-	if r.workosClient == nil || email == "" {
+	if email == "" {
 		return false, nil
 	}
 
@@ -825,17 +822,7 @@ type ProvisionedOrganization struct {
 // Gram org ID (UUIDv5) from the returned WorkOS org ID, sets the external_id
 // on the WorkOS org to the derived Gram ID, and creates an admin membership
 // linking the first user.
-// When no WorkOS client is configured (tests, OSS), returns a random UUID as gramOrgID.
 func (r *Resolver) ProvisionOrgInWorkOS(ctx context.Context, orgName, gramUserID string) (ProvisionedOrganization, error) {
-	if r.workosClient == nil {
-		return ProvisionedOrganization{
-			WorkOSOrganizationID: "",
-			GramOrganizationID:   uuid.New().String(),
-			WorkOSUserID:         "",
-			WorkOSMembershipID:   "",
-		}, nil
-	}
-
 	// Look up user's WorkOS ID from the database.
 	user, err := r.userRepo.GetUser(ctx, gramUserID)
 	if err != nil {

@@ -87,11 +87,8 @@ type IdentityCoverageCheckpoint struct {
 }
 
 // NewIdentityCoverageCheckpoint wires the production adapters to an MCP
-// metric scope. A nil database or recorder produces a disabled checkpoint.
+// metric scope.
 func NewIdentityCoverageCheckpoint(db *pgxpool.Pool, recorder IdentityCoverageRecorder) *IdentityCoverageCheckpoint {
-	if db == nil || recorder == nil {
-		return nil
-	}
 	return &IdentityCoverageCheckpoint{
 		principal: &authenticatedPrincipalAdapter{PrincipalAdapter: NewAuthenticatedUserPrincipalAdapter(db), agent: NewAgentPrincipalAdapter(db)},
 		resource:  NewMCPServerResourceAdapter(db),
@@ -103,10 +100,6 @@ func NewIdentityCoverageCheckpoint(db *pgxpool.Pool, recorder IdentityCoverageRe
 // stamped by successful authentication and the fronting server resolved from
 // the live route. Unstamped requests never enter principal derivation.
 func (c *IdentityCoverageCheckpoint) Record(ctx context.Context, organizationID string, surface mcpmetrics.KillswitchCoverageSurface, resourceSource ServerSource) {
-	if c == nil {
-		return
-	}
-
 	derivation := deriveCoverage(ctx, killswitches.OrganizationID(organizationID), c.principal, c.resource, resourceSource)
 	derivation.record(ctx, c.recorder, surface)
 }

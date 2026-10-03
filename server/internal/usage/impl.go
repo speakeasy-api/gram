@@ -90,10 +90,6 @@ type openRouterBillingDBProvisioner interface {
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, keyRefresher openRouterKeyRefreshScheduler, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier, meterReadConn clickhouse.Conn) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
-	if trialNotifier == nil {
-		trialNotifier = trialemails.NoopNotifier{}
-	}
-
 	service := &Service{
 		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
 		logger:          logger,
@@ -400,11 +396,7 @@ func (s *Service) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 // request arrived on, or fallback. Browser redirects must stay on that host
 // because the session cookie is host-only.
 func (s *Service) platformHostBaseURL(ctx context.Context, fallback *url.URL) string {
-	serverURL := ""
-	if s.serverURL != nil {
-		serverURL = s.serverURL.String()
-	}
-	return requestorigin.PlatformHostBaseURL(ctx, serverURL, fallback.String())
+	return requestorigin.PlatformHostBaseURL(ctx, s.serverURL.String(), fallback.String())
 }
 
 func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckoutPayload) (res string, err error) {

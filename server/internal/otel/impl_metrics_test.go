@@ -189,6 +189,7 @@ func ingestMetricTestExport(
 		logPublisher:    nil,
 		metricPublisher: publisher,
 		spanPublisher:   nil,
+		hooksSink:       newRecordingHooksSink(),
 	}
 	projectID := uuid.MustParse(testMetricProjectID)
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{

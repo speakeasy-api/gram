@@ -35,26 +35,9 @@ type Evaluator struct {
 	metrics   scanMetrics
 }
 
-// NewEvaluator wraps observers with ownership and duplicate protection.
-func NewEvaluator(observers ...Observer) *Evaluator {
-	return &Evaluator{
-		policy:    nil,
-		observers: observers,
-		metrics: scanMetrics{
-			scans:         nil,
-			duration:      nil,
-			flagDropped:   nil,
-			flagOversized: nil,
-		},
-	}
-}
-
 // PrependObserver composes test or instrumentation observation without
 // exposing a second scan boundary that could bypass the subject claim.
 func PrependObserver(observer Observer, next *Evaluator) *Evaluator {
-	if next == nil {
-		return NewEvaluator(observer)
-	}
 	clone := *next
 	clone.observers = make([]Observer, 0, len(next.observers)+1)
 	clone.observers = append(clone.observers, observer)
@@ -64,27 +47,19 @@ func PrependObserver(observer Observer, next *Evaluator) *Evaluator {
 
 // Drain waits for detached flag evaluations after request admission has stopped.
 func (e *Evaluator) Drain(ctx context.Context) error {
-	if e == nil || e.policy == nil {
-		return nil
-	}
 	return e.policy.drain(ctx)
 }
 
 // Scan synchronously evaluates an authoritative subject at most once.
 func (e *Evaluator) Scan(ctx context.Context, subject Subject) Decision {
-	if e == nil || !subject.claimEvaluation() {
+	if !subject.claimEvaluation() {
 		return Allow()
 	}
 
 	start := time.Now()
-	decision := Allow()
-	if e.policy != nil {
-		decision = e.policy.evaluate(ctx, subject)
-	}
+	decision := e.policy.evaluate(ctx, subject)
 	for _, observer := range e.observers {
-		if observer != nil {
-			observer.Observe(ctx, subject)
-		}
+		observer.Observe(ctx, subject)
 	}
 	e.metrics.record(ctx, subject.Event, decision.metricDecision(), time.Since(start))
 	return decision
@@ -97,19 +72,14 @@ type scanMetrics struct {
 	flagOversized metric.Int64Counter
 }
 
-type noop struct {
+type scanTracer struct {
 	tracer trace.Tracer
 }
 
-// NewNoop returns an Evaluator that records reachability and the scan cost baseline,
-// without evaluating policies, recording findings, or gating calls.
-func NewNoop(tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger) *Evaluator {
-	return newInstrumentedEvaluator(nil, tracerProvider, meterProvider, logger)
-}
+const scanInstrumentationScope = "github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 
-func newInstrumentedEvaluator(policy *policyEvaluator, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger) *Evaluator {
-	const scope = "github.com/speakeasy-api/gram/server/internal/mcpriskscan"
-	meter := meterProvider.Meter(scope)
+func newScanMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) scanMetrics {
+	meter := meterProvider.Meter(scanInstrumentationScope)
 	scans, err := meter.Int64Counter(
 		"mcp.risk.scan",
 		metric.WithDescription("MCP risk scans by endpoint surface, MCP method, and decision"),
@@ -143,19 +113,15 @@ func newInstrumentedEvaluator(policy *policyEvaluator, tracerProvider trace.Trac
 	if err != nil {
 		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName("mcp.risk.scan.flag_oversized"), attr.SlogError(err))
 	}
-	return &Evaluator{
-		policy:    policy,
-		observers: []Observer{&noop{tracer: tracerProvider.Tracer(scope)}},
-		metrics: scanMetrics{
-			scans:         scans,
-			duration:      duration,
-			flagDropped:   flagDropped,
-			flagOversized: flagOversized,
-		},
+	return scanMetrics{
+		scans:         scans,
+		duration:      duration,
+		flagDropped:   flagDropped,
+		flagOversized: flagOversized,
 	}
 }
 
-func (n *noop) Observe(ctx context.Context, subject Subject) {
+func (n *scanTracer) Observe(ctx context.Context, subject Subject) {
 	event := subject.Event
 	surface := attribute.String("gram.mcp.risk.scan.surface", event.Surface)
 	method := attribute.String("gram.mcp.risk.scan.method", event.Method)
@@ -188,18 +154,11 @@ func (m scanMetrics) record(ctx context.Context, event Event, decision string, e
 	phase := attribute.String("gram.mcp.risk.scan.phase", event.Phase())
 	outcome := attribute.String("gram.mcp.risk.scan.decision", decision)
 	opts := metric.WithAttributes(surface, method, phase, outcome)
-	if m.scans != nil {
-		m.scans.Add(ctx, 1, opts)
-	}
-	if m.duration != nil {
-		m.duration.Record(ctx, elapsed.Seconds(), opts)
-	}
+	m.scans.Add(ctx, 1, opts)
+	m.duration.Record(ctx, elapsed.Seconds(), opts)
 }
 
 func (m scanMetrics) recordFlagDrop(ctx context.Context, event Event) {
-	if m.flagDropped == nil {
-		return
-	}
 	m.flagDropped.Add(ctx, 1, metric.WithAttributes(
 		attribute.String("gram.mcp.risk.scan.surface", event.Surface),
 		attribute.String("gram.mcp.risk.scan.method", event.Method),
@@ -208,9 +167,6 @@ func (m scanMetrics) recordFlagDrop(ctx context.Context, event Event) {
 }
 
 func (m scanMetrics) recordFlagOversized(ctx context.Context, event Event) {
-	if m.flagOversized == nil {
-		return
-	}
 	m.flagOversized.Add(ctx, 1, metric.WithAttributes(
 		attribute.String("gram.mcp.risk.scan.surface", event.Surface),
 		attribute.String("gram.mcp.risk.scan.method", event.Method),

@@ -107,7 +107,7 @@ func NewOnboardingService(db *pgxpool.Pool) *OnboardingService {
 }
 
 func (s *OnboardingService) Get(ctx context.Context, organizationID, userID string) (OnboardingProjection, error) {
-	if s == nil || s.db == nil || organizationID == "" || userID == "" {
+	if organizationID == "" || userID == "" {
 		return OnboardingProjection{}, ErrOnboardingInvalid
 	}
 
@@ -207,7 +207,7 @@ func (s *OnboardingService) Get(ctx context.Context, organizationID, userID stri
 }
 
 func (s *OnboardingService) Start(ctx context.Context, organizationID, userID string, source ...OnboardingSourceSurface) (OnboardingProjection, error) {
-	if s == nil || s.db == nil || organizationID == "" || userID == "" {
+	if organizationID == "" || userID == "" {
 		return OnboardingProjection{}, ErrOnboardingInvalid
 	}
 
@@ -251,7 +251,7 @@ func (s *OnboardingService) Start(ctx context.Context, organizationID, userID st
 }
 
 func (s *OnboardingService) RecordInstallIntent(ctx context.Context, organizationID, userID string, client OnboardingClientFamily) (OnboardingProjection, error) {
-	if s == nil || s.db == nil || organizationID == "" || userID == "" || !validOnboardingClient(client) {
+	if organizationID == "" || userID == "" || !validOnboardingClient(client) {
 		return OnboardingProjection{}, ErrOnboardingInvalid
 	}
 
@@ -311,9 +311,6 @@ func (s *OnboardingService) RecordInstallIntent(ctx context.Context, organizatio
 // active workflow. The registration ID remains internal and is never projected
 // to dashboard callers.
 func (s *OnboardingService) RecordCatalogExplored(ctx context.Context, principal Principal) error {
-	if s == nil || s.db == nil {
-		return ErrUnavailable
-	}
 	connectionID, generation, err := parseOptionalConnection(principal)
 	if err != nil {
 		return err
@@ -373,7 +370,7 @@ func (s *OnboardingService) RecordDistributionSucceeded(ctx context.Context, pri
 }
 
 func (s *OnboardingService) recordLifecycleMilestone(ctx context.Context, principal Principal, projectID, registrationID uuid.UUID, milestone string) error {
-	if s == nil || s.db == nil || projectID == uuid.Nil || registrationID == uuid.Nil {
+	if projectID == uuid.Nil || registrationID == uuid.Nil {
 		return ErrOnboardingInvalid
 	}
 	connectionID, generation, err := parseConnection(principal)
@@ -424,7 +421,7 @@ func (s *OnboardingService) recordLifecycleMilestone(ctx context.Context, princi
 }
 
 func (s *OnboardingService) RecordAgentConfigurationCopied(ctx context.Context, organizationID, userID string) (OnboardingProjection, error) {
-	if s == nil || s.db == nil || organizationID == "" || userID == "" {
+	if organizationID == "" || userID == "" {
 		return OnboardingProjection{}, ErrOnboardingInvalid
 	}
 
@@ -455,7 +452,7 @@ func (s *OnboardingService) RecordAgentConfigurationCopied(ctx context.Context, 
 }
 
 func (s *OnboardingService) BindRegistration(ctx context.Context, organizationID, userID string, projectID, registrationID uuid.UUID) (OnboardingProjection, error) {
-	if s == nil || s.db == nil || organizationID == "" || userID == "" || projectID == uuid.Nil || registrationID == uuid.Nil {
+	if organizationID == "" || userID == "" || projectID == uuid.Nil || registrationID == uuid.Nil {
 		return OnboardingProjection{}, ErrOnboardingInvalid
 	}
 
@@ -505,7 +502,7 @@ func (s *OnboardingService) BindRegistrationForPrincipal(ctx context.Context, pr
 }
 
 func (s *OnboardingService) Dismiss(ctx context.Context, organizationID, userID string) error {
-	if s == nil || s.db == nil || organizationID == "" || userID == "" {
+	if organizationID == "" || userID == "" {
 		return ErrOnboardingInvalid
 	}
 

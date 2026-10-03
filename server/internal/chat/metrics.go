@@ -39,9 +39,6 @@ func newCaptureMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) 
 // RecordDroppedGeneration counts an assistant generation dropped at capture
 // because the model produced malformed tool_call arguments.
 func (m *captureMetrics) RecordDroppedGeneration(ctx context.Context, projectID uuid.UUID, toolName string) {
-	if m.droppedGenerations == nil {
-		return
-	}
 	m.droppedGenerations.Add(ctx, 1, metric.WithAttributes(
 		attr.ProjectID(projectID.String()),
 		attr.ToolName(toolName),

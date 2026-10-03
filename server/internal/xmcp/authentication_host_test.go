@@ -28,8 +28,7 @@ const xmcpAuthenticationHost = "https://auth.example.com"
 func xmcpAuthenticationHostHandler(t *testing.T, ti *testInstance) http.Handler {
 	t.Helper()
 
-	host, err := mcp.NewAuthenticationHost(xmcpAuthenticationHost, ti.serverURL, "test")
-	require.NoError(t, err)
+	host := mcp.NewAuthenticationHost(xmcpAuthenticationHost, ti.serverURL, "test")
 	mcp.AttachAuthenticationHost(host, ti.mcpService)
 	xmcp.AttachAuthenticationHost(host, ti.service)
 

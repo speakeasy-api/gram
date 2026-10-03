@@ -43,8 +43,7 @@ func (unusedReplayGuard) Reserve(context.Context, replay.Key, time.Time) (bool, 
 func admitWithFailingKeys(t *testing.T, keyErr error) error {
 	t.Helper()
 
-	verifier, err := workload.NewVerifier(failingWorkloadKeys{err: keyErr}, unusedReplayGuard{})
-	require.NoError(t, err)
+	verifier := workload.NewVerifier(failingWorkloadKeys{err: keyErr}, unusedReplayGuard{})
 	lookup := &countingLookup{issuer: workloadidentity_repo.WorkloadIssuer{
 		ID:      uuid.New(),
 		Name:    "test issuer",

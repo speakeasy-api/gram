@@ -7,13 +7,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/audit"
 )
 
 func TestFacadeActivateCoversCreateAndReactivationWithTypedOutcomes(t *testing.T) {
 	conn, orgID := newLifecycleDatabase(t, "killswitch_facade_activate")
-	lifecycle := newLifecycleServiceForTest(t, conn, func(OrganizationID, PrincipalKey) bool { return true }, func(OrganizationID, ResourceKey) bool { return true }, nil)
-	facade, err := NewFacade(lifecycle)
-	require.NoError(t, err)
+	lifecycle := newLifecycleServiceForTest(t, conn, func(OrganizationID, PrincipalKey) bool { return true }, func(OrganizationID, ResourceKey) bool { return true }, NewAuditBeforeCommitHook(audit.NewLogger()))
+	facade := NewFacade(lifecycle)
 
 	create := testActivateRequest(orgID, uuid.New())
 	created, err := facade.ActivatePrescription(t.Context(), ActivatePrescriptionInput{
@@ -59,9 +60,8 @@ func TestFacadeCurrentReadsAreBoundedDeterministicAndTenantQualified(t *testing.
 	conn, orgID := newLifecycleDatabase(t, "killswitch_facade_reads")
 	otherOrgID := "org_" + uuid.NewString()
 	insertOrganization(t, conn, otherOrgID)
-	lifecycle := newLifecycleServiceForTest(t, conn, func(OrganizationID, PrincipalKey) bool { return true }, func(OrganizationID, ResourceKey) bool { return true }, nil)
-	facade, err := NewFacade(lifecycle)
-	require.NoError(t, err)
+	lifecycle := newLifecycleServiceForTest(t, conn, func(OrganizationID, PrincipalKey) bool { return true }, func(OrganizationID, ResourceKey) bool { return true }, NewAuditBeforeCommitHook(audit.NewLogger()))
+	facade := NewFacade(lifecycle)
 
 	activate := func(organizationID, principal string, resources []string, internalNote, externalNote string) MutationResult {
 		request := testActivateRequest(organizationID, uuid.New())
@@ -120,9 +120,8 @@ func TestFacadeCurrentReadsAreBoundedDeterministicAndTenantQualified(t *testing.
 
 func TestFacadeListsDefinitionsWithoutEvaluatorDependency(t *testing.T) {
 	conn, _ := newLifecycleDatabase(t, "killswitch_facade_definitions")
-	lifecycle := newLifecycleServiceForTest(t, conn, func(OrganizationID, PrincipalKey) bool { return true }, func(OrganizationID, ResourceKey) bool { return true }, nil)
-	facade, err := NewFacade(lifecycle)
-	require.NoError(t, err)
+	lifecycle := newLifecycleServiceForTest(t, conn, func(OrganizationID, PrincipalKey) bool { return true }, func(OrganizationID, ResourceKey) bool { return true }, NewAuditBeforeCommitHook(audit.NewLogger()))
+	facade := NewFacade(lifecycle)
 
 	definitions, err := facade.ListDefinitions(t.Context())
 	require.NoError(t, err)

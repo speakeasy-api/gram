@@ -152,8 +152,8 @@ func TestOfflineShadowMCPScan_CursorApprovalWithURLAndIdentitySuppressesFinding(
 			"cursor-call-1": {Match: serverURL, ServerURL: serverURL, ServerIdentity: "", HookSource: "cursor"},
 			"cursor-call-2": {Match: serverURL, ServerURL: serverURL, ServerIdentity: "", HookSource: "cursor"},
 		}},
-		nil,
-		shadowmcpscan.WithShadowMCPBypass(checker),
+		offlineBypassCoverage{},
+		checker,
 	)
 
 	findings := scanner.Scan(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, uuid.MustParse(policy.ID), []shadowmcpscan.Message{{
@@ -168,3 +168,7 @@ func TestOfflineShadowMCPScan_CursorApprovalWithURLAndIdentitySuppressesFinding(
 	require.Equal(t, 3, countingDB.readCalls, "principal membership, roles, and grants load once for one user")
 	require.Empty(t, findings[0], "the approved Cursor-style server bypass must suppress offline findings")
 }
+
+type offlineBypassCoverage struct{}
+
+func (offlineBypassCoverage) RecordShadowMCPResolution(context.Context, string, string, string) {}

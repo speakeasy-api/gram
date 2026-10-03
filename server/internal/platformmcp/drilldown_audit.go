@@ -24,9 +24,6 @@ func NewPostgresDrilldownAuditor(db *pgxpool.Pool) DrilldownAuditor {
 }
 
 func (a *postgresDrilldownAuditor) RecordUserMCPStatusRead(ctx context.Context, principal Principal, projectID, mcpID, maskedIdentity, window string) error {
-	if a == nil || a.db == nil {
-		return fmt.Errorf("platform mcp drilldown auditor unavailable")
-	}
 	project, err := uuid.Parse(projectID)
 	if err != nil {
 		return fmt.Errorf("parse audited project id: %w", err)
@@ -49,9 +46,6 @@ func (a *postgresDrilldownAuditor) RecordUserMCPStatusRead(ctx context.Context, 
 }
 
 func (a *postgresDrilldownAuditor) RecordUsageAttributionRead(ctx context.Context, principal Principal, projectID, targetKind, target, maskedIdentity, window string) error {
-	if a == nil || a.db == nil {
-		return fmt.Errorf("platform mcp drilldown auditor unavailable")
-	}
 	project, err := uuid.Parse(projectID)
 	if err != nil {
 		return fmt.Errorf("parse audited project id: %w", err)

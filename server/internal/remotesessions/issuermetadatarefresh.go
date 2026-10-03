@@ -425,7 +425,7 @@ func (r *IssuerMetadataRefresher) reproject(ctx context.Context, existing repo.R
 func (r *IssuerMetadataRefresher) refresh(ctx context.Context, existing repo.RemoteSessionIssuer, reason remotesessionmetrics.IssuerMetadataRefreshReason) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
 	logger := r.logger.With(attr.SlogRemoteSessionIssuerID(existing.ID.String()), attr.SlogOAuthIssuer(existing.Issuer), attr.SlogOAuthIssuerMetadataRefreshReason(reason))
 
-	params, _, err := refreshIssuerMetadata(ctx, r.policy, r.jwksResolver, r.tunnels, existing)
+	params, _, err := refreshIssuerMetadata(ctx, r.policy, r.jwksResolver, issuerTunnelTransport(r.tunnels, existing.TunneledMcpServerID), existing)
 	if err != nil {
 		msg, _ := discoveryFailureMessage(err)
 		retryURL := discoveryRetryURL(err)

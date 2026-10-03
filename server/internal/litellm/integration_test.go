@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
@@ -39,8 +40,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	riskcelenv "github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -96,7 +100,7 @@ func (s *recordingScanner) RecordPolicyChallenge(_ context.Context, _ string, _ 
 
 func TestRealHooksPersistsMixedCaseMemberAndDedupesRetry(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newRealTestService(t, nil)
+	ctx, ti := newRealTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -141,7 +145,7 @@ func TestRealHooksPersistsMixedCaseMemberAndDedupesRetry(t *testing.T) {
 func TestOTLPTraceUsesGuardrailCallAttribution(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newRealTestService(t, nil)
+	ctx, ti := newRealTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -213,7 +217,7 @@ func TestOTLPTraceUsesGuardrailCallAttribution(t *testing.T) {
 func TestOTLPMetricsPersistOnlyOperationalRows(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newRealTestService(t, nil)
+	ctx, ti := newRealTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -275,7 +279,7 @@ func TestOTLPMetricsPersistOnlyOperationalRows(t *testing.T) {
 
 func TestRealHooksCapturesResponseWithCachedActorAndDedupesRetry(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newRealTestService(t, nil)
+	ctx, ti := newRealTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -359,7 +363,7 @@ func TestRealHooksCapturesResponseWithCachedActorAndDedupesRetry(t *testing.T) {
 
 func TestRealHooksCorrelatesAgentTurnsAcrossNativeHooksAndLiteLLM(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newRealTestService(t, nil)
+	ctx, ti := newRealTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -524,7 +528,7 @@ func TestRealHooksCorrelatesAgentTurnsAcrossNativeHooksAndLiteLLM(t *testing.T) 
 // the transcript shows every answer twice.
 func TestRealHooksProxiedAssistantTurnDoesNotDuplicateNativeClaudeStop(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newRealTestService(t, nil)
+	ctx, ti := newRealTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -636,7 +640,7 @@ func requireChatLiteLLMProxied(t *testing.T, ctx context.Context, conn *pgxpool.
 
 func TestRealHooksConcurrentUncorrelatedPromptsPreserveNative(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newRealTestService(t, nil)
+	ctx, ti := newRealTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -718,7 +722,7 @@ func TestRealHooksConcurrentUncorrelatedPromptsPreserveNative(t *testing.T) {
 
 func TestRealHooksLiteLLMOnlyLongSessionPersistsEveryPrompt(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newRealTestService(t, nil)
+	ctx, ti := newRealTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -744,7 +748,7 @@ func TestRealHooksLiteLLMOnlyLongSessionPersistsEveryPrompt(t *testing.T) {
 
 func TestRealHooksPersistsToolCallOnlyResponse(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newRealTestService(t, nil)
+	ctx, ti := newRealTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -775,7 +779,7 @@ func TestRealHooksPersistsToolCallOnlyResponse(t *testing.T) {
 
 func TestRealHooksFixtureToolsNeverBecomeExecutions(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newRealTestService(t, nil)
+	ctx, ti := newRealTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -823,7 +827,7 @@ func TestRealHooksFixtureToolsNeverBecomeExecutions(t *testing.T) {
 
 func TestRealHooksResponseCacheMissDoesNotUseIntegrationKeyOwner(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newRealTestService(t, nil)
+	ctx, ti := newRealTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -851,7 +855,7 @@ func TestRealHooksResponseCacheMissDoesNotUseIntegrationKeyOwner(t *testing.T) {
 
 func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newRealTestService(t, nil)
+	ctx, ti := newRealTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -918,23 +922,24 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 	require.Equal(t, []uuid.UUID{messages[0].ID}, fetched.MessageIDs)
 	require.Len(t, fetched.Policies, 1)
 
-	customRules, err := customruleanalyzer.NewScanner(ti.conn)
-	require.NoError(t, err)
+	customRules := customruleanalyzer.NewScanner(ti.conn)
 	celEngine, err := riskcelenv.New()
 	require.NoError(t, err)
+	presets, err := presetlib.New()
+	require.NoError(t, err)
 	flags := &feature.InMemory{}
-	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), ti.conn, cache.NoopCache, nil)
-	analyze, err := riskanalysis.NewAnalyzeBatch(
+	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), ti.conn, cache.NoopCache, &url.URL{Scheme: "https", Host: "app.getgram.ai"})
+	analyze := riskanalysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
 		nil,
 		&riskanalysis.StubPIIScanner{},
-		nil,
+		promptinjection.NewScanner(testenv.NewLogger(t), promptinjection.NoopClassifier),
 		shadowMCPClient,
 		noMCPProvenance{},
-		nil,
+		promptpolicy.NoopEvaluator,
 		flags,
 		gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
@@ -945,12 +950,11 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 		gcp.NewNoopPublisher[*riskv1.Finding](),
 		customRules,
 		celEngine,
-		nil,
-		nil,
+		presets,
+		risk.NewShadowMCPBypassChecker(risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), ti.conn)),
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		false,
 	)
-	require.NoError(t, err)
 
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestActivityEnvironment()
@@ -1012,7 +1016,7 @@ func TestRealHooksBlocksAndCapturesPolicyMessage(t *testing.T) {
 		acknowledgementHit: false,
 		challenges:         0,
 	}
-	ctx, ti := newRealTestService(t, scanner)
+	ctx, ti := newRealTestServiceWithScanner(t, scanner)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -1054,7 +1058,7 @@ func TestRealHooksTreatsWarnAsBlockWithoutChallenge(t *testing.T) {
 		acknowledgementHit: false,
 		challenges:         0,
 	}
-	ctx, ti := newRealTestService(t, scanner)
+	ctx, ti := newRealTestServiceWithScanner(t, scanner)
 	payload := testPayload()
 	payload.LitellmCallID = new("warn-" + uuid.NewString())
 	payload.Texts = []string{"warning prompt"}
@@ -1071,7 +1075,7 @@ func TestRealHooksTreatsWarnAsBlockWithoutChallenge(t *testing.T) {
 func TestRealHooksNeverUsesEndUserKeyOwnerOrCachedActor(t *testing.T) {
 	t.Parallel()
 	scanner := &recordingScanner{result: nil, seenUserIDs: nil, acknowledgementHit: false, challenges: 0}
-	ctx, ti := newRealTestService(t, scanner)
+	ctx, ti := newRealTestServiceWithScanner(t, scanner)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)

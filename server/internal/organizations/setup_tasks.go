@@ -289,7 +289,7 @@ func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupT
 }
 
 func (s *Service) sendSetupTaskAssignmentEmail(ctx context.Context, ac *contextvalues.AuthContext, organizationName, organizationSlug string, task *gen.SetupTask, assignmentTime time.Time) {
-	if s.email == nil || task == nil || task.Assignee == nil || strings.TrimSpace(task.Assignee.Email) == "" {
+	if task == nil || task.Assignee == nil || strings.TrimSpace(task.Assignee.Email) == "" {
 		return
 	}
 

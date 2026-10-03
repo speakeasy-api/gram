@@ -22,9 +22,6 @@ func registerFindMCPTool(reg *Registrar, reader Reader, cursorKeyMaterial string
 		if input.ProjectID != "" && input.ProjectSlug != "" {
 			return nil, FindMCPOutput{}, fmt.Errorf("only one of project_id or project_slug may be supplied")
 		}
-		if reader == nil || cursorKeyMaterial == "" {
-			return nil, FindMCPOutput{}, ErrUnavailable
-		}
 		output, err := reader.FindMCP(ctx, principal, input)
 		if err != nil {
 			return nil, FindMCPOutput{}, ErrUnavailable

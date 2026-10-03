@@ -35,9 +35,11 @@ func setPreparationBinding(ctx context.Context, q *repo.Queries, b repo.RemoteSe
 func (s *Service) PrepareIdentityChaining(ctx context.Context, in PreparationInput) (*PreparationResult, error) {
 	return s.prepareIdentityChaining(ctx, in, false)
 }
+
 func (s *Service) UnlinkIdentityChaining(ctx context.Context, in PreparationInput) (*PreparationResult, error) {
 	return s.prepareIdentityChaining(ctx, in, true)
 }
+
 func (s *Service) ReadIdentityChaining(ctx context.Context, in PreparationInput) (*PreparationResult, error) {
 	return s.readIdentityChaining(ctx, in)
 }

@@ -40,8 +40,7 @@ func newTestGuard(t *testing.T, maxHold time.Duration) (*Guard, *redis.Client) {
 	client, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	guard, err := NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "replay")), maxHold)
-	require.NoError(t, err)
+	guard := NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "replay")), maxHold)
 	return guard, client
 }
 

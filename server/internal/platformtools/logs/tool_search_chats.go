@@ -48,10 +48,6 @@ func (s *SearchChats) Descriptor() core.ToolDescriptor {
 }
 
 func (s *SearchChats) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if s.telemetry == nil {
-		return fmt.Errorf("telemetry service not configured")
-	}
-
 	input := searchChatsInput{Filter: nil, Cursor: nil, Sort: "desc", Limit: 50}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err

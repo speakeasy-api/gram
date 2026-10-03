@@ -15,9 +15,11 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	relay "github.com/speakeasy-api/gram/server/internal/background/activities/publish_outbox"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/roledistribution"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
@@ -220,8 +222,9 @@ func newPipelineFixture(t *testing.T) pipelineFixture {
 	require.Equal(t, org, event.GetOrganizationId())
 	require.Equal(t, role.RoleUrn, event.GetRoleUrn())
 	publication := plugins.PublicationRequests{Enabled: true}
+	guard := admission.NewGuard(new(feature.InMemory), admission.NewReportMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)))
 	handler := roledistribution.NewHandler(testenv.NewLogger(t), roledistribution.Processors{Setup: func(ctx context.Context, roleURN, organization string) (bool, error) {
-		processed, err := roledistribution.ProcessRoleDistributionSetup(ctx, db, publication, nil, roleURN, organization)
+		processed, err := roledistribution.ProcessRoleDistributionSetup(ctx, db, publication, guard, roleURN, organization)
 		if err != nil {
 			return false, fmt.Errorf("process pipeline setup: %w", err)
 		}

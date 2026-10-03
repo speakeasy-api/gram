@@ -50,10 +50,6 @@ func (s *GetToolUsageSummary) Descriptor() core.ToolDescriptor {
 }
 
 func (s *GetToolUsageSummary) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if s.telemetry == nil {
-		return fmt.Errorf("telemetry service not configured")
-	}
-
 	input := getToolUsageSummaryInput{
 		From:               "",
 		To:                 "",

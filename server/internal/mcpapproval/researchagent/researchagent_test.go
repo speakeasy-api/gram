@@ -182,6 +182,10 @@ type stubJudge struct {
 	seen    []string
 }
 
+func cleanJudge() *stubJudge {
+	return &stubJudge{verdict: researchagent.JudgeVerdict{Injection: false, Rationale: ""}, err: nil, seen: nil}
+}
+
 func (j *stubJudge) JudgeFetchedPage(_ context.Context, input researchagent.JudgeInput) (researchagent.JudgeVerdict, error) {
 	j.seen = append(j.seen, input.Content)
 	if j.err != nil {
@@ -242,7 +246,7 @@ func TestRun(t *testing.T) {
 		}`,
 	}
 
-	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(search), researchagent.EgressSelectTool(fetch))
+	runner := researchagent.New(completions, cleanJudge(), research.NewURLMenu(), researchagent.EgressSelectTool(search), researchagent.EgressSelectTool(fetch))
 	encoded, meta, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -294,7 +298,7 @@ func TestRun_TurnLimitForcesAWrapUp(t *testing.T) {
 		extracted: `{"summary": "ran out", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(search))
+	runner := researchagent.New(completions, cleanJudge(), research.NewURLMenu(), researchagent.EgressSelectTool(search))
 	encoded, meta, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 	require.True(t, meta.TurnLimitReached)
@@ -333,7 +337,7 @@ func TestRun_CapsClaims(t *testing.T) {
 		extracted: fmt.Sprintf(`{"summary": "s", "coverage": {"level": "moderate"}, "claims": [%s]}`, strings.Join(claims, ",")),
 	}
 
-	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
+	runner := researchagent.New(completions, cleanJudge(), research.NewURLMenu(), researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 	encoded, _, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -370,7 +374,7 @@ func TestRun_DropsClaimsWhoseCitationsCannotBeFollowed(t *testing.T) {
 		extracted: fmt.Sprintf(`{"summary": "s", "coverage": {"level": "moderate"}, "claims": [%s]}`, strings.Join(claims, ",")),
 	}
 
-	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
+	runner := researchagent.New(completions, cleanJudge(), research.NewURLMenu(), researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 	encoded, meta, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -438,7 +442,7 @@ func TestRun_CountsWhatItsToolsSpent(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(search))
+	runner := researchagent.New(completions, cleanJudge(), research.NewURLMenu(), researchagent.EgressSelectTool(search))
 	input := runInput()
 	_, meta, _, err := runner.Run(t.Context(), input)
 	require.NoError(t, err)
@@ -472,7 +476,7 @@ func TestRun_LongTranscriptKeepsTheWrapUp(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(fetch))
+	runner := researchagent.New(completions, cleanJudge(), research.NewURLMenu(), researchagent.EgressSelectTool(fetch))
 	_, _, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -498,7 +502,7 @@ func TestRun_BriefingFencesTheEvidenceAsUntrusted(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
+	runner := researchagent.New(completions, cleanJudge(), research.NewURLMenu(), researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 	_, _, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -536,7 +540,7 @@ func TestRun_RecordsAPageThatTriesToSteerTheAgent(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "thin"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, judge, nil, researchagent.EgressSelectTool(fetch))
+	runner := researchagent.New(completions, judge, research.NewURLMenu(), researchagent.EgressSelectTool(fetch))
 	encoded, meta, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -582,7 +586,7 @@ func TestRun_ReturnsAToolCallTrace(t *testing.T) {
 
 	// A third tool the model names but that is not registered, to exercise
 	// the error branch: executeTool refuses it.
-	runner := researchagent.New(completions, judge, nil,
+	runner := researchagent.New(completions, judge, research.NewURLMenu(),
 		researchagent.EgressSynthesizeTool(search, "the search provider"),
 		researchagent.EgressSelectTool(fetch),
 	)
@@ -629,7 +633,7 @@ func TestRun_FailedFetchKeepsItsTargetURL(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil, nil,
+	runner := researchagent.New(completions, cleanJudge(), research.NewURLMenu(),
 		researchagent.EgressSynthesizeTool(&searchTool{prompt: 0, completion: 0, drained: nil}, "the search provider"),
 		researchagent.EgressSelectTool(&failingTool{}),
 	)
@@ -664,7 +668,7 @@ func TestRun_LinksFetchesToTheClaimsThatCiteThem(t *testing.T) {
 		}`,
 	}
 
-	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(cited))
+	runner := researchagent.New(completions, cleanJudge(), research.NewURLMenu(), researchagent.EgressSelectTool(cited))
 	_, _, trace, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -690,7 +694,7 @@ func TestRun_BoundsTheContentPreview(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(fetch))
+	runner := researchagent.New(completions, cleanJudge(), research.NewURLMenu(), researchagent.EgressSelectTool(fetch))
 	_, _, trace, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -722,7 +726,7 @@ func TestRun_RecordsAFlaggedPageOnce(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, judge, nil, researchagent.EgressSelectTool(fetch))
+	runner := researchagent.New(completions, judge, research.NewURLMenu(), researchagent.EgressSelectTool(fetch))
 	encoded, meta, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -752,7 +756,7 @@ func TestRun_CountsPagesTheJudgeCouldNotAnswerFor(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "thin"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, judge, nil, researchagent.EgressSelectTool(fetch))
+	runner := researchagent.New(completions, judge, research.NewURLMenu(), researchagent.EgressSelectTool(fetch))
 	encoded, meta, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err, "research continues; the page is simply unjudged")
 
@@ -779,7 +783,7 @@ func TestRun_RejectsDegenerateExtraction(t *testing.T) {
 		extracted: `{"summary": "placeholder", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
+	runner := researchagent.New(completions, cleanJudge(), research.NewURLMenu(), researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 	_, _, _, err := runner.Run(t.Context(), runInput())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "degenerate")
@@ -801,7 +805,7 @@ func TestRun_RejectsUnknownTier(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "thin"}, "claims": [{"tier": "verdict", "text": "bad"}]}`,
 	}
 
-	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
+	runner := researchagent.New(completions, cleanJudge(), research.NewURLMenu(), researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 	_, _, _, err := runner.Run(t.Context(), runInput())
 	require.Error(t, err)
 
@@ -815,7 +819,7 @@ func TestRun_RejectsUnknownTier(t *testing.T) {
 		},
 		extracted: `{"summary": "s", "coverage": {"level": "certain"}, "claims": []}`,
 	}
-	runner2 := researchagent.New(completions2, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
+	runner2 := researchagent.New(completions2, cleanJudge(), research.NewURLMenu(), researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 	_, _, _, err = runner2.Run(t.Context(), runInput())
 	require.Error(t, err)
 }
@@ -841,7 +845,7 @@ func TestRun_SourceReputationAcceptsAbsenceRejectsJunk(t *testing.T) {
 		]}`,
 	}
 
-	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
+	runner := researchagent.New(completions, cleanJudge(), research.NewURLMenu(), researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 	encoded, _, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 
@@ -863,7 +867,7 @@ func TestRun_SourceReputationAcceptsAbsenceRejectsJunk(t *testing.T) {
 			{"tier": "independently_reported", "text": "bad", "citations": [{"url": "https://example.com/a"}], "source_reputation": "trustworthy"}
 		]}`,
 	}
-	runner2 := researchagent.New(completions2, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
+	runner2 := researchagent.New(completions2, cleanJudge(), research.NewURLMenu(), researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 	_, _, _, err = runner2.Run(t.Context(), runInput())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "source reputation")
@@ -885,7 +889,7 @@ func TestRun_ToolErrorFeedsBack(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(failing), researchagent.EgressSelectTool(search))
+	runner := researchagent.New(completions, cleanJudge(), research.NewURLMenu(), researchagent.EgressSelectTool(failing), researchagent.EgressSelectTool(search))
 	_, _, _, err := runner.Run(t.Context(), runInput())
 	require.NoError(t, err)
 	require.Contains(t, completions.extraction.Prompt, "tool error: fetch budget exhausted")
@@ -907,7 +911,7 @@ func TestRun_AllToolFailuresFailTheRun(t *testing.T) {
 		extracted: `{"summary": "must never be produced", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(failing))
+	runner := researchagent.New(completions, cleanJudge(), research.NewURLMenu(), researchagent.EgressSelectTool(failing))
 	_, _, _, err := runner.Run(t.Context(), runInput())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "every research tool call failed")

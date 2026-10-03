@@ -160,9 +160,6 @@ func (a *Authorizer) RequireCreate(ctx context.Context, dbtx repo.DBTX, agentID 
 	if ownerUserID == human.Auth.UserID {
 		return human, nil
 	}
-	if a.authz == nil {
-		return HumanContext{}, errors.New("agent authorization engine is unavailable")
-	}
 	if err := a.authz.EvaluateLoadedGrants(ctx, human.grants, agentCheck(authz.ScopeAgentWrite, agentID)); err != nil {
 		return HumanContext{}, fmt.Errorf("authorize agent creation for another owner: %w", err)
 	}
@@ -259,9 +256,6 @@ func (a *Authorizer) requireAgentWithHuman(ctx context.Context, dbtx repo.DBTX, 
 	if ownsUnblockedAgent(human, agent) {
 		return human, agent, nil
 	}
-	if a.authz == nil {
-		return HumanContext{}, repo.Agent{}, errors.New("agent authorization engine is unavailable")
-	}
 	if err := a.authz.EvaluateLoadedGrants(ctx, human.grants, agentCheck(scope, agent.ID)); err != nil {
 		// Selected-agent denials deliberately do not distinguish absent,
 		// cross-tenant, or unauthorized resources.
@@ -270,20 +264,16 @@ func (a *Authorizer) requireAgentWithHuman(ctx context.Context, dbtx repo.DBTX, 
 	return human, agent, nil
 }
 
-func (a *Authorizer) Permissions(ctx context.Context, human HumanContext, agent repo.Agent) (AgentPermissions, error) {
+func (a *Authorizer) Permissions(human HumanContext, agent repo.Agent) AgentPermissions {
 	if ownsUnblockedAgent(human, agent) {
-		return AgentPermissions{Read: true, Write: true, Authorize: true, Transfer: true}, nil
+		return AgentPermissions{Read: true, Write: true, Authorize: true, Transfer: true}
 	}
-	if a.authz == nil {
-		return AgentPermissions{}, errors.New("agent authorization engine is unavailable")
-	}
-
 	return AgentPermissions{
 		Read:      authz.GrantsSatisfy(human.grants, agentCheck(authz.ScopeAgentRead, agent.ID)),
 		Write:     authz.GrantsSatisfy(human.grants, agentCheck(authz.ScopeAgentWrite, agent.ID)),
 		Authorize: authz.GrantsSatisfy(human.grants, agentCheck(authz.ScopeAgentAuthorize, agent.ID)),
 		Transfer:  authz.GrantsSatisfy(human.grants, agentCheck(authz.ScopeAgentTransfer, agent.ID)),
-	}, nil
+	}
 }
 
 func ownsUnblockedAgent(human HumanContext, agent repo.Agent) bool {

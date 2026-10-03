@@ -31,27 +31,17 @@ func partitionAttrs(key Partition) []attribute.KeyValue {
 // partitionTracker records the distinct partitions a noop implementation has
 // admitted so [registerInstanceGauge] can report the instance cardinality a
 // real implementation would hold. Entries are never evicted, matching the
-// real implementations, so the counts preview their memory footprint too. A
-// nil tracker records nothing and reports no namespaces, which keeps the
-// zero-value noops inert.
+// real implementations, so the counts preview their memory footprint too.
 type partitionTracker struct {
 	namespaces sync.Map // Partition.String() -> namespace
 }
 
 func (t *partitionTracker) observe(key Partition) {
-	if t == nil {
-		return
-	}
-
 	t.namespaces.LoadOrStore(key.String(), key.Namespace())
 }
 
 func (t *partitionTracker) countByNamespace() map[string]int64 {
 	counts := make(map[string]int64)
-	if t == nil {
-		return counts
-	}
-
 	t.namespaces.Range(func(_, val any) bool {
 		if namespace, ok := val.(string); ok {
 			counts[namespace]++

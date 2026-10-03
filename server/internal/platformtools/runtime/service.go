@@ -45,82 +45,34 @@ type Service struct {
 
 var _ gateway.PlatformExecutor = (*Service)(nil)
 
-type Option func(*config)
-
-type config struct {
-	deps           platformtools.Dependencies
-	extras         []platformtools.ExternalTool
-	featureChecker platformtools.FeatureChecker
-}
-
-func WithTriggerTools(app *bgtriggers.App) Option {
-	return func(c *config) {
-		c.deps.TriggerApp = app
-	}
-}
-
-func WithSlackHTTPClient(client *guardian.HTTPClient) Option {
-	return func(c *config) {
-		c.deps.SlackHTTPClient = client
-	}
-}
-
-// WithFileURLMinting enables tools that mint short-lived asset download URLs
-// (e.g. platform_slack_get_file_url) by supplying the sealing client and the
-// public base URL the minted URLs point at.
-func WithFileURLMinting(enc *encryption.Client, serverURL *url.URL) Option {
-	return func(c *config) {
-		c.deps.Encryption = enc
-		c.deps.ServerURL = serverURL
-	}
-}
-
-func WithExternalTools(extras []platformtools.ExternalTool) Option {
-	return func(c *config) {
-		c.extras = extras
-	}
-}
-
-// WithFeatureChecker gates ExecuteTool dispatch on a per-organization feature
-// flag. A nil checker grants every gated tool.
-func WithFeatureChecker(checker platformtools.FeatureChecker) Option {
-	return func(c *config) {
-		c.featureChecker = checker
-	}
-}
-
 func NewService(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
 	telemetrySvc platformtools.TelemetryService,
 	auditLogger *audit.Logger,
-	options ...Option,
+	threadRouter *bgtriggers.ThreadRouter,
+	slackHTTPClient *guardian.HTTPClient,
+	enc *encryption.Client,
+	serverURL *url.URL,
+	featureChecker platformtools.FeatureChecker,
+	extras []platformtools.ExternalTool,
 ) *Service {
-	cfg := config{
-		deps: platformtools.Dependencies{
-			Logger:           logger,
-			DB:               db,
-			TelemetryService: telemetrySvc,
-			Audit:            auditLogger,
-			TriggerApp:       nil,
-			SlackHTTPClient:  nil,
-			Encryption:       nil,
-			ServerURL:        nil,
-		},
-		extras:         nil,
-		featureChecker: nil,
-	}
-	for _, option := range options {
-		option(&cfg)
-	}
-
-	executors, gates := platformtools.BuildExecutors(cfg.deps, cfg.extras...)
+	executors, gates := platformtools.BuildExecutors(platformtools.Dependencies{
+		Logger:           logger,
+		DB:               db,
+		TelemetryService: telemetrySvc,
+		Audit:            auditLogger,
+		ThreadRouter:     threadRouter,
+		SlackHTTPClient:  slackHTTPClient,
+		Encryption:       enc,
+		ServerURL:        serverURL,
+	}, extras...)
 
 	return &Service{
 		logger:         logger.With(attr.SlogComponent("platform_tools")),
 		executors:      executors,
 		featureGates:   gates,
-		featureChecker: cfg.featureChecker,
+		featureChecker: featureChecker,
 	}
 }
 
@@ -136,9 +88,9 @@ func MemoryExternalTools(svc *memory.MemoryService) []platformtools.ExternalTool
 }
 
 // AssistantSkillTools returns the always-on attached-skill tools.
-func AssistantSkillTools(logger *slog.Logger, db *pgxpool.Pool, opts ...platformskills.LoadOption) []platformtools.ExternalTool {
+func AssistantSkillTools(logger *slog.Logger, db *pgxpool.Pool) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
-		{Executor: platformskills.NewLoadTool(logger, db, opts...), RequiredFeature: ""},
+		{Executor: platformskills.NewLoadTool(logger, db), RequiredFeature: ""},
 	}
 }
 
@@ -295,7 +247,7 @@ func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, e
 
 	urnStr := plan.Descriptor.URN.String()
 
-	if feature, gated := s.featureGates[urnStr]; gated && s.featureChecker != nil {
+	if feature, gated := s.featureGates[urnStr]; gated {
 		if !s.featureChecker(ctx, authCtx.ActiveOrganizationID, feature) {
 			return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").LogWarn(ctx, s.logger)
 		}

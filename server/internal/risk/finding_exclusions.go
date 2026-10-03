@@ -85,9 +85,6 @@ func (r *FindingExclusionResolver) exclusionSetFor(ctx context.Context, projectI
 	if set, ok := r.cache.Get(key); ok {
 		return set, nil
 	}
-	if r.db == nil {
-		return risk_analysis.ExclusionSet{}, errors.New("finding exclusion database is unavailable")
-	}
 
 	exclusions, err := repo.New(r.db).ListEnabledExclusionsForPolicy(ctx, repo.ListEnabledExclusionsForPolicyParams{
 		ProjectID:    projectID,

@@ -1,7 +1,6 @@
 package metering_test
 
 import (
-	"context"
 	"slices"
 	"testing"
 	"time"
@@ -12,8 +11,8 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
-	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattest"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
@@ -58,8 +57,7 @@ func TestChatStorageReadingPipelineToClickHouse(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	writer := chattest.NewMessageWriter(t, infra, conn)
 	writes := []chat.MessageWrite{{
 		Params: chatrepo.CreateChatMessageParams{
 			ID:               uuid.Nil,

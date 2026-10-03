@@ -30,14 +30,6 @@ type identityProviderAttachmentErrorResult struct {
 	Message string `json:"message"`
 }
 
-func registerUnavailableIdentityProviderTool(reg *Registrar) {
-	addTool(reg, &mcp.Tool{
-		Name:        "attach_platform_mcp_identity_provider",
-		Title:       "Connect an MCP Server's OAuth Provider",
-		Description: "Connect one MCP server to the OAuth provider it advertises. This is not switched on for your organization yet.",
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("identity_provider_attachment"))
-}
-
 func registerIdentityProviderTool(reg *Registrar, registrations *RegistrationService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "attach_platform_mcp_identity_provider",

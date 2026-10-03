@@ -54,10 +54,6 @@ func (s *GetObservabilityOverview) Descriptor() core.ToolDescriptor {
 }
 
 func (s *GetObservabilityOverview) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if s.telemetry == nil {
-		return fmt.Errorf("telemetry service not configured")
-	}
-
 	// Default include_time_series to true to mirror the telemetry API default,
 	// which the Goa transport would otherwise apply for us.
 	input := getObservabilityOverviewInput{

@@ -3,6 +3,8 @@ package assistantmemories
 import (
 	"context"
 	"errors"
+	"log"
+	"os"
 	"testing"
 	"time"
 
@@ -11,8 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/assistant_memories"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/memory/repo"
@@ -20,6 +25,23 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
+
+var infra *testenv.Environment
+
+func TestMain(m *testing.M) {
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
+	if err != nil {
+		log.Fatalf("launch test infrastructure: %v", err)
+	}
+	infra = res
+
+	code := m.Run()
+
+	if err := cleanup(); err != nil {
+		log.Fatalf("cleanup test infrastructure: %v", err)
+	}
+	os.Exit(code)
+}
 
 type fakeMemory struct {
 	listFn   func(ctx context.Context, projectID uuid.UUID, params memory.ListParams) (memory.ListResult, error)
@@ -61,14 +83,20 @@ func newTestHarness(t *testing.T) (*testHarness, context.Context) {
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 
+	conn, err := infra.CloneTestDatabase(t, "assistantmemoriestest")
+	require.NoError(t, err)
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billing.NewStubClient(logger, tracerProvider))
+
 	mem := &fakeMemory{listFn: nil, getFn: nil, deleteFn: nil}
 
-	authzEngine := authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	svc := &Service{
 		tracer: tracerProvider.Tracer("test"),
 		logger: logger,
-		auth:   nil,
+		auth:   auth.New(logger, conn, sessionManager, authzEngine),
 		authz:  authzEngine,
 		memory: mem,
 	}
@@ -133,8 +161,6 @@ func TestListAssistantMemories_RBACDenied(t *testing.T) {
 	t.Parallel()
 
 	h, ctx := newTestHarness(t)
-	logger := testenv.NewLogger(t)
-	h.svc.authz = authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := h.svc.ListAssistantMemories(ctx, &gen.ListAssistantMemoriesPayload{
@@ -302,8 +328,6 @@ func TestGetAssistantMemory_RBACDenied(t *testing.T) {
 	t.Parallel()
 
 	h, ctx := newTestHarness(t)
-	logger := testenv.NewLogger(t)
-	h.svc.authz = authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := h.svc.GetAssistantMemory(ctx, &gen.GetAssistantMemoryPayload{
@@ -373,8 +397,6 @@ func TestDeleteAssistantMemory_RBACDenied(t *testing.T) {
 	t.Parallel()
 
 	h, ctx := newTestHarness(t)
-	logger := testenv.NewLogger(t)
-	h.svc.authz = authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, h.projectID.String()))
 

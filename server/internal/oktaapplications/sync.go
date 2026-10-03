@@ -63,9 +63,8 @@ const (
 )
 
 var (
-	errClientUnavailable = errors.New("okta applications: client factory not configured")
-	errConnectionGone    = errors.New("okta applications: connection no longer verified")
-	errSuperseded        = errors.New("okta applications: a later run already applied")
+	errConnectionGone = errors.New("okta applications: connection no longer verified")
+	errSuperseded     = errors.New("okta applications: a later run already applied")
 )
 
 // retryableError marks a failure Temporal should retry: our own infrastructure,
@@ -354,9 +353,6 @@ func (s *Syncer) openRun(ctx context.Context, target repo.GetSyncTargetRow) (rep
 }
 
 func (s *Syncer) client(target repo.GetSyncTargetRow) (okta.Client, error) {
-	if s.clients == nil {
-		return nil, errClientUnavailable
-	}
 	if !target.JsonWebKeySetID.Valid {
 		return nil, fmt.Errorf("okta applications: managed client has no key set")
 	}

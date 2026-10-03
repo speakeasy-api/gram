@@ -126,7 +126,7 @@ func newTestCIMDOAuthHTTP(t *testing.T) (*OAuthHTTP, *cimdDocServer) {
 
 	base, err := url.Parse("https://gram.example")
 	require.NoError(t, err)
-	service, err := NewOAuthHTTP(OAuthHTTPConfig{
+	service := NewOAuthHTTP(OAuthHTTPConfig{
 		BaseURL:        base,
 		Cache:          &memoryCache{values: map[string]any{}},
 		Store:          platformoauth.NewInMemoryStore(),
@@ -136,9 +136,11 @@ func newTestCIMDOAuthHTTP(t *testing.T) (*OAuthHTTP, *cimdDocServer) {
 		Organizations:  testOrganizationSelector{organizations: []OrganizationOption{{ID: "org-1", Name: "Organization one"}}},
 		Signer:         sessiontokens.NewSigner("test-key"),
 		Encryption:     testCIMDEncryption(t),
+		Telemetry:      NewOAuthTelemetry(testenv.NewLogger(t), testenv.NewMeterProvider(t)),
+		Logger:         testenv.NewLogger(t),
 		GuardianPolicy: policy,
+		MeterProvider:  testenv.NewMeterProvider(t),
 	})
-	require.NoError(t, err)
 	return service, ds
 }
 
@@ -313,16 +315,11 @@ func TestCIMDToken_ClientPresentingSecretRejected(t *testing.T) {
 	require.Contains(t, response.Body.String(), `"invalid_client"`)
 }
 
-func TestAuthorizationServerMetadata_AdvertisesCIMDOnlyWhenResolvable(t *testing.T) {
+func TestAuthorizationServerMetadata_AdvertisesCIMD(t *testing.T) {
 	t.Parallel()
 
 	withCIMD, _ := newTestCIMDOAuthHTTP(t)
 	require.True(t, authorizationServerMetadataFlag(t, withCIMD), "a resolvable AS advertises CIMD support")
-
-	// No guardian policy means no resolver: advertising support would route
-	// spec-compliant clients into a guaranteed-failure flow instead of
-	// letting them fall back to dynamic client registration.
-	require.False(t, authorizationServerMetadataFlag(t, newTestOAuthHTTP(t)))
 }
 
 func authorizationServerMetadataFlag(t *testing.T, service *OAuthHTTP) bool {

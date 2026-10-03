@@ -102,8 +102,7 @@ func newTestVerifier(t *testing.T, signer testSigner) (*Verifier, *testKeys, *te
 	require.NoError(t, err)
 	guard := &testGuard{seen: make(map[replay.Key]bool), maxHold: assertioncore.ReplayHoldFor(4 * time.Hour), err: nil}
 	keys := &testKeys{key: signer.key, lookups: 0}
-	verifier, err := NewVerifier(keys, guard)
-	require.NoError(t, err)
+	verifier := NewVerifier(keys, guard)
 	expect := Expectation{
 		Issuer: testIssuer, Subject: testSubject, KeySource: source,
 		ReplayIssuer: "user-session-issuer-1", ReplayParty: "workload-issuer-1",

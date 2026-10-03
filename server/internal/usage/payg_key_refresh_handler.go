@@ -3,7 +3,6 @@ package usage
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 
@@ -75,9 +74,6 @@ func (h *PaygKeyRefreshHandler) Handle(ctx context.Context, event *webhooksv1.Ev
 			attr.SlogOutboxPublicID(eventID),
 		)
 		return nil
-	}
-	if h.refresher == nil {
-		return errors.New("openrouter key refresh scheduler is unavailable")
 	}
 
 	if err := h.refresher.SchedulePaygOpenRouterChatKeyReconciliation(ctx, eventID, organizationID, desiredState); err != nil {

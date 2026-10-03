@@ -54,13 +54,8 @@ type Scanner struct {
 	stokenCodec *stokens.Codec
 }
 
-func NewScanner(db repo.DBTX) (*Scanner, error) {
-	eval, err := newEvaluator(evaluatorCacheSize)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Scanner{db: db, eval: eval, stokenCodec: stokens.NewCodec()}, nil
+func NewScanner(db repo.DBTX) *Scanner {
+	return &Scanner{db: db, eval: newEvaluator(evaluatorCacheSize), stokenCodec: stokens.NewCodec()}
 }
 
 func (s *Scanner) Scan(ctx context.Context, req ScanRequest) (scanners.Result, error) {

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/adminmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 const proposalTestSubject = "user:staff-subject"
@@ -64,7 +65,7 @@ func newProposalFixture(t *testing.T, name string) proposalFixture {
 
 	return proposalFixture{
 		db:     db,
-		store:  newProposalStore(db, nil),
+		store:  newProposalStore(db, testenv.NewLogger(t)),
 		cipher: cipher,
 		owner:  proposalOwner{SubjectURN: proposalTestSubject, ClientRowID: connection.ClientRowID, ConnectionID: connection.ID, Generation: connection.Generation},
 		orgA:   orgA,

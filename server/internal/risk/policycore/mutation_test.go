@@ -25,6 +25,7 @@ func TestRequireFreshPolicyRejectsChangedLockedRow(t *testing.T) {
 	var stale *StalePolicyError
 	require.ErrorAs(t, err, &stale)
 }
+
 func TestValidateStoredMCPScopeAppliesFinalAction(t *testing.T) {
 	t.Parallel()
 

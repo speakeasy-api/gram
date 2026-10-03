@@ -25,23 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-func TestNewEnforceHandlerRejectsNilRiskRecorder(t *testing.T) {
-	t.Parallel()
-
-	_, _, writer := newReplyWriter(t)
-	meterProvider, _ := newTestMeterProvider(t)
-	handler, err := gitleaks.NewEnforceHandler(
-		testenv.NewLogger(t),
-		meterProvider,
-		writer,
-		func(string, []byte) (string, error) { return "fingerprint", nil },
-		gitleaks.EnforceHandlerConfig{},
-		nil,
-	)
-	require.Nil(t, handler)
-	require.Error(t, err)
-}
-
 func TestEnforceHandlerWritesSafePepperedReply(t *testing.T) {
 	t.Parallel()
 

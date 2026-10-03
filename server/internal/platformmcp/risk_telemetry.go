@@ -45,10 +45,6 @@ type riskTelemetry struct {
 }
 
 func NewRiskTelemetry(logger *slog.Logger, meterProvider metric.MeterProvider) RiskTelemetry {
-	if logger == nil || meterProvider == nil {
-		return noopRiskTelemetry{}
-	}
-
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/platformmcp")
 	calls, err := meter.Int64Counter(platformMCPRiskToolCallMetric, metric.WithDescription("Bounded Platform MCP risk tool outcomes"), metric.WithUnit("{call}"))
 	if err != nil {
@@ -62,7 +58,7 @@ func NewRiskTelemetry(logger *slog.Logger, meterProvider metric.MeterProvider) R
 }
 
 func (t *riskTelemetry) Record(ctx context.Context, event RiskToolEvent, duration time.Duration) {
-	if t == nil || !validRiskToolEvent(event) || duration < 0 {
+	if !validRiskToolEvent(event) || duration < 0 {
 		return
 	}
 	attributes := metric.WithAttributes(
@@ -72,12 +68,8 @@ func (t *riskTelemetry) Record(ctx context.Context, event RiskToolEvent, duratio
 		attribute.String("platform_mcp.risk.catalog_version", event.CatalogVersion),
 		attribute.String("platform_mcp.risk.reconciliation", event.Reconciliation),
 	)
-	if t.calls != nil {
-		t.calls.Add(ctx, 1, attributes)
-	}
-	if t.duration != nil {
-		t.duration.Record(ctx, duration.Seconds(), attributes)
-	}
+	t.calls.Add(ctx, 1, attributes)
+	t.duration.Record(ctx, duration.Seconds(), attributes)
 }
 
 func validRiskToolEvent(event RiskToolEvent) bool {

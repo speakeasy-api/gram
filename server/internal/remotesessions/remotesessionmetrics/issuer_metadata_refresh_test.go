@@ -39,13 +39,3 @@ func TestIssuerMetadataRefreshRecord_PinsInstrumentAndDimensions(t *testing.T) {
 	require.Len(t, sum.DataPoints, 1)
 	require.Equal(t, int64(1), sum.DataPoints[0].Value)
 }
-
-func TestIssuerMetadataRefreshRecord_NilSafe(t *testing.T) {
-	t.Parallel()
-
-	var m *IssuerMetadataRefresh
-	m.Record(t.Context(), "https://idp.example.com", IssuerMetadataRefreshReasonOnUse, IssuerMetadataRefreshOutcomeRefreshed)
-
-	empty := &IssuerMetadataRefresh{attempts: nil}
-	empty.Record(t.Context(), "https://idp.example.com", IssuerMetadataRefreshReasonOnUse, IssuerMetadataRefreshOutcomeRefreshed)
-}

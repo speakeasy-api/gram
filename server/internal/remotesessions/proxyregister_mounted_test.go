@@ -21,7 +21,7 @@ import (
 func TestProxyRegisterMountedHandlerResolvesProjectForTunneledRequest(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestServiceWithConfig(t, testServiceConfig{tunnelRouting: true})
+	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.SessionID)

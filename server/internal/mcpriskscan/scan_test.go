@@ -3,7 +3,12 @@ package mcpriskscan_test
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"testing"
+
+	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -18,12 +23,12 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
-func TestNoop_DoesNotPromoteCredentialOwnerToPrincipal(t *testing.T) {
+func TestEvaluator_DoesNotPromoteCredentialOwnerToPrincipal(t *testing.T) {
 	t.Parallel()
 	recorder := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
-	evaluator := mcpriskscan.NewNoop(provider, testenv.NewMeterProvider(t), testenv.NewLogger(t))
+	evaluator := newScanEvaluator(provider, testenv.NewMeterProvider(t), testenv.NewLogger(t))
 	var authCtx contextvalues.AuthContext
 	authCtx.UserID = "credential-owner"
 	ctx := contextvalues.SetAuthContext(t.Context(), &authCtx)
@@ -55,12 +60,12 @@ func TestNoop_DoesNotPromoteCredentialOwnerToPrincipal(t *testing.T) {
 	require.Equal(t, "credential-owner", authCtx.UserID)
 }
 
-func TestNoop_DoesNotExportRequestPayload(t *testing.T) {
+func TestEvaluator_DoesNotExportRequestPayload(t *testing.T) {
 	t.Parallel()
 	recorder := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
-	evaluator := mcpriskscan.NewNoop(provider, testenv.NewMeterProvider(t), testenv.NewLogger(t))
+	evaluator := newScanEvaluator(provider, testenv.NewMeterProvider(t), testenv.NewLogger(t))
 	event := mcpriskscan.Event{
 		Surface: mcpriskscan.SurfaceHostedMCP, OrganizationID: "", ProjectID: "", ServerID: "",
 		ToolsetID: "", ToolName: "ping", ResourceURI: "", PromptName: "",
@@ -70,7 +75,7 @@ func TestNoop_DoesNotExportRequestPayload(t *testing.T) {
 	payload := []byte(`{"private_argument":"sensitive-tool-input"}`)
 	original := bytes.Clone(payload)
 	evaluator.Scan(t.Context(), mcpriskscan.NewRequest(t.Context(), event, mcpriskscan.BorrowPayload(payload)))
-	require.Equal(t, original, payload, "the no-op must not mutate borrowed payload bytes")
+	require.Equal(t, original, payload, "the evaluator must not mutate borrowed payload bytes")
 
 	spans := recorder.Ended()
 	require.Len(t, spans, 2)
@@ -81,7 +86,7 @@ func TestNoop_DoesNotExportRequestPayload(t *testing.T) {
 	}
 }
 
-func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
+func TestEvaluator_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
 	t.Parallel()
 	reader := sdkmetric.NewManualReader()
 	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
@@ -90,7 +95,7 @@ func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
 		require.NoError(t, meterProvider.Shutdown(context.Background()))
 		require.NoError(t, tracerProvider.Shutdown(context.Background()))
 	})
-	evaluator := mcpriskscan.NewNoop(tracerProvider, meterProvider, testenv.NewLogger(t))
+	evaluator := newScanEvaluator(tracerProvider, meterProvider, testenv.NewLogger(t))
 	wantCounts := make(map[attribute.Set]int64)
 	for _, seam := range []struct{ surface, method string }{
 		{mcpriskscan.SurfaceHostedMCP, mcpriskscan.MethodToolsCall},
@@ -109,8 +114,8 @@ func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
 		for _, suffix := range []string{"first", "second"} {
 			evaluator.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 				Surface: seam.surface, Method: seam.method,
-				OrganizationID: "org-" + suffix, ProjectID: "project-" + suffix,
-				ServerID: "server-" + suffix, ToolsetID: "toolset-" + suffix,
+				OrganizationID: "org-" + suffix, ProjectID: uuid.NewString(),
+				ServerID: uuid.NewString(), ToolsetID: "toolset-" + suffix,
 				ToolName: "tool-" + suffix, ResourceURI: "resource://" + suffix, PromptName: "prompt-" + suffix,
 			}, mcpriskscan.BorrowPayload([]byte(suffix))))
 			ctx = mcpidentity.NewValidatorBoundary().StampAPIKey(ctx, "key_test")
@@ -151,10 +156,10 @@ func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
 func TestEvaluator_ClaimsAnOwnedSubjectOnce(t *testing.T) {
 	t.Parallel()
 	var calls int
-	evaluator := mcpriskscan.NewEvaluator(mcpriskscan.ObserverFunc(func(_ context.Context, subject mcpriskscan.Subject) {
+	evaluator := mcpriskscan.PrependObserver(mcpriskscan.ObserverFunc(func(_ context.Context, subject mcpriskscan.Subject) {
 		calls++
 		require.True(t, subject.EvaluationOwner())
-	}))
+	}), newScanEvaluator(testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), testenv.NewLogger(t)))
 	subject := mcpriskscan.NewRequest(t.Context(), mcpriskscan.Event{
 		Surface: mcpriskscan.SurfaceHostedMCP,
 		Method:  mcpriskscan.MethodToolsCall,
@@ -169,9 +174,9 @@ func TestEvaluator_ClaimsAnOwnedSubjectOnce(t *testing.T) {
 func TestEvaluator_IgnoresNonOwnerSurface(t *testing.T) {
 	t.Parallel()
 	var calls int
-	evaluator := mcpriskscan.NewEvaluator(mcpriskscan.ObserverFunc(func(context.Context, mcpriskscan.Subject) {
+	evaluator := mcpriskscan.PrependObserver(mcpriskscan.ObserverFunc(func(context.Context, mcpriskscan.Subject) {
 		calls++
-	}))
+	}), newScanEvaluator(testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), testenv.NewLogger(t)))
 	subject := mcpriskscan.NewRequest(t.Context(), mcpriskscan.Event{
 		Surface: "meta_mcp",
 		Method:  mcpriskscan.MethodToolsCall,
@@ -200,9 +205,9 @@ func TestNewResponse_ReusesExecutionAndTrustedPrincipal(t *testing.T) {
 	require.True(t, response.EvaluationOwner())
 
 	var calls int
-	evaluator := mcpriskscan.NewEvaluator(mcpriskscan.ObserverFunc(func(context.Context, mcpriskscan.Subject) {
+	evaluator := mcpriskscan.PrependObserver(mcpriskscan.ObserverFunc(func(context.Context, mcpriskscan.Subject) {
 		calls++
-	}))
+	}), newScanEvaluator(testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), testenv.NewLogger(t)))
 	evaluator.Scan(ctx, response)
 	evaluator.Scan(ctx, mcpriskscan.NewResponse(request, mcpriskscan.BorrowPayload([]byte(`{"result":"duplicate terminal"}`))))
 	require.Equal(t, 1, calls, "repeated terminal events must share the response-phase claim")
@@ -218,4 +223,10 @@ func TestBorrowPayload_IsCompleteOrUnavailable(t *testing.T) {
 	oversized := mcpriskscan.BorrowPayload(append(atLimit, 'x'))
 	require.Equal(t, mcpriskscan.PayloadOversized, oversized.Availability())
 	require.Nil(t, oversized.Bytes(), "oversized content must not be truncated")
+}
+
+// newScanEvaluator builds an evaluator with no applicable policies, so every
+// scan allows and only the instrumentation is observable.
+func newScanEvaluator(tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger) *mcpriskscan.Evaluator {
+	return mcpriskscan.NewPolicyEvaluator(logger, tracerProvider, meterProvider, staticPolicies(), policyDetectorFunc(nil), &findingPublisher{}, &evidenceWriter{}, mcpriskscan.DefaultPolicyConfig)
 }

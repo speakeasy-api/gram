@@ -367,11 +367,9 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 		ThreadID:    threadID,
 	})
 
-	if m.authz != nil {
-		ctx, err = m.authz.PrepareContext(ctx)
-		if err != nil {
-			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load assistant owner grants")
-		}
+	ctx, err = m.authz.PrepareContext(ctx)
+	if err != nil {
+		return ctx, nil, oops.E(oops.CodeUnexpected, err, "load assistant owner grants")
 	}
 
 	return ctx, claims, nil

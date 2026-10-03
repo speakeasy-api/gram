@@ -43,9 +43,6 @@ type PlatformRequesterReview struct {
 // requester row. Missing projects, requests, and ownership all return the same
 // not-found response so the lookup reveals no other user's queue activity.
 func (s *Service) ReadPlatformRequesterReview(ctx context.Context, input PlatformRequesterReviewInput) (PlatformRequesterReview, error) {
-	if s == nil || s.db == nil {
-		return PlatformRequesterReview{}, oops.E(oops.CodeUnavailable, nil, "MCP review requests are temporarily unavailable")
-	}
 	if strings.TrimSpace(input.OrganizationID) == "" || input.ProjectID == uuid.Nil || strings.TrimSpace(input.UserID) == "" || input.RequestID == uuid.Nil {
 		return PlatformRequesterReview{}, oops.E(oops.CodeBadRequest, nil, "organization, project, user, and request are required")
 	}

@@ -118,18 +118,8 @@ type ToolCallSearchReader interface {
 // codec, sensitive budget, volume cap, auditor) because a search page carries
 // masked identities and person references exactly as list_mcp_usage_users does.
 func (s *DiagnosticsService) WithToolCallSearch(search ToolCallSearchReader) *DiagnosticsService {
-	if s != nil && search != nil {
-		s.search = search
-	}
+	s.search = search
 	return s
-}
-
-// toolCallSearchValid reports whether search_tool_calls and list_attribute_keys
-// are servable. Postgres is checked only where it is used, on the mcp_id
-// attribution path, so the search stays honest about which dependency it needs.
-func (s *DiagnosticsService) toolCallSearchValid() bool {
-	return s != nil && s.search != nil && s.telemetry != nil && s.reader != nil && s.references != nil &&
-		s.sensitiveBudget.valid() && s.volume.valid() && s.auditor != nil && s.budget.valid() && s.now != nil
 }
 
 // ToolCallAttributeFilter is one attribute predicate. Filters are combined with
@@ -211,9 +201,6 @@ type toolCallSearch struct {
 }
 
 func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Principal, input SearchToolCallsInput) (SearchToolCallsOutput, error) {
-	if !s.toolCallSearchValid() {
-		return SearchToolCallsOutput{}, ErrUnavailable
-	}
 	search, err := normalizeToolCallSearch(input)
 	if err != nil {
 		return SearchToolCallsOutput{}, err
@@ -599,9 +586,6 @@ func toolCallSearchUserScope(projectID string) string {
 // Empty targets mean nothing reliable identifies the server, which the caller
 // reports rather than widening to the whole project.
 func (s *DiagnosticsService) toolCallSearchServer(ctx context.Context, principal Principal, search toolCallSearch) (toolLogsTargets, error) {
-	if s.db == nil {
-		return toolLogsTargets{}, ErrUnavailable
-	}
 	if _, err := s.reader.GetMCP(ctx, principal, GetMCPInput{ProjectID: search.projectID, MCPID: search.mcpID}); err != nil {
 		return toolLogsTargets{}, fmt.Errorf("resolve tool call search mcp: %w", err)
 	}
@@ -686,12 +670,6 @@ type toolUsageMatchers struct {
 }
 
 func (s *DiagnosticsService) toolCallSearchMatchers(ctx context.Context, projectID string) (toolUsageMatchers, error) {
-	// Without Postgres the rows still list, but hook-observed calls cannot be
-	// folded onto the configured servers and are reported as the calling app
-	// named them.
-	if s.db == nil {
-		return toolUsageMatchers{hosted: nil, servers: nil, meta: nil}, nil
-	}
 	parsedProject, err := uuid.Parse(projectID)
 	if err != nil {
 		return toolUsageMatchers{}, fmt.Errorf("parse project id: %w", err)
@@ -904,9 +882,6 @@ type ListAttributeKeysOutput struct {
 }
 
 func (s *DiagnosticsService) ListAttributeKeys(ctx context.Context, principal Principal, input ListAttributeKeysInput) (ListAttributeKeysOutput, error) {
-	if !s.toolCallSearchValid() {
-		return ListAttributeKeysOutput{}, ErrUnavailable
-	}
 	projectID := strings.TrimSpace(input.ProjectID)
 	if projectID == "" {
 		return ListAttributeKeysOutput{}, fmt.Errorf("%w: project_id is required", ErrToolCallSearchInvalid)

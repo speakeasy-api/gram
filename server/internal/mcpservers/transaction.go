@@ -40,7 +40,7 @@ type MCPServerTransactionInput struct {
 // workflow and remote provisioning use this command so those invariants cannot
 // drift.
 func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, input MCPServerTransactionInput) (repo.McpServer, error) {
-	if tx == nil || auditLogger == nil || input.ProjectID == uuid.Nil || input.Name == "" || input.Visibility == "" {
+	if input.ProjectID == uuid.Nil || input.Name == "" || input.Visibility == "" {
 		return repo.McpServer{}, fmt.Errorf("invalid MCP server transaction input")
 	}
 

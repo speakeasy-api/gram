@@ -66,7 +66,7 @@ func NewRemoteMCPReadinessProber(logger *slog.Logger, db *pgxpool.Pool, enc *enc
 }
 
 func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, principal Principal, projectID, registrationID, remoteMCPServerID, userSessionIssuerID, connectionID, generation uuid.UUID) (ProviderReadinessProbeResult, error) {
-	if p == nil || p.db == nil || p.enc == nil || p.policy == nil || p.sessions == nil || principal.UserID == "" || principal.OrganizationID == "" || projectID == uuid.Nil || registrationID == uuid.Nil || remoteMCPServerID == uuid.Nil || userSessionIssuerID == uuid.Nil || connectionID == uuid.Nil || generation == uuid.Nil {
+	if principal.UserID == "" || principal.OrganizationID == "" || projectID == uuid.Nil || registrationID == uuid.Nil || remoteMCPServerID == uuid.Nil || userSessionIssuerID == uuid.Nil || connectionID == uuid.Nil || generation == uuid.Nil {
 		return ProviderReadinessProbeResult{}, ErrReadinessInvalid
 	}
 	if _, err := projectsrepo.New(p.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: projectID, OrganizationID: principal.OrganizationID}); err != nil {

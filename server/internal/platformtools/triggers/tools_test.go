@@ -7,40 +7,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNormalizeTargetKindRequiresExplicitValue(t *testing.T) {
+func TestBuildConfigureTriggerInputSchemaStripsTargetFields(t *testing.T) {
 	t.Parallel()
 
-	got, err := normalizeTargetKind("")
-
-	require.Error(t, err)
-	require.Empty(t, got)
-	require.ErrorContains(t, err, "target_kind is required")
-}
-
-func TestNormalizeTargetKindAcceptsNoop(t *testing.T) {
-	t.Parallel()
-
-	got, err := normalizeTargetKind(targetKindNoop)
-
-	require.NoError(t, err)
-	require.Equal(t, targetKindNoop, got)
-}
-
-func TestBuildConfigureTriggerInputSchemaProjectScopedExposesTargetFields(t *testing.T) {
-	t.Parallel()
-
-	schema := decodeConfigureSchema(t, buildConfigureTriggerInputSchema(false))
-
-	props := configureSchemaProperties(t, schema)
-	require.Contains(t, props, "target_kind")
-	require.Contains(t, props, "target_ref")
-	require.Contains(t, props, "target_display")
-}
-
-func TestBuildConfigureTriggerInputSchemaAssistantScopedStripsTargetFields(t *testing.T) {
-	t.Parallel()
-
-	schema := decodeConfigureSchema(t, buildConfigureTriggerInputSchema(true))
+	schema := decodeConfigureSchema(t, buildConfigureTriggerInputSchema())
 
 	props := configureSchemaProperties(t, schema)
 	require.NotContains(t, props, "target_kind", "assistant-scoped schema must not expose target_kind to the LLM")

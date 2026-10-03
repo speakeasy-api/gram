@@ -147,26 +147,6 @@ func TestContinueSessionToolMapsBudgetErrors(t *testing.T) {
 	require.Contains(t, refusal.Payload, `"rate_limited"`)
 }
 
-func TestSessionRecallStubsRefuse(t *testing.T) {
-	t.Parallel()
-
-	registrar := newRegistrar(newTestMCPServer())
-	registerUnavailableSessionRecallTools(registrar)
-	ctx := ContextWithPrincipal(t.Context(), registrationServicePrincipal())
-
-	for name, arguments := range map[string]string{
-		"list_my_sessions": `{}`,
-		"continue_session": `{"session_id":"ses_abc"}`,
-	} {
-		descriptor := descriptorByName(t, registrar, name)
-		require.Equal(t, externalOnly, descriptor.Meta.Audiences, "stub for %q must declare the live tool's audiences", name)
-		_, err := descriptor.Invoke(ctx, json.RawMessage(arguments))
-		var refusal *ToolRefusalError
-		require.ErrorAs(t, err, &refusal)
-		require.JSONEq(t, `{"code":"feature_unavailable","feature":"session_recall","message":"This is not switched on for your organization yet."}`, refusal.Payload)
-	}
-}
-
 func TestSessionRecallToolsRequirePrincipal(t *testing.T) {
 	t.Parallel()
 

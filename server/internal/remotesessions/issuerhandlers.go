@@ -287,9 +287,9 @@ func (s *Service) RefreshRemoteSessionIssuerMetadata(ctx context.Context, payloa
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote session issuer").LogError(ctx, logger)
 	}
 
-	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, s.jwksResolver, s.tunnels, existing)
+	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, s.jwksResolver, issuerTunnelTransport(s.tunnels, existing.TunneledMcpServerID), existing)
 	if err != nil {
-		return nil, s.recordIssuerDiscoveryFailure(ctx, logger, existing, err)
+		return nil, recordIssuerDiscoveryFailure(ctx, s.db, logger, existing, err)
 	}
 
 	dbtx, err := s.db.Begin(ctx)

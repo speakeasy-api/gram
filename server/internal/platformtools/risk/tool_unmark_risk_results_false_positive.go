@@ -43,10 +43,6 @@ func (s *UnmarkRiskResultsFalsePositive) Descriptor() core.ToolDescriptor {
 }
 
 func (s *UnmarkRiskResultsFalsePositive) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if s.risk == nil {
-		return fmt.Errorf("risk service not configured")
-	}
-
 	input := unmarkRiskResultsFalsePositiveInput{ResultIDs: nil}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err

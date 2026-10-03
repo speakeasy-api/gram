@@ -610,9 +610,7 @@ func (c *IdentityCommit) register(ctx context.Context, reg Registration) (Regist
 	method, ok := registeredAuthMethod(response, policy)
 	if !ok {
 		failure := registration.InvalidSuccessResponse(0)
-		if c.committer.telemetry != nil {
-			c.committer.telemetry.RecordFailure(ctx, registration.MethodDCR, failure)
-		}
+		c.committer.telemetry.RecordFailure(ctx, registration.MethodDCR, failure)
 		reg.Failure = &failure
 		return reg, nil
 	}

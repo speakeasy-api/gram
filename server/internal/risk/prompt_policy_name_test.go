@@ -118,21 +118,6 @@ func TestGeneratePromptPolicyName(t *testing.T) {
 	}
 }
 
-func TestGeneratePromptPolicyNameWithoutCompletionClient(t *testing.T) {
-	t.Parallel()
-
-	svc := &Service{
-		logger:       testenv.NewLogger(t),
-		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
-		stokenCodec:  stokens.NewCodec(),
-	}
-	got := svc.generatePromptPolicyName(context.Background(), "org_123", "project_123", "Block destructive deletes", nil)
-	want := "Prompt Policy: Block destructive deletes"
-	if got != want {
-		t.Fatalf("generatePromptPolicyName() = %q, want %q", got, want)
-	}
-}
-
 type promptNameCompletionClient struct {
 	response *openrouter.CompletionResponse
 	err      error

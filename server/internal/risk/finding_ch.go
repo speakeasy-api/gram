@@ -441,12 +441,8 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 // redelivery: attribution is stamped once at ingest and a transient Postgres
 // blip must not persist permanently unattributed rows.
 // carriedChatProjects resolves the project of every chat named by carried
-// attribution in the batch, bounded to the batch's project ids. Without a
-// database nothing can be verified, so every carried chat is unverifiable.
+// attribution in the batch, bounded to the batch's project ids.
 func (w *FindingCHWriter) carriedChatProjects(ctx context.Context, messages []*riskv1.Finding) (map[uuid.UUID]uuid.UUID, error) {
-	if w.db == nil {
-		return nil, nil
-	}
 	var chatIDs, projectIDs []uuid.UUID
 	seenChats := make(map[uuid.UUID]struct{})
 	seenProjects := make(map[uuid.UUID]struct{})

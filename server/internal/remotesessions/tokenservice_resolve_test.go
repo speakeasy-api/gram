@@ -26,10 +26,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 func newResolveManager(t *testing.T, conn *pgxpool.Pool, enc *encryption.Client) *remotesessions.ChallengeManager {
@@ -45,7 +47,7 @@ func newResolveManager(t *testing.T, conn *pgxpool.Pool, enc *encryption.Client)
 		conn,
 		enc,
 		policy,
-		nil,
+		tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", policy, nil),
 		cache.NoopCache,
 		mustURL(t, "http://localhost"),
 	)

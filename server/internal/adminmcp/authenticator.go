@@ -52,17 +52,10 @@ type staffAccessSession struct {
 }
 
 func NewStaffAuthenticator(signer *sessiontokens.Signer, db *pgxpool.Pool, cipher *encryption.Client, verifier adminSessionVerifier, issuer, audience string) *StaffAuthenticator {
-	var store staffAccessStore
-	if db != nil {
-		store = postgresStaffAccessStore{db: db}
-	}
-	return &StaffAuthenticator{signer: signer, store: store, cipher: cipher, verifier: verifier, issuer: issuer, audience: audience}
+	return &StaffAuthenticator{signer: signer, store: postgresStaffAccessStore{db: db}, cipher: cipher, verifier: verifier, issuer: issuer, audience: audience}
 }
 
 func (a *StaffAuthenticator) Authenticate(ctx context.Context, token string) (Principal, error) {
-	if a == nil || a.signer == nil || a.store == nil || a.cipher == nil || a.verifier == nil || a.issuer == "" || a.audience == "" {
-		return Principal{}, ErrAuthUnavailable
-	}
 	claims, err := a.signer.ValidateExactAudience(token, a.audience)
 	if err != nil || claims.Issuer != a.issuer || claims.ID == "" || claims.ClientID == "" {
 		return Principal{}, errors.New("invalid staff token")

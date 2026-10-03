@@ -31,20 +31,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan/mcpriskscantest"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	spendcelenv "github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-var (
-	infra *testenv.Environment
-)
+var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
@@ -127,6 +129,34 @@ func (r *recordingEfficacySignaler) signaled() []uuid.UUID {
 	return slices.Clone(r.signals)
 }
 
+// recordingChatTitleGenerator stands in for the Temporal-backed generator,
+// which lives in the background package and cannot be imported here.
+type recordingChatTitleGenerator struct {
+	mu      sync.Mutex
+	chatIDs []string
+}
+
+func (r *recordingChatTitleGenerator) ScheduleChatTitleGeneration(_ context.Context, chatID, _, _ string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.chatIDs = append(r.chatIDs, chatID)
+	return nil
+}
+
+// recordingSuggestionSignaler stands in for the Temporal-backed suggestion
+// signaler, which lives in the background package and cannot be imported here.
+type recordingSuggestionSignaler struct {
+	mu       sync.Mutex
+	skillIDs []uuid.UUID
+}
+
+func (r *recordingSuggestionSignaler) Signal(_ context.Context, _, skillID uuid.UUID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.skillIDs = append(r.skillIDs, skillID)
+	return nil
+}
+
 // namespacedSpendGateCache keeps snapshots isolated even though hook tests use
 // the same Redis database and organization fixture in parallel.
 type namespacedSpendGateCache struct {
@@ -195,13 +225,23 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		require.NoError(t, spendGateCache.DeleteByPrefix(context.Background(), ""))
 	})
 
-	// Pass nil for telemetry logger, temporalEnv, productFeatures, and chatTitleGenerator in tests
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
+	telemetryLogger := telemetry.NewLogger(
+		ctx,
+		logger,
+		tracerProvider,
+		meterProvider,
+		chConn,
+		func(context.Context, string) (bool, error) { return true, nil },
+		func(context.Context, string) (bool, error) { return false, nil },
+		telemetry.NewUserInfoResolver(logger, conn, cacheAdapter),
+		telemetry.NewNoopLogPublisher(logger),
+	)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	assetStorage := assetstest.NewTestBlobStore(t)
-	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetStorage)
+	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetStorage, chat.NewTurnStream(redisClient))
 	t.Cleanup(func() { _ = chatWriterShutdown(t.Context()) })
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
@@ -213,33 +253,29 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn)
 	spendCelEngine, err := spendcelenv.New()
 	require.NoError(t, err)
-	spendGate, err := spendrules.NewGate(logger, spendGateCache, spendCelEngine)
-	require.NoError(t, err)
+	spendGate := spendrules.NewGate(logger, spendGateCache, spendCelEngine)
 	svc := NewService(
 		logger,
 		conn,
 		tracerProvider,
 		meterProvider,
-		nil,
+		telemetryLogger,
 		gcp.NewNoopPublisher[*otelv1.InboundLogRecord](),
 		sessionManager,
 		cacheAdapter,
-		nil,
-		nil,
 		authzEngine,
 		audit.NewLogger(),
-		nil,
-		nil,
-		nil,
-		nil,
+		productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
+		&recordingChatTitleGenerator{mu: sync.Mutex{}, chatIDs: nil},
+		mcpriskscantest.NewRiskScanner(t, logger, tracerProvider, meterProvider, conn, nil, classifierReturning(promptinjection.LabelSafe)),
+		promptinjection.NewScanner(logger, classifierReturning(promptinjection.LabelSafe)),
 		policyBypass,
 		spendGate,
 		shadowMCPClient,
 		chatWriter,
 		efficacySignals,
-		nil,
+		&recordingSuggestionSignaler{mu: sync.Mutex{}, skillIDs: nil},
 		identitySignals,
-		serverURL,
 		siteURL,
 		"test-jwt-secret",
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),

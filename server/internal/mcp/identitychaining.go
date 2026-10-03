@@ -30,24 +30,18 @@ type identityChainer interface {
 	Governs(ctx context.Context, req identitychaining.Request) bool
 }
 
-// SetIdentityChainer enables identity chaining on proxied upstreams. Without
-// one, upstream token resolution keeps its interactive-only behavior.
-func (s *Service) SetIdentityChainer(chainer identityChainer) {
-	s.identityChainer = chainer
-}
-
 // identityChainingRequest builds the chaining request for the authenticated
-// human in ctx. It reports false when chaining must not run: no executor, or
-// a caller that is not a validated user session (assistants, agents,
-// workloads and API keys never select a human's delegation). Whether chaining
-// applies to the upstream is then decided by its binding configuration.
+// human in ctx. It reports false when chaining must not run: a caller that is
+// not a validated user session (assistants, agents, workloads and API keys
+// never select a human's delegation). Whether chaining applies to the
+// upstream is then decided by its binding configuration.
 //
 // A tunneled upstream is identified by its own derived issuer, never by the
 // resource it claims, exactly as interactive routing treats it; one without a
 // derived issuer calls anonymously and so never chains.
 func (s *Service) identityChainingRequest(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID, upstreamResource string, tunneled bool, tunneledIssuerID uuid.NullUUID) (identitychaining.Request, bool) {
 	var none identitychaining.Request
-	if s.identityChainer == nil || userSessionIssuerID == uuid.Nil || strings.TrimRight(upstreamResource, "/") == "" || (tunneled && !tunneledIssuerID.Valid) {
+	if userSessionIssuerID == uuid.Nil || strings.TrimRight(upstreamResource, "/") == "" || (tunneled && !tunneledIssuerID.Valid) {
 		return none, false
 	}
 	remoteIssuer := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
@@ -184,7 +178,7 @@ func identityChainingError(outcome identitychaining.Outcome) error {
 // or nil when chaining cannot apply: no gated issuer, or a member outside the
 // gateway's project, whose bindings belong to another project.
 func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember) func(ctx context.Context, upstreamResource string) (string, error) {
-	if s.identityChainer == nil || gate.userSessionIssuerID == uuid.Nil || member.projectID != gate.projectID {
+	if gate.userSessionIssuerID == uuid.Nil || member.projectID != gate.projectID {
 		return nil
 	}
 	return func(ctx context.Context, upstreamResource string) (string, error) {

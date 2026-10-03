@@ -3,14 +3,15 @@ package remotesessions
 import (
 	"encoding/json"
 	"errors"
-	"github.com/jackc/pgx/v5"
-	"github.com/speakeasy-api/gram/server/internal/oauthwire"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -42,6 +43,7 @@ func TestPreparationEligibility(t *testing.T) {
 		})
 	}
 }
+
 func TestPreparationCanonicalResourceAndScopes(t *testing.T) {
 	t.Parallel()
 	in := PreparationInput{UserSessionIssuerID: uuid.New(), RemoteSessionIssuerID: uuid.New(), Resource: "https://resource.example.com/mcp/", Scopes: []string{"write", "read", "read"}}
@@ -61,6 +63,7 @@ func TestPreparationCanonicalResourceAndScopes(t *testing.T) {
 		require.Error(t, err)
 	}
 }
+
 func TestPreparationNormalizesConfirmedGrantSets(t *testing.T) {
 	t.Parallel()
 	in := PreparationInput{UserSessionIssuerID: uuid.New(), RemoteSessionIssuerID: uuid.New(), Resource: "https://resource.example.com/", ConfirmGrants: []string{"refresh_token", "authorization_code", "refresh_token"}}
@@ -106,11 +109,12 @@ func TestPreparationDCRValidation(t *testing.T) {
 		})
 	}
 }
+
 func TestPreparationDCRWireAndUncertainty(t *testing.T) {
 	t.Parallel()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	s := &Service{policy: policy}
+	s := &Service{GlobalIssuers: &GlobalIssuers{policy: policy}}
 	for _, tt := range []struct {
 		name                string
 		status              int

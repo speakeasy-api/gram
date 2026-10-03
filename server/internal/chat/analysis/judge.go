@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -97,25 +98,21 @@ type Judges struct {
 
 // NewJudges validates and assembles the roster. Every judge needs a unique,
 // non-empty, lowercase name because the name is a persistence key.
-func NewJudges(judges ...Judge) (*Judges, error) {
+func NewJudges(judges ...Judge) *Judges {
 	byName := make(map[string]Judge, len(judges))
 	ordered := make([]Judge, 0, len(judges))
 	for _, judge := range judges {
-		if judge == nil {
-			return nil, fmt.Errorf("chat analysis judge roster contains a nil judge")
-		}
 		name := judge.Name()
-		if !judgeNamePattern.MatchString(name) {
-			return nil, fmt.Errorf("chat analysis judge name %q must match %s", name, judgeNamePattern)
-		}
-		if _, ok := byName[name]; ok {
-			return nil, fmt.Errorf("chat analysis judge name %q registered twice", name)
-		}
+		_, duplicate := byName[name]
+		inv.Require("chat analysis judge "+name,
+			"name matches "+judgeNamePattern.String(), judgeNamePattern.MatchString(name),
+			"name is registered once", !duplicate,
+		)
 		byName[name] = judge
 		ordered = append(ordered, judge)
 	}
 
-	return &Judges{ordered: ordered, byName: byName}, nil
+	return &Judges{ordered: ordered, byName: byName}
 }
 
 // Names lists the roster's judge names in registration order.

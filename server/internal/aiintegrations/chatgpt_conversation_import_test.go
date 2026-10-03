@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/timewindowpoller"
-	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattest"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -103,11 +103,10 @@ func TestChatGPTConversationProcessPageWritesChatAndMessagesIdempotently(t *test
 	cfg := created.Config
 	cfg.ProjectID = project.ID
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
-	t.Cleanup(func() { _ = shutdown(context.Background()) })
+	writer := chattest.NewMessageWriter(t, infra, conn)
 
 	heartbeats := 0
-	svc := NewChatGPTConversationImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) { heartbeats++ })
+	svc := NewChatGPTConversationImportService(testenv.NewLogger(t), store, conn, newTestGuardianPolicy(t), writer, func(context.Context, int) { heartbeats++ })
 	file := chatgptFixtureFile(chatgptConversationFixture)
 	src := &chatgptConversationSource{
 		client: &stubCodexComplianceClient{
@@ -261,10 +260,9 @@ func TestChatGPTConversationProcessPageStoresMessagesContainingNUL(t *testing.T)
 	cfg := created.Config
 	cfg.ProjectID = project.ID
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
-	t.Cleanup(func() { _ = shutdown(context.Background()) })
+	writer := chattest.NewMessageWriter(t, infra, conn)
 
-	svc := NewChatGPTConversationImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+	svc := NewChatGPTConversationImportService(testenv.NewLogger(t), store, conn, newTestGuardianPolicy(t), writer, func(context.Context, int) {})
 	file := chatgptFixtureFile(chatgptConversationNULFixture)
 	src := &chatgptConversationSource{
 		client: &stubCodexComplianceClient{

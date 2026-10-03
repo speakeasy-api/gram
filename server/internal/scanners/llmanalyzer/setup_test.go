@@ -11,8 +11,10 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"google.golang.org/protobuf/proto"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/requestreply"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
@@ -46,6 +48,13 @@ func collectMetrics(t *testing.T, reader *sdkmetric.ManualReader) metricdata.Res
 // reply writer and a manual-reader meter provider.
 func newEnforceHandler(t *testing.T, stub *llmanalyzer.StubCompleter, opts ...llmanalyzer.EnforceHandlerOption) (*llmanalyzer.EnforceHandler, *miniredis.Miniredis, *redis.Client, *sdkmetric.ManualReader) {
 	t.Helper()
+	return newMeteredEnforceHandler(t, stub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()), opts...)
+}
+
+// newMeteredEnforceHandler is newEnforceHandler with a caller-supplied usage
+// recorder.
+func newMeteredEnforceHandler(t *testing.T, stub *llmanalyzer.StubCompleter, recorder *metering.RiskRecorder, opts ...llmanalyzer.EnforceHandlerOption) (*llmanalyzer.EnforceHandler, *miniredis.Miniredis, *redis.Client, *sdkmetric.ManualReader) {
+	t.Helper()
 	mr, client, writer := newReplyWriter(t)
 	meterProvider, reader := newEnforceMeterProvider(t)
 	var completer llmanalyzer.Completer
@@ -53,7 +62,7 @@ func newEnforceHandler(t *testing.T, stub *llmanalyzer.StubCompleter, opts ...ll
 		completer = stub
 	}
 	analyzer := llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), completer)
-	handler := llmanalyzer.NewEnforceHandler(testenv.NewLogger(t), testenv.NewTracerProvider(t), meterProvider, analyzer, writer, opts...)
+	handler := llmanalyzer.NewEnforceHandler(testenv.NewLogger(t), testenv.NewTracerProvider(t), meterProvider, analyzer, writer, recorder, opts...)
 	return handler, mr, client, reader
 }
 

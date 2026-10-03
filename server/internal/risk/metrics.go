@@ -77,9 +77,6 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 // RecordFindingCHInserts records the number of finding messages submitted to
 // ClickHouse in a single batch insert along with the outcome of the insert call.
 func (m *metrics) RecordFindingCHInserts(ctx context.Context, count int, outcome o11y.Outcome) {
-	if m.chMessagesInserted == nil {
-		return
-	}
 	m.chMessagesInserted.Add(ctx, int64(count), metric.WithAttributes(attr.Outcome(outcome)))
 }
 
@@ -88,9 +85,6 @@ func (m *metrics) RecordFindingCHInserts(ctx context.Context, count int, outcome
 // redelivery, tagged with the reason. A sustained non-zero rate flags a
 // producer bug to fix while the subscription still retains the messages.
 func (m *metrics) RecordFindingCHSkipped(ctx context.Context, reason string) {
-	if m.chMessagesSkipped == nil {
-		return
-	}
 	m.chMessagesSkipped.Add(ctx, 1, metric.WithAttributes(attr.Reason(reason)))
 }
 
@@ -100,17 +94,11 @@ func (m *metrics) RecordFindingCHSkipped(ctx context.Context, reason string) {
 // A sustained non-zero rate points at a producer stamping unverifiable chat
 // attribution.
 func (m *metrics) RecordFindingCHUnverifiedAttribution(ctx context.Context) {
-	if m.chMessagesAttributionDropped == nil {
-		return
-	}
 	m.chMessagesAttributionDropped.Add(ctx, 1)
 }
 
 // RecordFindingCHExcluded records a risk finding message that was annotated as
 // excluded (excluded_at/exclusion_id set) rather than dropped before insert.
 func (m *metrics) RecordFindingCHExcluded(ctx context.Context) {
-	if m.chMessagesExcluded == nil {
-		return
-	}
 	m.chMessagesExcluded.Add(ctx, 1)
 }

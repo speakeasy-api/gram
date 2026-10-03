@@ -24,21 +24,18 @@ type OrganizationUsageSummary struct {
 	EstimatedTotalUSD      string  `json:"estimated_total_usd"`
 }
 
-func registerUsageTools(server *mcp.Server, organizations OrganizationReader, usage UsageReader) {
+func registerUsageTools(server *mcp.Server, reader Reader) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_organization_usage_summary",
 		Title:       "Get Organization Usage Summary",
 		Description: "Read the current billing-cycle PAYG usage estimate for an exact organization ID. This is not a bill: inference spend includes completed UTC days only, and invoices can finalize up to 72 hours after the cycle ends. Does not return billing identities or inference keys.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input OrganizationIDInput) (*mcp.CallToolResult, OrganizationUsageSummary, error) {
-		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
+		org, err := readExactOrganization(ctx, reader, input.OrganizationID)
 		if err != nil {
 			return nil, OrganizationUsageSummary{}, err
 		}
-		if usage == nil {
-			return nil, OrganizationUsageSummary{}, errUsageUnavailable
-		}
-		summary, err := usage.GetPaygBillingSummary(ctx, &gen.GetPaygBillingSummaryPayload{OrganizationID: org.ID})
+		summary, err := reader.GetPaygBillingSummary(ctx, &gen.GetPaygBillingSummaryPayload{OrganizationID: org.ID})
 		if err != nil || summary == nil {
 			return nil, OrganizationUsageSummary{}, errUsageUnavailable
 		}

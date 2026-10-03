@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/agents"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -100,14 +101,12 @@ func (a *authenticatedPrincipalAdapter) DeriveCandidates(ctx context.Context, or
 	return result, nil
 }
 
-func registeredPrincipalAdapter(registry *killswitches.Registry) (killswitches.PrincipalAdapter, error) {
-	user, ok := registry.PrincipalAdapter(PrincipalKindUser)
-	if !ok {
-		return nil, errors.New("authenticated user principal adapter is not registered")
-	}
-	agent, ok := registry.PrincipalAdapter(PrincipalKindAgent)
-	if !ok {
-		return nil, errors.New("authenticated agent principal adapter is not registered")
-	}
-	return &authenticatedPrincipalAdapter{PrincipalAdapter: user, agent: agent}, nil
+func registeredPrincipalAdapter(registry *killswitches.Registry) killswitches.PrincipalAdapter {
+	user, userOK := registry.PrincipalAdapter(PrincipalKindUser)
+	agent, agentOK := registry.PrincipalAdapter(PrincipalKindAgent)
+	inv.Require("mcp tool-execution principal adapter",
+		"authenticated user principal adapter is registered", userOK,
+		"authenticated agent principal adapter is registered", agentOK,
+	)
+	return &authenticatedPrincipalAdapter{PrincipalAdapter: user, agent: agent}
 }

@@ -85,9 +85,6 @@ type Scanner struct {
 }
 
 func NewScanner(logger *slog.Logger, classifier Classifier) *Scanner {
-	if classifier == nil {
-		classifier = NoopClassifier
-	}
 	return &Scanner{classifier: classifier, logger: logger}
 }
 

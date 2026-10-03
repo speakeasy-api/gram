@@ -56,12 +56,8 @@ func NewClientAdmissionService(db *pgxpool.Pool, auditLogger *audit.Logger) *Cli
 	return &ClientAdmissionService{db: db, audit: auditLogger}
 }
 
-func (s *ClientAdmissionService) valid() bool {
-	return s != nil && s.db != nil && s.audit != nil
-}
-
 func (s *ClientAdmissionService) Get(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (ClientAdmission, error) {
-	if !s.valid() || principal.OrganizationID == "" || principal.UserID == "" || project.ID == uuid.Nil || registrationID == uuid.Nil {
+	if principal.OrganizationID == "" || principal.UserID == "" || project.ID == uuid.Nil || registrationID == uuid.Nil {
 		return ClientAdmission{}, ErrClientAdmissionUnavailable
 	}
 	issuerID, err := s.registrationIssuer(ctx, s.db, principal, project, registrationID)
@@ -89,7 +85,7 @@ func (s *ClientAdmissionService) Get(ctx context.Context, principal Principal, p
 // against the registered server, and ModeDisabled additionally withdraws the
 // advertised CIMD support from the issuer's RFC 8414 metadata.
 func (s *ClientAdmissionService) Set(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID, mode string) (ClientAdmission, error) {
-	if !s.valid() || principal.OrganizationID == "" || principal.UserID == "" || project.ID == uuid.Nil || registrationID == uuid.Nil {
+	if principal.OrganizationID == "" || principal.UserID == "" || project.ID == uuid.Nil || registrationID == uuid.Nil {
 		return ClientAdmission{}, ErrClientAdmissionUnavailable
 	}
 	// Validated here as well as at the tool boundary: the enum documented on

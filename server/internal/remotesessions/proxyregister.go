@@ -108,10 +108,6 @@ type DCRResponse struct {
 // callbackOrigin is the origin of the redirect_uri registered for the client.
 // The client row that stores the result must resolve to the same origin.
 func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, callbackOrigin *url.URL, request ProxyRegisterRequest, telemetry registration.Recorder) (ProxyRegisterResponse, error) {
-	if policy == nil || callbackOrigin == nil {
-		return ProxyRegisterResponse{}, fmt.Errorf("dynamic client registration is not configured")
-	}
-
 	// The response carries a client secret, so the endpoint must be HTTPS,
 	// with the RFC 8252 loopback exception for local development and tests
 	// (guardian's egress policy blocks loopback in production regardless).
@@ -130,7 +126,7 @@ func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, tunnels
 		// live ctx means the deadline that expired was ours, which is an
 		// upstream timeout worth recording. An expired ctx is the caller
 		// giving up, which is not.
-		if telemetry != nil && ctx.Err() == nil && !errors.Is(err, context.Canceled) {
+		if ctx.Err() == nil && !errors.Is(err, context.Canceled) {
 			telemetry.RecordFailure(ctx, registration.MethodDCR, registration.ClassifyDCR(err))
 		}
 	}
@@ -180,10 +176,7 @@ func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, tunnels
 		if perr != nil {
 			return ProxyRegisterResponse{}, fmt.Errorf("parse tunneled_mcp_server_id: %w", perr)
 		}
-		doer, err = upstreamHTTPDoer(httpClient, tunnels, uuid.NullUUID{UUID: parsed, Valid: true})
-		if err != nil {
-			return ProxyRegisterResponse{}, fmt.Errorf("select tunnel transport for registration: %w", err)
-		}
+		doer = upstreamHTTPDoer(httpClient, tunnels, uuid.NullUUID{UUID: parsed, Valid: true})
 	}
 	resp, err := doer.Do(httpReq)
 	if err != nil {
@@ -316,10 +309,6 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 		},
 	); err != nil {
 		return err
-	}
-
-	if s.policy == nil {
-		return oops.E(oops.CodeUnexpected, nil, "proxy register handler is not configured").LogError(ctx, s.logger)
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, proxyRegisterMaxBodyBytes)

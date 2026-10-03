@@ -41,16 +41,13 @@ type CredentialCodec struct {
 	encryption *encryption.Client
 }
 
-func NewCredentialCodec(encryptionClient *encryption.Client) (*CredentialCodec, error) {
-	if encryptionClient == nil {
-		return nil, errors.New("platform MCP credential codec requires encryption")
-	}
-	return &CredentialCodec{encryption: encryptionClient}, nil
+func NewCredentialCodec(encryptionClient *encryption.Client) *CredentialCodec {
+	return &CredentialCodec{encryption: encryptionClient}
 }
 
 // Issue mints an opaque credential bound to organizationID and resource.
 func (c *CredentialCodec) Issue(kind credentialKind, organizationID, resource string) (string, error) {
-	if c == nil || c.encryption == nil || organizationID == "" {
+	if organizationID == "" {
 		return "", errors.New("platform MCP credential input is incomplete")
 	}
 	secret := make([]byte, 32)
@@ -87,7 +84,7 @@ func (c *CredentialCodec) OrganizationID(kind credentialKind, credential string)
 
 // decode verifies and opens a credential of the given kind.
 func (c *CredentialCodec) decode(kind credentialKind, credential string) (credentialPayload, error) {
-	if c == nil || c.encryption == nil || credential == "" || len(credential) > maxPlatformCredentialLength {
+	if credential == "" || len(credential) > maxPlatformCredentialLength {
 		return credentialPayload{}, errInvalidCredential
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(credential)

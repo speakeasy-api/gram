@@ -89,7 +89,7 @@ func TestListPluginsPagesAProjectsPluginsWithMembershipCounts(t *testing.T) {
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	service := testPluginTargets(conn)
+	service := testPluginTargets(t, conn)
 
 	defaultPlugin, err := pluginsrepo.New(conn).CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
 		OrganizationID: principal.OrganizationID,
@@ -170,7 +170,7 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
 	prepared, err := NewLiveOrgAdminAuthorizer(conn, engine).PrepareExternalContext(ctx, principal)
 	require.NoError(t, err)
-	service := testPluginTargets(conn).WithAuthorization(engine).
+	service := testPluginTargets(t, conn).WithAuthorization(engine).
 		WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{
 			PluginSlug: "direct-user", Packages: []plugindelivery.PublicationPackageAddress{{ServerName: "Assigned MCP", MCPURL: "https://private.example/mcp/member"}},
 		}}})
@@ -322,7 +322,7 @@ func TestListPluginAssignmentsReturnsOpaqueProjectBoundReferences(t *testing.T) 
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	service := testPluginTargets(conn)
+	service := testPluginTargets(t, conn)
 	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return now }
 
@@ -352,7 +352,7 @@ func TestPluginReadsIgnoreCrossTenantAssignmentRows(t *testing.T) {
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	service := testPluginTargets(conn)
+	service := testPluginTargets(t, conn)
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Shared Tools", "shared")
 
 	before, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String()})
@@ -403,7 +403,7 @@ func TestListPluginAssignmentsBoundsResolverWorkInSQL(t *testing.T) {
 		}
 	}
 
-	service := testPluginTargets(conn)
+	service := testPluginTargets(t, conn)
 	result, err := service.ListPluginAssignments(ctx, principal, ListPluginAssignmentsInput{ProjectID: project.ID.String()})
 	require.NoError(t, err)
 	require.True(t, result.Truncated)
@@ -445,7 +445,7 @@ func TestPluginAssignmentOptionsUseCanonicalRoleAndLongAttributePrincipals(t *te
 	})
 	require.NoError(t, err)
 
-	service := testPluginTargets(conn)
+	service := testPluginTargets(t, conn)
 	result, err := service.ListPluginAssignments(ctx, principal, ListPluginAssignmentsInput{ProjectID: project.ID.String()})
 	require.NoError(t, err)
 	byName := map[string]PluginAssignmentOption{}
@@ -483,7 +483,7 @@ func TestGetPluginAssignmentVersionChangesAfterDashboardStyleEdit(t *testing.T) 
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	service := testPluginTargets(conn)
+	service := testPluginTargets(t, conn)
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Shared Tools", "shared")
 
 	before, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String()})
@@ -527,7 +527,7 @@ func TestGetPluginResolvesAnExactTargetAndReportsMembership(t *testing.T) {
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	admissionResult := DistributionAdmission{State: DistributionAdmissionNotApplicable, Mode: "legacy", MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: "2026-09-10T00:00:00Z", Complete: true}
-	service := testPluginTargets(conn).WithDistributionAdmissionReads(stubDistributionAdmissionReader{plugin: admissionResult}).
+	service := testPluginTargets(t, conn).WithDistributionAdmissionReads(stubDistributionAdmissionReader{plugin: admissionResult}).
 		WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{
 			PluginSlug: "marketing", NotConfigured: false, Fresh: nil,
 			Packages: []plugindelivery.PublicationPackageAddress{{ServerName: "MCP", MCPURL: "https://private.example/mcp/first"}},
@@ -556,7 +556,7 @@ func TestGetPluginRetainsInventoryWhenPublicationEvidenceIsUnavailable(t *testin
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Existing MCPs", "existing-mcps")
-	service := testPluginTargets(conn)
+	service := testPluginTargets(t, conn)
 	for _, evidence := range []stubPluginPublicationEvidence{
 		{items: nil},
 		{err: errors.New("publication resolution failed")},
@@ -580,7 +580,7 @@ func TestGetPluginPagesTypedMembershipAndRejectsStaleCursor(t *testing.T) {
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_plugin_member_pages")
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	service := testPluginTargets(conn)
+	service := testPluginTargets(t, conn)
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Existing MCPs", "existing-mcps")
 	const memberCount = maxPluginMembers + 1
 	serverIDs := make([]uuid.UUID, memberCount)
@@ -646,7 +646,7 @@ func TestGetPluginRefusesAnUnmatchedTargetRatherThanFallingBackToDefault(t *test
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	service := testPluginTargets(conn)
+	service := testPluginTargets(t, conn)
 	_, err = pluginsrepo.New(conn).CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
 		OrganizationID: principal.OrganizationID,
 		ProjectID:      project.ID,
@@ -672,7 +672,7 @@ func TestPluginInventoryRefusesAnotherOrganizationsProject(t *testing.T) {
 
 	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
 	_, otherProject := seedRegistrationLifecycle(t, ctx, conn)
-	service := testPluginTargets(conn)
+	service := testPluginTargets(t, conn)
 	seedPlugin(t, ctx, conn, principal.OrganizationID, otherProject.ID, "Foreign", "foreign")
 
 	_, err = service.ListPlugins(ctx, principal, ListPluginsInput{ProjectID: otherProject.ID.String()})
@@ -694,7 +694,7 @@ func TestSetPluginAssignmentsReplacesAtomicallyAndReplaysSafely(t *testing.T) {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPPluginAssignmentMutations, principal.OrganizationID, true)
-	service := testPluginTargets(conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget())
+	service := testPluginTargets(t, conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget())
 	_, err = service.SetPluginAssignments(ctx, principal, SetPluginAssignmentsInput{
 		ProjectID:                 project.ID.String(),
 		Plugin:                    uuid.Nil.String(),
@@ -901,7 +901,7 @@ func TestSetPluginAssignmentsRefusesHiddenCurrentAssignments(t *testing.T) {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPPluginAssignmentMutations, principal.OrganizationID, true)
-	service := testPluginTargets(conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget())
+	service := testPluginTargets(t, conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget())
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Hidden Audience", "hidden-audience")
 	_, err = pluginsrepo.New(conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
 		PluginID: plugin.ID, OrganizationID: principal.OrganizationID, PrincipalUrn: "user:private-user-id",
@@ -932,7 +932,7 @@ func TestSetPluginAssignmentsRejectsExpiredAndCrossProjectReferences(t *testing.
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPPluginAssignmentMutations, principal.OrganizationID, true)
-	service := testPluginTargets(conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget())
+	service := testPluginTargets(t, conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget())
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Shared Tools", "shared-tools")
 	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return now }
@@ -954,7 +954,7 @@ func TestSetPluginAssignmentsRejectsExpiredAndCrossProjectReferences(t *testing.
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			localService := testPluginTargets(conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget())
+			localService := testPluginTargets(t, conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget())
 			localService.now = func() time.Time { return test.at }
 			_, err := localService.SetPluginAssignments(ctx, principal, SetPluginAssignmentsInput{
 				ProjectID: project.ID.String(), Plugin: plugin.ID.String(), AssignmentReferences: []string{test.reference},
@@ -987,6 +987,6 @@ func TestComposedPluginToolsKeepReadsForBothAudiencesAndMutationsExternal(t *tes
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_plugin_tool_audiences")
 	require.NoError(t, err)
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, testPluginTargets(conn), nil, CatalogDescriptor{})
+	_, registrar := newTestServer(t, func(services *Services) { services.Plugins = testPluginTargets(t, conn) })
 	requirePluginToolAudiences(t, registrar)
 }

@@ -71,16 +71,10 @@ type MCPConnectionSettingsService struct {
 }
 
 func NewMCPConnectionSettingsService(db platformrepo.DBTX) *MCPConnectionSettingsService {
-	if db == nil {
-		return nil
-	}
 	return &MCPConnectionSettingsService{queries: platformrepo.New(db)}
 }
 
 func (s *MCPConnectionSettingsService) Get(ctx context.Context, principal Principal, input GetMCPConnectionSettingsInput) (MCPConnectionSettings, error) {
-	if s == nil || s.queries == nil {
-		return MCPConnectionSettings{}, ErrUnavailable
-	}
 	return s.get(ctx, s.queries, principal, input)
 }
 
@@ -88,7 +82,7 @@ func (s *MCPConnectionSettingsService) Get(ctx context.Context, principal Princi
 // covers network mode and endpoint IDs, slugs, and domain IDs. It deliberately
 // excludes ingress observations, domain names, membership, and root selection.
 func (s *MCPConnectionSettingsService) GetInTx(ctx context.Context, tx pgx.Tx, principal Principal, input GetMCPConnectionSettingsInput) (MCPConnectionSettings, error) {
-	if s == nil || s.queries == nil || tx == nil {
+	if tx == nil {
 		return MCPConnectionSettings{}, ErrUnavailable
 	}
 	return s.get(ctx, s.queries.WithTx(tx), principal, input)

@@ -2401,6 +2401,7 @@ func TestPluginsService_PublishPlugins_ObservabilityListedFirstInMarketplace(t *
 		require.Equal(t, p.expectFirst, market.Plugins[0].Name, "observability plugin must be first in %s", p.path)
 	}
 }
+
 func TestPluginsService_PublishPlugins_CodexPackageHappyPath(t *testing.T) {
 	t.Parallel()
 

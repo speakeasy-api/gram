@@ -78,10 +78,6 @@ func pluginCatalogAnnotations() *types.ToolAnnotations {
 }
 
 func (t *ListPlugins) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if t.plugins == nil {
-		return fmt.Errorf("plugins service not configured")
-	}
-
 	input := listPluginsInput{}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err

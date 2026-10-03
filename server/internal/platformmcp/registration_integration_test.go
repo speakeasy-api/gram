@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -45,7 +46,7 @@ import (
 var platformMCPInfra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	infra, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
+	infra, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true, Temporal: true})
 	if err != nil {
 		log.Fatalf("launch test infrastructure: %v", err)
 	}
@@ -62,16 +63,20 @@ func TestMain(m *testing.M) {
 func TestLiveOrgAdminAuthorizerAcceptsOnlySafeDashboardURL(t *testing.T) {
 	t.Parallel()
 
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_authorizer_dashboard_url")
+	require.NoError(t, err)
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+
 	for _, raw := range []string{"http://app.example.test", "https://user@app.example.test"} {
 		parsed, err := url.Parse(raw)
 		require.NoError(t, err)
-		authorizer := NewLiveOrgAdminAuthorizer(nil, nil).WithDashboardURL(parsed)
+		authorizer := NewLiveOrgAdminAuthorizer(conn, engine).WithDashboardURL(parsed)
 		require.Nil(t, authorizer.dashboardURL)
 	}
 
 	parsed, err := url.Parse("https://app.example.test/base")
 	require.NoError(t, err)
-	authorizer := NewLiveOrgAdminAuthorizer(nil, nil).WithDashboardURL(parsed)
+	authorizer := NewLiveOrgAdminAuthorizer(conn, engine).WithDashboardURL(parsed)
 	require.NotNil(t, authorizer.dashboardURL)
 	parsed.Host = "mutated.example.test"
 	require.Equal(t, "app.example.test", authorizer.dashboardURL.Host)
@@ -205,7 +210,7 @@ func TestMemberResourceDiscoveryUsesLiveRBAC(t *testing.T) {
 	prepared, err := NewLiveOrgAdminAuthorizer(conn, engine).PrepareExternalContext(ctx, principal)
 	require.NoError(t, err)
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
-	reader.setInventoryCursorKey("member-discovery-key")
+	reader.configureKeyMaterial("member-discovery-key", testRiskPolicyCatalog(t))
 
 	projects, err := reader.ListProjects(prepared, principal, ListProjectsInput{Limit: 1})
 	require.NoError(t, err)
@@ -581,8 +586,7 @@ func TestRegistrationStoreAllowsFreshOrganizationTarget(t *testing.T) {
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	store, err := NewRegistrationStore(conn)
-	require.NoError(t, err)
+	store := NewRegistrationStore(conn)
 
 	eligible, err := store.EligibleCatalogRegistrationTarget(ctx, principal.OrganizationID, project)
 	require.NoError(t, err)
@@ -597,8 +601,7 @@ func TestRegistrationStoreRejectsProjectOutsideOrganization(t *testing.T) {
 	require.NoError(t, err)
 
 	_, project := seedRegistrationLifecycle(t, ctx, conn)
-	store, err := NewRegistrationStore(conn)
-	require.NoError(t, err)
+	store := NewRegistrationStore(conn)
 
 	eligible, err := store.EligibleCatalogRegistrationTarget(ctx, "org_"+uuid.NewString(), project)
 	require.NoError(t, err)
@@ -632,8 +635,7 @@ func TestRegistrationStoreAllowsLegacyToolsetBackedServer(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	store, err := NewRegistrationStore(conn)
-	require.NoError(t, err)
+	store := NewRegistrationStore(conn)
 	eligible, err := store.EligibleCatalogRegistrationTarget(ctx, principal.OrganizationID, project)
 	require.NoError(t, err)
 	require.True(t, eligible)
@@ -657,8 +659,7 @@ func TestRegistrationStoreRegistersManyServersInOneProject(t *testing.T) {
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	store, err := NewRegistrationStore(conn)
-	require.NoError(t, err)
+	store := NewRegistrationStore(conn)
 
 	registrationIDs := make(map[uuid.UUID]struct{})
 	for i := range 6 {
@@ -684,8 +685,7 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	store, err := NewRegistrationStore(conn)
-	require.NoError(t, err)
+	store := NewRegistrationStore(conn)
 	request := CatalogRegistrationRequest{
 		ProjectSlug:      project.Slug,
 		SourceKind:       "catalog",
@@ -1362,8 +1362,7 @@ func TestSetupHandoffRoundTripsWithoutAConnection(t *testing.T) {
 	}
 	require.False(t, assistant.HasConnection())
 
-	store, err := NewRegistrationStore(conn)
-	require.NoError(t, err)
+	store := NewRegistrationStore(conn)
 
 	request := registrationRequest(project, "assistant-handoff", "assistant-handoff-key")
 	receipt, err := store.BeginReceipt(ctx, assistant, project, request, time.Now().UTC())
@@ -1448,8 +1447,7 @@ func TestAssistantReadinessIsAttributedAndReadWithoutAConnection(t *testing.T) {
 		ClientID:       AssistantClientID,
 		Surface:        SurfaceProjectAssistant,
 	}
-	store, err := NewRegistrationStore(conn)
-	require.NoError(t, err)
+	store := NewRegistrationStore(conn)
 
 	request := registrationRequest(project, "assistant-readiness", "assistant-readiness-key")
 	receipt, err := store.BeginReceipt(ctx, assistant, project, request, time.Now().UTC())
@@ -1519,8 +1517,7 @@ func TestRegistrationStoreWritesWithoutAConnection(t *testing.T) {
 	}
 	require.False(t, assistant.HasConnection())
 
-	store, err := NewRegistrationStore(conn)
-	require.NoError(t, err)
+	store := NewRegistrationStore(conn)
 
 	request := registrationRequest(project, "assistant-registered", "assistant-key")
 	receipt, err := store.BeginReceipt(ctx, assistant, project, request, time.Now().UTC())
@@ -1558,8 +1555,7 @@ func TestFindReceiptIsExistingOnlyAndUserScoped(t *testing.T) {
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_find_receipt")
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	store, err := NewRegistrationStore(conn)
-	require.NoError(t, err)
+	store := NewRegistrationStore(conn)
 	request := registrationRequest(project, "reviewed", "find-only-key")
 	now := time.Now().UTC()
 	_, found, err := store.FindReceipt(ctx, principal, project, request, now)

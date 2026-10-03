@@ -138,37 +138,20 @@ type ShadowInventoryService struct {
 	distributionAdmissionRead distributionAdmissionReader
 }
 
-func NewShadowInventoryService(dbReader shadowInventoryReader, reviews shadowReviewReader, flags feature.Provider, organizations OrganizationSlugResolver, dbQueries *platformrepo.Queries, budget OperationBudget, keyMaterial string) (*ShadowInventoryService, error) {
-	codec, err := newSubjectReferenceCodec(keyMaterial)
-	if err != nil {
-		return nil, ErrShadowInventoryUnavailable
-	}
-	versions, err := newShadowDecisionVersionCodec(keyMaterial)
-	if err != nil {
-		return nil, ErrShadowInventoryUnavailable
-	}
-	if dbReader == nil || reviews == nil || flags == nil || organizations == nil || dbQueries == nil || !budget.valid() {
-		return nil, ErrShadowInventoryUnavailable
-	}
+func NewShadowInventoryService(dbReader shadowInventoryReader, reviews shadowReviewReader, flags feature.Provider, organizations OrganizationSlugResolver, dbQueries *platformrepo.Queries, budget OperationBudget, keyMaterial string) *ShadowInventoryService {
 	return &ShadowInventoryService{
 		projects: postgresRiskProjectResolver{queries: dbQueries}, inventory: dbReader, reviews: reviews,
-		flags: flags, organizations: organizations, budget: budget, references: codec, versions: versions, now: time.Now, distributionAdmissionRead: nil,
-	}, nil
+		flags: flags, organizations: organizations, budget: budget, references: newSubjectReferenceCodec(keyMaterial), versions: newShadowDecisionVersionCodec(keyMaterial), now: time.Now, distributionAdmissionRead: nil,
+	}
 }
 
 func (s *ShadowInventoryService) WithDistributionAdmissionReads(read distributionAdmissionReader) *ShadowInventoryService {
-	if s != nil {
-		s.distributionAdmissionRead = read
-	}
+	s.distributionAdmissionRead = read
 	return s
 }
 
-func (s *ShadowInventoryService) valid() bool {
-	return s != nil && s.projects != nil && s.inventory != nil && s.reviews != nil && s.flags != nil && s.organizations != nil && s.budget.valid() && s.references != nil && s.versions != nil && s.now != nil
-}
-
 func (s *ShadowInventoryService) List(ctx context.Context, principal Principal, input ListShadowMCPInventoryInput) (ListShadowMCPInventoryOutput, error) {
-	if !s.valid() || principal.OrganizationID == "" {
+	if principal.OrganizationID == "" {
 		return ListShadowMCPInventoryOutput{}, ErrShadowInventoryUnavailable
 	}
 	project, err := s.projects.Resolve(ctx, principal.OrganizationID, strings.TrimSpace(input.ProjectID), "")
@@ -241,9 +224,6 @@ func (s *ShadowInventoryService) List(ctx context.Context, principal Principal, 
 // ResolveTargetReference resolves a D1 handle for the D2 mutation path. The
 // underlying URL or command remains inside the server process.
 func (s *ShadowInventoryService) ResolveTargetReference(principal Principal, projectID, targetReference string) (string, string, error) {
-	if !s.valid() {
-		return "", "", ErrShadowInventoryUnavailable
-	}
 	projectID = strings.TrimSpace(projectID)
 	scope := queryScope("shadow_target", projectID)
 	encoded, err := s.references.DecodeScoped(strings.TrimSpace(targetReference), principal, shadowTargetReferenceKind, scope, s.now())
@@ -258,7 +238,7 @@ func (s *ShadowInventoryService) ResolveTargetReference(principal Principal, pro
 }
 
 func (s *ShadowInventoryService) GetReview(ctx context.Context, principal Principal, input GetShadowMCPReviewInput) (GetShadowMCPReviewOutput, error) {
-	if !s.valid() || principal.OrganizationID == "" {
+	if principal.OrganizationID == "" {
 		return GetShadowMCPReviewOutput{}, ErrShadowInventoryUnavailable
 	}
 	project, err := s.projects.Resolve(ctx, principal.OrganizationID, strings.TrimSpace(input.ProjectID), "")
@@ -283,15 +263,13 @@ func (s *ShadowInventoryService) GetReview(ctx context.Context, principal Princi
 		return GetShadowMCPReviewOutput{}, err
 	}
 	output := GetShadowMCPReviewOutput{Project: riskProject(project), Target: target, Evidence: emptyShadowEvidence(), DistributionAdmission: nil}
-	if s.distributionAdmissionRead != nil {
-		var distributionAdmission DistributionAdmission
-		if targetKind == shadowTargetKindServerURL {
-			distributionAdmission = s.distributionAdmissionRead.ForTarget(ctx, principal.OrganizationID, project.ID, targetKey)
-		} else {
-			distributionAdmission = s.distributionAdmissionRead.NotApplicable(ctx, principal.OrganizationID, project.ID)
-		}
-		output.DistributionAdmission = &distributionAdmission
+	var distributionAdmission DistributionAdmission
+	if targetKind == shadowTargetKindServerURL {
+		distributionAdmission = s.distributionAdmissionRead.ForTarget(ctx, principal.OrganizationID, project.ID, targetKey)
+	} else {
+		distributionAdmission = s.distributionAdmissionRead.NotApplicable(ctx, principal.OrganizationID, project.ID)
 	}
+	output.DistributionAdmission = &distributionAdmission
 	if row.ApprovalRequest == nil {
 		return output, nil
 	}

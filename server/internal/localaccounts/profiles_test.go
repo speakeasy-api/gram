@@ -32,9 +32,6 @@ func TestApplyRejectsInvalidInputBeforeAccessingDependencies(t *testing.T) {
 		result, err := Apply(t.Context(), nil, nil, "org_placeholder", "unknown", dryRun, time.Time{}, nil)
 		require.ErrorContains(t, err, "profile must be")
 		require.False(t, result.Committed)
-		result, err = Apply(t.Context(), nil, nil, "org_placeholder", Enterprise, dryRun, time.Time{}, nil)
-		require.ErrorContains(t, err, "recheck is required")
-		require.False(t, result.Committed)
 	}
 }
 

@@ -58,8 +58,10 @@ type Service struct {
 	publicationRequests   plugins.PublicationRequests
 }
 
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
+var (
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
+)
 
 func NewService(
 	logger *slog.Logger,
@@ -70,6 +72,7 @@ func NewService(
 	auditLogger *audit.Logger,
 	temporalEnv *tenv.Environment,
 	pluginsGitHubEnabled bool,
+	distributionAdmission *admission.Guard,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("mcpendpoints"))
 
@@ -82,20 +85,13 @@ func NewService(
 		audit:                 auditLogger,
 		temporalEnv:           temporalEnv,
 		pluginsGitHubEnabled:  pluginsGitHubEnabled,
-		distributionAdmission: admission.NewGuard(nil, nil),
+		distributionAdmission: distributionAdmission,
 		publicationRequests:   plugins.PublicationRequests{Enabled: false},
 	}
 }
 
 func (s *Service) WithPublicationRequests(enabled bool) *Service {
 	s.publicationRequests.Enabled = enabled
-	return s
-}
-
-func (s *Service) WithDistributionAdmission(guard *admission.Guard) *Service {
-	if s != nil {
-		s.distributionAdmission = guard
-	}
 	return s
 }
 
@@ -905,9 +901,6 @@ func (s *Service) logRootAutoClear(
 }
 
 func (s *Service) reconcileCustomDomains(ctx context.Context, customDomainIDs []uuid.UUID) error {
-	if s.temporalEnv == nil {
-		return nil
-	}
 	var reconcileErrors []error
 	for _, customDomainID := range customDomainIDs {
 		_, err := (&background.CustomDomainRegistrationClient{TemporalEnv: s.temporalEnv}).ExecuteCustomDomainReconcile(ctx, customDomainID)

@@ -233,27 +233,14 @@ func TestReserve_HoldClampedToMax(t *testing.T) {
 	require.LessOrEqual(t, ttl, maxHold, "a hold longer than the cap must be truncated to it")
 }
 
-// A guard with no store cannot answer truthfully, so it is refused at
-// construction rather than degrading into one that reports every caller as
-// the first.
-func TestNewRedisGuard_RequiresStore(t *testing.T) {
-	t.Parallel()
-
-	_, err := NewRedisGuard(nil, "ns", time.Hour)
-	require.Error(t, err)
-}
-
 func TestNewRedisGuard_RejectsUnusableConfiguration(t *testing.T) {
 	t.Parallel()
 
 	client, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	_, err = NewRedisGuard(client, "", time.Hour)
-	require.Error(t, err, "an empty namespace would share a keyspace with every other consumer")
-
-	_, err = NewRedisGuard(client, "ns", 0)
-	require.Error(t, err, "a zero cap would clamp every reservation below its floor")
+	require.Panics(t, func() { NewRedisGuard(client, "", time.Hour) }, "an empty namespace would share a keyspace with every other consumer")
+	require.Panics(t, func() { NewRedisGuard(client, "ns", 0) }, "a zero cap would clamp every reservation below its floor")
 }
 
 // An incomplete Key is a caller bug, and accepting one would put every

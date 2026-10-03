@@ -641,8 +641,7 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 	})
 	require.NoError(t, err)
 
-	store, err := NewRegistrationStore(conn)
-	require.NoError(t, err)
+	store := NewRegistrationStore(conn)
 	allow := func() Limiter { return &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}} }
 	insights := &stubSkillInsightsReader{}
 	insightsConnectionLane := &countingLimiter{}
@@ -660,10 +659,9 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 	if options.grantAdmin || options.grantSkillRead || options.grantSkillWrite {
 		runtimeAuthorizer = NewLiveOrgAdminAuthorizer(conn, authzEngine)
 	}
-	runtime := NewRuntimeWithLifecycle(
-		logger, &testAuthenticator{principal: principal}, testGate{enabled: true}, runtimeAuthorizer,
-		"", "test-cursor-key", nil, nil, nil, nil, nil, nil, nil, nil, skillsSurface, nil, nil, nil, CatalogDescriptor{},
-	)
+	services := newTestServices(t)
+	services.Skills = skillsSurface
+	runtime := NewRuntime(logger, &testAuthenticator{principal: principal}, testGate{enabled: true}, runtimeAuthorizer, "", testServicesKey, testRiskPolicyCatalog(t), &testReadinessRecorder{}, services)
 	server := httptest.NewServer(runtime.Handler())
 	t.Cleanup(server.Close)
 

@@ -28,9 +28,6 @@ type xaaReadinessService struct {
 // so the agent surface checks the same rollout flag before reading it.
 func (r *PostgresReader) WithXAAReadiness(connections xaaConnectionsReader, flags feature.Provider) *PostgresReader {
 	r.xaaReadiness = &xaaReadinessService{connections: connections, enabled: func(ctx context.Context, orgID string) (bool, error) {
-		if flags == nil {
-			return false, ErrUnavailable
-		}
 		slug, err := NewPostgresOrganizationSlugResolver(r.db).OrganizationSlug(ctx, orgID)
 		if err != nil {
 			return false, err
@@ -81,9 +78,6 @@ func registerXAAReadinessTool(reg *Registrar, service *xaaReadinessService) {
 		serverID, err := uuid.Parse(input.MCPServerID)
 		if err != nil || serverID == uuid.Nil {
 			return xaaReadinessRefusal("invalid_request", "Provide an exact project ID and MCP server ID.")
-		}
-		if service == nil || service.connections == nil || service.enabled == nil {
-			return xaaReadinessRefusal(unavailableCode, "XAA readiness is unavailable on this server.")
 		}
 		enabled, err := service.enabled(ctx, principal.OrganizationID)
 		if err != nil {

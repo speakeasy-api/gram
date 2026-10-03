@@ -51,7 +51,7 @@ func TestPinMessageTool_RequiresFields(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewPinMessageTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callPinMessage,
 	}
 

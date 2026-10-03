@@ -26,7 +26,7 @@ type NetworkIngressOrphan struct {
 
 // FindOrphans inventories provider-owned resources without modifying them.
 func (r *NetworkIngressProvisionerRegistry) FindOrphans(ctx context.Context, known map[string][]NetworkIngressResourceNames) ([]NetworkIngressOrphan, error) {
-	if r == nil || len(r.providers) == 0 {
+	if len(r.providers) == 0 {
 		return nil, fmt.Errorf("network ingress orphan inventory has no providers")
 	}
 	var result []NetworkIngressOrphan

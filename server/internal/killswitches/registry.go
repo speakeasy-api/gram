@@ -75,9 +75,6 @@ func BuildRegistry(input Registration) (*Registry, error) {
 		if err := validateIdentifier("transport adapter key", string(registration.Key)); err != nil {
 			return nil, err
 		}
-		if isNilInterface(registration.Adapter) {
-			return nil, fmt.Errorf("transport adapter %q must not be nil", registration.Key)
-		}
 		if _, exists := registry.transportAdapters[registration.Key]; exists {
 			return nil, fmt.Errorf("duplicate transport adapter %q", registration.Key)
 		}
@@ -85,9 +82,6 @@ func BuildRegistry(input Registration) (*Registry, error) {
 	}
 	for _, registration := range input.PrincipalAdapters {
 		adapter := registration.Adapter
-		if isNilInterface(adapter) {
-			return nil, fmt.Errorf("principal adapter must not be nil")
-		}
 		kind := adapter.Kind()
 		if err := validateIdentifier("principal adapter kind", string(kind)); err != nil {
 			return nil, err
@@ -102,9 +96,6 @@ func BuildRegistry(input Registration) (*Registry, error) {
 	}
 	for _, registration := range input.ResourceAdapters {
 		adapter := registration.Adapter
-		if isNilInterface(adapter) {
-			return nil, fmt.Errorf("resource adapter must not be nil")
-		}
 		kind := adapter.Kind()
 		if err := validateIdentifier("resource adapter kind", string(kind)); err != nil {
 			return nil, err

@@ -90,10 +90,6 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 }
 
 func (m *metrics) RecordToolCall(ctx context.Context, rec toolCallRecord) {
-	if m.toolCallsCounter == nil {
-		return
-	}
-
 	kv := []attribute.KeyValue{
 		attr.ToolCallKind(string(rec.URN.Kind)),
 		attr.ToolName(rec.ToolName),
@@ -112,10 +108,6 @@ func (m *metrics) RecordToolCall(ctx context.Context, rec toolCallRecord) {
 }
 
 func (m *metrics) RecordResourceCall(ctx context.Context, orgID string, resourceURN urn.Resource, statusCode int) {
-	if m.toolCallsCounter == nil {
-		return
-	}
-
 	kv := []attribute.KeyValue{
 		attr.ResourceURN(resourceURN.String()),
 		attr.OrganizationID(orgID),

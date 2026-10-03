@@ -197,6 +197,7 @@ func TestTeeOTELLogsToEventFeedPublishesRecords(t *testing.T) {
 		logger:           testenv.NewLogger(t),
 		riskRecorder:     metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		otelLogPublisher: publisher,
+		nowFunc:          time.Now,
 	}
 
 	payload := claudeLogsPayload(
@@ -229,6 +230,7 @@ func TestTeeOTELLogsToEventFeedSwallowsPublishFailure(t *testing.T) {
 		logger:           testenv.NewLogger(t),
 		riskRecorder:     metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		otelLogPublisher: publisher,
+		nowFunc:          time.Now,
 	}
 
 	payload := claudeLogsPayload(

@@ -50,8 +50,7 @@ type Service struct {
 	audit         *audit.Logger
 	tunnelManager *tunnelManager
 	// redisClient revokes live anonymous MCP sessions when public consent is
-	// withdrawn. Nil disables that best-effort cleanup (the serve path's
-	// consent guard still rejects per-request).
+	// withdrawn.
 	redisClient *redis.Client
 }
 
@@ -417,9 +416,6 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 // but without it, re-enabling within the session TTL would resurrect old
 // sessions. Detached from request cancellation, mirroring deleteRuntimeState.
 func (s *Service) revokeAnonymousSessions(ctx context.Context, logger *slog.Logger, serverID uuid.UUID) {
-	if s.redisClient == nil {
-		return
-	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	if err := tunnelsessions.Purge(ctx, s.redisClient, serverID.String()); err != nil {

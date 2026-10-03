@@ -19,9 +19,6 @@ func ReadAllString(ctx context.Context, store Reader, rawURL string, limit int64
 	if rawURL == "" {
 		return "", fmt.Errorf("empty asset URL")
 	}
-	if store == nil {
-		return "", fmt.Errorf("asset storage unavailable")
-	}
 	assetURL, err := url.Parse(rawURL)
 	if err != nil {
 		return "", fmt.Errorf("parse asset URL: %w", err)

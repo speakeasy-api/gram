@@ -17,8 +17,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
-var errStaffGrant = errors.New("staff OAuth grant is invalid")
-var errStaffRefreshReuse = errors.New("staff OAuth refresh token was reused")
+var (
+	errStaffGrant        = errors.New("staff OAuth grant is invalid")
+	errStaffRefreshReuse = errors.New("staff OAuth refresh token was reused")
+)
 
 type staffTokenConnection struct {
 	ID            uuid.UUID
@@ -49,9 +51,6 @@ type staffGrantStore interface {
 type postgresStaffGrantStore struct{ db *pgxpool.Pool }
 
 func (s postgresStaffGrantStore) ValidateGrant(ctx context.Context, codeHash, clientID, redirectURI, verifier string, now time.Time) (staffTokenConnection, error) {
-	if s.db == nil {
-		return staffTokenConnection{}, errors.New("staff OAuth state unavailable")
-	}
 	row, err := repo.New(s.db).GetAuthorizationGrant(ctx, repo.GetAuthorizationGrantParams{AuthorizationCodeHash: codeHash, ClientID: clientID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return staffTokenConnection{}, errStaffGrant
@@ -80,9 +79,6 @@ func tokenConnectionFromRow(row repo.AdminMcpConnection) staffTokenConnection {
 }
 
 func (s postgresStaffGrantStore) ExchangeGrant(ctx context.Context, codeHash, clientID, redirectURI, verifier string, session staffIssuedSession, now time.Time) error {
-	if s.db == nil {
-		return errors.New("staff OAuth state unavailable")
-	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin staff code exchange: %w", err)
@@ -137,9 +133,6 @@ func insertStaffSession(ctx context.Context, q *repo.Queries, connection staffTo
 }
 
 func (s postgresStaffGrantStore) PrepareRefresh(ctx context.Context, refreshHash, clientID string, now time.Time) (staffTokenConnection, error) {
-	if s.db == nil {
-		return staffTokenConnection{}, errors.New("staff OAuth state unavailable")
-	}
 	row, err := repo.New(s.db).GetRefreshSession(ctx, repo.GetRefreshSessionParams{RefreshTokenHash: refreshHash, ClientID: clientID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return staffTokenConnection{}, errStaffGrant
@@ -185,9 +178,6 @@ func (s postgresStaffGrantStore) terminalizeRefreshReuse(ctx context.Context, re
 }
 
 func (s postgresStaffGrantStore) RotateRefresh(ctx context.Context, refreshHash, clientID string, expected staffTokenConnection, replacement staffIssuedSession, now time.Time) error {
-	if s.db == nil {
-		return errors.New("staff OAuth state unavailable")
-	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin staff refresh rotation: %w", err)

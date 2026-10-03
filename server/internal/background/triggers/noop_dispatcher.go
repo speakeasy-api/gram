@@ -12,11 +12,7 @@ type NoopDispatcher struct {
 }
 
 func NewNoopDispatcher(logger *slog.Logger) *NoopDispatcher {
-	if logger != nil {
-		logger = logger.With(attr.SlogComponent("background_triggers_noop_dispatcher"))
-	}
-
-	return &NoopDispatcher{logger: logger}
+	return &NoopDispatcher{logger: logger.With(attr.SlogComponent("background_triggers_noop_dispatcher"))}
 }
 
 func (d *NoopDispatcher) Kind() string {
@@ -24,17 +20,15 @@ func (d *NoopDispatcher) Kind() string {
 }
 
 func (d *NoopDispatcher) Dispatch(ctx context.Context, input Task) error {
-	if d.logger != nil {
-		d.logger.InfoContext(
-			ctx,
-			"noop trigger dispatched",
-			attr.SlogTriggerInstanceID(input.TriggerInstanceID),
-			attr.SlogTriggerDefinitionSlug(input.DefinitionSlug),
-			attr.SlogTriggerTargetKind(input.TargetKind),
-			attr.SlogTriggerTargetRef(input.TargetRef),
-			attr.SlogTriggerEventID(input.EventID),
-		)
-	}
+	d.logger.InfoContext(
+		ctx,
+		"noop trigger dispatched",
+		attr.SlogTriggerInstanceID(input.TriggerInstanceID),
+		attr.SlogTriggerDefinitionSlug(input.DefinitionSlug),
+		attr.SlogTriggerTargetKind(input.TargetKind),
+		attr.SlogTriggerTargetRef(input.TargetRef),
+		attr.SlogTriggerEventID(input.EventID),
+	)
 
 	return nil
 }

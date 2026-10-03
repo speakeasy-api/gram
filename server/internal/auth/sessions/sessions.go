@@ -291,7 +291,7 @@ func (s *Manager) ClearSession(ctx context.Context, session Session) error {
 
 	// Revoke the WorkOS AuthKit session so the user is prompted to sign in
 	// again on next login rather than being auto-authenticated.
-	if session.WorkOSSessionID != "" && s.idpClient != nil {
+	if session.WorkOSSessionID != "" {
 		if err := s.idpClient.RevokeSession(ctx, session.WorkOSSessionID); err != nil {
 			// Non-fatal: the Gram session is still cleared, and the WorkOS
 			// session will expire naturally.

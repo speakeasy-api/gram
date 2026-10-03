@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
@@ -264,9 +263,8 @@ func TestWorkloadIssuerAdmission_UnresolvableInputsFailClosed(t *testing.T) {
 		endpoint  *ResolvedMcpEndpoint
 		issuerURL string
 	}{
-		"unwired lookup": {lookup: func(*countingLookup) workloadIssuerLookup { return nil }, endpoint: workloadTestTenant(), issuerURL: "https://idp.example.test"},
-		"no endpoint":    {lookup: (*countingLookup).fn, endpoint: nil, issuerURL: "https://idp.example.test"},
-		"empty issuer":   {lookup: (*countingLookup).fn, endpoint: workloadTestTenant(), issuerURL: ""},
+		"no endpoint":  {lookup: (*countingLookup).fn, endpoint: nil, issuerURL: "https://idp.example.test"},
+		"empty issuer": {lookup: (*countingLookup).fn, endpoint: workloadTestTenant(), issuerURL: ""},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -397,21 +395,6 @@ func TestWorkloadIssuerAdmission_LimiterOutageFailsClosed(t *testing.T) {
 	require.EqualValues(t, 0, lookup.calls.Load(), "an unbounded lookup is exactly what the ceiling prevents")
 }
 
-// A ceiling that was never wired leaves this path with no bound at all. On a
-// grant reachable without credentials that is the condition the bound exists
-// for, so it refuses rather than running unprotected.
-func TestWorkloadIssuerAdmission_AbsentBudgetRefuses(t *testing.T) {
-	t.Parallel()
-
-	lookup := &countingLookup{issuer: workloadidentity_repo.WorkloadIssuer{ID: uuid.New()}, found: true}
-	admission := newWorkloadTestAdmission(t, lookup.fn(), nil)
-
-	_, err := admission.admit(t.Context(), workloadTestTenant(), "https://idp.example.test")
-
-	require.ErrorIs(t, err, errWorkloadIssuerLimiterUnavailable)
-	require.EqualValues(t, 0, lookup.calls.Load())
-}
-
 // The budget is per endpoint, which is the property that keeps a mitigation
 // from becoming a cross-tenant denial surface: one endpoint's spend must never
 // be charged against another's.
@@ -428,13 +411,4 @@ func TestWorkloadIssuerLookupScope_SeparatesEndpoints(t *testing.T) {
 		"a different endpoint must not spend this one's budget")
 	require.NotEqual(t, workloadIssuerLookupScope(shared), workloadFetchScope(shared),
 		"key fetches and admission lookups bound different resources and must not share a bucket")
-}
-
-// Without a store there are no buckets, and admission must not read that as
-// permission to run unbounded.
-func TestNewWorkloadIssuerLookupBudget_NilWithoutAStore(t *testing.T) {
-	t.Parallel()
-
-	require.Nil(t, newWorkloadIssuerLookupBudget(nil, testenv.NewMeterProvider(t)),
-		"no store means no ceiling, which admission refuses rather than ignores")
 }

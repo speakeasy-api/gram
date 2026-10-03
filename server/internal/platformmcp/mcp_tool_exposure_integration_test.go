@@ -2,7 +2,6 @@ package platformmcp
 
 import (
 	"context"
-	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -11,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -130,13 +128,10 @@ func seedToolExposureFixture(t *testing.T, ctx context.Context, name string) (co
 	// membership and the org:admin grant against the database, so the test
 	// only passes when the seeded caller really is a live administrator.
 	admin := NewLiveOrgAdminAuthorizer(conn, engine)
-	service, err := NewMCPToolExposureService(testenv.NewLogger(t), conn, audit.NewLogger(), engine, admin, "tool-exposure-cursor-key", plugins.PublicationRequests{}, nil, testOperationBudget(), testOperationBudget())
-	require.NoError(t, err)
-
 	// Stands in for toolsets.TriggerToolsetIndexForVersion, which needs a
 	// Temporal environment this package's tests do not run.
 	indexed := &[]uuid.UUID{}
-	service.WithIndexing(func(_ context.Context, indexedProject, indexedToolset uuid.UUID) error {
+	service := NewMCPToolExposureService(testenv.NewLogger(t), conn, audit.NewLogger(), engine, admin, "tool-exposure-cursor-key", plugins.PublicationRequests{}, nil, testOperationBudget(), testOperationBudget(), func(_ context.Context, indexedProject, indexedToolset uuid.UUID) error {
 		require.Equal(t, project.ID, indexedProject)
 		*indexed = append(*indexed, indexedToolset)
 		return nil
@@ -762,78 +757,4 @@ func TestAddToolsToMCPReplaysAfterTheTargetIsUnlinked(t *testing.T) {
 	require.Equal(t, "applied", replay.Outcome)
 	require.Equal(t, []string{fixture.tools[0]}, replay.Applied)
 	require.Equal(t, "verification_unavailable", replay.SnapshotScope, "the post-commit read honestly reports it could not confirm")
-}
-
-// The unavailable registration must advertise exactly what a composed
-// deployment advertises, so a tool never appears and disappears as a rollout
-// flips. The live side is a real service, or the two paths would install the
-// same handler and the comparison would prove nothing.
-func TestToolExposureUnavailableRegistrationMatchesLiveManifest(t *testing.T) {
-	t.Parallel()
-	_, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_tool_exposure_manifest")
-	require.True(t, fixture.service.valid(), "the live side must be a composed service")
-
-	reader := NewPostgresReader(testenv.NewLogger(t), fixture.conn)
-	describe := func(service *MCPToolExposureService) map[string]Descriptor {
-		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "tool-exposure-manifest", Version: "0.0.1"}, nil))
-		registerToolExposureTools(registrar, service, reader)
-		byName := map[string]Descriptor{}
-		for _, descriptor := range registrar.Descriptors() {
-			byName[descriptor.Name] = descriptor
-		}
-		return byName
-	}
-
-	live := describe(fixture.service)
-	unavailable := describe(nil)
-	require.Len(t, unavailable, 3)
-	require.Len(t, live, len(unavailable))
-	for name, descriptor := range unavailable {
-		other, ok := live[name]
-		require.True(t, ok, "tool %q is registered on both paths", name)
-		require.Equal(t, other.Title, descriptor.Title)
-		require.Equal(t, other.Description, descriptor.Description)
-		require.Equal(t, other.Meta, descriptor.Meta)
-		require.Equal(t, other.Annotations, descriptor.Annotations)
-		require.Equal(t, other.InputSchema, descriptor.InputSchema)
-	}
-
-	require.Equal(t, bothAudiences, unavailable[listProjectToolsToolName].Meta.Audiences)
-	require.Equal(t, ExternalAuthorizationMember, unavailable[listProjectToolsToolName].Meta.Authorization)
-	require.True(t, unavailable[listProjectToolsToolName].Annotations.ReadOnlyHint)
-	for _, name := range []string{addToolsToMCPToolName, removeToolsFromMCPToolName} {
-		require.Equal(t, externalOnly, unavailable[name].Meta.Audiences, "%s", name)
-		require.Equal(t, ExternalAuthorizationOrgAdmin, unavailable[name].Meta.Authorization, "%s", name)
-		require.Equal(t, ProjectScopeExplicit, unavailable[name].Meta.ProjectScope, "%s", name)
-		require.Contains(t, unavailable[name].Description, "republishes every plugin that carries the server",
-			"%s must state the blast radius before it is called", name)
-		require.Contains(t, unavailable[name].Description, "confirmed: true", "%s", name)
-	}
-
-	// The refusals themselves must differ: a caller that only asked to list a
-	// project's tools must not be told it cannot change a server.
-	listRefusal := invokeUnavailable(t, unavailable[listProjectToolsToolName], map[string]any{
-		"project_id": fixture.project.ID.String(),
-	})
-	addRefusal := invokeUnavailable(t, unavailable[addToolsToMCPToolName], map[string]any{
-		"project_id": fixture.project.ID.String(), "mcp_id": fixture.toolsetID.String(),
-		"tool_urns": []string{fixture.tools[0]}, "expected_version": strings.Repeat("a", 64),
-		"idempotency_key": uuid.NewString(), "confirmed": true,
-	})
-	require.Contains(t, listRefusal, "Listing a project's tools")
-	require.Contains(t, addRefusal, "Changing which tools an MCP server exposes")
-	require.NotEqual(t, listRefusal, addRefusal)
-}
-
-func invokeUnavailable(t *testing.T, descriptor Descriptor, arguments map[string]any) string {
-	t.Helper()
-	encoded, err := json.Marshal(arguments)
-	require.NoError(t, err)
-	// Through the exported accessor, so the nil guard it exists for is part of
-	// what this exercises rather than bypassed.
-	_, err = descriptor.Invoke(t.Context(), encoded)
-	require.Error(t, err)
-	var refusal *ToolRefusalError
-	require.ErrorAs(t, err, &refusal)
-	return refusal.Payload
 }

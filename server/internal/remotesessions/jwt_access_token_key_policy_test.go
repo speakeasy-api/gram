@@ -7,15 +7,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 const (
@@ -36,8 +40,11 @@ func newRSAKeyPolicyFixture(t *testing.T, bits int) (*rsa.PrivateKey, *jwks.KeyR
 	cache := jwks.NewMemoryCache()
 	now := time.Now()
 	require.NoError(t, cache.Put(t.Context(), rsaKeyPolicyJWKSURI, jwks.CacheState{Document: document, ETag: "", RefreshedAt: now, ExpiresAt: now.Add(time.Hour), LastErrorAt: time.Time{}, LastError: "", Revision: ""}))
-	keys, err := jwks.NewKeyResolver(jwks.NewResolver(policy, testenv.NewMeterProvider(t), logger), cache, ratelimit.New(nil, "access-key-policy-test", ratelimit.PerMinute(1)), nil, logger)
-	require.NoError(t, err)
+	mr := miniredis.RunT(t)
+	redisClient := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { require.NoError(t, redisClient.Close()) })
+	store := ratelimit.NewRedisStore(redisClient)
+	keys := jwks.NewKeyResolver(jwks.NewResolver(policy, testenv.NewMeterProvider(t), logger), cache, ratelimit.New(store, "access-key-policy-test", ratelimit.PerMinute(1)), ratelimit.New(store, "access-key-policy-test-fetch", ratelimit.PerMinute(1)), logger)
 	return key, keys, policy
 }
 
@@ -65,7 +72,7 @@ func TestWeakRSARejectedForIDAndAccessTokens(t *testing.T) {
 	})
 	require.ErrorContains(t, err, "rsa verification key is smaller than 2048 bits")
 
-	enricher := NewSessionEnricher(testenv.NewLogger(t), nil, policy, keys, nil, nil, nil)
+	enricher := NewSessionEnricher(testenv.NewLogger(t), nil, policy, keys, nil, tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", policy, nil), nil)
 	result := enricher.jwtAccessToken(t.Context(), enrichmentTarget{
 		issuerID: uuid.New(), issuerURL: rsaKeyPolicyIssuer, jwksURI: rsaKeyPolicyJWKSURI, externalClientID: rsaKeyPolicyClientID,
 	}, mintRSAAccessToken(t, key, jose.RS256, "at+jwt"))
@@ -78,7 +85,7 @@ func TestWeakRSARejectedForIDAndAccessTokens(t *testing.T) {
 func TestAccessTokenRSAAlgorithmsVerify(t *testing.T) {
 	t.Parallel()
 	key, keys, policy := newRSAKeyPolicyFixture(t, 2048)
-	enricher := NewSessionEnricher(testenv.NewLogger(t), nil, policy, keys, nil, nil, nil)
+	enricher := NewSessionEnricher(testenv.NewLogger(t), nil, policy, keys, nil, tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", policy, nil), nil)
 	target := enrichmentTarget{issuerID: uuid.New(), issuerURL: rsaKeyPolicyIssuer, jwksURI: rsaKeyPolicyJWKSURI, externalClientID: rsaKeyPolicyClientID}
 	result := enricher.jwtAccessToken(t.Context(), target, mintRSAAccessToken(t, key, jose.RS256, "at+jwt"))
 	require.Equal(t, interfaceStatusOK, result.Status, result.Reason)

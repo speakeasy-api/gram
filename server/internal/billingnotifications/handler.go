@@ -89,9 +89,6 @@ func (h *EventHandler) Handle(ctx context.Context, event *webhooksv1.Event, _ gc
 		)
 		return nil
 	}
-	if h.scheduler == nil {
-		return fmt.Errorf("billing email scheduler is unavailable")
-	}
 	return schedule(ctx)
 }
 

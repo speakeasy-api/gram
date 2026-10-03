@@ -133,17 +133,13 @@ func validKillswitchResourceClass(class KillswitchResourceClass) bool {
 	}
 }
 
-// IdentityCoverageCounter owns the kill-switch identity-coverage census. A
-// nil *IdentityCoverageCounter is valid — Record becomes a no-op — so callers
-// that do not care about metrics can pass nil.
+// IdentityCoverageCounter owns the kill-switch identity-coverage census.
 type IdentityCoverageCounter struct {
 	calls metric.Int64Counter
 }
 
 // NewIdentityCoverageCounter constructs the coverage census counter. An
-// instrument creation failure is logged and leaves the instrument nil; Record
-// handles nil instruments so partial construction still produces a usable
-// value.
+// instrument creation failure is logged.
 func NewIdentityCoverageCounter(meter metric.Meter, logger *slog.Logger) *IdentityCoverageCounter {
 	calls, err := meter.Int64Counter(
 		InstrumentMCPToolCallKillswitchIdentity,
@@ -162,10 +158,6 @@ func NewIdentityCoverageCounter(meter metric.Meter, logger *slog.Logger) *Identi
 // class (surface falls back to hosted) — so no identifier, URL, note, or
 // free-form error text can ever become a metric dimension.
 func (c *IdentityCoverageCounter) Record(ctx context.Context, surface KillswitchCoverageSurface, identity KillswitchIdentityClass, resource KillswitchResourceClass) {
-	if c == nil || c.calls == nil {
-		return
-	}
-
 	if !validKillswitchCoverageSurface(surface) {
 		surface = KillswitchSurfaceHosted
 	}

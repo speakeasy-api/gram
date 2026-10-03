@@ -54,10 +54,6 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 }
 
 func (m *metrics) RecordHookEventDuration(ctx context.Context, source string, eventName string, outcome string, decision string, orgSlug string, riskScanned bool, duration time.Duration) {
-	if m == nil || m.eventDuration == nil {
-		return
-	}
-
 	m.eventDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(hookEventMetricAttributes(source, eventName, outcome, decision, orgSlug, riskScanned)...))
 }
 

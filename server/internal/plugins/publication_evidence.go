@@ -31,8 +31,8 @@ type PublicationPackageAddress struct {
 // inputs and stored publication fingerprints. It does not contact GitHub, expose
 // the marketplace bearer URL, or mint credentials.
 func (s *Service) ResolvePublicationEvidence(ctx context.Context, organizationID string, projectID uuid.UUID, pluginSlugs []string) ([]PublicationEvidence, error) {
-	if s == nil || s.authz == nil || organizationID == "" {
-		return nil, fmt.Errorf("publication evidence authorization unavailable")
+	if organizationID == "" {
+		return nil, fmt.Errorf("publication evidence requires an organization")
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}); err != nil {
 		return nil, fmt.Errorf("authorize publication evidence: %w", err)

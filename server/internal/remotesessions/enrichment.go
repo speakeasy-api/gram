@@ -363,12 +363,7 @@ func (e *SessionEnricher) run(ctx context.Context, target enrichmentTarget, name
 	ctx, cancel := context.WithTimeout(ctx, enrichmentInterfaceBudget)
 	defer cancel()
 
-	doer, err := upstreamHTTPDoer(e.client, e.tunnels, target.tunneledMcpServerID)
-	if err != nil {
-		logger.WarnContext(ctx, "enrichment transport unavailable", attr.SlogError(err))
-		res.fail("transport unavailable")
-		return none, res
-	}
+	doer := upstreamHTTPDoer(e.client, e.tunnels, target.tunneledMcpServerID)
 
 	req, err := build(ctx)
 	if err != nil {
@@ -464,10 +459,7 @@ func (e *SessionEnricher) jwtAccessToken(ctx context.Context, target enrichmentT
 	}
 	ctx, cancel := context.WithTimeout(ctx, idTokenVerifyBudget)
 	defer cancel()
-	transport, err := issuerTunnelTransport(e.tunnels, target.tunneledMcpServerID)
-	if err != nil {
-		return out
-	}
+	transport := issuerTunnelTransport(e.tunnels, target.tunneledMcpServerID)
 	var claims jwt.Claims
 	var all map[string]json.RawMessage
 	header, err := verifyIssuerSignedJWTWithKeyPolicy(ctx, e.keys, target.jwksURI, target.issuerID.String(), transport, accessToken, jwks.AllowedSignatureAlgorithms(), validateJWTVerificationKeyStrength, &claims, &all)
@@ -684,10 +676,7 @@ func (e *SessionEnricher) decodeIntrospection(ctx context.Context, target enrich
 	if e.keys == nil || target.jwksURI == "" {
 		return nil, errors.New("signed introspection response cannot be verified without the issuer's key set")
 	}
-	transport, err := issuerTunnelTransport(e.tunnels, target.tunneledMcpServerID)
-	if err != nil {
-		return nil, fmt.Errorf("select introspection key set transport: %w", err)
-	}
+	transport := issuerTunnelTransport(e.tunnels, target.tunneledMcpServerID)
 	var claims jwt.Claims
 	var envelope struct {
 		TokenIntrospection map[string]json.RawMessage `json:"token_introspection"`

@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -124,7 +125,13 @@ func TestPluginAssignmentMutationInputHashCoversExactNormalizedWrite(t *testing.
 func TestResolveMutationAssignmentsSkipsEmptyChoiceLookup(t *testing.T) {
 	t.Parallel()
 
-	principalURNs, summaries, err := (&PluginsService{}).resolveMutationAssignments(t.Context(), nil, Principal{}, ResolvedProject{}, nil)
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_plugin_mutation_assignments")
+	require.NoError(t, err)
+	tx, err := conn.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction the assignment resolver reads through
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+
+	principalURNs, summaries, err := testPluginTargets(t, conn).resolveMutationAssignments(t.Context(), tx, Principal{}, ResolvedProject{}, nil)
 	require.NoError(t, err)
 	require.NotNil(t, principalURNs)
 	require.Empty(t, principalURNs)
@@ -140,10 +147,6 @@ func TestPluginAssignmentMutationToolRequiresConfirmation(t *testing.T) {
 	require.ErrorAs(t, err, &mutation)
 	require.Equal(t, "confirmation_required", mutation.Code)
 	require.NoError(t, requirePluginAssignmentConfirmation(true))
-
-	service := NewPluginsService(nil, OperationBudget{}, "")
-	_, err = service.SetPluginAssignments(t.Context(), Principal{}, SetPluginAssignmentsInput{})
-	require.ErrorIs(t, err, ErrPluginAssignmentMutationUnavailable)
 
 	refusal, ok := pluginToolResult(&PluginAssignmentMutationError{Code: "confirmation_required", Message: "confirm", Cause: ErrPluginAssignmentMutationInvalid})
 	require.True(t, ok)

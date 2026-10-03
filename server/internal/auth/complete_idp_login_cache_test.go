@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/workos/workos-go/v6/pkg/usermanagement"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -62,8 +63,8 @@ func TestCompleteIDPLogin_MembershipGateIgnoresStaleCacheRepopulation(t *testing
 			pylonClient, err := pylon.NewPylon(logger, "")
 			require.NoError(t, err)
 			resolver := identity.NewResolver(logger, testenv.NewTracerProvider(t), backingCache,
-				"", "", nil, fetcher, orgRepo.New(inst.conn), userRepo.New(inst.conn), pylonClient,
-				posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", ""), nil, suffix)
+				"", "", identity.NewWorkOSAdapter(usermanagement.NewClient("test-api-key")), fetcher, orgRepo.New(inst.conn), userRepo.New(inst.conn), pylonClient,
+				posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", ""), testenv.NewGrowthEmitter(t, logger, inst.conn), suffix)
 
 			if tt.beforeCount == 1 {
 				require.NoError(t, resolver.SyncMembershipsFromWorkOS(ctx, gramUserID, idpLoginWorkosUserID))
@@ -121,8 +122,8 @@ func TestCompleteIDPLogin_UserInfoCacheWriteFailureIsBestEffort(t *testing.T) {
 	pylonClient, err := pylon.NewPylon(logger, "")
 	require.NoError(t, err)
 	resolver := identity.NewResolver(logger, testenv.NewTracerProvider(t), failingCache,
-		"", "", nil, fetcher, orgRepo.New(inst.conn), userRepo.New(inst.conn), pylonClient,
-		posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", ""), nil, suffix)
+		"", "", identity.NewWorkOSAdapter(usermanagement.NewClient("test-api-key")), fetcher, orgRepo.New(inst.conn), userRepo.New(inst.conn), pylonClient,
+		posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", ""), testenv.NewGrowthEmitter(t, logger, inst.conn), suffix)
 
 	login, err := resolver.CompleteIDPLogin(ctx, idpUser, identity.IDPLoginOptions{})
 	require.Equal(t, 1, failingCache.failedSets, "login attempted to cache fresh user info")

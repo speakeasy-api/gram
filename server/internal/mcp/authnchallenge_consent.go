@@ -366,22 +366,14 @@ func (p autoRefreshPolicy) IsEnforced() bool {
 
 // consentToolFilteringEnabled reports the organization admin's durable opt-in
 // from the consent_tool_filtering product feature managed on MCP Connections.
-// An unavailable checker degrades to off.
 func (s *Service) consentToolFilteringEnabled(ctx context.Context, _ *slog.Logger, organizationID string) bool {
-	if s.platformFeatureChecker == nil {
-		return false
-	}
 	return s.platformFeatureChecker(ctx, organizationID, string(productfeatures.FeatureConsentToolFiltering))
 }
 
 // resolveAutoRefreshPolicy reports the organization's automatic-refresh policy.
 // Enforcement wins over the opt-in so an organization that turns on both still
-// gets the stricter behavior, and an unavailable feature checker degrades to
-// disabled rather than silently refreshing connections.
+// gets the stricter behavior.
 func (s *Service) resolveAutoRefreshPolicy(ctx context.Context, organizationID string) autoRefreshPolicy {
-	if s.platformFeatureChecker == nil {
-		return autoRefreshDisabled
-	}
 	if s.platformFeatureChecker(ctx, organizationID, string(productfeatures.FeatureRemoteSessionAutoRefreshEnforced)) {
 		return autoRefreshEnforced
 	}

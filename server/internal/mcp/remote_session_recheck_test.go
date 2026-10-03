@@ -403,7 +403,7 @@ func seedTunneledRecheckFixture(t *testing.T, prefix, identifier string, callerI
 	if len(callerIssuers) > 0 {
 		callerIssuer = callerIssuers[0]
 	}
-	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), provider, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{ValidationTimeout: validationProbeTimeout, RecheckInterval: recheckTestInterval}, testenv.NewTracerProvider(t), nil, callerIssuer)
+	ctx, ti := newTestMCPServiceWithConfig(t, testenv.NewLogger(t), provider, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, mcp.MetaRuntimeConfig{ValidationTimeout: validationProbeTimeout, RecheckInterval: recheckTestInterval}, testenv.NewTracerProvider(t), nil, callerIssuer)
 	projectID, orgID := consentTestTenant(t, ctx)
 	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	serverID, tunnelID := createPrivateTunneledServer(t, ctx, ti, projectID, shared, prefix+"-server", identifier)

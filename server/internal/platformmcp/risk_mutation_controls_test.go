@@ -29,12 +29,15 @@ type riskMutationFlagProvider struct {
 func (p *riskMutationFlagProvider) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
 	return false, nil
 }
+
 func (p *riskMutationFlagProvider) IsFlagEnabledLocal(context.Context, feature.Flag, string, map[string]string, map[string]string) (bool, error) {
 	return false, nil
 }
+
 func (p *riskMutationFlagProvider) FlagPayload(context.Context, feature.Flag, string, map[string]string) ([]byte, error) {
 	return nil, nil
 }
+
 func (p *riskMutationFlagProvider) EvaluateFlag(_ context.Context, flag feature.Flag, _ string, groups map[string]string) (feature.Evaluation, error) {
 	p.flag = flag
 	p.groups = groups
@@ -206,8 +209,7 @@ func TestRiskMutationInputHashIsCanonicalAndOperationSeparated(t *testing.T) {
 func TestRiskVersionTokensAreOpaqueAndStateSensitive(t *testing.T) {
 	t.Parallel()
 
-	codec, err := newRiskVersionCodec("test-key")
-	require.NoError(t, err)
+	codec := newRiskVersionCodec("test-key")
 	prompt := "sensitive prompt material"
 	includeA, includeB := "message.type == 'a'", "message.type == 'b'"
 	exemptA, exemptB := "message.source == 'a'", "message.source == 'b'"
@@ -386,14 +388,11 @@ func TestRiskMutationHandlerSelectionAcceptsExportedSuccessContract(t *testing.T
 		CreateRiskPolicyReceiptResult: CreateRiskPolicyReceiptResult{Project: RiskMutationReceiptProject{ID: "11111111-1111-4111-8111-111111111111", Slug: "default"}, Policy: RiskPolicyReceiptSummary{ID: "22222222-2222-4222-8222-222222222222", PolicyType: "standard", Enabled: true, Action: "flag"}, Version: "opaque", ResultCategory: "created"},
 		Receipt:                       RiskMutationToolReceipt{ID: "33333333-3333-4333-8333-333333333333", Replayed: false},
 	}
-	registerRiskMutationHandlers(registrar, catalog, true, &RiskMutationHandlers{
-		Controls: &RiskMutationControls{},
-		CreatePolicy: func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, CreateRiskPolicyToolOutput, error) {
-			return nil, want, nil
-		},
-	})
-	require.NotContains(t, descriptorByName(t, registrar, operationCreateRiskPolicy).Description, "not enabled")
-	require.Contains(t, descriptorByName(t, registrar, operationUpdateRiskPolicy).Description, "not enabled")
+	handlers := *newTestServices(t).RiskMutations
+	handlers.CreatePolicy = func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, CreateRiskPolicyToolOutput, error) {
+		return nil, want, nil
+	}
+	registerRiskMutationHandlers(registrar, catalog, &handlers)
 	for _, descriptor := range registrar.Descriptors() {
 		if descriptor.Name != operationCreateRiskPolicy {
 			continue
@@ -404,79 +403,4 @@ func TestRiskMutationHandlerSelectionAcceptsExportedSuccessContract(t *testing.T
 		return
 	}
 	require.Fail(t, "create risk policy descriptor was not registered")
-}
-
-func TestRiskMutationHandlerSelectionRequiresAvailableCatalogForLiveCallbacks(t *testing.T) {
-	t.Parallel()
-
-	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
-	registrar := newRegistrar(server)
-	called := false
-	registerRiskMutationHandlers(registrar, policycatalog.Catalog{}, false, &RiskMutationHandlers{
-		Controls: &RiskMutationControls{},
-		CreatePolicy: func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, CreateRiskPolicyToolOutput, error) {
-			called = true
-			return nil, CreateRiskPolicyToolOutput{}, nil
-		},
-	})
-
-	create := descriptorByName(t, registrar, operationCreateRiskPolicy)
-	_, err := create.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"default","policy_type":"prompt_based","name":"policy","enabled":true,"prompt":"instruction","idempotency_key":"key"}`))
-	var refusal *ToolRefusalError
-	require.ErrorAs(t, err, &refusal)
-	require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`)
-	require.Contains(t, create.Description, "not enabled")
-	require.False(t, called, "catalog failure must keep live callbacks unavailable")
-}
-
-func TestRiskMutationHandlerSelectionDefaultsEveryWriteToStableRefusal(t *testing.T) {
-	t.Parallel()
-
-	catalog, err := policycatalog.Build()
-	require.NoError(t, err)
-
-	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
-	bindExternalTestPrincipal(server)
-	registrar := newRegistrar(server)
-	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
-	registerRiskMutationHandlers(registrar, catalog, true, &RiskMutationHandlers{})
-	for _, name := range []string{operationCreateRiskPolicy, operationUpdateRiskPolicy, operationCreateRiskExclusion, operationUpdateRiskExclusion, operationMarkRiskFindingsFalsePositive, operationUnmarkRiskFindingsFalsePositive} {
-		require.Contains(t, descriptorByName(t, registrar, name).Description, "not enabled")
-	}
-	arguments := map[string]json.RawMessage{
-		"create_risk_policy":                     json.RawMessage(`{"project_slug":"default","policy_type":"standard","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key"}`),
-		"update_risk_policy":                     json.RawMessage(`{"project_slug":"default","policy_id":"11111111-1111-4111-8111-111111111111","expected_version":"version","idempotency_key":"key","patch":{"enabled":true}}`),
-		"create_risk_exclusion":                  json.RawMessage(`{"project_slug":"default","match_type":"source","match_value":"gitleaks","enabled":true,"idempotency_key":"key"}`),
-		"update_risk_exclusion":                  json.RawMessage(`{"project_slug":"default","exclusion_id":"11111111-1111-4111-8111-111111111111","enabled":true,"expected_version":"version","idempotency_key":"key"}`),
-		operationMarkRiskFindingsFalsePositive:   json.RawMessage(`{"project_slug":"default","finding_ids":["11111111-1111-4111-8111-111111111111"],"confirmed":true,"idempotency_key":"key"}`),
-		operationUnmarkRiskFindingsFalsePositive: json.RawMessage(`{"project_slug":"default","finding_ids":["11111111-1111-4111-8111-111111111111"],"confirmed":true,"idempotency_key":"key"}`),
-	}
-	require.Len(t, arguments, 6, "every risk write must be exercised against its stub")
-	for _, descriptor := range registrar.Descriptors() {
-		input, ok := arguments[descriptor.Name]
-		if !ok {
-			continue
-		}
-		_, err := descriptor.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), input)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), `"code":"feature_unavailable"`)
-	}
-
-	clientTransport, serverTransport := mcp.NewInMemoryTransports()
-	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
-	require.NoError(t, err)
-	defer func() { _ = serverSession.Close() }()
-	client := mcp.NewClient(&mcp.Implementation{Name: "risk-stub-client", Version: "0.0.1"}, nil)
-	session, err := client.Connect(t.Context(), clientTransport, nil)
-	require.NoError(t, err)
-	defer func() { _ = session.Close() }()
-
-	refused, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: operationCreateRiskPolicy, Arguments: map[string]any{"project_slug": "default", "policy_type": "standard", "name": "policy", "enabled": true, "sources": []string{"gitleaks"}, "idempotency_key": "key"}})
-	require.NoError(t, err)
-	require.True(t, refused.IsError)
-	require.Nil(t, refused.StructuredContent, "disabled tools must not emit a zero-valued structured success output")
-	require.Len(t, refused.Content, 1)
-	text, ok := refused.Content[0].(*mcp.TextContent)
-	require.True(t, ok)
-	require.JSONEq(t, `{"code":"feature_unavailable","feature":"risk_mutations","message":"This Platform MCP capability is not enabled for the current rollout."}`, text.Text)
 }

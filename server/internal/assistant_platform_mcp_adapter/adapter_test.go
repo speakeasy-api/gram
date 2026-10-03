@@ -10,7 +10,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func projectPolicy() TargetPolicy {
@@ -198,7 +197,7 @@ func TestOnlyAdmittedDescriptorsAreComposed(t *testing.T) {
 		{Name: "get_platform_context", InputSchema: []byte(`{"type":"object"}`)},
 	}
 
-	tools := Tools(admitted, nil)
+	tools := Tools(admitted, allowAuthorizer{})
 	require.Len(t, tools, len(admitted))
 
 	names := make([]string, 0, len(tools))
@@ -207,7 +206,7 @@ func TestOnlyAdmittedDescriptorsAreComposed(t *testing.T) {
 	}
 	require.Equal(t, []string{"list_projects", "get_platform_context"}, names)
 
-	require.Empty(t, Tools(nil, nil), "an empty admission list composes no tools")
+	require.Empty(t, Tools(nil, allowAuthorizer{}), "an empty admission list composes no tools")
 }
 
 // The assistant resolves people's names through list_access_members, which
@@ -218,8 +217,8 @@ func TestOnlyAdmittedDescriptorsAreComposed(t *testing.T) {
 func TestComposedAssistantToolsetIncludesListAccessMembers(t *testing.T) {
 	t.Parallel()
 
-	runtime := platformmcp.NewRuntimeWithLifecycle(nil, nil, nil, nil, "", "", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, platformmcp.CatalogDescriptor{})
-	tools := ExternalTools(runtime.AssistantTools(), nil)
+	runtime := newTestRuntime(t)
+	tools := ExternalTools(runtime.AssistantTools(), allowAuthorizer{})
 
 	composed := map[string]platformtools.ExternalTool{}
 	for _, tool := range tools {
@@ -252,8 +251,8 @@ func TestComposedAssistantToolsetIncludesListAccessMembers(t *testing.T) {
 func TestAssistantToolsetListsPluginReadsAndWithholdsPluginMutations(t *testing.T) {
 	t.Parallel()
 
-	runtime := platformmcp.NewRuntime(testenv.NewLogger(t), nil, nil, nil, "", "", nil, nil, nil, nil, nil)
-	composed := ExternalTools(runtime.AssistantTools(), nil)
+	runtime := newTestRuntime(t)
+	composed := ExternalTools(runtime.AssistantTools(), allowAuthorizer{})
 
 	listed := map[string]platformtools.ToolDescriptor{}
 	for _, tool := range composed {

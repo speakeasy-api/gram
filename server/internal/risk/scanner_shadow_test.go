@@ -106,7 +106,7 @@ func newMeteredScanner(t *testing.T, ti *testInstance, pii *instrumentedPIIScann
 	reader := sdkmetric.NewManualReader()
 	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 	t.Cleanup(func() { _ = meterProvider.Shutdown(context.Background()) })
-	scanner, err := risk.NewScannerWithEnforcementDispatcher(
+	scanner := risk.NewScannerWithEnforcementDispatcher(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		meterProvider,
@@ -114,11 +114,10 @@ func newMeteredScanner(t *testing.T, ti *testInstance, pii *instrumentedPIIScann
 		newTestCustomRuleAnalyzer(t, ti.conn),
 		pii,
 		promptinjection.NewScanner(testenv.NewLogger(t), engine.Classify),
-		nil,
+		testPromptPolicyScanner(t),
 		flags,
 		testCELEngine(t),
 		dispatcher, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
-	require.NoError(t, err)
 	return scanner, reader
 }
 

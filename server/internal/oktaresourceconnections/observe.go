@@ -175,9 +175,6 @@ func (o *Observer) ObserveAttempt(ctx context.Context, obs identitychaining.Obse
 }
 
 func (o *Observer) count(ctx context.Context, disposition string, result Result) {
-	if o.observations == nil {
-		return
-	}
 	o.observations.Add(ctx, 1, metric.WithAttributes(attr.Outcome(disposition), attr.Reason(string(result))))
 }
 

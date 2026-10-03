@@ -58,7 +58,7 @@ func TestEditCanvasTool_RequiresCanvasID(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewEditCanvasTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callEditCanvas,
 	}
 
@@ -72,7 +72,7 @@ func TestEditCanvasTool_RequiresOperation(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewEditCanvasTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callEditCanvas,
 	}
 

@@ -41,7 +41,7 @@ func TestDeriveInstanceHealthStatus(t *testing.T) {
 func TestListInstancesIncludesSafeDiagnostics(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newRealTestService(t, nil)
+	ctx, ti := newRealTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)

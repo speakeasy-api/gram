@@ -11,7 +11,7 @@ import (
 
 // Metrics records parameter-header recovery without request-derived dimensions.
 // Share one instance across clients. These diagnostic counters do not meter
-// logical tool calls or billable usage. The zero value and nil receiver are safe.
+// logical tool calls or billable usage.
 type Metrics struct {
 	headerMismatch     metric.Int64Counter
 	recoveryAttempt    metric.Int64Counter
@@ -40,37 +40,27 @@ func NewMetrics(provider metric.MeterProvider, logger *slog.Logger) *Metrics {
 
 // RecordHeaderMismatch counts each mismatch response, including on replay.
 func (m *Metrics) RecordHeaderMismatch(ctx context.Context) {
-	if m != nil && m.headerMismatch != nil {
-		m.headerMismatch.Add(ctx, 1)
-	}
+	m.headerMismatch.Add(ctx, 1)
 }
 
 // RecordRecoveryAttempt counts the start of the single permitted recovery.
 func (m *Metrics) RecordRecoveryAttempt(ctx context.Context) {
-	if m != nil && m.recoveryAttempt != nil {
-		m.recoveryAttempt.Add(ctx, 1)
-	}
+	m.recoveryAttempt.Add(ctx, 1)
 }
 
 // RecordRecoverySuccess counts a replay with neither a protocol nor tool error.
 func (m *Metrics) RecordRecoverySuccess(ctx context.Context) {
-	if m != nil && m.recoverySuccess != nil {
-		m.recoverySuccess.Add(ctx, 1)
-	}
+	m.recoverySuccess.Add(ctx, 1)
 }
 
 // RecordRecoveryFailure counts an unsuccessful refresh or replay, including
 // exhaustion. Every completed attempt records exactly one success or failure.
 func (m *Metrics) RecordRecoveryFailure(ctx context.Context) {
-	if m != nil && m.recoveryFailure != nil {
-		m.recoveryFailure.Add(ctx, 1)
-	}
+	m.recoveryFailure.Add(ctx, 1)
 }
 
 // RecordRecoveryExhaustion counts a repeated mismatch after the one replay.
 // Exhaustion is a subset of failures, not an additional recovery attempt.
 func (m *Metrics) RecordRecoveryExhaustion(ctx context.Context) {
-	if m != nil && m.recoveryExhaustion != nil {
-		m.recoveryExhaustion.Add(ctx, 1)
-	}
+	m.recoveryExhaustion.Add(ctx, 1)
 }

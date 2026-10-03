@@ -2,6 +2,7 @@ package activities_test
 
 import (
 	"encoding/json"
+	"sync"
 	"testing"
 	"time"
 
@@ -93,7 +94,7 @@ func testSyncedRoleDeletionPluginAssignments(t *testing.T, scope string) {
 		t.Helper()
 		stub := newWorkOSClientWithEvents([][]events.Event{{{ID: eventID, Event: eventType, CreatedAt: now, Data: payload}}})
 		if scope == "organization" {
-			result, err := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil).Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+			result, err := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, &recordingIdentityMapSignaler{mu: sync.Mutex{}, count: 0}).Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 			require.NoError(t, err)
 			require.Equal(t, eventID, result.LastEventID)
 		} else {

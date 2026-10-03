@@ -113,26 +113,15 @@ type DistributionService struct {
 	organizations OrganizationSlugResolver
 }
 
-func NewDistributionService(db *pgxpool.Pool, auditLogger *audit.Logger, attach ExistingPluginAttacher, publish ProjectPublisher, plugins PluginTargetResolver) *DistributionService {
-	if auditLogger == nil {
-		auditLogger = audit.NewLogger()
-	}
-	return &DistributionService{db: db, audit: auditLogger, attach: attach, publish: publish, plugins: plugins, now: time.Now, approvals: NewPostgresDirectRemoteApprovals()}
-}
-
-func (s *DistributionService) WithDistributionAdmission(guard *admission.Guard, organizations OrganizationSlugResolver) *DistributionService {
-	if s != nil {
-		s.admission = guard
-		s.organizations = organizations
-	}
-	return s
+func NewDistributionService(db *pgxpool.Pool, auditLogger *audit.Logger, attach ExistingPluginAttacher, publish ProjectPublisher, plugins PluginTargetResolver, guard *admission.Guard, organizations OrganizationSlugResolver) *DistributionService {
+	return &DistributionService{db: db, audit: auditLogger, attach: attach, publish: publish, plugins: plugins, now: time.Now, approvals: NewPostgresDirectRemoteApprovals(), admission: guard, organizations: organizations}
 }
 
 // Current returns the selected workflow target's live attachment state and its
 // last persisted version. It does not require readiness, so dashboard resume can
 // safely project the state before offering a mutation.
 func (s *DistributionService) Current(ctx context.Context, principal Principal, projectSlug, targetPlugin string) (Distribution, error) {
-	if s == nil || s.db == nil || projectSlug == "" {
+	if projectSlug == "" {
 		return Distribution{}, ErrDistributionInvalid
 	}
 	q := repo.New(s.db)
@@ -163,7 +152,7 @@ func (s *DistributionService) Current(ctx context.Context, principal Principal, 
 }
 
 func (s *DistributionService) Distribute(ctx context.Context, principal Principal, input DistributionInput) (Distribution, error) {
-	if s == nil || s.db == nil || s.audit == nil || s.attach == nil || input.ProjectSlug == "" || input.ExpectedVersion < 0 {
+	if input.ProjectSlug == "" || input.ExpectedVersion < 0 {
 		return Distribution{}, ErrDistributionInvalid
 	}
 
@@ -297,7 +286,7 @@ func (s *DistributionService) DistributeForOnboarding(ctx context.Context, princ
 }
 
 func (s *DistributionService) Remove(ctx context.Context, principal Principal, input DistributionInput) (Distribution, error) {
-	if s == nil || s.db == nil || s.audit == nil || input.ProjectSlug == "" || input.ExpectedVersion < 0 {
+	if input.ProjectSlug == "" || input.ExpectedVersion < 0 {
 		return Distribution{}, ErrDistributionInvalid
 	}
 
@@ -407,7 +396,7 @@ func (s *DistributionService) Remove(ctx context.Context, principal Principal, i
 // RepairPublication replays the same post-commit desired-state publication
 // without changing the attachment or distribution version.
 func (s *DistributionService) RepairPublication(ctx context.Context, principal Principal, input DistributionInput) (Distribution, error) {
-	if s == nil || s.db == nil || input.ProjectSlug == "" || input.ExpectedVersion <= 0 {
+	if input.ProjectSlug == "" || input.ExpectedVersion <= 0 {
 		return Distribution{}, ErrDistributionInvalid
 	}
 	rollout, rolloutErr := s.resolveDistributionRollout(ctx, principal, input.ProjectSlug)
@@ -450,7 +439,7 @@ func (s *DistributionService) RepairPublication(ctx context.Context, principal P
 
 func (s *DistributionService) publishCommittedDistribution(ctx context.Context, principal Principal, row repo.PlatformMcpDistribution, pluginName, commitMessage string) (Distribution, error) {
 	publicationState := publicationStateRepairRequired
-	if s.publish != nil && s.publish(ctx, row.ProjectID, principal.UserID, commitMessage) == nil {
+	if s.publish(ctx, row.ProjectID, principal.UserID, commitMessage) == nil {
 		publicationState = publicationStateCurrent
 	}
 	updated, err := repo.New(s.db).UpdatePlatformMCPDistributionPublication(ctx, repo.UpdatePlatformMCPDistributionPublicationParams{
@@ -493,9 +482,6 @@ func (s *DistributionService) onboardingTarget(ctx context.Context, q *repo.Quer
 // fresh-ready anonymously, which is insufficient to override an organization's
 // existing Shadow MCP policy. Reviewed catalogue registrations are unaffected.
 func (s *DistributionService) resolveDistributionRollout(ctx context.Context, principal Principal, projectSlug string) (admission.RolloutConfig, error) {
-	if s == nil || s.admission == nil || s.organizations == nil {
-		return admission.RolloutConfig{}, ErrDistributionAdmissionUnavailable
-	}
 	organizationSlug, err := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
 	if err != nil || organizationSlug == "" {
 		return admission.RolloutConfig{}, fmt.Errorf("%w: resolve organization slug: %w", ErrDistributionAdmissionUnavailable, err)
@@ -523,7 +509,7 @@ func (s *DistributionService) requireDistributionAdmission(ctx context.Context, 
 			return err
 		}
 	}
-	if s.admission == nil || !target.McpServerID.Valid {
+	if !target.McpServerID.Valid {
 		return ErrDistributionAdmissionUnavailable
 	}
 	if err := s.admission.CheckAttachment(ctx, tx, rollout, rolloutErr, principal.OrganizationID, target.ProjectID, pluginID, target.McpServerID.UUID); err != nil {
@@ -550,7 +536,7 @@ func (s *DistributionService) requireApprovedDirectRemoteDistribution(ctx contex
 	if registration.CatalogProvider != directRemoteProviderKey {
 		return nil
 	}
-	if s.approvals == nil || registration.CatalogReference == "" {
+	if registration.CatalogReference == "" {
 		return ErrDistributionBlockedPendingApproval
 	}
 	approval, err := s.approvals.CheckDirectRemoteApprovalTx(ctx, tx, principal.OrganizationID, principal.UserID, target.ProjectID, registration.CatalogReference)
@@ -709,9 +695,6 @@ func (s *DistributionService) resolvePlugin(ctx context.Context, db pluginsrepo.
 			return PluginRef{}, fmt.Errorf("get platform mcp distribution default plugin: %w", err)
 		}
 		return PluginRef{ID: plugin.ID, Name: plugin.Name, Slug: plugin.Slug, IsDefault: true}, nil
-	}
-	if s.plugins == nil {
-		return PluginRef{}, ErrDistributionInvalid
 	}
 	target, err := s.plugins.ResolvePlugin(ctx, principal, projectID, wanted)
 	if err != nil {

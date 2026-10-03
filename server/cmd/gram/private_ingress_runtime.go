@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
@@ -33,7 +34,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
-	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -65,17 +65,17 @@ func (r *privateIngressRuntime) Close(ctx context.Context) {
 	}
 }
 
-func validatePrivateIngressTemporalConfig(c *cli.Context) error {
-	if c.String("temporal-address") == "" || c.String("temporal-namespace") == "" || c.String("temporal-task-queue") == "" {
-		return fmt.Errorf("private ingress Temporal address, namespace, and task queue are required")
-	}
-	return validateNetworkIngressWorkerTemporalTLS(c.String("environment"), c.String("temporal-client-cert"), c.String("temporal-client-key"))
+func requirePrivateIngressTemporalConfig(c *cli.Context) {
+	inv.Require("private ingress Temporal",
+		"address is set", c.String("temporal-address") != "",
+		"namespace is set", c.String("temporal-namespace") != "",
+		"task queue is set", c.String("temporal-task-queue") != "",
+	)
+	requireNetworkIngressWorkerTemporalTLS(c.String("environment"), c.String("temporal-client-cert"), c.String("temporal-client-key"))
 }
 
 func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.Logger) (_ *privateIngressRuntime, err error) {
-	if err := validatePrivateIngressTemporalConfig(c); err != nil {
-		return nil, err
-	}
+	requirePrivateIngressTemporalConfig(c)
 	r := &privateIngressRuntime{DB: nil, Redis: nil, Temporal: nil, Kubernetes: nil, Runtime: nil, cleanup: nil}
 	defer func() {
 		if err != nil {
@@ -135,9 +135,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 
 	enc, err := encryption.New(c.String("encryption-key"))
-	if err != nil {
-		return nil, fmt.Errorf("create private ingress encryption client: %w", err)
-	}
+	inv.Require("encryption client", "encryption-key is a valid AES-256 key", err)
 	env := environments.NewEnvironmentEntries(logger, db, enc, metadatarepo.New(db))
 	r.Kubernetes, err = k8s.InitializeK8sClient(ctx, logger, c.String("environment"), "", "")
 	if err != nil {
@@ -153,9 +151,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if err != nil {
 		return nil, err
 	}
-	if r.Temporal != nil {
-		r.cleanup = append(r.cleanup, stop)
-	}
+	r.cleanup = append(r.cleanup, stop)
 	auditLogger := newAuditLogger()
 	var openRouter openrouter.Provisioner
 	if c.String("environment") == "local" {
@@ -173,10 +169,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		return nil, err
 	}
 	r.cleanup = append(r.cleanup, stop)
-	roleClient, err := newAccessRoleProvider(ctx, logger, guardianPolicy, c)
-	if err != nil {
-		return nil, err
-	}
+	roleClient := newAccessRoleProvider(ctx, logger, guardianPolicy, c)
 	authzEngine := authz.NewEngine(logger, db, authz.ChallengeLoggingEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureAuthzChallengeLogging)), roleClient, authz.EngineOpts{
 		AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential, AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
 		AdmitWorkloadSession: runtimepolicy.AdmitWorkloadSession,
@@ -209,15 +202,14 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs), tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs))
 	r.cleanup = append(r.cleanup, stop)
 	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessions, logsEnabled, newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture), posthogClient, authzEngine, featureFlags)
-	chatWriter, stop := chat.NewChatMessageWriter(logger, db, assetStorage)
+	chatWriter, stop := chat.NewChatMessageWriter(logger, db, assetStorage, chat.NewTurnStream(redisClient))
 	r.cleanup = append(r.cleanup, stop)
-	chatWriter = chatWriter.WithTurnStream(chat.NewTurnStream(redisClient))
 	efficacySignaler := background.NewThrottledSignaler(&background.TemporalSkillEfficacySignaler{TemporalEnv: r.Temporal, Logger: logger}, background.SkillEfficacySignalCooldown, logger)
 	analysisSignaler := background.NewThrottledSignaler(&background.TemporalChatAnalysisSignaler{TemporalEnv: r.Temporal, Logger: logger}, background.ChatAnalysisSignalCooldown, logger)
 	r.cleanup = append(r.cleanup, efficacySignaler.Shutdown, analysisSignaler.Shutdown)
 	chatWriter.AddObserver(efficacy.NewObserver(logger, efficacySignaler))
 	chatWriter.AddObserver(analysis.NewObserver(logger, analysisSignaler))
-	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, enc, openRouter), chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), &background.TemporalChatTitleGenerator{TemporalEnv: r.Temporal}, telemLogger)
+	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, enc, openRouter), chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), telemLogger)
 	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
 		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, publishers, shadowMCPClient,
@@ -229,10 +221,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	memoryService := memory.NewMemoryService(logger, tracerProvider, meterProvider, db, completions, auditLogger)
 	ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completions)
 	slackClient := slackclient.NewSlackClient(guardianPolicy)
-	authenticationHost, err := mcp.NewAuthenticationHost(c.String("authentication-host-url"), serverURL, c.String("environment"))
-	if err != nil {
-		return nil, fmt.Errorf("invalid authentication host url: %w", err)
-	}
+	authenticationHost := mcp.NewAuthenticationHost(c.String("authentication-host-url"), serverURL, c.String("environment"))
 	platformHosts, err := parsePlatformHosts(c, authenticationHost)
 	if err != nil {
 		return nil, err
@@ -248,18 +237,13 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		return nil, err
 	}
 	contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cacheImpl)
-	assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, enc, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger)
+	assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, enc, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger, chatWriter, assetStorage, c.String(usersessions.JWTSigningKeyFlag), env, slackapi.NewClient("", guardianPolicy.PooledClient()), featureFlags)
 	assistantsCore.SetWakeCanceller(triggerApp)
 	assistantsCore.SetDashboardIngestor(triggerApp)
-	assistantsCore.SetChatMessageWriter(chatWriter)
-	assistantsCore.SetAssetStorage(assetStorage)
-	assistantsCore.SetAssetSigningKey(c.String(usersessions.JWTSigningKeyFlag))
-	assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
-	assistantsCore.SetFeatureProvider(featureFlags)
 	assistantsCore.SetOutboundCallbackOrigin(callbackOrigins.Outbound)
 	triggerApp.RegisterDispatcher(assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: r.Temporal}, ratelimit.NewRedisStore(redisClient)))
 	platformExtras := append([]platformtools.ExternalTool{}, platformruntime.MemoryExternalTools(memoryService)...)
-	platformExtras = append(platformExtras, platformruntime.AssistantSkillTools(logger, db, platformskills.WithEfficacySignaler(efficacySignaler))...)
+	platformExtras = append(platformExtras, platformruntime.AssistantSkillTools(logger, db)...)
 	gcpIdentity := newGCPIdentity(ctx, logger, c)
 	kmsSigningClients, err := newKMSSigningClients(ctx, logger, c)
 	if err != nil {
@@ -267,31 +251,25 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-	tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, redisClient)
-	if err != nil {
-		return nil, fmt.Errorf("build tunnel http client: %w", err)
-	}
+	tunnelHTTPClient := newTunnelHTTPClient(c, guardianPolicy, redisClient)
 	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner)
 	if err != nil {
 		return nil, err
 	}
 	r.cleanup = append(r.cleanup, func(context.Context) error { remoteSessionDeps.Refresher.Shutdown(); return nil })
 	challengeManager := remoteSessionDeps.Challenges
-	mcpService, err := newMCPService(c, mcpServiceDependencies{
+	mcpService := newMCPService(c, mcpServiceDependencies{
 		CallerAssertions: callerAssertions,
 		Logger:           logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
 		Sessions: sessionManager, ChatSessions: chatSessions, Environment: env,
 		Posthog: posthogClient, Features: featureFlags, ServerURL: serverURL, SiteURL: siteURL,
 		Encryption: enc, Guardian: guardianPolicy, Functions: functionsOrchestrator,
 		BillingTracker: billingTracker, Billing: billingRepo, Telemetry: telemLogger, TelemetryService: telemSvc,
-		RAG: ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager,
+		RAG: ragService, ThreadRouter: triggerApp.ThreadRouter, Authz: authzEngine, AssistantTokens: assistantTokenManager,
 		ShadowMCP: shadowMCPClient, MCPRisk: mcpRiskEvaluator, Audit: auditLogger,
 		PlatformExtras: platformExtras, PlatformFeatureChecker: productFeatures.PlatformFeatureCheck,
-		PlatformToolsets: map[string]platformtools.Toolset{}, Identity: identityResolver, Challenges: challengeManager, CallbackOrigins: callbackOrigins,
+		PlatformToolsets: map[string]platformtools.Toolset{}, Identity: identityResolver, Challenges: challengeManager, IDTokenKeys: remoteSessionDeps.IDTokenKeys, CallbackOrigins: callbackOrigins,
 	})
-	if err != nil {
-		return nil, err
-	}
 	r.cleanup = append(r.cleanup, func(ctx context.Context) error {
 		drainCtx, cancel := context.WithTimeout(ctx, probeDrainTimeout)
 		defer cancel()
@@ -300,9 +278,6 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	mcpService.StartRemoteSessionRecheck(ctx)
 	admission := networkingress.NewExpansionAdmission(productFeatures, false, c.Bool("network-ingress-enabled"))
 	metadata := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cacheImpl, authzEngine, auditLogger, admission.CheckExpansion)
-	r.Runtime, err = buildMCPServerRuntime(mcpServerRuntimeDependencies{Logger: logger, DB: db, Encryption: enc, MCP: mcpService, Metadata: metadata})
-	if err != nil {
-		return nil, err
-	}
+	r.Runtime = buildMCPServerRuntime(mcpServerRuntimeDependencies{Logger: logger, DB: db, Encryption: enc, MCP: mcpService, Metadata: metadata})
 	return r, nil
 }

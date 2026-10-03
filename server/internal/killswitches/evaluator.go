@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"go.opentelemetry.io/otel/metric"
 
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/repo"
 )
 
@@ -38,24 +39,13 @@ type preparedEvaluation struct {
 
 // NewEvaluator constructs an evaluator over the authoritative PostgreSQL connection. A positive
 // evaluator-specific timeout is mandatory even when callers normally carry a deadline.
-func NewEvaluator(db repo.DBTX, registry *Registry, timeout time.Duration, meterProvider metric.MeterProvider, logger *slog.Logger) (*Evaluator, error) {
-	if isNilInterface(db) {
-		return nil, errors.New("kill-switch evaluator database is required")
-	}
+func NewEvaluator(db repo.DBTX, registry *Registry, timeout time.Duration, meterProvider metric.MeterProvider, logger *slog.Logger) *Evaluator {
 	return newEvaluator(repo.New(db), registry, timeout, newEvaluationMetrics(meterProvider, logger))
 }
 
-func newEvaluator(queries evaluationQueries, registry *Registry, timeout time.Duration, metrics *evaluationMetrics) (*Evaluator, error) {
-	if isNilInterface(queries) {
-		return nil, errors.New("kill-switch evaluator queries are required")
-	}
-	if registry == nil {
-		return nil, errors.New("kill-switch evaluator registry is required")
-	}
-	if timeout <= 0 {
-		return nil, errors.New("kill-switch evaluator timeout must be positive")
-	}
-	return &Evaluator{queries: queries, registry: registry, timeout: timeout, metrics: metrics}, nil
+func newEvaluator(queries evaluationQueries, registry *Registry, timeout time.Duration, metrics *evaluationMetrics) *Evaluator {
+	inv.Require("kill-switch evaluator", "timeout is positive", timeout > 0)
+	return &Evaluator{queries: queries, registry: registry, timeout: timeout, metrics: metrics}
 }
 
 // Evaluate returns a matched denial, an ordinary no-match, or a classified infrastructure failure.

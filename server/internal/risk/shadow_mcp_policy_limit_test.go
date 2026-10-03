@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -151,19 +152,17 @@ func TestScanner_LookupShadowMCPBlockingPolicy_CarriesDispositionAndBlocklist(t 
 	})
 	require.NoError(t, err)
 
-	scanner, err := risk.NewScanner(
+	scanner := risk.NewScanner(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
 		newTestCustomRuleAnalyzer(t, ti.conn),
 		nil,
-		nil,
-		nil,
-		nil,
+		testPIScanner(t),
+		testPromptPolicyScanner(t),
+		&feature.InMemory{},
 		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
-
-	require.NoError(t, err)
 
 	policy, err := scanner.LookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID)
 	require.NoError(t, err)
@@ -186,19 +185,17 @@ func TestScanner_LookupShadowMCPBlockingPolicy_BlockAllDisposition(t *testing.T)
 	})
 	require.NoError(t, err)
 
-	scanner, err := risk.NewScanner(
+	scanner := risk.NewScanner(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
 		newTestCustomRuleAnalyzer(t, ti.conn),
 		nil,
-		nil,
-		nil,
-		nil,
+		testPIScanner(t),
+		testPromptPolicyScanner(t),
+		&feature.InMemory{},
 		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
-
-	require.NoError(t, err)
 
 	policy, err := scanner.LookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID)
 	require.NoError(t, err)

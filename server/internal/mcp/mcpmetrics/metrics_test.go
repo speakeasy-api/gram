@@ -47,16 +47,6 @@ func TestMetrics_RecordMCPToolCall(t *testing.T) {
 		// Should not panic
 		m.RecordMCPToolCall(context.Background(), "org-123", "https://mcp.example.com", "test-tool")
 	})
-
-	t.Run("handles_nil_counter_gracefully", func(t *testing.T) {
-		t.Parallel()
-		m := &Metrics{
-			mcpToolCallCounter: nil,
-		}
-
-		// Should not panic when counter is nil
-		m.RecordMCPToolCall(context.Background(), "org-123", "https://mcp.example.com", "test-tool")
-	})
 }
 
 func TestMetrics_RecordMCPRequestDuration(t *testing.T) {
@@ -69,16 +59,6 @@ func TestMetrics_RecordMCPRequestDuration(t *testing.T) {
 		m := NewMetrics(meter, logger)
 
 		// Should not panic
-		m.RecordMCPRequestDuration(context.Background(), "tools/call", "https://mcp.example.com", 100*time.Millisecond)
-	})
-
-	t.Run("handles_nil_histogram_gracefully", func(t *testing.T) {
-		t.Parallel()
-		m := &Metrics{
-			mcpRequestDuration: nil,
-		}
-
-		// Should not panic when histogram is nil
 		m.RecordMCPRequestDuration(context.Background(), "tools/call", "https://mcp.example.com", 100*time.Millisecond)
 	})
 }
@@ -151,30 +131,6 @@ func TestMetrics_RecordOAuthRefreshTokenReplayServed(t *testing.T) {
 	m.RecordOAuthRefreshTokenReplayServed(t.Context(), "issuer-1", "mcp-slug-1")
 }
 
-func TestMetrics_RecordOAuthFlow_NilCountersDoNotPanic(t *testing.T) {
-	t.Parallel()
-
-	m := &Metrics{}
-
-	// All four must be nil-safe (counter construction can fail at startup).
-	m.RecordOAuthFlowStarted(t.Context(), "issuer-1", "mcp-slug-1")
-	m.RecordOAuthFlowCompleted(t.Context(), "issuer-1", "mcp-slug-1")
-	m.RecordOAuthFlowFailed(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageConsent)
-	m.RecordOAuthFlowDeclined(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageIDPCallback)
-	m.RecordOAuthAuthorityUnavailable(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageToken)
-	m.RecordOAuthRefreshTokenReplayServed(t.Context(), "issuer-1", "mcp-slug-1")
-}
-
-// TestRequestCounterRecord_NilSafety pins the documented contract that a nil
-// *RequestCounter, and one whose instrument failed to construct, are both
-// safe to record against.
-func TestRequestCounterRecord_NilSafety(t *testing.T) {
-	t.Parallel()
-
-	var c *RequestCounter
-	c.Record(t.Context(), mcpversions.Version20260728, "tools/list", SurfaceHosting)
-}
-
 func TestRequestCounterRecord_RecordsWithoutError(t *testing.T) {
 	t.Parallel()
 
@@ -186,16 +142,13 @@ func TestRequestCounterRecord_RecordsWithoutError(t *testing.T) {
 
 // TestMetricsRecordMCPRequest_ForwardsToCensus pins that the service-side
 // entry point records through the same census counter the proxy interceptor
-// uses, and is nil-receiver safe.
+// uses.
 func TestMetricsRecordMCPRequest_ForwardsToCensus(t *testing.T) {
 	t.Parallel()
 
 	m := NewMetrics(testenv.NewMeterProvider(t).Meter("test"), testenv.NewLogger(t))
 	require.NotNil(t, m.requestCensus)
 	m.RecordMCPRequest(t.Context(), mcpversions.Version20260728, "tools/list", SurfaceHosting)
-
-	var nilMetrics *Metrics
-	nilMetrics.RecordMCPRequest(t.Context(), mcpversions.Version20260728, "tools/list", SurfaceHosting)
 }
 
 func TestRecordMCPProtocolVersionRejected_PinsInstrumentAndDimensions(t *testing.T) {
@@ -221,7 +174,7 @@ func TestRecordMCPProtocolVersionRejected_PinsInstrumentAndDimensions(t *testing
 	require.Equal(t, int64(1), sum.DataPoints[0].Value)
 }
 
-func TestRecordMCPProtocolVersionRejected_ClampsAndIsNilSafe(t *testing.T) {
+func TestRecordMCPProtocolVersionRejected_Clamps(t *testing.T) {
 	t.Parallel()
 
 	reader := sdkmetric.NewManualReader()
@@ -235,11 +188,6 @@ func TestRecordMCPProtocolVersionRejected_ClampsAndIsNilSafe(t *testing.T) {
 		attr.McpSurface(string(SurfaceHosting)),
 		attr.NetworkSurface(NetworkSurfacePublic),
 	)
-
-	var nilMetrics *Metrics
-	nilMetrics.RecordMCPProtocolVersionRejected(t.Context(), mcpversions.Version20260728, "tools/list", SurfaceHosting)
-	empty := &Metrics{}
-	empty.RecordMCPProtocolVersionRejected(t.Context(), mcpversions.Version20260728, "tools/list", SurfaceHosting)
 }
 
 // TestRequestCounterRecord_PinsInstrumentAndDimensions pins the census wiring
@@ -364,19 +312,6 @@ func TestRecordMCPRequestRejected_PinsInstrumentAndDimensions(t *testing.T) {
 	require.True(t, ok, "rejected instrument must be an int64 counter")
 	require.Len(t, sum.DataPoints, 1)
 	require.Equal(t, int64(1), sum.DataPoints[0].Value)
-}
-
-// TestRecordMCPRequestRejected_NilSafe pins the documented contract that a
-// nil *Metrics, and one whose instrument failed to construct, are both safe
-// to record against.
-func TestRecordMCPRequestRejected_NilSafe(t *testing.T) {
-	t.Parallel()
-
-	var nilMetrics *Metrics
-	nilMetrics.RecordMCPRequestRejected(t.Context(), "no_credentials", "mcp.example.com/mcp/demo", SurfaceHosting)
-
-	empty := &Metrics{}
-	empty.RecordMCPRequestRejected(t.Context(), "no_credentials", "mcp.example.com/mcp/demo", SurfaceHosting)
 }
 
 // collectMetric drains the reader and returns the named metric, failing the

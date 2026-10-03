@@ -7,14 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
-
-func TestGuardResolveRequiresInjectedProvider(t *testing.T) {
-	t.Parallel()
-
-	_, err := (&Guard{}).Resolve(t.Context(), "organization", "organization", "project")
-	require.ErrorIs(t, err, ErrUnavailable)
-}
 
 func TestRequireUsableRolloutRejectsOpenMode(t *testing.T) {
 	t.Parallel()
@@ -31,7 +25,7 @@ func TestRolloutKillSwitchIsIndependentFromMode(t *testing.T) {
 	flags.SetFlag(feature.FlagPlatformMCPShadowAudienceEnforcement, "organization", false)
 	flags.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, "organization", true)
 
-	config, err := NewGuard(flags, nil).Resolve(t.Context(), "organization", "organization", "project")
+	config, err := NewGuard(flags, NewReportMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t))).Resolve(t.Context(), "organization", "organization", "project")
 	require.NoError(t, err)
 	require.Equal(t, ModeLegacy, config.Mode)
 	require.True(t, config.DirectRemoteDistributionDisabled)

@@ -377,10 +377,6 @@ func (s *Service) ListDismissedRiskResults(ctx context.Context, payload *gen.Lis
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
-	if s.findingsCH == nil {
-		return nil, oops.E(oops.CodeUnexpected, nil, "dismissed risk results are unavailable").LogError(ctx, s.logger)
-	}
-
 	cursor, err := parseRiskResultsCursor(payload.Cursor)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid cursor")

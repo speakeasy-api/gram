@@ -140,28 +140,19 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 // sources have none); the attribute is omitted then rather than recorded as
 // "".
 func (m *metrics) RecordAttempt(ctx context.Context, origin string, result fetchResult) {
-	if m == nil || m.fetchAttempts == nil {
-		return
-	}
 	m.fetchAttempts.Add(ctx, 1, metric.WithAttributes(fetchAttributes(origin, result)...))
 }
 
 func (m *metrics) RecordFetchDuration(ctx context.Context, origin string, result fetchResult, duration time.Duration) {
-	if m == nil || m.fetchDuration == nil {
-		return
-	}
 	m.fetchDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(fetchAttributes(origin, result)...))
 }
 
 func (m *metrics) RecordResponseSize(ctx context.Context, origin string, bytes int64) {
-	if m == nil || m.fetchResponseSize == nil {
-		return
-	}
 	m.fetchResponseSize.Record(ctx, bytes, metric.WithAttributes(attr.JWKSOrigin(origin)))
 }
 
 func (m *metrics) RecordValidationFailure(ctx context.Context, reason validationReason) {
-	if m == nil || m.validationFailures == nil || reason == "" {
+	if reason == "" {
 		return
 	}
 	m.validationFailures.Add(ctx, 1, metric.WithAttributes(attr.JWKSValidationReason(reason)))

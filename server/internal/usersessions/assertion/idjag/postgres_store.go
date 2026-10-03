@@ -23,15 +23,12 @@ type PostgresStore struct {
 }
 
 // NewPostgresStore builds the database-backed ID-JAG validation store.
-func NewPostgresStore(db *pgxpool.Pool) (*PostgresStore, error) {
-	if db == nil {
-		return nil, errors.New("idjag: database is required")
-	}
+func NewPostgresStore(db *pgxpool.Pool) *PostgresStore {
 	return &PostgresStore{
 		userSessions:   usersessionsrepo.New(db),
 		remoteSessions: remotesessionsrepo.New(db),
 		directory:      directoryrepo.New(db),
-	}, nil
+	}
 }
 
 var _ Store = (*PostgresStore)(nil)

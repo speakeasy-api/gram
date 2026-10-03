@@ -222,9 +222,6 @@ func (tp *ToolProxy) doPlatform(
 	attrRecorder tm.HTTPLogAttributes,
 ) error {
 	span := trace.SpanFromContext(ctx)
-	if tp.platformTools == nil {
-		return oops.E(oops.CodeUnexpected, nil, "platform tool executor not configured").LogError(ctx, logger)
-	}
 
 	attrRecorder.RecordMethod(http.MethodPost)
 	attrRecorder.RecordRoute(plan.Descriptor.URN.String())

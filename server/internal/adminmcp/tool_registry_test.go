@@ -44,7 +44,7 @@ func registryToolCall(t *testing.T, reader RegistryReader, name, args string, ve
 	if verified {
 		principal.staff = &contextvalues.AdminAuthContext{SessionID: "browser-session", OIDCSubject: "staff-subject", Email: principal.Email}
 	}
-	runtime := NewRuntime(&testAuthenticator{principal: principal}, "")
+	runtime := NewRuntime(&testAuthenticator{principal: principal}, "", &recordingOrganizationReader{})
 	registerRegistryTools(runtime.server, reader)
 	request := httptest.NewRequest(http.MethodPost, Path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"`+name+`","arguments":`+args+`}}`))
 	request.Header.Set("Authorization", "Bearer test-token")
@@ -61,25 +61,6 @@ func registryToolCall(t *testing.T, reader RegistryReader, name, args string, ve
 	}
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &message))
 	return response.Body.String(), message.Result.StructuredContent
-}
-
-type registryRuntimeReader struct {
-	OrganizationReader
-	*recordingRegistryReader
-}
-
-func TestRegistryReadsAppearInConfiguredContext(t *testing.T) {
-	t.Parallel()
-	reader := &registryRuntimeReader{recordingRegistryReader: &recordingRegistryReader{}}
-	_, body, data := callStaffReadTool(t, reader, "get_admin_context", `{}`)
-	require.NotContains(t, body, `"isError":true`)
-	var output AdminContext
-	require.NoError(t, json.Unmarshal(data, &output))
-	require.Contains(t, output.Workflows, "inspect bounded registry entries and safe validation summaries")
-
-	_, _, data = callStaffReadTool(t, nil, "get_admin_context", `{}`)
-	require.NoError(t, json.Unmarshal(data, &output))
-	require.NotContains(t, output.Workflows, "inspect bounded registry entries and safe validation summaries")
 }
 
 func TestRegistryListRequiresVerifiedStaffAndBoundsInputs(t *testing.T) {

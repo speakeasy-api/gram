@@ -30,7 +30,7 @@ const (
 // Slack task's event. A failure to read the thread marks the context
 // unavailable instead of failing the dispatch.
 func (a *App) backfillSlackThread(ctx context.Context, task Task) (Task, error) {
-	if task.ThreadBackfill == nil || task.DefinitionSlug != DefinitionSlugSlack || a.slackClient == nil {
+	if task.ThreadBackfill == nil || task.DefinitionSlug != DefinitionSlugSlack {
 		return task, nil
 	}
 

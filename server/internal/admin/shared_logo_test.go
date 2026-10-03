@@ -20,9 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	issuersrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
@@ -35,9 +33,6 @@ func TestStandaloneIssuerLogo_SharedDashboardStorageAndReplacement(t *testing.T)
 	tp := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tp, nil)
 	require.NoError(t, err)
-	enc, err := encryption.NewWithBytes(make([]byte, 32))
-	require.NoError(t, err)
-	svc.SetRemoteSessionService(remotesessions.NewGlobalService(svc.logger, tp, testenv.NewMeterProvider(t), db, enc, policy))
 
 	// Separate service/store instances share only the database and disk location,
 	// as the admin and dashboard API processes do. No copy or in-memory blob map.

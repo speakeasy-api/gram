@@ -103,10 +103,6 @@ func (c *Client) Call(ctx context.Context, method string, payload map[string]any
 // is used by callers that resolve tokens out of band (e.g. decrypted
 // per-installation bot tokens).
 func (c *Client) CallWithToken(ctx context.Context, method string, payload map[string]any, token string) ([]byte, error) {
-	if c.httpClient == nil {
-		return nil, fmt.Errorf("slack HTTP client not configured")
-	}
-
 	form, err := encodeFormPayload(payload)
 	if err != nil {
 		return nil, fmt.Errorf("encode slack payload for %s: %w", method, err)

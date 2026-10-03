@@ -114,8 +114,8 @@ func resolveClientIdentity(ctx context.Context, logger *slog.Logger, store sessi
 	info, err := store.Load(ctx, payload.projectID, sessionClientInfoScope(payload), payload.sessionID, time.Now().UnixMilli())
 	switch {
 	case errors.Is(err, sessionclientinfo.ErrNotFound):
-		// An unknown caller is ordinary: no Redis, an evicted record, or a
-		// client that never reported a name.
+		// An unknown caller is ordinary: an evicted record, or a client that
+		// never reported a name.
 		return identity, ""
 	case err != nil:
 		logger.WarnContext(ctx, "failed to load mcp session client info", attr.SlogError(err))

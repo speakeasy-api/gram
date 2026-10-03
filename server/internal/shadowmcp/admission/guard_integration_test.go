@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -39,7 +40,7 @@ func TestGatewayMemberAdmissionChecksEveryPluginAudience(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	guard := NewGuard(nil, nil)
+	guard := NewGuard(&feature.InMemory{}, NewReportMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)))
 	rollout := RolloutConfig{Mode: ModeEnforce}
 	tx := testenv.BeginTx(t, ctx, fixture.conn)
 	require.ErrorIs(t, guard.CheckGatewayMemberAddition(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, gateway.ID, serverID), ErrApprovalRequired)
@@ -63,7 +64,6 @@ func TestGatewayMemberAdmissionChecksEveryPluginAudience(t *testing.T) {
 	})
 	require.NoError(t, err)
 	tx = testenv.BeginTx(t, ctx, fixture.conn)
-	require.ErrorIs(t, (*Guard)(nil).CheckGatewayAttachment(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, gateway.ID), ErrUnavailable)
 	require.ErrorIs(t, guard.CheckGatewayAttachment(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, gateway.ID), ErrApprovalRequired)
 	require.ErrorIs(t, guard.CheckPluginAudience(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, []string{"role:developers", "role:operators"}), ErrApprovalRequired)
 	require.ErrorIs(t, guard.CheckRemoteTarget(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, remoteID, "https://mcp.example.test/changed"), ErrApprovalRequired)
@@ -87,7 +87,7 @@ func TestPrivateGatewayAudienceBlocksEveryone(t *testing.T) {
 		DisplayName: "Gateway", Policy: "required", SortOrder: 0,
 	})
 	require.NoError(t, err)
-	guard := NewGuard(nil, nil)
+	guard := NewGuard(&feature.InMemory{}, NewReportMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)))
 	rollout := RolloutConfig{Mode: ModeLegacy}
 	tx := testenv.BeginTx(t, ctx, fixture.conn)
 	require.NoError(t, guard.CheckGatewayAttachment(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, gateway.ID))
@@ -109,7 +109,7 @@ func TestGuardRemoteTargetKillSwitchWithoutAttachments(t *testing.T) {
 	fixture := newAdmissionFixture(t)
 	_, remoteID := seedAdmissionRemote(t, fixture)
 	tx := testenv.BeginTx(t, t.Context(), fixture.conn)
-	guard := NewGuard(nil, nil)
+	guard := NewGuard(&feature.InMemory{}, NewReportMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)))
 	rollout := RolloutConfig{Mode: ModeLegacy, DirectRemoteDistributionDisabled: true}
 	require.ErrorIs(t, guard.CheckRemoteTarget(t.Context(), tx, rollout, nil, fixture.orgID, fixture.projectID, remoteID, "https://mcp.example.test/changed"), ErrDistributionDisabled)
 	require.NoError(t, guard.CheckRemoteTarget(t.Context(), tx, rollout, nil, fixture.orgID, fixture.projectID, uuid.New(), "https://mcp.example.test/changed"))
@@ -123,7 +123,7 @@ func TestGuardPublicVisibilityCannotUseOrganisationApproval(t *testing.T) {
 	seedDecision(t, fixture, "https://mcp.example.test/server", "approved", []string{urn.PrincipalWildcard})
 	tx := testenv.BeginTx(t, t.Context(), fixture.conn)
 	reports := &capturedReports{outcomes: nil}
-	guard := NewGuard(nil, reports)
+	guard := NewGuard(&feature.InMemory{}, reports)
 	require.ErrorIs(t, guard.CheckPublicVisibility(t.Context(), tx, RolloutConfig{Mode: ModeEnforce}, nil, fixture.orgID, fixture.projectID, serverID), ErrApprovalRequired)
 	require.NoError(t, guard.CheckPublicVisibility(t.Context(), tx, RolloutConfig{Mode: ModeReport}, nil, fixture.orgID, fixture.projectID, serverID))
 	require.Equal(t, []ReportOutcome{ReportApprovalRequired}, reports.outcomes)
@@ -141,7 +141,7 @@ func TestGuardProspectiveDefaultUsesReservedSlugAudience(t *testing.T) {
 		OrganizationID: fixture.orgID, ProjectID: fixture.projectID, Name: "Reserved", Slug: "default", Description: pgtype.Text{},
 	})
 	require.NoError(t, err)
-	guard := NewGuard(nil, nil)
+	guard := NewGuard(&feature.InMemory{}, NewReportMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)))
 	rollout := RolloutConfig{Mode: ModeEnforce}
 	tx := testenv.BeginTx(t, t.Context(), fixture.conn)
 	require.NoError(t, guard.CheckProspectiveDefaultAttachment(t.Context(), tx, rollout, nil, fixture.orgID, fixture.projectID, serverID))
@@ -160,7 +160,7 @@ func TestGuardProspectiveMissingDefaultSeedsOnlyDefaultProject(t *testing.T) {
 	fixture := newAdmissionFixture(t)
 	serverID, _ := seedAdmissionRemote(t, fixture)
 	seedBlockingPolicy(t, fixture)
-	guard := NewGuard(nil, nil)
+	guard := NewGuard(&feature.InMemory{}, NewReportMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)))
 	rollout := RolloutConfig{Mode: ModeEnforce}
 	tx := testenv.BeginTx(t, t.Context(), fixture.conn)
 	require.ErrorIs(t, guard.CheckProspectiveDefaultAttachment(t.Context(), tx, rollout, nil, fixture.orgID, fixture.projectID, serverID), ErrApprovalRequired)

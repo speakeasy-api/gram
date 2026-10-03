@@ -2,6 +2,7 @@ package mcpmetadata_test
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/url"
 	"os"
@@ -70,7 +71,7 @@ type testInstance struct {
 
 func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestMCPMetadataServiceWithAdmission(t, nil)
+	return newTestMCPMetadataServiceWithAdmission(t, func(context.Context, string) error { return errors.New("private network access disabled") })
 }
 
 func newTestMCPMetadataServiceWithAdmission(t *testing.T, admission func(context.Context, string) error) (context.Context, *testInstance) {

@@ -279,13 +279,11 @@ func (h *ToolCallLogRelayHandler) failMessages(ctx context.Context, messages []t
 			message.fail(err)
 		}
 	}
-	if h.recordsFailed != nil {
-		h.recordsFailed.Add(ctx, int64(len(messages)), metric.WithAttributes(attr.Reason(string(reason))))
-	}
+	h.recordsFailed.Add(ctx, int64(len(messages)), metric.WithAttributes(attr.Reason(string(reason))))
 }
 
 func (h *ToolCallLogRelayHandler) recordDropped(ctx context.Context, count int, reason relayReason) {
-	if h.recordsDropped == nil || count == 0 {
+	if count == 0 {
 		return
 	}
 	h.recordsDropped.Add(ctx, int64(count), metric.WithAttributes(attr.Reason(string(reason))))

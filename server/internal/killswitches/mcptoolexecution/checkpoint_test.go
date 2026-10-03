@@ -38,13 +38,10 @@ func (e *fixedEvaluator) Evaluate(context.Context, killswitches.EvaluationReques
 func TestCheckpointEvaluatesEveryCoveredCallWithRealEvaluator(t *testing.T) {
 	t.Parallel()
 	conn, orgID := newTestDatabase(t, "ks_mcp_checkpoint")
-	registry, err := NewRegistry(conn)
-	require.NoError(t, err)
-	realEvaluator, err := killswitches.NewEvaluator(conn, registry, time.Second, nil, testenv.NewLogger(t))
-	require.NoError(t, err)
+	registry := NewRegistry(conn)
+	realEvaluator := killswitches.NewEvaluator(conn, registry, time.Second, testenv.NewMeterProvider(t), testenv.NewLogger(t))
 	counted := &countingEvaluator{delegate: realEvaluator}
-	checkpoint, err := newCheckpoint(registry, counted, time.Second)
-	require.NoError(t, err)
+	checkpoint := newCheckpoint(registry, counted, time.Second)
 
 	userID := "user_" + uuid.NewString()
 	insertUser(t, conn, userID, false)
@@ -107,13 +104,11 @@ func TestCheckpointEvaluatesEveryCoveredCallWithRealEvaluator(t *testing.T) {
 func TestCheckpointPreservesUnsupportedIdentityAndFailsClosedOnCoverageFailure(t *testing.T) {
 	t.Parallel()
 	conn, orgID := newTestDatabase(t, "ks_mcp_checkpoint_failures")
-	registry, err := NewRegistry(conn)
-	require.NoError(t, err)
+	registry := NewRegistry(conn)
 	noMatch, err := killswitches.NewNoMatchResult(killswitches.NoMatchReasonNoPrescription)
 	require.NoError(t, err)
 	evaluation := &fixedEvaluator{result: noMatch}
-	checkpoint, err := newCheckpoint(registry, evaluation, time.Second)
-	require.NoError(t, err)
+	checkpoint := newCheckpoint(registry, evaluation, time.Second)
 
 	projectID := insertProject(t, conn, orgID, "unsupported-identity", false)
 	serverID := insertMCPServer(t, conn, orgID, projectID, false)
@@ -221,14 +216,12 @@ func TestCheckpointBoundsAllIdentityAndResourceResolution(t *testing.T) {
 func TestCheckpointReturnsEvaluatorInfrastructureFailureWithoutMatch(t *testing.T) {
 	t.Parallel()
 	conn, orgID := newTestDatabase(t, "ks_mcp_checkpoint_evaluator_failure")
-	registry, err := NewRegistry(conn)
-	require.NoError(t, err)
+	registry := NewRegistry(conn)
 	cause := errors.New("database unavailable")
 	failure, err := killswitches.NewInfrastructureFailureResult(cause)
 	require.NoError(t, err)
 	evaluation := &fixedEvaluator{result: failure}
-	checkpoint, err := newCheckpoint(registry, evaluation, time.Second)
-	require.NoError(t, err)
+	checkpoint := newCheckpoint(registry, evaluation, time.Second)
 
 	userID := "user_" + uuid.NewString()
 	insertUser(t, conn, userID, false)

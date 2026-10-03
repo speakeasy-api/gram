@@ -49,9 +49,6 @@ func NewGuard(flags feature.Provider, reports ReportObserver) *Guard {
 }
 
 func (g *Guard) Resolve(ctx context.Context, organizationID, organizationSlug, projectSlug string) (RolloutConfig, error) {
-	if g == nil {
-		return RolloutConfig{}, fmt.Errorf("%w: guard is nil", ErrUnavailable)
-	}
 	config, err := ResolveRollout(ctx, g.flags, organizationID, organizationSlug, projectSlug)
 	if err != nil {
 		return RolloutConfig{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
@@ -60,7 +57,7 @@ func (g *Guard) Resolve(ctx context.Context, organizationID, organizationSlug, p
 }
 
 func (g *Guard) ResolveProject(ctx context.Context, db projectsrepo.DBTX, organizationID, organizationSlug string, projectID uuid.UUID) (RolloutConfig, error) {
-	if db == nil || projectID == uuid.Nil {
+	if projectID == uuid.Nil {
 		return RolloutConfig{}, fmt.Errorf("%w: project rollout identity is incomplete", ErrUnavailable)
 	}
 	project, err := projectsrepo.New(db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: projectID, OrganizationID: organizationID})
@@ -162,9 +159,6 @@ func (g *Guard) CheckGatewayAttachment(ctx context.Context, tx pgx.Tx, rollout R
 	if len(targets) == 0 {
 		return nil
 	}
-	if g == nil {
-		return unavailable(errors.New("distribution admission guard is missing"))
-	}
 	if err := requireUsableRollout(rollout, rolloutErr); err != nil {
 		return err
 	}
@@ -205,9 +199,6 @@ func (g *Guard) CheckGatewayMemberAddition(ctx context.Context, tx pgx.Tx, rollo
 	}
 	if target == "" {
 		return unavailable(errors.New("direct-remote gateway member has no live remote URL"))
-	}
-	if g == nil {
-		return unavailable(errors.New("distribution admission guard is missing"))
 	}
 	if err := requireUsableRollout(rollout, rolloutErr); err != nil {
 		return err
@@ -348,7 +339,7 @@ func (g *Guard) CheckPublicVisibility(ctx context.Context, tx pgx.Tx, rollout Ro
 	if rollout.Mode == ModeEnforce {
 		return ErrApprovalRequired
 	}
-	if rollout.Mode == ModeReport && g.reports != nil {
+	if rollout.Mode == ModeReport {
 		g.reports.RecordReport(ctx, ReportApprovalRequired)
 	}
 	return nil
@@ -384,7 +375,7 @@ func (g *Guard) checkURL(ctx context.Context, tx pgx.Tx, rollout RolloutConfig, 
 		return nil
 	}
 	outcome := ReportUnavailable
-	if rollout.Mode == ModeReport && g.reports != nil {
+	if rollout.Mode == ModeReport {
 		defer func() { g.reports.RecordReport(ctx, outcome) }()
 	}
 	canonical, ok := shadowmcp.CanonicalizeInventoryURL(rawURL)

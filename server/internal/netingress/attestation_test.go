@@ -81,7 +81,7 @@ func TestAttestationVerifierSuccessAndCache(t *testing.T) {
 	ingress := Ingress{ID: uuid.New(), OrganizationID: "org_123", Provider: ProviderTailscale, DNSName: "private.example.ts.net"}
 	reviewer := &fakeTokenReviewer{response: authenticatedTokenReview(DefaultTokenAudience, "system:serviceaccount:attestor-ns:attestor-sa")}
 	lookup := &fakeAttestorLookup{ingress: ingress}
-	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, 30*time.Second)
+	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, 30*time.Second, newTestTelemetry(t))
 	verifier.now = func() time.Time { return now }
 
 	got, err := verifier.Verify(t.Context(), token, "10.0.0.1:1234")
@@ -109,7 +109,7 @@ func TestAttestationVerifierCacheBoundedByTokenExpiry(t *testing.T) {
 	token := unsignedToken(t, now.Add(5*time.Second))
 	reviewer := &fakeTokenReviewer{response: authenticatedTokenReview(DefaultTokenAudience, "system:serviceaccount:ns:sa")}
 	lookup := &fakeAttestorLookup{ingress: Ingress{ID: uuid.New()}}
-	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Minute)
+	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Minute, newTestTelemetry(t))
 	verifier.now = func() time.Time { return current }
 
 	_, err := verifier.Verify(t.Context(), token, "10.0.0.1:1234")
@@ -148,7 +148,7 @@ func TestAttestationVerifierRejectsInvalidReview(t *testing.T) {
 			t.Parallel()
 			reviewer := &fakeTokenReviewer{response: test.review, err: test.reviewErr}
 			lookup := &fakeAttestorLookup{ingress: Ingress{ID: uuid.New()}}
-			verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Second)
+			verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Second, newTestTelemetry(t))
 			verifier.now = func() time.Time { return now }
 			_, err := verifier.Verify(t.Context(), test.token, "10.0.0.1:1234")
 			require.Error(t, err)
@@ -166,7 +166,7 @@ func TestAttestationVerifierNegativeCacheAndBoundedSize(t *testing.T) {
 	current := now
 	reviewer := &fakeTokenReviewer{response: &authenticationv1.TokenReview{}}
 	lookup := &fakeAttestorLookup{}
-	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Minute)
+	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Minute, newTestTelemetry(t))
 	verifier.now = func() time.Time { return current }
 
 	invalid := unsignedToken(t, now.Add(time.Minute))
@@ -198,7 +198,7 @@ func TestAttestationVerifierRateLimitIsRetryableAndNotCached(t *testing.T) {
 	token := unsignedToken(t, now.Add(time.Minute))
 	reviewer := &fakeTokenReviewer{response: authenticatedTokenReview(DefaultTokenAudience, "system:serviceaccount:ns:sa")}
 	lookup := &fakeAttestorLookup{ingress: Ingress{ID: uuid.New()}}
-	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Minute)
+	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Minute, newTestTelemetry(t))
 	verifier.now = func() time.Time { return now }
 	verifier.sourceLimiters["10.0.0.1"] = rate.NewLimiter(0, 0)
 
@@ -220,7 +220,7 @@ func TestAttestationVerifierLookupAndCacheRecheckFailures(t *testing.T) {
 	token := unsignedToken(t, now.Add(time.Minute))
 	reviewer := &fakeTokenReviewer{response: authenticatedTokenReview(DefaultTokenAudience, "system:serviceaccount:ns:sa")}
 	lookup := &fakeAttestorLookup{ingress: Ingress{ID: uuid.New()}}
-	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Minute)
+	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Minute, newTestTelemetry(t))
 	verifier.now = func() time.Time { return current }
 
 	lookup.byAttestorErr = ErrIngressUnavailable
@@ -268,7 +268,7 @@ func TestAttestationVerifierCoalescesConcurrentRechecks(t *testing.T) {
 		recheckStarted: make(chan struct{}, 1),
 		recheckRelease: make(chan struct{}),
 	}
-	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Minute)
+	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Minute, newTestTelemetry(t))
 	verifier.now = func() time.Time { return current }
 	joined := make(chan struct{}, requests)
 	verifier.recheckJoined = func() { joined <- struct{}{} }
@@ -316,7 +316,7 @@ func TestAttestationVerifierCanceledWaiterDoesNotCancelSharedRecheck(t *testing.
 		recheckStarted: make(chan struct{}, 1),
 		recheckRelease: make(chan struct{}),
 	}
-	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Minute)
+	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Minute, newTestTelemetry(t))
 	verifier.now = func() time.Time { return current }
 	_, err := verifier.Verify(t.Context(), token, "10.0.0.1")
 	require.NoError(t, err)
@@ -355,6 +355,7 @@ func TestAttestationVerifierGlobalRateLimitBoundsSourceChurn(t *testing.T) {
 		&fakeAttestorLookup{ingress: Ingress{ID: uuid.New()}},
 		DefaultTokenAudience,
 		time.Minute,
+		newTestTelemetry(t),
 	)
 	verifier.now = func() time.Time { return now }
 	verifier.globalLimiter = rate.NewLimiter(0, 1)
@@ -366,14 +367,6 @@ func TestAttestationVerifierGlobalRateLimitBoundsSourceChurn(t *testing.T) {
 		ID:        "second",
 	}), "10.0.0.2")
 	require.ErrorContains(t, err, "rate limit")
-}
-
-func TestAttestationVerifierFailsClosedWhenUnconfigured(t *testing.T) {
-	t.Parallel()
-
-	verifier := NewAttestationVerifier(nil, nil, "", 0)
-	_, err := verifier.Verify(t.Context(), "opaque", "10.0.0.1:1234")
-	require.ErrorIs(t, err, ErrAttestationRejected)
 }
 
 func authenticatedTokenReview(audience, subject string) *authenticationv1.TokenReview {

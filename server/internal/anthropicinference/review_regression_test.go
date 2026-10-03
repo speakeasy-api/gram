@@ -16,7 +16,7 @@ func TestServiceArchivesBeforeCheckpointLoadFailure(t *testing.T) {
 	loadErr := errors.New("checkpoint unavailable")
 	store := &memoryStore{loadErr: loadErr}
 	scanner := &recordingScanner{}
-	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanner}
+	service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: store, scanner: scanner}
 	_, err := service.Process(t.Context(), Config{}, exampleFrame())
 	require.ErrorIs(t, err, loadErr)
 	require.Len(t, store.saved, 1)
@@ -28,7 +28,7 @@ func TestServiceOperationIDsStableAcrossAcceptedMultiBlockHistory(t *testing.T) 
 	t.Parallel()
 	store := &memoryStore{}
 	scanner := &recordingScanner{}
-	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanner}
+	service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: store, scanner: scanner}
 	frame := exampleFrame()
 	frame.Messages = []Message{
 		{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"first"},{"type":"text","text":"second"}]`)},

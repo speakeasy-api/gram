@@ -82,7 +82,7 @@ func TestRotationSnapshot_AllowsMetadataRefreshDuringHTTP(t *testing.T) {
 			enc := testenv.NewEncryptionClient(t)
 			base, err := url.Parse(testServerURL)
 			require.NoError(t, err)
-			revoker := remotesessions.NewUpstreamRevoker(logger, tracer, meter, ti.conn, enc, policy, nil)
+			revoker := remotesessions.NewUpstreamRevoker(logger, tracer, meter, ti.conn, enc, policy, ti.tunnels)
 			rotator := remotesessions.NewClientRotator(logger, ti.conn, enc, policy, nil, ti.redisCache, base, revoker, audit.NewLogger(), nil)
 			done := make(chan error, 1)
 			go func() {

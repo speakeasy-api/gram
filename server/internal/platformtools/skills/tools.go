@@ -35,10 +35,6 @@ func (t *Create) Descriptor() core.ToolDescriptor {
 }
 
 func (t *Create) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if t.skills == nil {
-		return fmt.Errorf("skills service not configured")
-	}
-
 	input := createInput{Content: ""}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
@@ -85,10 +81,6 @@ func (t *List) Descriptor() core.ToolDescriptor {
 }
 
 func (t *List) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if t.skills == nil {
-		return fmt.Errorf("skills service not configured")
-	}
-
 	input := listInput{Cursor: nil, Limit: 50}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
@@ -144,10 +136,6 @@ func (t *Get) Descriptor() core.ToolDescriptor {
 }
 
 func (t *Get) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if t.skills == nil {
-		return fmt.Errorf("skills service not configured")
-	}
-
 	input := getInput{ID: ""}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
@@ -198,10 +186,6 @@ func (t *ListVersions) Descriptor() core.ToolDescriptor {
 }
 
 func (t *ListVersions) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if t.skills == nil {
-		return fmt.Errorf("skills service not configured")
-	}
-
 	input := listVersionsInput{ID: "", Cursor: nil, Limit: 20}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
@@ -264,10 +248,6 @@ func (t *ListDistributions) Descriptor() core.ToolDescriptor {
 }
 
 func (t *ListDistributions) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if t.skills == nil {
-		return fmt.Errorf("skills service not configured")
-	}
-
 	input := listDistributionsInput{SkillID: nil, PluginID: nil, Cursor: nil, Limit: 20}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
@@ -327,10 +307,6 @@ func (t *Distribute) Descriptor() core.ToolDescriptor {
 }
 
 func (t *Distribute) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if t.skills == nil {
-		return fmt.Errorf("skills service not configured")
-	}
-
 	input := distributeInput{ID: "", PluginID: nil, AssistantID: nil, PinnedVersionID: nil}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
@@ -398,10 +374,6 @@ func (t *Undistribute) Descriptor() core.ToolDescriptor {
 }
 
 func (t *Undistribute) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if t.skills == nil {
-		return fmt.Errorf("skills service not configured")
-	}
-
 	input := undistributeInput{ID: "", PluginID: nil, AssistantID: nil}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err

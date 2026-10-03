@@ -3,7 +3,6 @@ package usage
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 
@@ -53,9 +52,6 @@ func (h *EnterpriseTrialConversionKeyReconcileHandler) Handle(ctx context.Contex
 	if payload.OrganizationID != organizationID || payload.SubjectID != organizationID || payload.SubjectType != "organization" {
 		h.logger.ErrorContext(ctx, "dropping mismatched enterprise trial conversion key reconciliation event", attr.SlogOrganizationID(organizationID), attr.SlogOutboxPublicID(eventID))
 		return nil
-	}
-	if h.scheduler == nil {
-		return errors.New("enterprise trial conversion key reconciliation scheduler is unavailable")
 	}
 	if err := h.scheduler.ScheduleEnterpriseTrialConversionKeyReconciliation(ctx, eventID, organizationID); err != nil {
 		return fmt.Errorf("schedule enterprise trial conversion key reconciliation: %w", err)

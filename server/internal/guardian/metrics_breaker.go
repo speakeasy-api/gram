@@ -66,19 +66,17 @@ func newCircuitBreakerMetrics(logger *slog.Logger, meter metric.Meter) *circuitB
 func (m *circuitBreakerMetrics) recordTransition(ctx context.Context, key Partition, from, to BreakerState, cause string) {
 	attrs := partitionAttrs(key)
 
-	if m.transitions != nil {
-		m.transitions.Add(ctx, 1, metric.WithAttributes(append(attrs,
-			attr.ResilienceBreakerState(to.String()),
-			attr.ResilienceBreakerPreviousState(from.String()),
-			attr.ResilienceBreakerTransitionCause(cause),
-		)...))
-	}
+	m.transitions.Add(ctx, 1, metric.WithAttributes(append(attrs,
+		attr.ResilienceBreakerState(to.String()),
+		attr.ResilienceBreakerPreviousState(from.String()),
+		attr.ResilienceBreakerTransitionCause(cause),
+	)...))
 
 	// The open-circuits gauge deliberately excludes the cause attribute: an
 	// increment and its matching decrement must land on the same series to
 	// cancel out, regardless of what caused each transition.
 
-	if m.openCircuits != nil && from != to {
+	if from != to {
 		if to == BreakerStateOpen {
 			m.openCircuits.Add(ctx, 1, metric.WithAttributes(attrs...))
 		} else if from == BreakerStateOpen {
@@ -88,10 +86,6 @@ func (m *circuitBreakerMetrics) recordTransition(ctx context.Context, key Partit
 }
 
 func (m *circuitBreakerMetrics) recordRequest(ctx context.Context, key Partition, allowed bool) {
-	if m.requests == nil {
-		return
-	}
-
 	outcome := outcomeRejected
 	if allowed {
 		outcome = outcomeAllowed

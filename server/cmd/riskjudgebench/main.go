@@ -153,7 +153,6 @@ func main() {
 		&openrouter.PlatformKeyResolver{Provisioner: prov},
 		nil, // message capture  (nil-guarded)
 		nil, // usage tracking   (nil-guarded)
-		nil, // chat title gen   (nil-guarded)
 		nil, // telemetry logger (nil-guarded)
 	)
 	_ = metricnoop.NewMeterProvider() // (ppopenrouter.New would need this; we call the client directly)
@@ -284,9 +283,11 @@ type devProvisioner struct{ apiKey string }
 func (d *devProvisioner) ProvisionAPIKey(_ context.Context, _ string, _ openrouter.KeyType) (string, error) {
 	return d.apiKey, nil
 }
+
 func (d *devProvisioner) RefreshAPIKeyLimit(_ context.Context, _ string, _ openrouter.KeyType, _ *int) (int, error) {
 	return 0, fmt.Errorf("not implemented in bench")
 }
+
 func (*devProvisioner) AddAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
 	return openrouter.DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}, nil
 }
@@ -298,15 +299,19 @@ func (*devProvisioner) RemoveAPIKeyDisableCause(context.Context, string, openrou
 func (d *devProvisioner) DisableAPIKey(_ context.Context, _ string, _ openrouter.KeyType) error {
 	return fmt.Errorf("not implemented in bench")
 }
+
 func (d *devProvisioner) GetCreditsUsed(_ context.Context, _ string, _ openrouter.KeyType) (float64, int, error) {
 	return 0, 0, fmt.Errorf("not implemented in bench")
 }
+
 func (d *devProvisioner) GetKeyUsage(_ context.Context, _ string) (float64, *int64, error) {
 	return 0, nil, fmt.Errorf("not implemented in bench")
 }
+
 func (d *devProvisioner) ReconcileMonthlyCredits(_ context.Context, _ string, _ openrouter.KeyType, currentLimit int64, _ int64, _ *int64) (int64, error) {
 	return currentLimit, nil
 }
+
 func (d *devProvisioner) GetModelUsage(_ context.Context, _ string, _ string, _ openrouter.KeyType) (*openrouter.ModelUsage, error) {
 	return nil, fmt.Errorf("not implemented in bench")
 }
@@ -484,18 +489,21 @@ func accuracy(s *modelStats) float64 {
 	}
 	return float64(s.tp+s.tn) / float64(n)
 }
+
 func precision(s *modelStats) float64 {
 	if d := s.tp + s.fp; d > 0 {
 		return float64(s.tp) / float64(d)
 	}
 	return 0
 }
+
 func recall(s *modelStats) float64 {
 	if d := s.tp + s.fn; d > 0 {
 		return float64(s.tp) / float64(d)
 	}
 	return 0
 }
+
 func f1(s *modelStats) float64 {
 	p, r := precision(s), recall(s)
 	if p+r == 0 {
@@ -503,6 +511,7 @@ func f1(s *modelStats) float64 {
 	}
 	return 2 * p * r / (p + r)
 }
+
 func avgTok(s *modelStats) int {
 	if s.tokenN == 0 {
 		return 0

@@ -3,12 +3,13 @@ package mcpregistry
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/santhosh-tekuri/jsonschema/v6"
-	"github.com/speakeasy-api/gram/server/internal/mcpregistry/contract"
-	"github.com/stretchr/testify/require"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry/contract"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRecordContract(t *testing.T) {

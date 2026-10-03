@@ -21,6 +21,7 @@ import (
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -29,6 +30,7 @@ import (
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -132,17 +134,17 @@ func runLLMLaneBatchWithMeter(t *testing.T, conn *pgxpool.Pool, td testData, fla
 		llmPub = capturedLLMPub
 	}
 
-	ab, err := risk_analysis.NewAnalyzeBatch(
+	ab := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		meterProvider,
 		conn,
-		nil,
+		assetstest.NewTestBlobStore(t),
 		piiScanner,
-		nil,
-		nil,
-		nil,
-		nil,
+		promptinjection.NewScanner(testenv.NewLogger(t), promptinjection.NoopClassifier),
+		newShadowMCPClient(t, conn),
+		newMCPProvenanceLookup(t),
+		(&recordingPromptJudge{}).Evaluate,
 		flags,
 		presidioPub,
 		gitleaksPub,
@@ -153,12 +155,11 @@ func runLLMLaneBatchWithMeter(t *testing.T, conn *pgxpool.Pool, td testData, fla
 		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
-		nil,
-		nil,
+		mustPresetLibrary(t),
+		newShadowMCPBypassChecker(t, conn),
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		analyzerEnabled,
 	)
-	require.NoError(t, err)
 
 	var ts testsuite.WorkflowTestSuite
 	env := ts.NewTestActivityEnvironment()

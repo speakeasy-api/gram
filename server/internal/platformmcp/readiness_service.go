@@ -49,7 +49,7 @@ func NewReadinessService(store *RegistrationStore, gate CatalogRegistrationGateC
 }
 
 func (s *ReadinessService) WithTelemetry(telemetry LifecycleTelemetry) *ReadinessService {
-	if s != nil && telemetry != nil {
+	if telemetry != nil {
 		s.telemetry = telemetry
 	}
 	return s
@@ -67,7 +67,7 @@ func (s *ReadinessService) GetReadiness(ctx context.Context, principal Principal
 }
 
 func (s *ReadinessService) getReadiness(ctx context.Context, principal Principal, projectSlug, registrationID string, force, consumeBudget bool) (ResolvedProject, Readiness, bool, error) {
-	if s == nil || s.store == nil || s.gate == nil || (force && s.adapters == nil) || (consumeBudget && !s.repairBudget.valid()) || projectSlug == "" || registrationID == "" {
+	if projectSlug == "" || registrationID == "" {
 		return ResolvedProject{}, Readiness{}, false, ErrUnavailable
 	}
 	if consumeBudget {
@@ -102,9 +102,6 @@ func (s *ReadinessService) getReadiness(ctx context.Context, principal Principal
 		return project, readiness, found, err
 	}
 
-	if s.forceLimiter == nil {
-		return ResolvedProject{}, Readiness{}, false, ErrUnavailable
-	}
 	limitKey := principal.OrganizationID + ":" + parsedRegistrationID.String()
 	decision, err := s.forceLimiter.Allow(ctx, limitKey)
 	if err != nil {

@@ -34,7 +34,7 @@ func NewSelectedUseRecorder(db *pgxpool.Pool) *SelectedUseRecorder {
 }
 
 func (r *SelectedUseRecorder) RecordSuccessfulToolCall(ctx context.Context, observation toolcallobserver.SuccessObservation) {
-	if r == nil || r.db == nil || observation.OrganizationID == "" || observation.UserID == "" || observation.ProjectID == uuid.Nil || observation.MCPServerID == uuid.Nil || !validSelectedUseToolName(observation.ToolName) {
+	if observation.OrganizationID == "" || observation.UserID == "" || observation.ProjectID == uuid.Nil || observation.MCPServerID == uuid.Nil || !validSelectedUseToolName(observation.ToolName) {
 		return
 	}
 

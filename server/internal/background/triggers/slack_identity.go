@@ -41,7 +41,7 @@ func slackBotIdentityCacheKey(tokenHash string) string {
 // Failing to resolve them leaves the event unchanged.
 func (a *App) withSlackBotIdentity(ctx context.Context, instance triggerrepo.TriggerInstance, env map[string]string, event any) any {
 	evt, ok := event.(slackTriggerEvent)
-	if !ok || a.slackClient == nil || instance.DefinitionSlug != DefinitionSlugSlack {
+	if !ok || instance.DefinitionSlug != DefinitionSlugSlack {
 		return event
 	}
 	token := toolconfig.CIEnvFrom(env).Get("SLACK_BOT_TOKEN")

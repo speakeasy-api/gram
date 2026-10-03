@@ -119,9 +119,9 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
-	telemetryLogger := telemetry.NewLogger(ctx, logger, tracerProvider, testenv.NewMeterProvider(t), chConn, enabled, enabled, nil, telemetry.NewNoopLogPublisher(logger))
+	telemetryLogger := telemetry.NewLogger(ctx, logger, tracerProvider, testenv.NewMeterProvider(t), chConn, enabled, enabled, telemetry.NewUserInfoResolver(logger, conn, testenv.NewMemoryCache()), telemetry.NewNoopLogPublisher(logger))
 
-	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, blobs, telemetryLogger, nil)
+	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, blobs, telemetryLogger, testenv.NewGrowthEmitter(t, logger, conn))
 
 	return ctx, &testInstance{
 		service:   svc,

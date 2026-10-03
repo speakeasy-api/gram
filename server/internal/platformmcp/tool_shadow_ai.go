@@ -15,10 +15,6 @@ const (
 )
 
 func registerShadowAITools(reg *Registrar, service *ShadowAIService) {
-	if !service.valid() {
-		registerUnavailableShadowAITools(reg)
-		return
-	}
 	addTool(reg, &mcp.Tool{
 		Name:        operationListShadowAIInventory,
 		Title:       "List Shadow AI Inventory",
@@ -39,15 +35,6 @@ func registerShadowAITools(reg *Registrar, service *ShadowAIService) {
 			return service.ListLibrary(ctx, principal, input)
 		})
 	})
-}
-
-func registerUnavailableShadowAITools(reg *Registrar) {
-	for _, tool := range []struct{ name, title, description string }{
-		{operationListShadowAIInventory, "List Shadow AI Inventory", "List detected AI tools and their gateway access decisions. This is not switched on for your organization yet."},
-		{operationListAIScanLibrary, "List AI Scan Library", "List the AI tools device agents probe for. This is not switched on for your organization yet."},
-	} {
-		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: readOnlyAnnotations()}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, unavailableTool(shadowAIFeature))
-	}
 }
 
 // shadowAIToolResult projects the service's sentinels into a refusal the model

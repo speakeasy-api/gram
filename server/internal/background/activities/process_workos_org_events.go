@@ -52,7 +52,6 @@ type ProcessWorkOSOrganizationEventsResult struct {
 
 // IdentityMapRefreshSignaler requests an immediate ClickHouse identity map
 // sync after directory changes, instead of waiting out the sync schedule.
-// Optional: nil means changes converge at the next scheduled tick.
 type IdentityMapRefreshSignaler interface {
 	SignalIdentityMapRefresh(ctx context.Context) error
 }
@@ -186,7 +185,7 @@ type postCommitEffects struct {
 }
 
 func (p *ProcessWorkOSOrganizationEvents) runPostCommitEffects(ctx context.Context, logger *slog.Logger, effects postCommitEffects) {
-	if effects.refreshIdentityMap && p.identityMap != nil {
+	if effects.refreshIdentityMap {
 		if err := p.identityMap.SignalIdentityMapRefresh(ctx); err != nil {
 			logger.WarnContext(ctx, "failed to signal identity map refresh", attr.SlogError(err))
 		}

@@ -4,6 +4,10 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
+
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
@@ -26,11 +30,16 @@ func TestMethodDispatchByRevision(t *testing.T) {
 					t.Parallel()
 					_, payload := newClientIdentityFixture(t)
 					payload.protocolVersion = mcpversions.Resolution{Declared: version, InEffect: version}
-					req := &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.NumberID(7), Method: method,
-						Params: json.RawMessage(`{"protocolVersion":"` + version + `"}`)}
+					req := &rawRequest{
+						JSONRPC: "2.0", ID: mcpjsonrpc.NumberID(7), Method: method,
+						Params: json.RawMessage(`{"protocolVersion":"` + version + `"}`),
+					}
 					logger := testenv.NewLogger(t)
-					service := &Service{logger: logger, sessionClientInfo: sessionclientinfo.NewStore(nil, 1),
-						toolsetsRepo: toolsets_repo.New(failingDBTX{}), mcpMetadataRepo: metadata_repo.New(failingDBTX{})}
+					service := &Service{
+						logger: logger, metrics: mcpmetrics.NewMetrics(testenv.NewMeterProvider(t).Meter("test"), logger),
+						sessionClientInfo: sessionclientinfo.NewStore(redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()}), 1),
+						toolsetsRepo:      toolsets_repo.New(failingDBTX{}), mcpMetadataRepo: metadata_repo.New(failingDBTX{}),
+					}
 					if method == mcpversions.MethodServerDiscover {
 						// A discovery path must not invoke the session store.
 						service.sessionClientInfo = nil
@@ -105,7 +114,7 @@ func TestUnavailableMethodNotificationHasNoResponse(t *testing.T) {
 	t.Parallel()
 	for _, method := range []string{mcpversions.MethodNotificationsInitialized, mcpversions.MethodPing, "unknown/method"} {
 		req := &rawRequest{Method: method}
-		body, err := (&Service{}).handlePlatformToolsetRequest(t.Context(), nil, platformtools.Toolset{}, req, "",
+		body, err := (&Service{logger: testenv.NewLogger(t), metrics: mcpmetrics.NewMetrics(testenv.NewMeterProvider(t).Meter("test"), testenv.NewLogger(t))}).handlePlatformToolsetRequest(t.Context(), nil, platformtools.Toolset{}, req, "",
 			&mcpversions.Resolution{Declared: mcpversions.Version20260728, InEffect: mcpversions.Version20260728})
 		require.NoError(t, err)
 		require.Empty(t, body)
@@ -160,7 +169,7 @@ func TestInitializeDeclaring20260728CannotStartHandshake(t *testing.T) {
 	// invoke the handshake, even before the general mirrored-header validator runs.
 	resolution := mcpversions.Resolve(mcpversions.Version20251125, mcpversions.SupportedHostedToolset())
 	require.False(t, initializeNegotiable(req, resolution))
-	body, err := (&Service{}).handlePlatformToolsetRequest(t.Context(), nil, platformtools.Toolset{}, req, "", &resolution)
+	body, err := (&Service{logger: testenv.NewLogger(t), metrics: mcpmetrics.NewMetrics(testenv.NewMeterProvider(t).Meter("test"), testenv.NewLogger(t))}).handlePlatformToolsetRequest(t.Context(), nil, platformtools.Toolset{}, req, "", &resolution)
 	require.Error(t, err)
 	require.Empty(t, body)
 	require.Equal(t, mcpversions.Version20251125, resolution.InEffect)

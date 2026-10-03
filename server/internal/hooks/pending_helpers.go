@@ -168,18 +168,16 @@ func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeP
 		return fmt.Errorf("invalid project ID in session metadata: %w", err)
 	}
 
-	if s.telemetryLogger != nil {
-		s.telemetryLogger.Log(ctx, telemetry.LogParams{
-			Timestamp:  time.Now(),
-			ToolInfo:   telemetryToolInfo(metadata, projectID, toolName),
-			UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
-			Attributes: attrs,
-		})
+	s.telemetryLogger.Log(ctx, telemetry.LogParams{
+		Timestamp:  time.Now(),
+		ToolInfo:   telemetryToolInfo(metadata, projectID, toolName),
+		UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
+		Attributes: attrs,
+	})
 
-		s.logger.DebugContext(ctx, "Wrote hook to ClickHouse with metadata",
-			attr.SlogEvent("hook_written"),
-		)
-	}
+	s.logger.DebugContext(ctx, "Wrote hook to ClickHouse with metadata",
+		attr.SlogEvent("hook_written"),
+	)
 
 	if payload.HookEventName == "PreToolUse" {
 		if err := s.writeToolCallRequestToPG(ctx, payload, metadata); err != nil {
@@ -334,10 +332,6 @@ type MetricDataPoint struct {
 
 // writeMetricsToClickHouse writes Claude Code metrics to ClickHouse telemetry_logs
 func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.MetricsPayload, orgID string, projectID string) {
-	if s.telemetryLogger == nil {
-		return
-	}
-
 	parsedProjectID, err := uuid.Parse(projectID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "Invalid project ID for metrics", attr.SlogError(err))

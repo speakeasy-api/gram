@@ -70,6 +70,7 @@ type testInstance struct {
 	service        *mcpendpoints.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
+	flags          *feature.InMemory
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -91,13 +92,16 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	auditLogger := audit.NewLogger()
+	temporalEnv, _ := infra.NewTemporalEnv(t)
 
-	svc := mcpendpoints.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, false)
+	flags := new(feature.InMemory)
+	svc := mcpendpoints.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, temporalEnv, false, admission.NewGuard(flags, admission.NewReportMetrics(testenv.NewMeterProvider(t), logger)))
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
+		flags:          flags,
 	}
 }
 
@@ -156,37 +160,47 @@ func newTestServiceWithGitHubPublishing(t *testing.T) (context.Context, *testIns
 	temporalEnv, _ := infra.NewTemporalEnv(t)
 	auditLogger := audit.NewLogger()
 	f := &feature.InMemory{}
+	distributionAdmission := admission.NewGuard(f, admission.NewReportMetrics(meterProvider, logger))
 
 	ghConfig := &plugins.GitHubConfig{
 		Client:         fakeGitHubPublisher{},
 		Org:            "test-org",
 		InstallationID: 12345,
 	}
-	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai", f)
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
 
-	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider,
-		background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient, auditLogger),
-		&background.WorkerOptions{PluginPublisher: pluginPublisher},
-	)
+	pluginPublisher := plugins.NewPublisher(logger, conn, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, ghConfig, "local", "https://app.getgram.ai", f, distributionAdmission)
+
+	billingClient := billing.NewStubClient(logger, tracerProvider)
+	worker, err := background.NewDeploymentProcessingWorker(temporalEnv, logger, tracerProvider, meterProvider, background.DeploymentProcessingDeps{
+		GuardianPolicy:    guardianPolicy,
+		DB:                conn,
+		FeatureProvider:   f,
+		AssetStorage:      assetStorage,
+		EncryptionClient:  enc,
+		FunctionsDeployer: funcs,
+		MCPRegistryClient: mcpRegistryClient,
+		BillingRepository: billingClient,
+	})
+	require.NoError(t, err)
+	worker.RegisterPluginPublishing(pluginPublisher)
 	t.Cleanup(func() {
 		worker.Stop()
 	})
 	require.NoError(t, worker.Start(), "start temporal worker")
 
-	redisClient, err := infra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-
-	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := mcpendpoints.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, temporalEnv, true)
+	svc := mcpendpoints.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, temporalEnv, true, distributionAdmission)
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
+		flags:          f,
 	}, temporalEnv
 }
 
@@ -206,11 +220,9 @@ func seedBlockedDirectRemoteDistribution(t *testing.T, ctx context.Context, ti *
 		Status: "registered", McpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
 	})
 	require.NoError(t, err)
-	flags := new(feature.InMemory)
-	flags.SetFlag(feature.FlagPlatformMCPShadowAudienceEnforcement, authCtx.ActiveOrganizationID, true)
-	flags.SetFlagPayload(feature.FlagPlatformMCPShadowAudienceEnforcement, authCtx.ActiveOrganizationID, []byte(`{"mode":"enforce"}`))
-	flags.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, authCtx.ActiveOrganizationID, true)
-	ti.service.WithDistributionAdmission(admission.NewGuard(flags, nil))
+	ti.flags.SetFlag(feature.FlagPlatformMCPShadowAudienceEnforcement, authCtx.ActiveOrganizationID, true)
+	ti.flags.SetFlagPayload(feature.FlagPlatformMCPShadowAudienceEnforcement, authCtx.ActiveOrganizationID, []byte(`{"mode":"enforce"}`))
+	ti.flags.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, authCtx.ActiveOrganizationID, true)
 }
 
 func withExactAuthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {

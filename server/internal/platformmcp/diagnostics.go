@@ -106,71 +106,34 @@ type DiagnosticsService struct {
 }
 
 // NewDiagnosticsService composes the overview-first entry points. The bounded
-// drill-down tools are attached separately by WithDrilldown, so a deployment
-// that cannot mint subject references serves the overview and withholds the
-// row-level reads rather than serving them unbound.
-func NewDiagnosticsService(db *pgxpool.Pool, telemetry DiagnosticsTelemetryReader, sessionCapture FeatureChecker, reader DiagnosticsReader, readiness *ReadinessService, budget OperationBudget) *DiagnosticsService {
-	var sessions ProjectOverviewSessionReader
-	if db != nil {
-		sessions = chatrepo.New(db)
-	}
+// drill-down tools are attached separately by WithDrilldown.
+func NewDiagnosticsService(db *pgxpool.Pool, telemetry DiagnosticsTelemetryReader, sessionCapture FeatureChecker, reader DiagnosticsReader, readiness *ReadinessService, budget OperationBudget, identityGate CanonicalIdentityGate) *DiagnosticsService {
 	return &DiagnosticsService{
 		db:             db,
 		telemetry:      telemetry,
-		sessions:       sessions,
+		sessions:       chatrepo.New(db),
 		sessionCapture: sessionCapture,
 		reader:         reader,
 		readiness:      readiness,
 		budget:         budget,
-		identityGate:   nil,
+		identityGate:   identityGate,
 		now:            time.Now,
 	}
 }
 
-// WithCanonicalIdentityGate applies the telemetry service's rollout-aware
-// identity folding to user attribution without making the ClickHouse repository
-// responsible for feature flags.
-func (s *DiagnosticsService) WithCanonicalIdentityGate(gate CanonicalIdentityGate) *DiagnosticsService {
-	if s != nil {
-		s.identityGate = gate
-	}
-	return s
-}
-
 func (s *DiagnosticsService) canonicalIdentityOrg(ctx context.Context, organizationID string) string {
-	if s == nil || s.identityGate == nil {
-		return ""
-	}
 	return s.identityGate.CanonicalOrgFor(ctx, organizationID)
 }
 
 // WithDrilldown attaches the bounded drill-down reads. Reference key material
-// is required: without it a trace or subject handle could not be bound to the
-// caller's organization and session, and the tools stay unavailable rather than
-// returning unbound identifiers.
+// binds a trace or subject handle to the caller's organization and session.
 func (s *DiagnosticsService) WithDrilldown(drilldown DrilldownTelemetryReader, referenceKeyMaterial string, sensitiveBudget OperationBudget, volume DrilldownVolumeBudget, auditor DrilldownAuditor) *DiagnosticsService {
-	if s == nil || drilldown == nil || !sensitiveBudget.valid() || !volume.valid() || auditor == nil {
-		return s
-	}
-	codec, err := newSubjectReferenceCodec(referenceKeyMaterial)
-	if err != nil {
-		return s
-	}
 	s.drilldown = drilldown
-	s.references = codec
+	s.references = newSubjectReferenceCodec(referenceKeyMaterial)
 	s.sensitiveBudget = sensitiveBudget
 	s.volume = volume
 	s.auditor = auditor
 	return s
-}
-
-// drilldownValid reports whether the bounded drill-down tools are servable.
-func (s *DiagnosticsService) drilldownValid() bool {
-	return s.valid() && s.drilldown != nil && s.references != nil && s.sensitiveBudget.valid() && s.volume.valid() && s.auditor != nil
-}
-
-func (s *DiagnosticsService) valid() bool {
-	return s != nil && s.db != nil && s.telemetry != nil && s.sessions != nil && s.sessionCapture != nil && s.reader != nil && s.budget.valid()
 }
 
 // GetProjectOverviewInput asks for one project's activity. It carries no
@@ -216,9 +179,6 @@ type GetProjectOverviewOutput struct {
 }
 
 func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal Principal, input GetProjectOverviewInput) (GetProjectOverviewOutput, error) {
-	if !s.valid() {
-		return GetProjectOverviewOutput{}, ErrUnavailable
-	}
 	if input.ProjectID == "" {
 		return GetProjectOverviewOutput{}, fmt.Errorf("project_id is required")
 	}
@@ -426,9 +386,6 @@ type GetMCPDiagnosticsOutput struct {
 }
 
 func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Principal, input GetMCPDiagnosticsInput) (GetMCPDiagnosticsOutput, error) {
-	if !s.valid() {
-		return GetMCPDiagnosticsOutput{}, ErrUnavailable
-	}
 	if input.ProjectID == "" || input.MCPID == "" {
 		return GetMCPDiagnosticsOutput{}, fmt.Errorf("project_id and mcp_id are required")
 	}
@@ -542,7 +499,7 @@ func (s *DiagnosticsService) organizationProjectIDs(ctx context.Context, princip
 // unavailable readiness service is reported as "not found", which
 // attributeFault treats as no evidence rather than as a healthy result.
 func (s *DiagnosticsService) currentReadiness(ctx context.Context, principal Principal, mcp MCP) (Readiness, bool) {
-	if s.readiness == nil || mcp.Registration == nil || mcp.Registration.ID == "" || mcp.ProjectSlug == "" {
+	if mcp.Registration == nil || mcp.Registration.ID == "" || mcp.ProjectSlug == "" {
 		return Readiness{}, false
 	}
 	_, readiness, found, err := s.readiness.CurrentReadiness(ctx, principal, mcp.ProjectSlug, mcp.Registration.ID)

@@ -109,9 +109,6 @@ func (s *Service) RevokeSession(ctx context.Context, payload *gen.RevokeSessionP
 	if err != nil {
 		return err
 	}
-	if s.sessionTokens == nil || s.sessionRevoker == nil {
-		return oops.C(oops.CodeUnexpected)
-	}
 	subject := urn.NewAgentSubject(agent.ID)
 	row, err := repo.New(tx).RevokeManagedAgentSession(ctx, repo.RevokeManagedAgentSessionParams{
 		OrganizationID: human.Auth.ActiveOrganizationID, AgentSubject: subject.String(), ID: sessionID,

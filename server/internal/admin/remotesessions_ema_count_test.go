@@ -1,9 +1,10 @@
 package admin
 
 import (
+	"testing"
+
 	adminrsgen "github.com/speakeasy-api/gram/server/gen/admin_remote_sessions"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestIssuerConversionsPreserveEMABindingCounts(t *testing.T) {

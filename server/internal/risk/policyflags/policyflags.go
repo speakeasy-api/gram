@@ -53,9 +53,6 @@ func ProjectFlagEnabled(ctx context.Context, logger *slog.Logger, queries *repo.
 // carry so callers that need the slug for telemetry do not repeat the lookup.
 // Any lookup failure reads as off with an empty slug.
 func ProjectFlagState(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID, flag feature.Flag) (enabled bool, orgSlug string) {
-	if flags == nil {
-		return false, ""
-	}
 	memo, _ := ctx.Value(memoKey{}).(*requestMemo)
 	if memo == nil {
 		state, _ := resolveProjectFlag(ctx, logger, queries, flags, orgID, projectID, flag)
@@ -91,9 +88,6 @@ func ProjectFlagState(ctx context.Context, logger *slog.Logger, queries *repo.Qu
 // empty slug. Under WithRequestMemo the lookup runs once per project and
 // flag for the request.
 func ProjectFlagMode(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID, flag feature.Flag) (mode feature.Variant, orgSlug string) {
-	if flags == nil {
-		return feature.VariantRiskLLMOff, ""
-	}
 	memo, _ := ctx.Value(memoKey{}).(*requestMemo)
 	if memo == nil {
 		resolved, _ := resolveProjectFlagMode(ctx, logger, queries, flags, orgID, projectID, flag)

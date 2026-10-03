@@ -119,11 +119,6 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 
 	startTime := time.Now()
 
-	base := h.rt
-	if base == nil {
-		base = http.DefaultTransport
-	}
-
 	// Capture request headers up front so we have them even if the round trip fails.
 	requestHeaders := make(map[string]string)
 	for key, values := range req.Header {
@@ -140,7 +135,7 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	h.AttrRecorder.RecordUserAgent(req.UserAgent())
 	h.AttrRecorder.RecordRequestHeaders(requestHeaders, false)
 
-	resp, err := base.RoundTrip(req)
+	resp, err := h.rt.RoundTrip(req)
 	// record duration before handling err
 	duration := time.Since(startTime).Seconds()
 	h.AttrRecorder.RecordDuration(duration)

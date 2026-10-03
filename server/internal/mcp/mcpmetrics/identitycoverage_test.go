@@ -59,15 +59,3 @@ func TestIdentityCoverageRecord_ClampsAtRecordSite(t *testing.T) {
 		attr.McpKillswitchResourceClass(KillswitchResourceUnavailable),
 	)
 }
-
-// TestIdentityCoverageRecord_NilSafe pins the documented contract that a nil
-// counter and one whose instrument failed to construct both record safely.
-func TestIdentityCoverageRecord_NilSafe(t *testing.T) {
-	t.Parallel()
-
-	var nilCounter *IdentityCoverageCounter
-	nilCounter.Record(t.Context(), KillswitchSurfaceHosted, KillswitchIdentityActiveUser, KillswitchResourceCanonicalServer)
-
-	empty := &IdentityCoverageCounter{calls: nil}
-	empty.Record(t.Context(), KillswitchSurfaceHosted, KillswitchIdentityActiveUser, KillswitchResourceCanonicalServer)
-}

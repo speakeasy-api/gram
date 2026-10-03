@@ -428,18 +428,6 @@ func TestRecentToolCallTargetOmitsUnclassifiedShadowSource(t *testing.T) {
 	require.Empty(t, target)
 }
 
-func TestOrganizationEventsRequireLogsFeature(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_organization_events_require_logs")
-	require.NoError(t, err)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).
-		WithOrganizationEvents(&recordingEventFeedReader{}, nil, mustParseURL(t, "https://app.getgram.test"))
-	_, err = reader.ListOrganizationEvents(ctx, Principal{OrganizationID: "organization"}, ListOrganizationEventsInput{})
-	require.ErrorIs(t, err, ErrUnavailable)
-}
-
 func TestListOrganizationEventsUsesBoundedSafeProjection(t *testing.T) {
 	t.Parallel()
 

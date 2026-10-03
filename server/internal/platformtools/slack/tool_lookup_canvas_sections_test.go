@@ -57,7 +57,7 @@ func TestLookupCanvasSectionsTool_RequiresCriteria(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewLookupCanvasSectionsTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callLookupCanvasSections,
 	}
 

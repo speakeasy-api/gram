@@ -50,7 +50,7 @@ func TestTeeCompletionStreamOrdersToolCallsByIndex(t *testing.T) {
 		`data: [DONE]`,
 	}, "\n\n") + "\n\n"
 
-	got, err := teeCompletionStream(strings.NewReader(body), nil)
+	got, err := teeCompletionStream(strings.NewReader(body), func(string) {})
 	require.NoError(t, err)
 
 	require.Len(t, got.ToolCalls, 2)
@@ -75,7 +75,7 @@ func TestTeeCompletionStreamSkipsMalformedChunks(t *testing.T) {
 		`data: [DONE]`,
 	}, "\n\n") + "\n\n"
 
-	got, err := teeCompletionStream(strings.NewReader(body), nil)
+	got, err := teeCompletionStream(strings.NewReader(body), func(string) {})
 	require.NoError(t, err)
 	require.Equal(t, "before-after", got.Content)
 }

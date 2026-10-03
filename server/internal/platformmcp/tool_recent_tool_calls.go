@@ -35,10 +35,8 @@ type RecentToolCallReadService struct {
 
 // WithRecentToolCalls enables recent project-scoped Tool Logs summaries.
 func (r *PostgresReader) WithRecentToolCalls(telemetry RecentToolCallReader, dashboardURL *url.URL) *PostgresReader {
-	if telemetry != nil && validDashboardURL(dashboardURL) {
-		copyURL := *dashboardURL
-		r.recentToolCalls = &RecentToolCallReadService{telemetry: telemetry, dashboardURL: &copyURL, now: time.Now}
-	}
+	copyURL := *dashboardURL
+	r.recentToolCalls = &RecentToolCallReadService{telemetry: telemetry, dashboardURL: &copyURL, now: time.Now}
 	return r
 }
 
@@ -71,9 +69,6 @@ type ListRecentToolCallsOutput struct {
 }
 
 func (r *PostgresReader) ListRecentToolCalls(ctx context.Context, principal Principal, input ListRecentToolCallsInput) (ListRecentToolCallsOutput, error) {
-	if r == nil || r.reader == nil || r.recentToolCalls == nil || r.recentToolCalls.telemetry == nil || r.recentToolCalls.now == nil {
-		return ListRecentToolCallsOutput{}, ErrUnavailable
-	}
 	if (input.ProjectID == "") == (input.ProjectSlug == "") {
 		return ListRecentToolCallsOutput{}, fmt.Errorf("exactly one of project_id or project_slug is required")
 	}
@@ -220,13 +215,4 @@ func registerRecentToolCallTools(reg *Registrar, reader *PostgresReader) {
 		output, err := reader.ListRecentToolCalls(ctx, principal, input)
 		return nil, output, err
 	})
-}
-
-func registerUnavailableRecentToolCallTools(reg *Registrar) {
-	addTool(reg, &mcp.Tool{
-		Name:        "list_recent_tool_calls",
-		Title:       "List Recent Tool Calls",
-		Description: "List recent Tool Logs summaries for one project. This is not switched on for your organization yet.",
-		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}, unavailableTool("recent_tool_calls"))
 }

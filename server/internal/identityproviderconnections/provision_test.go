@@ -3,7 +3,6 @@ package identityproviderconnections_test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"testing"
 	"time"
 
@@ -921,29 +920,27 @@ func TestNewProvisioner_RejectsPlaintextServerURL(t *testing.T) {
 	t.Parallel()
 	_, ti := newTestDB(t)
 
-	build := func(serverURL string) error {
-		_, err := identityproviderconnections.NewProvisioner(
-			testenv.NewLogger(t),
-			ti.conn,
-			gcpauth.NewIdentity(gcpauth.NewStubResolver()),
-			provisiontest.NewKMSClients(t).Factory,
-			audit.NewLogger(),
-			identityproviderconnections.Config{
-				KeyRing:               provisiontest.KeyRing,
-				SigningCredentialID:   uuid.New(),
-				SigningServiceAccount: "",
-				ServerURL:             mustURL(t, serverURL),
-			},
-		)
-		if err != nil {
-			return fmt.Errorf("build provisioner: %w", err)
+	build := func(serverURL string) func() {
+		return func() {
+			identityproviderconnections.NewProvisioner(
+				testenv.NewLogger(t),
+				ti.conn,
+				gcpauth.NewIdentity(gcpauth.NewStubResolver()),
+				provisiontest.NewKMSClients(t).Factory,
+				audit.NewLogger(),
+				identityproviderconnections.Config{
+					KeyRing:               provisiontest.KeyRing,
+					SigningCredentialID:   uuid.New(),
+					SigningServiceAccount: "",
+					ServerURL:             mustURL(t, serverURL),
+				},
+			)
 		}
-		return nil
 	}
 
-	require.Error(t, build("http://app.getgram.ai"))
-	require.NoError(t, build("https://app.getgram.ai"))
-	require.NoError(t, build("http://localhost:8080"))
+	require.Panics(t, build("http://app.getgram.ai"))
+	require.NotPanics(t, build("https://app.getgram.ai"))
+	require.NotPanics(t, build("http://localhost:8080"))
 }
 
 func TestProbeSigningCredential_RefusesUnpinnedServiceAccount(t *testing.T) {
