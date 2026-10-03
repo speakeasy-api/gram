@@ -82,27 +82,6 @@ func newToolsListResponseFromWire(t *testing.T, payload string) *proxy.ToolsList
 	}
 }
 
-// requireCallerVarying asserts the wire payload carries the caller-varying
-// cache stance: private scope and no ttl. Both members are checked because
-// a private result with an inherited upstream ttl still lets the requesting
-// user's own client serve a filtered inventory past a grant revocation.
-func requireCallerVarying(t *testing.T, resp *proxy.ToolsListResponse) {
-	t.Helper()
-
-	rpcResp, ok := resp.RemoteMessage.Message.(*jsonrpc.Response)
-	require.True(t, ok)
-	var wire map[string]json.RawMessage
-	require.NoError(t, json.Unmarshal(rpcResp.Result, &wire))
-	require.JSONEq(t, `"private"`, string(wire["cacheScope"]),
-		"an RBAC-scoped catalog must never use the public cache default")
-	require.JSONEq(t, `0`, string(wire["ttlMs"]),
-		"an RBAC-scoped catalog must not inherit an upstream ttl")
-	require.Equal(t, "private", resp.Result.CacheScope,
-		"the typed view must agree with the wire")
-	require.Equal(t, 0, resp.Result.TTLMs,
-		"the typed view must agree with the wire")
-}
-
 func TestToolsListMCPConnectFilterInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
@@ -110,13 +89,10 @@ func TestToolsListMCPConnectFilterInterceptor_Name(t *testing.T) {
 	require.Equal(t, "tools-list-mcp-connect-filter", interceptor.Name())
 }
 
-func TestToolsListMCPConnectFilterInterceptor_NilEngineKeepsToolsButLabels(t *testing.T) {
+func TestToolsListMCPConnectFilterInterceptor_NilEngineKeepsTools(t *testing.T) {
 	t.Parallel()
 
-	// A nil engine must not panic and must not drop tools. It is still
-	// labelled: the interceptor is only attached to private-visibility
-	// servers, so the catalog describes what this caller may reach even
-	// when no grants could be evaluated.
+	// A nil engine must not panic and must not drop tools.
 	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(nil, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, []*mcp.Tool{
@@ -125,13 +101,12 @@ func TestToolsListMCPConnectFilterInterceptor_NilEngineKeepsToolsButLabels(t *te
 	})
 	require.NoError(t, interceptor.InterceptToolsListResponse(t.Context(), resp))
 	require.Len(t, resp.Result.Tools, 2, "nil engine must leave the tools array unchanged")
-	requireCallerVarying(t, resp)
 }
 
 func TestToolsListMCPConnectFilterInterceptor_ErrorResponseUntouched(t *testing.T) {
 	t.Parallel()
 
-	// A JSON-RPC error carries no inventory, so there is nothing to label
+	// A JSON-RPC error carries no inventory, so there is nothing to filter
 	// and no result to splice into.
 	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(newAuthzEngineForTest(t), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
@@ -171,16 +146,16 @@ func TestToolsListMCPConnectFilterInterceptor_KeepsOnlyGrantedTools(t *testing.T
 
 	require.Len(t, resp.Result.Tools, 1)
 	require.Equal(t, "search_tickets", resp.Result.Tools[0].Name)
-	requireCallerVarying(t, resp)
 }
 
 func TestToolsListMCPConnectFilterInterceptor_AllGrantedPreservesToolBytes(t *testing.T) {
 	t.Parallel()
 
 	// When every tool is authorized there is nothing to replace, so the
-	// interceptor must label the result without rewriting the tools
-	// member: replacing it would re-marshal each kept tool through
-	// mcp.Tool, dropping per-tool members the SDK does not model.
+	// interceptor must leave the result exactly as it arrived: replacing
+	// the tools member would re-marshal each kept tool through mcp.Tool,
+	// dropping per-tool members the SDK does not model. The proxy applies
+	// the caller-varying label after the chain.
 	engine := newAuthzEngineForTest(t)
 	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
 	ctx = authztest.WithExactGrants(t, ctx,
@@ -198,8 +173,8 @@ func TestToolsListMCPConnectFilterInterceptor_AllGrantedPreservesToolBytes(t *te
 
 	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
-	// An upstream declaring its own catalog public and long-lived, plus a
-	// per-tool member mcp.Tool does not model.
+	// An upstream declaring its own cache stance, plus a per-tool member
+	// mcp.Tool does not model.
 	resp := newToolsListResponseFromWire(t, `{"ttlMs":60000,"cacheScope":"public","tools":[`+
 		`{"name":"tool_a","inputSchema":{},"x-vendor-hint":"survives"},`+
 		`{"name":"tool_b","inputSchema":{}}]}`)
@@ -219,8 +194,7 @@ func TestToolsListMCPConnectFilterInterceptor_AllGrantedPreservesToolBytes(t *te
 	require.Contains(t, string(after["tools"]), `"x-vendor-hint":"survives"`,
 		"per-tool members the SDK does not model must survive an unfiltered relay")
 
-	// Both caching members overwrite the upstream's own stance.
-	requireCallerVarying(t, resp)
+	require.Equal(t, before, after, "an unfiltered catalog must be left exactly as it arrived")
 }
 
 func TestToolsListMCPConnectFilterInterceptor_EmptyArrayWhenNoGrantsMatch(t *testing.T) {
@@ -296,13 +270,11 @@ func TestToolsListMCPConnectFilterInterceptor_NilResultPassesThrough(t *testing.
 	require.NoError(t, interceptor.InterceptToolsListResponse(t.Context(), resp))
 }
 
-func TestToolsListMCPConnectFilterInterceptor_EmptyToolsListIsStillLabelled(t *testing.T) {
+func TestToolsListMCPConnectFilterInterceptor_EmptyToolsListPassesThrough(t *testing.T) {
 	t.Parallel()
 
 	// Upstream returned a successful response with zero tools, so no
-	// checks fire and the tools member is left alone. An empty catalog on
-	// a private-visibility server is still per-principal information, so
-	// it is labelled like any other.
+	// checks fire and the tools member is left alone.
 	engine := newAuthzEngineForTest(t)
 	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
 	ctx = authztest.WithExactGrants(t, ctx)
@@ -312,7 +284,6 @@ func TestToolsListMCPConnectFilterInterceptor_EmptyToolsListIsStillLabelled(t *t
 	resp := newToolsListResponse(t, nil)
 	require.NoError(t, interceptor.InterceptToolsListResponse(ctx, resp))
 	require.Empty(t, resp.Result.Tools)
-	requireCallerVarying(t, resp)
 }
 
 func TestToolsListMCPConnectFilterInterceptor_FiltersByDisposition(t *testing.T) {
