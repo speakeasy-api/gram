@@ -51,9 +51,10 @@ func NewEncryptionClient(t *testing.T) *encryption.Client {
 func NewLogger(*testing.T) *slog.Logger {
 	if isTestingVerbose() {
 		return slog.New(o11y.NewLogHandler(&o11y.LogHandlerOptions{
-			RawLevel:    os.Getenv("LOG_LEVEL"),
-			Pretty:      true,
-			DataDogAttr: false,
+			RawLevel:        os.Getenv("LOG_LEVEL"),
+			Pretty:          true,
+			DataDogAttr:     false,
+			SamplingEnabled: false,
 		}))
 	}
 	return slog.New(slog.DiscardHandler)
