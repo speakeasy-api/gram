@@ -809,7 +809,10 @@ where
                         .as_ref()
                         .is_some_and(|admission| admission.reply.is_closed())
                     {
-                        continue;
+                        // Activation changed the actor/client credentials. Retire
+                        // this driver instead of retaining an unsubmitted identity.
+                        // Dropping queued receipts leaves durable events retryable.
+                        return Ok("admission cancelled during activation");
                     }
                     let input = invocation_content(turn.input, notice);
                     let items = vec![user_content_item(&input)];
@@ -1312,6 +1315,87 @@ mod tests {
                 },
             )))
         }
+    }
+
+    #[tokio::test]
+    async fn cancellation_during_activation_retires_without_model_work() {
+        let tokens = TokenRegistry::new("initial");
+        let (seen_tx, mut seen_rx) = mpsc::unbounded_channel();
+        let model = QueueTestModel {
+            tokens: tokens.clone(),
+            seen: seen_tx,
+            finish: Arc::new(tokio::sync::Semaphore::new(0)),
+        };
+        let driver = Agent::builder()
+            .model(model)
+            .build()
+            .unwrap()
+            .start(SessionConfig::new("cancel-activation"))
+            .await
+            .unwrap();
+        let (tx, rx) = mpsc::channel(2);
+        let (_notice_tx, notices) = mpsc::unbounded_channel();
+        let (cmd, mut commands) = mpsc::channel(2);
+        let (reply, admitted) = tokio::sync::oneshot::channel();
+        let accepted = Arc::new(AtomicBool::new(false));
+        tx.try_send(QueuedTurn {
+            input: RunnerContent::Text("cancelled".into()),
+            bearer: "cancelled-token".into(),
+            mcp_servers: vec![],
+            admission: Some(TurnAdmission {
+                event: None,
+                accepted: accepted.clone(),
+                reply,
+            }),
+        })
+        .unwrap();
+        let (next_reply, next_receipt) = tokio::sync::oneshot::channel();
+        tx.try_send(QueuedTurn {
+            input: RunnerContent::Text("retry-later".into()),
+            bearer: "next-token".into(),
+            mcp_servers: vec![],
+            admission: Some(TurnAdmission {
+                event: None,
+                accepted: Arc::new(AtomicBool::new(false)),
+                reply: next_reply,
+            }),
+        })
+        .unwrap();
+        let actor_tokens = tokens.clone();
+        let actor = tokio::spawn(async move {
+            let Some(McpCmd::BeginTurn { bearer, reply, .. }) = commands.recv().await else {
+                panic!("expected activation");
+            };
+            actor_tokens.rotate(bearer).unwrap();
+            drop(admitted); // Cancel only after the actor installs the bearer.
+            reply.send(Ok(None)).unwrap();
+        });
+        let outcome = tokio::time::timeout(
+            Duration::from_secs(2),
+            run_loop(
+                driver,
+                rx,
+                notices,
+                Arc::new(Mutex::new(None)),
+                None,
+                "thread".into(),
+                (tokens, cmd),
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(outcome, "admission cancelled during activation");
+        assert!(!accepted.load(Ordering::Acquire));
+        assert!(
+            next_receipt.await.is_err(),
+            "pending events must remain retryable"
+        );
+        assert!(
+            seen_rx.try_recv().is_err(),
+            "cancelled activation must not call the model"
+        );
+        actor.await.unwrap();
     }
 
     #[tokio::test]
