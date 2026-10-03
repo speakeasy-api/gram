@@ -83,7 +83,7 @@ func slackExecutionHasActor(event slackTriggerEvent) bool {
 		// System messages and edits/deletions can identify an affected user or the
 		// original author rather than the actor responsible for this notification.
 		switch event.Subtype {
-		case "", "file_share", "thread_broadcast":
+		case "", "file_share", "thread_broadcast", "me_message":
 			return true
 		default:
 			return false

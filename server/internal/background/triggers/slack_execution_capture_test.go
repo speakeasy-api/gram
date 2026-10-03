@@ -43,6 +43,7 @@ func TestSlackExecutionSelectionAtIngress(t *testing.T) {
 		mapped   bool
 	}{
 		{name: "human", event: slackTriggerEvent{EventType: "message", TeamID: "TEXAMPLE", UserID: "UEXAMPLE"}, mapped: true},
+		{name: "human action", event: slackTriggerEvent{EventType: "message", TeamID: "TEXAMPLE", UserID: "UEXAMPLE", Subtype: "me_message"}, mapped: true},
 		{name: "button", event: slackTriggerEvent{EventType: "block_actions", TeamID: "TEXAMPLE", UserID: "UEXAMPLE", AppID: "AEXAMPLE"}, mapped: true},
 		{name: "bot", event: slackTriggerEvent{EventType: "message", TeamID: "TEXAMPLE", UserID: "UEXAMPLE", BotID: "BEXAMPLE"}, fallback: "slack_non_user_event"},
 		{name: "app", event: slackTriggerEvent{EventType: "message", TeamID: "TEXAMPLE", UserID: "UEXAMPLE", AppID: "AEXAMPLE"}, fallback: "slack_non_user_event"},
@@ -177,7 +178,7 @@ func TestSlackExecutionActorEventAllowlist(t *testing.T) {
 			}
 		})
 	}
-	for _, subtype := range []string{"file_share", "thread_broadcast"} {
+	for _, subtype := range []string{"file_share", "thread_broadcast", "me_message"} {
 		require.True(t, slackExecutionHasActor(slackTriggerEvent{EventType: "message", Subtype: subtype}))
 	}
 }
