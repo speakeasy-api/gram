@@ -1377,6 +1377,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 
 	if chat.CapturedSurface != "" {
 		source = &chat.CapturedSurface
+		originatingClient = nil
 	}
 	messageIDs := make([]uuid.UUID, len(resultMessages))
 	for i, message := range resultMessages {

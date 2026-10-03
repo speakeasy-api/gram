@@ -1,5 +1,5 @@
 import { useGramContext } from "@gram/client/react-query/_context.js";
-import { buildLoadChatQuery } from "@gram/client/react-query/loadChat.js";
+import { buildListChatsQuery } from "@gram/client/react-query/listChats.js";
 import { buildListChatSessionLinksQuery } from "@gram/client/react-query/listChatSessionLinks.js";
 import { SlackChannelLink } from "@/components/slack-channel-link";
 import { IdentityAvatar } from "@/components/identity-avatar";
@@ -273,13 +273,14 @@ export function ChatLogsTable({
   error,
   emptyState,
 }: ChatLogsTableProps): JSX.Element {
-  const client = useGramContext();
   const { user } = useSession();
   const { data: membersData } = useMembers();
 
   // One batched lineage lookup for the visible rows. Optional decoration:
   // errors are swallowed (never blank the list) and the endpoint caps at 100
   // ids, matching the list's maximum page size.
+  const client = useGramContext();
+  const queryClient = useQueryClient();
   const chatIds = useMemo(
     () => chats.slice(0, 100).map((chat) => chat.id),
     [chats],
@@ -294,13 +295,14 @@ export function ChatLogsTable({
     enabled: !!linksData?.links.some((link) => link.kind === "subagent"),
     retry: false,
     throwOnError: false,
-    queryFn: async (context) => {
+    queryFn: async () => {
       const links = [...(linksData?.links ?? [])];
       const parents: ChatOverview[] = [];
       const visited = new Set(chatIds);
-      // Fetch lineage in bounded batches and stop revisiting sessions. The
-      // same authorized load endpoint supplies parent rows outside this page.
-      for (;;) {
+      let requested = 0;
+      // Fetch authorized overview metadata without opening transcripts. Bound
+      // ancestor depth and count, and retain only the exact requested IDs.
+      for (let depth = 0; depth < 10 && requested < 100; depth++) {
         const ids = [
           ...new Set(
             links
@@ -313,23 +315,30 @@ export function ChatLogsTable({
               )
               .map((link) => link.parentChatId!),
           ),
-        ].slice(0, 100);
+        ].slice(0, 100 - requested);
         if (!ids.length) break;
+        requested += ids.length;
         for (const id of ids) visited.add(id);
         for (let offset = 0; offset < ids.length; offset += 8) {
           const loaded = await Promise.allSettled(
             ids.slice(offset, offset + 8).map((id) => {
-              const query = buildLoadChatQuery(client, { id, limit: 1 });
-              return query.queryFn({ ...context, queryKey: query.queryKey });
+              const query = buildListChatsQuery(client, {
+                search: id,
+                limit: 100,
+              });
+              return queryClient
+                .fetchQuery({ ...query, staleTime: 60_000 })
+                .then((result) => result.chats.find((chat) => chat.id === id));
             }),
           );
           for (const result of loaded)
-            if (result.status === "fulfilled") parents.push(result.value);
+            if (result.status === "fulfilled" && result.value)
+              parents.push(result.value);
         }
         const query = buildListChatSessionLinksQuery(client, { chatIds: ids });
-        const next = await query.queryFn({
-          ...context,
-          queryKey: query.queryKey,
+        const next = await queryClient.fetchQuery({
+          ...query,
+          staleTime: 60_000,
         });
         links.push(...next.links);
       }
@@ -479,7 +488,7 @@ export function ChatLogsTable({
                       </span>
                       <span className="text-muted-foreground/40">·</span>
                       <span className="inline-flex items-center gap-1.5">
-                        {(chat.participants?.length ?? 0) > 1 && (
+                        {(chat.participants?.length ?? 0) > 0 && (
                           <span
                             className="flex shrink-0 -space-x-1"
                             aria-label="Conversation participants"
@@ -528,7 +537,7 @@ export function ChatLogsTable({
                             )}
                           </span>
                         )}
-                        {(chat.participants?.length ?? 0) <= 1 &&
+                        {(chat.participants?.length ?? 0) === 0 &&
                           (chat.assistantName ? (
                             <>
                               <Icon

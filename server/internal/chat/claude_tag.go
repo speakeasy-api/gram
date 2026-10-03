@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -14,16 +15,26 @@ import (
 
 // persistClaudeTagMetadata runs in the message transaction. It does not change
 // ownership, billing, or authorization based on identities found in a prompt.
-// Platform MCP assessment: list_chats already shares the inferred source query.
-// Keep participant snapshots in the authorized management API; that MCP tool's
-// masked-person contract deliberately excludes raw identities and transcripts,
-// so neither a new tool nor unmasked participant fields belong in its result.
+// Platform MCP assessment: project readers inspect observed Slack participants,
+// channels and helper relationships through the management API. list_chats,
+// available to external members and managed assistants, shares the inferred
+// source query but returns masked people without raw identities or transcripts.
+// Omit participant snapshots, channel IDs/names and helper links from that tool:
+// these identifiers would bypass its existing person-reference privacy boundary.
+// list_my_sessions serves an external member's own coding-session recall; Slack
+// senders are observed participants, not session owners, so adding them there
+// would imply unsupported ownership. Neither tool gains a new permission or
+// workflow. The chat metadata tool's bounded-output tests prove raw identity
+// omission; chat service tests prove authorized participant and lineage reads.
 func persistClaudeTagMetadata(ctx context.Context, db repo.DBTX, param repo.CreateChatMessageParams) error {
 	queries := repo.New(db)
-	if err := queries.MarkKnownClaudeTagSubsession(ctx, repo.MarkKnownClaudeTagSubsessionParams{ProjectID: param.ProjectID, ChatID: param.ChatID}); err != nil {
-		return fmt.Errorf("mark known Claude Tag subsession: %w", err)
-	}
 	if param.Role != "user" {
+		return nil
+	}
+	source := strings.ToLower(CanonicalSource(param.Source.String))
+	claudeSource := source == "cowork" || strings.HasPrefix(source, "claude")
+	claudeProxy := source == "litellm" && strings.HasPrefix(strings.ToLower(param.UserAgent.String), "claude-code")
+	if !claudeSource && !claudeProxy {
 		return nil
 	}
 	metadata := claudetag.Parse(param.Content)
@@ -50,6 +61,9 @@ func persistClaudeTagMetadata(ctx context.Context, db repo.DBTX, param repo.Crea
 		// The envelope is delivered to the parent; from-session identifies its helper.
 		if err := queries.InsertSubsessionLink(ctx, repo.InsertSubsessionLinkParams{ProjectID: param.ProjectID, ParentChatID: param.ChatID, ChildChatID: uuid.NullUUID{UUID: SessionIDToChatID(metadata.ChildSession), Valid: true}, ParentSessionID: param.ChatID.String(), ChildSessionID: conv.ToPGText(metadata.ChildSession)}); err != nil {
 			return fmt.Errorf("record subsession link: %w", err)
+		}
+		if err := queries.MarkKnownClaudeTagSubsession(ctx, repo.MarkKnownClaudeTagSubsessionParams{ProjectID: param.ProjectID, ChatID: SessionIDToChatID(metadata.ChildSession)}); err != nil {
+			return fmt.Errorf("mark captured Claude Tag helper: %w", err)
 		}
 	}
 	return nil

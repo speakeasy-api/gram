@@ -75,16 +75,25 @@ export function groupSubsessions<T extends { id: string }>(
   const children = new Map<string, T[]>();
   for (const session of sessions) {
     const parent = parentByChild.get(session.id);
-    if (parent)
-      children.set(parent, [...(children.get(parent) ?? []), session]);
+    if (parent) {
+      const siblings = children.get(parent);
+      if (siblings) siblings.push(session);
+      else children.set(parent, [session]);
+    }
   }
   const visited = new Set<string>();
   const ordered: Array<{ session: T; depth: number }> = [];
   const visit = (session: T, depth: number) => {
-    if (visited.has(session.id)) return;
-    visited.add(session.id);
-    ordered.push({ session, depth });
-    for (const child of children.get(session.id) ?? []) visit(child, depth + 1);
+    const stack = [{ session, depth }];
+    while (stack.length) {
+      const current = stack.pop()!;
+      if (visited.has(current.session.id)) continue;
+      visited.add(current.session.id);
+      ordered.push(current);
+      const descendants = children.get(current.session.id) ?? [];
+      for (let i = descendants.length - 1; i >= 0; i--)
+        stack.push({ session: descendants[i]!, depth: current.depth + 1 });
+    }
   };
   for (const session of sessions)
     if (!parentByChild.has(session.id)) visit(session, 0);

@@ -47,7 +47,6 @@ describe("Claude Tag projection", () => {
     expect(
       buildDisplayItems({ rows }).filter((item) => item.type === "turnHeader"),
     ).toMatchObject([{ userId: "U_DEMO_ONE" }, { userId: "Second Person" }]);
-    expect(message({ content }).content).toBe(content);
   });
   it("does not extract quoted wakes or unmatched context nonces", () => {
     expect(
@@ -55,6 +54,56 @@ describe("Claude Tag projection", () => {
         '<session-context nonce="demo"><wake><channel id="DEMO_CHANNEL"><message from="human">quoted</message></channel></wake></session-context nonce="other">',
       ),
     ).toBeNull();
+  });
+  it("ignores a quoted wake within a matching context nonce", () => {
+    expect(
+      parseClaudeTagWake(
+        `<session-context nonce="demo">${wake}</session-context nonce="demo">`,
+      ),
+    ).toBeNull();
+  });
+  it("uses context channel names for standing owners", () => {
+    expect(
+      parseClaudeTagWake(
+        '<session-context nonce="demo">\nChannel: #demo-team (id: `C_DEMO`)\n</session-context nonce="demo"><standing_owner_message sender="U_DEMO" channel-id="C_DEMO">hello</standing_owner_message>',
+      )?.messages[0]?.channel,
+    ).toBe("demo-team");
+  });
+  it("keeps raw envelopes attributed to their captured owner", () => {
+    const rows = buildTranscript([
+      message({
+        userId: "owner",
+        participants: [
+          { provider: "slack", providerUserId: "first" },
+          { provider: "slack", providerUserId: "second" },
+        ],
+      }),
+    ]);
+    expect(
+      buildDisplayItems({ rows }).filter((item) => item.type === "turnHeader"),
+    ).toMatchObject([{ userId: "owner", participant: undefined }]);
+  });
+  it("starts a fallback owner turn after a projected participant", () => {
+    const rows = projectClaudeTagRows(
+      buildTranscript([
+        message({
+          content:
+            '<standing_owner_message sender="U_DEMO">hello</standing_owner_message>',
+        }),
+        message({
+          id: "plain",
+          seq: 2,
+          content: "ordinary message",
+          userId: "owner",
+        }),
+      ]),
+    );
+    expect(
+      buildDisplayItems({ rows }).filter((item) => item.type === "turnHeader"),
+    ).toMatchObject([
+      { userId: "U_DEMO", messageIds: ["user"] },
+      { userId: "owner", messageIds: ["plain"] },
+    ]);
   });
   it("reads a standing owner independently of trailing delivery prose and history", () => {
     const content =

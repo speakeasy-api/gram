@@ -78206,7 +78206,7 @@ components:
           description: Observed Slack channel associated with this session.
         slack_channel_name:
           type: string
-          description: Observed Slack channel name, without the leading hash.
+          description: Observed Slack channel name as reported by the captured envelope.
         slack_team_id:
           type: string
           description: Observed Slack workspace associated with this session.
@@ -78448,7 +78448,7 @@ components:
           description: Observed Slack channel associated with this session.
         slack_channel_name:
           type: string
-          description: Observed Slack channel name, without the leading hash.
+          description: Observed Slack channel name as reported by the captured envelope.
         slack_team_id:
           type: string
           description: Observed Slack workspace associated with this session.
@@ -78531,7 +78531,7 @@ components:
           description: Whether the continuation exists as a captured chat the caller can read, i.e. whether the child side is navigable.
         child_chat_id:
           type: string
-          description: Chat id derived for the continuation. Absent when the continuation's session id was unknowable at move time (e.g. Cursor mints ids server-side) — or when the caller's visibility scope cannot read the child, which is deliberately indistinguishable.
+          description: Chat id of the child session in this relationship. Absent when its session id was unknowable when the relationship was recorded (e.g. Cursor mints ids server-side) — or when the caller's visibility scope cannot read the child, which is deliberately indistinguishable.
           format: uuid
         child_title:
           type: string
@@ -78551,7 +78551,7 @@ components:
           description: Whether the parent exists as a captured chat the caller can read, i.e. whether the parent side is navigable.
         parent_chat_id:
           type: string
-          description: Chat id of the session the move originated from. Absent when the caller's visibility scope cannot read the parent — a masked end exposes no identity, matching parent_captured.
+          description: Chat id of the parent session in this relationship. Absent when the caller's visibility scope cannot read the parent — a masked end exposes no identity, matching parent_captured.
           format: uuid
         parent_title:
           type: string

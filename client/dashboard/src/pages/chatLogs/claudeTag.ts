@@ -56,7 +56,7 @@ export function parseClaudeTagWake(content: unknown): ClaudeTagWake | null {
           id: el.getAttribute("ts"),
           timestamp: el.getAttribute("sent-at"),
           trigger: el.getAttribute("originating-ask") === "true",
-          channel: el.getAttribute("channel-id") ?? "",
+          channel: contextChannel?.name ?? el.getAttribute("channel-id") ?? "",
         },
       ],
     };

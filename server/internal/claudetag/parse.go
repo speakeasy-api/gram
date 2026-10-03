@@ -100,6 +100,9 @@ func Parse(text string) Metadata {
 		if attrs["team-id"] != "" {
 			team = attrs["team-id"]
 		}
+		if channelID == "" {
+			channelID = attrs["channel-id"]
+		}
 		return Metadata{Detected: true, Sender: attrs["sender"], Senders: []string{attrs["sender"]}, Title: "", Team: team, ChannelID: channelID, ChannelName: channelName, ChildSession: "", Text: strings.Join(strings.Fields(body.Text), " ")}
 	case "cross-session-message":
 		if attrs["standing-audience"] != "parent" || attrs["from-session"] == "" {
@@ -157,11 +160,12 @@ func parseWake(text, team, botID string) Metadata {
 				continue
 			}
 			result.Detected = true
-			if result.Title == "" || message.Trigger == "true" {
+			messageText := strings.Join(strings.Fields(message.Text), " ")
+			if messageText != "" && (result.Title == "" || message.Trigger == "true") {
 				result.ChannelID = channel.ID
-				result.ChannelName = name
+				result.ChannelName = strings.TrimPrefix(name, "#")
 				result.Title = "Claude Tag in #" + strings.TrimPrefix(name, "#")
-				result.Text = strings.Join(strings.Fields(message.Text), " ")
+				result.Text = messageText
 			}
 			if message.Sender != "" && !seen[message.Sender] {
 				result.Senders = append(result.Senders, message.Sender)

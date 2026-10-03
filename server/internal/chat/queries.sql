@@ -342,7 +342,7 @@ DO UPDATE SET
 WHERE chat_messages.project_id = EXCLUDED.project_id
   AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
   AND chat_messages.source = 'litellm'
-RETURNING id, content, tool_calls, model, user_id, external_user_id, source, (xmax = 0) AS inserted;
+RETURNING id, content, tool_calls, model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted;
 
 -- name: AcquireChatPromptCorrelationLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended(
@@ -1042,12 +1042,11 @@ LIMIT @page_limit;
 -- Driven from chats with a per-chat probe on
 -- chat_messages_chat_id_project_id_created_at_source_idx for the latest
 -- non-empty source, instead of sorting the project's entire message history.
--- The lateral join drops chats with no sourced messages, matching the previous
--- inner-join semantics. project_id keeps a sibling-project stamp from
+-- The optional message probe retains chats with captured surface evidence. project_id keeps a sibling-project stamp from
 -- advertising a source this project cannot load.
 SELECT DISTINCT coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = @project_id::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, latest.source) AS source
 FROM chats c
-CROSS JOIN LATERAL (
+LEFT JOIN LATERAL (
   SELECT cm.source
   FROM chat_messages cm
   WHERE cm.chat_id = c.id
@@ -1056,8 +1055,9 @@ CROSS JOIN LATERAL (
     AND cm.source <> ''
   ORDER BY cm.created_at DESC
   LIMIT 1
-) latest
+) latest ON TRUE
 WHERE c.project_id = @project_id
+  AND (latest.source IS NOT NULL OR c.session_surface IS NOT NULL OR EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = @project_id::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag'))
   AND c.deleted IS FALSE
   AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
   AND (@user_id::text = '' OR c.user_id = @user_id::text)
@@ -2147,7 +2147,7 @@ WHERE p.project_id = @project_id AND p.message_id = ANY(@message_ids::uuid[])
 ORDER BY p.provider, p.provider_user_id;
 
 -- name: RecordChatSlackChannel :exec
-UPDATE chats SET slack_team_id = coalesce(nullif(@team_id::text, ''), CASE WHEN slack_channel_id = @channel_id::text THEN slack_team_id END),
+UPDATE chats SET slack_team_id = coalesce(nullif(@team_id::text, ''), slack_team_id),
  slack_channel_name = coalesce(nullif(@channel_name::text, ''), CASE WHEN slack_channel_id = @channel_id::text THEN slack_channel_name END),
  slack_channel_id = @channel_id::text
 WHERE project_id = @project_id AND id = @chat_id;

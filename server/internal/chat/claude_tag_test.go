@@ -71,6 +71,9 @@ func TestClaudeTagParticipantsArePerMessageSnapshots(t *testing.T) {
 	rows, err := repo.New(ti.conn).ListChatParticipants(ctx, repo.ListChatParticipantsParams{ProjectID: ti.projectID, ChatIds: []uuid.UUID{chatID}})
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
+	if rows[0].MessageID.UUID != writes[0].Params.ID {
+		rows[0], rows[1] = rows[1], rows[0]
+	}
 	require.Equal(t, writes[0].Params.ID, rows[0].MessageID.UUID)
 	require.Equal(t, "demo_mapped_person", rows[0].UserID.String)
 	require.Equal(t, "First Person", rows[0].DisplayName.String)
@@ -79,6 +82,9 @@ func TestClaudeTagParticipantsArePerMessageSnapshots(t *testing.T) {
 	require.NoError(t, q.RevokeSlackIdentityMapping(ctx, slackrepo.RevokeSlackIdentityMappingParams{OrganizationID: ti.orgID, SlackTeamID: "T_DEMO_ONE", SlackUserID: "U_DEMO_ONE"}))
 	rows, err = repo.New(ti.conn).ListChatParticipants(ctx, repo.ListChatParticipantsParams{ProjectID: ti.projectID, ChatIds: []uuid.UUID{chatID}})
 	require.NoError(t, err)
+	if rows[0].MessageID.UUID != writes[0].Params.ID {
+		rows[0], rows[1] = rows[1], rows[0]
+	}
 	require.Equal(t, "demo_mapped_person", rows[0].UserID.String)
 	messages, err := repo.New(ti.conn).ListChatMessages(ctx, repo.ListChatMessagesParams{ProjectID: ti.projectID, ChatID: chatID})
 	require.NoError(t, err)
@@ -165,7 +171,6 @@ func TestClaudeTagHelperLinkDirectionAndCycleRejection(t *testing.T) {
 	child, err := repo.New(ti.conn).GetChat(ctx, repo.GetChatParams{ID: childID, ProjectID: ti.projectID})
 	require.NoError(t, err)
 	require.Equal(t, "claude-tag", child.CapturedSurface)
-
 }
 
 func TestClaudeTagMetadataRollsBackWithMessage(t *testing.T) {
@@ -233,12 +238,11 @@ func TestClaudeTagHelperLinkSurvivesCaptureOrder(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "C_DEMO", conv.PtrValOr(loaded.SlackChannelID, ""))
 	require.Equal(t, "demo-team", conv.PtrValOr(loaded.SlackChannelName, ""))
-
 }
 
 func TestClaudeTagWakeOverridesReportedSourceAndPersistsChannel(t *testing.T) {
 	t.Parallel()
-	for _, source := range []string{"Claude In Slack", "claude-code-web"} {
+	for _, source := range []string{"Claude In Slack", "claude-code-web", "claude-desktop", "Claude Chat Desktop", "Claude Cowork", "cowork"} {
 		t.Run(source, func(t *testing.T) {
 			t.Parallel()
 			ti := newTestChatService(t)
@@ -261,4 +265,33 @@ func TestClaudeTagWakeOverridesReportedSourceAndPersistsChannel(t *testing.T) {
 			require.Equal(t, "C_DEMO", conv.PtrValOr(listed.Chats[0].SlackChannelID, ""))
 		})
 	}
+}
+
+func TestClaudeTagEnvelopeDoesNotOverrideNonClaudeSource(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	id := seedChat(t, ctx, ti, "", "", "Other agent")
+	write := tagWrite(t, ti, id, `<standing_owner_message sender="U_DEMO_ONE">example</standing_owner_message>`)
+	write.Params.Source = conv.ToPGText("codex")
+	_, err := tagWriter(t, ti).Write(ctx, ti.projectID, []chat.MessageWrite{write})
+	require.NoError(t, err)
+	got, err := repo.New(ti.conn).GetChat(ctx, repo.GetChatParams{ID: id, ProjectID: ti.projectID})
+	require.NoError(t, err)
+	require.False(t, got.SessionSurface.Valid)
+}
+
+func TestClaudeTagEnvelopeSupportsClaudeProxy(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	id := seedChat(t, ctx, ti, "", "", "Claude proxy")
+	write := tagWrite(t, ti, id, `<standing_owner_message sender="U_DEMO_ONE">hello</standing_owner_message>`)
+	write.Params.Source = conv.ToPGText("litellm")
+	write.Params.UserAgent = conv.ToPGText("claude-code")
+	_, err := tagWriter(t, ti).Write(ctx, ti.projectID, []chat.MessageWrite{write})
+	require.NoError(t, err)
+	got, err := repo.New(ti.conn).GetChat(ctx, repo.GetChatParams{ID: id, ProjectID: ti.projectID})
+	require.NoError(t, err)
+	require.Equal(t, "claude-tag", got.SessionSurface.String)
 }

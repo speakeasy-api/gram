@@ -74,7 +74,7 @@ export type ChatOverview = {
    */
   slackChannelId?: string | undefined;
   /**
-   * Observed Slack channel name, without the leading hash.
+   * Observed Slack channel name as reported by the captured envelope.
    */
   slackChannelName?: string | undefined;
   /**

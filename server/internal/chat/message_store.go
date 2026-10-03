@@ -453,6 +453,9 @@ func insertChatMessages(ctx context.Context, db repo.DBTX, params []repo.CreateC
 		if err := requireChatProject(ctx, db, key.chatID, key.projectID); err != nil {
 			return 0, err
 		}
+		if err := repo.New(db).MarkKnownClaudeTagSubsession(ctx, repo.MarkKnownClaudeTagSubsessionParams{ProjectID: param.ProjectID, ChatID: param.ChatID}); err != nil {
+			return 0, fmt.Errorf("mark known Claude Tag subsession: %w", err)
+		}
 		seen[key] = struct{}{}
 	}
 	n, err := repo.New(db).CreateChatMessage(ctx, params)
@@ -585,6 +588,12 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		return 0, fmt.Errorf("upsert correlated chat message: %w", err)
 	}
 	param.ID = stored.ID
+	param.Content = stored.Content
+	param.Source = stored.Source
+	param.UserAgent = stored.UserAgent
+	if err := repo.New(tx).MarkKnownClaudeTagSubsession(ctx, repo.MarkKnownClaudeTagSubsessionParams{ProjectID: param.ProjectID, ChatID: param.ChatID}); err != nil {
+		return 0, fmt.Errorf("mark known Claude Tag subsession: %w", err)
+	}
 	if err := persistClaudeTagMetadata(ctx, tx, param); err != nil {
 		return 0, err
 	}

@@ -139,7 +139,7 @@ type LoadChatResponseBody struct {
 	SlackTeamID *string `form:"slack_team_id,omitempty" json:"slack_team_id,omitempty" xml:"slack_team_id,omitempty"`
 	// Observed Slack channel associated with this session.
 	SlackChannelID *string `form:"slack_channel_id,omitempty" json:"slack_channel_id,omitempty" xml:"slack_channel_id,omitempty"`
-	// Observed Slack channel name, without the leading hash.
+	// Observed Slack channel name as reported by the captured envelope.
 	SlackChannelName *string `form:"slack_channel_name,omitempty" json:"slack_channel_name,omitempty" xml:"slack_channel_name,omitempty"`
 	// Distinct observed conversation participants across the session.
 	Participants []*ChatParticipantResponseBody `form:"participants,omitempty" json:"participants,omitempty" xml:"participants,omitempty"`
@@ -2632,7 +2632,7 @@ type ChatOverviewResponseBody struct {
 	SlackTeamID *string `form:"slack_team_id,omitempty" json:"slack_team_id,omitempty" xml:"slack_team_id,omitempty"`
 	// Observed Slack channel associated with this session.
 	SlackChannelID *string `form:"slack_channel_id,omitempty" json:"slack_channel_id,omitempty" xml:"slack_channel_id,omitempty"`
-	// Observed Slack channel name, without the leading hash.
+	// Observed Slack channel name as reported by the captured envelope.
 	SlackChannelName *string `form:"slack_channel_name,omitempty" json:"slack_channel_name,omitempty" xml:"slack_channel_name,omitempty"`
 	// Distinct observed conversation participants across the session.
 	Participants []*ChatParticipantResponseBody `form:"participants,omitempty" json:"participants,omitempty" xml:"participants,omitempty"`
@@ -2884,14 +2884,14 @@ type ChatTotalsResponseBody struct {
 
 // ChatSessionLinkResponseBody is used to define fields on response body types.
 type ChatSessionLinkResponseBody struct {
-	// Chat id of the session the move originated from. Absent when the caller's
+	// Chat id of the parent session in this relationship. Absent when the caller's
 	// visibility scope cannot read the parent — a masked end exposes no identity,
 	// matching parent_captured.
 	ParentChatID *string `form:"parent_chat_id,omitempty" json:"parent_chat_id,omitempty" xml:"parent_chat_id,omitempty"`
-	// Chat id derived for the continuation. Absent when the continuation's session
-	// id was unknowable at move time (e.g. Cursor mints ids server-side) — or when
-	// the caller's visibility scope cannot read the child, which is deliberately
-	// indistinguishable.
+	// Chat id of the child session in this relationship. Absent when its session
+	// id was unknowable when the relationship was recorded (e.g. Cursor mints ids
+	// server-side) — or when the caller's visibility scope cannot read the child,
+	// which is deliberately indistinguishable.
 	ChildChatID *string `form:"child_chat_id,omitempty" json:"child_chat_id,omitempty" xml:"child_chat_id,omitempty"`
 	// Title of the parent chat, when it has been captured and titled and the
 	// caller's visibility scope can read it.

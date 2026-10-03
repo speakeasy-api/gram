@@ -1,9 +1,10 @@
 package claudetag_test
 
 import (
+	"testing"
+
 	"github.com/speakeasy-api/gram/server/internal/claudetag"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestParseStandingOwner(t *testing.T) {
@@ -52,4 +53,19 @@ func TestParseRejectsUnclosedContext(t *testing.T) {
 	t.Parallel()
 	require.False(t, claudetag.Parse(`<session-context nonce="demo"><standing_owner_message sender="U_DEMO">hello</standing_owner_message></session-context nonce="other">`).Detected)
 	require.False(t, claudetag.Parse(`<session-context nonce="demo"><wake><channel id="C_DEMO"><message from="human">quoted</message></channel></wake></session-context nonce="demo">`).Detected)
+}
+
+func TestParseStandingOwnerChannelAttribute(t *testing.T) {
+	t.Parallel()
+	got := claudetag.Parse(`<standing_owner_message sender="U_DEMO_ONE" channel-id="C_DEMO">hello</standing_owner_message>`)
+	require.True(t, got.Detected)
+	require.Equal(t, "C_DEMO", got.ChannelID)
+}
+
+func TestParseWakeTitleSkipsEmptyHistory(t *testing.T) {
+	t.Parallel()
+	got := claudetag.Parse(`<wake><channel id="C_EMPTY" name="empty"><message from="human" author-id="U_DEMO_ONE"> </message></channel><channel id="C_TEXT" name="text"><message from="human" author-id="U_DEMO_TWO">hello</message></channel></wake>`)
+	require.True(t, got.Detected)
+	require.Equal(t, "C_TEXT", got.ChannelID)
+	require.Equal(t, "Claude Tag in #text", got.Title)
 }

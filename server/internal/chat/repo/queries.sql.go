@@ -2645,7 +2645,7 @@ func (q *Queries) ListChatSlackChannels(ctx context.Context, arg ListChatSlackCh
 const listChatSources = `-- name: ListChatSources :many
 SELECT DISTINCT coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = $1::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, latest.source) AS source
 FROM chats c
-CROSS JOIN LATERAL (
+LEFT JOIN LATERAL (
   SELECT cm.source
   FROM chat_messages cm
   WHERE cm.chat_id = c.id
@@ -2654,8 +2654,9 @@ CROSS JOIN LATERAL (
     AND cm.source <> ''
   ORDER BY cm.created_at DESC
   LIMIT 1
-) latest
+) latest ON TRUE
 WHERE c.project_id = $1
+  AND (latest.source IS NOT NULL OR c.session_surface IS NOT NULL OR EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = $1::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag'))
   AND c.deleted IS FALSE
   AND ($2::text = '' OR c.external_user_id = $2::text)
   AND ($3::text = '' OR c.user_id = $3::text)
@@ -2686,8 +2687,7 @@ type ListChatSourcesParams struct {
 // Driven from chats with a per-chat probe on
 // chat_messages_chat_id_project_id_created_at_source_idx for the latest
 // non-empty source, instead of sorting the project's entire message history.
-// The lateral join drops chats with no sourced messages, matching the previous
-// inner-join semantics. project_id keeps a sibling-project stamp from
+// The optional message probe retains chats with captured surface evidence. project_id keeps a sibling-project stamp from
 // advertising a source this project cannot load.
 // Natively captured proxied sessions carry no litellm message rows (they are
 // suppressed as duplicates), so the LiteLLM filter option must also be offered
@@ -3837,16 +3837,16 @@ func (q *Queries) MarkKnownClaudeTagSubsession(ctx context.Context, arg MarkKnow
 }
 
 const recordChatSlackChannel = `-- name: RecordChatSlackChannel :exec
-UPDATE chats SET slack_team_id = coalesce(nullif($1::text, ''), CASE WHEN slack_channel_id = $2::text THEN slack_team_id END),
- slack_channel_name = coalesce(nullif($3::text, ''), CASE WHEN slack_channel_id = $2::text THEN slack_channel_name END),
- slack_channel_id = $2::text
+UPDATE chats SET slack_team_id = coalesce(nullif($1::text, ''), slack_team_id),
+ slack_channel_name = coalesce(nullif($2::text, ''), CASE WHEN slack_channel_id = $3::text THEN slack_channel_name END),
+ slack_channel_id = $3::text
 WHERE project_id = $4 AND id = $5
 `
 
 type RecordChatSlackChannelParams struct {
 	TeamID      string
-	ChannelID   string
 	ChannelName string
+	ChannelID   string
 	ProjectID   uuid.UUID
 	ChatID      uuid.UUID
 }
@@ -3854,8 +3854,8 @@ type RecordChatSlackChannelParams struct {
 func (q *Queries) RecordChatSlackChannel(ctx context.Context, arg RecordChatSlackChannelParams) error {
 	_, err := q.db.Exec(ctx, recordChatSlackChannel,
 		arg.TeamID,
-		arg.ChannelID,
 		arg.ChannelName,
+		arg.ChannelID,
 		arg.ProjectID,
 		arg.ChatID,
 	)
@@ -4699,7 +4699,7 @@ DO UPDATE SET
 WHERE chat_messages.project_id = EXCLUDED.project_id
   AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
   AND chat_messages.source = 'litellm'
-RETURNING id, content, tool_calls, model, user_id, external_user_id, source, (xmax = 0) AS inserted
+RETURNING id, content, tool_calls, model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted
 `
 
 type UpsertCorrelatedChatMessageParams struct {
@@ -4740,6 +4740,7 @@ type UpsertCorrelatedChatMessageRow struct {
 	UserID         pgtype.Text
 	ExternalUserID pgtype.Text
 	Source         pgtype.Text
+	UserAgent      pgtype.Text
 	Inserted       bool
 }
 
@@ -4784,6 +4785,7 @@ func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCor
 		&i.UserID,
 		&i.ExternalUserID,
 		&i.Source,
+		&i.UserAgent,
 		&i.Inserted,
 	)
 	return i, err

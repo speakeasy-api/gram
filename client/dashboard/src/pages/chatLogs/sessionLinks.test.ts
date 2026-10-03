@@ -35,9 +35,40 @@ describe("subsession grouping", () => {
   it("retains all rows under missing or cyclic evidence", () => {
     const sessions = [{ id: "a" }, { id: "b" }];
     expect(
-      groupSubsessions(sessions, [edge("a", "b"), edge("b", "a")]),
-    ).toHaveLength(2);
-    expect(groupSubsessions(sessions, [edge("missing", "a")])).toHaveLength(2);
+      groupSubsessions(sessions, [edge("a", "b"), edge("b", "a")])
+        .map(({ session }) => session.id)
+        .sort(),
+    ).toEqual(["a", "b"]);
+    expect(
+      groupSubsessions(sessions, [edge("missing", "a")])
+        .map(({ session }) => session.id)
+        .sort(),
+    ).toEqual(["a", "b"]);
+  });
+  it("keeps self loops, absent children and non-helper links flat", () => {
+    const sessions = [{ id: "a" }, { id: "b" }];
+    for (const link of [
+      edge("a", "a"),
+      edge("a", "missing"),
+      { ...edge("a", "b"), kind: "move" },
+    ])
+      expect(groupSubsessions(sessions, [link])).toEqual(
+        sessions.map((session) => ({ session, depth: 0 })),
+      );
+  });
+  it("handles deep helper chains without recursion", () => {
+    const sessions = Array.from({ length: 20000 }, (_, i) => ({
+      id: String(i),
+    }));
+    const links = sessions
+      .slice(1)
+      .map((session, i) => edge(String(i), session.id));
+    const grouped = groupSubsessions(sessions, links);
+    expect(grouped).toHaveLength(sessions.length);
+    expect(grouped.at(-1)).toEqual({
+      session: sessions.at(-1),
+      depth: sessions.length - 1,
+    });
   });
   it("does not label helpers as moves", () => {
     expect(
