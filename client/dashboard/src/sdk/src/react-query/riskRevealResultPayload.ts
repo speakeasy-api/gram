@@ -54,7 +54,7 @@ export type RiskRevealResultPayloadMutationError =
  * revealRiskResultPayload risk
  *
  * @remarks
- * Return the full scanned payload of the MCP tool call a risk result was raised on, so its findings can be shown in context. Positions of every finding with the same execution_id index into the returned payload. Requires an unrestricted chat:read grant. Every successful reveal is audited.
+ * Return the full scanned payload of the MCP tool call phase a risk result was raised on, so its findings can be shown in context. Positions of every finding with the same execution_id and phase index into the returned payload. Requires an unrestricted chat:read grant. Every successful reveal is audited.
  */
 export function useRiskRevealResultPayloadMutation(
   options?: MutationHookOptions<
