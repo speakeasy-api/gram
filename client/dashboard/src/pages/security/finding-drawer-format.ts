@@ -3,6 +3,8 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 /** "a" or "an" for the word that follows, by its first letter. */
 function indefiniteArticle(word: string): "a" | "an" {
   const w = word.trim();
+  // Initialisms are read letter by letter: "an MCP", "a URL".
+  if (/^[A-Z]{2,}\b/.test(w)) return /^[AEFHILMNORSX]/.test(w) ? "an" : "a";
   // A "u" read as "you" ("user", "unique") takes "a".
   if (/^u[^aeiou][aeiou]/i.test(w)) return "a";
   return /^[aeiou]/i.test(w) ? "an" : "a";

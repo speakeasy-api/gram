@@ -18,6 +18,11 @@ describe("shadowServerFacts", () => {
     });
   });
 
+  it("reports no version for a trailing separator", () => {
+    expect(shadowServerFacts("npx pkg@").version).toBeNull();
+    expect(shadowServerFacts("uvx pkg==").version).toBeNull();
+  });
+
   it("keeps an unversioned scoped package whole", () => {
     expect(shadowServerFacts("npx @acme/tool").pkg).toBe("@acme/tool");
   });

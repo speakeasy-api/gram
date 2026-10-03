@@ -22,6 +22,8 @@ describe("withArticle", () => {
     ["assistant message", "an assistant message"],
     ["GitHub", "a GitHub"],
     ["untrusted tool", "an untrusted tool"],
+    ["MCP server", "an MCP server"],
+    ["URL", "a URL"],
   ])("%s", (word, expected) => {
     expect(withArticle(word)).toBe(expected);
   });
