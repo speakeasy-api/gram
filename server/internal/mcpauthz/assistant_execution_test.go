@@ -86,7 +86,12 @@ func TestAssistantExecutionRejectsConfusedOrMalformedSignedClaims(t *testing.T) 
 			raw, err = token.SignedString(issuer.key)
 			require.NoError(t, err)
 			_, err = issuer.ValidateAssistantExecution(raw)
-			require.Error(t, err)
+			switch tc.name {
+			case "wrong issuer", "unknown key", "wrong root":
+				require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity)
+			default:
+				require.Error(t, err)
+			}
 		})
 	}
 }
@@ -106,5 +111,5 @@ func TestAssistantExecutionSigningRotation(t *testing.T) {
 	retired, err := New(privateB, publicB, "https://gram.example", false)
 	require.NoError(t, err)
 	_, err = retired.ValidateAssistantExecution(raw)
-	require.Error(t, err)
+	require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity)
 }

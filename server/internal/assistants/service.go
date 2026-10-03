@@ -2007,6 +2007,14 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	case err != nil:
 		return EnqueueResult{}, err
 	}
+	if assistant.Status != StatusActive {
+		return EnqueueResult{
+			AssistantID:  assistant.ID,
+			ThreadID:     uuid.Nil,
+			ShouldSignal: false,
+		}, nil
+	}
+	// Only active assistants may signal retries. Preserve the stored identity.
 	// An ingress retry must signal the original persisted invocation even if
 	// its authority changed after the first insert. Dispatch validates that
 	// envelope; re-resolving here could strand it or change its attribution.
@@ -2016,13 +2024,6 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return EnqueueResult{}, fmt.Errorf("find previously enqueued assistant event: %w", err)
-	}
-	if assistant.Status != StatusActive {
-		return EnqueueResult{
-			AssistantID:  assistant.ID,
-			ThreadID:     uuid.Nil,
-			ShouldSignal: false,
-		}, nil
 	}
 
 	sourceKind, sourceRefJSON, normalizedPayloadJSON, sourcePayloadJSON, err := buildAssistantEventPayload(task)
@@ -2827,7 +2828,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			}
 			// Transient turn-level failure (LLM 5xx, MCP blip) — reset event,
 			// keep the warm runtime, let the coordinator re-kick on the next
-			// admit cycle.
+			// admit cycle, after AssistantThreadWorkflow's durable admission backoff.
 			s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_requeued", "assistant event requeued for retry", "WARN", runErr)
 			if err := s.resetEventToPending(ctx, thread.ProjectID, event.ID, runErr); err != nil {
 				return ProcessThreadEventsResult{}, err

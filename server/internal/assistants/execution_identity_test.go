@@ -188,11 +188,14 @@ func TestExecutionCapturePersistsSelectionAndGatesDispatch(t *testing.T) {
 	require.NoError(t, err)
 	retry, err := core.EnqueueTriggerTask(t.Context(), bgtriggers.Task{TargetKind: bgtriggers.TargetKindAssistant, TargetRef: assistant.ID.String(), EventID: row.EventID, EventJSON: []byte(`not-json`)})
 	require.NoError(t, err)
-	require.True(t, retry.ShouldSignal)
-	require.Equal(t, thread.ID, retry.ThreadID, "retry must signal original stored envelope despite changed authority")
+	require.False(t, retry.ShouldSignal, "paused assistants cannot signal persisted retries")
 	active := StatusActive
 	_, err = core.UpdateAssistant(t.Context(), project, assistant.ID, nil, nil, nil, nil, nil, nil, nil, &active)
 	require.NoError(t, err)
+	retry, err = core.EnqueueTriggerTask(t.Context(), bgtriggers.Task{TargetKind: bgtriggers.TargetKindAssistant, TargetRef: assistant.ID.String(), EventID: row.EventID, EventJSON: []byte(`not-json`)})
+	require.NoError(t, err)
+	require.True(t, retry.ShouldSignal)
+	require.Equal(t, thread.ID, retry.ThreadID, "active retry must signal original stored envelope despite changed authority")
 	require.ErrorIs(t, core.checkExecutionDispatch(t.Context(), assistant, thread, event), assistantidentity.ErrExecutionAdmissionRequired, "temporary pause must not invalidate identity incarnation")
 	require.NoError(t, core.DeleteAssistant(t.Context(), project, assistant.ID, urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"), nil))
 	require.ErrorIs(t, core.checkExecutionDispatch(t.Context(), assistant, thread, event), assistantidentity.ErrInvalidIdentity)
@@ -221,6 +224,8 @@ func TestInvocationBusyPreservesDurableQueuedEventBudget(t *testing.T) {
 	require.NoError(t, err)
 	project, assistant, _, _ := insertAssistantFixture(t, db)
 	thread := seedThreadWithEvent(t, db, assistant, "busy-thread", "busy-thread", eventStatusPending)
+	original, err := assistantrepo.New(db).GetLatestAssistantThreadEventByThreadID(t.Context(), assistantrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: thread, ProjectID: project})
+	require.NoError(t, err)
 	core := newProvisioningCore(t, db)
 	for range maxEventAttempts + 2 {
 		event, ok, err := core.claimNextPendingEvent(t.Context(), project, thread)
@@ -233,6 +238,13 @@ func TestInvocationBusyPreservesDurableQueuedEventBudget(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, eventStatusPending, row.Status)
 	require.Zero(t, row.Attempts)
+	require.Equal(t, original.ID, row.ID)
+	require.Equal(t, original.EventID, row.EventID)
+	require.Equal(t, original.NormalizedPayloadJson, row.NormalizedPayloadJson, "busy retries retain captured identity")
+	require.Equal(t, original.SourcePayloadJson, row.SourcePayloadJson)
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.Error(t, core.resetEventToPending(cancelled, project, row.ID, ErrRuntimeInvocationBusy))
 }
 
 func TestLegacyCaptureExplicitlyStripsReservedExecutionMetadata(t *testing.T) {
@@ -244,4 +256,43 @@ func TestLegacyCaptureExplicitlyStripsReservedExecutionMetadata(t *testing.T) {
 	raw, err := core.captureExecution(t.Context(), assistantRecord{ID: assistantID, ProjectID: project, OrganizationID: "org-test"}, sourceKindCron, threadID, uuid.NullUUID{}, "legacy", []byte(`{"text":"hello","_gram_execution":{"version":1},"_gram_resume_user_id":"forged","gram_event_kind":"mcp_auth"}`))
 	require.NoError(t, err)
 	require.JSONEq(t, `{"text":"hello"}`, string(raw))
+}
+
+func TestLegacyRetryHonorsCurrentAssistantLifecycle(t *testing.T) {
+	t.Parallel()
+	db, err := assistantsInfra.CloneTestDatabase(t, "legacy_retry_lifecycle")
+	require.NoError(t, err)
+	project, assistantID, _, _ := insertAssistantFixture(t, db)
+	threadID := seedThreadWithEvent(t, db, assistantID, "legacy-retry", "legacy-retry", eventStatusPending)
+	core := newProvisioningCore(t, db)
+	assistant, err := core.getAssistantForDispatch(t.Context(), assistantID)
+	require.NoError(t, err)
+	queries := assistantrepo.New(db)
+	params := assistantrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: threadID, ProjectID: project}
+	original, err := queries.GetLatestAssistantThreadEventByThreadID(t.Context(), params)
+	require.NoError(t, err)
+	thread := assistantThreadRecord{ID: threadID, ProjectID: project, AssistantID: assistantID}
+	event := assistantThreadEventRecord{EventID: original.EventID, NormalizedPayloadJSON: original.NormalizedPayloadJson}
+	require.NoError(t, core.checkExecutionDispatch(t.Context(), assistant, thread, event))
+	paused := StatusPaused
+	_, err = core.UpdateAssistant(t.Context(), project, assistantID, nil, nil, nil, nil, nil, nil, nil, &paused)
+	require.NoError(t, err)
+	task := bgtriggers.Task{TargetKind: bgtriggers.TargetKindAssistant, TargetRef: assistantID.String(), EventID: original.EventID, EventJSON: []byte(`not-json`)}
+	retry, err := core.EnqueueTriggerTask(t.Context(), task)
+	require.NoError(t, err)
+	require.False(t, retry.ShouldSignal)
+	// Use the pre-pause record to cover an already admitted processing loop.
+	_, err = core.processEventTurn(t.Context(), thread, assistant, assistantRuntimeRecord{}, event)
+	require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity)
+	active := StatusActive
+	_, err = core.UpdateAssistant(t.Context(), project, assistantID, nil, nil, nil, nil, nil, nil, nil, &active)
+	require.NoError(t, err)
+	retry, err = core.EnqueueTriggerTask(t.Context(), task)
+	require.NoError(t, err)
+	require.True(t, retry.ShouldSignal)
+	require.Equal(t, threadID, retry.ThreadID)
+	require.NoError(t, core.checkExecutionDispatch(t.Context(), assistant, thread, event))
+	unchanged, err := queries.GetLatestAssistantThreadEventByThreadID(t.Context(), params)
+	require.NoError(t, err)
+	require.Equal(t, original, unchanged, "retry must not replace or reattribute the persisted event")
 }
