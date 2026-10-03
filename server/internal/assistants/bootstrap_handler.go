@@ -13,10 +13,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// bootstrapRateBurst caps how many bootstrap calls one assistant can fire
-// in quick succession. Steady state is once per thread per VM lifetime,
-// so anything sustained above this signals either a bug (runner thrash)
-// or token abuse.
+// Bootstrap authenticates each invocation, including retries. Bound per-thread
+// credentials get independent buckets so busy siblings cannot starve each other.
+// Legacy assistant-wide credentials retain the assistant-wide abuse limit.
 const (
 	bootstrapRateBurst    = 60
 	bootstrapRatePerMin   = 60
@@ -72,7 +71,11 @@ func (s *Service) handleGetThreadBootstrap(w http.ResponseWriter, r *http.Reques
 	}
 
 	// A Store outage is not a throttle — fail open rather than wedge bootstrap.
-	switch res, err := s.bootstrapLimiter.Allow(ctx, principal.AssistantID.String()); {
+	rateKey := principal.AssistantID.String()
+	if principal.ThreadID != uuid.Nil {
+		rateKey += ":" + principal.ThreadID.String()
+	}
+	switch res, err := s.bootstrapLimiter.Allow(ctx, rateKey); {
 	case err != nil:
 		s.logger.WarnContext(ctx, "bootstrap rate limiter unavailable, allowing",
 			attr.SlogError(err),

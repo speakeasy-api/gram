@@ -150,6 +150,8 @@ func TestBuildThreadBootstrapInitializesAndReusesPersistedSkillBaseline(t *testi
 
 	first, err := svc.core.BuildThreadBootstrap(ctx, projectID, threadID, record.ID)
 	require.NoError(t, err)
+	require.Equal(t, record.ID.String(), first.AssistantID)
+	require.Equal(t, projectID.String(), first.ProjectID)
 	require.Contains(t, first.Instructions, `Name: "bootstrap-skill"; description: "first"`)
 
 	_, err = skillsrepo.New(conn).CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{

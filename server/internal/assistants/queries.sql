@@ -977,11 +977,12 @@ WHERE id = @event_id AND project_id = @project_id AND assistant_thread_id = @thr
   AND status = @pending_status AND deleted IS FALSE;
 
 -- name: GetNextPendingExecutionEvent :one
-SELECT id, event_id, normalized_payload_json
-FROM assistant_thread_events
-WHERE project_id = @project_id AND assistant_thread_id = @thread_id
-  AND status = @pending_status AND deleted IS FALSE
-ORDER BY created_at ASC
+SELECT e.id, e.event_id, e.normalized_payload_json
+FROM assistant_thread_events e
+JOIN assistant_threads t ON t.id = e.assistant_thread_id AND t.project_id = e.project_id
+WHERE e.project_id = @project_id AND e.assistant_thread_id = @thread_id
+  AND e.status = @pending_status AND e.deleted IS FALSE AND t.deleted IS FALSE
+ORDER BY e.created_at ASC
 LIMIT 1;
 
 -- name: ClaimNextPendingEvent :one

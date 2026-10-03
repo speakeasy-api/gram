@@ -1603,11 +1603,12 @@ func (q *Queries) GetManagedAssistantByProject(ctx context.Context, projectID uu
 }
 
 const getNextPendingExecutionEvent = `-- name: GetNextPendingExecutionEvent :one
-SELECT id, event_id, normalized_payload_json
-FROM assistant_thread_events
-WHERE project_id = $1 AND assistant_thread_id = $2
-  AND status = $3 AND deleted IS FALSE
-ORDER BY created_at ASC
+SELECT e.id, e.event_id, e.normalized_payload_json
+FROM assistant_thread_events e
+JOIN assistant_threads t ON t.id = e.assistant_thread_id AND t.project_id = e.project_id
+WHERE e.project_id = $1 AND e.assistant_thread_id = $2
+  AND e.status = $3 AND e.deleted IS FALSE AND t.deleted IS FALSE
+ORDER BY e.created_at ASC
 LIMIT 1
 `
 

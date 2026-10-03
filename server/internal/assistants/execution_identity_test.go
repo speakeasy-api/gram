@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
@@ -369,7 +370,7 @@ func TestExecutionDenialRecordedOnceWithoutAdmissionRetry(t *testing.T) {
 	for range 1 {
 		result, err := core.ProcessThreadEvents(t.Context(), project, threadID)
 		require.NoError(t, err)
-		require.False(t, result.RetryAdmission)
+		require.True(t, result.RetryAdmission, "release cold reservation and wake pending siblings")
 		row, err := assistantrepo.New(db).GetLatestAssistantThreadEventByThreadID(t.Context(), assistantrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: threadID, ProjectID: project})
 		require.NoError(t, err)
 		require.Equal(t, eventStatusFailed, row.Status)
@@ -405,10 +406,11 @@ func TestExecutionAdmissionGateIsTerminal(t *testing.T) {
 	require.NoError(t, err)
 	_, err = core.AdmitPendingThreads(t.Context(), assistant.ID)
 	require.NoError(t, err)
+	sibling := seedThreadWithEvent(t, db, assistant.ID, "gate-sibling", "gate-sibling", eventStatusPending)
 	for range 1 {
 		result, err := core.ProcessThreadEvents(t.Context(), project, threadID)
 		require.NoError(t, err)
-		require.False(t, result.RetryAdmission)
+		require.True(t, result.RetryAdmission, "release cold reservation and wake pending siblings")
 		row, err = assistantrepo.New(db).GetLatestAssistantThreadEventByThreadID(t.Context(), params)
 		require.NoError(t, err)
 		require.Equal(t, eventStatusFailed, row.Status)
@@ -419,6 +421,10 @@ func TestExecutionAdmissionGateIsTerminal(t *testing.T) {
 	_, claimable, err := core.claimNextPendingEvent(t.Context(), project, threadID)
 	require.NoError(t, err)
 	require.False(t, claimable, "terminal event must not be claimable again")
+	admitted, err := core.AdmitPendingThreads(t.Context(), assistant.ID)
+	require.NoError(t, err)
+	require.Contains(t, admitted.ThreadIDs, sibling, "coordinator kick must admit sibling after denied starter releases reservation")
+
 }
 
 func TestColdAdmissionSkipsDeniedEventAndContinuesEligibleEvent(t *testing.T) {
@@ -449,4 +455,18 @@ func TestColdAdmissionSkipsDeniedEventAndContinuesEligibleEvent(t *testing.T) {
 	require.Equal(t, "eligible", latest.EventID)
 	require.Equal(t, eventStatusPending, latest.Status)
 	require.Zero(t, latest.Attempts, "preflight must not claim or consume eligible event")
+}
+
+func TestColdPreflightExcludesDeletedThread(t *testing.T) {
+	t.Parallel()
+	db, err := assistantsInfra.CloneTestDatabase(t, "cold_deleted_thread")
+	require.NoError(t, err)
+	project, _, _, thread := insertAssistantFixture(t, db)
+	q := assistantrepo.New(db)
+	params := assistantrepo.GetNextPendingExecutionEventParams{ProjectID: project, ThreadID: thread, PendingStatus: eventStatusPending}
+	_, err = q.GetNextPendingExecutionEvent(t.Context(), params)
+	require.NoError(t, err)
+	require.NoError(t, q.SoftDeleteAssistantThread(t.Context(), assistantrepo.SoftDeleteAssistantThreadParams{ID: thread, ProjectID: project}))
+	_, err = q.GetNextPendingExecutionEvent(t.Context(), params)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }

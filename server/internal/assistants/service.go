@@ -2610,7 +2610,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				if err := s.stopRuntimeRecord(ctx, projectID, runtimeRecord.ID, runtimeStateStopped); err != nil {
 					return ProcessThreadEventsResult{}, err
 				}
-				return ProcessThreadEventsResult{AssistantID: assistant.ID, ProcessedAnyEvent: preflightProcessed, WarmUntil: time.Time{}, WarmTTLSeconds: assistant.WarmTTLSeconds, RuntimeActive: false, RetryAdmission: false, BootstrappedRuntime: false}, nil
+				return ProcessThreadEventsResult{AssistantID: assistant.ID, ProcessedAnyEvent: preflightProcessed, WarmUntil: time.Time{}, WarmTTLSeconds: assistant.WarmTTLSeconds, RuntimeActive: false, RetryAdmission: true, BootstrappedRuntime: false}, nil
 			}
 			if err != nil {
 				return ProcessThreadEventsResult{}, fmt.Errorf("read cold execution event: %w", err)
@@ -3266,6 +3266,8 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	}
 
 	return threadBootstrap{
+		AssistantID:    assistant.ID.String(),
+		ProjectID:      assistant.ProjectID.String(),
 		Model:          assistant.Model,
 		Instructions:   instructions,
 		CompletionsURL: completionsEndpoint.String(),

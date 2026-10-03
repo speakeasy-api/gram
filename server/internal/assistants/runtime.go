@@ -232,6 +232,8 @@ func runtimeRequestContext(parent context.Context, maxTimeSeconds int, fallback 
 // assistant-scoped JWT from the /turn request, so the auth token is not
 // included.
 type threadBootstrap struct {
+	AssistantID    string             `json:"assistant_id"`
+	ProjectID      string             `json:"project_id"`
 	Model          string             `json:"model"`
 	Instructions   string             `json:"instructions,omitempty"`
 	CompletionsURL string             `json:"completions_url"`

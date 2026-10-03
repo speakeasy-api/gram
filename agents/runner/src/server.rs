@@ -128,10 +128,7 @@ async fn thread_turn(
     headers: HeaderMap,
     Json(request): Json<ThreadTurnRequest>,
 ) -> Result<Json<ThreadTurnResponse>, (StatusCode, String)> {
-    let span = tracing::info_span!("thread_turn", thread_id = %thread_id);
-    thread_turn_inner(host, thread_id, headers, request)
-        .instrument(span)
-        .await
+    thread_turn_inner(host, thread_id, headers, request).await
 }
 
 async fn thread_turn_inner(
@@ -171,9 +168,61 @@ async fn thread_turn_inner(
             };
             (status, "invocation authentication unavailable".to_string())
         })?;
-    SpanIdentity::bind_request(&host.identity.assistant_id, request.assistant_id.as_deref());
-    SpanIdentity::bind_request(&host.identity.project_id, request.project_id.as_deref());
+    // Only authenticated bootstrap may establish permanent runtime identity.
+    // Older servers omit these fields; never substitute untrusted request hints.
+    for (cell, authenticated, hint) in [
+        (
+            &host.identity.assistant_id,
+            bootstrap.assistant_id.as_deref(),
+            request.assistant_id.as_deref(),
+        ),
+        (
+            &host.identity.project_id,
+            bootstrap.project_id.as_deref(),
+            request.project_id.as_deref(),
+        ),
+    ] {
+        if let Some(id) = authenticated
+            && (hint.is_some_and(|hint| hint != id)
+                || cell.get().is_some_and(|existing| existing != id))
+        {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "invocation identity mismatch".into(),
+            ));
+        }
+    }
+    for (cell, authenticated) in [
+        (
+            &host.identity.assistant_id,
+            bootstrap.assistant_id.as_deref(),
+        ),
+        (&host.identity.project_id, bootstrap.project_id.as_deref()),
+    ] {
+        if let Some(id) = authenticated {
+            SpanIdentity::bind_request(cell, Some(id));
+            if cell.get().is_none_or(|bound| bound != id) {
+                return Err((
+                    StatusCode::UNAUTHORIZED,
+                    "invocation identity mismatch".into(),
+                ));
+            }
+        }
+    }
+    let span = tracing::info_span!("thread_turn", thread_id = %thread_id);
+    admit_authenticated_turn(host, thread_id, headers, request, bootstrap, tokens)
+        .instrument(span)
+        .await
+}
 
+async fn admit_authenticated_turn(
+    host: AppState,
+    thread_id: String,
+    headers: HeaderMap,
+    request: ThreadTurnRequest,
+    bootstrap: crate::wire::ThreadBootstrap,
+    tokens: crate::http_layer::TokenRegistry,
+) -> Result<Json<ThreadTurnResponse>, (StatusCode, String)> {
     // Idempotency key is namespaced by thread so two threads sharing an
     // event_id namespace can't collide.
     let idempotency_key = headers
@@ -297,7 +346,7 @@ mod tests {
                         release.notified().await;
                         return (StatusCode::UNAUTHORIZED, "invalid");
                     }
-                    (StatusCode::OK, r#"{"model":"test","completions_url":"http://localhost","chat_id":"chat"}"#)
+                    (StatusCode::OK, r#"{"model":"test","completions_url":"http://localhost","chat_id":"chat","assistant_id":"11111111-1111-4111-8111-111111111111","project_id":"22222222-2222-4222-8222-222222222222"}"#)
                 }
             }
         }));
@@ -322,6 +371,17 @@ mod tests {
         assert_eq!(error.0, StatusCode::UNAUTHORIZED);
         assert!(host.seen.is_empty());
         assert!(host.turn_admissions.is_empty());
+        let forged = serde_json::from_str(r#"{"input":"test","auth_token":"valid","assistant_id":"33333333-3333-4333-8333-333333333333"}"#).unwrap();
+        assert_eq!(
+            thread_turn_inner(host.clone(), "shared".into(), HeaderMap::new(), forged)
+                .await
+                .err()
+                .unwrap()
+                .0,
+            StatusCode::UNAUTHORIZED
+        );
+        assert!(host.identity.assistant_id.get().is_none());
+        assert!(host.identity.project_id.get().is_none());
         let invalid_host = host.clone();
         let invalid = tokio::spawn(async move {
             let request =
@@ -347,6 +407,14 @@ mod tests {
             .await
             .unwrap()
             .is_ok()
+        );
+        assert_eq!(
+            host.identity.assistant_id.get().unwrap(),
+            "11111111-1111-4111-8111-111111111111"
+        );
+        assert_eq!(
+            host.identity.project_id.get().unwrap(),
+            "22222222-2222-4222-8222-222222222222"
         );
         release.notify_one();
         assert_eq!(
