@@ -350,6 +350,12 @@ mod tests {
         .unwrap();
         let (tx, mut rx) = tokio::sync::mpsc::channel(1);
         let thread = Arc::new(crate::runtime::ConfiguredThread {
+            bootstrap_settings: crate::runtime::bootstrap_settings(
+                &serde_json::from_str(
+                    r#"{"model":"test","completions_url":"http://localhost","chat_id":"chat"}"#,
+                )
+                .unwrap(),
+            ),
             thread_id: "thread".into(),
             chat_id: "chat".into(),
             idle_since: Arc::new(std::sync::Mutex::new(None)),

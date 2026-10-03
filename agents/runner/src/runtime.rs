@@ -81,6 +81,7 @@ pub struct RuntimeHost {
 /// thread race through an `OnceCell` so only one bootstrap fetch and one
 /// task spawn happen.
 pub struct ConfiguredThread {
+    pub bootstrap_settings: BootstrapSettings,
     pub thread_id: String,
     pub chat_id: String,
     pub idle_since: Arc<Mutex<Option<Instant>>>,
@@ -372,6 +373,64 @@ impl Drop for EventAdmission {
     }
 }
 
+// History and MCP membership evolve independently; only driver configuration
+// requires rebuilding a warm thread. Credentials are never part of this key.
+#[derive(PartialEq, Eq, Debug)]
+pub struct BootstrapSettings {
+    model: String,
+    instructions: String,
+    completions_url: String,
+    chat_id: String,
+    context_window: Option<u64>,
+    compaction: crate::compaction::CompactionPolicy,
+}
+
+pub fn bootstrap_settings(bootstrap: &ThreadBootstrap) -> BootstrapSettings {
+    BootstrapSettings {
+        model: bootstrap.model.clone(),
+        instructions: bootstrap.instructions.clone(),
+        completions_url: bootstrap.completions_url.clone(),
+        chat_id: bootstrap.chat_id.clone(),
+        context_window: bootstrap.context_window,
+        compaction: bootstrap.compaction.clone(),
+    }
+}
+
+fn retire_changed_settings(
+    host: &RuntimeHost,
+    thread_id: &str,
+    settings: &BootstrapSettings,
+) -> Result<(), RunnerError> {
+    if let Some(previous) = lookup_thread(host, thread_id) {
+        if previous.bootstrap_settings == *settings {
+            return Ok(());
+        }
+        // Admission is serialized by the caller. The idle mutex also excludes
+        // enqueue and the loop's idle transition; never discard pending work.
+        let mut idle = previous
+            .idle_since
+            .lock()
+            .map_err(|_| RunnerError::Loop("idle clock poisoned".into()))?;
+        if idle.is_none() {
+            return Err(RunnerError::InvocationBusy);
+        }
+        let mut task = previous
+            .task_handle
+            .lock()
+            .map_err(|_| RunnerError::Loop("thread task lock poisoned".into()))?;
+        if let Some(handle) = task.take() {
+            handle.abort();
+        }
+        *idle = None;
+        host.threads.remove_if(thread_id, |_, cell| {
+            cell.get()
+                .is_some_and(|current| Arc::ptr_eq(current, &previous))
+        });
+        // Keep successful event dedup entries across a configuration rebuild.
+    }
+    Ok(())
+}
+
 /// First-turn bootstrap path. Concurrent /turn requests for the same thread
 /// race through the `OnceCell`; only one wins the bootstrap fetch and task
 /// spawn. Later turns reuse the warm driver but queue their own opaque bearer.
@@ -381,6 +440,7 @@ pub async fn ensure_thread(
     bootstrap: ThreadBootstrap,
     tokens: TokenRegistry,
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
+    retire_changed_settings(host, thread_id, &bootstrap_settings(&bootstrap))?;
     let cell = host
         .threads
         .entry(thread_id.to_string())
@@ -408,6 +468,7 @@ async fn spawn_thread(
     bootstrap: ThreadBootstrap,
     tokens: TokenRegistry,
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
+    let settings = bootstrap_settings(&bootstrap);
     let (inbox_tx, inbox_rx) = mpsc::channel::<QueuedTurn>(64);
     let (notice_tx, notice_rx) = mpsc::unbounded_channel::<RunnerContent>();
     let (mcp_cmd_tx, mcp_catalog) = spawn_mcp_actor(
@@ -625,6 +686,7 @@ async fn spawn_thread(
     });
 
     let configured = Arc::new(ConfiguredThread {
+        bootstrap_settings: settings,
         thread_id,
         chat_id,
         idle_since,
@@ -1074,6 +1136,7 @@ mod tests {
         let (inbox_tx, _inbox_rx) = mpsc::channel::<QueuedTurn>(64);
         let handle = tokio::spawn(async {});
         let configured = Arc::new(ConfiguredThread {
+            bootstrap_settings: bootstrap_settings(&test_bootstrap()),
             thread_id: thread_id.to_string(),
             chat_id: format!("chat-{thread_id}"),
             idle_since: Arc::new(Mutex::new(idle_since)),
@@ -1117,6 +1180,46 @@ mod tests {
         assert_eq!(parts.len(), 2);
         assert!(matches!(&parts[0], RunnerContentPart::Text { text } if text == "server update"));
         assert!(matches!(&parts[1], RunnerContentPart::Text { text } if text == "prompt"));
+    }
+
+    #[tokio::test]
+    async fn changed_driver_settings_wait_for_idle_and_preserve_dedup() {
+        let host = empty_host();
+        insert_thread(&host, "thread", None);
+        let old = lookup_thread(&host, "thread").unwrap();
+        let event = EventAdmission::new(host.clone(), "thread:event".into());
+        event.slot.accepted.store(true, Ordering::Release);
+        let mut next = test_bootstrap();
+        next.instructions = "updated instructions".into();
+        assert!(matches!(
+            retire_changed_settings(&host, "thread", &bootstrap_settings(&next)),
+            Err(RunnerError::InvocationBusy)
+        ));
+        assert!(Arc::ptr_eq(&old, &lookup_thread(&host, "thread").unwrap()));
+        *old.idle_since.lock().unwrap() = Some(Instant::now());
+        retire_changed_settings(&host, "thread", &bootstrap_settings(&next)).unwrap();
+        assert!(lookup_thread(&host, "thread").is_none());
+        assert!(host.seen.contains_key("thread:event"));
+    }
+
+    #[test]
+    fn driver_settings_exclude_history_and_mcp_membership() {
+        let original = test_bootstrap();
+        let mut next = original.clone();
+        next.mcp_servers.push(
+            serde_json::from_str(r#"{"id":"tool","url":"https://example.com/mcp"}"#).unwrap(),
+        );
+        next.history
+            .push(serde_json::from_str(r#"{"role":"user","content":"new"}"#).unwrap());
+        assert_eq!(bootstrap_settings(&original), bootstrap_settings(&next));
+        next.model = "new-model".into();
+        assert_ne!(bootstrap_settings(&original), bootstrap_settings(&next));
+        next = original.clone();
+        next.context_window = Some(123);
+        assert_ne!(bootstrap_settings(&original), bootstrap_settings(&next));
+        next = original.clone();
+        next.compaction = crate::compaction::CompactionPolicy::Off;
+        assert_ne!(bootstrap_settings(&original), bootstrap_settings(&next));
     }
 
     #[tokio::test]
@@ -1326,6 +1429,7 @@ mod tests {
     fn full_queue_returns_retryable_backpressure_and_dropped_queue_never_acknowledges() {
         let (tx, rx) = mpsc::channel(1);
         let thread = ConfiguredThread {
+            bootstrap_settings: bootstrap_settings(&test_bootstrap()),
             thread_id: "thread".into(),
             chat_id: "chat".into(),
             idle_since: Arc::new(Mutex::new(None)),
