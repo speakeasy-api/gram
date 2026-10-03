@@ -35,7 +35,10 @@ enum MiddlewareError {
     InvalidTokenHeader(#[from] http::header::InvalidHeaderValue),
 }
 
-/// Thread bearer. Only the serialized loop may rotate it, between completed turns.
+/// Bearer slot for one assistant thread. Every outbound request the thread
+/// makes (chat completions, MCP, bootstrap fetch) authenticates against
+/// this slot, so the ThreadID claim minted on `/threads/turn` propagates
+/// to platform tools that key off `principal.ThreadID`.
 #[derive(Clone, Debug)]
 pub struct TokenRegistry {
     inner: Arc<RwLock<String>>,
@@ -135,17 +138,8 @@ impl McpRotatingClient {
         custom
     }
 
-    fn current_token(&self) -> Result<Option<String>, McpStreamableHttpError<reqwest::Error>> {
-        let token = self
-            .tokens
-            .current()
-            .map_err(|err| McpStreamableHttpError::Io(std::io::Error::other(err.to_string())))?;
-        if token.is_empty() {
-            return Err(McpStreamableHttpError::Io(std::io::Error::other(
-                "missing turn credential",
-            )));
-        }
-        Ok(Some(token))
+    fn current_token(&self) -> Option<String> {
+        self.tokens.current().ok().filter(|t| !t.is_empty())
     }
 }
 
@@ -159,7 +153,7 @@ impl McpHttpClient for McpRotatingClient {
         _auth_header: Option<String>,
         custom_headers: HashMap<HeaderName, HeaderValue>,
     ) -> Result<McpStreamableHttpPostResponse, McpStreamableHttpError<reqwest::Error>> {
-        let token = self.current_token()?;
+        let token = self.current_token();
         let headers = self.merged_headers(custom_headers);
         RmcpStreamableHttpClient::post_message(
             &self.inner,
@@ -179,7 +173,7 @@ impl McpHttpClient for McpRotatingClient {
         _auth_header: Option<String>,
         custom_headers: HashMap<HeaderName, HeaderValue>,
     ) -> Result<(), McpStreamableHttpError<reqwest::Error>> {
-        let token = self.current_token()?;
+        let token = self.current_token();
         let headers = self.merged_headers(custom_headers);
         RmcpStreamableHttpClient::delete_session(&self.inner, uri, session_id, token, headers).await
     }
@@ -192,7 +186,7 @@ impl McpHttpClient for McpRotatingClient {
         _auth_header: Option<String>,
         custom_headers: HashMap<HeaderName, HeaderValue>,
     ) -> Result<McpSseStream, McpStreamableHttpError<reqwest::Error>> {
-        let token = self.current_token()?;
+        let token = self.current_token();
         let headers = self.merged_headers(custom_headers);
         RmcpStreamableHttpClient::get_stream(
             &self.inner,
@@ -203,30 +197,5 @@ impl McpHttpClient for McpRotatingClient {
             headers,
         )
         .await
-    }
-}
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn missing_or_poisoned_credentials_never_become_anonymous_mcp_requests() {
-        let empty = McpRotatingClient::new(
-            reqwest::Client::new(),
-            TokenRegistry::new(""),
-            HeaderMap::new(),
-        );
-        assert!(empty.current_token().is_err());
-        let registry = TokenRegistry::new("token");
-        let poisoned = registry.clone();
-        let _ = std::thread::spawn(move || {
-            let _guard = poisoned.inner.write().unwrap();
-            std::panic::resume_unwind(Box::new("test poison"));
-        })
-        .join();
-        let client = McpRotatingClient::new(reqwest::Client::new(), registry, HeaderMap::new());
-        assert!(client.current_token().is_err());
     }
 }

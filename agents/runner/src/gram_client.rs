@@ -75,8 +75,9 @@ impl GramBootstrapClient {
         Self { base_url, http }
     }
 
-    /// Authenticates an invocation and fetches its thread-scoped bootstrap.
-    /// Call before allocating admission state; never cache across credentials.
+    /// Fetches the bootstrap blob for a thread. Caller is responsible for
+    /// ensuring this is called at most once per thread per VM lifetime
+    /// (the runtime's `OnceCell` guard handles that for the live path).
     pub async fn fetch_bootstrap(
         &self,
         thread_id: &str,

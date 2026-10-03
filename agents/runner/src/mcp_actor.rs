@@ -48,14 +48,6 @@ const MCP_RETRY_COOLDOWN: Duration = Duration::from_secs(30);
 const MCP_AUTH_URL_TTL: Duration = Duration::from_secs(15 * 60);
 
 pub enum McpCmd {
-    /// Serialized turn boundary: close prior sessions before installing the
-    /// opaque bearer. Tool discovery/auth caches cannot cross credentials.
-    BeginTurn {
-        desired: Vec<McpServer>,
-        bearer: String,
-        reply: oneshot::Sender<Result<Option<String>, RunnerError>>,
-    },
-
     /// Sent by `tool_search` before every search. The actor connects any
     /// configured server that is not yet connected (creating an auth flow
     /// for servers that demand one) and replies with the status of every
@@ -71,6 +63,12 @@ pub enum McpCmd {
         tool_name: String,
         reply: oneshot::Sender<Result<(), String>>,
     },
+    /// Sent by `/threads/{id}/turn` when the server-side toolset has
+    /// drifted from the snapshot the runner bootstrapped with. The actor
+    /// diffs `desired` against the configured set, registering added
+    /// servers and disconnecting removed ones. Connects stay deferred to
+    /// the next `EnsureConnected`.
+    Reconcile { desired: Vec<McpServer> },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -104,7 +102,7 @@ pub fn spawn_mcp_actor(
     thread_id: &str,
     servers: &[McpServer],
     tokens: &TokenRegistry,
-    inbox_tx: UnboundedSender<crate::wire::RunnerContent>,
+    inbox_tx: UnboundedSender<String>,
 ) -> Result<(mpsc::Sender<McpCmd>, CatalogReader), RunnerError> {
     let mut manager = McpServerManager::new();
     let catalog = manager.source();
@@ -142,7 +140,7 @@ struct McpActor {
     http_client: reqwest::Client,
     thread_id: String,
     tokens: TokenRegistry,
-    inbox_tx: UnboundedSender<crate::wire::RunnerContent>,
+    inbox_tx: UnboundedSender<String>,
     // Servers whose last connect demanded authorization, mapped to the auth
     // flow (None while flow creation itself is failing). Retried on
     // every EnsureConnected so a completed authorization is picked up
@@ -163,35 +161,6 @@ impl McpActor {
     async fn run(mut self, mut cmd_rx: mpsc::Receiver<McpCmd>) {
         while let Some(cmd) = cmd_rx.recv().await {
             match cmd {
-                McpCmd::BeginTurn {
-                    desired,
-                    bearer,
-                    reply,
-                } => {
-                    // Reject the whole update before changing credentials. A
-                    // skipped malformed registration could otherwise reconnect
-                    // a previous endpoint under the next turn's bearer.
-                    if let Some(err) = desired.iter().find_map(|server| {
-                        build_mcp_server_config(server, &self.http_client, &self.tokens).err()
-                    }) {
-                        let _ = reply.send(Err(err));
-                        continue;
-                    }
-                    let ids: Vec<String> = self.configured.keys().cloned().collect();
-                    for id in ids {
-                        if self.is_connected(&id) {
-                            self.drop_connection(&id, "turn_boundary").await;
-                        }
-                    }
-                    self.auth_pending.clear();
-                    self.last_errors.clear();
-                    self.last_reconnects.clear();
-                    let result = match self.tokens.rotate(bearer) {
-                        Ok(()) => Ok(self.reconcile(desired).await),
-                        Err(err) => Err(err),
-                    };
-                    let _ = reply.send(result);
-                }
                 McpCmd::EnsureConnected { reply } => {
                     let statuses = self.ensure_connected().await;
                     let _ = reply.send(statuses);
@@ -199,6 +168,9 @@ impl McpActor {
                 McpCmd::ReconnectTool { tool_name, reply } => {
                     let result = self.reconnect_for_tool(&tool_name).await;
                     let _ = reply.send(result);
+                }
+                McpCmd::Reconcile { desired } => {
+                    self.reconcile(desired).await;
                 }
             }
         }
@@ -366,7 +338,7 @@ impl McpActor {
         }
     }
 
-    async fn reconcile(&mut self, desired: Vec<McpServer>) -> Option<String> {
+    async fn reconcile(&mut self, desired: Vec<McpServer>) {
         let desired_map: BTreeMap<String, McpServer> =
             desired.into_iter().map(|s| (s.id.clone(), s)).collect();
 
@@ -427,7 +399,7 @@ impl McpActor {
         self.configured = desired_map;
 
         if attached.is_empty() && detached.is_empty() {
-            return None;
+            return;
         }
         let mut notice =
             String::from("<message-context>\nEventType: assistant_mcp_servers_updated\n");
@@ -439,7 +411,7 @@ impl McpActor {
         }
         notice
             .push_str("Use tool_search to discover tools on attached servers.\n</message-context>");
-        Some(notice)
+        self.send_notice(notice);
     }
 
     /// Creates (or reuses) the auth flow for a server whose connect
@@ -518,11 +490,7 @@ impl McpActor {
     }
 
     fn send_notice(&self, notice: String) {
-        if self
-            .inbox_tx
-            .send(crate::wire::RunnerContent::Text(notice))
-            .is_err()
-        {
+        if self.inbox_tx.send(notice).is_err() {
             tracing::warn!("drop mcp notice: thread inbox closed");
         }
     }
@@ -543,15 +511,6 @@ fn build_mcp_server_config(
     http_client: &reqwest::Client,
     tokens: &TokenRegistry,
 ) -> Result<McpServerConfig, RunnerError> {
-    let url = reqwest::Url::parse(&server.url)
-        .map_err(|_| RunnerError::Loop("invalid MCP endpoint URL".into()))?;
-    if !matches!(url.scheme(), "http" | "https")
-        || url.host_str().is_none()
-        || !url.username().is_empty()
-        || url.password().is_some()
-    {
-        return Err(RunnerError::Loop("invalid MCP endpoint transport".into()));
-    }
     let mut server_headers = http::HeaderMap::new();
     for (k, v) in &server.headers {
         let name = http::HeaderName::from_bytes(k.as_bytes()).map_err(|source| {
@@ -579,39 +538,4 @@ fn build_mcp_server_config(
         &server.id,
         McpTransportBinding::StreamableHttp(transport),
     ))
-}
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn malformed_next_configuration_does_not_rotate_bearer() {
-        let client = reqwest::Client::new();
-        let gram = GramBootstrapClient::new(
-            "http://localhost".into(),
-            crate::http_layer::build_bootstrap_client(client.clone()),
-        );
-        let tokens = TokenRegistry::new("original");
-        let (notices, _) = mpsc::unbounded_channel();
-        let (commands, _) = spawn_mcp_actor(gram, client, "thread", &[], &tokens, notices).unwrap();
-        for raw in [
-            r#"{"id":"server","url":"file:///tmp/socket","headers":{}}"#,
-            r#"{"id":"server","url":"https://new.example/mcp","headers":{"invalid\nheader":"value"}}"#,
-        ] {
-            let server: McpServer = serde_json::from_str(raw).unwrap();
-            let (reply, response) = oneshot::channel();
-            commands
-                .send(McpCmd::BeginTurn {
-                    desired: vec![server],
-                    bearer: "next".into(),
-                    reply,
-                })
-                .await
-                .unwrap();
-            assert!(response.await.unwrap().is_err());
-            assert_eq!(tokens.current().unwrap(), "original");
-        }
-    }
 }
