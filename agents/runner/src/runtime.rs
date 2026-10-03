@@ -97,6 +97,7 @@ pub struct ConfiguredThread {
 /// credentials, reconciles tools, or injects input into the active model turn.
 #[derive(Default)]
 pub struct EventSlot {
+    pub submit: Mutex<()>,
     pub gate: tokio::sync::Mutex<()>,
     pub accepted: Arc<AtomicBool>,
 }
@@ -654,17 +655,21 @@ async fn activate_turn(
 ) -> Result<Option<String>, RunnerError> {
     let (reply, response) = tokio::sync::oneshot::channel();
     // Disconnect credential-bearing MCP sessions before changing the token.
-    mcp_cmd_tx
-        .send(McpCmd::BeginTurn {
-            desired: turn.mcp_servers.clone(),
-            bearer: turn.bearer.clone(),
-            reply,
-        })
-        .await
-        .map_err(|_| RunnerError::Loop("mcp actor closed".into()))?;
-    let notice = response
-        .await
-        .map_err(|_| RunnerError::Loop("mcp turn admission failed".into()))??;
+    let notice = tokio::time::timeout(Duration::from_secs(30), async {
+        mcp_cmd_tx
+            .send(McpCmd::BeginTurn {
+                desired: turn.mcp_servers.clone(),
+                bearer: turn.bearer.clone(),
+                reply,
+            })
+            .await
+            .map_err(|_| RunnerError::Loop("mcp actor closed".into()))?;
+        response
+            .await
+            .map_err(|_| RunnerError::Loop("mcp turn admission failed".into()))?
+    })
+    .await
+    .map_err(|_| RunnerError::Loop("mcp turn admission timed out".into()))??;
     // The actor and model clients share this registry. No model work starts
     // until the actor has completed the credential transition.
     debug_assert!(tokens.current()? == turn.bearer);
@@ -734,20 +739,31 @@ where
                 // tuple, never to the next message's delegator.
                 let _ = drain(&mut notices);
                 let notice = activate_turn(&credential.0, &credential.1, &turn).await?;
-                if turn
-                    .admission
-                    .as_ref()
-                    .is_some_and(|admission| admission.reply.is_closed())
                 {
-                    continue;
+                    // Share this short synchronous boundary with retry enqueue:
+                    // cancellation cannot expose accepted=false after submit.
+                    let _submission = turn
+                        .admission
+                        .as_ref()
+                        .and_then(|a| a.event.as_ref())
+                        .map(|event| event.slot.submit.lock())
+                        .transpose()
+                        .map_err(|_| RunnerError::Loop("admission lock poisoned".into()))?;
+                    if turn
+                        .admission
+                        .as_ref()
+                        .is_some_and(|admission| admission.reply.is_closed())
+                    {
+                        continue;
+                    }
+                    let input = invocation_content(turn.input, notice);
+                    let items = vec![user_content_item(&input)];
+                    req.submit(&mut driver, items)?;
+                    if let Some(admission) = &turn.admission {
+                        admission.accepted.store(true, Ordering::Release);
+                    }
                 }
-                let input = invocation_content(turn.input, notice);
-                let items = vec![user_content_item(&input)];
-                req.submit(&mut driver, items)?;
                 if let Some(admission) = turn.admission {
-                    // Publish dedup acceptance before acknowledging, even if the
-                    // HTTP response is cancelled or lost immediately afterwards.
-                    admission.accepted.store(true, Ordering::Release);
                     let _ = admission.reply.send(());
                     drop(admission.event);
                 }
@@ -1246,7 +1262,8 @@ mod tests {
             .unwrap();
         assert_eq!(first, ("token-a".into(), vec!["message-a".into()]));
         let (reply, mut admitted) = tokio::sync::oneshot::channel();
-        let accepted = Arc::new(AtomicBool::new(false));
+        let event = EventAdmission::new(empty_host(), "thread:event".into());
+        let accepted = event.slot.accepted.clone();
         // A cancelled HTTP admission stays retryable and never starts model work.
         let (cancelled_reply, cancelled) = tokio::sync::oneshot::channel();
         drop(cancelled);
@@ -1266,7 +1283,7 @@ mod tests {
             bearer: "token-b".into(),
             mcp_servers: vec![],
             admission: Some(TurnAdmission {
-                event: None,
+                event: Some(event),
                 accepted: accepted.clone(),
                 reply,
             }),
@@ -1430,6 +1447,7 @@ mod tests {
         host.seen.insert(
             "T:evt-1".to_string(),
             Arc::new(EventSlot {
+                submit: Mutex::new(()),
                 accepted: Arc::new(AtomicBool::new(true)),
                 gate: tokio::sync::Mutex::new(()),
             }),
@@ -1437,6 +1455,7 @@ mod tests {
         host.seen.insert(
             "T:evt-2".to_string(),
             Arc::new(EventSlot {
+                submit: Mutex::new(()),
                 accepted: Arc::new(AtomicBool::new(true)),
                 gate: tokio::sync::Mutex::new(()),
             }),
@@ -1444,6 +1463,7 @@ mod tests {
         host.seen.insert(
             "other:evt-1".to_string(),
             Arc::new(EventSlot {
+                submit: Mutex::new(()),
                 accepted: Arc::new(AtomicBool::new(true)),
                 gate: tokio::sync::Mutex::new(()),
             }),

@@ -506,3 +506,14 @@ func TestColdPreflightExcludesDeletedThread(t *testing.T) {
 	_, err = q.GetNextPendingExecutionEvent(t.Context(), params)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
+
+func TestDecodeExecutionRejectsNonObjectLegacyFallback(t *testing.T) {
+	t.Parallel()
+	for _, raw := range []string{"null", "[]", "true", "123", `"legacy"`} {
+		_, err := decodeExecution([]byte(raw))
+		require.Error(t, err, "only an object can be a legacy event")
+	}
+	execution, err := decodeExecution([]byte(`{}`))
+	require.NoError(t, err)
+	require.Nil(t, execution)
+}

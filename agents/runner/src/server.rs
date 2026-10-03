@@ -14,6 +14,10 @@ use crate::runtime::{
 };
 use crate::telemetry::SpanIdentity;
 
+// Under the server's 30-minute /turn budget: 25 minutes of queue wait plus
+// one 30-minute turn fits the shared 60-minute token lifetime.
+const QUEUE_ADMISSION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(25 * 60);
+
 const IDEMPOTENCY_HEADER: &str = "x-idempotency-key";
 
 /// Turn requests can carry base64 `input_parts` images (the server-side
@@ -209,9 +213,18 @@ async fn thread_turn_inner(
         }
     }
     let span = tracing::info_span!("thread_turn", thread_id = %thread_id);
-    admit_authenticated_turn(host, thread_id, headers, request, bootstrap, tokens)
-        .instrument(span)
-        .await
+    tokio::time::timeout(
+        QUEUE_ADMISSION_TIMEOUT,
+        admit_authenticated_turn(host, thread_id, headers, request, bootstrap, tokens)
+            .instrument(span),
+    )
+    .await
+    .map_err(|_| {
+        (
+            StatusCode::TOO_MANY_REQUESTS,
+            crate::errors::RunnerError::InvocationBusy.to_string(),
+        )
+    })?
 }
 
 async fn admit_authenticated_turn(
@@ -277,14 +290,34 @@ async fn admit_authenticated_turn(
         .await
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
 
-    thread.enqueue(turn).map_err(|e| {
-        let status = if matches!(e, crate::errors::RunnerError::InvocationBusy) {
-            StatusCode::TOO_MANY_REQUESTS
-        } else {
-            StatusCode::SERVICE_UNAVAILABLE
-        };
-        (status, e.to_string())
-    })?;
+    {
+        let _submission = event_admission
+            .as_ref()
+            .map(|event| event.slot.submit.lock())
+            .transpose()
+            .map_err(|_| {
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "admission lock poisoned".into(),
+                )
+            })?;
+        if event_admission.as_ref().is_some_and(|event| {
+            event
+                .slot
+                .accepted
+                .load(std::sync::atomic::Ordering::Acquire)
+        }) {
+            return Ok(Json(ThreadTurnResponse::deduped()));
+        }
+        thread.enqueue(turn).map_err(|e| {
+            let status = if matches!(e, crate::errors::RunnerError::InvocationBusy) {
+                StatusCode::TOO_MANY_REQUESTS
+            } else {
+                StatusCode::SERVICE_UNAVAILABLE
+            };
+            (status, e.to_string())
+        })?;
+    }
     drop(_turn_admission);
     // Pending tuples remain durable at the server until the loop admits them.
     // A loop/activation failure drops this sender and leaves the event retryable.
@@ -431,6 +464,7 @@ mod tests {
         host.seen.insert(
             "shared:accepted".into(),
             Arc::new(crate::runtime::EventSlot {
+                submit: std::sync::Mutex::new(()),
                 gate: Mutex::new(()),
                 accepted: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             }),

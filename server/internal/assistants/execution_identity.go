@@ -162,6 +162,9 @@ func decodeExecution(raw []byte) (*assistantidentity.Execution, error) {
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return nil, fmt.Errorf("assistant execution: %w", err)
 	}
+	if payload == nil {
+		return nil, assistantidentity.ErrInvalidIdentity
+	}
 	for key := range payload {
 		if canonical := reservedExecutionKey(key); canonical != "" && key != canonical {
 			return nil, assistantidentity.ErrInvalidIdentity
