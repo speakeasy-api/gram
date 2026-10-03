@@ -23,8 +23,7 @@ const (
 	conversationOutcomeNew             = "new"
 )
 
-// metrics counts how inference frames map onto stored conversations. A nil
-// *metrics records nothing, so tests can build a Service without a meter.
+// metrics counts how inference frames map onto stored conversations.
 type metrics struct {
 	conversations metric.Int64Counter
 }
@@ -44,9 +43,6 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 
 // RecordConversation records one frame's resolution outcome.
 func (m *metrics) RecordConversation(ctx context.Context, frame Frame, outcome string) {
-	if m == nil || m.conversations == nil {
-		return
-	}
 	m.conversations.Add(ctx, 1, metric.WithAttributes(
 		attr.InferenceApplication(metricApplication(frame.Source.Application)),
 		attr.InferenceHasSessionID(frame.SessionID != ""),

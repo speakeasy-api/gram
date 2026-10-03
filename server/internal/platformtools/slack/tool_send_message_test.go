@@ -37,7 +37,7 @@ func TestSendMessageTool_PassesOptionalFields(t *testing.T) {
 	tool := &slackTool{
 		descriptor: NewSendMessageTool(nil, nil).Descriptor(),
 		client:     newAPIClient(server.URL, server.Client()),
-		callFn:     sendMessageCall(nil),
+		callFn:     sendMessageCall(failingThreadRouter{}),
 	}
 
 	var out bytes.Buffer
@@ -78,7 +78,7 @@ func TestSendMessageTool_PassesBlockKitBlocks(t *testing.T) {
 	tool := &slackTool{
 		descriptor: NewSendMessageTool(nil, nil).Descriptor(),
 		client:     newAPIClient(server.URL, server.Client()),
-		callFn:     sendMessageCall(nil),
+		callFn:     sendMessageCall(failingThreadRouter{}),
 	}
 
 	var out bytes.Buffer
@@ -115,7 +115,7 @@ func TestSendMessageTool_RejectsRouteRepliesInThread(t *testing.T) {
 	tool := &slackTool{
 		descriptor: NewSendMessageTool(nil, nil).Descriptor(),
 		client:     newAPIClient("http://unused.invalid", http.DefaultClient),
-		callFn:     sendMessageCall(nil),
+		callFn:     sendMessageCall(failingThreadRouter{}),
 	}
 
 	var out bytes.Buffer

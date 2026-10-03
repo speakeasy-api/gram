@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan/mcpriskscantest"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -215,8 +216,8 @@ func (s *consumingRiskScan) Observe(_ context.Context, subject mcpriskscan.Subje
 func consumeRiskScanPayloads(t *testing.T, ti *testInstance) *consumingRiskScan {
 	t.Helper()
 	scanner := &consumingRiskScan{t: t, payloads: nil, events: nil}
-	noop := mcpriskscan.NewNoop(ti.tracerProvider, testenv.NewMeterProvider(t), ti.logger)
-	ti.service.SetRiskScanEvaluator(mcpriskscan.PrependObserver(scanner, noop))
+	evaluator := mcpriskscantest.NewEvaluator(t, ti.logger, ti.tracerProvider, testenv.NewMeterProvider(t), ti.conn, testenv.NewMemoryCache(), ti.enc)
+	ti.service.SetRiskScanEvaluator(mcpriskscan.PrependObserver(scanner, evaluator))
 	return scanner
 }
 
@@ -393,6 +394,7 @@ func TestRiskScan_HostedScopedBlockPolicyOnlyStopsMatchingServer(t *testing.T) {
 		},
 		hostedPolicyDetector{},
 		gcp.NewNoopPublisher[*riskv1.Finding](),
+		risk.NewMCPFindingEvidenceStore(ti.conn, ti.enc),
 		mcpriskscan.DefaultPolicyConfig,
 	)
 	ti.service.SetRiskScanEvaluator(evaluator)
@@ -466,6 +468,7 @@ func TestRiskScan_HostedHTTPResponsePolicies(t *testing.T) {
 			hostedPolicyListLookup{policies: policies, scopedServerID: server.ID},
 			hostedResponsePolicyDetector{},
 			publisher,
+			risk.NewMCPFindingEvidenceStore(ti.conn, ti.enc),
 			mcpriskscan.DefaultPolicyConfig,
 		)
 	}

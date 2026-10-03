@@ -28,7 +28,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
-var funcs functions.ToolCaller
+var funcs functions.ToolCaller = &mockToolCaller{}
 
 type mockPlatformExecutor struct {
 	requestBody []byte
@@ -280,10 +280,10 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				meterProvider,
 				ToolCallSourceDirect,
 				enc,
-				nil, // no cache needed for this test
+				testenv.NewMemoryCache(),
 				policy,
 				funcs,
-				nil,
+				&mockPlatformExecutor{},
 			)
 
 			// Create response recorder
@@ -410,10 +410,10 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				meterProvider,
 				ToolCallSourceDirect,
 				enc,
-				nil, // no cache needed for this test
+				testenv.NewMemoryCache(),
 				policy,
 				funcs,
-				nil,
+				&mockPlatformExecutor{},
 			)
 
 			// Create response recorder
@@ -761,10 +761,10 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				meterProvider,
 				ToolCallSourceDirect,
 				enc,
-				nil, // no cache needed for this test
+				testenv.NewMemoryCache(),
 				policy,
 				funcs,
-				nil,
+				&mockPlatformExecutor{},
 			)
 
 			// Create response recorder
@@ -982,10 +982,10 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				meterProvider,
 				ToolCallSourceDirect,
 				enc,
-				nil, // no cache needed for this test
+				testenv.NewMemoryCache(),
 				policy,
 				funcs,
-				nil,
+				&mockPlatformExecutor{},
 			)
 
 			// Create response recorder
@@ -1323,10 +1323,10 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 				meterProvider,
 				ToolCallSourceDirect,
 				enc,
-				nil,
+				testenv.NewMemoryCache(),
 				policy,
 				funcs,
-				nil,
+				&mockPlatformExecutor{},
 			)
 
 			// Create response recorder
@@ -1425,10 +1425,10 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 		meterProvider,
 		ToolCallSourceDirect,
 		enc,
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		mockFuncCaller,
-		nil,
+		&mockPlatformExecutor{},
 	)
 
 	// Create response recorder
@@ -1564,10 +1564,10 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 		meterProvider,
 		ToolCallSourceDirect,
 		enc,
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		mockFuncCaller,
-		nil,
+		&mockPlatformExecutor{},
 	)
 
 	// Create request body
@@ -1657,7 +1657,7 @@ func TestToolProxy_Do_PlatformTool_UsesWrappedBodyPayload(t *testing.T) {
 		meterProvider,
 		ToolCallSourceDirect,
 		enc,
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		funcs,
 		platformExecutor,
@@ -1724,7 +1724,7 @@ func TestToolProxy_Do_PlatformTool_PreservesRawBodyFieldPayload(t *testing.T) {
 		meterProvider,
 		ToolCallSourceDirect,
 		enc,
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		funcs,
 		platformExecutor,
@@ -1773,7 +1773,7 @@ func TestToolProxy_Do_PlatformTool_PreservesCallerFaultAttribution(t *testing.T)
 		testenv.NewMeterProvider(t),
 		ToolCallSourceDirect,
 		testenv.NewEncryptionClient(t),
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		funcs,
 		platformExecutor,
@@ -1859,10 +1859,10 @@ func TestToolProxy_Do_HTTPTool_UserConfigVariablesSent(t *testing.T) {
 		meterProvider,
 		ToolCallSourceDirect,
 		enc,
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		funcs,
-		nil,
+		&mockPlatformExecutor{},
 	)
 
 	// Create response recorder
@@ -1945,10 +1945,10 @@ func TestToolProxy_Do_HTTPTool_UserConfigNotInPlanNotSent(t *testing.T) {
 		meterProvider,
 		ToolCallSourceDirect,
 		enc,
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		funcs,
-		nil,
+		&mockPlatformExecutor{},
 	)
 
 	// Create response recorder
@@ -2042,10 +2042,10 @@ func TestToolProxy_Do_FunctionTool_UserConfigNotInPlanNotSent(t *testing.T) {
 		meterProvider,
 		ToolCallSourceDirect,
 		enc,
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		mockFuncCaller,
-		nil,
+		&mockPlatformExecutor{},
 	)
 
 	// Create request body
@@ -2154,10 +2154,10 @@ func TestToolProxy_Do_HTTPTool_SystemEnvSentWhenInPlan(t *testing.T) {
 		meterProvider,
 		ToolCallSourceDirect,
 		enc,
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		funcs,
-		nil,
+		&mockPlatformExecutor{},
 	)
 
 	// Create response recorder
@@ -2238,10 +2238,10 @@ func TestToolProxy_Do_HTTPTool_SystemEnvKeysConvertedToHTTPHeaders(t *testing.T)
 		meterProvider,
 		ToolCallSourceDirect,
 		enc,
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		funcs,
-		nil,
+		&mockPlatformExecutor{},
 	)
 
 	recorder := httptest.NewRecorder()
@@ -2334,10 +2334,10 @@ func TestToolProxy_Do_FunctionTool_SystemEnvSentWhenInPlan(t *testing.T) {
 		meterProvider,
 		ToolCallSourceDirect,
 		enc,
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		mockFuncCaller,
-		nil,
+		&mockPlatformExecutor{},
 	)
 
 	// Create request body
@@ -2448,10 +2448,10 @@ func TestToolProxy_Do_HTTPTool_UserConfigPrefersOverSystemEnv(t *testing.T) {
 		meterProvider,
 		ToolCallSourceDirect,
 		enc,
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		funcs,
-		nil,
+		&mockPlatformExecutor{},
 	)
 
 	// Create response recorder
@@ -2546,10 +2546,10 @@ func TestToolProxy_Do_FunctionTool_UserConfigPrefersOverSystemEnv(t *testing.T) 
 		meterProvider,
 		ToolCallSourceDirect,
 		enc,
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		mockFuncCaller,
-		nil,
+		&mockPlatformExecutor{},
 	)
 
 	// Create request body
@@ -2664,10 +2664,10 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWhenInUserConfig(t *testing.T) {
 		meterProvider,
 		ToolCallSourceDirect,
 		enc,
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		mockFuncCaller,
-		nil,
+		&mockPlatformExecutor{},
 	)
 
 	// Create request body
@@ -2776,10 +2776,10 @@ func TestToolProxy_Do_FunctionTool_AuthInputNotSentWhenNotInUserConfig(t *testin
 		meterProvider,
 		ToolCallSourceDirect,
 		enc,
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		mockFuncCaller,
-		nil,
+		&mockPlatformExecutor{},
 	)
 
 	// Create request body
@@ -2888,10 +2888,10 @@ func TestToolProxy_Do_FunctionTool_AuthInputPrefersUserConfigOverSystemEnv(t *te
 		meterProvider,
 		ToolCallSourceDirect,
 		enc,
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		mockFuncCaller,
-		nil,
+		&mockPlatformExecutor{},
 	)
 
 	// Create request body
@@ -3006,10 +3006,10 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWithRegularVariables(t *testing.
 		meterProvider,
 		ToolCallSourceDirect,
 		enc,
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		mockFuncCaller,
-		nil,
+		&mockPlatformExecutor{},
 	)
 
 	// Create request body
@@ -3119,10 +3119,10 @@ func TestToolProxy_Do_FunctionTool_AuthInputNilNotSent(t *testing.T) {
 		meterProvider,
 		ToolCallSourceDirect,
 		enc,
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		mockFuncCaller,
-		nil,
+		&mockPlatformExecutor{},
 	)
 
 	// Create request body

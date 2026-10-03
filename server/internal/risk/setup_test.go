@@ -2,6 +2,7 @@ package risk_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -34,6 +35,8 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/mcpapprovaltest"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -43,8 +46,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -57,6 +62,7 @@ func testCELEngine(t *testing.T) *celenv.Engine {
 	require.NoError(t, err)
 	return eng
 }
+
 func realtimeScanRequest(organizationID string, projectID uuid.UUID, userID, text string, messageType message.Type, toolName string) risk.RealtimeScanRequest {
 	return risk.RealtimeScanRequest{
 		Provenance: metering.RiskProvenance{
@@ -88,6 +94,62 @@ func realtimeScanRequest(organizationID string, projectID uuid.UUID, userID, tex
 	}
 }
 
+func testPIScanner(t *testing.T) *promptinjection.Scanner {
+	t.Helper()
+	return promptinjection.NewScanner(testenv.NewLogger(t), promptinjection.NoopClassifier)
+}
+
+func testPromptPolicyScanner(t *testing.T) *promptpolicy.Scanner {
+	t.Helper()
+	return promptpolicy.NewScanner(testenv.NewLogger(t), (&stubJudge{evaluate: nil}).Evaluate)
+}
+
+// newTestApprovalIntake builds the real MCP approval service over the test
+// instance. The approval workflow stays off until a test enables
+// feature.FlagMCPApproval on flags, so block-link redemptions fall back to the
+// legacy bypass request by default.
+func newTestApprovalIntake(t *testing.T, ti *testInstance, flags feature.Provider) *mcpapproval.Service {
+	t.Helper()
+	logger := testenv.NewLogger(t)
+	authzEngine := authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	return mcpapproval.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.sessionManager, authzEngine, flags, audit.NewLogger(), mcpapprovaltest.NewAssembler(telemetryrepo.New(ti.chConn)), mcpapprovaltest.StartResearch)
+}
+
+// unavailableCompletionClient stands in for OpenRouter when a test does not
+// script completions: every call fails, so LLM-backed helpers take their
+// error fallbacks.
+type unavailableCompletionClient struct{}
+
+var errCompletionUnavailable = errors.New("completion unavailable in tests")
+
+func (unavailableCompletionClient) GetCompletion(context.Context, openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
+	return nil, errCompletionUnavailable
+}
+
+func (unavailableCompletionClient) GetCompletionStream(context.Context, openrouter.CompletionRequest) (openrouter.StreamReader, error) {
+	return nil, errCompletionUnavailable
+}
+
+func (unavailableCompletionClient) GetObjectCompletion(context.Context, openrouter.ObjectCompletionRequest) (*openrouter.CompletionResponse, error) {
+	return nil, errCompletionUnavailable
+}
+
+func (unavailableCompletionClient) CreateEmbeddings(context.Context, string, string, []string, ...openrouter.EmbeddingOption) ([][]float32, error) {
+	return nil, errCompletionUnavailable
+}
+
+func (unavailableCompletionClient) ResolveKey(context.Context, string, string, billing.ModelUsageSource, openrouter.KeyType) (openrouter.ResolvedKey, error) {
+	return openrouter.PlatformKey(), nil
+}
+
+// reconcilerStub implements risk.RiskExclusionReconciler without a Temporal
+// worker.
+type reconcilerStub struct{}
+
+func (reconcilerStub) Reconcile(context.Context, uuid.UUID, uuid.UUID) error {
+	return nil
+}
+
 func testPresetLibrary(t *testing.T) *presetlib.Library {
 	t.Helper()
 	lib, err := presetlib.New()
@@ -97,8 +159,7 @@ func testPresetLibrary(t *testing.T) *presetlib.Library {
 
 func newTestCustomRuleAnalyzer(t *testing.T, conn riskrepo.DBTX) *customruleanalyzer.Scanner {
 	t.Helper()
-	scanner, err := customruleanalyzer.NewScanner(conn)
-	require.NoError(t, err)
+	scanner := customruleanalyzer.NewScanner(conn)
 
 	return scanner
 }
@@ -226,9 +287,8 @@ type testInstance struct {
 	cacheAdapter   cache.Cache
 	judge          *stubJudge
 	// approvalIntake routes shadow-MCP block-link redemptions into the MCP
-	// approval workflow. Nil in the default harness, so existing tests keep
-	// exercising the legacy bypass path; intake tests set it before the
-	// service is built.
+	// approval workflow. Defaults to the real approval service with the
+	// approval flag off; intake tests set it before the service is built.
 	approvalIntake               risk.ShadowMCPApprovalIntake
 	reconcileShadowMCPPolicyURLs risk.ShadowMCPPolicyURLReconciler
 	shadowMCPInventoryURLLookup  risk.ShadowMCPInventoryURLLookup
@@ -268,7 +328,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	cacheAdapter := &countingCache{Cache: cache.NewRedisCacheAdapter(redisClient), mu: sync.Mutex{}, deletes: nil}
-	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, testenv.DefaultSiteURL(t))
 	auditLogger := audit.NewLogger()
 	flags := &feature.InMemory{}
 	findingEvidence := risk.NewMCPFindingEvidenceStore(conn, testenv.NewEncryptionClient(t))
@@ -288,7 +348,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		shadowMCPInventoryURLLookup: func(_ context.Context, _ uuid.UUID, canonicalURLs []string) ([]string, error) {
 			return canonicalURLs, nil
 		},
-		completionClient: nil,
+		completionClient: unavailableCompletionClient{},
 		cacheDeletes:     cacheAdapter,
 		chConn:           chConn,
 		assetStorage:     assetstest.NewTestBlobStore(t),
@@ -299,10 +359,13 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 	for _, configureInstance := range configure {
 		configureInstance(ti)
 	}
+	if ti.approvalIntake == nil {
+		ti.approvalIntake = newTestApprovalIntake(t, ti, flags)
+	}
 	if ti.riskPublisher == nil {
 		ti.riskPublisher = gcp.NewNoopPublisher[*meteringv1.MeterReading]()
 	}
-	ti.service = risk.NewService(logger, tracerProvider, ti.conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, ti.cacheAdapter, "test-jwt-secret", ti.approvalIntake, nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {
+	ti.service = risk.NewService(logger, tracerProvider, ti.conn, sessionManager, authzEngine, sig, reconcilerStub{}, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, ti.cacheAdapter, "test-jwt-secret", ti.approvalIntake, nil, testPIScanner(t), flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {
 		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)
 	}, func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
 		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURLs)

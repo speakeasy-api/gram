@@ -83,8 +83,7 @@ type DispatcherConfig struct {
 	// entry, or with a non-positive entry, use WaitTimeout.
 	LaneWaitTimeout map[riskv1.EnforcementScanner]time.Duration
 
-	// Flags resolves the global content limit override. Nil applies
-	// DefaultMaxContentBytes.
+	// Flags resolves the global content limit override.
 	Flags feature.Provider
 }
 
@@ -247,9 +246,6 @@ func newTruncationCounter(meterProvider metric.MeterProvider) metric.Int64Counte
 // contentLimit reads the global truncation limit from the flag payload,
 // falling back to DefaultMaxContentBytes when the flag carries none.
 func (d *Dispatcher) contentLimit(ctx context.Context) int {
-	if d.flags == nil {
-		return DefaultMaxContentBytes
-	}
 	payload, err := d.flags.FlagPayload(ctx, feature.FlagRiskEnforcementMaxContentBytes, contentLimitDistinctID, nil)
 	if err != nil {
 		d.logger.WarnContext(ctx, "resolve enforcement content limit", attr.SlogError(err))
@@ -291,7 +287,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 	for i := range request.ToolCalls {
 		request.ToolCalls[i].Arguments = truncate("tool call arguments", request.ToolCalls[i].Arguments)
 	}
-	if truncated && d.truncations != nil {
+	if truncated {
 		d.truncations.Add(ctx, 1)
 	}
 	seen := make(map[Lane]struct{}, len(request.Lanes))

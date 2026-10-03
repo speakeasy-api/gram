@@ -125,9 +125,6 @@ func (e *MeterReadingStripeExporter) Handle(ctx context.Context, reading *meteri
 	if !ok {
 		return fmt.Errorf("meter %q version %d is not registered", reading.GetMeterId(), reading.GetMeterVersion())
 	}
-	if e.stripeCatalog == nil {
-		return errors.New("stripe catalog is not configured")
-	}
 	eventName, err := e.stripeCatalog.MeterEventName(definition)
 	if err != nil {
 		return fmt.Errorf("map meter %q version %d to Stripe: %w", reading.GetMeterId(), reading.GetMeterVersion(), err)
@@ -201,18 +198,10 @@ func (e *MeterReadingStripeExporter) stripeCustomerID(ctx context.Context, organ
 }
 
 func (e *MeterReadingStripeExporter) recordReadingOutcome(ctx context.Context, outcome stripeExportOutcome) {
-	if e.readings == nil {
-		return
-	}
-
 	e.readings.Add(ctx, 1, metric.WithAttributes(attr.MeteringStripeExportDisposition(outcome)))
 }
 
 func (e *MeterReadingStripeExporter) recordExportError(ctx context.Context, err error) {
-	if e.exportErrors == nil {
-		return
-	}
-
 	class := stripeclient.V2MeterEventErrorUnknown
 	code := ""
 	statusCode := 0

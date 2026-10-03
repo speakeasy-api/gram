@@ -141,13 +141,13 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 	}
 
 	// A shadow-MCP block on a URL-identified server redeems into the MCP
-	// approval workflow when it is available: the ask attaches as a requester
+	// approval workflow: the ask attaches as a requester
 	// on the server's single review — deduplicated by canonical URL, evidence
 	// gathered — instead of minting a per-user bypass row. The legacy bypass
 	// request remains only for what the workflow cannot key: identity-only
 	// servers with no observed URL, and organizations without the approval
 	// feature (a forbidden intake error is that signal, not a failure).
-	if s.approvalIntake != nil && target.Kind == PolicyBypassTargetKindShadowMCPServer {
+	if target.Kind == PolicyBypassTargetKindShadowMCPServer {
 		// Only http(s) URLs are admittable: the approval intake rejects every
 		// other scheme, and the block evaluator will happily mint a ws:// (or
 		// any other schemed) server_url into the token. Those links must keep

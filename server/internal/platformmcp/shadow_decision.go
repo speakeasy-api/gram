@@ -89,10 +89,6 @@ func NewShadowDecisionService(db *pgxpool.Pool, shadow *ShadowInventoryService, 
 	return &ShadowDecisionService{db: db, shadow: shadow, core: core, audiences: audiences, flags: flags, organizations: organizations, budget: budget, receipts: NewShadowDecisionReceiptStore(db)}
 }
 
-func (s *ShadowDecisionService) valid() bool {
-	return s != nil && s.db != nil && s.shadow != nil && s.shadow.valid() && s.core != nil && s.audiences != nil && s.flags != nil && s.organizations != nil && s.budget.valid() && s.receipts != nil
-}
-
 func (s *ShadowDecisionService) Decide(ctx context.Context, principal Principal, input DecideShadowMCPAccessInput) (DecideShadowMCPAccessOutput, error) {
 	if !input.Confirmed {
 		return DecideShadowMCPAccessOutput{}, shadowDecisionError("confirmation_required", "Confirm the exact Shadow MCP decision and audiences before applying it.", ErrShadowDecisionInvalid)
@@ -119,7 +115,7 @@ func (s *ShadowDecisionService) Decide(ctx context.Context, principal Principal,
 	if input.Decision == "deny" && len(references) != 0 {
 		return DecideShadowMCPAccessOutput{}, shadowDecisionInvalid("Deny does not accept audience references.")
 	}
-	if !s.valid() || principal.OrganizationID == "" || principal.UserID == "" {
+	if principal.OrganizationID == "" || principal.UserID == "" {
 		return DecideShadowMCPAccessOutput{}, shadowDecisionUnavailable(nil)
 	}
 	project, err := s.shadow.projects.Resolve(ctx, principal.OrganizationID, input.ProjectID, "")
@@ -286,12 +282,15 @@ func (e *ShadowDecisionError) Unwrap() error { return e.Cause }
 func shadowDecisionError(code, message string, cause error) error {
 	return &ShadowDecisionError{Code: code, Message: message, Cause: cause}
 }
+
 func shadowDecisionInvalid(message string) error {
 	return shadowDecisionError("invalid_request", message, ErrShadowDecisionInvalid)
 }
+
 func shadowDecisionNotFound() error {
 	return shadowDecisionError("not_found", "The Shadow MCP target or audience is not available to this organization.", ErrShadowDecisionNotFound)
 }
+
 func shadowDecisionUnavailable(cause error) error {
 	if cause == nil {
 		cause = ErrShadowDecisionUnavailable

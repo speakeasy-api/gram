@@ -211,24 +211,6 @@ func TestRiskAnalysisStatusToolServesLiveAndRefusals(t *testing.T) {
 	require.Contains(t, refusal.Payload, "not switched on")
 }
 
-func TestRiskAnalysisStatusToolStubWithoutDescriber(t *testing.T) {
-	t.Parallel()
-
-	server := mcp.NewServer(&mcp.Implementation{Name: "risk-analysis-status-stub-test", Version: "0.0.1"}, nil)
-	reg := newRegistrar(server)
-	registerRiskAnalysisStatusTool(reg, nil)
-	descriptor := descriptorByName(t, reg, "get_risk_analysis_status")
-	require.Contains(t, descriptor.Description, "unavailable in this deployment")
-	require.NotEmpty(t, descriptor.InputSchema)
-
-	_, err := descriptor.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{}`))
-	var refusal *ToolRefusalError
-	require.ErrorAs(t, err, &refusal)
-	require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`)
-
-	require.Nil(t, NewRiskAnalysisStatusService(testenv.NewLogger(t), nil, &stubAnalysisDescriber{status: analysisstatus.Status{}, err: nil, projectID: uuid.Nil, calls: 0}, nil, riskMutationOrganizationResolver{slug: "org", err: nil}))
-}
-
 func TestHumanDurationUnits(t *testing.T) {
 	t.Parallel()
 
@@ -248,39 +230,5 @@ func TestHumanDurationUnits(t *testing.T) {
 		{in: 72 * time.Hour, want: "3 days"},
 	} {
 		require.Equal(t, test.want, humanDuration(test.in), test.in.String())
-	}
-}
-
-// The status read does not depend on the policy reader: when policy reads are
-// unavailable the status tool is still served live, and the policy stubs are
-// registered exactly once alongside it.
-func TestRiskAnalysisStatusToolLiveWhenPolicyReadsUnavailable(t *testing.T) {
-	t.Parallel()
-
-	project := ResolvedProject{ID: uuid.New(), Name: "Project", Slug: "project"}
-	startedAt := riskAnalysisTestNow.Add(-12 * time.Second)
-	describer := &stubAnalysisDescriber{status: analysisstatus.Status{State: analysisstatus.StateRunning, RunningSince: &startedAt, LastRunStartedAt: nil, LastRunAt: nil, LastRunOutcome: ""}, err: nil, projectID: uuid.Nil, calls: 0}
-	service, _ := testRiskAnalysisStatusService(t, project, describer, feature.EvaluationEnabled)
-
-	server := mcp.NewServer(&mcp.Implementation{Name: "risk-analysis-status-independent-test", Version: "0.0.1"}, nil)
-	reg := newRegistrar(server)
-	require.NotPanics(t, func() { registerRiskToolsWithMutations(reg, nil, service, nil) })
-
-	descriptor := descriptorByName(t, reg, "get_risk_analysis_status")
-	require.NotContains(t, descriptor.Description, "unavailable in this deployment")
-	raw, err := descriptor.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project"}`))
-	require.NoError(t, err)
-	output, ok := raw.(GetRiskAnalysisStatusOutput)
-	require.True(t, ok)
-	require.Equal(t, "running", output.State)
-
-	policies := descriptorByName(t, reg, "list_risk_policies")
-	require.Contains(t, policies.Description, "unavailable in this deployment")
-	names := map[string]int{}
-	for _, d := range reg.Descriptors() {
-		names[d.Name]++
-	}
-	for _, name := range []string{"get_risk_analysis_status", "list_risk_policies", "get_risk_policy", "list_risk_exclusions"} {
-		require.Equal(t, 1, names[name], name)
 	}
 }

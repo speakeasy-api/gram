@@ -14,41 +14,33 @@ const (
 	riskRuleBreakdownToolName = "get_risk_rule_breakdown"
 )
 
-// registerRiskFindingListTools serves the three per-finding reads live when the
-// service is usable, and as "not switched on" stubs otherwise, so the tools
-// always exist in the manifest.
+// registerRiskFindingListTools serves the three per-finding reads.
 func registerRiskFindingListTools(reg *Registrar, service riskFindingListLister) {
-	available := service != nil && service.valid()
 	registerRiskFindingListTool(reg, &mcp.Tool{
 		Name: riskFindingListToolName, Title: "List Risk Findings",
 		Description: "List individual risk findings in an exact project or the organization's literal default project, newest message first, with the matched value redacted to a length and hash fingerprint that never reaches the model. Filter by message-time window, policy, concrete MCP server, chat, category, rule substring, user substring, assistant linkage, or unique match; page with an opaque cursor, 25 per page by default and at most 50. MCP findings can be chatless and return execution_id, mcp_server_id, meta_mcp_server_id, toolset_id, tool_name, phase, mediation_surface, mcp_method, principal_kind, identity_stamped, and enforcement_outcome. Each finding carries a stable id for later dismissal, its severity band and score, and an organization-scoped user pseudonym shared with list_watchdog_findings. Prefer get_risk_rule_breakdown to size a finding set, and list_watchdog_findings for severity-first rule triage.",
 		Annotations: readOnlyAnnotations(), InputSchema: riskFindingListSchema(),
-	}, available, func(ctx context.Context, principal Principal, input ListRiskFindingPageInput) (ListRiskFindingPageOutput, error) {
+	}, func(ctx context.Context, principal Principal, input ListRiskFindingPageInput) (ListRiskFindingPageOutput, error) {
 		return service.List(ctx, principal, input)
 	})
 	registerRiskFindingListTool(reg, &mcp.Tool{
 		Name: riskFindingByChatToolName, Title: "List Risk Findings By Chat",
 		Description: "List chat sessions with live risk findings in an exact project or the organization's literal default project, with each chat's finding count, latest detection time and an organization-scoped user pseudonym. Pages by chat id with an opaque cursor, 25 per page by default and at most 50. Use list_risk_findings with chat_id to read one chat's findings.",
 		Annotations: readOnlyAnnotations(), InputSchema: riskFindingByChatSchema(),
-	}, available, func(ctx context.Context, principal Principal, input ListRiskFindingsByChatInput) (ListRiskFindingsByChatOutput, error) {
+	}, func(ctx context.Context, principal Principal, input ListRiskFindingsByChatInput) (ListRiskFindingsByChatOutput, error) {
 		return service.ListByChat(ctx, principal, input)
 	})
 	registerRiskFindingListTool(reg, &mcp.Tool{
 		Name: riskRuleBreakdownToolName, Title: "Get Risk Rule Breakdown",
 		Description: "Count live risk findings per rule and detection source for one category over a detection-time window, defaulting to the last seven days and capped at 31 days, in an exact project or the organization's literal default project. Answers volume questions in one small call instead of paginating list_risk_findings. Unlike list_watchdog_findings it filters by category rather than severity band, needs no Watchdog rollout, and returns up to 1000 rules with explicit truncation.",
 		Annotations: readOnlyAnnotations(), InputSchema: riskRuleBreakdownSchema(),
-	}, available, func(ctx context.Context, principal Principal, input GetRiskRuleBreakdownInput) (GetRiskRuleBreakdownOutput, error) {
+	}, func(ctx context.Context, principal Principal, input GetRiskRuleBreakdownInput) (GetRiskRuleBreakdownOutput, error) {
 		return service.RuleBreakdown(ctx, principal, input)
 	})
 }
 
-func registerRiskFindingListTool[In, Out any](reg *Registrar, tool *mcp.Tool, available bool, call func(context.Context, Principal, In) (Out, error)) {
+func registerRiskFindingListTool[In, Out any](reg *Registrar, tool *mcp.Tool, call func(context.Context, Principal, In) (Out, error)) {
 	meta := ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}
-	if !available {
-		tool.Description += " Finding reads are unavailable in this deployment."
-		addTool(reg, tool, meta, unavailableRiskReadTool(reg, tool.Name))
-		return
-	}
 	addTool(reg, tool, meta, func(ctx context.Context, _ *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error) {
 		return riskReadToolCall(ctx, reg.riskTelemetry, tool.Name, func(principal Principal) (Out, error) { return call(ctx, principal, input) })
 	})

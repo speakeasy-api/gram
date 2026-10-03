@@ -27,8 +27,7 @@ func TestHostedCheckpoint_ReevaluatesAndFailsClosed(t *testing.T) {
 	serverID := insertMCPServer(t, conn, orgID, projectID, false)
 	source := ServerSource{FrontingServerID: uuid.NullUUID{UUID: serverID, Valid: true}}
 	recorder := &coverageRecorder{}
-	checkpoint, err := NewHostedCheckpoint(conn, testenv.NewMeterProvider(t), nil, recorder)
-	require.NoError(t, err)
+	checkpoint := NewHostedCheckpoint(conn, testenv.NewMeterProvider(t), testenv.NewLogger(t), recorder)
 	ctx := testIdentityContext(t, mcpidentity.KindUserSession, userID)
 
 	disposition, err := checkpoint.Evaluate(ctx, orgID, source)
@@ -108,8 +107,7 @@ func TestHostedCheckpoint_DerivationErrorsTakePrecedenceOverUnsupportedInputs(t 
 	serverID := insertMCPServer(t, conn, orgID, projectID, false)
 	serverSource := ServerSource{FrontingServerID: uuid.NullUUID{UUID: serverID, Valid: true}}
 	recorder := &coverageRecorder{}
-	checkpoint, err := NewHostedCheckpoint(conn, testenv.NewMeterProvider(t), nil, recorder)
-	require.NoError(t, err)
+	checkpoint := NewHostedCheckpoint(conn, testenv.NewMeterProvider(t), testenv.NewLogger(t), recorder)
 
 	unsupportedIdentityCtx := testIdentityContext(t, mcpidentity.KindAnonymous, "")
 	disposition, err := checkpoint.Evaluate(unsupportedIdentityCtx, orgID, serverSource)
@@ -152,10 +150,8 @@ func TestMCPToolExecutionEvaluationAcrossProjects(t *testing.T) {
 	conn, orgID := newTestDatabase(t, "ks_mcp_evaluation")
 	organization := killswitches.OrganizationID(orgID)
 
-	registry, err := NewRegistry(conn)
-	require.NoError(t, err)
-	evaluator, err := killswitches.NewEvaluator(conn, registry, time.Second, nil, testenv.NewLogger(t))
-	require.NoError(t, err)
+	registry := NewRegistry(conn)
+	evaluator := killswitches.NewEvaluator(conn, registry, time.Second, testenv.NewMeterProvider(t), testenv.NewLogger(t))
 
 	pausedUser := "user_" + uuid.NewString()
 	insertUser(t, conn, pausedUser, false)

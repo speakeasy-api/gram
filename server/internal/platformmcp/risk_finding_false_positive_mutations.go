@@ -168,9 +168,6 @@ func decodeRiskFindingFalsePositiveInput(raw map[string]any) (riskFindingFalsePo
 }
 
 func (s *riskFindingFalsePositiveService) apply(ctx context.Context, principal Principal, input riskFindingFalsePositiveInput, restore bool) (OperationReceipt, RiskFindingFalsePositiveReceipt, error) {
-	if s == nil || s.controls == nil || s.falsePositives == nil {
-		return OperationReceipt{}, RiskFindingFalsePositiveReceipt{}, riskMutationUnavailable()
-	}
 	project, err := s.controls.Admit(ctx, principal, strings.TrimSpace(input.ProjectSlug))
 	if err != nil {
 		return OperationReceipt{}, RiskFindingFalsePositiveReceipt{}, err

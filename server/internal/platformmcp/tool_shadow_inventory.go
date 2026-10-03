@@ -10,10 +10,6 @@ import (
 )
 
 func registerShadowInventoryTools(reg *Registrar, service *ShadowInventoryService) {
-	if !service.valid() {
-		registerUnavailableShadowInventoryTools(reg)
-		return
-	}
 	addTool(reg, &mcp.Tool{
 		Name:        "list_shadow_mcp_inventory",
 		Title:       "List Shadow MCP Inventory",
@@ -34,15 +30,6 @@ func registerShadowInventoryTools(reg *Registrar, service *ShadowInventoryServic
 			return service.GetReview(ctx, principal, input)
 		})
 	})
-}
-
-func registerUnavailableShadowInventoryTools(reg *Registrar) {
-	for _, tool := range []struct{ name, title, description string }{
-		{"list_shadow_mcp_inventory", "List Shadow MCP Inventory", "List privacy-safe Shadow MCP inventory. This is not switched on for your organization yet."},
-		{"get_shadow_mcp_review", "Get Shadow MCP Review", "Inspect one privacy-safe Shadow MCP review. This is not switched on for your organization yet."},
-	} {
-		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: readOnlyAnnotations()}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("shadow_mcp_inventory"))
-	}
 }
 
 func shadowInventoryToolCall[Out any](ctx context.Context, call func(Principal) (Out, error)) (*mcp.CallToolResult, Out, error) {

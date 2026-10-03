@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
+	"github.com/speakeasy-api/gram/server/internal/trialemails/trialemailstest"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
@@ -202,13 +203,19 @@ func newStripeWebhookService(t *testing.T, customerID string, handler stripeWebh
 		handler = testStripeWebhookHandler
 	}
 
+	logger := testenv.NewLogger(t)
 	return &Service{
-		logger:        testenv.NewLogger(t),
-		db:            db,
-		stripeClient:  client,
-		orgRepo:       orgrepo.New(db),
-		stripeHandler: handler,
-		openRouter:    openrouter.NewDevelopment("test-key"),
+		logger:          logger,
+		db:              db,
+		stripeClient:    client,
+		orgRepo:         orgrepo.New(db),
+		stripeHandler:   handler,
+		stripeMetrics:   newStripeWebhookMetrics(testenv.NewMeterProvider(t), logger),
+		openRouter:      openrouter.NewDevelopment("test-key"),
+		auditLogger:     audit.NewLogger(),
+		productFeatures: newTestProductFeatures(t, db),
+		trial:           trialemailstest.NoopNotifier{},
+		now:             time.Now,
 	}, db
 }
 
@@ -2378,7 +2385,7 @@ func TestStripeCheckoutAuditFailureRollsBackActivationAndSchedulingIntent(t *tes
 	featureCache := configurePaygCheckout(t, service, "event_audit_failure", "subscription_audit_failure", "active")
 	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 7)
 	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat, true, []string{"admin_lock", "billing_inactive"}, 7)
-	service.auditLogger = nil
+	failAuditLogInserts(t, db)
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "failure").Code)
 
@@ -3031,7 +3038,7 @@ func TestStripeSubscriptionDeletionAuditFailureRollsBackDomainAndReceipt(t *test
 
 	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
 	metrics := configurePaygSubscriptionDeletion(t, service, "event_deactivation_failure", "subscription_failure", "subscription_failure")
-	service.auditLogger = nil
+	failAuditLogInserts(t, db)
 	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 100)
 	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat, true, []string{"admin_lock"}, 100)
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "failure").Code)
@@ -3115,4 +3122,11 @@ func TestStripeCheckoutRejectsMalformedIdentifiers(t *testing.T) {
 	}}
 	service := &Service{logger: testenv.NewLogger(t), stripeClient: client, stripeHandler: testStripeWebhookHandler}
 	require.Equal(t, http.StatusBadRequest, serveStripeWebhook(service, "malformed").Code)
+}
+
+// failAuditLogInserts makes every audit_logs insert in db fail so tests can
+// assert that a failed audit write rolls back the surrounding transaction.
+func failAuditLogInserts(t *testing.T, db *pgxpool.Pool) {
+	t.Helper()
+	require.NoError(t, testrepo.New(db).RejectAuditLogWritesFixture(t.Context()))
 }

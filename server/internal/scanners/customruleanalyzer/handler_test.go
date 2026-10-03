@@ -16,8 +16,7 @@ import (
 
 func newTestScanner(t *testing.T, conn repo.DBTX) *customruleanalyzer.Scanner {
 	t.Helper()
-	s, err := customruleanalyzer.NewScanner(conn)
-	require.NoError(t, err)
+	s := customruleanalyzer.NewScanner(conn)
 
 	return s
 }

@@ -17,7 +17,6 @@ import (
 
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/access"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -156,34 +155,20 @@ type AccessReadService struct {
 	versionKey []byte
 }
 
-func NewAccessReadService(logger *slog.Logger, db *pgxpool.Pool, budget OperationBudget, keyMaterial string) *AccessReadService {
-	if logger == nil {
-		return &AccessReadService{logger: nil, db: nil, roles: nil, budget: OperationBudget{Connection: nil, Organization: nil}, references: nil, now: nil, versionKey: nil}
-	}
-	references, err := newSubjectReferenceCodec(keyMaterial)
-	if err != nil {
-		logger.ErrorContext(context.Background(), "build Platform MCP access reference codec", attr.SlogError(err))
-	}
+func NewAccessReadService(logger *slog.Logger, db *pgxpool.Pool, roles *access.RoleManager, budget OperationBudget, keyMaterial string) *AccessReadService {
 	versionKey := sha256.Sum256([]byte("platform-mcp-access-role-version:" + keyMaterial))
 	return &AccessReadService{
 		logger:     logger,
 		db:         db,
-		roles:      access.NewRoleManager(logger, db, nil, nil),
+		roles:      roles,
 		budget:     budget,
-		references: references,
+		references: newSubjectReferenceCodec(keyMaterial),
 		now:        time.Now,
 		versionKey: versionKey[:],
 	}
 }
 
-func (s *AccessReadService) valid() bool {
-	return s != nil && s.db != nil && s.roles != nil && s.budget.valid() && s.references != nil && s.now != nil && len(s.versionKey) == sha256.Size
-}
-
 func (s *AccessReadService) ListRoles(ctx context.Context, principal Principal) (ListAccessRolesOutput, error) {
-	if !s.valid() {
-		return ListAccessRolesOutput{}, ErrUnavailable
-	}
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return ListAccessRolesOutput{}, err
 	}
@@ -218,9 +203,6 @@ func (s *AccessReadService) ListRoles(ctx context.Context, principal Principal) 
 }
 
 func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal, input ListAccessMembersInput) (ListAccessMembersOutput, error) {
-	if !s.valid() {
-		return ListAccessMembersOutput{}, ErrUnavailable
-	}
 	query := normalizeAccessQuery(input.Query)
 	if input.RoleReference == "" && len([]rune(query)) < minAccessQueryLength {
 		return ListAccessMembersOutput{}, ErrAccessQueryRequired
@@ -307,9 +289,6 @@ func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal
 }
 
 func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principal, input GetMCPAccessInput) (GetMCPAccessOutput, error) {
-	if !s.valid() {
-		return GetMCPAccessOutput{}, ErrUnavailable
-	}
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return GetMCPAccessOutput{}, err
 	}

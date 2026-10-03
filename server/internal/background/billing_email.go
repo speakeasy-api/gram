@@ -40,9 +40,6 @@ var _ billingnotifications.BillingEmailScheduler = (*TemporalBillingEmailSchedul
 // enqueue starts one billing email workflow per durable event. The workflow id
 // carries the event id, so a redelivered event never sends a second email.
 func (s *TemporalBillingEmailScheduler) enqueue(ctx context.Context, workflowIDPrefix, eventID string, workflowFunc any, input any) error {
-	if s == nil || s.TemporalEnv == nil {
-		return fmt.Errorf("temporal environment is not configured")
-	}
 	_, err := s.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                                       fmt.Sprintf("%s:%s", workflowIDPrefix, eventID),
 		TaskQueue:                                string(s.TemporalEnv.Queue()),

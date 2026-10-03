@@ -37,8 +37,7 @@ func TestClientAdmissionRoundTripsWithoutAConnection(t *testing.T) {
 		ClientID:       AssistantClientID,
 		Surface:        SurfaceProjectAssistant,
 	}
-	store, err := NewRegistrationStore(conn)
-	require.NoError(t, err)
+	store := NewRegistrationStore(conn)
 
 	request := registrationRequest(project, "client-admission", "client-admission-key")
 	receipt, err := store.BeginReceipt(ctx, assistant, project, request, time.Now().UTC())
@@ -111,8 +110,7 @@ func TestClientAdmissionProtectsActiveEMABindings(t *testing.T) {
 			conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_admission_ema")
 			require.NoError(t, err)
 			principal, project := seedRegistrationLifecycle(t, ctx, conn)
-			store, err := NewRegistrationStore(conn)
-			require.NoError(t, err)
+			store := NewRegistrationStore(conn)
 			request := registrationRequest(project, "admission-ema", "admission-ema-key")
 			receipt, err := store.BeginReceipt(ctx, principal, project, request, time.Now().UTC())
 			require.NoError(t, err)

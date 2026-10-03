@@ -643,9 +643,6 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 // requester attribution, evidence gathering, audit, and transactional write used
 // by the HTTP API without pretending Platform MCP has a selected-project session.
 func (s *Service) CreatePlatformRequest(ctx context.Context, organizationID string, projectID uuid.UUID, userID, targetKind, target, note string) (*gen.ApprovalRequestSummary, error) {
-	if s == nil || s.db == nil {
-		return nil, oops.E(oops.CodeUnavailable, nil, "MCP review requests are temporarily unavailable")
-	}
 	if strings.TrimSpace(organizationID) == "" || projectID == uuid.Nil || strings.TrimSpace(userID) == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
@@ -931,10 +928,6 @@ func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchP
 			return nil, oops.E(oops.CodeNotFound, err, "approval request not found")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading approval request").LogError(ctx, s.logger)
-	}
-
-	if s.research == nil {
-		return nil, oops.E(oops.CodeUnexpected, nil, "the research runner is not available").LogError(ctx, s.logger)
 	}
 
 	requestedBy := ""

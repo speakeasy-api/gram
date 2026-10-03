@@ -68,9 +68,6 @@ func (s *Service) CreateStripePortalSession(ctx context.Context, _ *gen.CreateSt
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return "", err
 	}
-	if s.siteURL == nil {
-		return "", oops.E(oops.CodeUnavailable, nil, "self-serve billing is temporarily unavailable").LogWarn(ctx, s.logger)
-	}
 
 	metadata, state, err := s.getStripeBillingState(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {

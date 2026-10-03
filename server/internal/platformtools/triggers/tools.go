@@ -31,7 +31,6 @@ const (
 	toolNameListTriggers   = "platform_list_triggers"
 	toolNameConfigure      = "platform_configure_trigger"
 	targetKindAssistant    = bgtriggers.TargetKindAssistant
-	targetKindNoop         = bgtriggers.TargetKindNoop
 	triggerStatusActive    = bgtriggers.StatusActive
 	triggerStatusPaused    = bgtriggers.StatusPaused
 	triggerStatusCancelled = bgtriggers.StatusCancelled
@@ -47,9 +46,6 @@ type configureTriggerSharedInput struct {
 	Name            string  `json:"name" jsonschema:"Trigger instance name."`
 	EnvironmentSlug string  `json:"environment_slug" jsonschema:"Environment slug containing the trigger secrets."`
 	Status          *string `json:"status,omitempty" jsonschema:"Optional trigger status."`
-	TargetKind      string  `json:"target_kind" jsonschema:"Trigger target kind."`
-	TargetRef       string  `json:"target_ref" jsonschema:"Opaque target reference to invoke when this trigger matches."`
-	TargetDisplay   string  `json:"target_display" jsonschema:"User-facing target label."`
 }
 
 type configureTriggerInput struct {
@@ -58,9 +54,6 @@ type configureTriggerInput struct {
 	Name            string         `json:"name"`
 	EnvironmentSlug string         `json:"environment_slug"`
 	Status          *string        `json:"status,omitempty"`
-	TargetKind      string         `json:"target_kind"`
-	TargetRef       string         `json:"target_ref"`
-	TargetDisplay   string         `json:"target_display"`
 	Config          map[string]any `json:"config"`
 }
 
@@ -97,37 +90,21 @@ type listTriggersResult struct {
 }
 
 type ListTriggers struct {
-	db                  *pgxpool.Pool
-	app                 *bgtriggers.App
-	assistantSelfScoped bool
+	db  *pgxpool.Pool
+	app *bgtriggers.App
 }
 
 type ConfigureTrigger struct {
-	db                  *pgxpool.Pool
-	app                 *bgtriggers.App
-	inputSchema         []byte
-	audit               *audit.Logger
-	assistantSelfScoped bool
-}
-
-func NewListTriggersTool(db *pgxpool.Pool, app *bgtriggers.App) *ListTriggers {
-	return &ListTriggers{db: db, app: app, assistantSelfScoped: false}
+	db          *pgxpool.Pool
+	app         *bgtriggers.App
+	inputSchema []byte
+	audit       *audit.Logger
 }
 
 // NewAssistantListTriggersTool returns a ListTriggers that filters the result
 // to triggers whose target is the calling assistant principal.
 func NewAssistantListTriggersTool(db *pgxpool.Pool, app *bgtriggers.App) *ListTriggers {
-	return &ListTriggers{db: db, app: app, assistantSelfScoped: true}
-}
-
-func NewConfigureTriggerTool(db *pgxpool.Pool, app *bgtriggers.App, audit *audit.Logger) *ConfigureTrigger {
-	return &ConfigureTrigger{
-		db:                  db,
-		app:                 app,
-		inputSchema:         buildConfigureTriggerInputSchema(false),
-		audit:               audit,
-		assistantSelfScoped: false,
-	}
+	return &ListTriggers{db: db, app: app}
 }
 
 // NewAssistantConfigureTriggerTool returns a ConfigureTrigger that pins
@@ -136,21 +113,19 @@ func NewConfigureTriggerTool(db *pgxpool.Pool, app *bgtriggers.App, audit *audit
 // assistant in the same project.
 func NewAssistantConfigureTriggerTool(db *pgxpool.Pool, app *bgtriggers.App, audit *audit.Logger) *ConfigureTrigger {
 	return &ConfigureTrigger{
-		db:                  db,
-		app:                 app,
-		inputSchema:         buildConfigureTriggerInputSchema(true),
-		audit:               audit,
-		assistantSelfScoped: true,
+		db:          db,
+		app:         app,
+		inputSchema: buildConfigureTriggerInputSchema(),
+		audit:       audit,
 	}
 }
 
-func buildConfigureTriggerInputSchema(assistantSelfScoped bool) []byte {
+func buildConfigureTriggerInputSchema() []byte {
 	definitionSlugs := listDefinitionSlugs()
 	inner := schemaBytesToMap(core.BuildInputSchema[configureTriggerSharedInput](
 		core.WithPropertyFormat("trigger_id", "uuid"),
 		core.WithPropertyEnum("definition_slug", stringSliceToAny(definitionSlugs)...),
 		core.WithPropertyEnum("status", triggerStatusActive, triggerStatusPaused, triggerStatusCancelled),
-		core.WithPropertyEnum("target_kind", targetKindAssistant, targetKindNoop),
 	))
 
 	properties := getMap(inner, "properties")
@@ -159,24 +134,7 @@ func buildConfigureTriggerInputSchema(assistantSelfScoped bool) []byte {
 		"description": "Trigger-definition-specific configuration.",
 	}
 
-	required := append(getStringSlice(inner, "required"), "config")
-	if assistantSelfScoped {
-		// Target binds to the calling assistant principal; do not let the LLM
-		// see, supply, or override it.
-		stripSchemaProperty(inner, "target_kind")
-		stripSchemaProperty(inner, "target_ref")
-		stripSchemaProperty(inner, "target_display")
-		filtered := required[:0]
-		for _, name := range required {
-			switch name {
-			case "target_kind", "target_ref", "target_display":
-				continue
-			}
-			filtered = append(filtered, name)
-		}
-		required = filtered
-	}
-	inner["required"] = dedupeStrings(required)
+	inner["required"] = append(getStringSlice(inner, "required"), "config")
 
 	branches := make([]any, 0, len(definitionSlugs))
 	for _, slug := range definitionSlugs {
@@ -294,19 +252,6 @@ func stringSliceToAny(values []string) []any {
 	return out
 }
 
-func dedupeStrings(values []string) []string {
-	seen := make(map[string]struct{}, len(values))
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	return out
-}
-
 func (t *ListTriggers) Descriptor() core.ToolDescriptor {
 	readOnly := true
 	destructive := false
@@ -330,31 +275,22 @@ func (t *ListTriggers) Descriptor() core.ToolDescriptor {
 }
 
 func (t *ListTriggers) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if t.db == nil || t.app == nil {
-		return fmt.Errorf("trigger tools are not configured")
-	}
-
 	authCtx, err := requireProjectAuthContext(ctx)
 	if err != nil {
 		return err
 	}
 
-	var selfTargetRef string
-	var selfCorrelationID string
-	if t.assistantSelfScoped {
-		principal, ok := contextvalues.GetAssistantPrincipal(ctx)
-		if !ok {
-			return fmt.Errorf("assistant list-triggers requires an assistant principal")
-		}
-		selfTargetRef = principal.AssistantID.String()
-		callerThread, err := assistantrepo.New(t.db).ResolveThreadCorrelation(ctx, assistantrepo.ResolveThreadCorrelationParams{
-			ThreadID:  principal.ThreadID,
-			ProjectID: *authCtx.ProjectID,
-		})
-		if err != nil {
-			return fmt.Errorf("resolve thread correlation: %w", err)
-		}
-		selfCorrelationID = callerThread.CorrelationID
+	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+	if !ok {
+		return fmt.Errorf("assistant list-triggers requires an assistant principal")
+	}
+	selfTargetRef := principal.AssistantID.String()
+	callerThread, err := assistantrepo.New(t.db).ResolveThreadCorrelation(ctx, assistantrepo.ResolveThreadCorrelationParams{
+		ThreadID:  principal.ThreadID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return fmt.Errorf("resolve thread correlation: %w", err)
 	}
 
 	input := listTriggersInput{DefinitionSlug: nil}
@@ -374,18 +310,16 @@ func (t *ListTriggers) Call(ctx context.Context, _ toolconfig.ToolCallEnv, paylo
 		if input.DefinitionSlug != nil && *input.DefinitionSlug != "" && item.DefinitionSlug != *input.DefinitionSlug {
 			continue
 		}
-		if t.assistantSelfScoped {
-			if item.TargetKind != targetKindAssistant || item.TargetRef != selfTargetRef {
+		if item.TargetKind != targetKindAssistant || item.TargetRef != selfTargetRef {
+			continue
+		}
+		// Wake binds to a specific thread via correlation_id; admit only
+		// reminders the caller owns so a sibling can't enumerate (and
+		// then cancel) peer wakes.
+		if item.DefinitionSlug == bgtriggers.DefinitionSlugWake {
+			correlationID, _ := bgtriggers.WakeConfigFields(item.ConfigJson)
+			if correlationID != callerThread.CorrelationID {
 				continue
-			}
-			// Wake binds to a specific thread via correlation_id; admit only
-			// reminders the caller owns so a sibling can't enumerate (and
-			// then cancel) peer wakes.
-			if item.DefinitionSlug == bgtriggers.DefinitionSlugWake {
-				correlationID, _ := bgtriggers.WakeConfigFields(item.ConfigJson)
-				if correlationID != selfCorrelationID {
-					continue
-				}
 			}
 		}
 
@@ -423,10 +357,6 @@ func (t *ConfigureTrigger) Descriptor() core.ToolDescriptor {
 }
 
 func (t *ConfigureTrigger) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if t.db == nil || t.app == nil {
-		return fmt.Errorf("trigger tools are not configured")
-	}
-
 	authCtx, err := requireProjectAuthContext(ctx)
 	if err != nil {
 		return err
@@ -454,9 +384,6 @@ type configureTriggerParams struct {
 	Name            string
 	EnvironmentSlug string
 	Status          *string
-	TargetKind      string
-	TargetRef       string
-	TargetDisplay   string
 	Config          map[string]any
 }
 
@@ -474,33 +401,16 @@ func (t *ConfigureTrigger) upsertTrigger(
 	if params.DefinitionSlug == bgtriggers.DefinitionSlugWake {
 		return t.upsertWake(ctx, authCtx, params)
 	}
-	if t.assistantSelfScoped {
-		principal, ok := contextvalues.GetAssistantPrincipal(ctx)
-		if !ok {
-			return nil, fmt.Errorf("assistant configure-trigger requires an assistant principal")
-		}
-		params.TargetKind = targetKindAssistant
-		params.TargetRef = principal.AssistantID.String()
-		if strings.TrimSpace(params.TargetDisplay) == "" {
-			params.TargetDisplay = strings.TrimSpace(params.Name)
-		}
+	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+	if !ok {
+		return nil, fmt.Errorf("assistant configure-trigger requires an assistant principal")
 	}
+	targetRef := principal.AssistantID.String()
 	if strings.TrimSpace(params.Name) == "" {
 		return nil, fmt.Errorf("name is required")
 	}
 	if strings.TrimSpace(params.EnvironmentSlug) == "" {
 		return nil, fmt.Errorf("environment_slug is required")
-	}
-	if strings.TrimSpace(params.TargetRef) == "" {
-		return nil, fmt.Errorf("target_ref is required")
-	}
-	if strings.TrimSpace(params.TargetDisplay) == "" {
-		return nil, fmt.Errorf("target_display is required")
-	}
-
-	targetKind, err := normalizeTargetKind(params.TargetKind)
-	if err != nil {
-		return nil, err
 	}
 
 	envQueries := environmentsrepo.New(t.db)
@@ -530,9 +440,9 @@ func (t *ConfigureTrigger) upsertTrigger(
 			DefinitionSlug: params.DefinitionSlug,
 			Name:           strings.TrimSpace(params.Name),
 			EnvironmentID:  uuid.NullUUID{UUID: environment.ID, Valid: true},
-			TargetKind:     targetKind,
-			TargetRef:      strings.TrimSpace(params.TargetRef),
-			TargetDisplay:  strings.TrimSpace(params.TargetDisplay),
+			TargetKind:     targetKindAssistant,
+			TargetRef:      targetRef,
+			TargetDisplay:  strings.TrimSpace(params.Name),
 			Config:         params.Config,
 			Status:         status,
 		}, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
@@ -564,7 +474,7 @@ func (t *ConfigureTrigger) upsertTrigger(
 		if existing.DefinitionSlug != params.DefinitionSlug {
 			return nil, fmt.Errorf("trigger %s is %q, expected %q", existing.ID.String(), existing.DefinitionSlug, params.DefinitionSlug)
 		}
-		if t.assistantSelfScoped && (existing.TargetKind != targetKindAssistant || existing.TargetRef != params.TargetRef) {
+		if existing.TargetKind != targetKindAssistant || existing.TargetRef != targetRef {
 			return nil, fmt.Errorf("trigger does not belong to the calling assistant")
 		}
 
@@ -579,9 +489,9 @@ func (t *ConfigureTrigger) upsertTrigger(
 			DefinitionSlug: params.DefinitionSlug,
 			Name:           strings.TrimSpace(params.Name),
 			EnvironmentID:  uuid.NullUUID{UUID: environment.ID, Valid: true},
-			TargetKind:     targetKind,
-			TargetRef:      strings.TrimSpace(params.TargetRef),
-			TargetDisplay:  strings.TrimSpace(params.TargetDisplay),
+			TargetKind:     targetKindAssistant,
+			TargetRef:      targetRef,
+			TargetDisplay:  strings.TrimSpace(params.Name),
 			Config:         params.Config,
 			Status:         status,
 		}, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
@@ -660,17 +570,12 @@ func (t *ConfigureTrigger) upsertWake(
 		return nil, err
 	}
 
-	targetDisplay := strings.TrimSpace(params.TargetDisplay)
-	if targetDisplay == "" {
-		targetDisplay = strings.TrimSpace(params.Name)
-	}
-
 	instance, err := t.app.CreateWakeInstance(ctx, bgtriggers.CreateWakeInstanceParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		Name:           strings.TrimSpace(params.Name),
 		AssistantID:    principal.AssistantID,
-		TargetDisplay:  targetDisplay,
+		TargetDisplay:  strings.TrimSpace(params.Name),
 		FireAt:         fireAt.UTC(),
 		Note:           note,
 		CorrelationID:  thread.CorrelationID,
@@ -808,11 +713,6 @@ func buildTriggerToolView(
 		environmentSlug = environment.Slug
 	}
 
-	var webhookURL *string
-	if app != nil {
-		webhookURL = app.WebhookURL(item)
-	}
-
 	return triggerToolView{
 		ID:              item.ID.String(),
 		DefinitionSlug:  item.DefinitionSlug,
@@ -824,7 +724,7 @@ func buildTriggerToolView(
 		TargetDisplay:   item.TargetDisplay,
 		Status:          item.Status,
 		Config:          config,
-		WebhookURL:      webhookURL,
+		WebhookURL:      app.WebhookURL(item),
 		CreatedAt:       item.CreatedAt.Time.UTC().Format(time.RFC3339),
 		UpdatedAt:       item.UpdatedAt.Time.UTC().Format(time.RFC3339),
 	}, nil
@@ -863,19 +763,6 @@ func normalizeStatus(status *string) string {
 		return triggerStatusActive
 	}
 	return strings.TrimSpace(*status)
-}
-
-func normalizeTargetKind(targetKind string) (string, error) {
-	if strings.TrimSpace(targetKind) == "" {
-		return "", fmt.Errorf("target_kind is required")
-	}
-	normalized := strings.TrimSpace(targetKind)
-	switch normalized {
-	case targetKindAssistant, targetKindNoop:
-		return normalized, nil
-	default:
-		return "", fmt.Errorf("unsupported target_kind %q", normalized)
-	}
 }
 
 func decodePayload(payload io.Reader, target any) error {

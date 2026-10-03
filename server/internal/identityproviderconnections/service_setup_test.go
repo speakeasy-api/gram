@@ -40,10 +40,9 @@ const (
 const testClientID = "0oaexampleclient00001"
 
 type serviceInstance struct {
-	svc   *identityproviderconnections.Service
-	conn  *testInstance
-	orgID string
-	// flags is nil when the service was built over a caller-supplied provider.
+	svc          *identityproviderconnections.Service
+	conn         *testInstance
+	orgID        string
 	flags        *feature.InMemory
 	oktaFakes    *okta.FakeFactory
 	syncTrigger  *fakeSyncTrigger
@@ -166,15 +165,24 @@ func oktaFixtures() map[string]okta.Fixtures {
 // org:admin for the organization.
 func newTestService(t *testing.T) (context.Context, *serviceInstance) {
 	t.Helper()
-	return newTestServiceWithFlags(t, nil)
+	return newTestServiceWithPoolLimit(t, 0)
 }
 
-func newTestServiceWithFlags(t *testing.T, features feature.Provider) (context.Context, *serviceInstance) {
+func newTestServiceWithPoolLimit(t *testing.T, maxConns int32) (context.Context, *serviceInstance) {
 	t.Helper()
-	return newTestServiceWithPoolLimit(t, features, 0)
+	flags := &feature.InMemory{}
+	return newTestServiceOver(t, flags, flags, maxConns)
 }
 
-func newTestServiceWithPoolLimit(t *testing.T, features feature.Provider, maxConns int32) (context.Context, *serviceInstance) {
+// newTestServiceWithFlags builds only the service over features, so callers
+// cannot reach an in-memory flag set that the service does not consult.
+func newTestServiceWithFlags(t *testing.T, features feature.Provider) (context.Context, *identityproviderconnections.Service) {
+	t.Helper()
+	ctx, si := newTestServiceOver(t, features, &feature.InMemory{}, 0)
+	return ctx, si.svc
+}
+
+func newTestServiceOver(t *testing.T, features feature.Provider, flags *feature.InMemory, maxConns int32) (context.Context, *serviceInstance) {
 	t.Helper()
 
 	ctx, ti := newTestDB(t)
@@ -202,15 +210,7 @@ func newTestServiceWithPoolLimit(t *testing.T, features feature.Provider, maxCon
 	authCtx.ActiveOrganizationID = ti.orgID
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	// flags is only the effective provider when the caller supplied none; a
-	// service built over another provider exposes nil so toggling it cannot
-	// silently do nothing.
-	var flags *feature.InMemory
-	if features == nil {
-		flags = &feature.InMemory{}
-		flags.SetFlag(feature.FlagOktaConnections, ti.orgID, true)
-		features = flags
-	}
+	flags.SetFlag(feature.FlagOktaConnections, ti.orgID, true)
 
 	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
 	provisioner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID, "")

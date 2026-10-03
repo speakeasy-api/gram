@@ -129,9 +129,6 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 		return "", err
 	}
 
-	if s.featureFlags == nil {
-		return "", oops.E(oops.CodeUnavailable, nil, "self-serve billing is temporarily unavailable").LogWarn(ctx, s.logger)
-	}
 	enabled, err := s.featureFlags.IsFlagEnabled(
 		ctx,
 		feature.FlagPaygSelfServeBilling,
@@ -144,7 +141,7 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 	if !enabled {
 		return "", oops.E(oops.CodeForbidden, nil, "self-serve billing is not enabled").LogWarn(ctx, s.logger)
 	}
-	if s.stripeClient == nil || s.siteURL == nil {
+	if s.stripeClient == nil {
 		return "", oops.E(oops.CodeUnavailable, nil, "self-serve billing is temporarily unavailable").LogWarn(ctx, s.logger)
 	}
 
@@ -393,9 +390,6 @@ func isStripeCheckoutCASConflict(err error) bool {
 }
 
 func (s *Service) checkoutNow() time.Time {
-	if s.now == nil {
-		return time.Now().UTC().Truncate(time.Second)
-	}
 	return s.now().UTC().Truncate(time.Second)
 }
 

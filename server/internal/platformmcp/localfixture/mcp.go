@@ -33,10 +33,6 @@ func NewMCPHTTP(oauth *OAuthHTTP) *MCPHTTP {
 
 func (s *MCPHTTP) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s == nil || s.oauth == nil {
-			http.NotFound(w, r)
-			return
-		}
 		w.Header().Set("Cache-Control", "no-store")
 		if r.Method != http.MethodPost && r.Method != http.MethodDelete {
 			w.Header().Set("Allow", http.MethodPost+", "+http.MethodDelete)

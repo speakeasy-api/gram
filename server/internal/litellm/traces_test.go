@@ -67,11 +67,9 @@ func (a *traceTestAuthorizer) Authorize(ctx context.Context, value string, schem
 
 func newTraceTestService(t *testing.T, authorizer authorizer, meterProvider metric.MeterProvider, logBulk func(context.Context, []telemetry.LogParams) error) (*Service, *TraceProcessor) {
 	t.Helper()
-	processor := newTraceProcessor(testenv.NewLogger(t), meterProvider, logBulk, traceProcessorWorkers, traceProcessorQueueSize)
-	metricProcessor := newMetricProcessor(testenv.NewLogger(t), meterProvider, logBulk, traceProcessorWorkers, traceProcessorQueueSize)
-	resolver := NewInstanceResolver(testenv.NewLogger(t), nil)
-	processor.SetInstanceResolver(resolver)
-	metricProcessor.SetInstanceResolver(resolver)
+	resolver := newTestInstanceResolver(t)
+	processor := newTraceProcessor(testenv.NewLogger(t), meterProvider, logBulk, traceProcessorWorkers, traceProcessorQueueSize, newTestCallCache(), resolver)
+	metricProcessor := newMetricProcessor(testenv.NewLogger(t), meterProvider, logBulk, traceProcessorWorkers, traceProcessorQueueSize, resolver)
 	processor.Start(t.Context())
 	metricProcessor.Start(t.Context())
 	t.Cleanup(func() {
@@ -763,7 +761,7 @@ func TestTraceHTTPQueueSaturationDropsWithoutBlocking(t *testing.T) {
 		calls++
 		mu.Unlock()
 		return nil
-	}, traceProcessorWorkers, traceProcessorQueueSize)
+	}, traceProcessorWorkers, traceProcessorQueueSize, newTestCallCache(), newTestInstanceResolver(t))
 	processor.Start(t.Context())
 	var releaseOnce sync.Once
 	releaseWorkers := func() { releaseOnce.Do(func() { close(release) }) }
@@ -804,7 +802,7 @@ func TestTraceHTTPQueueSaturationDropsWithoutBlocking(t *testing.T) {
 		health:    newDisabledHealthProcessor(t),
 		db:        nil,
 		telemetry: nil,
-		instances: NewInstanceResolver(testenv.NewLogger(t), nil),
+		instances: newTestInstanceResolver(t),
 		authz:     nil,
 		audit:     nil,
 		keyPrefix: "",
@@ -829,7 +827,7 @@ func TestTraceProcessorShutdownRetriesWaitForWorkerCompletion(t *testing.T) {
 		entered <- struct{}{}
 		<-release
 		return nil
-	}, 1, 1)
+	}, 1, 1, newTestCallCache(), newTestInstanceResolver(t))
 	processor.Start(t.Context())
 	require.True(t, processor.Enqueue(t.Context(), []telemetry.LogParams{}))
 	<-entered
@@ -855,7 +853,7 @@ func TestTraceProcessorBoundsPersistenceAttempts(t *testing.T) {
 			ok    bool
 		}{value: value, ok: ok}
 		return nil
-	}, 1, 1)
+	}, 1, 1, newTestCallCache(), newTestInstanceResolver(t))
 	processor.Start(t.Context())
 	require.True(t, processor.Enqueue(t.Context(), []telemetry.LogParams{}))
 	got := <-deadline
@@ -873,7 +871,7 @@ func TestTraceProcessorRecordsPersistenceFailuresBySpanCount(t *testing.T) {
 	wantErr := errors.New("persistence unavailable")
 	processor := newTraceProcessor(testenv.NewLogger(t), meterProvider, func(context.Context, []telemetry.LogParams) error {
 		return wantErr
-	}, 1, 1)
+	}, 1, 1, newTestCallCache(), newTestInstanceResolver(t))
 	processor.Start(t.Context())
 
 	require.True(t, processor.Enqueue(t.Context(), make([]telemetry.LogParams, 3)))
@@ -896,7 +894,7 @@ func TestTraceProcessorRecoversPersistencePanic(t *testing.T) {
 		}
 		persisted <- struct{}{}
 		return nil
-	}, 1, 2)
+	}, 1, 2, newTestCallCache(), newTestInstanceResolver(t))
 	processor.Start(t.Context())
 
 	require.True(t, processor.Enqueue(t.Context(), make([]telemetry.LogParams, 3)))
@@ -969,7 +967,7 @@ func metricCounterValueForReason(t *testing.T, reader *sdkmetric.ManualReader, n
 func TestTracePersistenceKeepsOnlyAllowlistedAttributes(t *testing.T) {
 	t.Parallel()
 
-	ctx, instance := newRealTestService(t, nil)
+	ctx, instance := newRealTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	instance.service.auth = fixedAuthorizer{authCtx: authCtx}

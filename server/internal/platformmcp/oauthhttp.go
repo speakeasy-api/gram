@@ -20,7 +20,6 @@ import (
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/metric/noop"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -28,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -152,9 +152,7 @@ type OAuthHTTP struct {
 	now           func() time.Time
 	logger        *slog.Logger
 	// cimd resolves URL-shaped client_ids against their Client ID Metadata
-	// Documents. Nil disables inbound CIMD entirely: such a client_id then
-	// falls through to an ordinary registry lookup and is rejected as
-	// unknown, and the AS metadata stops advertising support.
+	// Documents.
 	cimd          clientMetadataResolver
 	cimdAdmission *admission.Metrics
 	// idpCallbackBaseURL hosts the identity provider callback. The identity
@@ -177,7 +175,6 @@ type OAuthHTTPConfig struct {
 	Telemetry     OAuthTelemetry
 	Logger        *slog.Logger
 	// GuardianPolicy backs the CIMD document fetcher's SSRF protection.
-	// Nil leaves inbound CIMD disabled.
 	GuardianPolicy *guardian.Policy
 	MeterProvider  metric.MeterProvider
 	// IDPCallbackBaseURL is the pinned origin of the identity provider
@@ -185,28 +182,8 @@ type OAuthHTTPConfig struct {
 	IDPCallbackBaseURL *url.URL
 }
 
-func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
-	if config.BaseURL == nil || config.BaseURL.Scheme == "" || config.BaseURL.Host == "" || config.Cache == nil || config.Store == nil || config.Identity == nil || config.Gate == nil || config.Authorizer == nil || config.Organizations == nil || config.Signer == nil || config.Encryption == nil {
-		return nil, errors.New("platform oauth http configuration is incomplete")
-	}
-	credentials, err := NewCredentialCodec(config.Encryption)
-	if err != nil {
-		return nil, err
-	}
-	logger := config.Logger
-	if logger == nil {
-		logger = slog.New(slog.DiscardHandler)
-	}
-	meterProvider := config.MeterProvider
-	if meterProvider == nil {
-		meterProvider = noop.NewMeterProvider()
-	}
-	// A nil guardian policy leaves resolver nil, which disables inbound
-	// CIMD rather than fetching documents through an unguarded client.
-	var resolver clientMetadataResolver
-	if config.GuardianPolicy != nil {
-		resolver = cimd.NewResolver(config.GuardianPolicy, meterProvider, logger)
-	}
+func NewOAuthHTTP(config OAuthHTTPConfig) *OAuthHTTP {
+	inv.Require("platform oauth http", "base URL is absolute", config.BaseURL.Scheme != "" && config.BaseURL.Host != "")
 	baseURL := *config.BaseURL
 	idpCallbackBaseURL := baseURL
 	if config.IDPCallbackBaseURL != nil {
@@ -222,27 +199,21 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 		authorizer:    config.Authorizer,
 		organizations: config.Organizations,
 		signer:        config.Signer,
-		credentials:   credentials,
+		credentials:   NewCredentialCodec(config.Encryption),
 		telemetry:     config.Telemetry,
 		now:           time.Now,
-		logger:        logger,
-		cimd:          resolver,
-		cimdAdmission: admission.NewMetrics(meterProvider, logger),
+		logger:        config.Logger,
+		cimd:          cimd.NewResolver(config.GuardianPolicy, config.MeterProvider, config.Logger),
+		cimdAdmission: admission.NewMetrics(config.MeterProvider, config.Logger),
 
 		idpCallbackBaseURL: &idpCallbackBaseURL,
-	}, nil
-}
-
-func (s *OAuthHTTP) oauthTelemetry() OAuthTelemetry {
-	if s.telemetry == nil {
-		return noopOAuthTelemetry{}
 	}
-	return s.telemetry
 }
 
 func (s *OAuthHTTP) Attach(mux interface {
 	Handle(string, string, http.HandlerFunc)
-}) {
+},
+) {
 	mux.Handle("GET", "/.well-known/oauth-protected-resource/platform-mcp", handlerFunc(s.ProtectedResourceHandler()))
 	mux.Handle("GET", "/.well-known/oauth-authorization-server/platform-mcp", handlerFunc(s.AuthorizationServerHandler()))
 	mux.Handle("POST", "/platform-mcp/register", handlerFunc(s.RegisterHandler()))
@@ -289,7 +260,7 @@ func (s *OAuthHTTP) AuthorizationServerHandler() http.Handler {
 		// emits. Advertising support while admitting nothing would route
 		// spec-compliant clients into a guaranteed-failure flow instead of
 		// letting them fall back to dynamic client registration.
-		if s.cimd != nil && platformCIMDAdmissionMode != admission.ModeDisabled {
+		if platformCIMDAdmissionMode != admission.ModeDisabled {
 			metadata["client_id_metadata_document_supported"] = true
 		}
 		writeJSON(w, http.StatusOK, metadata)
@@ -604,7 +575,7 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 	recorded := &oauthResponseRecorder{ResponseWriter: w}
 	w = recorded
 	defer func() {
-		s.oauthTelemetry().Record(r.Context(), OAuthEvent{
+		s.telemetry.Record(r.Context(), OAuthEvent{
 			Operation: "interactive_authorization",
 			Outcome:   recorded.outcome(),
 			Reason:    recorded.reason,
@@ -686,7 +657,7 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 		operation, ok := tokenOperation(r.PostForm.Get("grant_type"))
 		if ok {
 			defer func() {
-				s.oauthTelemetry().Record(r.Context(), OAuthEvent{Operation: operation, Outcome: recorded.outcome(), Reason: recorded.reason})
+				s.telemetry.Record(r.Context(), OAuthEvent{Operation: operation, Outcome: recorded.outcome(), Reason: recorded.reason})
 			}()
 		}
 		now := s.now()
@@ -859,7 +830,7 @@ func (s *OAuthHTTP) mintReplacementAndRespond(w http.ResponseWriter, r *http.Req
 		return
 	}
 	generationAuthorizedAt := old.Connection.AuthorizationExpiresAt.Add(-platformoauth.AuthorizationLifetime)
-	s.oauthTelemetry().RecordRefreshSuccess(r.Context(), s.now().Sub(now), now.Sub(generationAuthorizedAt))
+	s.telemetry.RecordRefreshSuccess(r.Context(), s.now().Sub(now), now.Sub(generationAuthorizedAt))
 	writeJSON(w, http.StatusOK, map[string]any{"access_token": accessToken, "token_type": "Bearer", "expires_in": int64(accessExpiresAt.Sub(now).Seconds()), "refresh_token": refreshToken})
 }
 

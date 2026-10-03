@@ -6,6 +6,7 @@ package mcp_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -160,7 +161,7 @@ func TestRuntimeMethods_MountedOnMux(t *testing.T) {
 		ti.cacheAdapter,
 		authz.NewEngine(ti.logger, ti.conn, nil, workos.NewStubClient()),
 		ti.audit,
-		nil,
+		func(context.Context, string) error { return errors.New("private network access disabled") },
 	)
 
 	mux := goahttp.NewMuxer()

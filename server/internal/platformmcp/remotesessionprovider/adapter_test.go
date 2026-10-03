@@ -12,8 +12,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestValidDescriptorRequiresReviewedHTTPSURLs(t *testing.T) {
@@ -42,13 +44,15 @@ func TestPreflightSetupRunsConfiguratorBeforeClientLookup(t *testing.T) {
 		configured = true
 		return errors.New("configure fixture client")
 	})
-	adapter := New(nil, &remotesessions.ChallengeManager{}, Descriptor{
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	adapter := New(policy, &remotesessions.ChallengeManager{}, Descriptor{
 		ProviderKey:                "fixture",
 		RemoteSessionIssuerID:      uuid.New(),
 		StreamableHTTPURL:          "https://provider.test/mcp",
 		ProviderSetupCompletionURL: "https://gram.test/platform-mcp/provider-setup-complete",
 	}, configurator)
-	err := adapter.PreflightSetup(t.Context(), platformmcp.ProviderSetupRequest{
+	err = adapter.PreflightSetup(t.Context(), platformmcp.ProviderSetupRequest{
 		UserID: "user", OrganizationID: "organization", ProjectID: uuid.New(), RegistrationID: uuid.New(), UserSessionIssuerID: uuid.New(), MCPSlug: "mcp", ConnectionID: uuid.New(), Generation: uuid.New(),
 	})
 
@@ -222,13 +226,15 @@ func TestPreflightSetupAcceptsAConnectionlessRequest(t *testing.T) {
 		configured = true
 		return errors.New("configure fixture client")
 	})
-	adapter := New(nil, &remotesessions.ChallengeManager{}, Descriptor{
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	adapter := New(policy, &remotesessions.ChallengeManager{}, Descriptor{
 		ProviderKey:                "fixture",
 		RemoteSessionIssuerID:      uuid.New(),
 		StreamableHTTPURL:          "https://provider.test/mcp",
 		ProviderSetupCompletionURL: "https://gram.test/platform-mcp/provider-setup-complete",
 	}, configurator)
-	err := adapter.PreflightSetup(t.Context(), platformmcp.ProviderSetupRequest{
+	err = adapter.PreflightSetup(t.Context(), platformmcp.ProviderSetupRequest{
 		UserID: "user", OrganizationID: "organization", ProjectID: uuid.New(), RegistrationID: uuid.New(), UserSessionIssuerID: uuid.New(), MCPSlug: "mcp",
 	})
 
@@ -241,7 +247,9 @@ func TestPreflightSetupAcceptsAConnectionlessRequest(t *testing.T) {
 func TestPreflightSetupRejectsAHalfPopulatedConnection(t *testing.T) {
 	t.Parallel()
 
-	adapter := New(nil, &remotesessions.ChallengeManager{}, Descriptor{
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	adapter := New(policy, &remotesessions.ChallengeManager{}, Descriptor{
 		ProviderKey:                "fixture",
 		RemoteSessionIssuerID:      uuid.New(),
 		StreamableHTTPURL:          "https://provider.test/mcp",

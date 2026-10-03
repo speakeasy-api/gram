@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -28,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/metering"
@@ -39,7 +41,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
-	"math"
 
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
@@ -331,10 +332,10 @@ type Scanner struct {
 	gitleaks              *gitleaks.Scanner           // warm at startup, reused across scans
 	customRuleScanner     *customruleanalyzer.Scanner // required; evaluates custom CEL detection rules
 	piiScanner            ra.PIIScanner               // nil if Presidio is unavailable
-	piScanner             *promptinjection.Scanner    // never nil
-	promptPolicy          *promptpolicy.Scanner       // nil-safe; owns prompt policy finding decisions
-	flags                 feature.Provider            // nil disables prompt_based enforcement
-	dispatcher            EnforcementDispatcher       // nil leaves Pub/Sub enforcement inert
+	piScanner             *promptinjection.Scanner
+	promptPolicy          *promptpolicy.Scanner // owns prompt policy finding decisions
+	flags                 feature.Provider
+	dispatcher            EnforcementDispatcher // nil leaves Pub/Sub enforcement inert
 	riskRecorder          *metering.RiskRecorder
 	realtimeRecordsMu     sync.Mutex
 	realtimeRecords       sync.WaitGroup
@@ -347,12 +348,9 @@ type Scanner struct {
 }
 
 // NewScanner creates a RiskScanner. piiScanner may be nil if Presidio
-// is not available in the server process. piScanner must be non-nil; a nil
-// classifier fails open through NoopClassifier.
+// is not available in the server process.
 // Primes the gitleaks detector to avoid per-scan rule compilation on the
-// real-time hook path; returns an error if the detector cannot be built
-// (init relies on viper global state and should never realistically fail,
-// but propagating the error keeps startup honest).
+// real-time hook path; panics at startup if the detector cannot be built.
 func NewScanner(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
@@ -365,7 +363,7 @@ func NewScanner(
 	flags feature.Provider,
 	celEng *celenv.Engine,
 	riskRecorder *metering.RiskRecorder,
-) (*Scanner, error) {
+) *Scanner {
 	return newScanner(logger, tracerProvider, meterProvider, db, customRuleScanner, piiScanner, piScanner, promptPolicy, flags, celEng, dispatcherConfig{
 		dispatcher:   nil,
 		riskRecorder: riskRecorder,
@@ -386,7 +384,7 @@ func NewScannerWithEnforcementDispatcher(
 	celEng *celenv.Engine,
 	dispatcher EnforcementDispatcher,
 	riskRecorder *metering.RiskRecorder,
-) (*Scanner, error) {
+) *Scanner {
 	return newScanner(logger, tracerProvider, meterProvider, db, customRuleScanner, piiScanner, piScanner, promptPolicy, flags, celEng, dispatcherConfig{
 		dispatcher:   dispatcher,
 		riskRecorder: riskRecorder,
@@ -410,19 +408,14 @@ func newScanner(
 	flags feature.Provider,
 	celEng *celenv.Engine,
 	cfg dispatcherConfig,
-) (*Scanner, error) {
-	if piScanner == nil {
-		piScanner = promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
-	}
-
+) *Scanner {
 	gitleaksScanner := gitleaks.NewScanner()
-	if err := gitleaksScanner.Prime(); err != nil {
-		return nil, fmt.Errorf("prime gitleaks scanner: %w", err)
-	}
-	recommended, err := ra.CompileRecommended(celEng)
-	if err != nil {
-		return nil, fmt.Errorf("compile recommended scopes version %d: %w", recommendedscopes.Version, err)
-	}
+	primeErr := gitleaksScanner.Prime()
+	recommended, recommendedErr := ra.CompileRecommended(celEng)
+	inv.Require("risk scanner",
+		"gitleaks detector primes", primeErr,
+		fmt.Sprintf("recommended scopes version %d compile", recommendedscopes.Version), recommendedErr,
+	)
 
 	return &Scanner{
 		logger:                logger.With(attr.SlogComponent("risk-scanner")),
@@ -445,7 +438,7 @@ func newScanner(
 		metrics:               newScannerMetrics(meterProvider, logger),
 		celEng:                celEng,
 		recommended:           recommended,
-	}, nil
+	}
 }
 
 // Shutdown stops accepting detached realtime recordings and waits for every
@@ -817,12 +810,8 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 		attr.ProjectID(projectID),
 		attr.Outcome(outcome),
 	)
-	if s.metrics.scanDuration != nil {
-		s.metrics.scanDuration.Record(ctx, duration.Seconds(), attrs)
-	}
-	if s.metrics.scanResults != nil {
-		s.metrics.scanResults.Add(ctx, 1, attrs)
-	}
+	s.metrics.scanDuration.Record(ctx, duration.Seconds(), attrs)
+	s.metrics.scanResults.Add(ctx, 1, attrs)
 }
 
 // scanPolicy runs a policy's sources sequentially. Gitleaks holds a mutex
@@ -1270,16 +1259,10 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		prompt = policy.Prompt.String
 	}
 	scanStarted := time.Now()
-	var scanResult scanners.Result
-	var verdict *promptpolicy.Verdict
-	if s.promptPolicy != nil {
-		// text is the type-appropriate body the hook layer already flattened:
-		// the prompt for user messages, tool-input JSON for tool_request,
-		// tool-output JSON for tool_response.
-		scanResult, verdict = s.promptPolicy.ScanWithVerdict(ctx, policy.OrganizationID, policy.ProjectID.String(), baseProvenance.UserID, prompt, cfg, judgemessage.New(messageType, toolName, text))
-	} else {
-		scanResult = scanners.Result{Findings: promptpolicy.FindingsFromEvaluation(cfg, nil, nil, true), STokens: 0, Completed: false}
-	}
+	// text is the type-appropriate body the hook layer already flattened:
+	// the prompt for user messages, tool-input JSON for tool_request,
+	// tool-output JSON for tool_response.
+	scanResult, verdict := s.promptPolicy.ScanWithVerdict(ctx, policy.OrganizationID, policy.ProjectID.String(), baseProvenance.UserID, prompt, cfg, judgemessage.New(messageType, toolName, text))
 	provenance := baseProvenance
 	provenance.RiskPolicyID = policy.ID
 	provenance.RiskPolicyVersion = policy.Version
@@ -1691,13 +1674,11 @@ func (s *Scanner) recordPubsubDegraded(ctx context.Context, lane enforcereply.La
 		args = append(args, attr.SlogError(err))
 	}
 	s.logger.ErrorContext(ctx, "pub/sub enforcement lane degraded", args...)
-	if s.metrics.pubsubDegraded != nil {
-		s.metrics.pubsubDegraded.Add(ctx, 1, metric.WithAttributes(
-			attribute.String("lane", lane.String()),
-			attr.Reason(reason),
-			attr.RiskEnforcementFailMode(failMode),
-		))
-	}
+	s.metrics.pubsubDegraded.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("lane", lane.String()),
+		attr.Reason(reason),
+		attr.RiskEnforcementFailMode(failMode),
+	))
 }
 
 // llmPolicyOutcome classifies a policy's enforcing result in the llm engine
@@ -1799,14 +1780,12 @@ func (s *Scanner) recordShadowComparison(ctx context.Context, policy repo.RiskPo
 	if llmMatched && !llmUnavailable {
 		llmOutcome = llmPolicyOutcomeMatched
 	}
-	if s.metrics.llmShadowComparison != nil {
-		s.metrics.llmShadowComparison.Add(ctx, 1, metric.WithAttributes(
-			attr.OrganizationID(policy.OrganizationID),
-			attr.RiskPolicyID(policy.ID.String()),
-			attr.RiskScanMode(llmanalyzer.ScanModeSync),
-			attr.Outcome(comparison),
-		))
-	}
+	s.metrics.llmShadowComparison.Add(ctx, 1, metric.WithAttributes(
+		attr.OrganizationID(policy.OrganizationID),
+		attr.RiskPolicyID(policy.ID.String()),
+		attr.RiskScanMode(llmanalyzer.ScanModeSync),
+		attr.Outcome(comparison),
+	))
 	s.recordLLMPolicyEvaluation(ctx, policy, llmOutcome, duration)
 }
 
@@ -1820,12 +1799,8 @@ func (s *Scanner) recordLLMPolicyEvaluation(ctx context.Context, policy repo.Ris
 		attr.RiskScanMode(llmanalyzer.ScanModeSync),
 		attr.Outcome(outcome),
 	)
-	if s.metrics.llmPolicyEvaluations != nil {
-		s.metrics.llmPolicyEvaluations.Add(ctx, 1, attrs)
-	}
-	if s.metrics.llmPolicyDuration != nil {
-		s.metrics.llmPolicyDuration.Record(ctx, duration.Seconds(), attrs)
-	}
+	s.metrics.llmPolicyEvaluations.Add(ctx, 1, attrs)
+	s.metrics.llmPolicyDuration.Record(ctx, duration.Seconds(), attrs)
 }
 
 func (s *Scanner) projectFlagEnabled(ctx context.Context, orgID string, projectID uuid.UUID, flag feature.Flag) bool {

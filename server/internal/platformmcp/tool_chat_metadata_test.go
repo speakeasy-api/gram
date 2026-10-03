@@ -119,28 +119,10 @@ func TestListChatsToolRequiresPrincipal(t *testing.T) {
 	require.ErrorIs(t, err, ErrUnauthorized)
 }
 
-func TestListChatsStubRefuses(t *testing.T) {
+func TestListChatsIsServedOnBothSurfaces(t *testing.T) {
 	t.Parallel()
 
-	registrar := newRegistrar(newTestMCPServer())
-	registerUnavailableChatMetadataTools(registrar)
-	descriptor := descriptorByName(t, registrar, listChatsToolName)
-	require.Equal(t, bothAudiences, descriptor.Meta.Audiences, "the stub declares the live tool's audiences")
-	require.Equal(t, ProjectScopeDefaultable, descriptor.Meta.ProjectScope)
-
-	_, err := descriptor.Invoke(ContextWithPrincipal(t.Context(), registrationServicePrincipal()), json.RawMessage(`{"window":"7d"}`))
-	var refusal *ToolRefusalError
-	require.ErrorAs(t, err, &refusal)
-	require.JSONEq(t, `{"code":"feature_unavailable","feature":"chat_metadata","message":"This is not switched on for your organization yet."}`, refusal.Payload)
-}
-
-// The nil-dependency deployment serves list_chats as a stub, so the tool is on
-// both surfaces regardless of composition.
-func TestListChatsIsRegisteredAsAStubWithoutDependencies(t *testing.T) {
-	t.Parallel()
-
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newTestServer(t)
 	descriptor := descriptorByName(t, registrar, listChatsToolName)
 	require.Equal(t, bothAudiences, descriptor.Meta.Audiences)
-	require.Contains(t, descriptor.Description, "not switched on")
 }

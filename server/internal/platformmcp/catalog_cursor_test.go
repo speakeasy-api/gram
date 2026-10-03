@@ -9,8 +9,7 @@ import (
 func TestCatalogCursorBindsContinuationToPrincipalAndNormalizedFilters(t *testing.T) {
 	t.Parallel()
 
-	codec, err := newCatalogCursorCodec("test-cursor-key")
-	require.NoError(t, err)
+	codec := newCatalogCursorCodec("test-cursor-key")
 	principal := Principal{OrganizationID: "organization", Generation: "generation"}
 	value, err := codec.Encode(catalogCursor{
 		OrganizationID: principal.OrganizationID,
@@ -54,10 +53,8 @@ func TestCatalogSearchPageEnforcesPublicBound(t *testing.T) {
 func TestCatalogCursorUsesStableKeyMaterial(t *testing.T) {
 	t.Parallel()
 
-	first, err := newCatalogCursorCodec("stable-key")
-	require.NoError(t, err)
-	second, err := newCatalogCursorCodec("stable-key")
-	require.NoError(t, err)
+	first := newCatalogCursorCodec("stable-key")
+	second := newCatalogCursorCodec("stable-key")
 	principal := Principal{OrganizationID: "organization", Generation: "generation"}
 	value, err := first.Encode(catalogCursor{OrganizationID: principal.OrganizationID, Generation: principal.Generation})
 	require.NoError(t, err)
@@ -69,8 +66,7 @@ func TestCatalogCursorUsesStableKeyMaterial(t *testing.T) {
 func TestCatalogCursorRejectsTampering(t *testing.T) {
 	t.Parallel()
 
-	codec, err := newCatalogCursorCodec("test-cursor-key")
-	require.NoError(t, err)
+	codec := newCatalogCursorCodec("test-cursor-key")
 	principal := Principal{OrganizationID: "organization", Generation: "generation"}
 	value, err := codec.Encode(catalogCursor{OrganizationID: principal.OrganizationID, Generation: principal.Generation})
 	require.NoError(t, err)
@@ -85,8 +81,7 @@ func TestCatalogCursorRejectsTampering(t *testing.T) {
 func TestCatalogCursorBindsAConnectionlessCallerToItsSubject(t *testing.T) {
 	t.Parallel()
 
-	codec, err := newCatalogCursorCodec("test-cursor-key")
-	require.NoError(t, err)
+	codec := newCatalogCursorCodec("test-cursor-key")
 	assistant := Principal{OrganizationID: "organization", UserID: "user-1", Surface: SurfaceProjectAssistant}
 	require.False(t, assistant.HasConnection())
 	require.NotEmpty(t, principalCursorBinding(assistant))

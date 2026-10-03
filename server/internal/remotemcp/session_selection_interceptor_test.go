@@ -19,6 +19,11 @@ import (
 
 const selectionTestGrantID = "0198a0b0-0000-7000-8000-0000000000aa"
 
+func newWitnessStoreForTest(t *testing.T) *toolfilter.SessionToolWitnessStore {
+	t.Helper()
+	return toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache())
+}
+
 // selectionOf builds a compiled selection whose frozen name grant is
 // exactly the given names.
 func selectionOf(t *testing.T, names ...string) *toolfilter.SessionSelection {
@@ -85,14 +90,14 @@ func withListSession(resp *proxy.ToolsListResponse, sessionID, requestCursor str
 func TestSessionSelectionInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t, "a"), nil)
+	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t, "a"), newWitnessStoreForTest(t))
 	require.Equal(t, "session-selection", interceptor.Name())
 }
 
 func TestSessionSelectionInterceptor_ListFiltersToSelectedSubsetInUpstreamOrder(t *testing.T) {
 	t.Parallel()
 
-	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t, "delta", "alpha"), nil)
+	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t, "delta", "alpha"), newWitnessStoreForTest(t))
 	resp := newToolsListResponse(t, namedTools("alpha", "bravo", "charlie", "delta"))
 
 	require.NoError(t, interceptor.InterceptToolsListResponse(t.Context(), resp))
@@ -109,7 +114,7 @@ func TestSessionSelectionInterceptor_ListFiltersToSelectedSubsetInUpstreamOrder(
 func TestSessionSelectionInterceptor_ListEmptySelectionFiltersEverything(t *testing.T) {
 	t.Parallel()
 
-	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t), nil)
+	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t), newWitnessStoreForTest(t))
 	resp := newToolsListResponse(t, namedTools("alpha", "bravo"))
 
 	require.NoError(t, interceptor.InterceptToolsListResponse(t.Context(), resp))
@@ -120,7 +125,7 @@ func TestSessionSelectionInterceptor_ListEmptySelectionFiltersEverything(t *test
 func TestSessionSelectionInterceptor_ListLiveGrantMatchesHintedTools(t *testing.T) {
 	t.Parallel()
 
-	store := toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache())
+	store := newWitnessStoreForTest(t)
 	interceptor := remotemcp.NewSessionSelectionInterceptor(liveSelection(t, toolfilter.AnnotationReadOnly), store)
 	resp := withListSession(newToolsListResponse(t, []*mcp.Tool{
 		readOnlySDKTool("reader"),
@@ -134,7 +139,7 @@ func TestSessionSelectionInterceptor_ListLiveGrantMatchesHintedTools(t *testing.
 func TestSessionSelectionInterceptor_ListErrorResponsePassesThrough(t *testing.T) {
 	t.Parallel()
 
-	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t, "alpha"), nil)
+	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t, "alpha"), newWitnessStoreForTest(t))
 	resp := &proxy.ToolsListResponse{
 		Error: &jsonrpc.Error{Code: -32601, Message: "method not found", Data: nil},
 		RemoteMessage: &proxy.RemoteMessage{
@@ -153,14 +158,14 @@ func TestSessionSelectionInterceptor_ListErrorResponsePassesThrough(t *testing.T
 func TestSessionSelectionInterceptor_ListNilResponseFailsClosed(t *testing.T) {
 	t.Parallel()
 
-	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t, "alpha"), nil)
+	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t, "alpha"), newWitnessStoreForTest(t))
 	require.Error(t, interceptor.InterceptToolsListResponse(t.Context(), nil))
 }
 
 func TestSessionSelectionInterceptor_ListMissingResultAndErrorFailsClosed(t *testing.T) {
 	t.Parallel()
 
-	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t, "alpha"), nil)
+	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t, "alpha"), newWitnessStoreForTest(t))
 	resp := &proxy.ToolsListResponse{
 		Error:         nil,
 		RemoteMessage: nil,
@@ -173,7 +178,7 @@ func TestSessionSelectionInterceptor_ListMissingResultAndErrorFailsClosed(t *tes
 func TestSessionSelectionInterceptor_ListNilSelectionFailsClosedToZeroTools(t *testing.T) {
 	t.Parallel()
 
-	interceptor := remotemcp.NewSessionSelectionInterceptor(nil, nil)
+	interceptor := remotemcp.NewSessionSelectionInterceptor(nil, newWitnessStoreForTest(t))
 	resp := newToolsListResponse(t, namedTools("alpha"))
 
 	require.NoError(t, interceptor.InterceptToolsListResponse(t.Context(), resp))
@@ -185,7 +190,7 @@ func TestSessionSelectionInterceptor_SessionlessListWitnessAuthorizesCall(t *tes
 
 	// Stateless upstreams omit the MCP session id. Their witness is scoped by
 	// the consent grant and must support the same list-to-call round trip.
-	store := toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache())
+	store := newWitnessStoreForTest(t)
 	interceptor := remotemcp.NewSessionSelectionInterceptor(liveSelection(t, toolfilter.AnnotationReadOnly, "writer"), store)
 	resp := newToolsListResponse(t, []*mcp.Tool{
 		readOnlySDKTool("reader"),
@@ -211,14 +216,14 @@ func newToolsCallRequestWithSession(toolName, sessionID string) *proxy.ToolsCall
 func TestSessionSelectionInterceptor_CallAllowsSelectedTool(t *testing.T) {
 	t.Parallel()
 
-	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t, "alpha", "bravo"), nil)
+	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t, "alpha", "bravo"), newWitnessStoreForTest(t))
 	require.NoError(t, interceptor.InterceptToolsCallRequest(t.Context(), newToolsCallRequest("alpha")))
 }
 
 func TestSessionSelectionInterceptor_CallRejectsUnselectedToolWithTypedRejection(t *testing.T) {
 	t.Parallel()
 
-	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t, "alpha"), nil)
+	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t, "alpha"), newWitnessStoreForTest(t))
 	err := interceptor.InterceptToolsCallRequest(t.Context(), newToolsCallRequest("charlie"))
 	require.Error(t, err)
 
@@ -231,21 +236,21 @@ func TestSessionSelectionInterceptor_CallRejectsUnselectedToolWithTypedRejection
 func TestSessionSelectionInterceptor_CallEmptySelectionRejectsEverything(t *testing.T) {
 	t.Parallel()
 
-	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t), nil)
+	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t), newWitnessStoreForTest(t))
 	require.Error(t, interceptor.InterceptToolsCallRequest(t.Context(), newToolsCallRequest("alpha")))
 }
 
 func TestSessionSelectionInterceptor_CallNilCallFailsClosed(t *testing.T) {
 	t.Parallel()
 
-	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t, "alpha"), nil)
+	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t, "alpha"), newWitnessStoreForTest(t))
 	require.Error(t, interceptor.InterceptToolsCallRequest(t.Context(), nil))
 }
 
 func TestSessionSelectionInterceptor_CallNilParamsFailsClosed(t *testing.T) {
 	t.Parallel()
 
-	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t, "alpha"), nil)
+	interceptor := remotemcp.NewSessionSelectionInterceptor(selectionOf(t, "alpha"), newWitnessStoreForTest(t))
 	call := &proxy.ToolsCallRequest{Params: nil, UserRequest: nil}
 	require.Error(t, interceptor.InterceptToolsCallRequest(t.Context(), call))
 }
@@ -257,7 +262,7 @@ func TestSessionSelection_ListWitnessAuthorizesLiveCall(t *testing.T) {
 	t.Parallel()
 
 	selection := liveSelection(t, toolfilter.AnnotationReadOnly)
-	store := toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache())
+	store := newWitnessStoreForTest(t)
 	listInterceptor := remotemcp.NewSessionSelectionInterceptor(selection, store)
 	callInterceptor := remotemcp.NewSessionSelectionInterceptor(selection, store)
 

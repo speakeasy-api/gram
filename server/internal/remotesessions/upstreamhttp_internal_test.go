@@ -16,8 +16,7 @@ func TestUpstreamHTTPDoerPublicIssuerDialsDirect(t *testing.T) {
 	t.Parallel()
 
 	direct := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)).PooledClient()
-	doer, err := upstreamHTTPDoer(direct, nil, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
-	require.NoError(t, err)
+	doer := upstreamHTTPDoer(direct, nil, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	require.Equal(t, httpDoer(direct), doer)
 }
 
@@ -28,20 +27,10 @@ func TestUpstreamHTTPDoerTunnelBindingWins(t *testing.T) {
 	tunnels := tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), nil)
 	tunnelID := uuid.New()
 
-	doer, err := upstreamHTTPDoer(direct, tunnels, uuid.NullUUID{UUID: tunnelID, Valid: true})
-	require.NoError(t, err)
+	doer := upstreamHTTPDoer(direct, tunnels, uuid.NullUUID{UUID: tunnelID, Valid: true})
 	bound, ok := doer.(tunnelDoer)
 	require.True(t, ok)
 	require.Equal(t, tunnelID.String(), bound.tunnelID)
-}
-
-func TestUpstreamHTTPDoerTunnelBindingWithoutTransportErrors(t *testing.T) {
-	t.Parallel()
-
-	direct := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)).PooledClient()
-	doer, err := upstreamHTTPDoer(direct, nil, uuid.NullUUID{UUID: uuid.New(), Valid: true})
-	require.Error(t, err)
-	require.Nil(t, doer)
 }
 
 func TestUpstreamHTTPDoerRetainedBindingWithoutLiveRouteFailsClosed(t *testing.T) {
@@ -49,8 +38,7 @@ func TestUpstreamHTTPDoerRetainedBindingWithoutLiveRouteFailsClosed(t *testing.T
 
 	direct := &recordingHTTPDoer{}
 	tunnels := tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), nil)
-	doer, err := upstreamHTTPDoer(direct, tunnels, uuid.NullUUID{UUID: uuid.New(), Valid: true})
-	require.NoError(t, err)
+	doer := upstreamHTTPDoer(direct, tunnels, uuid.NullUUID{UUID: uuid.New(), Valid: true})
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "https://idp.internal/oauth/token", nil)
 	require.NoError(t, err)
@@ -69,5 +57,7 @@ func (d *recordingHTTPDoer) Do(*http.Request) (*http.Response, error) {
 	return nil, nil
 }
 
-var _ httpDoer = (*http.Client)(nil)
-var _ httpDoer = (*recordingHTTPDoer)(nil)
+var (
+	_ httpDoer = (*http.Client)(nil)
+	_ httpDoer = (*recordingHTTPDoer)(nil)
+)

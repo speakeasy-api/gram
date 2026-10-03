@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-
 	"net/http"
 	"net/url"
 	"sync/atomic"
@@ -87,7 +86,7 @@ func New(policy *guardian.Policy, sessions *remotesessions.ChallengeManager, des
 }
 
 func (a *Adapter) ProviderKey() string {
-	if a == nil || !validDescriptor(a.descriptor) {
+	if !validDescriptor(a.descriptor) {
 		return ""
 	}
 	return a.descriptor.ProviderKey
@@ -103,7 +102,7 @@ func (a *Adapter) PreflightSetup(ctx context.Context, request platformmcp.Provid
 		return platformmcp.ErrSetupHandoffInvalid
 	}
 	descriptor := a.descriptor
-	if !validDescriptor(descriptor) || a.sessions == nil {
+	if !validDescriptor(descriptor) {
 		return platformmcp.ErrProviderAdapterUnavailable
 	}
 	if a.configurator != nil {
@@ -144,7 +143,7 @@ func (a *Adapter) BeginSetup(ctx context.Context, request platformmcp.ProviderSe
 		return platformmcp.ProviderSetupResult{}, platformmcp.ErrSetupHandoffInvalid
 	}
 	descriptor := a.descriptor
-	if !validDescriptor(descriptor) || a.sessions == nil {
+	if !validDescriptor(descriptor) {
 		return platformmcp.ProviderSetupResult{}, platformmcp.ErrProviderAdapterUnavailable
 	}
 	client, err := a.reviewedClient(ctx, request, descriptor)
@@ -187,7 +186,7 @@ func (a *Adapter) ProbeReadiness(ctx context.Context, request platformmcp.Provid
 		return platformmcp.ProviderReadinessProbeResult{}, err
 	}
 	descriptor := a.descriptor
-	if !validDescriptor(descriptor) || a.sessions == nil || a.policy == nil {
+	if !validDescriptor(descriptor) {
 		return platformmcp.ProviderReadinessProbeResult{}, platformmcp.ErrProviderAdapterUnavailable
 	}
 
@@ -274,7 +273,7 @@ func (a *Adapter) probe(ctx context.Context, descriptor Descriptor, token string
 func (a *Adapter) readinessResult(state platformmcp.ReadinessState, evidence string, request platformmcp.ProviderReadinessProbeRequest, authorization remotesessions.ResolvedAuthorization, absence string) platformmcp.ProviderReadinessProbeResult {
 	now := time.Now().UTC()
 	lifetime := readinessLifetime
-	if a != nil && a.descriptor.TestOnlyReadinessLifetime > 0 {
+	if a.descriptor.TestOnlyReadinessLifetime > 0 {
 		lifetime = a.descriptor.TestOnlyReadinessLifetime
 	}
 	return platformmcp.ProviderReadinessProbeResult{

@@ -44,11 +44,9 @@ func TestGramMCPCatalogEnabled(t *testing.T) {
 
 func TestGramMCPCatalogEnabledUnknown(t *testing.T) {
 	t.Parallel()
-	for _, provider := range []feature.Provider{nil, &feature.InMemory{}} {
-		enabled, err := feature.GramMCPCatalogEnabled(t.Context(), provider, "test-org", "org-slug")
-		require.NoError(t, err)
-		require.False(t, enabled)
-	}
+	enabled, err := feature.GramMCPCatalogEnabled(t.Context(), &feature.InMemory{}, "test-org", "org-slug")
+	require.NoError(t, err)
+	require.False(t, enabled)
 }
 
 func TestGramMCPCatalogEnabledEmptyOrganization(t *testing.T) {

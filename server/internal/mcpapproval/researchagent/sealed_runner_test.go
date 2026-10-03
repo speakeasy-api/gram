@@ -30,7 +30,7 @@ func TestRun_SeedsMenuFromBriefing(t *testing.T) {
 	}
 
 	menu := research.NewURLMenu()
-	runner := researchagent.New(completions, nil, menu, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
+	runner := researchagent.New(completions, cleanJudge(), menu, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 
 	input := researchagent.RunInput{
 		OrgID:       "org-1",
@@ -80,7 +80,7 @@ func TestRun_BriefingRedactsEmails(t *testing.T) {
 		extracted: `{"summary": "s", "coverage": {"level": "none"}, "claims": []}`,
 	}
 
-	runner := researchagent.New(completions, nil, nil, researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
+	runner := researchagent.New(completions, cleanJudge(), research.NewURLMenu(), researchagent.EgressSelectTool(&echoTool{name: "platform_web_search", handler: "web_search", calls: nil}))
 	input := runInput()
 	input.Evidence = json.RawMessage(`{"usage": {"requesters": ["alex@corp.example.com", "sam@corp.example.com", "alex@corp.example.com"]}}`)
 

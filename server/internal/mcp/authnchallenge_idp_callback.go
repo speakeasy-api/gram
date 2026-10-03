@@ -346,59 +346,57 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		if current == nil || issuerID != federation.IssuerID || clientID != federation.ClientID || version != federation.Configuration {
 			return finishFederation(oops.CodeFailedPrecondition, remotesessions.ErrFederatedConfiguration, "Login configuration changed. Restart login", false)
 		}
-		if s.federatedLoginConsumer != nil {
-			policy, err := current.OfflinePolicy()
-			if err != nil {
-				return failFederationDependency(err, "Login configuration is unavailable. Restart login")
-			}
-			if federation.OfflineRequested && federation.ConfigurationHash != policy.ConfigurationHash {
-				return finishFederation(oops.CodeFailedPrecondition, remotesessions.ErrFederatedConfiguration, "Login configuration changed. Restart login", false)
-			}
+		policy, err := current.OfflinePolicy()
+		if err != nil {
+			return failFederationDependency(err, "Login configuration is unavailable. Restart login")
+		}
+		if federation.OfflineRequested && federation.ConfigurationHash != policy.ConfigurationHash {
+			return finishFederation(oops.CodeFailedPrecondition, remotesessions.ErrFederatedConfiguration, "Login configuration changed. Restart login", false)
+		}
 
-			handedIdentity := federatedIdentity
-			if optionalRefused {
-				handedIdentity = nil
-			}
-			err = s.federatedLoginConsumer.ConsumeFederatedLogin(ctx, AuthorizedFederatedLogin{
-				OrganizationID: endpoint.OrganizationID, UserID: gramUserID, UserSessionIssuerID: challengeState.UserSessionIssuerID,
-				TrustedIssuerID: federation.IssuerID, TrustedClientID: federation.ClientID, Identity: handedIdentity,
-				Provider: current, ConfigurationHash: policy.ConfigurationHash, OfflineRequested: federation.OfflineRequested, OptionalRefused: optionalRefused,
+		handedIdentity := federatedIdentity
+		if optionalRefused {
+			handedIdentity = nil
+		}
+		err = s.federatedLoginConsumer.ConsumeFederatedLogin(ctx, AuthorizedFederatedLogin{
+			OrganizationID: endpoint.OrganizationID, UserID: gramUserID, UserSessionIssuerID: challengeState.UserSessionIssuerID,
+			TrustedIssuerID: federation.IssuerID, TrustedClientID: federation.ClientID, Identity: handedIdentity,
+			Provider: current, ConfigurationHash: policy.ConfigurationHash, OfflineRequested: federation.OfflineRequested, OptionalRefused: optionalRefused,
+		})
+		if err != nil {
+			return finishFederation(oops.CodeUnavailable, errors.New("federated credential handoff failed"), "Login credential handoff failed. Restart login", false)
+		}
+		// Observe policy after retention: an unsolicited refresh credential from
+		// minimal login can make the optional consent request unnecessary.
+		requestOffline := false
+		if lookup, ok := s.federatedLoginConsumer.(FederatedOfflinePolicy); ok && policy.Enabled && !federation.OfflineRequested {
+			requestOffline, err = lookup.ShouldRequestFederatedOffline(ctx, FederatedOfflineRequest{
+				Provider: current, OrganizationID: endpoint.OrganizationID, UserID: gramUserID,
+				TrustedIssuerID: federation.IssuerID, TrustedClientID: federation.ClientID,
+				ConfigurationHash: policy.ConfigurationHash, ExplicitRetry: federation.ExplicitRetry,
 			})
 			if err != nil {
-				return finishFederation(oops.CodeUnavailable, errors.New("federated credential handoff failed"), "Login credential handoff failed. Restart login", false)
+				// Optional policy storage must not invalidate the retained base login.
+				// An unknown policy never authorizes an additional consent prompt.
+				requestOffline = false
 			}
-			// Observe policy after retention: an unsolicited refresh credential from
-			// minimal login can make the optional consent request unnecessary.
-			requestOffline := false
-			if lookup, ok := s.federatedLoginConsumer.(FederatedOfflinePolicy); ok && policy.Enabled && !federation.OfflineRequested {
-				requestOffline, err = lookup.ShouldRequestFederatedOffline(ctx, FederatedOfflineRequest{
-					Provider: current, OrganizationID: endpoint.OrganizationID, UserID: gramUserID,
-					TrustedIssuerID: federation.IssuerID, TrustedClientID: federation.ClientID,
-					ConfigurationHash: policy.ConfigurationHash, ExplicitRetry: federation.ExplicitRetry,
-				})
-				if err != nil {
-					// Optional policy storage must not invalidate the retained base login.
-					// An unknown policy never authorizes an additional consent prompt.
-					requestOffline = false
-				}
+		}
+		if requestOffline {
+			// The first login is already retained. Cache identity only, never tokens,
+			// and allow exactly one more authorization round trip for this challenge.
+			federation.ValidatedUserID = gramUserID
+			federation.ValidatedIdentity = &remotesessions.FederatedIdentity{ExpiresAt: time.Time{}, Nonce: "", Issuer: federatedIdentity.Issuer, Subject: federatedIdentity.Subject, Email: federatedIdentity.Email, EmailVerified: federatedIdentity.EmailVerified}
+			federation.OfflineRequested = true
+			federation.ConfigurationHash = policy.ConfigurationHash
+			federation.Nonce, err = generateOpaqueToken()
+			if err != nil {
+				return failFederationDependency(err, "Login is unavailable. Restart login")
 			}
-			if requestOffline {
-				// The first login is already retained. Cache identity only, never tokens,
-				// and allow exactly one more authorization round trip for this challenge.
-				federation.ValidatedUserID = gramUserID
-				federation.ValidatedIdentity = &remotesessions.FederatedIdentity{ExpiresAt: time.Time{}, Nonce: "", Issuer: federatedIdentity.Issuer, Subject: federatedIdentity.Subject, Email: federatedIdentity.Email, EmailVerified: federatedIdentity.EmailVerified}
-				federation.OfflineRequested = true
-				federation.ConfigurationHash = policy.ConfigurationHash
-				federation.Nonce, err = generateOpaqueToken()
-				if err != nil {
-					return failFederationDependency(err, "Login is unavailable. Restart login")
-				}
-				federation.Verifier, err = generateOpaqueToken()
-				if err != nil {
-					return failFederationDependency(err, "Login is unavailable. Restart login")
-				}
-				return s.startFederatedLogin(w, r, &challengeState, current)
+			federation.Verifier, err = generateOpaqueToken()
+			if err != nil {
+				return failFederationDependency(err, "Login is unavailable. Restart login")
 			}
+			return s.startFederatedLogin(w, r, &challengeState, current)
 		}
 	}
 

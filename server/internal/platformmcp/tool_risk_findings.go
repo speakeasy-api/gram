@@ -21,11 +21,6 @@ func registerRiskFindingsTool(reg *Registrar, service riskFindingsLister) {
 		}, nil),
 	}
 	meta := ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}
-	if service == nil || !service.valid() {
-		tool.Description += " Findings are unavailable in this deployment."
-		addTool(reg, tool, meta, unavailableRiskReadTool(reg, tool.Name))
-		return
-	}
 	addTool(reg, tool, meta, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRiskFindingsInput) (*mcp.CallToolResult, ListRiskFindingsOutput, error) {
 		return riskReadToolCall(ctx, reg.riskTelemetry, tool.Name, func(principal Principal) (ListRiskFindingsOutput, error) { return service.List(ctx, principal, input) })
 	})

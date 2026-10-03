@@ -207,8 +207,10 @@ type TemporalSpendRuleEvaluator struct {
 	TemporalEnv *tenv.Environment
 }
 
-var _ spendrules.EvaluationSignaler = (*TemporalSpendRuleEvaluator)(nil)
-var _ spendrules.ActorEvaluationSignaler = (*TemporalSpendRuleEvaluator)(nil)
+var (
+	_ spendrules.EvaluationSignaler      = (*TemporalSpendRuleEvaluator)(nil)
+	_ spendrules.ActorEvaluationSignaler = (*TemporalSpendRuleEvaluator)(nil)
+)
 
 func (e *TemporalSpendRuleEvaluator) Signal(ctx context.Context, organizationID string) error {
 	id := buildSpendRuleOrgEvaluationWorkflowID(organizationID)

@@ -166,7 +166,7 @@ func TestListServers_OmitsToolsAndComputesScalars(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, nil)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
 	client.httpClient = srv.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -995,7 +995,7 @@ func TestListServers_ComputesSupportsDcr(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, nil)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
 	client.httpClient = srv.Client()
 	registry := Registry{
 		ID:  uuid.New(),

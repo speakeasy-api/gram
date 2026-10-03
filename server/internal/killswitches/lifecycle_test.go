@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -38,7 +39,7 @@ func TestLifecycleVersionsSnapshotsAndStaleReferences(t *testing.T) {
 		validated = append(validated, key)
 		validatedMu.Unlock()
 		return resourceValid.Load()
-	}, nil)
+	}, NewAuditBeforeCommitHook(audit.NewLogger()))
 
 	startsAt := time.Date(2027, 1, 2, 3, 4, 5, 0, time.FixedZone("offset", 2*60*60))
 	expiresAt := startsAt.Add(48 * time.Hour)
@@ -143,7 +144,7 @@ func TestLifecycleReplayConflictAndBoundedReceipt(t *testing.T) {
 	conn, orgID := newLifecycleDatabase(t, "killswitch_replay")
 	var referencesValid atomic.Bool
 	referencesValid.Store(true)
-	service := newLifecycleServiceForTest(t, conn, func(OrganizationID, PrincipalKey) bool { return referencesValid.Load() }, func(OrganizationID, ResourceKey) bool { return referencesValid.Load() }, nil)
+	service := newLifecycleServiceForTest(t, conn, func(OrganizationID, PrincipalKey) bool { return referencesValid.Load() }, func(OrganizationID, ResourceKey) bool { return referencesValid.Load() }, NewAuditBeforeCommitHook(audit.NewLogger()))
 
 	operationID := uuid.New()
 	startUTC := time.Date(2027, 2, 3, 4, 5, 6, 100, time.UTC)
@@ -332,8 +333,7 @@ func TestLifecycleAuthoritativeValidationUsesMutationTransaction(t *testing.T) {
 		<-releaseCommit
 		return nil
 	}
-	service, err := NewLifecycleService(conn, registry, lockingLifecycleValidator{}, hook)
-	require.NoError(t, err)
+	service := NewLifecycleService(conn, registry, lockingLifecycleValidator{}, hook)
 	type mutationOutcome struct {
 		result MutationResult
 		err    error
@@ -374,7 +374,7 @@ func TestLifecycleOrganizationIsolationAndCrossProjectResources(t *testing.T) {
 	insertOrganization(t, conn, orgB)
 	service := newLifecycleServiceForTest(t, conn, nil, func(org OrganizationID, key ResourceKey) bool {
 		return string(org) == orgA && (key == ResourceKey(orgA+":project:a:tool") || key == ResourceKey(orgA+":project:b:tool"))
-	}, nil)
+	}, NewAuditBeforeCommitHook(audit.NewLogger()))
 
 	request := testActivateRequest(orgA, uuid.New())
 	request.Desired.SelectedResourceInputs = []string{"project:a:tool", "project:b:tool"}
@@ -410,7 +410,7 @@ func TestLifecycleScopeChangesValidateCurrentSelections(t *testing.T) {
 	conn, orgID := newLifecycleDatabase(t, "killswitch_scope_changes")
 	var resourcesValid atomic.Bool
 	resourcesValid.Store(true)
-	service := newLifecycleServiceForTest(t, conn, nil, func(OrganizationID, ResourceKey) bool { return resourcesValid.Load() }, nil)
+	service := newLifecycleServiceForTest(t, conn, nil, func(OrganizationID, ResourceKey) bool { return resourcesValid.Load() }, NewAuditBeforeCommitHook(audit.NewLogger()))
 
 	activated, err := service.ActivatePrescription(t.Context(), testActivateRequest(orgID, uuid.New()))
 	require.NoError(t, err)
@@ -461,7 +461,7 @@ func TestLifecycleDynamicAllIntervalsRollbackCleanupAndReclaim(t *testing.T) {
 	service := newLifecycleServiceForTest(t, conn, nil, func(OrganizationID, ResourceKey) bool {
 		resourceValidations.Add(1)
 		return true
-	}, nil)
+	}, NewAuditBeforeCommitHook(audit.NewLogger()))
 	first, err := service.ActivatePrescription(t.Context(), request)
 	require.NoError(t, err, "rolled-back operation ID must remain reusable")
 	prescription, err := getPrescriptionForTest(t.Context(), conn, OrganizationID(orgID), first.PrescriptionID)
@@ -534,6 +534,7 @@ func TestLifecycleCollaboratorsCannotCompleteTransaction(t *testing.T) {
 				_, err := queries.Exec(ctx, " /* leading comment */ COMMIT")
 				return fmt.Errorf("validator commit: %w", err)
 			}),
+			hook: NewAuditBeforeCommitHook(audit.NewLogger()),
 		},
 		{
 			name: "validator commit through query rewriter",
@@ -542,6 +543,7 @@ func TestLifecycleCollaboratorsCannotCompleteTransaction(t *testing.T) {
 				_, err := queries.Exec(ctx, "SELECT 1", rewritingLifecycleQuery{sql: "COMMIT"})
 				return fmt.Errorf("validator query rewriter commit: %w", err)
 			}),
+			hook: NewAuditBeforeCommitHook(audit.NewLogger()),
 		},
 		{
 			name: "validator rollback through query",
@@ -554,6 +556,7 @@ func TestLifecycleCollaboratorsCannotCompleteTransaction(t *testing.T) {
 				rows.Close()
 				return errors.New("transaction control unexpectedly allowed")
 			}),
+			hook: NewAuditBeforeCommitHook(audit.NewLogger()),
 		},
 		{
 			name:      "hook commit through query row",
@@ -588,8 +591,7 @@ func TestLifecycleCollaboratorsCannotCompleteTransaction(t *testing.T) {
 			conn, orgID := newLifecycleDatabase(t, fmt.Sprintf("killswitch_transaction_control_%d", i))
 			registry, err := BuildRegistry(validRegistration())
 			require.NoError(t, err)
-			service, err := NewLifecycleService(conn, registry, test.validator, test.hook)
-			require.NoError(t, err)
+			service := NewLifecycleService(conn, registry, test.validator, test.hook)
 
 			_, err = service.ActivatePrescription(t.Context(), testActivateRequest(orgID, uuid.New()))
 			require.ErrorIs(t, err, errLifecycleTransactionQueryRejected)
@@ -607,7 +609,7 @@ func TestLifecycleSuccessorRollbackRestoresCurrentVersion(t *testing.T) {
 	t.Parallel()
 
 	conn, orgID := newLifecycleDatabase(t, "killswitch_successor_rollback")
-	service := newLifecycleServiceForTest(t, conn, nil, nil, nil)
+	service := newLifecycleServiceForTest(t, conn, nil, nil, NewAuditBeforeCommitHook(audit.NewLogger()))
 	activated, err := service.ActivatePrescription(t.Context(), testActivateRequest(orgID, uuid.New()))
 	require.NoError(t, err)
 
@@ -633,7 +635,7 @@ func TestLifecycleRejectsInvalidTransitionsAndReceiptPayload(t *testing.T) {
 	t.Parallel()
 
 	conn, orgID := newLifecycleDatabase(t, "killswitch_invalid")
-	service := newLifecycleServiceForTest(t, conn, nil, nil, nil)
+	service := newLifecycleServiceForTest(t, conn, nil, nil, NewAuditBeforeCommitHook(audit.NewLogger()))
 	request := testActivateRequest(orgID, uuid.New())
 	result, err := service.ActivatePrescription(t.Context(), request)
 	require.NoError(t, err)
@@ -765,8 +767,7 @@ func newLifecycleServiceForTest(t *testing.T, conn *pgxpool.Pool, principalValid
 	t.Helper()
 	registry, err := BuildRegistry(validRegistration())
 	require.NoError(t, err)
-	service, err := NewLifecycleService(conn, registry, fakeLifecycleValidator{principal: principalValidation, resource: resourceValidation}, hook)
-	require.NoError(t, err)
+	service := NewLifecycleService(conn, registry, fakeLifecycleValidator{principal: principalValidation, resource: resourceValidation}, hook)
 	return service
 }
 
@@ -884,7 +885,7 @@ func TestLifecycleInputValidation(t *testing.T) {
 	t.Parallel()
 
 	conn, orgID := newLifecycleDatabase(t, "killswitch_input")
-	service := newLifecycleServiceForTest(t, conn, nil, nil, nil)
+	service := newLifecycleServiceForTest(t, conn, nil, nil, NewAuditBeforeCommitHook(audit.NewLogger()))
 
 	tests := []struct {
 		name    string

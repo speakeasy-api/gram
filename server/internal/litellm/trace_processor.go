@@ -64,22 +64,20 @@ type TraceProcessor struct {
 	invalidIdentifiers metric.Int64Counter
 }
 
-func NewTraceProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, telemetryLogger *telemetry.Logger, calls *callcache.Cache) *TraceProcessor {
-	processor := newOTLPProcessor(logger, meterProvider, telemetryLogger.LogBulkBounded, traceProcessorWorkers, traceProcessorQueueSize, otlpSignalSpans)
-	processor.calls = calls
-	return processor
+func NewTraceProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, telemetryLogger *telemetry.Logger, calls *callcache.Cache, resolver *InstanceResolver) *TraceProcessor {
+	return newTraceProcessor(logger, meterProvider, telemetryLogger.LogBulkBounded, traceProcessorWorkers, traceProcessorQueueSize, calls, resolver)
 }
 
 type MetricProcessor struct {
 	*TraceProcessor
 }
 
-func NewMetricProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, telemetryLogger *telemetry.Logger) *MetricProcessor {
-	return newMetricProcessor(logger, meterProvider, telemetryLogger.LogBulkBounded, traceProcessorWorkers, traceProcessorQueueSize)
+func NewMetricProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, telemetryLogger *telemetry.Logger, resolver *InstanceResolver) *MetricProcessor {
+	return newMetricProcessor(logger, meterProvider, telemetryLogger.LogBulkBounded, traceProcessorWorkers, traceProcessorQueueSize, resolver)
 }
 
-func newMetricProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, logBulk func(context.Context, []telemetry.LogParams) error, workers, queueSize int) *MetricProcessor {
-	return &MetricProcessor{TraceProcessor: newOTLPProcessor(logger, meterProvider, logBulk, workers, queueSize, otlpSignalMetrics)}
+func newMetricProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, logBulk func(context.Context, []telemetry.LogParams) error, workers, queueSize int, resolver *InstanceResolver) *MetricProcessor {
+	return &MetricProcessor{TraceProcessor: newOTLPProcessor(logger, meterProvider, logBulk, workers, queueSize, otlpSignalMetrics, nil, resolver)}
 }
 
 type traceAttribution struct {
@@ -133,11 +131,11 @@ func enrichTraceAttribution(ctx context.Context, logger *slog.Logger, calls *cal
 	}
 }
 
-func newTraceProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, logBulk func(context.Context, []telemetry.LogParams) error, workers, queueSize int) *TraceProcessor {
-	return newOTLPProcessor(logger, meterProvider, logBulk, workers, queueSize, otlpSignalSpans)
+func newTraceProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, logBulk func(context.Context, []telemetry.LogParams) error, workers, queueSize int, calls *callcache.Cache, resolver *InstanceResolver) *TraceProcessor {
+	return newOTLPProcessor(logger, meterProvider, logBulk, workers, queueSize, otlpSignalSpans, calls, resolver)
 }
 
-func newOTLPProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, logBulk func(context.Context, []telemetry.LogParams) error, workers, queueSize int, signal otlpSignal) *TraceProcessor {
+func newOTLPProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, logBulk func(context.Context, []telemetry.LogParams) error, workers, queueSize int, signal otlpSignal, calls *callcache.Cache, resolver *InstanceResolver) *TraceProcessor {
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/litellm")
 	signalName := signal.name()
 	accepted, _ := meter.Int64Counter("litellm.otel."+signalName+".accepted", metric.WithDescription("LiteLLM OTLP "+signalName+" accepted into the processing queue"))
@@ -149,8 +147,8 @@ func newOTLPProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, l
 	return &TraceProcessor{
 		logger:             logger.With(attr.SlogComponent("litellm.otel.processor")),
 		logBulk:            logBulk,
-		calls:              nil,
-		resolver:           nil,
+		calls:              calls,
+		resolver:           resolver,
 		signal:             signal,
 		jobs:               make(chan otlpJob, queueSize),
 		stop:               make(chan struct{}),
@@ -166,12 +164,6 @@ func newOTLPProcessor(logger *slog.Logger, meterProvider metric.MeterProvider, l
 		truncatedAttrs:     truncatedAttrs,
 		invalidIdentifiers: invalidIdentifiers,
 	}
-}
-
-func (p *TraceProcessor) SetInstanceResolver(resolver *InstanceResolver) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.resolver = resolver
 }
 
 func (p *TraceProcessor) Start(ctx context.Context) {
@@ -267,13 +259,8 @@ func (p *TraceProcessor) run(ctx context.Context) {
 func (p *TraceProcessor) process(ctx context.Context, job otlpJob) {
 	persistenceCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), tracePersistenceTimeout)
 	defer cancel()
-	p.mu.Lock()
-	resolver := p.resolver
-	p.mu.Unlock()
-	if resolver != nil {
-		enrichLiteLLMInstanceAttribution(persistenceCtx, resolver, job.rows)
-	}
-	if p.signal == otlpSignalSpans && p.calls != nil {
+	enrichLiteLLMInstanceAttribution(persistenceCtx, p.resolver, job.rows)
+	if p.signal == otlpSignalSpans {
 		cacheCtx, cacheCancel := context.WithTimeout(persistenceCtx, callCacheTimeout)
 		enrichTraceAttribution(cacheCtx, p.logger, p.calls, job.rows)
 		cacheCancel()

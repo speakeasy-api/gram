@@ -52,9 +52,6 @@ func (t *slackTool) Descriptor() core.ToolDescriptor {
 }
 
 func (t *slackTool) Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if t.client == nil {
-		return fmt.Errorf("slack client not configured")
-	}
 	return t.callFn(ctx, t.client, env, payload, wr)
 }
 

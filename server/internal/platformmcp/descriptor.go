@@ -186,30 +186,22 @@ func newRegistrar(server *mcp.Server) *Registrar {
 }
 
 func (r *Registrar) withExternalAuthorizer(authorizer Authorizer) {
-	if r != nil {
-		r.externalAuthorizer = authorizer
-	}
+	r.externalAuthorizer = authorizer
 }
 
 func (r *Registrar) withRiskTelemetry(telemetry RiskTelemetry) {
-	if r != nil && telemetry != nil {
+	if telemetry != nil {
 		r.riskTelemetry = telemetry
 	}
 }
 
 // Descriptors returns everything registered, before any audience filter.
 func (r *Registrar) Descriptors() []Descriptor {
-	if r == nil {
-		return nil
-	}
 	return r.descriptors
 }
 
 // For returns the descriptors admitted to one audience.
 func (r *Registrar) For(audience Audience) []Descriptor {
-	if r == nil {
-		return nil
-	}
 	admitted := make([]Descriptor, 0, len(r.descriptors))
 	for _, descriptor := range r.descriptors {
 		if descriptor.Meta.servesAudience(audience) {
@@ -223,7 +215,7 @@ func (r *Registrar) For(audience Audience) []Descriptor {
 // composed tools/list result. This is only a discovery filter: exact resource
 // checks remain in each handler and run again when a listed tool is called.
 func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal, tools []*mcp.Tool) []*mcp.Tool {
-	if r == nil || principal.UserID == "" || principal.OrganizationID == "" {
+	if principal.UserID == "" || principal.OrganizationID == "" {
 		return []*mcp.Tool{}
 	}
 	descriptors := make(map[string]Descriptor, len(r.descriptors))
@@ -303,9 +295,6 @@ func grantsAuthorizeAnyResource(grants []authz.Grant, organizationID string, sco
 // ResourceFor returns one admitted resource by URI. An audience that is not
 // admitted to a resource cannot tell it apart from one that does not exist.
 func (r *Registrar) ResourceFor(audience Audience, uri string) (ResourceDescriptor, bool) {
-	if r == nil {
-		return ResourceDescriptor{}, false //nolint:exhaustruct // The zero descriptor is the "not found" signal.
-	}
 	for _, resource := range r.resources {
 		if resource.URI == uri && resource.Meta.servesAudience(audience) {
 			return resource, true

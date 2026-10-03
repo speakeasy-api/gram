@@ -45,13 +45,8 @@ type toolCallBlockParams struct {
 // id is minted on the hot path so the URL can go in the deny response
 // immediately, while the backing row is inserted off the hot path (see
 // insertToolCallBlock). The link is on the organization's default host.
-// Returns "" when no dashboard URL is available.
 func (s *Service) blockViewURL(ctx context.Context, organizationID string, blockID uuid.UUID) string {
-	siteURL := s.orgSiteURL(ctx, organizationID)
-	if siteURL == nil {
-		return ""
-	}
-	return siteURL.JoinPath("blocks", blockID.String()).String()
+	return s.orgSiteURL(ctx, organizationID).JoinPath("blocks", blockID.String()).String()
 }
 
 // insertToolCallBlock persists the durable block row for a pre-minted id. It is
@@ -59,7 +54,7 @@ func (s *Service) blockViewURL(ctx context.Context, organizationID string, block
 // visible to the block page within moments. Best-effort: logs and returns on
 // failure.
 func (s *Service) insertToolCallBlock(ctx context.Context, blockID uuid.UUID, p toolCallBlockParams) {
-	if s.repo == nil || strings.TrimSpace(p.OrganizationID) == "" || p.ProjectID == uuid.Nil {
+	if strings.TrimSpace(p.OrganizationID) == "" || p.ProjectID == uuid.Nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, toolCallBlockWriteTimeout)
@@ -171,7 +166,7 @@ func (s *Service) recordToolCallBlockAsync(ctx context.Context, p toolCallBlockP
 	// Only mint a URL when the block row can actually be persisted; otherwise
 	// the link would resolve to a /blocks/<id> page with no backing row. These
 	// preconditions must mirror insertToolCallBlock's guard.
-	if s.repo == nil || strings.TrimSpace(p.OrganizationID) == "" || p.ProjectID == uuid.Nil {
+	if strings.TrimSpace(p.OrganizationID) == "" || p.ProjectID == uuid.Nil {
 		return ""
 	}
 	blockID, err := uuid.NewV7()

@@ -49,11 +49,8 @@ const maxUnmaskAssetReadSize = 20 * 1024 * 1024 // 20 MiB
 // — the latter keeps the plaintext strictly in-process, mirroring scan-time
 // matching, so no unmask audit entry is written there.
 type RevealMatcher struct {
-	logger *slog.Logger
-	repo   *repo.Queries
-	// assetStorage may be nil in hosts that cannot read content-part assets;
-	// findings anchored to a content part are then unreconstructable and are
-	// refused by the match-length gate.
+	logger       *slog.Logger
+	repo         *repo.Queries
 	assetStorage blobio.Reader
 }
 
@@ -149,10 +146,10 @@ func (m *RevealMatcher) LoadAnchor(ctx context.Context, projectID uuid.UUID, row
 
 // HydratePartContent reads a content-part anchor's asset into the anchor,
 // size-capped like the batch scanner's hydration. Best-effort: a missing or
-// unreadable asset (or a nil asset reader) just leaves the anchor without
-// content and the reveal refuses for lack of candidates.
+// unreadable asset just leaves the anchor without content and the reveal
+// refuses for lack of candidates.
 func (m *RevealMatcher) HydratePartContent(ctx context.Context, anchor *RevealAnchor) {
-	if anchor.contentOK || anchor.partAssetURL == "" || m.assetStorage == nil {
+	if anchor.contentOK || anchor.partAssetURL == "" {
 		return
 	}
 	content, err := blobio.ReadAllString(ctx, m.assetStorage, anchor.partAssetURL, maxUnmaskAssetReadSize)

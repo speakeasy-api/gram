@@ -14,8 +14,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -25,7 +28,7 @@ import (
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
 	if err != nil {
 		log.Fatalf("failed to launch test infrastructure: %v", err)
 	}
@@ -76,4 +79,17 @@ func newInferenceTestService(t *testing.T) (context.Context, *pgxpool.Pool, *Ser
 	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{ActiveOrganizationID: orgID, UserID: "user_inference_test", SessionID: conv.PtrEmpty("test_session"), AccountType: "enterprise"})
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, orgID)})
 	return ctx, conn, service, orgID
+}
+
+func newTestGuardianPolicy(t *testing.T) *guardian.Policy {
+	t.Helper()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	return policy
+}
+
+func newTestChatWriter(t *testing.T, conn *pgxpool.Pool) *chat.ChatMessageWriter {
+	t.Helper()
+	writer := chattest.NewMessageWriter(t, infra, conn)
+	return writer
 }

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -16,19 +15,15 @@ const (
 )
 
 func registerMCPConnectionMutationTools(reg *Registrar, service *MCPConnectionMutationService) {
-	setAddress := unavailableMCPConnectionMutationTool[SetMCPAddressInput, MCPConnectionMutationOutput]()
-	setNetworkAccess := unavailableMCPConnectionMutationTool[SetMCPNetworkAccessInput, MCPConnectionMutationOutput]()
-	if service != nil {
-		setAddress = func(ctx context.Context, _ *mcp.CallToolRequest, input SetMCPAddressInput) (*mcp.CallToolResult, MCPConnectionMutationOutput, error) {
-			return principalToolCall(ctx, mcpConnectionMutationToolResult, func(principal Principal) (MCPConnectionMutationOutput, error) {
-				return service.SetAddress(ctx, principal, input)
-			})
-		}
-		setNetworkAccess = func(ctx context.Context, _ *mcp.CallToolRequest, input SetMCPNetworkAccessInput) (*mcp.CallToolResult, MCPConnectionMutationOutput, error) {
-			return principalToolCall(ctx, mcpConnectionMutationToolResult, func(principal Principal) (MCPConnectionMutationOutput, error) {
-				return service.SetNetworkAccess(ctx, principal, input)
-			})
-		}
+	setAddress := func(ctx context.Context, _ *mcp.CallToolRequest, input SetMCPAddressInput) (*mcp.CallToolResult, MCPConnectionMutationOutput, error) {
+		return principalToolCall(ctx, mcpConnectionMutationToolResult, func(principal Principal) (MCPConnectionMutationOutput, error) {
+			return service.SetAddress(ctx, principal, input)
+		})
+	}
+	setNetworkAccess := func(ctx context.Context, _ *mcp.CallToolRequest, input SetMCPNetworkAccessInput) (*mcp.CallToolResult, MCPConnectionMutationOutput, error) {
+		return principalToolCall(ctx, mcpConnectionMutationToolResult, func(principal Principal) (MCPConnectionMutationOutput, error) {
+			return service.SetNetworkAccess(ctx, principal, input)
+		})
 	}
 	meta := ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}
 	addTool(reg, &mcp.Tool{
@@ -41,17 +36,6 @@ func registerMCPConnectionMutationTools(reg *Registrar, service *MCPConnectionMu
 		Description: "Change network access for one exact MCP server or gateway in an explicit project to public_only, dual, or private_only. Supply the exact settings version from get_mcp_connection_settings, an idempotency key, and confirmed: true only after the user confirms the exact change. This commits the local desired mode and requests publication; the response reports the publication request outcome, not that publication or downstream convergence has completed. Private access may be rejected when it is unavailable for the organization.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true)},
 	}, meta, setNetworkAccess)
-}
-
-func unavailableMCPConnectionMutationTool[In, Out any]() mcp.ToolHandlerFor[In, Out] {
-	return func(_ context.Context, _ *mcp.CallToolRequest, _ In) (*mcp.CallToolResult, Out, error) {
-		var zero Out
-		payload, err := json.Marshal(featureUnavailableResult{Code: unavailableCode, Feature: "mcp_connection_mutations", Message: "MCP connection mutations are unavailable on this server."})
-		if err != nil {
-			return nil, zero, fmt.Errorf("encode unavailable MCP connection mutation result: %w", err)
-		}
-		return nil, zero, &ToolRefusalError{Code: unavailableCode, Payload: string(payload)}
-	}
 }
 
 func mcpConnectionMutationToolResult(err error) (*mcp.CallToolResult, bool) {

@@ -1,42 +1,45 @@
-package background
+package risk
 
 import (
 	"context"
 
 	"github.com/google/uuid"
 
-	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
 )
 
-// shadowMCPPolicyBypassChecker adapts the concrete risk evaluator to the
-// scanner-facing interface without introducing a risk_analysis import cycle.
-type shadowMCPPolicyBypassChecker struct {
+// ShadowMCPBypassChecker answers the shadow MCP scanner's bypass checks with
+// the policy bypass grants PolicyBypassEvaluator resolves.
+type ShadowMCPBypassChecker struct {
 	evaluator policyBypassBatchEvaluator
 }
 
-type policyBypassBatchEvaluator interface {
-	CanBypassBatch(ctx context.Context, inputs []risk.PolicyBypassEvaluation) map[risk.PolicyBypassEvaluation]bool
+func NewShadowMCPBypassChecker(evaluator *PolicyBypassEvaluator) *ShadowMCPBypassChecker {
+	return &ShadowMCPBypassChecker{evaluator: evaluator}
 }
 
-func (c *shadowMCPPolicyBypassChecker) CanBypassShadowMCP(
+type policyBypassBatchEvaluator interface {
+	CanBypassBatch(ctx context.Context, inputs []PolicyBypassEvaluation) map[PolicyBypassEvaluation]bool
+}
+
+func (c *ShadowMCPBypassChecker) CanBypassShadowMCP(
 	ctx context.Context,
 	organizationID string,
 	policyID uuid.UUID,
 	requests []shadowmcpscan.BypassRequest,
 ) map[shadowmcpscan.BypassRequest]bool {
 	results := make(map[shadowmcpscan.BypassRequest]bool, len(requests))
-	evaluationRequests := make(map[risk.PolicyBypassEvaluation][]shadowmcpscan.BypassRequest, len(requests))
-	evaluations := make([]risk.PolicyBypassEvaluation, 0, len(requests))
+	evaluationRequests := make(map[PolicyBypassEvaluation][]shadowmcpscan.BypassRequest, len(requests))
+	evaluations := make([]PolicyBypassEvaluation, 0, len(requests))
 	for _, request := range requests {
-		var target *risk.PolicyBypassTarget
+		var target *PolicyBypassTarget
 		if request.Resolved {
-			target = risk.ShadowMCPPolicyBypassTarget(request.Evidence, request.ToolName)
+			target = ShadowMCPPolicyBypassTarget(request.Evidence, request.ToolName)
 			if target == nil {
 				continue
 			}
 		}
-		evaluation := risk.PolicyBypassEvaluation{
+		evaluation := PolicyBypassEvaluation{
 			OrganizationID: organizationID,
 			UserID:         request.UserID,
 			PolicyID:       policyID.String(),

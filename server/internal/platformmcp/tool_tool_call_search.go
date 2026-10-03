@@ -48,18 +48,3 @@ func registerToolCallSearchTools(reg *Registrar, diagnostics *DiagnosticsService
 		return nil, output, nil
 	})
 }
-
-func registerUnavailableToolCallSearchTools(reg *Registrar) {
-	addTool(reg, &mcp.Tool{
-		Name:        "search_tool_calls",
-		Title:       "Search Tool Calls",
-		Description: "Search one project's tool calls across every MCP server. This is not switched on for your organization yet.",
-		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("tool_call_search"))
-	addTool(reg, &mcp.Tool{
-		Name:        "list_attribute_keys",
-		Title:       "List Attribute Keys",
-		Description: "List the attribute keys present on one project's telemetry. This is not switched on for your organization yet.",
-		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}, unavailableTool("tool_call_search"))
-}

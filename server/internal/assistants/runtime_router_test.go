@@ -87,11 +87,10 @@ func newTestRouter(t *testing.T, target string) (*runtimeRouter, *stubRuntimeBac
 	t.Helper()
 	fly := &stubRuntimeBackend{name: runtimeBackendFlyIO, serverURL: &url.URL{Scheme: "https", Host: "fly.example.com"}, imageRef: "fly:img", ensureRecords: nil, runTurnCount: 0, interruptedThreadIDs: nil, stopCount: 0, reapCount: 0}
 	gke := &stubRuntimeBackend{name: runtimeBackendGKE, serverURL: &url.URL{Scheme: "https", Host: "gke.example.com"}, imageRef: "gke:img", ensureRecords: nil, runTurnCount: 0, interruptedThreadIDs: nil, stopCount: 0, reapCount: 0}
-	router, err := newRuntimeRouter(target, map[string]RuntimeBackend{
+	router := newRuntimeRouter(target, map[string]RuntimeBackend{
 		runtimeBackendFlyIO: fly,
 		runtimeBackendGKE:   gke,
 	})
-	require.NoError(t, err)
 	return router, fly, gke
 }
 
@@ -133,11 +132,10 @@ func TestRuntimeRouterUnknownBackendErrors(t *testing.T) {
 func TestNewRuntimeRouterRequiresTargetConfigured(t *testing.T) {
 	t.Parallel()
 
-	_, err := newRuntimeRouter(runtimeBackendGKE, map[string]RuntimeBackend{
-		runtimeBackendFlyIO: &stubRuntimeBackend{name: runtimeBackendFlyIO, serverURL: nil, imageRef: "", ensureRecords: nil, runTurnCount: 0, stopCount: 0, reapCount: 0},
+	require.Panics(t, func() {
+		newRuntimeRouter(runtimeBackendGKE, map[string]RuntimeBackend{
+			runtimeBackendFlyIO: &stubRuntimeBackend{name: runtimeBackendFlyIO, serverURL: nil, imageRef: "", ensureRecords: nil, runTurnCount: 0, stopCount: 0, reapCount: 0},
+		})
 	})
-	require.ErrorContains(t, err, `target backend "gke" is not configured`)
-
-	_, err = newRuntimeRouter(runtimeBackendFlyIO, map[string]RuntimeBackend{})
-	require.ErrorContains(t, err, "at least one backend")
+	require.Panics(t, func() { newRuntimeRouter(runtimeBackendFlyIO, map[string]RuntimeBackend{}) })
 }

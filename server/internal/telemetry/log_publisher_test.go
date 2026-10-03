@@ -61,7 +61,7 @@ func newShadowTestLogger(t *testing.T, ctx context.Context, ti *testInstance, pu
 	logger := testenv.NewLogger(t)
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
 	logPub := telemetry.NewLogPublisher(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pub)
-	return telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.chConn, enabled, enabled, nil, logPub), logPub
+	return telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.chConn, enabled, enabled, telemetry.NewUserInfoResolver(logger, ti.conn, testenv.NewMemoryCache()), logPub), logPub
 }
 
 // fetchLog reads back exactly one telemetry_logs row for the given tool.

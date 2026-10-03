@@ -53,21 +53,19 @@ import (
 )
 
 type Service struct {
+	*GlobalIssuers
+
 	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
 	auth         *auth.Auth
 	sessions     *sessions.Manager
 	authz        *authz.Engine
 	enc          *encryption.Client
 	environments *environments.EnvironmentEntries
-	policy       *guardian.Policy
 	tunnels      *tunnelrouting.HTTPClient
 	auditLogger  *audit.Logger
 	identity     *IdentityCommitter
 	refresher    *RefreshService
 	revoker      *UpstreamRevoker
-	jwksResolver *jwks.Resolver
 	// rotator backs the administrator's rotate action with the same
 	// re-registration the authorize path runs automatically.
 	rotator *ClientRotator
@@ -106,23 +104,21 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 	logger = logger.With(attr.SlogComponent("remotesessions"))
 	revoker := NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy, tunnels, refresher.assertions)
 	registrationTelemetry := registration.NewMetrics(logger, meterProvider)
+	jwksResolver := jwks.NewResolver(policy, meterProvider, logger)
 
 	return &Service{
+		GlobalIssuers:     newGlobalIssuers(logger, db, policy, jwksResolver),
 		bindingAuthorizer: nil,
 		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
-		logger:            logger,
-		db:                db,
 		auth:              auth.New(logger, db, sessionManager, authzEngine),
 		sessions:          sessionManager,
 		authz:             authzEngine,
 		enc:               enc,
 		environments:      env,
-		policy:            policy,
 		tunnels:           tunnels,
 		auditLogger:       auditLogger,
 		identity:          identity,
 		refresher:         refresher,
-		jwksResolver:      jwks.NewResolver(policy, meterProvider, logger),
 		revoker:           revoker,
 		// The refresher's lease cache single-flights rotations the same way it
 		// single-flights refreshes, so the two never race on one client.

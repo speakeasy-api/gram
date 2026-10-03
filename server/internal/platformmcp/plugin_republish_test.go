@@ -79,7 +79,7 @@ func TestRepublishPluginRequiresConfirmation(t *testing.T) {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Support Tools", "support-tools")
 	signaler := &recordingPluginPublishSignaler{}
-	service := testPluginTargets(conn).WithPublicationEvidence(staleEvidence("support-tools", new(false))).
+	service := testPluginTargets(t, conn).WithPublicationEvidence(staleEvidence("support-tools", new(false))).
 		WithRepublish(plugindelivery.PublicationRequests{Enabled: false}, signaler, testOperationBudget())
 
 	_, err = service.RepublishPlugin(ctx, principal, RepublishPluginInput{ProjectID: project.ID.String(), Plugin: "support-tools", IdempotencyKey: "unconfirmed"})
@@ -99,7 +99,7 @@ func TestRepublishPluginRefusesWhenPublishingIsNotConfigured(t *testing.T) {
 	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Support Tools", "support-tools")
 	signaler := &recordingPluginPublishSignaler{}
 	evidence := stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{PluginSlug: "support-tools", NotConfigured: true}}}
-	service := testPluginTargets(conn).WithPublicationEvidence(evidence).
+	service := testPluginTargets(t, conn).WithPublicationEvidence(evidence).
 		WithRepublish(plugindelivery.PublicationRequests{Enabled: true}, signaler, testOperationBudget())
 
 	_, err = service.RepublishPlugin(ctx, principal, RepublishPluginInput{ProjectID: project.ID.String(), Plugin: "support-tools", Confirmed: true, IdempotencyKey: "not-configured"})
@@ -120,7 +120,7 @@ func TestRepublishPluginReportsAlreadyCurrentWithoutRequestingAPublish(t *testin
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Support Tools", "support-tools")
 	seedMarketplaceConnection(t, ctx, conn, project.ID)
 	signaler := &recordingPluginPublishSignaler{}
-	service := testPluginTargets(conn).WithPublicationEvidence(staleEvidence("support-tools", new(true))).
+	service := testPluginTargets(t, conn).WithPublicationEvidence(staleEvidence("support-tools", new(true))).
 		WithRepublish(plugindelivery.PublicationRequests{Enabled: true}, signaler, testOperationBudget())
 	baseline, err := testrepo.New(conn).CountPublishOutboxRows(ctx)
 	require.NoError(t, err)
@@ -147,7 +147,7 @@ func TestRepublishPluginSignalsTheProjectWhenEmissionIsDisabled(t *testing.T) {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Support Tools", "support-tools")
 	signaler := &recordingPluginPublishSignaler{}
-	service := testPluginTargets(conn).WithPublicationEvidence(staleEvidence("support-tools", new(false))).
+	service := testPluginTargets(t, conn).WithPublicationEvidence(staleEvidence("support-tools", new(false))).
 		WithRepublish(plugindelivery.PublicationRequests{Enabled: false}, signaler, testOperationBudget())
 	input := RepublishPluginInput{ProjectID: project.ID.String(), Plugin: "Support Tools", Confirmed: true, IdempotencyKey: "signal"}
 
@@ -179,7 +179,7 @@ func TestRepublishPluginEnqueuesADurableRequestForAConnectedMarketplace(t *testi
 	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Support Tools", "support-tools")
 	seedMarketplaceConnection(t, ctx, conn, project.ID)
 	signaler := &recordingPluginPublishSignaler{}
-	service := testPluginTargets(conn).WithPublicationEvidence(staleEvidence("support-tools", nil)).
+	service := testPluginTargets(t, conn).WithPublicationEvidence(staleEvidence("support-tools", nil)).
 		WithRepublish(plugindelivery.PublicationRequests{Enabled: true}, signaler, testOperationBudget())
 	baseline, err := testrepo.New(conn).CountPublishOutboxRows(ctx)
 	require.NoError(t, err)
@@ -222,7 +222,7 @@ func TestRepublishPluginRefusesAnInexactTargetRatherThanFallingBackToDefault(t *
 	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Shared", "shared-one")
 	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Shared", "shared-two")
 	signaler := &recordingPluginPublishSignaler{}
-	service := testPluginTargets(conn).WithPublicationEvidence(staleEvidence("shared-one", new(false))).
+	service := testPluginTargets(t, conn).WithPublicationEvidence(staleEvidence("shared-one", new(false))).
 		WithRepublish(plugindelivery.PublicationRequests{Enabled: false}, signaler, testOperationBudget())
 
 	_, err = service.RepublishPlugin(ctx, principal, RepublishPluginInput{ProjectID: project.ID.String(), Plugin: "marketing", Confirmed: true, IdempotencyKey: "missing"})
@@ -257,11 +257,11 @@ func TestComposedRepublishPluginToolDeclaresAnExternalAdminIdempotentWrite(t *te
 
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_republish_tool")
 	require.NoError(t, err)
-	plugins := testPluginTargets(conn).WithPublicationEvidence(stubPluginPublicationEvidence{}).
+	plugins := testPluginTargets(t, conn).WithPublicationEvidence(stubPluginPublicationEvidence{}).
 		WithRepublish(plugindelivery.PublicationRequests{Enabled: true}, nil, testOperationBudget())
 	require.True(t, plugins.republishValid())
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, plugins, nil, CatalogDescriptor{})
+	_, registrar := newTestServer(t, func(services *Services) { services.Plugins = plugins })
 	requireRepublishPluginDeclaration(t, registrar)
 	require.Equal(t, republishPluginDescription, descriptorByName(t, registrar, operationRepublishPlugin).Description)
 }
@@ -274,12 +274,12 @@ func TestPluginReadsWithoutAPublishPathKeepRepublishPluginDeclared(t *testing.T)
 
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_republish_tool_unavailable")
 	require.NoError(t, err)
-	plugins := testPluginTargets(conn)
-	require.True(t, plugins.valid())
+	plugins := testPluginTargets(t, conn)
 	require.False(t, plugins.republishValid())
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, plugins, nil, CatalogDescriptor{})
+	_, registrar := newTestServer(t, func(services *Services) { services.Plugins = plugins })
 	requireRepublishPluginDeclaration(t, registrar)
+	require.Equal(t, unavailableRepublishPluginDescription, descriptorByName(t, registrar, operationRepublishPlugin).Description)
 }
 
 func seedMarketplaceConnection(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) {

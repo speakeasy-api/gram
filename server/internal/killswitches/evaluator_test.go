@@ -17,6 +17,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type evaluationQueryFunc func(context.Context, repo.EvaluateCurrentPrescriptionsParams) (repo.EvaluateCurrentPrescriptionsRow, error)
@@ -49,11 +50,9 @@ func TestEvaluatorRequiresBoundedTimeoutAndCandidates(t *testing.T) {
 		return repo.EvaluateCurrentPrescriptionsRow{}, pgx.ErrNoRows
 	})
 
-	_, err := newEvaluator(query, registry, 0, nil)
-	require.EqualError(t, err, "kill-switch evaluator timeout must be positive")
+	require.Panics(t, func() { newEvaluator(query, registry, 0, testEvaluationMetrics(t)) })
 
-	evaluator, err := newEvaluator(query, registry, time.Second, nil)
-	require.NoError(t, err)
+	evaluator := newEvaluator(query, registry, time.Second, testEvaluationMetrics(t))
 	request := evaluationRequest("block-tools")
 	request.DefinitionKeys = make([]DefinitionKey, MaxEvaluationDefinitionCandidates+1)
 	prepared, prepareErr := evaluator.prepare(request)
@@ -98,8 +97,7 @@ func TestEvaluatorUsesOneQueryAndRetainsWinningPolicy(t *testing.T) {
 		require.Equal(t, []string{"user", "user"}, params.CompatiblePrincipalKinds)
 		return repo.EvaluateCurrentPrescriptionsRow{PrescriptionID: prescriptionID, DefinitionKey: "closed-tools", ExternalNote: "Exact public note."}, nil
 	})
-	evaluator, err := newEvaluator(query, registry, time.Second, nil)
-	require.NoError(t, err)
+	evaluator := newEvaluator(query, registry, time.Second, testEvaluationMetrics(t))
 
 	result := evaluator.Evaluate(t.Context(), evaluationRequest("closed-tools", "block-tools"))
 	require.Equal(t, int32(1), calls.Load())
@@ -135,8 +133,7 @@ func TestEvaluatorPreservesDefinitionPrincipalCompatibility(t *testing.T) {
 		require.Equal(t, []string{"service", "user"}, params.CompatiblePrincipalKinds)
 		return repo.EvaluateCurrentPrescriptionsRow{}, pgx.ErrNoRows
 	})
-	evaluator, err := newEvaluator(query, registry, time.Second, nil)
-	require.NoError(t, err)
+	evaluator := newEvaluator(query, registry, time.Second, testEvaluationMetrics(t))
 
 	result := evaluator.Evaluate(t.Context(), EvaluationRequest{
 		OrganizationID: "org:test",
@@ -211,8 +208,7 @@ func TestEvaluatorDistinguishesFailuresAndAppliesCandidatePolicies(t *testing.T)
 			if timeout == 0 {
 				timeout = time.Second
 			}
-			evaluator, err := newEvaluator(test.query, registry, timeout, nil)
-			require.NoError(t, err)
+			evaluator := newEvaluator(test.query, registry, timeout, testEvaluationMetrics(t))
 			request := evaluationRequest(test.definitions...)
 			result := evaluator.Evaluate(t.Context(), request)
 			require.Equal(t, EvaluationResultInfrastructureFailure, result.Kind())
@@ -249,8 +245,7 @@ func TestEvaluatorUsesSuccessfulDatabaseResultWhenParentCancellationRaces(t *tes
 			ExternalNote:   "Authoritative match.",
 		}, nil
 	})
-	evaluator, err := newEvaluator(query, registry, time.Second, nil)
-	require.NoError(t, err)
+	evaluator := newEvaluator(query, registry, time.Second, testEvaluationMetrics(t))
 
 	result := evaluator.Evaluate(ctx, evaluationRequest("block-tools"))
 	require.Equal(t, EvaluationResultMatch, result.Kind())
@@ -268,8 +263,7 @@ func TestEvaluatorUsesSuccessfulNoMatchWhenParentCancellationRaces(t *testing.T)
 		cancel()
 		return repo.EvaluateCurrentPrescriptionsRow{}, pgx.ErrNoRows
 	})
-	evaluator, err := newEvaluator(query, registry, time.Second, nil)
-	require.NoError(t, err)
+	evaluator := newEvaluator(query, registry, time.Second, testEvaluationMetrics(t))
 
 	result := evaluator.Evaluate(ctx, evaluationRequest("closed-tools"))
 	require.Equal(t, EvaluationResultNoMatch, result.Kind())
@@ -288,8 +282,7 @@ func TestEvaluatorDistinguishesInFlightParentDeadlineFromEvaluatorTimeout(t *tes
 		<-ctx.Done()
 		return repo.EvaluateCurrentPrescriptionsRow{}, ctx.Err()
 	})
-	evaluator, err := newEvaluator(query, registry, time.Second, nil)
-	require.NoError(t, err)
+	evaluator := newEvaluator(query, registry, time.Second, testEvaluationMetrics(t))
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
 	defer cancel()
 
@@ -313,8 +306,7 @@ func TestEvaluatorTimeoutCauseWinsWhenParentExpiresBeforeDelayedQueryReturn(t *t
 		<-parentContext.Done()
 		return repo.EvaluateCurrentPrescriptionsRow{}, queryContext.Err()
 	})
-	evaluator, err := newEvaluator(query, registry, 5*time.Millisecond, nil)
-	require.NoError(t, err)
+	evaluator := newEvaluator(query, registry, 5*time.Millisecond, testEvaluationMetrics(t))
 
 	result := evaluator.Evaluate(parentContext, evaluationRequest("block-tools"))
 	kind, ok := result.InfrastructureFailureKind()
@@ -331,8 +323,7 @@ func TestEvaluatorPreservesParentCancellationAndSkipsUnsupportedCandidates(t *te
 		calls.Add(1)
 		return repo.EvaluateCurrentPrescriptionsRow{}, pgx.ErrNoRows
 	})
-	evaluator, err := newEvaluator(query, registry, time.Second, nil)
-	require.NoError(t, err)
+	evaluator := newEvaluator(query, registry, time.Second, testEvaluationMetrics(t))
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -380,8 +371,7 @@ func TestEvaluatorSkipsRecordingWhenMetricInstrumentIsDisabled(t *testing.T) {
 	query := evaluationQueryFunc(func(context.Context, repo.EvaluateCurrentPrescriptionsParams) (repo.EvaluateCurrentPrescriptionsRow, error) {
 		return repo.EvaluateCurrentPrescriptionsRow{}, pgx.ErrNoRows
 	})
-	evaluator, err := newEvaluator(query, evaluationRegistry(t), time.Second, metrics)
-	require.NoError(t, err)
+	evaluator := newEvaluator(query, evaluationRegistry(t), time.Second, metrics)
 
 	result := evaluator.Evaluate(t.Context(), evaluationRequest("block-tools"))
 	require.Equal(t, EvaluationResultNoMatch, result.Kind())
@@ -394,7 +384,7 @@ func TestKillswitchEvaluationMetricsHaveClosedAttributes(t *testing.T) {
 	registry := evaluationRegistry(t)
 	reader := sdkmetric.NewManualReader()
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	metrics := newEvaluationMetrics(provider, nil)
+	metrics := newEvaluationMetrics(provider, testenv.NewLogger(t))
 	prescriptionID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	queries := []evaluationQueryFunc{
 		func(context.Context, repo.EvaluateCurrentPrescriptionsParams) (repo.EvaluateCurrentPrescriptionsRow, error) {
@@ -408,8 +398,7 @@ func TestKillswitchEvaluationMetricsHaveClosedAttributes(t *testing.T) {
 		},
 	}
 	for _, query := range queries {
-		evaluator, err := newEvaluator(query, registry, time.Second, metrics)
-		require.NoError(t, err)
+		evaluator := newEvaluator(query, registry, time.Second, metrics)
 		evaluator.Evaluate(t.Context(), evaluationRequest("block-tools"))
 	}
 
@@ -457,4 +446,9 @@ func evaluationRegistry(t *testing.T) *Registry {
 	registry, err := BuildRegistry(registration)
 	require.NoError(t, err)
 	return registry
+}
+
+func testEvaluationMetrics(t *testing.T) *evaluationMetrics {
+	t.Helper()
+	return newEvaluationMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t))
 }

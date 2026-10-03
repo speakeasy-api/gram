@@ -30,10 +30,6 @@ func NewRecycleAssistantRuntimeImages(logger *slog.Logger, core *assistants.Serv
 }
 
 func (r *RecycleAssistantRuntimeImages) Do(ctx context.Context) (*RecycleAssistantRuntimeImagesResult, error) {
-	if r.core == nil {
-		return nil, fmt.Errorf("assistants core not configured")
-	}
-
 	result, err := r.core.RecycleActiveRuntimeImages(ctx, assistants.RecycleAssistantRuntimeImagesParams{
 		OnRowProcessed: func() {
 			activity.RecordHeartbeat(ctx)

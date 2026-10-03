@@ -61,9 +61,6 @@ func RequireFreshPlatformAdminSession(ctx context.Context, logger *slog.Logger, 
 	if _, ok := contextvalues.GetRBACScopeOverride(ctx); ok {
 		return nil, logger, oops.C(oops.CodeForbidden)
 	}
-	if reader == nil {
-		return nil, logger, oops.E(oops.CodeUnavailable, nil, "service is temporarily unavailable")
-	}
 	isAdmin, err := reader.IsPlatformAdmin(ctx, authCtx.UserID)
 	if err != nil {
 		return nil, logger, oops.E(oops.CodeUnavailable, err, "service is temporarily unavailable")
@@ -75,9 +72,6 @@ func RequireFreshPlatformAdminSession(ctx context.Context, logger *slog.Logger, 
 }
 
 func platformAdminContext(ctx context.Context, logger *slog.Logger) (*contextvalues.AuthContext, *slog.Logger, error) {
-	if logger == nil {
-		return nil, nil, oops.E(oops.CodeUnavailable, nil, "platform authorization logger is unavailable")
-	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, logger, oops.C(oops.CodeUnauthorized)

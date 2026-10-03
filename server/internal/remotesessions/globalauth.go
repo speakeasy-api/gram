@@ -8,11 +8,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // globalActor is audit metadata, never a dashboard credential.
@@ -28,33 +26,21 @@ func authorizeGlobalOperation(ctx context.Context, logger *slog.Logger) (globalA
 	return globalActor{email: email}, logger, nil
 }
 
-// NewGlobalService deliberately omits tenant authentication and mounts no routes.
-func NewGlobalService(logger *slog.Logger, tp trace.TracerProvider, mp metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy) *Service {
+// GlobalIssuers curates the global identity providers shared by every
+// organization. It carries no tenant authentication and mounts no routes; the
+// admin service and the remote sessions service both serve its methods.
+type GlobalIssuers struct {
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	policy       *guardian.Policy
+	jwksResolver *jwks.Resolver
+}
+
+func NewGlobalIssuers(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, policy *guardian.Policy) *GlobalIssuers {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
-	return &Service{
-		bindingAuthorizer: nil,
-		auth:              nil,
-		sessions:          nil,
-		authz:             nil,
-		environments:      nil,
-		auditLogger:       nil,
-		// Global operations never register a client or build its callback.
-		origins:               CallbackOrigins{Outbound: nil, Registration: nil},
-		identity:              nil,
-		refresher:             nil,
-		registrationTelemetry: nil,
-		rotator:               nil,
-		productFeatures:       nil,
-		logger:                logger,
-		tracer:                tp.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
-		db:                    db,
-		enc:                   enc,
-		policy:                policy,
-		tunnels:               nil,
-		jwksResolver:          jwks.NewResolver(policy, mp, logger),
-		// No tunnel transport: a global identity provider cannot be bound to a
-		// project tunnel, so revocation always dials directly. A binding that
-		// somehow existed would fail closed rather than silently dial out.
-		revoker: NewUpstreamRevoker(logger, tp, mp, db, enc, policy, nil),
-	}
+	return newGlobalIssuers(logger, db, policy, jwks.NewResolver(policy, meterProvider, logger))
+}
+
+func newGlobalIssuers(logger *slog.Logger, db *pgxpool.Pool, policy *guardian.Policy, jwksResolver *jwks.Resolver) *GlobalIssuers {
+	return &GlobalIssuers{logger: logger, db: db, policy: policy, jwksResolver: jwksResolver}
 }

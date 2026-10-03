@@ -91,9 +91,6 @@ func NewIssuerMetadataRefresh(logger *slog.Logger, meterProvider metric.MeterPro
 
 // Record counts one refresh attempt by its outcome, the reason it was requested, and the issuer.
 func (m *IssuerMetadataRefresh) Record(ctx context.Context, issuerURL string, reason IssuerMetadataRefreshReason, outcome IssuerMetadataRefreshOutcome) {
-	if m == nil || m.attempts == nil {
-		return
-	}
 	m.attempts.Add(ctx, 1, metric.WithAttributes(
 		attr.OAuthIssuer(issuerURL),
 		attr.OAuthIssuerMetadataRefreshReason(reason),

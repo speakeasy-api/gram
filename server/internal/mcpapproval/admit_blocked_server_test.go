@@ -1,8 +1,9 @@
 package mcpapproval_test
 
 import (
-	"github.com/jackc/pgx/v5/pgtype"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"

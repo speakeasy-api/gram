@@ -529,13 +529,4 @@ func TestNewClient_RejectsInvalidConfig(t *testing.T) {
 		MaxTokens: 0,
 	})
 	require.ErrorContains(t, err, "scheme must be https")
-
-	_, err = llmanalyzer.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, llmanalyzer.Config{
-		BaseURL:   "https://model.example.com/v1",
-		APIKey:    testAPIKey,
-		Model:     testModel,
-		Timeout:   0,
-		MaxTokens: 0,
-	})
-	require.ErrorContains(t, err, "guardian policy is required")
 }

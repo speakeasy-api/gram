@@ -85,7 +85,7 @@ func TestAttachWritesRejectsUnimplementedOperation(t *testing.T) {
 func TestAttachedChatAnalysisWriterPrepares(t *testing.T) {
 	t.Parallel()
 	f := newProposalFixture(t, "admin_mcp_attached_analysis")
-	runtime := NewRuntime(nil, "")
+	runtime := NewRuntime(&testAuthenticator{}, "", &recordingOrganizationReader{})
 	oauth := &StaffOAuth{Approval: &StaffProposalApproval{store: f.store}}
 	config := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetChatAnalysisSettings: true}} //nolint:exhaustive // Test the production wiring for the analysis operation.
 	require.NoError(t, AttachWrites(runtime, oauth, &productfeatures.Client{}, config))
@@ -113,7 +113,7 @@ func TestWriteContextReportsOnlyExecutableOperations(t *testing.T) {
 			if tc.granted {
 				principal.Scopes = append(principal.Scopes, ScopeWrite)
 			}
-			runtime := NewRuntime(&testAuthenticator{principal: principal}, "https://admin.example.test/admin-mcp")
+			runtime := NewRuntime(&testAuthenticator{principal: principal}, "https://admin.example.test/admin-mcp", &recordingOrganizationReader{})
 			if tc.attached {
 				oauth := &StaffOAuth{Approval: &StaffProposalApproval{}}
 				config := WriteConfig{Enabled: tc.enabled, Operations: map[WriteOperation]bool{OperationSetChatAnalysisSettings: true}} //nolint:exhaustive // One operation tests registration and discovery.

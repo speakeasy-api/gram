@@ -37,11 +37,6 @@ func DescribeOrganization(ctx context.Context, logger *slog.Logger, orgRepo *org
 		return &org, nil
 	}
 
-	if billingRepo == nil {
-		logger.WarnContext(ctx, "customer provider is not initialized, skipping customer state check")
-		return &org, nil
-	}
-
 	// This is used during auth, so try to avoid failing
 	customerTier, hasActiveSubscription, err := billingRepo.GetCustomerTier(ctx, orgID)
 	if err != nil {

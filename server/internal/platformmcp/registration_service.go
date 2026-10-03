@@ -108,41 +108,33 @@ func NewRegistrationService(catalog Catalog, gate CatalogRegistrationGateChecker
 }
 
 func (s *RegistrationService) WithOperationBudgets(budgets OperationBudgets) *RegistrationService {
-	if s != nil {
-		s.budgets = budgets
-	}
+	s.budgets = budgets
 	return s
 }
 
 func (s *RegistrationService) WithTelemetry(telemetry LifecycleTelemetry) *RegistrationService {
-	if s != nil && telemetry != nil {
+	if telemetry != nil {
 		s.telemetry = telemetry
 	}
 	return s
 }
 
 func (s *RegistrationService) WithReadiness(readiness *ReadinessService) *RegistrationService {
-	if s != nil {
-		s.readiness = readiness
-	}
+	s.readiness = readiness
 	return s
 }
 
 // WithIdentityProviderAttachment enables confirmed agent-side provider
 // attachment using trusted lifecycle persistence and server-owned OAuth calls.
 func (s *RegistrationService) WithIdentityProviderAttachment(attachment CatalogIdentityProviderAttachment) *RegistrationService {
-	if s != nil {
-		s.identityProviderAttachment = attachment
-	}
+	s.identityProviderAttachment = attachment
 	return s
 }
 
 // WithDirectRemoteInspector enables direct user-supplied remote MCP admission.
 // The inspector is server-composed because it owns Guardian-backed egress.
 func (s *RegistrationService) WithDirectRemoteInspector(inspector DirectRemoteInspector) *RegistrationService {
-	if s != nil {
-		s.directRemoteInspector = inspector
-	}
+	s.directRemoteInspector = inspector
 	return s
 }
 
@@ -150,16 +142,11 @@ func (s *RegistrationService) WithDirectRemoteInspector(inspector DirectRemoteIn
 // The command is injected from server composition to share the dashboard domain
 // implementation without importing mcpservers into Platform MCP.
 func (s *RegistrationService) WithLifecycleMetadata(metadata *LifecycleMetadataService) *RegistrationService {
-	if s != nil {
-		s.lifecycleMetadata = metadata
-	}
+	s.lifecycleMetadata = metadata
 	return s
 }
 
 func (s *RegistrationService) UpdateMCPMetadata(ctx context.Context, principal Principal, input UpdateMCPMetadataInput) (UpdateMCPMetadataResult, error) {
-	if s == nil || s.gate == nil || s.lifecycleMetadata == nil || !s.budgets.LifecycleMetadata.valid() {
-		return UpdateMCPMetadataResult{}, ErrRegistrationUnavailable
-	}
 	if err := s.budgets.LifecycleMetadata.Allow(ctx, principal); err != nil {
 		return UpdateMCPMetadataResult{}, err
 	}
@@ -177,9 +164,7 @@ func (s *RegistrationService) UpdateMCPMetadata(ctx context.Context, principal P
 // policy of a registered MCP's session issuer over MCP, which is otherwise
 // reachable only from the dashboard's Authentication settings.
 func (s *RegistrationService) WithClientAdmission(clientAdmission *ClientAdmissionService) *RegistrationService {
-	if s != nil {
-		s.clientAdmission = clientAdmission
-	}
+	s.clientAdmission = clientAdmission
 	return s
 }
 
@@ -206,7 +191,7 @@ func (s *RegistrationService) SetClientAdmission(ctx context.Context, principal 
 // paths: an available deployment, the caller's operation budget, the rollout
 // gate, and an eligible project.
 func (s *RegistrationService) clientAdmissionTarget(ctx context.Context, principal Principal, projectSlug, registrationID string) (ResolvedProject, uuid.UUID, error) {
-	if s == nil || s.gate == nil || s.store == nil || !s.clientAdmission.valid() || !s.budgets.LifecycleMetadata.valid() || projectSlug == "" || registrationID == "" {
+	if projectSlug == "" || registrationID == "" {
 		return ResolvedProject{}, uuid.Nil, ErrClientAdmissionUnavailable
 	}
 	parsedID, err := uuid.Parse(registrationID)
@@ -231,30 +216,22 @@ func (s *RegistrationService) clientAdmissionTarget(ctx context.Context, princip
 }
 
 func (s *RegistrationService) WithLifecycleVisibility(visibility *LifecycleVisibilityService) *RegistrationService {
-	if s != nil {
-		s.lifecycleVisibility = visibility
-	}
+	s.lifecycleVisibility = visibility
 	return s
 }
 
 func (s *RegistrationService) DisableMCP(ctx context.Context, principal Principal, input UpdateMCPVisibilityInput) (UpdateMCPVisibilityResult, error) {
-	if s == nil || s.lifecycleVisibility == nil {
-		return UpdateMCPVisibilityResult{}, ErrRegistrationUnavailable
-	}
 	return s.lifecycleVisibility.Disable(ctx, principal, input)
 }
 
 func (s *RegistrationService) EnableMCP(ctx context.Context, principal Principal, input UpdateMCPVisibilityInput) (UpdateMCPVisibilityResult, error) {
-	if s == nil || s.lifecycleVisibility == nil {
-		return UpdateMCPVisibilityResult{}, ErrRegistrationUnavailable
-	}
 	return s.lifecycleVisibility.Enable(ctx, principal, input)
 }
 
 // WithDashboardURL supplies the configured dashboard origin used only to build
 // trusted same-origin setup links for persisted registrations.
 func (s *RegistrationService) WithDashboardURL(dashboardURL *url.URL) *RegistrationService {
-	if s != nil && dashboardURL != nil && dashboardURL.Scheme == "https" && dashboardURL.Host != "" && dashboardURL.User == nil {
+	if dashboardURL != nil && dashboardURL.Scheme == "https" && dashboardURL.Host != "" && dashboardURL.User == nil {
 		dashboardURLCopy := *dashboardURL
 		s.dashboardURL = &dashboardURLCopy
 	}
@@ -265,9 +242,6 @@ func (s *RegistrationService) WithDashboardURL(dashboardURL *url.URL) *Registrat
 // lifecycle-bound registration. It keeps management adapters from depending on
 // RegistrationService persistence internals.
 func (s *RegistrationService) RegistrationCatalogIdentity(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogCandidate, error) {
-	if s == nil || s.store == nil {
-		return CatalogCandidate{}, ErrRegistrationUnavailable
-	}
 	return s.store.ResolveRegistrationCatalogIdentity(ctx, principal, project, registrationID)
 }
 
@@ -276,7 +250,7 @@ func (s *RegistrationService) RegistrationCatalogIdentity(ctx context.Context, p
 // fallback for provider attachment; callers cannot provide an endpoint, source,
 // or credential.
 func (s *RegistrationService) DashboardSetupURL(ctx context.Context, principal Principal, input IssueSetupHandoffInput) (string, error) {
-	if s == nil || s.gate == nil || s.store == nil || s.dashboardURL == nil || input.ProjectSlug == "" || input.RegistrationID == "" || input.ProviderKey == "" || input.CatalogRef == "" {
+	if s.dashboardURL == nil || input.ProjectSlug == "" || input.RegistrationID == "" || input.ProviderKey == "" || input.CatalogRef == "" {
 		return "", ErrRegistrationUnavailable
 	}
 	if !isBrowserCatalogProviderKey(input.ProviderKey) && input.ProviderKey != directRemoteProviderKey {
@@ -308,9 +282,6 @@ func (s *RegistrationService) DashboardSetupURL(ctx context.Context, principal P
 		return "", ErrCatalogRejected
 	}
 	if isBrowserCatalogProviderKey(input.ProviderKey) {
-		if s.catalog == nil {
-			return "", ErrRegistrationUnavailable
-		}
 		catalog, err := s.inspectCatalogIdentity(ctx, input.ProviderKey, input.CatalogRef)
 		if err != nil {
 			return "", fmt.Errorf("inspect dashboard setup catalog candidate: %w", err)
@@ -323,7 +294,7 @@ func (s *RegistrationService) DashboardSetupURL(ctx context.Context, principal P
 }
 
 func (s *RegistrationService) dashboardSettingsURL(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (string, error) {
-	if s == nil || s.store == nil || s.dashboardURL == nil || registrationID == uuid.Nil {
+	if s.dashboardURL == nil || registrationID == uuid.Nil {
 		return "", ErrRegistrationUnavailable
 	}
 	setup, err := s.store.ResolveRegistrationDashboardSetup(ctx, principal, project, registrationID)
@@ -339,7 +310,7 @@ func (s *RegistrationService) dashboardSettingsURL(ctx context.Context, principa
 // DashboardAuthorizationURL returns the Inspect page only after the upstream
 // provider is attached. Inspect owns the visible Connect/Authorize action.
 func (s *RegistrationService) DashboardAuthorizationURL(ctx context.Context, principal Principal, projectSlug, registrationID string) (string, error) {
-	if s == nil || s.store == nil || s.dashboardURL == nil || projectSlug == "" || registrationID == "" {
+	if s.dashboardURL == nil || projectSlug == "" || registrationID == "" {
 		return "", ErrRegistrationUnavailable
 	}
 	parsedID, err := uuid.Parse(registrationID)
@@ -364,7 +335,7 @@ func (s *RegistrationService) DashboardAuthorizationURL(ctx context.Context, pri
 // the lifecycle-bound Remote MCP. The caller supplies no provider identity,
 // OAuth configuration, client ID, secret, code, or token.
 func (s *RegistrationService) AttachDefaultIdentityProvider(ctx context.Context, principal Principal, projectSlug, registrationID string) (CatalogIdentityProviderAttachmentResult, error) {
-	if s == nil || s.gate == nil || s.store == nil || s.identityProviderAttachment == nil || !s.budgets.SetupStart.valid() || projectSlug == "" || registrationID == "" {
+	if projectSlug == "" || registrationID == "" {
 		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentUnavailable
 	}
 	if err := s.budgets.SetupStart.Allow(ctx, principal); err != nil {
@@ -399,7 +370,7 @@ func (s *RegistrationService) AttachDefaultIdentityProvider(ctx context.Context,
 }
 
 func (s *RegistrationService) IssueSetupHandoff(ctx context.Context, principal Principal, input IssueSetupHandoffInput) (IssuedSetupHandoff, error) {
-	if s == nil || s.gate == nil || s.store == nil || !s.budgets.Handoff.valid() || input.ProjectSlug == "" || input.RegistrationID == "" || input.ProviderKey == "" || input.CatalogRef == "" {
+	if input.ProjectSlug == "" || input.RegistrationID == "" || input.ProviderKey == "" || input.CatalogRef == "" {
 		return IssuedSetupHandoff{}, ErrRegistrationUnavailable
 	}
 	registrationID, err := uuid.Parse(input.RegistrationID)
@@ -434,9 +405,6 @@ func (s *RegistrationService) IssueSetupHandoff(ctx context.Context, principal P
 	if candidate.ProviderKey == directRemoteProviderKey {
 		intent = "dashboard_source_settings"
 	} else {
-		if s.catalog == nil {
-			return IssuedSetupHandoff{}, ErrRegistrationUnavailable
-		}
 		catalog, err := s.inspectCatalogIdentity(ctx, candidate.ProviderKey, candidate.CatalogRef)
 		if err != nil {
 			return IssuedSetupHandoff{}, fmt.Errorf("inspect setup handoff catalog candidate: %w", err)
@@ -465,7 +433,7 @@ func (s *RegistrationService) IssueSetupHandoff(ctx context.Context, principal P
 // the exact workflow-bound registration. Dashboard callers never supply a
 // provider key, catalogue reference, endpoint, or credential.
 func (s *RegistrationService) IssueSetupHandoffForRegistration(ctx context.Context, principal Principal, projectSlug, registrationID string) (IssuedSetupHandoff, error) {
-	if s == nil || s.store == nil || projectSlug == "" || registrationID == "" {
+	if projectSlug == "" || registrationID == "" {
 		return IssuedSetupHandoff{}, ErrRegistrationUnavailable
 	}
 	parsedID, err := uuid.Parse(registrationID)
@@ -508,7 +476,7 @@ type RegisterRemoteMCPResult struct {
 // result from an earlier MCP call is deliberately not trusted as admission
 // evidence, and no caller can supply credentials or headers.
 func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal Principal, input RegisterRemoteMCPInput) (RegisterRemoteMCPResult, error) {
-	if s == nil || s.gate == nil || s.store == nil || s.directRemoteInspector == nil || !s.budgets.Registration.valid() || input.ProjectSlug == "" || input.RemoteURL == "" || input.IdempotencyKey == "" {
+	if input.ProjectSlug == "" || input.RemoteURL == "" || input.IdempotencyKey == "" {
 		return RegisterRemoteMCPResult{}, ErrRegistrationUnavailable
 	}
 	if err := s.budgets.Registration.Allow(ctx, principal); err != nil {
@@ -588,7 +556,7 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 }
 
 func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal Principal, input RegisterCatalogMCPInput) (RegisterCatalogMCPResult, error) {
-	if s == nil || s.catalog == nil || s.gate == nil || s.store == nil || !s.budgets.Registration.valid() || input.ProjectSlug == "" || input.ProviderKey == "" || input.CatalogRef == "" || input.IdempotencyKey == "" {
+	if input.ProjectSlug == "" || input.ProviderKey == "" || input.CatalogRef == "" || input.IdempotencyKey == "" {
 		return RegisterCatalogMCPResult{}, ErrRegistrationUnavailable
 	}
 	if err := s.budgets.Registration.Allow(ctx, principal); err != nil {

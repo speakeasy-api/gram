@@ -81,12 +81,10 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 	single, err := pgxpool.NewWithConfig(ctx, config)
 	require.NoError(t, err)
 	t.Cleanup(single.Close)
-	reads := NewAccessReadService(logger, single, allowBudget(), "assignment-integration-key")
+	reads := NewAccessReadService(logger, single, access.NewRoleManager(logger, single, workos.NewStubClient(), audit.NewLogger()), allowBudget(), "assignment-integration-key")
 	manager := access.NewRoleManager(logger, single, workos.NewStubClient(), audit.NewLogger())
-	roles, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "assignment-integration-key", manager)
-	require.NoError(t, err)
-	service, err := NewAccessRoleAssignmentService(roles)
-	require.NoError(t, err)
+	roles := NewAccessRoleMutationService(reads, flags, allowBudget(), "assignment-integration-key", manager)
+	service := NewAccessRoleAssignmentService(roles)
 	role, err := manager.GetRoleByID(ctx, principal.OrganizationID, strings.TrimPrefix(targetRole.ID, "organization:"))
 	require.NoError(t, err)
 	roleVersion, err := roles.roleVersion(role)
@@ -226,8 +224,10 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 		ProjectID: project.ID.String(), MemberID: memberID, RoleID: role.ID, ExpectedVersion: input.ExpectedVersion,
 		MCPID: "", ExpectedRoleVersion: "",
 	}, func(context.Context, pgx.Tx) (AccessRoleAssignmentReceiptResult, error) {
-		return AccessRoleAssignmentReceiptResult{MaskedIdentity: first.Member.MaskedIdentity, Roles: first.Member.Roles,
-			Version: first.Member.Version, AssignedRole: first.AssignedRole, ResultCategory: first.ResultCategory, Reconciliation: "pending"}, nil
+		return AccessRoleAssignmentReceiptResult{
+			MaskedIdentity: first.Member.MaskedIdentity, Roles: first.Member.Roles,
+			Version: first.Member.Version, AssignedRole: first.AssignedRole, ResultCategory: first.ResultCategory, Reconciliation: "pending",
+		}, nil
 	})
 	require.NoError(t, err)
 	legacyFresh.IdempotencyKey = "legacy-receipt"

@@ -272,7 +272,7 @@ func (s *Service) enumerateToolsetConsentInventory(ctx context.Context, endpoint
 			continue
 		}
 		values := trueAnnotationValues(base.Annotations)
-		if s.authz != nil && private {
+		if private {
 			// Vocabulary order matches the RBAC disposition collapse, so the
 			// first true hint IS the disposition dimension tools/list uses.
 			disposition := ""

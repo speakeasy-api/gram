@@ -15,20 +15,20 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic/fake"
 	ktesting "k8s.io/client-go/testing"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestNetworkIngressRegistryOrphanInventoryFailsClosed(t *testing.T) {
 	t.Parallel()
 
-	empty, err := NewNetworkIngressProvisionerRegistry(nil, nil, nil)
-	require.NoError(t, err)
-	_, err = empty.FindOrphans(t.Context(), nil)
+	empty := NewNetworkIngressProvisionerRegistry(nil, testenv.NewLogger(t), NewNetworkIngressMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)))
+	_, err := empty.FindOrphans(t.Context(), nil)
 	require.ErrorContains(t, err, "has no providers")
 
-	withoutInventory, err := NewNetworkIngressProvisionerRegistry(map[string]NetworkIngressProvisioner{
+	withoutInventory := NewNetworkIngressProvisionerRegistry(map[string]NetworkIngressProvisioner{
 		NetworkIngressProviderTailscale: stubNetworkIngressProvisioner{},
-	}, nil, nil)
-	require.NoError(t, err)
+	}, testenv.NewLogger(t), NewNetworkIngressMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)))
 	_, err = withoutInventory.FindOrphans(t.Context(), nil)
 	require.ErrorContains(t, err, "does not support orphan inventory")
 }

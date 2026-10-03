@@ -16,8 +16,7 @@ import (
 func TestMCPToolExecutionRegistration(t *testing.T) {
 	t.Parallel()
 
-	registry, err := NewRegistry(nil)
-	require.NoError(t, err)
+	registry := NewRegistry(nil)
 
 	definition, ok := registry.Definition(DefinitionKeyMCPToolExecution)
 	require.True(t, ok)
@@ -47,8 +46,7 @@ func TestMCPToolExecutionRegistration(t *testing.T) {
 func TestMCPCoverageInventory(t *testing.T) {
 	t.Parallel()
 
-	registry, err := NewRegistry(nil)
-	require.NoError(t, err)
+	registry := NewRegistry(nil)
 
 	inventory := registry.CoverageInventory()
 	require.Len(t, inventory, 2)
@@ -96,8 +94,7 @@ func TestMCPCoverageInventory(t *testing.T) {
 func TestMCPToolExecutionTransportAdaptersFailClosed(t *testing.T) {
 	t.Parallel()
 
-	registry, err := NewRegistry(nil)
-	require.NoError(t, err)
+	registry := NewRegistry(nil)
 
 	match, err := killswitches.NewMatchResult(killswitches.PrescriptionID("0198a1b2-c3d4-7000-8000-0123456789ab"), "Paused by your administrator.")
 	require.NoError(t, err)

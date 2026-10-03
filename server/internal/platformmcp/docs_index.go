@@ -77,9 +77,6 @@ var _ DocsIndex = (*MemoryDocsIndex)(nil)
 // injected so freshness is evaluated against a test's clock rather than the
 // wall clock at process start.
 func NewMemoryDocsIndex(resources []SetupResource, now func() time.Time) *MemoryDocsIndex {
-	if now == nil {
-		now = time.Now
-	}
 	var chunks []docsChunk
 	for _, resource := range resources {
 		if !validSetupResource(resource) {
@@ -94,9 +91,6 @@ func NewMemoryDocsIndex(resources []SetupResource, now func() time.Time) *Memory
 // omitted entirely rather than ranked low: an unreviewed step that loses on
 // score today wins on score tomorrow.
 func (i *MemoryDocsIndex) Search(_ context.Context, query string, limit int) ([]DocsExcerpt, error) {
-	if i == nil {
-		return nil, nil
-	}
 	// A caller asking for nothing gets nothing: honouring the bound matters
 	// more than guessing a default, and silently returning five for a limit of
 	// zero would make the parameter advisory.

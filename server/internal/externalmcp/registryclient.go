@@ -76,7 +76,7 @@ func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider,
 // supplied trusted CIDR blocks. Callers must use this only for code-defined,
 // non-user-controlled registries such as the local fixture.
 func (c *RegistryClient) WithAllowedCIDRBlocks(cidrs ...string) *RegistryClient {
-	if c == nil || c.policy == nil || len(cidrs) == 0 {
+	if len(cidrs) == 0 {
 		return c
 	}
 	return &RegistryClient{

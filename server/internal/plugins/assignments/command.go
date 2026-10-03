@@ -43,7 +43,7 @@ type Result struct {
 // dashboard and Platform MCP writes, so concurrent assignment replacements are
 // serialized before either computes its current version.
 func Lock(ctx context.Context, tx pgx.Tx, organizationID string, projectID, pluginID uuid.UUID) (pluginsrepo.Plugin, error) {
-	if tx == nil || organizationID == "" || projectID == uuid.Nil || pluginID == uuid.Nil {
+	if organizationID == "" || projectID == uuid.Nil || pluginID == uuid.Nil {
 		return pluginsrepo.Plugin{}, ErrInvalid
 	}
 	var plugin pluginsrepo.Plugin
@@ -96,8 +96,7 @@ func IsSubset(desired, current []string) bool {
 }
 
 // Guard runs after the complete canonical current and desired sets are known,
-// but before any assignment row or audit record is changed. It is required so a
-// missed constructor injection can never silently authorize an audience change.
+// but before any assignment row or audit record is changed.
 type Guard func(ctx context.Context, tx pgx.Tx, plugin pluginsrepo.Plugin, current, desired []string) error
 
 // BeforeReplace remains separate from authorization. Platform MCP uses it for
@@ -119,7 +118,7 @@ func LegacyGuard(context.Context, pgx.Tx, pluginsrepo.Plugin, []string, []string
 // Replace atomically validates, authorizes, replaces, and audits one locked
 // plugin's complete assignment set using the caller-owned transaction.
 func Replace(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin pluginsrepo.Plugin, input Input, dependencies Dependencies) (Result, error) {
-	if tx == nil || logger == nil || dependencies.Guard == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || input.PluginID == uuid.Nil || input.Actor.IsZero() || plugin.ID != input.PluginID || plugin.OrganizationID != input.OrganizationID || plugin.ProjectID != input.ProjectID || plugin.Name == "" || plugin.Slug == "" || plugin.Deleted {
+	if input.OrganizationID == "" || input.ProjectID == uuid.Nil || input.PluginID == uuid.Nil || input.Actor.IsZero() || plugin.ID != input.PluginID || plugin.OrganizationID != input.OrganizationID || plugin.ProjectID != input.ProjectID || plugin.Name == "" || plugin.Slug == "" || plugin.Deleted {
 		return Result{}, ErrInvalid
 	}
 

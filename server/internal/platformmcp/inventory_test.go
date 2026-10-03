@@ -12,8 +12,7 @@ import (
 
 func TestInventoryCursorBindsProjectAndPrincipal(t *testing.T) {
 	t.Parallel()
-	codec, err := newInventoryCursorCodec("test-cursor-key")
-	require.NoError(t, err)
+	codec := newInventoryCursorCodec("test-cursor-key")
 	principal := Principal{OrganizationID: "organization", ConnectionID: "connection", Generation: "generation"}
 	projectID := uuid.New()
 	afterID := uuid.New()

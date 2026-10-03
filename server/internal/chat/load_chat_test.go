@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattest"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -150,7 +151,7 @@ func TestLoadChat_ContentPartAssetReadFailureLeavesTranscriptIntact(t *testing.T
 	chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "content parts")
 	msgID := seedMessageContent(t, ctx, ti, chatID, "review this attachment")
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, ti.assets)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, ti.assets, chattest.NewTurnStream(t, infra))
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	validContent := "asset-backed content"
 	validURL, err := writer.WriteContentPartAsset(ctx, ti.projectID, chatID, []byte(validContent))
@@ -244,7 +245,7 @@ func TestLoadChat_ContentPartsScopedToPage(t *testing.T) {
 	olderMsgID := seedMessageContent(t, ctx, ti, chatID, "older prompt")
 	newerMsgID := seedMessageContent(t, ctx, ti, chatID, "newer prompt")
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, ti.assets)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, ti.assets, chattest.NewTurnStream(t, infra))
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	assetURL, err := writer.WriteContentPartAsset(ctx, ti.projectID, chatID, []byte("attachment body"))
 	require.NoError(t, err)

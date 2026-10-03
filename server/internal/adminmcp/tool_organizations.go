@@ -111,9 +111,6 @@ func registerOrganizationTools(server *mcp.Server, reads OrganizationReader) {
 		if err != nil {
 			return nil, output, err
 		}
-		if reads == nil {
-			return nil, output, errOrganizationUnavailable
-		}
 		limit := *payload.Limit
 		result, err := reads.ListOrganizations(ctx, payload)
 		if err != nil || result == nil {
@@ -190,9 +187,6 @@ func readExactOrganization(ctx context.Context, reads OrganizationReader, id str
 	}
 	if id == "" || id != strings.TrimSpace(id) || len(id) > 128 {
 		return nil, errors.New("provide an exact organization ID from find_organizations")
-	}
-	if reads == nil {
-		return nil, errOrganizationUnavailable
 	}
 	org, err := reads.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: id})
 	if err != nil || org == nil || org.ID != id {

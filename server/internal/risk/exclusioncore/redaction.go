@@ -28,10 +28,6 @@ func NewRedactor(keyMaterial string) Redactor {
 	return Redactor{key: derive.Sum(nil)}
 }
 
-func (r Redactor) Configured() bool {
-	return len(r.key) > 0
-}
-
 func (r Redactor) Redact(projectID, field, value string) string {
 	if value == "" {
 		return ""

@@ -2,13 +2,14 @@ package remotesessions
 
 import (
 	"encoding/json"
-	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -68,7 +69,7 @@ func TestPreparationDCRTunneledSubmission(t *testing.T) {
 			require.NoError(t, err)
 			routes := route.NewRouteTable()
 			require.NoError(t, routes.Publish(t.Context(), tunnelID.UUID.String(), gateway.URL, time.Minute))
-			s := &Service{policy: policy, tunnels: tunnelrouting.NewHTTPClient(routes, "forward-token", policy, nil)}
+			s := &Service{GlobalIssuers: &GlobalIssuers{policy: policy}, tunnels: tunnelrouting.NewHTTPClient(routes, "forward-token", policy, nil)}
 			// An unresolvable issuer hostname ensures direct egress cannot pass.
 			response, state := s.submitPreparationDCRWithTunnel(t.Context(), PreparationInput{Scopes: []string{"read"}}, "https://issuer.invalid/register", "client_secret_basic", tunnelID)
 			require.Equal(t, tc.state, state)
@@ -91,10 +92,8 @@ func TestPreparationDCRTunneledSubmissionFailsClosed(t *testing.T) {
 	t.Cleanup(endpoint.Close)
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	for _, tunnels := range []*tunnelrouting.HTTPClient{nil, tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", policy, nil)} {
-		s := &Service{policy: policy, tunnels: tunnels}
-		_, state := s.submitPreparationDCRWithTunnel(t.Context(), PreparationInput{}, endpoint.URL, "client_secret_basic", uuid.NullUUID{UUID: uuid.New(), Valid: true})
-		require.Equal(t, "indeterminate", state)
-	}
-	require.Zero(t, direct.Load(), "missing tunnel transport or route must never fall back to direct egress")
+	s := &Service{GlobalIssuers: &GlobalIssuers{policy: policy}, tunnels: tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", policy, nil)}
+	_, state := s.submitPreparationDCRWithTunnel(t.Context(), PreparationInput{}, endpoint.URL, "client_secret_basic", uuid.NullUUID{UUID: uuid.New(), Valid: true})
+	require.Equal(t, "indeterminate", state)
+	require.Zero(t, direct.Load(), "a missing tunnel route must never fall back to direct egress")
 }

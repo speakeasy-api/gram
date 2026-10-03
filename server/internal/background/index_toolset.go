@@ -36,10 +36,6 @@ func ExecuteIndexToolset(
 	env *tenv.Environment,
 	params IndexToolsetParams,
 ) (client.WorkflowRun, error) {
-	if env == nil {
-		return nil, tenv.ErrNotConfigured
-	}
-
 	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                       indexToolsetWorkflowID(params),
 		TaskQueue:                string(env.Queue()),

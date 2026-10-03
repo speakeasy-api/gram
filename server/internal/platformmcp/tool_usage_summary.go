@@ -30,12 +30,3 @@ func registerToolUsageSummaryTool(reg *Registrar, diagnostics *DiagnosticsServic
 		return nil, output, nil
 	})
 }
-
-func registerUnavailableToolUsageSummaryTool(reg *Registrar) {
-	addTool(reg, &mcp.Tool{
-		Name:        toolUsageSummaryToolName,
-		Title:       "Tool Usage by Target Type",
-		Description: "Break one project's tool calls down by target type. This is not switched on for your organization yet.",
-		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}, unavailableTool("tool_usage_summary"))
-}

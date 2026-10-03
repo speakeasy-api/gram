@@ -95,8 +95,10 @@ type RegistryCatalog struct {
 	descriptors map[string]registryCatalogDescriptor
 }
 
-type CatalogDescriptorLoader func(ctx context.Context) ([]CatalogDescriptor, error)
-type RegistryCatalogSourceLoader func(ctx context.Context) ([]RegistryCatalogSource, error)
+type (
+	CatalogDescriptorLoader     func(ctx context.Context) ([]CatalogDescriptor, error)
+	RegistryCatalogSourceLoader func(ctx context.Context) ([]RegistryCatalogSource, error)
+)
 
 type DynamicRegistryCatalog struct {
 	identity    *externalmcp.CatalogService
@@ -130,9 +132,6 @@ func (c *DynamicRegistryCatalog) Inspect(ctx context.Context, providerKey, catal
 }
 
 func (c *DynamicRegistryCatalog) current(ctx context.Context) (*RegistryCatalog, error) {
-	if c == nil {
-		return nil, ErrCatalogUnavailable
-	}
 	if c.loadSources != nil {
 		sources, err := c.loadSources(ctx)
 		if err != nil {
@@ -206,10 +205,6 @@ func NewRegistryCatalogSources(sources []RegistryCatalogSource) *RegistryCatalog
 }
 
 func (c *RegistryCatalog) Search(ctx context.Context, query string) ([]CatalogCandidate, error) {
-	if c == nil {
-		return nil, ErrCatalogUnavailable
-	}
-
 	candidates := make([]CatalogCandidate, 0, len(c.descriptors))
 	for _, source := range c.descriptors {
 		result, err := source.client.ListServers(ctx, source.Registry, externalmcp.ListServersParams{Search: &query})
@@ -234,9 +229,6 @@ func (c *RegistryCatalog) Search(ctx context.Context, query string) ([]CatalogCa
 }
 
 func (c *RegistryCatalog) Inspect(ctx context.Context, providerKey, catalogRef string) (CatalogDetails, error) {
-	if c == nil {
-		return CatalogDetails{}, ErrCatalogUnavailable
-	}
 	source, ok := c.descriptors[providerKey]
 	if !ok || catalogRef == "" || (source.CanonicalRef != "" && catalogRef != source.CanonicalRef) {
 		return CatalogDetails{}, ErrCatalogRejected

@@ -52,7 +52,7 @@ func TestListUsergroupMembersTool_RequiresUsergroup(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewListUsergroupMembersTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callListUsergroupMembers,
 	}
 

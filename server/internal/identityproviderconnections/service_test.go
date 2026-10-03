@@ -665,11 +665,11 @@ func TestFlag_OnlyGatesCreate(t *testing.T) {
 	_, err = si.svc.Create(ctx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 
-	errCtx, errSi := newTestServiceWithFlags(t, errFlags{})
-	empty, err := errSi.svc.Get(errCtx, &gen.GetPayload{SessionToken: nil, ID: nil})
+	errCtx, errSvc := newTestServiceWithFlags(t, errFlags{})
+	empty, err := errSvc.Get(errCtx, &gen.GetPayload{SessionToken: nil, ID: nil})
 	require.NoError(t, err)
 	require.Nil(t, empty.Connection)
-	_, err = errSi.svc.Create(errCtx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
+	_, err = errSvc.Create(errCtx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
 	requireOopsCode(t, err, oops.CodeUnavailable)
 }
 
@@ -689,10 +689,10 @@ func TestFlag_OrganizationLookupFailureIsUnavailable(t *testing.T) {
 
 func TestFlag_RBACRunsBeforeTheFlag(t *testing.T) {
 	t.Parallel()
-	ctx, si := newTestServiceWithFlags(t, errFlags{})
+	ctx, svc := newTestServiceWithFlags(t, errFlags{})
 
 	noneCtx := authztest.WithExactGrants(t, ctx)
-	_, err := si.svc.Create(noneCtx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
+	_, err := svc.Create(noneCtx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
@@ -1023,7 +1023,7 @@ func TestCreate_SmallPoolAdmissionPreventsCrossOrganizationStarvation(t *testing
 	for _, maxConns := range []int32{2, 4} {
 		t.Run(fmt.Sprintf("pool_%d", maxConns), func(t *testing.T) {
 			t.Parallel()
-			ctx, si := newTestServiceWithPoolLimit(t, nil, maxConns)
+			ctx, si := newTestServiceWithPoolLimit(t, maxConns)
 			ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 			defer cancel()
 			slots := int(maxConns / 2)
@@ -1089,7 +1089,7 @@ func TestCreate_SmallPoolAdmissionPreventsCrossOrganizationStarvation(t *testing
 
 func TestCreate_SingleConnectionPoolIsUnavailable(t *testing.T) {
 	t.Parallel()
-	ctx, si := newTestServiceWithPoolLimit(t, nil, 1)
+	ctx, si := newTestServiceWithPoolLimit(t, 1)
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	_, err := si.svc.Create(ctx, &gen.CreatePayload{OrgURL: fullOrgURL})
@@ -1106,7 +1106,7 @@ func TestCreate_SingleConnectionPoolIsUnavailable(t *testing.T) {
 // connection available to it.
 func TestMutations_CompleteWithOneSparePoolConnection(t *testing.T) {
 	t.Parallel()
-	ctx, si := newTestServiceWithPoolLimit(t, nil, 2)
+	ctx, si := newTestServiceWithPoolLimit(t, 2)
 	created := createConnection(t, ctx, si, fullOrgURL)
 
 	held, err := si.conn.conn.Acquire(ctx)

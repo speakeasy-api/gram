@@ -11,16 +11,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/authztest"
-	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	approvalrepo "github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestShadowDecisionDeniesAndReplaysAtomically(t *testing.T) {
@@ -41,16 +37,9 @@ func TestShadowDecisionDeniesAndReplaysAtomically(t *testing.T) {
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagMCPApproval, principal.OrganizationID, true)
 	flags.SetFlag(feature.FlagPlatformMCPShadowAccessDecisions, principal.OrganizationID, true)
-	logger := testenv.NewLogger(t)
-	tracerProvider := testenv.NewTracerProvider(t)
-	redisClient, err := platformMCPInfra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-	sessions := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("shadow-decision"), billing.NewStubClient(logger, tracerProvider))
-	core := mcpapproval.NewService(logger, tracerProvider, conn, sessions, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, nil), flags, audit.NewLogger(), nil, nil)
-	references, err := newSubjectReferenceCodec("shadow-decision-key")
-	require.NoError(t, err)
-	versions, err := newShadowDecisionVersionCodec("shadow-decision-key")
-	require.NoError(t, err)
+	core := newTestApprovals(t, conn, flags)
+	references := newSubjectReferenceCodec("shadow-decision-key")
+	versions := newShadowDecisionVersionCodec("shadow-decision-key")
 	shadow := &ShadowInventoryService{projects: postgresRiskProjectResolver{queries: platformrepo.New(conn)}, inventory: stubShadowInventory{}, reviews: stubShadowReview{}, flags: flags, organizations: NewPostgresOrganizationSlugResolver(conn), budget: testOperationBudget(), references: references, versions: versions, now: time.Now}
 	targetPayload := `{"kind":"server_url","key":"https://shadow.example.test/mcp"}`
 	targetReference, err := shadow.references.EncodeScoped(principal, shadowTargetReferenceKind, queryScope("shadow_target", project.ID.String()), targetPayload, time.Now())
@@ -59,7 +48,7 @@ func TestShadowDecisionDeniesAndReplaysAtomically(t *testing.T) {
 	require.NoError(t, err)
 	version, err := shadow.versions.Encode(review.DecisionVersionState)
 	require.NoError(t, err)
-	service := NewShadowDecisionService(conn, shadow, core, testPluginTargets(conn), flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget())
+	service := NewShadowDecisionService(conn, shadow, core, testPluginTargets(t, conn), flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget())
 
 	localRequest, err := approvalrepo.New(conn).UpsertApprovalRequest(ctx, approvalrepo.UpsertApprovalRequestParams{
 		OrganizationID: principal.OrganizationID, ProjectID: project.ID,
@@ -131,16 +120,9 @@ func TestShadowDecisionAllowsEveryoneAndReplaysAtomically(t *testing.T) {
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagMCPApproval, principal.OrganizationID, true)
 	flags.SetFlag(feature.FlagPlatformMCPShadowAccessDecisions, principal.OrganizationID, true)
-	logger := testenv.NewLogger(t)
-	tracerProvider := testenv.NewTracerProvider(t)
-	redisClient, err := platformMCPInfra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-	sessions := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("shadow-decision-allow"), billing.NewStubClient(logger, tracerProvider))
-	core := mcpapproval.NewService(logger, tracerProvider, conn, sessions, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, nil), flags, audit.NewLogger(), nil, nil)
-	references, err := newSubjectReferenceCodec("shadow-decision-allow-key")
-	require.NoError(t, err)
-	versions, err := newShadowDecisionVersionCodec("shadow-decision-allow-key")
-	require.NoError(t, err)
+	core := newTestApprovals(t, conn, flags)
+	references := newSubjectReferenceCodec("shadow-decision-allow-key")
+	versions := newShadowDecisionVersionCodec("shadow-decision-allow-key")
 	shadow := &ShadowInventoryService{projects: postgresRiskProjectResolver{queries: platformrepo.New(conn)}, inventory: stubShadowInventory{}, reviews: stubShadowReview{}, flags: flags, organizations: NewPostgresOrganizationSlugResolver(conn), budget: testOperationBudget(), references: references, versions: versions, now: time.Now}
 	targetReference, err := shadow.references.EncodeScoped(principal, shadowTargetReferenceKind, queryScope("shadow_target", project.ID.String()), `{"kind":"server_url","key":"https://allowed-shadow.example.test/mcp"}`, time.Now())
 	require.NoError(t, err)
@@ -148,7 +130,7 @@ func TestShadowDecisionAllowsEveryoneAndReplaysAtomically(t *testing.T) {
 	require.NoError(t, err)
 	version, err := shadow.versions.Encode(review.DecisionVersionState)
 	require.NoError(t, err)
-	plugins := testPluginTargets(conn)
+	plugins := testPluginTargets(t, conn)
 	choices, err := plugins.ListPluginAssignments(ctx, principal, ListPluginAssignmentsInput{ProjectID: project.ID.String()})
 	require.NoError(t, err)
 	require.NotEmpty(t, choices.Assignments)

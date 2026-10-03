@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -12,6 +13,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
+	"github.com/speakeasy-api/gram/server/internal/trialemails/trialemailstest"
 )
 
 type M3StripeWebhookMetrics struct {
@@ -48,7 +50,9 @@ func NewM3StripeWebhookService(t *testing.T, db *pgxpool.Pool, stripeClient stri
 		stripeClient:    stripeClient,
 		stripeHandler:   nil,
 		stripeMetrics:   metrics,
-		productFeatures: nil,
+		productFeatures: newTestProductFeatures(t, db),
+		trial:           trialemailstest.NoopNotifier{},
+		now:             time.Now,
 	}
 	service.stripeHandler = service.serviceStripeWebhookHandler
 	return service, metrics

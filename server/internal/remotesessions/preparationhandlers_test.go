@@ -2,8 +2,9 @@ package remotesessions_test
 
 import (
 	"context"
-	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"testing"
+
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/conv"

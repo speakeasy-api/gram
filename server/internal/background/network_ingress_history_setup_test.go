@@ -92,8 +92,7 @@ func newIngressHistoryTest(t *testing.T, failing bool) (*NetworkIngressClient, u
 	logs := &ingressHistoryLogs{}
 	logger := slog.New(slog.NewTextHandler(logs, nil))
 	provider := &historyIngressProvider{credentialSeen: make(chan []byte, 10), failure: failing}
-	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, logger, k8s.NewNetworkIngressMetrics(logger, testenv.NewMeterProvider(t)))
-	require.NoError(t, err)
+	registry := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, logger, k8s.NewNetworkIngressMetrics(logger, testenv.NewMeterProvider(t)))
 	executor := networkingress.NewExecutor(db, enc, registry, networkingress.ExecutorOptions{Queue: string(env.Queue()), Image: "test-image", BackendService: "backend", BackendPort: 443, CanApply: func(context.Context) error { return nil }})
 	a := &networkIngressActivities{executor: executor, db: db, queue: string(env.Queue())}
 	var clientOptions client.Options

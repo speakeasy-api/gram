@@ -120,9 +120,6 @@ type CodexCloudImportService struct {
 }
 
 func NewCodexCloudImportService(logger *slog.Logger, store *Store, db *pgxpool.Pool, guardianPolicy *guardian.Policy, writer *chat.ChatMessageWriter, heartbeat func(ctx context.Context, page int)) *CodexCloudImportService {
-	if heartbeat == nil {
-		panic("codex cloud import service requires heartbeat")
-	}
 	return &CodexCloudImportService{
 		logger:         logger.With(attr.SlogComponent("aiintegrations.codex_cloud")),
 		store:          store,

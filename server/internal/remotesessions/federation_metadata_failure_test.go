@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/dns"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -44,7 +45,7 @@ func TestFederatedMetadataMalformedSuccessIsConfiguration(t *testing.T) {
 			_, probeErr := attemptIssuerProbe(t.Context(), doer, p.issuer.Issuer+"/.well-known/openid-configuration")
 			require.ErrorIs(t, probeErr, errInvalidDiscoveryDocument)
 			require.Equal(t, http.StatusOK, probeErr.Status)
-			m := &ChallengeManager{policy: federatedPublicPolicy(t)}
+			m := &ChallengeManager{policy: federatedPublicPolicy(t), locks: cache.NoopCache}
 			_, err = m.loadFederatedMetadata(t.Context(), p.organizationID, p.issuer, doer)
 			require.ErrorIs(t, err, ErrFederatedConfiguration)
 			require.NotErrorIs(t, err, ErrFederatedUnavailable)
@@ -81,7 +82,7 @@ func TestFederatedMetadataTransientResponseRemainsUnavailable(t *testing.T) {
 			_, probeErr := attemptIssuerProbe(t.Context(), doer, p.issuer.Issuer+"/.well-known/openid-configuration")
 			require.Error(t, probeErr)
 			require.NotErrorIs(t, probeErr, errInvalidDiscoveryDocument)
-			m := &ChallengeManager{policy: federatedPublicPolicy(t)}
+			m := &ChallengeManager{policy: federatedPublicPolicy(t), locks: cache.NoopCache}
 			_, err := m.loadFederatedMetadata(t.Context(), p.organizationID, p.issuer, doer)
 			require.ErrorIs(t, err, ErrFederatedUnavailable)
 			require.NotErrorIs(t, err, ErrFederatedConfiguration)
@@ -102,7 +103,7 @@ func TestFederatedMetadataTemporaryDNSWithoutTimeout(t *testing.T) {
 	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t), guardian.WithResolver(dns.NewMockResolver(dns.MockResolverConfig{
 		LookupIPFunc: func(context.Context, string, string) ([]net.IP, error) { return nil, cause },
 	})))
-	m := &ChallengeManager{policy: policy}
+	m := &ChallengeManager{policy: policy, locks: cache.NoopCache}
 	err := m.validateFederatedHost(t.Context(), "https://idp.example.test", false)
 	require.ErrorIs(t, err, ErrFederatedUnavailable)
 	require.ErrorIs(t, err, cause)

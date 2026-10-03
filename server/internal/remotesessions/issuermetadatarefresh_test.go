@@ -42,7 +42,7 @@ func newIssuerMetadataRefresher(t *testing.T, ti *testInstance) (*remotesessions
 	require.NoError(t, err)
 	reader := sdkmetric.NewManualReader()
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	return remotesessions.NewIssuerMetadataRefresher(testenv.NewLogger(t), provider, ti.conn, policy, nil, audit.NewLogger()), reader
+	return remotesessions.NewIssuerMetadataRefresher(testenv.NewLogger(t), provider, ti.conn, policy, ti.tunnels, audit.NewLogger()), reader
 }
 
 // metadataTracking is the tracking state a test stamps on an issuer row; a nil errorAt with an error means now.
@@ -1031,7 +1031,7 @@ func TestIssuerMetadataRefresh_NoteUse_ListClientsRefreshesTheIssuerItRenders(t 
 		ti.conn,
 		testenv.NewEncryptionClient(t),
 		policy,
-		nil,
+		ti.tunnels,
 		ti.redisCache,
 		mustURL(t, "http://localhost"),
 		remotesessions.WithIssuerMetadataRefresher(refresher),

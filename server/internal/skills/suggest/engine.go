@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -38,13 +39,8 @@ type Engine struct {
 	generator *modelGenerator
 }
 
-func NewEngine(config Config, logger *slog.Logger, db *pgxpool.Pool, insights InsightsReader, chats efficacy.TranscriptSource, completion CompletionClient, limiter *ratelimit.Limiter) (*Engine, error) {
-	if err := config.validate(); err != nil {
-		return nil, fmt.Errorf("suggestion config: %w", err)
-	}
-	if logger == nil || db == nil || insights == nil || chats == nil || completion == nil || limiter == nil {
-		return nil, errors.New("suggestion engine dependencies cannot be nil")
-	}
+func NewEngine(config Config, logger *slog.Logger, db *pgxpool.Pool, insights InsightsReader, chats efficacy.TranscriptSource, completion CompletionClient, limiter *ratelimit.Limiter) *Engine {
+	inv.Require("skill suggestion engine", "config is valid", config.validate())
 	return &Engine{
 		config:    config,
 		logger:    logger,
@@ -52,7 +48,7 @@ func NewEngine(config Config, logger *slog.Logger, db *pgxpool.Pool, insights In
 		insights:  insights,
 		chats:     chats,
 		generator: &modelGenerator{config: config, logger: logger, completion: completion, limiter: limiter},
-	}, nil
+	}
 }
 
 type RunInput struct {

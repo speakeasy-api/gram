@@ -51,14 +51,14 @@ func callFunctionToolWithClient(t *testing.T, client toolconfig.MCPClientIdentit
 		testenv.NewMeterProvider(t),
 		ToolCallSourceMCP,
 		testenv.NewEncryptionClient(t),
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		&mockToolCaller{
 			serverURL: mockServer.URL,
 			onCall:    func(invID uuid.UUID) { invocationID = invID },
 			onRequest: func(req functions.RunnerToolCallRequest) { captured = req.Meta },
 		},
-		nil,
+		&mockPlatformExecutor{},
 	)
 
 	bodyBytes, err := json.Marshal(ToolCallBody{

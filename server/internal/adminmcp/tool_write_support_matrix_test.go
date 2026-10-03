@@ -17,7 +17,8 @@ import (
 
 func supportMatrixSnapshot(t *testing.T, db interface {
 	Begin(context.Context) (pgx.Tx, error)
-}) *gen.SupportMatrix {
+},
+) *gen.SupportMatrix {
 	t.Helper()
 	tx, err := db.Begin(t.Context())
 	require.NoError(t, err)

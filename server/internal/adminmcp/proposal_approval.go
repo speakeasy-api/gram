@@ -117,10 +117,6 @@ func (s *StaffProposalApproval) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
-		if s == nil || s.store == nil || s.session == nil {
-			http.Error(w, "unavailable", http.StatusServiceUnavailable)
-			return
-		}
 		id, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			http.NotFound(w, r)

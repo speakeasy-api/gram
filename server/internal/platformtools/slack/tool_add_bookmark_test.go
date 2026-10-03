@@ -61,7 +61,7 @@ func TestAddBookmarkTool_RequiresFields(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewAddBookmarkTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callAddBookmark,
 	}
 

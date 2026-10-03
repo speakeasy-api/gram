@@ -154,15 +154,14 @@ func newKeyResolver(t *testing.T, client *redis.Client) *jwks.KeyResolver {
 	require.NoError(t, err)
 
 	limiter := ratelimit.New(ratelimit.NewRedisStore(client), string(testenv.NewCacheSuffix(t, "clientauth-jwks")), ratelimit.PerMinute(1000))
-	keys, err := jwks.NewKeyResolver(
+	fetchLimiter := ratelimit.New(ratelimit.NewRedisStore(client), string(testenv.NewCacheSuffix(t, "clientauth-jwks-fetch")), ratelimit.PerMinute(1000))
+	return jwks.NewKeyResolver(
 		jwks.NewResolver(policy, testenv.NewMeterProvider(t), logger),
 		jwks.NewMemoryCache(),
 		limiter,
-		nil,
+		fetchLimiter,
 		logger,
 	)
-	require.NoError(t, err)
-	return keys
 }
 
 // newVerifier builds a Verifier over a real Redis-backed replay guard sized
@@ -173,12 +172,9 @@ func newVerifier(t *testing.T) *privatekeyjwt.Verifier {
 	client, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	guard, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "clientauth-replay")), privatekeyjwt.DefaultMaxReplayHold)
-	require.NoError(t, err)
+	guard := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "clientauth-replay")), privatekeyjwt.DefaultMaxReplayHold)
 
-	verifier, err := privatekeyjwt.NewVerifier(newKeyResolver(t, client), guard)
-	require.NoError(t, err)
-	return verifier
+	return privatekeyjwt.NewVerifier(newKeyResolver(t, client), guard)
 }
 
 // expectationFor is the standard Expectation naming this signer's key source.

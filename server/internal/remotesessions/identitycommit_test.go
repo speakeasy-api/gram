@@ -13,7 +13,9 @@ import (
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -165,11 +167,11 @@ func requireLiveAgentBindings(t *testing.T, ctx context.Context, ti *testInstanc
 	require.True(t, live)
 }
 
-// identityCommitter builds a committer for plans that link stored clients,
-// which need no encryption, registration or tunnels.
 func identityCommitter(t *testing.T, ti *testInstance) *remotesessions.IdentityCommitter {
 	t.Helper()
-	return remotesessions.NewIdentityCommitter(testenv.NewLogger(t), ti.conn, nil, audit.NewLogger(), nil, nil, nil, nil)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	return remotesessions.NewIdentityCommitter(testenv.NewLogger(t), ti.conn, testenv.NewEncryptionClient(t), audit.NewLogger(), mustURL(t, testServerURL), policy, ti.tunnels, registration.NewMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)))
 }
 
 // lockIdentityCommit prepares plan and runs it through Lock, skipping

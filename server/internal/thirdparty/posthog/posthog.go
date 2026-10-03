@@ -126,7 +126,7 @@ func (p *Posthog) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinct
 // the SDK evaluates against its cached definitions first and only falls back
 // to a remote request for flags it cannot decide locally.
 func (p *Posthog) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
-	if p == nil || p.disabled || p.client == nil {
+	if p.disabled {
 		return feature.EvaluationIndeterminate, nil
 	}
 
@@ -184,7 +184,7 @@ func (p *Posthog) FlagVariant(ctx context.Context, flag feature.Flag, distinctID
 	// No disabled-log here, unlike IsFlagEnabled: New already logs the reason
 	// once at startup, and this sits on the managed assistant's per-request
 	// path, where a line per call is noise rather than a diagnostic.
-	if p == nil || p.disabled || p.client == nil {
+	if p.disabled {
 		return "", nil
 	}
 

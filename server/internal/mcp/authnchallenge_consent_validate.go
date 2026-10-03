@@ -46,11 +46,8 @@ var validationRate = ratelimit.PerMinute(6)
 // validationLimitedNotice is the fixed card copy for a rate-limited verify.
 const validationLimitedNotice = "Try again in a moment"
 
-// newValidationLimiter builds the per-challenge verify limiter; nil without Redis.
+// newValidationLimiter builds the per-challenge verify limiter.
 func newValidationLimiter(redisClient *redis.Client, meterProvider metric.MeterProvider) *ratelimit.Limiter {
-	if redisClient == nil {
-		return nil
-	}
 	return ratelimit.New(ratelimit.NewRedisStore(redisClient), "remote_session_validate", validationRate, ratelimit.WithMetrics(meterProvider))
 }
 
@@ -70,15 +67,13 @@ func (s *Service) validateRemoteSession(
 	challengeState AuthnChallengeState,
 	client remotesessions.Client,
 ) error {
-	if s.validationLimiter != nil {
-		res, lerr := s.validationLimiter.Allow(ctx, challengeState.ID)
-		switch {
-		case lerr != nil:
-			logger.WarnContext(ctx, "remote session validation limiter unavailable; allowing", attr.SlogError(lerr))
-		case !res.Allowed:
-			logger.InfoContext(ctx, "remote session validation rate limited")
-			return errValidationRateLimited
-		}
+	res, lerr := s.validationLimiter.Allow(ctx, challengeState.ID)
+	switch {
+	case lerr != nil:
+		logger.WarnContext(ctx, "remote session validation limiter unavailable; allowing", attr.SlogError(lerr))
+	case !res.Allowed:
+		logger.InfoContext(ctx, "remote session validation rate limited")
+		return errValidationRateLimited
 	}
 	return s.probeRemoteSession(ctx, logger, endpoint, challengeState, client, nil, remotesessionmetrics.ValidationTriggerVerify)
 }
@@ -403,10 +398,6 @@ func (s *Service) standaloneValidationTarget(
 
 // tunnelHasRoute is one route-store read: whether any gateway currently holds the tunnel; a store error reads as no route.
 func (s *Service) tunnelHasRoute(ctx context.Context, tunnelID uuid.UUID) bool {
-	// No route store means no gateway can be dialled, so the member reads offline.
-	if s.tunnelManager == nil || s.tunnelManager.routes == nil {
-		return false
-	}
 	candidates, err := s.tunnelManager.routes.Candidates(ctx, tunnelID.String())
 	return err == nil && len(candidates) > 0
 }

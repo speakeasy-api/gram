@@ -70,14 +70,8 @@ func (e *workloadIssuerRateLimitedError) Unwrap() error { return errWorkloadIssu
 // not reported as a rate limit an operator can wait out.
 var errWorkloadIssuerLimiterUnavailable = errors.New("workload issuer lookup limiter unavailable")
 
-// newWorkloadIssuerLookupBudget builds the per-endpoint ceiling, or nil when
-// there is no store. Nil is not "unlimited" — an absent budget refuses, so a
-// deployment without the store does not get the grant.
+// newWorkloadIssuerLookupBudget builds the per-endpoint ceiling.
 func newWorkloadIssuerLookupBudget(redisClient *redis.Client, meterProvider metric.MeterProvider) workloadIssuerBudget {
-	if redisClient == nil {
-		return nil
-	}
-
 	limiter := ratelimit.New(
 		ratelimit.NewRedisStore(redisClient),
 		"workload_issuer_lookup",
@@ -117,8 +111,7 @@ type workloadIssuerAdmission struct {
 	// burst, sustained load is the limiter's job.
 	inflight singleflight.Group
 
-	// charge bounds lookups reaching the database. Nil means no ceiling was
-	// wired, which admission treats as unprotected rather than unlimited.
+	// charge bounds lookups reaching the database.
 	charge workloadIssuerBudget
 }
 
@@ -157,9 +150,9 @@ type workloadIssuerResolution struct {
 // grant is reachable without credentials.
 func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (workloadidentity_repo.WorkloadIssuer, error) {
 	switch {
-	// An unwired lookup reads as "no issuer registered" and a missing endpoint
-	// as "no tenancy to resolve under", as admitWorkloadIdentity treats them.
-	case a.lookup == nil, endpoint == nil:
+	// A missing endpoint reads as "no tenancy to resolve under", as
+	// admitWorkloadIdentity treats it.
+	case endpoint == nil:
 		return workloadidentity_repo.WorkloadIssuer{}, errWorkloadIssuerUntrusted
 	// No row can describe an empty iss, so it is refused before it spends the
 	// endpoint's budget.
@@ -178,9 +171,6 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 		defer cancel()
 
 		// Charged before the query, so a refusal costs only the bucket read.
-		if a.charge == nil {
-			return nil, errWorkloadIssuerLimiterUnavailable
-		}
 		charged, chargeErr := a.charge(lookupCtx, workloadIssuerLookupScope(endpoint))
 		if chargeErr != nil {
 			return nil, fmt.Errorf("%w: %w", errWorkloadIssuerLimiterUnavailable, chargeErr)

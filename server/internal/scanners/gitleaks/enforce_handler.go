@@ -60,15 +60,6 @@ func NewEnforceHandler(
 	cfg EnforceHandlerConfig,
 	riskRecorder *metering.RiskRecorder,
 ) (*EnforceHandler, error) {
-	if writer == nil {
-		return nil, errors.New("gitleaks enforcement reply writer is required")
-	}
-	if fingerprint == nil {
-		return nil, errors.New("gitleaks enforcement fingerprint function is required")
-	}
-	if riskRecorder == nil {
-		return nil, errors.New("gitleaks enforcement risk recorder is required")
-	}
 	if cfg.MaxRequestAge <= 0 {
 		cfg.MaxRequestAge = DefaultMaxRequestAge
 	}

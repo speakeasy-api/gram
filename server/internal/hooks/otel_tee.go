@@ -42,7 +42,7 @@ const (
 // never affects the hooks response — a record dropped here simply does not
 // appear in the feed.
 func (s *Service) teeOTELLogsToEventFeed(ctx context.Context, payload *gen.LogsPayload, orgID string, projectID string) {
-	if s.otelLogPublisher == nil || payload == nil {
+	if payload == nil {
 		return
 	}
 
@@ -52,7 +52,7 @@ func (s *Service) teeOTELLogsToEventFeed(ctx context.Context, payload *gen.LogsP
 		ProjectId:      &projectID,
 	}).Build()
 
-	records := inboundLogRecordsFromHooksExport(payload, provenance, s.now())
+	records := inboundLogRecordsFromHooksExport(payload, provenance, s.nowFunc())
 	if len(records) == 0 {
 		return
 	}
@@ -72,7 +72,6 @@ func (s *Service) teeOTELLogsToEventFeed(ctx context.Context, payload *gen.LogsP
 	}
 
 	s.otelTeeDrains.Go(func() {
-
 		ctx, cancel := context.WithTimeout(ctx, otelTeeAckAwaitTimeout)
 		defer cancel()
 

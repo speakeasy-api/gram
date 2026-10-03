@@ -17,7 +17,7 @@ func TestSearchMessagesAndFilesTool_RequiresUserToken(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewSearchMessagesAndFilesTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callSearchMessagesAndFiles,
 	}
 

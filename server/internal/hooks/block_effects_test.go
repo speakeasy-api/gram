@@ -157,7 +157,7 @@ func TestIngest_ScanDenyCarriesNoBlockEffect(t *testing.T) {
 	require.NotContains(t, result.Effects, "block")
 }
 
-// A shadow-MCP deny whose link minting is unavailable (no site URL) has
+// A shadow-MCP deny whose link minting is unavailable (no signing key) has
 // nothing for the user to request — deny stands, no effect.
 func TestIngest_ShadowMCPDenyWithoutLinkCarriesNoBlockEffect(t *testing.T) {
 	t.Parallel()
@@ -170,7 +170,7 @@ func TestIngest_ShadowMCPDenyWithoutLinkCarriesNoBlockEffect(t *testing.T) {
 		ingestUserScopedShadowMCPScanner: ingestUserScopedShadowMCPScanner{userID: authCtx.UserID},
 		policyID:                         uuid.NewString(),
 	}
-	ti.service.orgHosts = nil
+	ti.service.jwtSecret = ""
 
 	result, err := ti.service.Ingest(ctx, shadowMCPDenyPayload("block-effect-no-link", "call-effect-2"))
 	require.NoError(t, err)

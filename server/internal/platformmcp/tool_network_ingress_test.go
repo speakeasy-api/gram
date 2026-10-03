@@ -18,40 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-func TestNetworkIngressToolHasSameContractWhenUnavailable(t *testing.T) {
-	t.Parallel()
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "ingress-live", Version: "0.0.1"}, nil))
-	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "ingress-unavailable", Version: "0.0.1"}, nil))
-	registerNetworkIngressTool(live, nil)
-	registerUnavailableNetworkIngressTool(unavailable)
-	require.JSONEq(t, string(live.Descriptors()[0].InputSchema), string(unavailable.Descriptors()[0].InputSchema))
-	require.Equal(t, live.Descriptors()[0].Meta, unavailable.Descriptors()[0].Meta)
-	require.Equal(t, ExternalAuthorizationOrgAdmin, live.Descriptors()[0].Meta.Authorization)
-	require.Equal(t, ProjectScopeNone, live.Descriptors()[0].Meta.ProjectScope)
-	require.Equal(t, []Audience{AudienceExternal}, live.Descriptors()[0].Meta.Audiences)
-
-	server := mcp.NewServer(&mcp.Implementation{Name: "ingress-fallback", Version: "0.0.1"}, nil)
-	bindExternalTestPrincipal(server)
-	reg := newRegistrar(server)
-	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
-	registerUnavailableNetworkIngressTool(reg)
-	clientTransport, serverTransport := mcp.NewInMemoryTransports()
-	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
-	require.NoError(t, err)
-	defer func() { _ = serverSession.Close() }()
-	client := mcp.NewClient(&mcp.Implementation{Name: "ingress-client", Version: "0.0.1"}, nil)
-	session, err := client.Connect(t.Context(), clientTransport, nil)
-	require.NoError(t, err)
-	defer func() { _ = session.Close() }()
-	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: getNetworkIngressToolName, Arguments: map[string]any{}})
-	require.NoError(t, err)
-	require.True(t, result.IsError)
-	require.Len(t, result.Content, 1)
-	text, ok := result.Content[0].(*mcp.TextContent)
-	require.True(t, ok)
-	require.Contains(t, text.Text, `"code":"feature_unavailable"`)
-}
-
 func TestNetworkIngressToolHidesUnexpectedErrors(t *testing.T) {
 	t.Parallel()
 	pool, err := pgxpool.New(t.Context(), "postgres://sentinel-db-user@sentinel-db-host:5432/sentinel_db")

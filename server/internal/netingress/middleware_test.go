@@ -42,7 +42,7 @@ func TestMiddlewareStampsPrivateOriginAndStripsAttestation(t *testing.T) {
 		gotHeaders = request.Header.Clone()
 		w.WriteHeader(http.StatusNoContent)
 	})
-	handler := Middleware(verifier, IdentityParsers{ProviderTailscale: TailscaleIdentityParser{}})(next)
+	handler := Middleware(verifier, IdentityParsers{ProviderTailscale: TailscaleIdentityParser{}}, newTestTelemetry(t))(next)
 
 	request := httptest.NewRequest(http.MethodPost, "http://private.example.ts.net/mcp/server", nil)
 	request.Host = "PRIVATE.EXAMPLE.TS.NET:443"
@@ -88,7 +88,7 @@ func TestMiddlewareFormatsIPv6PrivateOrigin(t *testing.T) {
 	request.Host = "[2001:db8::1]:443"
 	response := httptest.NewRecorder()
 
-	Middleware(verifier, IdentityParsers{ProviderTailscale: TailscaleIdentityParser{}})(next).ServeHTTP(response, request)
+	Middleware(verifier, IdentityParsers{ProviderTailscale: TailscaleIdentityParser{}}, newTestTelemetry(t))(next).ServeHTTP(response, request)
 
 	require.Equal(t, http.StatusNoContent, response.Code)
 	require.Equal(t, "https://[2001:db8::1]", gotOrigin.BaseURL)
@@ -110,7 +110,7 @@ func TestMiddlewareAllowsTaggedNodeWhenIdentityOptional(t *testing.T) {
 	request := privateRequest()
 	response := httptest.NewRecorder()
 
-	Middleware(verifier, IdentityParsers{ProviderTailscale: TailscaleIdentityParser{}})(next).ServeHTTP(response, request)
+	Middleware(verifier, IdentityParsers{ProviderTailscale: TailscaleIdentityParser{}}, newTestTelemetry(t))(next).ServeHTTP(response, request)
 
 	require.Equal(t, http.StatusNoContent, response.Code)
 	require.True(t, gotOriginOK)
@@ -173,7 +173,7 @@ func TestMiddlewareFailsClosed(t *testing.T) {
 			nextCalled := false
 			next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { nextCalled = true })
 
-			Middleware(test.verifier, test.parsers)(next).ServeHTTP(response, request)
+			Middleware(test.verifier, test.parsers, newTestTelemetry(t))(next).ServeHTTP(response, request)
 
 			require.Equal(t, test.wantStatus, response.Code)
 			require.False(t, nextCalled)
@@ -221,7 +221,7 @@ func TestMiddlewareTailscaleIdentityValidation(t *testing.T) {
 			request.Header.Set(TailscaleUserNameHeader, test.displayName)
 			request.Header.Set(TailscaleUserProfilePicHeader, "")
 			response := httptest.NewRecorder()
-			Middleware(verifier, IdentityParsers{ProviderTailscale: TailscaleIdentityParser{}})(next).ServeHTTP(response, request)
+			Middleware(verifier, IdentityParsers{ProviderTailscale: TailscaleIdentityParser{}}, newTestTelemetry(t))(next).ServeHTTP(response, request)
 			require.Equal(t, test.wantStatus, response.Code)
 			require.Equal(t, test.wantStatus == http.StatusNoContent, nextCalled)
 			if test.wantStatus == http.StatusUnauthorized {

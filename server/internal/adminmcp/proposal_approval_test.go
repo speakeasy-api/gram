@@ -70,7 +70,7 @@ func TestStaffProposalApprovalBrowserFlow(t *testing.T) {
 	require.NoError(t, err)
 	verifier := &fakeAdminVerifier{result: &contextvalues.AdminAuthContext{SessionID: "browser-session", OIDCSubject: "staff-subject", Email: "staff@example.test"}}
 	memory := testenv.NewMemoryCache()
-	authorization := NewStaffOAuthAuthorization(nil, nil, memory, verifier, f.cipher, staffAudience)
+	authorization := NewStaffOAuthAuthorization(postgresStaffClientStore{db: f.db}, postgresStaffAuthorizationStore{db: f.db}, memory, verifier, f.cipher, staffAudience)
 	approval := newStaffProposalApproval(f.store, authorization, memory, WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}}) //nolint:exhaustive // Only selected write operations are enabled by this test.
 	approval.operations = allowFeatureApprovals()
 	handler := middleware.AdminOriginCheck(nil)(approval.Handler())
@@ -134,7 +134,7 @@ func TestStaffProposalApprovalRequiresLinkedWritableConnection(t *testing.T) {
 	require.NoError(t, err)
 	verifier := &fakeAdminVerifier{result: &contextvalues.AdminAuthContext{SessionID: "browser-session", OIDCSubject: "staff-subject", Email: "staff@example.test"}}
 	memory := testenv.NewMemoryCache()
-	authorization := NewStaffOAuthAuthorization(nil, nil, memory, verifier, f.cipher, staffAudience)
+	authorization := NewStaffOAuthAuthorization(postgresStaffClientStore{db: f.db}, postgresStaffAuthorizationStore{db: f.db}, memory, verifier, f.cipher, staffAudience)
 	approval := newStaffProposalApproval(f.store, authorization, memory, WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}}) //nolint:exhaustive // Only selected write operations are enabled by this test.
 	approval.operations = allowFeatureApprovals()
 	handler := approval.Handler()

@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/identity"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/mcpapprovaltest"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/provenance"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
@@ -72,22 +73,6 @@ func (quietDomains) Lookup(_ context.Context, _ string) (*domainmeta.Registratio
 	return nil, nil
 }
 
-// quietProbes stands in for the remote probes: discovery finds nothing and
-// tools/list returns no declarations, so no section and no gap.
-type quietProbes struct{}
-
-func (quietProbes) DiscoverAuthority(_ context.Context, _ string) (*authority.Declaration, error) {
-	return nil, nil
-}
-
-func (quietProbes) ListToolDeclarations(_ context.Context, _ string) ([]capability.Declaration, error) {
-	return nil, nil
-}
-
-func (quietProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
-	return nil, nil
-}
-
 func decode(t *testing.T, raw []byte) map[string]any {
 	t.Helper()
 
@@ -108,7 +93,7 @@ func TestAssemble_PackageReference(t *testing.T) {
 			VersionCount:  3, MaintainerCount: 2, Deprecated: false, DeprecationReason: "",
 		},
 		err: nil,
-	}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
+	}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{})
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server@1.2.3"))
 	require.NoError(t, err)
@@ -146,7 +131,7 @@ func TestAssemble_RemoteReferenceCarriesExposure(t *testing.T) {
 			FirstCalled: &first, LastCalled: &last, CallCount: 42, UserCount: 7, TopUsers: nil,
 		}},
 		rowErr: nil, usageErr: nil,
-	}, quietProbes{}, quietProbes{}, quietProbes{})
+	}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{})
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.example.com/sse"))
 	require.NoError(t, err)
@@ -167,14 +152,14 @@ func TestAssemble_NotPublishedVersusGap(t *testing.T) {
 
 	reference := identity.Resolve("npx -y @scope/unknown-server")
 
-	clean := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
+	clean := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{})
 	raw, err := clean.Assemble(t.Context(), uuid.New(), reference)
 	require.NoError(t, err)
 	doc := decode(t, raw)
 	require.Equal(t, true, doc["package_not_published"])
 	require.NotContains(t, doc, "gaps")
 
-	failing := evidence.NewAssembler(&fakePackages{metadata: nil, err: errors.New("registry down")}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
+	failing := evidence.NewAssembler(&fakePackages{metadata: nil, err: errors.New("registry down")}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{})
 	raw, err = failing.Assemble(t.Context(), uuid.New(), reference)
 	require.NoError(t, err, "one source failing must not lose the gather")
 	doc = decode(t, raw)
@@ -190,7 +175,7 @@ func TestAssemble_ExposureFailureIsAGap(t *testing.T) {
 
 	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{
 		row: nil, usage: nil, rowErr: errors.New("clickhouse down"), usageErr: nil,
-	}, quietProbes{}, quietProbes{}, quietProbes{})
+	}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{})
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.example.com/sse"))
 	require.NoError(t, err)
@@ -206,7 +191,7 @@ func TestAssemble_ExposureFailureIsAGap(t *testing.T) {
 func TestAssemble_UnresolvedIsStillADocument(t *testing.T) {
 	t.Parallel()
 
-	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
+	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{})
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("./run-my-server --local"))
 	require.NoError(t, err)
@@ -234,7 +219,7 @@ func TestAssemble_MCPRemoteCommandReachesExposure(t *testing.T) {
 			LastCalledUnixNano: 0, UpdatedAt: time.Time{},
 		},
 		usage: nil, rowErr: nil, usageErr: nil,
-	}, quietProbes{}, quietProbes{}, quietProbes{})
+	}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{})
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y mcp-remote https://mcp.example.com/sse"))
 	require.NoError(t, err)
@@ -256,7 +241,7 @@ func TestAssemble_WithRealPackageClient(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	client := packagemeta.NewClient(server.Client(), packagemeta.WithNPMBaseURL(server.URL))
-	assembler := evidence.NewAssembler(client, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
+	assembler := evidence.NewAssembler(client, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{})
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y p@1.0.0"))
 	require.NoError(t, err)
@@ -272,7 +257,7 @@ func TestAssemble_WithRealPackageClient(t *testing.T) {
 func TestDecodeDocument_RoundTripAndVersionGate(t *testing.T) {
 	t.Parallel()
 
-	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
+	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{})
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server@1.2.3"))
 	require.NoError(t, err)
 
@@ -304,9 +289,9 @@ func TestAssemble_UnreachableSourceIsBoundedAndBecomesAGap(t *testing.T) {
 	assembler := evidence.NewAssembler(
 		blockingPackages{},
 		quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
-		quietProbes{},
-		quietProbes{},
-		quietProbes{},
+		mcpapprovaltest.QuietProbes{},
+		mcpapprovaltest.QuietProbes{},
+		mcpapprovaltest.QuietProbes{},
 		evidence.WithSourceTimeout(50*time.Millisecond),
 	)
 
@@ -542,9 +527,9 @@ func TestAssemble_UncataloguedServerReadsAsCheckedAndAbsent(t *testing.T) {
 	assembler := evidence.NewAssembler(
 		&fakePackages{metadata: nil, err: nil},
 		quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
-		quietProbes{},
+		mcpapprovaltest.QuietProbes{},
 		failingProbes{},
-		quietProbes{},
+		mcpapprovaltest.QuietProbes{},
 	)
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.example.com/mcp"))
@@ -732,7 +717,7 @@ func TestAssemble_RepositoryAndAdvisories(t *testing.T) {
 		}, err: nil},
 		quietDomains{},
 		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
-		quietProbes{}, quietProbes{}, quietProbes{},
+		mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{},
 	)
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server@1.2.3"))
@@ -773,7 +758,7 @@ func TestAssemble_CleanAdvisoriesAreAFinding(t *testing.T) {
 		&fakeAdvisories{report: &advisories.Report{Ecosystem: "npm", Package: "@scope/mcp-server", KnownCount: 0, Advisories: nil, Version: ""}, err: nil},
 		quietDomains{},
 		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
-		quietProbes{}, quietProbes{}, quietProbes{},
+		mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{},
 	)
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server"))
@@ -797,7 +782,7 @@ func TestAssemble_RepositoryNotFound(t *testing.T) {
 		quietAdvisories{},
 		quietDomains{},
 		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
-		quietProbes{}, quietProbes{}, quietProbes{},
+		mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{},
 	)
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server"))
@@ -826,7 +811,7 @@ func TestAssemble_UnsupportedRepositoryHostIsNotConsulted(t *testing.T) {
 		quietAdvisories{},
 		quietDomains{},
 		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
-		quietProbes{}, quietProbes{}, quietProbes{},
+		mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{},
 	)
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server"))
@@ -848,7 +833,7 @@ func TestAssemble_RepositoryAndAdvisoryFailuresAreGaps(t *testing.T) {
 		&fakeAdvisories{report: nil, err: errors.New("osv down")},
 		quietDomains{},
 		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
-		quietProbes{}, quietProbes{}, quietProbes{},
+		mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{},
 	)
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server"))
@@ -876,7 +861,7 @@ func TestAssemble_DomainRegistration(t *testing.T) {
 			Registrar:    "Example Registrar, Inc.",
 		}, err: nil},
 		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
-		quietProbes{}, quietProbes{}, quietProbes{},
+		mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{},
 	)
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.somevendor.io/sse"))
@@ -902,7 +887,7 @@ func TestAssemble_UnregisteredDomain(t *testing.T) {
 		quietAdvisories{},
 		&fakeDomains{registration: nil, err: nil},
 		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
-		quietProbes{}, quietProbes{}, quietProbes{},
+		mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{},
 	)
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.somevendor.io/sse"))
@@ -925,7 +910,7 @@ func TestAssemble_DomainFailureIsAGap(t *testing.T) {
 		&fakePackages{metadata: nil, err: nil},
 		quietRepos{}, quietAdvisories{}, failing,
 		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
-		quietProbes{}, quietProbes{}, quietProbes{},
+		mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{},
 	)
 	raw, err := remote.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.somevendor.io/sse"))
 	require.NoError(t, err)
@@ -937,7 +922,7 @@ func TestAssemble_DomainFailureIsAGap(t *testing.T) {
 		&fakePackages{metadata: nil, err: nil},
 		quietRepos{}, quietAdvisories{}, failing,
 		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
-		quietProbes{}, quietProbes{}, quietProbes{},
+		mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{},
 	)
 	raw, err = pkg.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server"))
 	require.NoError(t, err)
@@ -954,7 +939,7 @@ func (p *projectCatalogProbe) Lookup(_ context.Context, projectID uuid.UUID, _ s
 func TestAssembleCatalogReceivesResearchProjectWithoutAuthContext(t *testing.T) {
 	t.Parallel()
 	probe := &projectCatalogProbe{}
-	assembler := evidence.NewAssembler(&fakePackages{}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{}, quietProbes{}, quietProbes{}, probe)
+	assembler := evidence.NewAssembler(&fakePackages{}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{}, mcpapprovaltest.QuietProbes{}, mcpapprovaltest.QuietProbes{}, probe)
 	projectID := uuid.New()
 	_, err := assembler.Assemble(t.Context(), projectID, identity.Resolve("https://example.com/mcp"))
 	require.NoError(t, err)

@@ -59,13 +59,10 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, health HealthRefresher) *Service {
-	return NewServiceWithPublication(logger, tracerProvider, db, sessions, authzEngine, enc, auditLogger, admission, requester, nil, health)
-}
-
-// NewServiceWithPublication configures the optional durable publication invalidator.
-// A nil requester preserves the dormant producer behavior.
-func NewServiceWithPublication(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, publicationRequester PublicationRequester, health HealthRefresher) *Service {
+// NewService builds the network ingress service. publicationRequester is nil
+// when plugin publication is disabled, in which case ingress changes enqueue
+// no publication invalidation.
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, publicationRequester PublicationRequester, health HealthRefresher) *Service {
 	logger = logger.With(attr.SlogComponent("network_ingress"))
 	return &Service{
 		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/networkingress"),
@@ -117,9 +114,6 @@ func (s *Service) authorize(ctx context.Context, scope authz.Scope) (*contextval
 }
 
 func (s *Service) requireExpansion(ctx context.Context, organizationID string) error {
-	if s.admission == nil {
-		return oops.E(oops.CodeForbidden, nil, "private network ingress is not enabled for this organization")
-	}
 	if err := s.admission.CheckExpansion(ctx, organizationID); err != nil {
 		return oops.E(oops.CodeForbidden, err, "private network ingress is not enabled for this organization")
 	}
@@ -456,9 +450,6 @@ func (s *Service) CheckHealth(ctx context.Context, _ *gen.CheckHealthPayload) (*
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get network ingress").LogError(ctx, s.logger)
 	}
-	if s.health == nil {
-		return nil, oops.E(oops.CodeUnavailable, nil, "network ingress health reconciliation is unavailable")
-	}
 	if err := s.health.RefreshNetworkIngress(ctx, authCtx.ActiveOrganizationID, ingress.ID); err != nil {
 		return nil, oops.E(oops.CodeUnavailable, err, "network ingress health reconciliation is unavailable").LogError(ctx, s.logger)
 	}
@@ -488,9 +479,6 @@ func (s *Service) invalidateOrganization(ctx context.Context, tx pgx.Tx, organiz
 }
 
 func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, ingress repo.NetworkIngress) error {
-	if s.requester == nil {
-		return oops.E(oops.CodeUnavailable, nil, "network ingress lifecycle delivery is unavailable")
-	}
 	if err := s.requester.Enqueue(ctx, tx, ingress.OrganizationID, ingress.ID); err != nil {
 		return oops.E(oops.CodeUnavailable, err, "enqueue network ingress lifecycle").LogError(ctx, s.logger)
 	}

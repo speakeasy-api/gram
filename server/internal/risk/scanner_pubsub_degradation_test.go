@@ -67,21 +67,20 @@ func runPubsubLaneFailure(t *testing.T, laneErr error) (string, metricdata.Resou
 			Truncated: false,
 		}, nil
 	}}
-	scanner, err := risk.NewScannerWithEnforcementDispatcher(
+	scanner := risk.NewScannerWithEnforcementDispatcher(
 		logger,
 		testenv.NewTracerProvider(t),
 		meterProvider,
 		ti.conn,
 		newTestCustomRuleAnalyzer(t, ti.conn),
 		nil,
-		nil,
-		nil,
+		testPIScanner(t),
+		testPromptPolicyScanner(t),
 		pubsubEnforcementFlags(ctx),
 		testCELEngine(t),
 		dispatcher,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 	)
-	require.NoError(t, err)
 
 	result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "alice@example.com", message.User, ""))
 	require.NoError(t, err)

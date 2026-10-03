@@ -55,7 +55,7 @@ func TestFeatureWriteApprovalAndExecution(t *testing.T) {
 
 	verifier := &fakeAdminVerifier{result: staff}
 	memory := testenv.NewMemoryCache()
-	approval := newStaffProposalApproval(f.store, NewStaffOAuthAuthorization(nil, nil, memory, verifier, f.cipher, staffAudience), memory, writes)
+	approval := newStaffProposalApproval(f.store, NewStaffOAuthAuthorization(postgresStaffClientStore{db: f.db}, postgresStaffAuthorizationStore{db: f.db}, memory, verifier, f.cipher, staffAudience), memory, writes)
 	approval.operations = map[WriteOperation]approvableOperation{OperationSetOrganizationFeature: writer} //nolint:exhaustive // Only selected write operations are enabled by this test.
 	handler := middleware.AdminOriginCheck(nil)(approval.Handler())
 

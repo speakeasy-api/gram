@@ -14,7 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan/mcpriskscantest"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -54,6 +54,6 @@ func newTestInstanceService(t *testing.T) (context.Context, *Service, *pgxpool.P
 	policy, err := guardian.NewUnsafePolicy(tracer, nil)
 	require.NoError(t, err)
 	engine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := NewService(logger, tracer, meter, conn, sessions, nil, env, enc, testenv.NewMemoryCache(), policy, nil, nil, billingClient, telemetry.NewStub(logger), nil, testenv.DefaultSiteURL(t), engine, mcpriskscan.NewNoop(tracer, meter, logger))
+	svc := NewService(logger, tracer, meter, conn, sessions, nil, env, enc, testenv.NewMemoryCache(), policy, nil, nil, billingClient, telemetry.NewStub(logger), nil, testenv.DefaultSiteURL(t), engine, mcpriskscantest.NewEvaluator(t, logger, tracer, meter, conn, testenv.NewMemoryCache(), enc))
 	return ctx, svc, conn
 }

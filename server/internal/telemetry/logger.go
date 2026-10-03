@@ -130,9 +130,6 @@ func NewStub(logger *slog.Logger) *Logger {
 }
 
 func (l *Logger) checkToolIOLogsEnabled(ctx context.Context, organizationID string) bool {
-	if l.toolIOLogsEnabled == nil {
-		return false
-	}
 	enabled, err := l.toolIOLogsEnabled(ctx, organizationID)
 	if err != nil {
 		return false
@@ -318,7 +315,7 @@ func (l *Logger) buildBulkParams(ctx context.Context, operationCtx context.Conte
 // empty payloads. Caller-provided parts win, and the caller's attribute map
 // is never touched.
 func (l *Logger) hydrateUserInfo(ctx context.Context, param LogParams) LogParams {
-	if l.users == nil || param.ToolInfo.OrganizationID == "" || (param.UserInfo.userID == "" && param.UserInfo.email == "") {
+	if param.ToolInfo.OrganizationID == "" || (param.UserInfo.userID == "" && param.UserInfo.email == "") {
 		return param
 	}
 

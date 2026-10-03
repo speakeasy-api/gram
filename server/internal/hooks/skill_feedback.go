@@ -21,9 +21,6 @@ func (s *Service) SkillFeedback(ctx context.Context, payload *gen.SkillFeedbackP
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if s.productFeatures == nil {
-		return oops.E(oops.CodeUnexpected, nil, "skill feedback settings are unavailable")
-	}
 
 	skillsEnabled, err := s.productFeatures.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureSkills)
 	if err != nil {

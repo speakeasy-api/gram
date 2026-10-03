@@ -32,7 +32,7 @@ func newOrganizationWhitelistFixture(t *testing.T, name string) proposalFixture 
 
 func newOrganizationWhitelistWriter(t *testing.T, f proposalFixture) (*organizationWhitelistWriter, *writeTools) {
 	t.Helper()
-	runtime := NewRuntime(nil, "")
+	runtime := NewRuntime(&testAuthenticator{}, "", &recordingOrganizationReader{})
 	oauth := &StaffOAuth{Approval: &StaffProposalApproval{store: f.store}}
 	config := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationWhitelist: true}} //nolint:exhaustive // Only whitelisting is enabled.
 	require.NoError(t, AttachWrites(runtime, oauth, &productfeatures.Client{}, config))

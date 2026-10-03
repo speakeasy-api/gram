@@ -53,7 +53,7 @@ func TestSetCanvasAccessTool_RequiresTarget(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewSetCanvasAccessTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callSetCanvasAccess,
 	}
 
@@ -68,7 +68,7 @@ func TestSetCanvasAccessTool_RejectsBothTargets(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewSetCanvasAccessTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callSetCanvasAccess,
 	}
 

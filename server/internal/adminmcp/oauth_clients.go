@@ -43,9 +43,6 @@ type staffClientStore interface {
 type postgresStaffClientStore struct{ db *pgxpool.Pool }
 
 func (s postgresStaffClientStore) RegisterClient(ctx context.Context, client staffOAuthClient) error {
-	if s.db == nil {
-		return errors.New("staff client store is unavailable")
-	}
 	err := repo.New(s.db).RegisterOAuthClient(ctx, repo.RegisterOAuthClientParams{
 		ClientID:         client.ID,
 		ClientName:       client.Name,
@@ -59,9 +56,6 @@ func (s postgresStaffClientStore) RegisterClient(ctx context.Context, client sta
 }
 
 func (s postgresStaffClientStore) GetClient(ctx context.Context, clientID string) (staffOAuthClient, error) {
-	if s.db == nil {
-		return staffOAuthClient{}, errors.New("staff client store is unavailable")
-	}
 	row, err := repo.New(s.db).GetLiveOAuthClient(ctx, clientID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -91,10 +85,6 @@ func (s *StaffOAuthClients) RegisterHandler() http.Handler {
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
 			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		if s == nil || s.store == nil {
-			staffOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "client registration is unavailable")
 			return
 		}
 		contentType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))

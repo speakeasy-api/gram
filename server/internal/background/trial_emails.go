@@ -112,10 +112,6 @@ func (n *TemporalTrialEmailNotifier) TrialInactive(ctx context.Context, organiza
 }
 
 func (n *TemporalTrialEmailNotifier) enqueue(ctx context.Context, input TrialLifecycleEmailInput) error {
-	if n == nil || n.TemporalEnv == nil {
-		return fmt.Errorf("temporal environment is not configured")
-	}
-
 	_, err := n.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    trialLifecycleEmailWorkflowID(input),
 		TaskQueue:             string(n.TemporalEnv.Queue()),

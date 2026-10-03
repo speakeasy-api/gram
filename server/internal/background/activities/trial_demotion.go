@@ -186,10 +186,8 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 	for _, feature := range productfeatures.TrialRuntimeFeatures {
 		d.productFeatures.UpdateFeatureCache(ctx, args.OrganizationID, feature, false)
 	}
-	if d.notifier != nil {
-		if err := d.notifier.TrialInactive(ctx, args.OrganizationID); err != nil {
-			d.logger.ErrorContext(ctx, "notify inactive trial after demotion", attr.SlogOrganizationID(args.OrganizationID), attr.SlogError(err))
-		}
+	if err := d.notifier.TrialInactive(ctx, args.OrganizationID); err != nil {
+		d.logger.ErrorContext(ctx, "notify inactive trial after demotion", attr.SlogOrganizationID(args.OrganizationID), attr.SlogError(err))
 	}
 
 	return d.reconcileOpenRouterKeys(ctx, args.OrganizationID, changedKeyTypes)

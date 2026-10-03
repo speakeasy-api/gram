@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	meteringchrepo "github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
@@ -319,9 +320,6 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create temporal client: %w", err)
 			}
-			if temporalEnv == nil {
-				return errors.New("insufficient options to create temporal client")
-			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 			openRouterKeyRefresher := &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}
 
@@ -334,9 +332,7 @@ func newStreamsCommand() *cli.Command {
 			defer db.Close()
 
 			encryptionClient, err := encryption.New(c.String("encryption-key"))
-			if err != nil {
-				return fmt.Errorf("failed to create encryption client: %w", err)
-			}
+			inv.Require("encryption client", "encryption-key is a valid AES-256 key", err)
 
 			replicaDB, err := newDBClient(ctx, logger, meterProvider, c.String("database-read-replica-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
@@ -371,16 +367,10 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create Stripe client: %w", err)
 			}
-			stripeMeterEvents, err := newStripeMeterEventClient(logger, guardianPolicy, c)
-			if err != nil {
-				return fmt.Errorf("failed to create Stripe meter event client: %w", err)
-			}
+			stripeMeterEvents := newStripeMeterEventClient(logger, guardianPolicy, c)
 			stripeCatalog := newStripeCatalog(c)
 
-			_, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
-			if err != nil {
-				return fmt.Errorf("failed to create billing provider: %w", err)
-			}
+			_, billingTracker := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
 
 			var openRouter openrouter.Provisioner
 			if c.String("environment") == "local" {
@@ -396,7 +386,6 @@ func newStreamsCommand() *cli.Command {
 				modelkeys.NewResolver(db, encryptionClient, openRouter),
 				nil,
 				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
-				nil,
 				nil,
 			)
 			judgeRateLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
@@ -492,10 +481,7 @@ func newStreamsCommand() *cli.Command {
 			// Custom-rules shadow-mode subscriber: loads a project's selected CEL
 			// detection rules from the read replica (caching their compilation) and
 			// publishes any matches into the shared Finding topic.
-			scanner, err := customruleanalyzer.NewScanner(replicaDB)
-			if err != nil {
-				return fmt.Errorf("failed to create custom rules scanner: %w", err)
-			}
+			scanner := customruleanalyzer.NewScanner(replicaDB)
 			customRulesHandler := customruleanalyzer.NewHandler(logger, scanner, findingsPub, riskRecorder)
 
 			{
@@ -679,7 +665,7 @@ func newStreamsCommand() *cli.Command {
 
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
 				mustReceive(rg, &riskv1.GitleaksEnforcement{}, &riskv1.GitleaksEnforcer{}, gitleaksEnforceHandler)
-				mustReceive(rg, &riskv1.LLMEnforcement{}, &riskv1.LLMEnforcer{}, llmanalyzer.NewEnforceHandler(logger, tracerProvider, meterProvider, llmAnalyzer, replyWriter, llmanalyzer.WithRiskRecorder(riskRecorder)))
+				mustReceive(rg, &riskv1.LLMEnforcement{}, &riskv1.LLMEnforcer{}, llmanalyzer.NewEnforceHandler(logger, tracerProvider, meterProvider, llmAnalyzer, replyWriter, riskRecorder))
 				mustReceive(rg, &riskv1.PromptInjectionAnalysis{}, &riskv1.PromptInjectionAnalyzer{}, promptInjectionHandler)
 				mustReceive(rg, &riskv1.PromptPolicyAnalysis{}, &riskv1.PromptPolicyAnalyzer{}, promptPolicyHandler)
 				mustReceive(rg, &riskv1.LLMAnalysis{}, &riskv1.LLMAnalyzer{}, llmAnalyzerHandler)

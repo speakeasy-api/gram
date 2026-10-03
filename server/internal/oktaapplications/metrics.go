@@ -44,9 +44,6 @@ func newSyncMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) *sy
 }
 
 func (m *syncMetrics) record(ctx context.Context, outcome string, truncated bool) {
-	if m == nil || m.outcome == nil {
-		return
-	}
 	m.outcome.Add(ctx, 1, metric.WithAttributes(
 		attribute.String("outcome", outcome),
 		attribute.Bool("truncated", truncated),

@@ -46,11 +46,8 @@ type Verifier struct {
 }
 
 // NewVerifier binds key resolution and authoritative replay memory.
-func NewVerifier(keys assertioncore.VerificationKeys, guard assertioncore.ReplayGuard) (*Verifier, error) {
-	if keys == nil || guard == nil {
-		return nil, errors.New("workload: key resolver and replay guard are required")
-	}
-	return &Verifier{keys: keys, guard: guard}, nil
+func NewVerifier(keys assertioncore.VerificationKeys, guard assertioncore.ReplayGuard) *Verifier {
+	return &Verifier{keys: keys, guard: guard}
 }
 
 // Verify checks a signed platform assertion after its issuer and subject

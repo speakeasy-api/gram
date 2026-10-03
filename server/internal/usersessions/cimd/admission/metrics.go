@@ -61,9 +61,6 @@ func (m *Metrics) RecordDenied(ctx context.Context, mode Mode, reason DenialReas
 }
 
 func (m *Metrics) record(ctx context.Context, mode Mode, outcome string) {
-	if m == nil || m.decisions == nil {
-		return
-	}
 	m.decisions.Add(ctx, 1, metric.WithAttributes([]attribute.KeyValue{
 		attr.CIMDAdmissionMode(mode),
 		attr.CIMDAdmissionOutcome(outcome),

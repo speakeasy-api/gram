@@ -28,14 +28,17 @@ func (r *recordingBillingDiagnostics) GetInferenceKeys(_ context.Context, input 
 	r.keyInput = input
 	return r.keys, nil
 }
+
 func (r *recordingBillingDiagnostics) GetInferenceSpendHistory(_ context.Context, input *gen.GetInferenceSpendHistoryPayload) ([]*gen.AdminInferenceSpendMonth, error) {
 	r.historyInput = input
 	return r.months, nil
 }
+
 func (r *recordingBillingDiagnostics) GetMeterUsage(_ context.Context, input *gen.GetMeterUsagePayload) (*gen.AdminMeterUsageResponse, error) {
 	r.meterInput = input
 	return r.meter, nil
 }
+
 func (r *recordingBillingDiagnostics) GetSpendBreakdown(_ context.Context, input *gen.GetSpendBreakdownPayload) (*gen.AdminSpendBreakdownResponse, error) {
 	r.spendInput = input
 	return r.spend, nil
@@ -53,16 +56,21 @@ func TestBillingDiagnosticsBoundAndRedact(t *testing.T) {
 	t.Parallel()
 	window := &gen.MeterUsageWindow{From: "2026-01-01", To: "2026-02-01"}
 	privateCycles := []*gen.MeterUsageWindow{{From: "private-cycle-start", To: "private-cycle-end"}}
-	reads := &recordingBillingDiagnostics{recordingOrganizationReader: recordingOrganizationReader{org: &gen.AdminOrganization{ID: "org-a"}},
+	reads := &recordingBillingDiagnostics{
+		recordingOrganizationReader: recordingOrganizationReader{org: &gen.AdminOrganization{ID: "org-a"}},
 		keys: []*gen.AdminInferenceKey{
 			{KeyType: "chat", MonthlyCredits: 100},
 			{KeyType: "agents", CreditsUsed: 1.5, MonthlyCredits: 50, Disabled: true, DisableCauses: []string{"monthly_limit"}, DisableCausesClassified: true},
 		},
 		months: []*gen.AdminInferenceSpendMonth{{PeriodStart: "2026-01-01", PeriodEnd: "2026-02-01", SpendUsd: "1.23"}},
-		meter: &gen.AdminMeterUsageResponse{Family: "mcp_bandwidth", Window: window, BillingCycles: privateCycles, Unit: "bytes", Total: "500",
-			Buckets: []*gen.AdminMeterUsageBucket{{Total: "private-bucket"}}, QueriedAt: "2026-01-15T00:00:00Z", MeasurementMethod: "private-method"},
-		spend: &gen.AdminSpendBreakdownResponse{Window: window, BillingCycles: privateCycles, Currency: "USD", PricingBasis: "payg_list",
-			QueriedAt: "2026-01-15T00:00:00Z", TotalCostUsd: "2.34", Products: []*gen.SpendProduct{{Label: "private-product"}}},
+		meter: &gen.AdminMeterUsageResponse{
+			Family: "mcp_bandwidth", Window: window, BillingCycles: privateCycles, Unit: "bytes", Total: "500",
+			Buckets: []*gen.AdminMeterUsageBucket{{Total: "private-bucket"}}, QueriedAt: "2026-01-15T00:00:00Z", MeasurementMethod: "private-method",
+		},
+		spend: &gen.AdminSpendBreakdownResponse{
+			Window: window, BillingCycles: privateCycles, Currency: "USD", PricingBasis: "payg_list",
+			QueriedAt: "2026-01-15T00:00:00Z", TotalCostUsd: "2.34", Products: []*gen.SpendProduct{{Label: "private-product"}},
+		},
 	}
 
 	body, data := issuerToolCall(t, reads, "get_organization_inference_key_state", `{"organization_id":"org-a"}`, true)

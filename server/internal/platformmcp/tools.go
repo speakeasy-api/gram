@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -190,15 +189,33 @@ type operationBudgetResult struct {
 	Message       string         `json:"message"`
 }
 
+// Services are the capabilities one Platform MCP deployment serves. Every
+// field is required.
+type Services struct {
+	Reader              *PostgresReader
+	Catalog             Catalog
+	Registrations       *RegistrationService
+	SetupResources      []SetupResource
+	Feedback            *FeedbackService
+	Onboarding          *OnboardingService
+	Distributions       *DistributionService
+	Skills              *SkillsService
+	Diagnostics         *DiagnosticsService
+	WorkflowRun         *WorkflowRunService
+	Plugins             *PluginsService
+	SessionRecall       *SessionRecallService
+	RiskMutations       *RiskMutationHandlers
+	Candidate           CatalogDescriptor
+	AccessReads         *AccessReadService
+	AccessRoleMutations *AccessRoleMutationService
+	ConnectionMutations *MCPConnectionMutationService
+}
+
 // newServer composes the Platform MCP tools for one deployment. It returns the
 // registrar alongside the server so another admitted audience — the project
 // assistant — can be composed from the same registration pass rather than from
 // a second list that would drift.
-func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
-	return newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, workflowRun, plugins, sessionRecall, nil, candidate, nil, nil)
-}
-
-func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessRead *AccessReadService, accessRoleMutations *AccessRoleMutationService, connectionMutations ...*MCPConnectionMutationService) (*mcp.Server, *Registrar) {
+func newServer(services Services, cursorKeyMaterial string) (*mcp.Server, *Registrar) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "platform-mcp",
 		Title:   "Platform MCP",
@@ -247,226 +264,62 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 
 	reg := newRegistrar(server)
 
+	reader := services.Reader
+	registrations := services.Registrations
+	diagnostics := services.Diagnostics
 	registerReadTools(reg, reader, cursorKeyMaterial)
-	var xaaReadiness *xaaReadinessService
-	if postgresReader, ok := reader.(*PostgresReader); ok {
-		xaaReadiness = postgresReader.xaaReadiness
-	}
-	registerXAAReadinessTool(reg, xaaReadiness)
-	var connectionMutationService *MCPConnectionMutationService
-	if len(connectionMutations) > 0 {
-		connectionMutationService = connectionMutations[0]
-	}
-	if postgresReader, ok := reader.(*PostgresReader); ok {
-		registerMCPConnectionSettingsTool(reg, NewMCPConnectionSettingsService(postgresReader.db))
-		registerMCPConnectionMutationTools(reg, connectionMutationService)
-		if postgresReader.networkIngress == nil {
-			registerUnavailableNetworkIngressTool(reg)
-		} else {
-			registerNetworkIngressTool(reg, postgresReader.networkIngress)
-		}
-		registerToolExposureTools(reg, postgresReader.toolExposure, reader)
-		if postgresReader.reviewRequests == nil {
-			registerUnavailableReviewRequestTools(reg)
-		} else {
-			registerReviewRequestTools(reg, postgresReader.reviewRequests, postgresReader, postgresReader.reviewRequestBudget)
-		}
-		registerRiskToolsWithMutations(reg, postgresReader.riskReads, postgresReader.riskAnalysisStatus, riskMutations)
-		registerRiskFindingsTool(reg, postgresReader.riskFindings)
-		registerRiskFindingListTools(reg, postgresReader.riskFindingList)
-		if postgresReader.dataExports == nil {
-			registerUnavailableDataExportTools(reg)
-		} else {
-			registerDataExportTools(reg, postgresReader)
-		}
-		if postgresReader.dataExportMutations == nil {
-			registerUnavailableDataExportMutationTool(reg)
-		} else {
-			registerDataExportMutationTool(reg, postgresReader)
-		}
-		if postgresReader.recentToolCalls == nil {
-			registerUnavailableRecentToolCallTools(reg)
-		} else {
-			registerRecentToolCallTools(reg, postgresReader)
-		}
-		if postgresReader.networkTraffic == nil || postgresReader.networkTrafficLogsEnabled == nil {
-			registerUnavailableMCPNetworkTrafficTool(reg)
-		} else {
-			registerMCPNetworkTrafficTool(reg, postgresReader)
-		}
-		if postgresReader.eventFeed == nil {
-			registerUnavailableOrganizationEventTools(reg)
-		} else {
-			registerOrganizationEventTools(reg, postgresReader)
-		}
-		registerShadowInventoryTools(reg, postgresReader.shadowInventory)
-		registerShadowDecisionTool(reg, postgresReader.shadowDecisions)
-		registerShadowAITools(reg, postgresReader.shadowAI)
-	} else {
-		registerUnavailableMCPConnectionSettingsTool(reg)
-		registerMCPConnectionMutationTools(reg, nil)
-		registerUnavailableNetworkIngressTool(reg)
-		registerToolExposureTools(reg, nil, reader)
-		registerUnavailableReviewRequestTools(reg)
-		registerRiskAnalysisStatusTool(reg, nil)
-		registerRiskFindingsTool(reg, nil)
-		registerRiskFindingListTools(reg, nil)
-		registerUnavailableRiskToolsWithMutations(reg, riskMutations)
-		registerUnavailableDataExportTools(reg)
-		registerUnavailableDataExportMutationTool(reg)
-		registerUnavailableRecentToolCallTools(reg)
-		registerUnavailableMCPNetworkTrafficTool(reg)
-		registerUnavailableOrganizationEventTools(reg)
-		registerUnavailableShadowInventoryTools(reg)
-		registerShadowDecisionTool(reg, nil)
-		registerUnavailableShadowAITools(reg)
-	}
-	registerSetupResources(reg, setupResources, time.Now)
-	if registrations == nil || !registrations.budgets.Docs.valid() {
-		registerUnavailableSearchDocsTool(reg)
-	} else {
-		// The search index reads the same pinned corpus the resources are
-		// registered from, so a citation's URI always resolves to a resource
-		// this deployment actually serves.
-		registerSearchDocsTool(reg, NewMemoryDocsIndex(setupResources, time.Now), registrations.budgets.Docs)
-	}
+	registerXAAReadinessTool(reg, reader.xaaReadiness)
+	registerMCPConnectionSettingsTool(reg, NewMCPConnectionSettingsService(reader.db))
+	registerMCPConnectionMutationTools(reg, services.ConnectionMutations)
+	registerNetworkIngressTool(reg, reader.networkIngress)
+	registerToolExposureTools(reg, reader.toolExposure, reader)
+	registerReviewRequestTools(reg, reader.reviewRequests, reader, reader.reviewRequestBudget)
+	registerRiskToolsWithMutations(reg, reader.riskReads, reader.riskAnalysisStatus, services.RiskMutations)
+	registerRiskFindingsTool(reg, reader.riskFindings)
+	registerRiskFindingListTools(reg, reader.riskFindingList)
+	registerDataExportTools(reg, reader)
+	registerDataExportMutationTool(reg, reader)
+	registerRecentToolCallTools(reg, reader)
+	registerMCPNetworkTrafficTool(reg, reader)
+	registerOrganizationEventTools(reg, reader)
+	registerShadowInventoryTools(reg, reader.shadowInventory)
+	registerShadowDecisionTool(reg, reader.shadowDecisions)
+	registerShadowAITools(reg, reader.shadowAI)
+	registerSetupResources(reg, services.SetupResources, time.Now)
+	// The search index reads the same pinned corpus the resources are
+	// registered from, so a citation's URI always resolves to a resource
+	// this deployment actually serves.
+	registerSearchDocsTool(reg, NewMemoryDocsIndex(services.SetupResources, time.Now), registrations.budgets.Docs)
 	registerReadDocTool(reg)
-	if registrations == nil || !registrations.budgets.Catalog.valid() {
-		registerUnavailableCatalogTools(reg)
-		registerUnavailableCandidateInspectionTool(reg)
-	} else if catalog == nil && (registrations.directRemoteInspector == nil || registrations.gate == nil) {
-		registerUnavailableCatalogTools(reg)
-		registerUnavailableCandidateInspectionTool(reg)
-	} else {
-		registerCandidateInspectionTool(reg, catalog, registrations.directRemoteInspector, registrations.gate, registrations.budgets.Catalog)
-		if catalog == nil {
-			registerUnavailableCatalogTools(reg)
-		} else if cursorCodec, err := newCatalogCursorCodec(cursorKeyMaterial); err != nil {
-			registerUnavailableCatalogTools(reg)
-		} else {
-			registerCatalogTools(reg, catalog, registrations.budgets.Catalog, cursorCodec, onboarding)
-		}
-	}
-	if registrations == nil || registrations.store == nil || !registrations.budgets.Registration.valid() {
-		registerUnavailableCatalogRegistrationTool(reg)
-		registerUnavailableRemoteRegistrationTool(reg)
-		registerUnavailableIdentityProviderTool(reg)
-	} else {
-		registerCatalogRegistrationTool(reg, registrations, onboarding)
-		if registrations.directRemoteInspector == nil {
-			registerUnavailableRemoteRegistrationTool(reg)
-		} else {
-			registerRemoteRegistrationTool(reg, registrations, onboarding)
-		}
-		registerIdentityProviderTool(reg, registrations)
-	}
-	if registrations == nil || registrations.lifecycleMetadata == nil {
-		registerUnavailableLifecycleMetadataTool(reg)
-	} else {
-		registerLifecycleMetadataTool(reg, registrations)
-	}
-	if registrations == nil || registrations.lifecycleVisibility == nil {
-		registerUnavailableLifecycleVisibilityTools(reg)
-	} else {
-		registerLifecycleVisibilityTools(reg, registrations)
-	}
-	if registrations == nil || registrations.store == nil || !registrations.budgets.Handoff.valid() {
-		registerUnavailableSetupHandoffTool(reg)
-	} else {
-		registerSetupHandoffTool(reg, registrations)
-	}
-	if registrations == nil || !registrations.clientAdmission.valid() || !registrations.budgets.LifecycleMetadata.valid() {
-		registerUnavailableClientAdmissionTools(reg)
-	} else {
-		registerClientAdmissionTools(reg, registrations)
-	}
-	if registrations == nil || registrations.readiness == nil || !registrations.budgets.Repair.valid() {
-		registerUnavailableReadinessTools(reg)
-	} else {
-		registerReadinessTools(reg, registrations.readiness)
-	}
-	// Exact-plugin distribution is live once the workflow services it writes
-	// through are composed; without them the canonical descriptors stay visible
-	// as stubs rather than disappearing from the manifest.
-	if onboarding == nil || distributions == nil {
-		registerUnavailableTools(reg)
-	} else {
-		registerDistributionTools(reg, onboarding, distributions)
-	}
-	if !diagnostics.valid() {
-		registerUnavailableDiagnosticsTools(reg)
-	} else {
-		registerDiagnosticsTools(reg, diagnostics)
-	}
-	if !diagnostics.drilldownValid() {
-		registerUnavailableDrilldownTools(reg)
-	} else {
-		registerDrilldownTools(reg, diagnostics)
-	}
-	if !diagnostics.toolUsageValid() {
-		registerUnavailableToolUsageSummaryTool(reg)
-	} else {
-		registerToolUsageSummaryTool(reg, diagnostics)
-	}
-	if !diagnostics.userSearchValid() {
-		registerUnavailableUserSearchTools(reg)
-	} else {
-		registerUserSearchTools(reg, diagnostics)
-	}
-	if !diagnostics.toolCallSearchValid() {
-		registerUnavailableToolCallSearchTools(reg)
-	} else {
-		registerToolCallSearchTools(reg, diagnostics)
-	}
-	if diagnostics == nil || !diagnostics.valid() || diagnostics.references == nil || !diagnostics.sensitiveBudget.valid() || !diagnostics.volume.valid() {
-		registerUnavailableSkillUsageTools(reg)
-	} else {
-		registerSkillUsageTools(reg, diagnostics)
-	}
-	if !skills.valid() {
-		registerUnavailableSkillsTools(reg)
-	} else {
-		registerSkillsTools(reg, skills)
-	}
-	if !plugins.valid() {
-		registerUnavailablePluginTools(reg)
-	} else {
-		registerPluginTools(reg, plugins)
-	}
-	if !accessRead.valid() {
-		registerUnavailableAccessReadTools(reg)
-	} else {
-		registerAccessReadTools(reg, accessRead)
-	}
-	registerAccessRoleMutationTools(reg, accessRoleMutations)
-	if !sessionRecall.valid() {
-		registerUnavailableSessionRecallTools(reg)
-	} else {
-		registerSessionRecallTools(reg, sessionRecall)
-	}
+	registerCandidateInspectionTool(reg, services.Catalog, registrations.directRemoteInspector, registrations.gate, registrations.budgets.Catalog)
+	registerCatalogTools(reg, services.Catalog, registrations.budgets.Catalog, newCatalogCursorCodec(cursorKeyMaterial), services.Onboarding)
+	registerCatalogRegistrationTool(reg, registrations, services.Onboarding)
+	registerRemoteRegistrationTool(reg, registrations, services.Onboarding)
+	registerIdentityProviderTool(reg, registrations)
+	registerLifecycleMetadataTool(reg, registrations)
+	registerLifecycleVisibilityTools(reg, registrations)
+	registerSetupHandoffTool(reg, registrations)
+	registerClientAdmissionTools(reg, registrations)
+	registerReadinessTools(reg, registrations.readiness)
+	registerDistributionTools(reg, services.Onboarding, services.Distributions)
+	registerDiagnosticsTools(reg, diagnostics)
+	registerDrilldownTools(reg, diagnostics)
+	registerToolUsageSummaryTool(reg, diagnostics)
+	registerUserSearchTools(reg, diagnostics)
+	registerToolCallSearchTools(reg, diagnostics)
+	registerSkillUsageTools(reg, diagnostics)
+	registerSkillsTools(reg, services.Skills)
+	registerPluginTools(reg, services.Plugins)
+	registerAccessReadTools(reg, services.AccessReads)
+	registerAccessRoleMutationTools(reg, services.AccessRoleMutations)
+	registerSessionRecallTools(reg, services.SessionRecall)
 	// Registered beside session recall: recall serves a caller their own
 	// transcript as a digest, the listing serves an administrator every chat's
 	// metadata, and the two together are the whole of what this server says
 	// about conversations.
-	var chatMetadata *ChatMetadataService
-	if postgresReader, ok := reader.(*PostgresReader); ok {
-		chatMetadata = postgresReader.chatMetadata
-	}
-	if !chatMetadata.valid() {
-		registerUnavailableChatMetadataTools(reg)
-	} else {
-		registerChatMetadataTools(reg, chatMetadata)
-	}
-	if feedback == nil {
-		addTool(reg, &mcp.Tool{
-			Name:        "send_platform_mcp_feedback",
-			Title:       "Send Feedback About This Platform",
-			Description: "Send feedback about this platform. This is not switched on for your organization yet.",
-		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
-	} else {
-		registerFeedbackTool(reg, feedback)
-	}
-	registerWorkflowRunTool(reg, workflowRun)
+	registerChatMetadataTools(reg, reader.chatMetadata)
+	registerFeedbackTool(reg, services.Feedback)
+	registerWorkflowRunTool(reg, services.WorkflowRun)
 	return server, reg
 }
 
@@ -475,103 +328,6 @@ func registerReadTools(reg *Registrar, reader Reader, cursorKeyMaterial string) 
 	registerListProjectsTool(reg, reader)
 	registerFindMCPTool(reg, reader, cursorKeyMaterial)
 	registerGetMCPTool(reg, reader)
-}
-
-// Each stub declares the audiences its live counterpart declares, so a tool
-// does not appear on and disappear from a surface as the rollout flips.
-func registerUnavailableCatalogTools(reg *Registrar) {
-	for _, tool := range []struct {
-		name        string
-		title       string
-		description string
-	}{
-		{"search_mcp_catalog", "Search Reviewed MCP Servers", "Search the reviewed MCP servers available to add. This is not switched on for your organization yet."},
-	} {
-		addTool(reg, &mcp.Tool{
-			Name:        tool.name,
-			Title:       tool.title,
-			Description: tool.description,
-			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog"))
-	}
-}
-
-func registerUnavailableCandidateInspectionTool(reg *Registrar) {
-	addTool(reg, &mcp.Tool{
-		Name:        "inspect_mcp_candidate",
-		Title:       "Inspect an MCP Server",
-		Description: "Look at one MCP server before adding it. This is not switched on for your organization yet.",
-		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("candidate_inspection"))
-}
-
-func registerUnavailableCatalogRegistrationTool(reg *Registrar) {
-	addTool(reg, &mcp.Tool{
-		Name:        "register_catalog_mcp",
-		Title:       "Add a Reviewed MCP Server to a Project",
-		Description: "Add a reviewed MCP server to a project. This is not switched on for your organization yet.",
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog_registration"))
-}
-
-func registerUnavailableRemoteRegistrationTool(reg *Registrar) {
-	addTool(reg, &mcp.Tool{
-		Name:        "register_remote_mcp",
-		Title:       "Add Your Own MCP Server to a Project",
-		Description: "Add an MCP server of your own to a project. This is not switched on for your organization yet.",
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("direct_remote_registration"))
-}
-
-func registerUnavailableLifecycleMetadataTool(reg *Registrar) {
-	addTool(reg, &mcp.Tool{
-		Name:        "update_mcp_metadata",
-		Title:       "Rename an MCP Server",
-		Description: "Rename one MCP server. This is not switched on for your organization yet.",
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_lifecycle_metadata"))
-}
-
-func registerUnavailableSetupHandoffTool(reg *Registrar) {
-	addTool(reg, &mcp.Tool{
-		Name:        "get_setup_handoff",
-		Title:       "Open Setup in the Dashboard",
-		Description: "Open the dashboard to finish setting up an MCP server. This is not switched on for your organization yet.",
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("setup_handoff"))
-}
-
-func registerUnavailableTools(reg *Registrar) {
-	for _, tool := range []struct {
-		name        string
-		title       string
-		description string
-		feature     string
-	}{
-
-		{"distribute_mcp_to_plugin", "Add an MCP Server to a Plugin", "Give an MCP server to one plugin, so the people it reaches get it. This is not switched on for your organization yet.", "plugin_distribution"},
-		{"remove_mcp_from_plugin", "Remove an MCP Server from a Plugin", "Take an MCP server back out of one plugin. This is not switched on for your organization yet.", "plugin_distribution"},
-	} {
-		addTool(reg, &mcp.Tool{
-			Name:        tool.name,
-			Title:       tool.title,
-			Description: tool.description,
-		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool(tool.feature))
-	}
-}
-
-func registerUnavailableReadinessTools(reg *Registrar) {
-	for _, tool := range []struct {
-		name        string
-		title       string
-		description string
-	}{
-		{"get_mcp_readiness", "Check If an MCP Server Is Working", "Check whether an MCP server is working. This is not switched on for your organization yet."},
-		{"get_mcp_repair_plan", "What to Fix on an MCP Server", "See what to fix on an MCP server that is not working. This is not switched on for your organization yet."},
-	} {
-		addTool(reg, &mcp.Tool{
-			Name:        tool.name,
-			Title:       tool.title,
-			Description: tool.description,
-			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_readiness"))
-	}
 }
 
 func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
@@ -610,24 +366,6 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 		return nil, false
 	}
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, true
-}
-
-func unavailableTool(feature string) mcp.ToolHandlerFor[map[string]any, featureUnavailableResult] {
-	return func(_ context.Context, _ *mcp.CallToolRequest, _ map[string]any) (*mcp.CallToolResult, featureUnavailableResult, error) {
-		result := featureUnavailableResult{
-			Code:    unavailableCode,
-			Feature: feature,
-			Message: "This is not switched on for your organization yet.",
-		}
-		content, err := json.Marshal(result)
-		if err != nil {
-			return nil, featureUnavailableResult{}, fmt.Errorf("encode unavailable result: %w", err)
-		}
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: string(content)}},
-			IsError: true,
-		}, result, nil
-	}
 }
 
 func principalFromToolContext(ctx context.Context) (Principal, error) {

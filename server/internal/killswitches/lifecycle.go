@@ -31,11 +31,8 @@ type LifecycleService struct {
 	beforeCommit BeforeCommitHook
 }
 
-func NewLifecycleService(db *pgxpool.Pool, registry *Registry, validator LifecycleValidator, beforeCommit BeforeCommitHook) (*LifecycleService, error) {
-	if db == nil || registry == nil || isNilInterface(validator) {
-		return nil, ErrInvalidArgument
-	}
-	return &LifecycleService{db: db, registry: registry, validator: validator, beforeCommit: beforeCommit}, nil
+func NewLifecycleService(db *pgxpool.Pool, registry *Registry, validator LifecycleValidator, beforeCommit BeforeCommitHook) *LifecycleService {
+	return &LifecycleService{db: db, registry: registry, validator: validator, beforeCommit: beforeCommit}
 }
 
 type mutationQueries struct {
@@ -326,11 +323,9 @@ func (s *LifecycleService) executeMutation(ctx context.Context, mutation Mutatio
 	if err != nil {
 		return MutationResult{}, fmt.Errorf("encode killswitch operation response: %w", err)
 	}
-	if s.beforeCommit != nil {
-		event := MutationEvent{OrganizationID: mutation.OrganizationID, ActorUserID: mutation.ActorUserID, ActorDisplayName: mutation.ActorDisplayName, OperationID: mutation.OperationID, Operation: operation, Result: result}
-		if err := s.beforeCommit(ctx, restricted, event); err != nil {
-			return MutationResult{}, fmt.Errorf("before killswitch lifecycle commit: %w", err)
-		}
+	event := MutationEvent{OrganizationID: mutation.OrganizationID, ActorUserID: mutation.ActorUserID, ActorDisplayName: mutation.ActorDisplayName, OperationID: mutation.OperationID, Operation: operation, Result: result}
+	if err := s.beforeCommit(ctx, restricted, event); err != nil {
+		return MutationResult{}, fmt.Errorf("before killswitch lifecycle commit: %w", err)
 	}
 	rows, err := queries.CompleteKillswitchOperation(ctx, repo.CompleteKillswitchOperationParams{Response: encoded, OrganizationID: string(mutation.OrganizationID), OperationID: mutation.OperationID, Operation: string(operation), RequestHash: requestHash})
 	if err != nil {

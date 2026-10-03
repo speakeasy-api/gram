@@ -110,9 +110,6 @@ func newAnthropicAnalyticsPoller(
 	schedule string,
 	newSource anthropicAnalyticsSourceFactory,
 ) *AnthropicAnalyticsPoller {
-	if heartbeat == nil {
-		panic("anthropic analytics poller requires heartbeat")
-	}
 	return &AnthropicAnalyticsPoller{
 		store:           store,
 		guardianPolicy:  guardianPolicy,
@@ -170,9 +167,6 @@ func NewAnthropicAnalyticsUsageSource(
 	if err != nil {
 		return nil, err
 	}
-	if processPage == nil {
-		return nil, fmt.Errorf("process page is required")
-	}
 	return &anthropicUsageReportSource{
 		client:      client,
 		cfg:         cfg,
@@ -192,9 +186,6 @@ func NewAnthropicAnalyticsCostSource(
 	if err != nil {
 		return nil, err
 	}
-	if processPage == nil {
-		return nil, fmt.Errorf("process page is required")
-	}
 	return &anthropicCostReportSource{
 		client:      client,
 		cfg:         cfg,
@@ -204,9 +195,6 @@ func NewAnthropicAnalyticsCostSource(
 }
 
 func newAnthropicAnalyticsClient(guardianPolicy *guardian.Policy, schedule string, cfg Config, baseURL string) (Config, *anthropicapi.Client, error) {
-	if guardianPolicy == nil {
-		return cfg, nil, fmt.Errorf("guardian policy is required")
-	}
 	if cfg.Provider == "" {
 		cfg.Provider = ProviderAnthropicCompliance
 	}

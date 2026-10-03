@@ -61,13 +61,7 @@ func (m *ChallengeManager) validateFederatedHost(ctx context.Context, rawURL str
 		return ErrFederatedConfiguration
 	}
 	if tunneled {
-		if m.tunnels == nil {
-			return ErrFederatedConfiguration
-		}
 		return nil
-	}
-	if m.policy == nil {
-		return ErrFederatedConfiguration
 	}
 	if err := m.policy.ValidateHost(ctx, u.Hostname()); err != nil {
 		var networkError net.Error
@@ -107,15 +101,13 @@ func (m *ChallengeManager) loadFederatedMetadata(ctx context.Context, organizati
 		return rfc8414Document{}, err
 	}
 	key := federatedMetadataCacheKey(organizationID, issuer)
-	if m.locks != nil {
-		var entry federatedMetadataCacheEntry
-		if m.locks.Get(ctx, key, &entry) == nil && entry.ExpiresAt.After(time.Now()) {
-			entry.restoreScopePresence()
-			if err := m.validateFederatedMetadataHosts(ctx, issuer, entry.Document); err != nil {
-				return rfc8414Document{}, err
-			}
-			return entry.Document, nil
+	var entry federatedMetadataCacheEntry
+	if m.locks.Get(ctx, key, &entry) == nil && entry.ExpiresAt.After(time.Now()) {
+		entry.restoreScopePresence()
+		if err := m.validateFederatedMetadataHosts(ctx, issuer, entry.Document); err != nil {
+			return rfc8414Document{}, err
 		}
+		return entry.Document, nil
 	}
 	doc, discoveryErr := attemptIssuerProbe(ctx, doer, strings.TrimSuffix(issuer.Issuer, "/")+"/.well-known/openid-configuration")
 	if discoveryErr != nil {
@@ -128,10 +120,8 @@ func (m *ChallengeManager) loadFederatedMetadata(ctx context.Context, organizati
 	if err := m.validateFederatedMetadataHosts(ctx, issuer, doc); err != nil {
 		return rfc8414Document{}, err
 	}
-	if m.locks != nil {
-		// Cache write failure does not invalidate successfully validated discovery.
-		_ = m.locks.Set(ctx, key, federatedMetadataCacheEntry{Document: doc, ExpiresAt: time.Now().Add(federatedMetadataTTL), ScopesOmitted: doc.ScopesSupported == nil}, federatedMetadataTTL)
-	}
+	// Cache write failure does not invalidate successfully validated discovery.
+	_ = m.locks.Set(ctx, key, federatedMetadataCacheEntry{Document: doc, ExpiresAt: time.Now().Add(federatedMetadataTTL), ScopesOmitted: doc.ScopesSupported == nil}, federatedMetadataTTL)
 	return doc, nil
 }
 

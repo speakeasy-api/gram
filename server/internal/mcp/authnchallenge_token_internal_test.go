@@ -226,7 +226,7 @@ func newRefreshTokenReplayTestFixture(
 
 	service := new(Service)
 	service.enc = enc
-	service.metrics = &mcpmetrics.Metrics{}
+	service.metrics = mcpmetrics.NewMetrics(testenv.NewMeterProvider(t).Meter("test"), testenv.NewLogger(t))
 	service.userSessionSigner = sessiontokens.NewSigner("test-jwt-secret")
 	return service, endpoint, &clientRow, userSessionRefreshReplay{
 		Key:        payload.ReplayKey,

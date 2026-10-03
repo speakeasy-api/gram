@@ -15,14 +15,7 @@ import (
 func TestProxyManagerAttachesKillswitchToEveryPrivateBackend(t *testing.T) {
 	t.Parallel()
 	logger := testenv.NewLogger(t)
-	manager := NewProxyManager(
-		logger,
-		testenv.NewTracerProvider(t),
-		testenv.NewMeterProvider(t),
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
-		nil,
-		nil,
-	)
+	manager := newProxyManagerForTest(t, newUnsafePolicyForTest(t), newRiskScanEvaluatorForTest(t))
 
 	canonicalServerID := uuid.NewString()
 	remote := manager.Build(

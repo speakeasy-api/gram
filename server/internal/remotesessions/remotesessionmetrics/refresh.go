@@ -42,9 +42,6 @@ func NewRefresh(logger *slog.Logger, meterProvider metric.MeterProvider) *Refres
 // when the attempt died before the session's client and issuer rows could be
 // loaded.
 func (m *Refresh) Record(ctx context.Context, issuerURL string, trigger RefreshTrigger, outcome RefreshOutcome) {
-	if m == nil || m.attempts == nil {
-		return
-	}
 	m.attempts.Add(ctx, 1, metric.WithAttributes(
 		attr.OAuthIssuer(issuerURL),
 		attr.OAuthRefreshTrigger(trigger),

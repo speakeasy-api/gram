@@ -134,7 +134,7 @@ func NewRiskMutationReceiptStore(db *pgxpool.Pool) *RiskMutationReceiptStore {
 // completed input from its stored result, and commits receipt + domain + audit
 // atomically. Any callback, completion, or commit failure rolls all three back.
 func (s *RiskMutationReceiptStore) Execute(ctx context.Context, principal Principal, project ResolvedProject, request RiskMutationReceiptRequest, mutate RiskMutationTransaction) (OperationReceipt, error) {
-	if s == nil || s.db == nil || s.now == nil || mutate == nil || principal.OrganizationID == "" || principal.UserID == "" || project.ID == uuid.Nil || project.Slug == "" || request.IdempotencyKey == "" || len(request.IdempotencyKey) > 128 || !riskMutationOperation(request.Operation) {
+	if mutate == nil || principal.OrganizationID == "" || principal.UserID == "" || project.ID == uuid.Nil || project.Slug == "" || request.IdempotencyKey == "" || len(request.IdempotencyKey) > 128 || !riskMutationOperation(request.Operation) {
 		return OperationReceipt{}, &RiskMutationError{Code: "invalid_request", Message: "The risk mutation request is invalid.", Cause: ErrRiskMutationInvalid}
 	}
 	inputHash, err := riskMutationInputHash(request.Operation, request.Input)

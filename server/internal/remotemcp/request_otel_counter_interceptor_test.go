@@ -135,20 +135,6 @@ func TestRequestOTELCounterInterceptor_NonRequestMessagesAreSkipped(t *testing.T
 	require.NoError(t, newRequestCounterInterceptorForTest(t).InterceptUserRequest(t.Context(), req))
 }
 
-func TestRequestOTELCounterInterceptor_NilMetricsIsSafe(t *testing.T) {
-	t.Parallel()
-
-	interceptor := remotemcp.NewRequestOTELCounterInterceptor(nil)
-	req := newRequestCounterUserRequest(t, mcpversions.Version20250618, &jsonrpc.Request{
-		ID:     jsonrpc.ID{},
-		Method: "ping",
-		Params: nil,
-		Extra:  nil,
-	})
-
-	require.NoError(t, interceptor.InterceptUserRequest(t.Context(), req))
-}
-
 // TestRequestOTELCounterInterceptor_RecordsCensusDatapoint pins the
 // interceptor's core contract with a real reader: a parseable request must
 // produce an mcp.request datapoint carrying the clamped version, the clamped

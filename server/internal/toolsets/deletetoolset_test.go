@@ -8,13 +8,12 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/assistants"
+	"github.com/speakeasy-api/gram/server/internal/assistants/assistantstest"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -322,7 +321,7 @@ func TestToolsetsService_DeleteToolset_DetachesFromAssistants(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, otherBefore, otherAfter, "another project's independent attachments must survive deletion")
 
-	core := assistants.NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, nil, nil, nil, nil, nil, nil, audit.NewLogger())
+	core := assistantstest.NewServiceCore(t, infra, ti.conn)
 	reloaded, err := core.GetAssistant(ctx, *authCtx.ProjectID, assistant.ID)
 	require.NoError(t, err)
 	require.Len(t, reloaded.Toolsets, 1)

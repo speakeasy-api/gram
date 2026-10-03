@@ -52,10 +52,12 @@ func TestListPluginsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 func TestPluginInventoryAdminDetectionRequiresLoadedGrants(t *testing.T) {
 	t.Parallel()
 
-	service := &PluginsService{}
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_plugin_admin_detection")
+	require.NoError(t, err)
+	service := testPluginTargets(t, conn)
 	principal := Principal{OrganizationID: "org-1"}
 
-	_, err := service.IsOrganizationAdmin(context.Background(), principal)
+	_, err = service.IsOrganizationAdmin(context.Background(), principal)
 	require.ErrorIs(t, err, ErrUnavailable)
 
 	admin, err := service.IsOrganizationAdmin(authz.GrantsToContext(context.Background(), nil), principal)
@@ -181,8 +183,7 @@ func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 func TestPluginAssignmentReferenceIsEncryptedAndBound(t *testing.T) {
 	t.Parallel()
 
-	codec, err := newSubjectReferenceCodec("key-material")
-	require.NoError(t, err)
+	codec := newSubjectReferenceCodec("key-material")
 	principal := testReferencePrincipal()
 	projectID := "00000000-0000-0000-0000-000000000001"
 	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
@@ -290,8 +291,7 @@ func TestMatchesTargetNameRefusesPartialMatches(t *testing.T) {
 func TestPluginCursorRefusesAnotherPrincipalsCursor(t *testing.T) {
 	t.Parallel()
 
-	codec, err := newPluginCursorCodec("test-cursor-key")
-	require.NoError(t, err)
+	codec := newPluginCursorCodec("test-cursor-key")
 
 	projectID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	principal := Principal{OrganizationID: "org_1", ConnectionID: "conn_1", Generation: "gen_1"}
@@ -324,8 +324,7 @@ func TestPluginCursorRefusesAnotherPrincipalsCursor(t *testing.T) {
 func TestPluginCursorTreatsNoCursorAsTheFirstPage(t *testing.T) {
 	t.Parallel()
 
-	codec, err := newPluginCursorCodec("test-cursor-key")
-	require.NoError(t, err)
+	codec := newPluginCursorCodec("test-cursor-key")
 
 	after, err := codec.Decode("", Principal{OrganizationID: "org_1"}, uuid.MustParse("00000000-0000-0000-0000-000000000001"))
 	require.NoError(t, err)

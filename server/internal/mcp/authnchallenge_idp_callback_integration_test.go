@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -141,7 +142,8 @@ func TestHandleIDPCallback_RealResolverMembershipReconciliation(t *testing.T) {
 				ti.logger, ti.tracerProvider, ti.cacheAdapter, remote.URL, "test-client",
 				identity.NewWorkOSAdapter(sdk),
 				workos.NewClient(policy, "test-key", workos.ClientOpts{Endpoint: remote.URL}),
-				orgrepo.New(ti.conn), userrepo.New(ti.conn), p, nil, nil,
+				orgrepo.New(ti.conn), userrepo.New(ti.conn), p, posthog.New(ctx, ti.logger, "", "", ""),
+				testenv.NewGrowthEmitter(t, ti.logger, ti.conn),
 				testenv.NewCacheSuffix(t, cache.Suffix("idp-callback")),
 			)
 			memberBefore, err := resolver.IsOrganizationMember(ctx, ac.ActiveOrganizationID, uid)

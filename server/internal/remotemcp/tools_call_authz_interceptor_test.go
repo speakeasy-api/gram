@@ -67,15 +67,6 @@ func TestToolsCallAuthzInterceptor_Name(t *testing.T) {
 	require.Equal(t, "tools-call-authz", interceptor.Name())
 }
 
-func TestToolsCallAuthzInterceptor_NilEnginePassesThrough(t *testing.T) {
-	t.Parallel()
-
-	// Defensive: a nil engine must not panic and must not reject.
-	interceptor := remotemcp.NewToolsCallAuthzInterceptor(nil, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
-
-	require.NoError(t, interceptor.InterceptToolsCallRequest(t.Context(), newToolsCallRequest("any_tool")))
-}
-
 func TestToolsCallAuthzInterceptor_GrantsAllowMatchingTool(t *testing.T) {
 	t.Parallel()
 

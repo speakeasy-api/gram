@@ -25,9 +25,6 @@ type UsagePollService struct {
 }
 
 func NewUsagePollService(store *Store, telemetryLogger *telemetry.Logger, guardianPolicy *guardian.Policy, heartbeat func(ctx context.Context, page int)) *UsagePollService {
-	if heartbeat == nil {
-		panic("ai integration usage poll service requires heartbeat")
-	}
 	return &UsagePollService{
 		store:           store,
 		guardianPolicy:  guardianPolicy,
@@ -79,12 +76,6 @@ func NewCursorUsageSource(
 	baseURL string,
 	pageLimit int,
 ) (timewindowpoller.Source[[]telemetry.LogParams], error) {
-	if guardianPolicy == nil {
-		return nil, fmt.Errorf("guardian policy is required")
-	}
-	if processPage == nil {
-		return nil, fmt.Errorf("process page is required")
-	}
 	if cfg.Provider == "" {
 		cfg.Provider = ProviderCursor
 	}

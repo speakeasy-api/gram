@@ -15,7 +15,6 @@ type budgetTestFindings struct {
 	list func(context.Context, Principal, ListRiskFindingsInput) (ListRiskFindingsOutput, error)
 }
 
-func (*budgetTestFindings) valid() bool { return true }
 func (s *budgetTestFindings) List(ctx context.Context, p Principal, in ListRiskFindingsInput) (ListRiskFindingsOutput, error) {
 	return s.list(ctx, p, in)
 }
@@ -51,7 +50,6 @@ func TestRiskFindingsBudgetChargesBeforeList(t *testing.T) {
 				return ListRiskFindingsOutput{TotalCount: 7}, nil
 			}}
 			limited := &budgetedRiskFindings{service: service, budget: OperationBudget{Connection: connection, Organization: organization}}
-			require.True(t, limited.valid())
 			out, err := limited.List(t.Context(), principal, input)
 			require.ErrorIs(t, err, tc.wantErr)
 			require.Equal(t, []string{"connection"}, connection.keys)
@@ -70,19 +68,6 @@ func TestRiskFindingsBudgetChargesBeforeList(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, 2, calls, "each call must charge both budgets")
 		})
-	}
-}
-
-func TestRiskFindingsBudgetFailsClosedWhenMissing(t *testing.T) {
-	t.Parallel()
-	for _, budget := range []OperationBudget{{}, {Connection: allowOperationLimiter{}}, {Organization: allowOperationLimiter{}}} {
-		limited := &budgetedRiskFindings{service: &budgetTestFindings{list: func(context.Context, Principal, ListRiskFindingsInput) (ListRiskFindingsOutput, error) {
-			t.Fatal("List called without both limiters")
-			return ListRiskFindingsOutput{}, nil
-		}}, budget: budget}
-		require.False(t, limited.valid())
-		_, err := limited.List(t.Context(), Principal{ConnectionID: "connection", OrganizationID: "organization"}, ListRiskFindingsInput{})
-		require.ErrorIs(t, err, ErrOperationBudgetUnavailable)
 	}
 }
 
@@ -111,19 +96,6 @@ func TestRiskFindingsBudgetToolRefusals(t *testing.T) {
 			require.Equal(t, tc.outcome, recorder.events[0].Outcome)
 		})
 	}
-}
-
-func TestRiskFindingsReaderRequiresBudget(t *testing.T) {
-	t.Parallel()
-	service, _, _ := findingsFixture(t)
-	reader := (&PostgresReader{}).WithRiskFindings(service, allowBudget())
-	limited, ok := reader.riskFindings.(*budgetedRiskFindings)
-	require.True(t, ok, "production reader must attach a metered service")
-	require.Same(t, service, limited.service)
-	require.True(t, limited.valid())
-
-	reader.WithRiskFindings(service, OperationBudget{})
-	require.False(t, reader.riskFindings.valid(), "missing production budget must disable the tool")
 }
 
 func TestRiskFindingsBudgetPreservesServiceError(t *testing.T) {

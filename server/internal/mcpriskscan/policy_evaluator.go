@@ -75,16 +75,6 @@ type MCPFindingEvidenceWriter interface {
 	Store(context.Context, risk.MCPFindingEvidenceBatch) error
 }
 
-// PolicyEvaluatorOption configures optional evaluator dependencies.
-type PolicyEvaluatorOption func(*policyEvaluator)
-
-// WithMCPFindingEvidenceWriter enables encrypted evidence persistence.
-func WithMCPFindingEvidenceWriter(writer MCPFindingEvidenceWriter) PolicyEvaluatorOption {
-	return func(evaluator *policyEvaluator) {
-		evaluator.evidenceWriter = writer
-	}
-}
-
 type policyEvaluator struct {
 	logger          *slog.Logger
 	lookup          PolicyLookup
@@ -107,8 +97,8 @@ func NewPolicyEvaluator(
 	lookup PolicyLookup,
 	detector PolicyDetector,
 	publisher gcp.Publisher[*riskv1.Finding],
+	evidenceWriter MCPFindingEvidenceWriter,
 	config PolicyConfig,
-	options ...PolicyEvaluatorOption,
 ) *Evaluator {
 	if config.Deadline <= 0 {
 		config.Deadline = DefaultPolicyConfig.Deadline
@@ -119,26 +109,24 @@ func NewPolicyEvaluator(
 	if config.FlagConcurrency <= 0 {
 		config.FlagConcurrency = DefaultPolicyConfig.FlagConcurrency
 	}
-	evaluator := newInstrumentedEvaluator(nil, tracerProvider, meterProvider, logger)
+	metrics := newScanMetrics(meterProvider, logger)
 	policy := &policyEvaluator{
 		logger:          logger,
 		lookup:          lookup,
 		detector:        detector,
 		publisher:       publisher,
-		evidenceWriter:  nil,
+		evidenceWriter:  evidenceWriter,
 		config:          config,
 		flagSlots:       make(chan struct{}, config.FlagConcurrency),
 		flagScans:       sync.WaitGroup{},
-		onFlagDrop:      nil,
-		onFlagOversized: nil,
+		onFlagDrop:      metrics.recordFlagDrop,
+		onFlagOversized: metrics.recordFlagOversized,
 	}
-	for _, option := range options {
-		option(policy)
+	return &Evaluator{
+		policy:    policy,
+		observers: []Observer{&scanTracer{tracer: tracerProvider.Tracer(scanInstrumentationScope)}},
+		metrics:   metrics,
 	}
-	policy.onFlagDrop = evaluator.metrics.recordFlagDrop
-	policy.onFlagOversized = evaluator.metrics.recordFlagOversized
-	evaluator.policy = policy
-	return evaluator
 }
 
 func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decision {
@@ -250,9 +238,7 @@ func (p *policyEvaluator) scheduleFlagLane(parent context.Context, subject Subje
 		return
 	}
 	if subject.Payload.Availability() == PayloadOversized {
-		if p.onFlagOversized != nil {
-			p.onFlagOversized(parent, subject.Event)
-		}
+		p.onFlagOversized(parent, subject.Event)
 		return
 	}
 	if subject.Payload.Availability() != PayloadAvailable || len(subject.Payload.Bytes()) == 0 {
@@ -261,9 +247,7 @@ func (p *policyEvaluator) scheduleFlagLane(parent context.Context, subject Subje
 	select {
 	case p.flagSlots <- struct{}{}:
 	default:
-		if p.onFlagDrop != nil {
-			p.onFlagDrop(parent, subject.Event)
-		}
+		p.onFlagDrop(parent, subject.Event)
 		return
 	}
 	payload := bytes.Clone(subject.Payload.Bytes())
@@ -299,10 +283,6 @@ func (p *policyEvaluator) drain(ctx context.Context) error {
 }
 
 func (p *policyEvaluator) publish(ctx context.Context, event Event, policy policycore.Policy, findings []scanners.Finding, outcome riskv1.Finding_EnforcementOutcome) {
-	if p.publisher == nil {
-		p.logger.WarnContext(ctx, "MCP policy findings publisher is unavailable", attr.SlogRiskPolicyID(policy.ID.String()))
-		return
-	}
 	principal := event.Principal()
 	attribution := riskv1.Finding_Attribution_builder{
 		ChatId:           conv.PtrEmpty(event.ChatID),
@@ -341,9 +321,6 @@ func (p *policyEvaluator) publish(ctx context.Context, event Event, policy polic
 	_, _, err := scanners.PublishFindings(ctx, p.logger, p.publisher, meta, findings, "MCP policy", scanners.WithFindingMCPContext(attribution, execution, outcome))
 	if err != nil {
 		p.logger.WarnContext(ctx, "failed to publish MCP policy findings", attr.SlogRiskPolicyID(policy.ID.String()), attr.SlogError(err))
-	}
-	if p.evidenceWriter == nil {
-		return
 	}
 	projectID, err := uuid.Parse(event.ProjectID)
 	if err != nil {

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	metadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -27,11 +28,15 @@ func TestServerDiscoverNotificationHasNoResponse(t *testing.T) {
 		t.Run(surface, func(t *testing.T) {
 			t.Parallel()
 			logger := testenv.NewLogger(t)
-			service := &Service{logger: logger,
-				toolsetsRepo: toolsetsrepo.New(failingDBTX{}), mcpMetadataRepo: metadatarepo.New(failingDBTX{})}
+			service := &Service{
+				logger: logger, metrics: mcpmetrics.NewMetrics(testenv.NewMeterProvider(t).Meter("test"), logger),
+				toolsetsRepo: toolsetsrepo.New(failingDBTX{}), mcpMetadataRepo: metadatarepo.New(failingDBTX{}),
+			}
 			resolution := mcpversions.Resolution{Declared: mcpversions.Version20260728, InEffect: mcpversions.Version20260728}
-			req := &rawRequest{JSONRPC: "2.0", Method: mcpversions.MethodServerDiscover,
-				Params: json.RawMessage(`{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}`)}
+			req := &rawRequest{
+				JSONRPC: "2.0", Method: mcpversions.MethodServerDiscover,
+				Params: json.RawMessage(`{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}`),
+			}
 			var body json.RawMessage
 			var err error
 			switch surface {
@@ -76,7 +81,7 @@ func TestServerDiscoverPreservesZeroAndEmptyStringIDs(t *testing.T) {
 func TestPlatformServerDiscoverIsCallerVarying(t *testing.T) {
 	t.Parallel()
 	resolution := mcpversions.Resolution{Declared: mcpversions.Version20260728, InEffect: mcpversions.Version20260728}
-	body, err := (&Service{logger: testenv.NewLogger(t)}).handlePlatformToolsetRequest(t.Context(), nil, platformtools.Toolset{},
+	body, err := (&Service{logger: testenv.NewLogger(t), metrics: mcpmetrics.NewMetrics(testenv.NewMeterProvider(t).Meter("test"), testenv.NewLogger(t))}).handlePlatformToolsetRequest(t.Context(), nil, platformtools.Toolset{},
 		&rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.NumberID(1), Method: mcpversions.MethodServerDiscover}, "", &resolution)
 	require.NoError(t, err)
 	var response struct {
@@ -138,7 +143,7 @@ func TestHostedServerDiscoverStoredInstructionsAndCachePrivacy(t *testing.T) {
 			require.NoError(t, err)
 			// The request builder already loaded the toolset, so describing the
 			// server must not look it up again by slug.
-			service := &Service{logger: testenv.NewLogger(t), toolsetsRepo: toolsetsrepo.New(failingDBTX{}), mcpMetadataRepo: metadata}
+			service := &Service{logger: testenv.NewLogger(t), metrics: mcpmetrics.NewMetrics(testenv.NewMeterProvider(t).Meter("test"), testenv.NewLogger(t)), toolsetsRepo: toolsetsrepo.New(failingDBTX{}), mcpMetadataRepo: metadata}
 			body, err := service.handleRequest(ctx, &mcpInputs{
 				projectID: project.ID, toolset: toolset.Slug,
 				toolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, toolsetIsPublic: new(tc.public),

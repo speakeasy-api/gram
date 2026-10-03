@@ -8,13 +8,26 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
+
+func testAccessRoleMutationService(t *testing.T) *AccessRoleMutationService {
+	t.Helper()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_access_role_mutation_unit")
+	require.NoError(t, err)
+	logger := testenv.NewLogger(t)
+	return NewAccessRoleMutationService(NewAccessReadService(logger, conn, access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger()), allowBudget(), "access-role-unit-key"), &feature.InMemory{}, allowBudget(), "access-role-unit-key", access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger()))
+}
 
 func TestAccessRoleMutationRequiresConfirmationBeforeServiceValidation(t *testing.T) {
 	t.Parallel()
 
-	_, err := (*AccessRoleMutationService)(nil).Create(t.Context(), Principal{}, CreateMCPAccessRoleInput{})
+	_, err := testAccessRoleMutationService(t).Create(t.Context(), Principal{}, CreateMCPAccessRoleInput{})
 	var mutation *AccessRoleMutationError
 	require.ErrorAs(t, err, &mutation)
 	require.Equal(t, "confirmation_required", mutation.Code)
@@ -42,7 +55,7 @@ func TestAccessRoleRuleGrantsAreServerGeneratedAndProjectScoped(t *testing.T) {
 func TestAccessRoleVersionIsCanonicalAndCoversNonMCPGrants(t *testing.T) {
 	t.Parallel()
 
-	service := &AccessRoleMutationService{versionKey: make([]byte, 32)}
+	service := testAccessRoleMutationService(t)
 	projectID := uuid.NewString()
 	mcpID := uuid.NewString()
 	project := &accessgen.RoleGrant{Scope: string(authz.ScopeProjectRead), Selectors: []*accessgen.Selector{{ResourceKind: authz.ResourceKindProject, ResourceID: projectID}}}
@@ -127,7 +140,7 @@ func TestAccessRoleReceiptRejectsUnknownOrUnsafePayloads(t *testing.T) {
 func TestAccessRoleRemovalDoesNotRequireCurrentCatalog(t *testing.T) {
 	t.Parallel()
 
-	service := &AccessRoleMutationService{}
+	service := testAccessRoleMutationService(t)
 	mcpID := uuid.NewString()
 	rules, err := service.resolveRules(t.Context(), Principal{}, ResolvedProject{}, []MCPAccessRoleRule{{MCPID: mcpID, Tool: "retired_tool"}}, false, make(map[uuid.UUID]accessRoleRuleTarget))
 	require.NoError(t, err)

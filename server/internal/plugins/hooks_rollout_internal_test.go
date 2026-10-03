@@ -11,29 +11,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// eligibilityService builds a publisher wired to features but with no database:
-// hooksRolloutEligible touches neither, so nil deps are safe here.
+// eligibilityService builds a service carrying only the dependencies
+// hooksRolloutEligible reads.
 func eligibilityService(t *testing.T, features feature.Provider) *Service {
 	t.Helper()
-	return NewPublisher(testenv.NewLogger(t), nil, nil, nil, "local", "", features)
+	return &Service{logger: testenv.NewLogger(t), features: features}
 }
 
 func TestHooksRolloutEligible_CanaryBypassesProvider(t *testing.T) {
 	t.Parallel()
 
-	// nil provider proves the canary decision never consults PostHog — a canary
-	// org is eligible even during a provider outage.
-	svc := eligibilityService(t, nil)
+	// An empty provider proves the canary decision never consults PostHog — a
+	// canary org is eligible even during a provider outage.
+	svc := eligibilityService(t, &feature.InMemory{})
 	for slug := range canaryHooksOrgSlugs {
 		require.True(t, svc.hooksRolloutEligible(t.Context(), "org-any", slug), "canary slug %q must be eligible", slug)
 	}
-}
-
-func TestHooksRolloutEligible_NilProviderFailsClosed(t *testing.T) {
-	t.Parallel()
-
-	svc := eligibilityService(t, nil)
-	require.False(t, svc.hooksRolloutEligible(t.Context(), "org-1", "not-canary"))
 }
 
 func TestHooksRolloutEligible_PinAtOrAboveCurrentIsEligible(t *testing.T) {

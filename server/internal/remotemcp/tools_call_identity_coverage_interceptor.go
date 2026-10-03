@@ -42,7 +42,7 @@ func (i *ToolsCallIdentityCoverageInterceptor) Name() string {
 // rejects it. Validation and enforcement remain owned by their existing
 // interceptors and the upstream MCP server.
 func (i *ToolsCallIdentityCoverageInterceptor) InterceptUserRequest(ctx context.Context, req *proxy.UserRequest) error {
-	if i == nil || i.checkpoint == nil || !proxy.IsToolsCallRequest(req) {
+	if !proxy.IsToolsCallRequest(req) {
 		return nil
 	}
 

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func mustRecommendedSet(t *testing.T) RecommendedSet {
@@ -82,13 +83,14 @@ func masksFor(t *testing.T, specified []DetectionScopeConfig, messages []batchMe
 	require.NoError(t, err)
 	compiled, err := CompileDetectionScopes(eng, specified)
 	require.NoError(t, err)
-	return NewCategoryScopes(mustRecommendedSet(t), compiled, nil).Masks(t.Context(), messages)
+	return NewCategoryScopes(mustRecommendedSet(t), compiled, newRiskMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t))).Masks(t.Context(), messages)
 }
 
-func mergeOne(masks CategoryScopeMasks, findings [][]scanners.Finding) [][]scanners.Finding {
+func mergeOne(t *testing.T, masks CategoryScopeMasks, findings [][]scanners.Finding) [][]scanners.Finding {
+	t.Helper()
 	return mergeFindings(mergeFindingsInput{
 		orgID:                   "",
-		metrics:                 nil,
+		metrics:                 newRiskMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 		masks:                   masks,
 		exclusions:              NewExclusionSet(nil),
 		builtinEnabled:          false,
@@ -119,8 +121,8 @@ func TestRecommendedCategoryScopesPromptInjectionBehavior(t *testing.T) {
 	require.True(t, masks.InScope(2, categories.CategoryPromptInjection))
 
 	findings := [][]scanners.Finding{{pi}, {pi}, {pi}}
-	require.Empty(t, mergeOne(masks, findings)[0], "assistant_message is out of the prompt_injection recommendation")
-	require.Len(t, mergeOne(masks, findings)[1], 1)
+	require.Empty(t, mergeOne(t, masks, findings)[0], "assistant_message is out of the prompt_injection recommendation")
+	require.Len(t, mergeOne(t, masks, findings)[1], 1)
 }
 
 func TestRecommendedCategoryScopesMultiSourceSameMessage(t *testing.T) {
@@ -131,7 +133,7 @@ func TestRecommendedCategoryScopesMultiSourceSameMessage(t *testing.T) {
 	pi := finding(SourcePromptInjection, promptinjection.Rule)
 	secret := finding(SourceGitleaks, "secret.generic-api-key")
 
-	out := mergeOne(masks, [][]scanners.Finding{{pi, secret}, {pi, secret}})
+	out := mergeOne(t, masks, [][]scanners.Finding{{pi, secret}, {pi, secret}})
 	require.Empty(t, out[0], "assistant messages are out of scope for every category")
 	require.Len(t, out[1], 2)
 }
@@ -144,7 +146,7 @@ func TestDetectionScopeUnrestrictedKeepsPromptInjection(t *testing.T) {
 		{Category: string(categories.CategoryPromptInjection), ScopeInclude: "", ScopeExempt: ""},
 	}, messages)
 
-	out := mergeOne(masks, [][]scanners.Finding{{finding(SourcePromptInjection, promptinjection.Rule)}})
+	out := mergeOne(t, masks, [][]scanners.Finding{{finding(SourcePromptInjection, promptinjection.Rule)}})
 	require.Len(t, out[0], 1)
 }
 
@@ -180,7 +182,7 @@ func TestRecommendedCategoryScopesToolRequestOnlyCategories(t *testing.T) {
 	require.False(t, masks.InScope(1, categories.CategoryCLIDestructive))
 
 	cli := finding(SourceCLIDestructive, "cli_destructive.rm_rf")
-	out := mergeOne(masks, [][]scanners.Finding{{cli}, {cli}})
+	out := mergeOne(t, masks, [][]scanners.Finding{{cli}, {cli}})
 	require.Len(t, out[0], 1)
 	require.Empty(t, out[1])
 }
@@ -238,7 +240,7 @@ func TestSubsetWithoutCategoryMasksScansEverything(t *testing.T) {
 	messages := []batchMessage{msg(message.Assistant), msg(message.User)}
 	contents := messageContents(messages)
 	// No recommendation and no specified scope, so there is no mask at all.
-	masks := NewCategoryScopes(RecommendedSet{scopes: nil}, nil, nil).Masks(t.Context(), messages)
+	masks := NewCategoryScopes(RecommendedSet{scopes: nil}, nil, newRiskMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t))).Masks(t.Context(), messages)
 
 	subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePresidio])
 	require.Equal(t, []int{0, 1}, indices, "no category mask for presidio: every message reaches the scanner")
@@ -317,7 +319,7 @@ func TestCategoryScopesApplyTheRecommendation(t *testing.T) {
 	t.Parallel()
 
 	messages := []batchMessage{msg(message.Assistant), msg(message.User)}
-	masks := NewCategoryScopes(mustRecommendedSet(t), nil, nil).Masks(t.Context(), messages)
+	masks := NewCategoryScopes(mustRecommendedSet(t), nil, newRiskMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t))).Masks(t.Context(), messages)
 	// The secrets recommendation exempts assistant messages.
 	require.False(t, masks.InScope(0, categories.CategorySecrets))
 	require.True(t, masks.InScope(1, categories.CategorySecrets))
@@ -341,7 +343,7 @@ func TestCategoryScopesDoesNotAffectCustomRegistryScope(t *testing.T) {
 
 	out := mergeFindings(mergeFindingsInput{
 		orgID:                   "",
-		metrics:                 nil,
+		metrics:                 newRiskMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 		masks:                   masks,
 		exclusions:              NewExclusionSet(nil),
 		builtinEnabled:          false,

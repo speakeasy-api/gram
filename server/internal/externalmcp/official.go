@@ -58,9 +58,6 @@ type officialServerEntry struct {
 }
 
 func (a *OfficialRegistryAdapter) ListServers(ctx context.Context, registry Registry, params ListServersParams) (ListServersResult, error) {
-	if a == nil || a.httpClient == nil {
-		return ListServersResult{}, fmt.Errorf("official registry adapter is not configured")
-	}
 	base, err := url.Parse(registry.URL)
 	if err != nil {
 		return ListServersResult{}, fmt.Errorf("parse official registry URL: %w", err)
@@ -166,9 +163,6 @@ func officialIconURL(server serverJSON) *string {
 }
 
 func (a *OfficialRegistryAdapter) GetServerDetails(ctx context.Context, registry Registry, serverName string, allowedRemoteURLs []string) (*ServerDetails, error) {
-	if a == nil || a.httpClient == nil {
-		return nil, fmt.Errorf("official registry adapter is not configured")
-	}
 	base, err := reviewedRegistryDetailsURL(registry.URL)
 	if err != nil {
 		return nil, err

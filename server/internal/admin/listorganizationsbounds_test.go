@@ -3,16 +3,16 @@ package admin
 import (
 	"context"
 	"encoding/json"
-
 	"fmt"
-	gen "github.com/speakeasy-api/gram/server/gen/admin"
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/stretchr/testify/require"
@@ -123,9 +123,11 @@ func TestListOrganizationsBoundsService(t *testing.T) {
 		account  string
 	}{
 		{"a", 0, start.Add(-time.Microsecond), false, "free"},
-		{"b", 1, start, false, "payg"}, {"c", 2, start.Add(time.Microsecond), false, "payg"},
+		{"b", 1, start, false, "payg"},
+		{"c", 2, start.Add(time.Microsecond), false, "payg"},
 		{"d", 0, end.Add(-time.Microsecond), true, "free"},
-		{"e", 2, end, true, "payg"}, {"f", 3, end.Add(time.Microsecond), false, "free"},
+		{"e", 2, end, true, "payg"},
+		{"f", 3, end.Add(time.Microsecond), false, "free"},
 	} {
 		id := "org_api_bounds_" + f.id
 		var disabled *time.Time

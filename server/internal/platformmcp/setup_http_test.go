@@ -48,13 +48,8 @@ func TestDashboardSetupHTTPAuthenticatesCookieAndStartsProviderSetupWithoutCachi
 func TestDashboardSetupHTTPFailsClosedAndValidatesRequests(t *testing.T) {
 	t.Parallel()
 
-	unavailable := NewDashboardSetupHTTP(nil, dashboardSessionAuthenticator{userID: "user", organizationID: "organization"}).Handler()
-	response := httptest.NewRecorder()
-	unavailable.ServeHTTP(response, dashboardSetupRequest(http.MethodPost, `{"handoff":"handoff"}`))
-	require.Equal(t, http.StatusServiceUnavailable, response.Code)
-
 	handler := NewDashboardSetupHTTP(&recordingDashboardSetupStarter{}, dashboardSessionAuthenticator{userID: "user", organizationID: "organization"}).Handler()
-	response = httptest.NewRecorder()
+	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, dashboardSetupRequest(http.MethodGet, ""))
 	require.Equal(t, http.StatusMethodNotAllowed, response.Code)
 	require.Equal(t, http.MethodPost, response.Header().Get("Allow"))

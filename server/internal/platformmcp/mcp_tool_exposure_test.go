@@ -6,22 +6,16 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/plugins"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestToolInventoryCursorBindsContinuationToPrincipalProjectAndFilters(t *testing.T) {
 	t.Parallel()
 
-	codec, err := newToolInventoryCursorCodec("test-cursor-key")
-	require.NoError(t, err)
+	codec := newToolInventoryCursorCodec("test-cursor-key")
 	principal := Principal{OrganizationID: "organization", ConnectionID: "connection", Generation: "generation"}
 	projectID := uuid.New()
 	value, err := codec.Encode(toolInventoryCursor{
@@ -71,7 +65,6 @@ func TestToolExposureVersionTracksListAndTarget(t *testing.T) {
 func TestToolExposureMutationRefusesUnsafeRequestsBeforeTouchingTheDatabase(t *testing.T) {
 	t.Parallel()
 
-	service := &MCPToolExposureService{}
 	version := strings.Repeat("a", 64)
 	valid := ChangeMCPToolsInput{
 		ProjectID: uuid.NewString(), MCPID: uuid.NewString(),
@@ -93,7 +86,7 @@ func TestToolExposureMutationRefusesUnsafeRequestsBeforeTouchingTheDatabase(t *t
 			return in
 		},
 	} {
-		_, _, _, err := service.validate(mutate(valid))
+		_, _, _, err := validateChangeMCPToolsInput(mutate(valid))
 		require.Error(t, err, "%s must be refused", name)
 		var refusal *MCPToolExposureError
 		require.ErrorAs(t, err, &refusal)
@@ -104,7 +97,7 @@ func TestToolExposureMutationRefusesUnsafeRequestsBeforeTouchingTheDatabase(t *t
 	// rather than dropped from the batch.
 	malformed := valid
 	malformed.ToolURNs = []string{"tools:function:orders:create_order", "create_order"}
-	_, _, _, err := service.validate(malformed)
+	_, _, _, err := validateChangeMCPToolsInput(malformed)
 	var refusal *MCPToolExposureError
 	require.ErrorAs(t, err, &refusal)
 	require.Equal(t, []string{"create_order"}, refusal.UnknownTools)
@@ -112,7 +105,7 @@ func TestToolExposureMutationRefusesUnsafeRequestsBeforeTouchingTheDatabase(t *t
 	// Duplicates collapse instead of being applied twice.
 	duplicated := valid
 	duplicated.ToolURNs = []string{"tools:function:orders:create_order", " tools:function:orders:create_order "}
-	_, _, requested, err := service.validate(duplicated)
+	_, _, requested, err := validateChangeMCPToolsInput(duplicated)
 	require.NoError(t, err)
 	require.Len(t, requested, 1)
 }
@@ -120,13 +113,12 @@ func TestToolExposureMutationRefusesUnsafeRequestsBeforeTouchingTheDatabase(t *t
 func TestToolExposureMutationRequiresExplicitConfirmation(t *testing.T) {
 	t.Parallel()
 
-	service := &MCPToolExposureService{}
 	unconfirmed := ChangeMCPToolsInput{
 		ProjectID: uuid.NewString(), MCPID: uuid.NewString(),
 		ToolURNs:        []string{"tools:function:orders:create_order"},
 		ExpectedVersion: strings.Repeat("a", 64), IdempotencyKey: "key", Confirmed: false,
 	}
-	_, _, _, err := service.validate(unconfirmed)
+	_, _, _, err := validateChangeMCPToolsInput(unconfirmed)
 	var refusal *MCPToolExposureError
 	require.ErrorAs(t, err, &refusal)
 	require.Equal(t, "invalid_request", refusal.Code)
@@ -203,26 +195,6 @@ func TestToolExposureBudgetRefusalsTellThrottleFromFailure(t *testing.T) {
 	require.ErrorAs(t, broken, &refusal)
 	require.Equal(t, unavailableCode, refusal.Code)
 	require.ErrorIs(t, broken, ErrUnavailable)
-}
-
-// The service refuses to compose without both allowances, so a deployment can
-// never register these tools as live while they are unmetered.
-func TestToolExposureServiceRequiresBothOperationBudgets(t *testing.T) {
-	t.Parallel()
-
-	compose := func(reads, changes OperationBudget) error {
-		_, err := NewMCPToolExposureService(
-			testenv.NewLogger(t), &pgxpool.Pool{}, audit.NewLogger(), &authz.Engine{},
-			allowExternalCallAuthorizer{}, "key", plugins.PublicationRequests{}, nil, reads, changes,
-		)
-		return err
-	}
-
-	require.ErrorIs(t, compose(OperationBudget{}, testOperationBudget()), ErrMCPToolExposureInvalid,
-		"a read without an allowance does not compose")
-	require.ErrorIs(t, compose(testOperationBudget(), OperationBudget{}), ErrMCPToolExposureInvalid,
-		"a write without an allowance does not compose")
-	require.NoError(t, compose(testOperationBudget(), testOperationBudget()))
 }
 
 // The tool list belongs to the server detail, not to the list of servers: an

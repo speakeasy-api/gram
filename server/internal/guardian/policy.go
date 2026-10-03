@@ -289,9 +289,7 @@ func WithTLSRootCAs(pool *x509.CertPool) func(*Policy) {
 // WithLimiter sets the rate limiter backing clients built with
 // [WithResilience]. Defaults to a [NoopLimiter] that admits everything: pass
 // an [InProcLimiter] for per-process limits or a [RedisRateLimiter] when
-// limits must hold across replicas. A [NewNoopLimiter]-built NoopLimiter
-// still admits everything but reports the bucket-count gauge, previewing
-// partition cardinality before enforcement is switched on.
+// limits must hold across replicas.
 func WithLimiter(limiter Limiter) func(*Policy) {
 	return func(p *Policy) {
 		p.limiter = limiter
@@ -300,9 +298,7 @@ func WithLimiter(limiter Limiter) func(*Policy) {
 
 // WithBreaker sets the circuit breaker backing clients built with
 // [WithResilience]. Defaults to a [NoopBreaker] that admits everything: pass
-// an [InProcBreaker] to enforce breaker policies. A [NewNoopBreaker]-built
-// NoopBreaker still admits everything but reports the instance-count gauge,
-// previewing partition cardinality before enforcement is switched on.
+// an [InProcBreaker] to enforce breaker policies.
 func WithBreaker(breaker Breaker) func(*Policy) {
 	return func(p *Policy) {
 		p.breaker = breaker

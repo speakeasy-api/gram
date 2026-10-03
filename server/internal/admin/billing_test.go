@@ -90,6 +90,7 @@ func (f *fakeBillingOperations) GetPaygBillingSummaryForOrganization(_ context.C
 	f.organizationID = organizationID
 	return &usage.PaygBillingSummary{PeriodStart: "2026-08-01T00:00:00Z", PeriodEnd: "2026-09-01T00:00:00Z", TumTokens: 42, TumUnitPriceUsd: "0.1", TumCostUsd: "4.2", OtherInferenceSpendUsd: "1.0", EstimatedTotalUsd: "5.2"}, nil
 }
+
 func (f *fakeBillingOperations) GetMeterUsageForOrganization(_ context.Context, organizationID string, payload *usagegen.GetMeterUsagePayload) (*usagegen.MeterUsageResponse, error) {
 	f.organizationID = organizationID
 	return &usagegen.MeterUsageResponse{
@@ -206,6 +207,7 @@ func (f *fakeBillingOperations) SetStripeSubscriptionCancelAtPeriodEndForOrganiz
 	f.actor = actor
 	return &usage.StripeSubscription{Status: "active", CurrentPeriodStart: "2026-08-01T00:00:00Z", CurrentPeriodEnd: "2026-09-01T00:00:00Z", CancelAtPeriodEnd: cancel}, nil
 }
+
 func TestGetMeterUsageSelectsCanonicalOrganizationAndBoundedFamily(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db, meterConn := newTestAdminMeterService(t)
@@ -428,7 +430,6 @@ func TestGetInferenceKeysOmitsUnsupportedAndAbsentKeys(t *testing.T) {
 	require.Equal(t, []*gen.AdminInferenceKey{
 		{KeyType: "chat", CreditsUsed: 7.25, MonthlyCredits: 100, Disabled: false, DisableCauses: []string{}, DisableCausesClassified: true},
 	}, result)
-
 }
 
 func TestGetInferenceKeysReportsUnavailableWhenOpenRouterIsNotConfigured(t *testing.T) {
@@ -517,17 +518,6 @@ func TestSetInferenceKeyMonthlyLimitValidatesExplicitKeyAndBounds(t *testing.T) 
 		_, err := svc.SetInferenceKeyMonthlyLimit(t.Context(), payload)
 		requireOopsCode(t, err, oops.CodeInvalid)
 	}
-}
-
-func TestSetInferenceKeyMonthlyLimitReportsUnavailableWithoutScheduler(t *testing.T) {
-	t.Parallel()
-	ctx, svc, db := newTestAdminService(t)
-	seedOrg(t, ctx, db, orgFixture{id: "org_limit_unavailable", name: "Inference Limit Unavailable", slug: "inference-limit-unavailable"})
-
-	_, err := svc.SetInferenceKeyMonthlyLimit(ctx, &gen.SetInferenceKeyMonthlyLimitPayload{
-		OrganizationID: "org_limit_unavailable", KeyType: "chat", MonthlyCredits: 100,
-	})
-	requireOopsCode(t, err, oops.CodeUnavailable)
 }
 
 func TestSetInferenceKeyMonthlyLimitRejectsAbsentAndDisabledKeys(t *testing.T) {

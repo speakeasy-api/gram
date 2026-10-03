@@ -96,9 +96,6 @@ type Service struct {
 // show or publish; failing an org's coverage page, or publishing an
 // unprovable claim, is not.
 func deviceLevelCoverage(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, features feature.Provider, orgID string) bool {
-	if features == nil {
-		return false
-	}
 	// Targeted by PostHog organization group (org slug), matching how the
 	// dashboard evaluates it and how FlagBudgets is rolled out.
 	// Evaluating the flag without the org group would silently change the
@@ -187,9 +184,6 @@ func NewService(
 // Best-effort by design — failures are logged and the periodic tick picks
 // the due work up regardless.
 func (s *Service) kickSync(ctx context.Context, logger *slog.Logger) {
-	if s.syncTrigger == nil {
-		return
-	}
 	detached := context.WithoutCancel(ctx)
 	go func() {
 		triggerCtx, cancel := context.WithTimeout(detached, 10*time.Second)

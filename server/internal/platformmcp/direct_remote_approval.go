@@ -48,7 +48,7 @@ func NewPostgresDirectRemoteApprovals() *PostgresDirectRemoteApprovals {
 var _ DirectRemoteApprovalTxChecker = (*PostgresDirectRemoteApprovals)(nil)
 
 func (c *PostgresDirectRemoteApprovals) CheckDirectRemoteApprovalTx(ctx context.Context, db riskrepo.DBTX, organizationID, userID string, projectID uuid.UUID, remoteURL string) (DirectRemoteApprovalState, error) {
-	if c == nil || db == nil || organizationID == "" || userID == "" || projectID == uuid.Nil {
+	if db == nil || organizationID == "" || userID == "" || projectID == uuid.Nil {
 		return DirectRemoteApprovalState{}, ErrRegistrationUnavailable
 	}
 	inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(remoteURL)

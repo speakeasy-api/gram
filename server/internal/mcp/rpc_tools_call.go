@@ -296,7 +296,7 @@ func handleToolsCall(
 	// everyone, mirroring the connection-level guard in impl.go. Both the
 	// privacy read and the resource id follow the wrapper when one fronts
 	// the request.
-	if payload.authenticated && authzEngine != nil && payload.effectiveMCPPrivate(toolset.McpIsPublic) {
+	if payload.authenticated && payload.effectiveMCPPrivate(toolset.McpIsPublic) {
 		var disposition string
 		if tool != nil {
 			baseTool, err := conv.ToBaseTool(tool)

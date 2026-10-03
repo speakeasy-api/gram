@@ -222,18 +222,10 @@ func (h *MetricRelayHandler) handleBatch(ctx context.Context, messages []metricR
 }
 
 func (h *MetricRelayHandler) recordDroppedMetrics(ctx context.Context, count int, reason relayReason) {
-	if h.metricsDropped == nil {
-		return
-	}
-
 	h.metricsDropped.Add(ctx, int64(count), metric.WithAttributes(attr.Reason(string(reason))))
 }
 
 func (h *MetricRelayHandler) recordFailedMetrics(ctx context.Context, count int, reason relayReason) {
-	if h.metricsFailed == nil {
-		return
-	}
-
 	h.metricsFailed.Add(ctx, int64(count), metric.WithAttributes(attr.Reason(string(reason))))
 }
 

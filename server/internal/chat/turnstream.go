@@ -83,14 +83,8 @@ type TurnStream struct {
 	client *redis.Client
 }
 
-// NewTurnStream returns a stream over the supplied Redis client. A nil client
-// yields a nil TurnStream whose Publish is a no-op, so a deployment without
-// Redis degrades to a dashboard that shows the reply when it lands rather than
-// failing turns.
+// NewTurnStream returns a stream over the supplied Redis client.
 func NewTurnStream(client *redis.Client) *TurnStream {
-	if client == nil {
-		return nil
-	}
 	return &TurnStream{client: client}
 }
 
@@ -98,7 +92,7 @@ func NewTurnStream(client *redis.Client) *TurnStream {
 // non-fatal: a lost frame costs the watcher some responsiveness, and must
 // never fail the turn that produced it.
 func (t *TurnStream) Publish(ctx context.Context, chatID uuid.UUID, frame TurnFrame) (string, error) {
-	if t == nil || chatID == uuid.Nil {
+	if chatID == uuid.Nil {
 		return "", nil
 	}
 	payload, err := json.Marshal(frame)
@@ -106,7 +100,8 @@ func (t *TurnStream) Publish(ctx context.Context, chatID uuid.UUID, frame TurnFr
 		return "", fmt.Errorf("marshal turn frame: %w", err)
 	}
 	key := turnStreamKey(chatID)
-	cursor, err := t.client.XAdd(ctx, &redis.XAddArgs{
+	pipe := t.client.Pipeline()
+	add := pipe.XAdd(ctx, &redis.XAddArgs{
 		Stream: key,
 		// Approximate trimming: exact trimming costs a scan on every append
 		// and the bound is a safety valve, not a contract.
@@ -124,14 +119,17 @@ func (t *TurnStream) Publish(ctx context.Context, chatID uuid.UUID, frame TurnFr
 		ProducerID:     "",
 		IdempotentID:   "",
 		IdempotentAuto: false,
-	}).Result()
+	})
+	// Refreshed per append so an active turn keeps its history alive and an
+	// abandoned chat expires on its own.
+	pipe.Expire(ctx, key, turnStreamTTL)
+	_, execErr := pipe.Exec(ctx)
+	cursor, err := add.Result()
 	if err != nil {
 		return "", fmt.Errorf("append turn frame: %w", err)
 	}
-	// Refreshed per append so an active turn keeps its history alive and an
-	// abandoned chat expires on its own.
-	if err := t.client.Expire(ctx, key, turnStreamTTL).Err(); err != nil {
-		return cursor, fmt.Errorf("refresh turn stream ttl: %w", err)
+	if execErr != nil {
+		return cursor, fmt.Errorf("refresh turn stream ttl: %w", execErr)
 	}
 	return cursor, nil
 }
@@ -156,9 +154,6 @@ func (t *TurnStream) lastID(ctx context.Context, chatID uuid.UUID) (string, erro
 // cursor replays the chat's whole retained history, which is what a client
 // joining a turn late (or reconnecting without a cursor) wants.
 func (t *TurnStream) Replay(ctx context.Context, chatID uuid.UUID, after string) ([]TurnFrame, error) {
-	if t == nil {
-		return nil, errors.New("turn stream is not configured")
-	}
 	start := "-"
 	if after != "" {
 		// "(" makes the range exclusive, so a client never re-applies the
@@ -177,9 +172,6 @@ func (t *TurnStream) Replay(ctx context.Context, chatID uuid.UUID, after string)
 // reconnects mid-turn sees everything it missed before anything new — the
 // property pub/sub could not offer.
 func (t *TurnStream) Subscribe(ctx context.Context, chatID uuid.UUID, after string) (<-chan TurnFrame, error) {
-	if t == nil {
-		return nil, errors.New("turn stream is not configured")
-	}
 	// No cursor means "start from now", not "replay everything". A chat's
 	// retained frames span earlier turns, so replaying from the beginning would
 	// hand a client the previous turn's terminal frame and end the new turn

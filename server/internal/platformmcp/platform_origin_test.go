@@ -15,7 +15,6 @@ import (
 
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 const (
@@ -102,7 +101,7 @@ func TestRuntimeChallengeFollowsPlatformHost(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			handler := NewRuntime(testenv.NewLogger(t), &testAuthenticator{principal: testPrincipal()}, testGate{enabled: true}, &testAuthorizer{}, testCanonicalBaseURL+"/.well-known/oauth-protected-resource/platform-mcp", "test-cursor-key", nil, nil, nil, nil, nil).Handler()
+			handler := newTestRuntime(t, &testAuthenticator{principal: testPrincipal()}, testGate{enabled: true}, &testAuthorizer{}, testCanonicalBaseURL+"/.well-known/oauth-protected-resource/platform-mcp", &testReadinessRecorder{}).Handler()
 			res := httptest.NewRecorder()
 			handler.ServeHTTP(res, withRequestOrigin(httptest.NewRequest(http.MethodPost, Path, nil), tc.surface, tc.baseURL))
 

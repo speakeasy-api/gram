@@ -42,7 +42,7 @@ func TestUserSearch_ChargesTheSensitiveBudgetOnlyForServedReads(t *testing.T) {
 
 	connection := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
 	reader := &recordingUserSearchReader{rows: nil, metrics: &telemetryrepo.MetricsSummaryRow{ToolCounts: map[string]uint64{}}}
-	service := newUserSearchService(t, reader, &recordingUserSearchAuditor{}, nil)
+	service := newUserSearchService(t, reader, &recordingUserSearchAuditor{}, literalIdentityGate{})
 	service.sensitiveBudget = OperationBudget{Connection: connection, Organization: allowOperationLimiter{}}
 	principal := testPrincipal()
 
@@ -80,7 +80,7 @@ func TestGetUserMetricsSummary_ReauthorizesTheMCPBehindADrilldownReference(t *te
 
 	reader := &recordingUserSearchReader{rows: nil, metrics: &telemetryrepo.MetricsSummaryRow{LastSeenUnixNano: userSearchTestNow.UnixNano(), ToolCounts: map[string]uint64{}}}
 	auditor := &recordingUserSearchAuditor{}
-	service := newUserSearchService(t, reader, auditor, nil)
+	service := newUserSearchService(t, reader, auditor, literalIdentityGate{})
 	principal := testPrincipal()
 	window, err := resolveWindow("24h", userSearchTestNow, drilldownWindowSpec)
 	require.NoError(t, err)

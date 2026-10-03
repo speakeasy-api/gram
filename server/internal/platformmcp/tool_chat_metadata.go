@@ -12,8 +12,7 @@ import (
 
 const listChatsToolName = "list_chats"
 
-// listChatsMeta is shared by the live tool and its stub so the tool neither
-// appears on nor disappears from a surface as composition changes. Admitted to
+// listChatsMeta declares list_chats' audience and authority. Admitted to
 // the assistant because the read is connection-less and carries no content;
 // org:admin because a project-wide listing crosses every member's chats.
 var listChatsMeta = ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}
@@ -42,12 +41,6 @@ func registerChatMetadataTools(reg *Registrar, service *ChatMetadataService) {
 			return service.List(ctx, principal, input)
 		})
 	})
-}
-
-// The stub declares the audiences its live counterpart declares, so the tool
-// does not appear on and disappear from a surface as composition changes.
-func registerUnavailableChatMetadataTools(reg *Registrar) {
-	addTool(reg, listChatsTool("List one project's chats as metadata only. This is not switched on for your organization yet."), listChatsMeta, unavailableTool("chat_metadata"))
 }
 
 // chatMetadataToolResult maps the listing's refusals to structured payloads,

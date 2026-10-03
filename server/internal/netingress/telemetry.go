@@ -23,7 +23,6 @@ const (
 	ReasonMissingAttestation  = networkingress.ReasonMissingAttestation
 	ReasonInvalidSource       = networkingress.ReasonInvalidSource
 	ReasonAttestationRejected = networkingress.ReasonAttestationRejected
-	ReasonVerifierUnavailable = networkingress.ReasonVerifierUnavailable
 	ReasonHostMismatch        = networkingress.ReasonHostMismatch
 	ReasonIdentityInvalid     = networkingress.ReasonIdentityInvalid
 	ReasonIdentityRequired    = networkingress.ReasonIdentityRequired

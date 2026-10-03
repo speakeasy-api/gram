@@ -50,10 +50,7 @@ const (
 	OAuthFlowStageToken OAuthFlowStage = "token"
 )
 
-// Metrics is the mcp service's full instrument set. A nil *Metrics is valid —
-// every Record method becomes a no-op — and each method is also
-// nil-instrument-safe, so a partially constructed value still records what
-// it can.
+// Metrics is the mcp service's full instrument set.
 type Metrics struct {
 	// mcpInitializeCounter is the unsampled census of observed handshakes by
 	// protocol revision. A counter rather than a span attribute because traces
@@ -127,9 +124,7 @@ type Metrics struct {
 }
 
 // NewMetrics constructs every instrument the mcp service publishes. Each
-// instrument creation failure is logged and leaves that instrument nil; the
-// Record methods handle nil instruments so partial construction still
-// produces a usable value.
+// instrument creation failure is logged.
 func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 	mcpToolCallCounter, err := meter.Int64Counter(
 		"mcp.tool.call",
@@ -290,10 +285,6 @@ const (
 // counter adds the endpoint slug and the rejection reason (which also covers
 // the session cap, not a limiter) so a saturated tunnel is attributable.
 func (m *Metrics) RecordTunnelPublicRejection(ctx context.Context, mcpSlug string, reason TunnelPublicRejectReason) {
-	if m == nil || m.tunnelPublicRejectedCounter == nil {
-		return
-	}
-
 	m.tunnelPublicRejectedCounter.Add(ctx, 1, metric.WithAttributes(
 		attr.ToolsetMCPSlug(mcpSlug),
 		attr.TunnelPublicRejectionReason(string(reason)),
@@ -301,10 +292,6 @@ func (m *Metrics) RecordTunnelPublicRejection(ctx context.Context, mcpSlug strin
 }
 
 func (m *Metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL string, toolName string) {
-	if m == nil || m.mcpToolCallCounter == nil {
-		return
-	}
-
 	kv := []attribute.KeyValue{
 		attr.McpURL(mcpURL),
 		attr.ToolName(toolName),
@@ -316,9 +303,6 @@ func (m *Metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL st
 // RecordKillswitchIdentityCoverage records the bounded coverage classes for
 // one tools/call observed at a registered MCP checkpoint.
 func (m *Metrics) RecordKillswitchIdentityCoverage(ctx context.Context, surface KillswitchCoverageSurface, identity KillswitchIdentityClass, resource KillswitchResourceClass) {
-	if m == nil {
-		return
-	}
 	m.identityCoverage.Record(ctx, surface, identity, resource)
 }
 
@@ -326,9 +310,6 @@ func (m *Metrics) RecordKillswitchIdentityCoverage(ctx context.Context, surface 
 // toolsets.mcp_slug lookup after an mcp_endpoints address miss. Semantics on
 // [LegacyFallbackCounter.RecordToolsetSlugFallback].
 func (m *Metrics) RecordToolsetSlugFallback(ctx context.Context, entryPoint LegacyFallbackEntryPoint) {
-	if m == nil {
-		return
-	}
 	m.legacyFallback.RecordToolsetSlugFallback(ctx, entryPoint)
 }
 
@@ -336,9 +317,6 @@ func (m *Metrics) RecordToolsetSlugFallback(ctx context.Context, entryPoint Lega
 // toolset-URN audience. Semantics on
 // [LegacyFallbackCounter.RecordLegacyAudienceAccepted].
 func (m *Metrics) RecordLegacyAudienceAccepted(ctx context.Context, issuerID string) {
-	if m == nil {
-		return
-	}
 	m.legacyFallback.RecordLegacyAudienceAccepted(ctx, issuerID)
 }
 
@@ -359,10 +337,6 @@ func (m *Metrics) RecordLegacyAudienceAccepted(ctx context.Context, issuerID str
 // handshake — including clients that named an unknown revision or none at all,
 // which are the two cohorts most likely to break under a version ceiling.
 func (m *Metrics) RecordMCPInitialize(ctx context.Context, requested, negotiated string) {
-	if m == nil || m.mcpInitializeCounter == nil {
-		return
-	}
-
 	m.mcpInitializeCounter.Add(ctx, 1, metric.WithAttributes(
 		attr.MCPRequestedProtocolVersion(mcpversions.Clamp(mcpversions.Sanitize(requested))),
 		attr.MCPNegotiatedProtocolVersion(mcpversions.Clamp(mcpversions.Sanitize(negotiated))),
@@ -377,10 +351,6 @@ func (m *Metrics) RecordMCPInitialize(ctx context.Context, requested, negotiated
 // interceptor invokes directly for the /x/mcp traffic that never reaches the
 // mcp dispatch.
 func (m *Metrics) RecordMCPRequest(ctx context.Context, protocolVersion, method string, surface Surface) {
-	if m == nil {
-		return
-	}
-
 	m.requestCensus.Record(ctx, protocolVersion, method, surface)
 }
 
@@ -390,10 +360,6 @@ func (m *Metrics) RecordMCPRequest(ctx context.Context, protocolVersion, method 
 // request census, so accepted and version-rejected traffic can be combined
 // without introducing client-controlled cardinality.
 func (m *Metrics) RecordMCPProtocolVersionRejected(ctx context.Context, protocolVersion, method string, surface Surface) {
-	if m == nil || m.mcpProtocolVersionRejectedCounter == nil {
-		return
-	}
-
 	m.mcpProtocolVersionRejectedCounter.Add(ctx, 1, metric.WithAttributes(
 		attr.MCPNegotiatedProtocolVersion(mcpversions.Clamp(mcpversions.Sanitize(protocolVersion))),
 		attr.McpMethod(mcprequests.ClampMethod(method)),
@@ -415,10 +381,6 @@ func (m *Metrics) RecordMCPProtocolVersionRejected(ctx context.Context, protocol
 // counter therefore partitions traffic at the gate rather than overlapping
 // with them.
 func (m *Metrics) RecordMCPRequestRejected(ctx context.Context, reason string, mcpURL string, surface Surface) {
-	if m == nil || m.mcpRequestRejectedCounter == nil {
-		return
-	}
-
 	m.mcpRequestRejectedCounter.Add(ctx, 1, metric.WithAttributes(
 		attr.OAuthFailureReason(reason),
 		attr.McpURL(mcpURL),
@@ -434,10 +396,6 @@ func (m *Metrics) RecordMCPRequestRejected(ctx context.Context, reason string, m
 // histogram count by URL and network surface shows public/private traffic per
 // endpoint without another per-server counter.
 func (m *Metrics) RecordMCPRequestDuration(ctx context.Context, mcpMethod string, mcpURL string, duration time.Duration) {
-	if m == nil || m.mcpRequestDuration == nil {
-		return
-	}
-
 	kv := []attribute.KeyValue{
 		attr.McpMethod(mcprequests.ClampMethod(mcpMethod)),
 		attr.McpURL(mcpURL),
@@ -460,18 +418,12 @@ func oauthFlowDimensions(issuerID, mcpSlug string) []attribute.KeyValue {
 // RecordOAuthFlowStarted records that a user-facing OAuth flow was initiated
 // — emitted once per minted challenge at /authorize.
 func (m *Metrics) RecordOAuthFlowStarted(ctx context.Context, issuerID, mcpSlug string) {
-	if m == nil || m.oauthFlowStartedCounter == nil {
-		return
-	}
 	m.oauthFlowStartedCounter.Add(ctx, 1, metric.WithAttributes(oauthFlowDimensions(issuerID, mcpSlug)...))
 }
 
 // RecordOAuthFlowCompleted records that a user-facing OAuth flow resolved
 // successfully — emitted when the authorization_code token exchange succeeds.
 func (m *Metrics) RecordOAuthFlowCompleted(ctx context.Context, issuerID, mcpSlug string) {
-	if m == nil || m.oauthFlowCompletedCounter == nil {
-		return
-	}
 	m.oauthFlowCompletedCounter.Add(ctx, 1, metric.WithAttributes(oauthFlowDimensions(issuerID, mcpSlug)...))
 }
 
@@ -482,9 +434,6 @@ func (m *Metrics) RecordOAuthFlowCompleted(ctx context.Context, issuerID, mcpSlu
 // deliberate user declines (see RecordOAuthFlowDeclined), or for refresh_token
 // grants (not part of a flow).
 func (m *Metrics) RecordOAuthFlowFailed(ctx context.Context, issuerID, mcpSlug string, stage OAuthFlowStage) {
-	if m == nil || m.oauthFlowFailedCounter == nil {
-		return
-	}
 	kv := append(oauthFlowDimensions(issuerID, mcpSlug), attr.OAuthFlowStage(string(stage)))
 	m.oauthFlowFailedCounter.Add(ctx, 1, metric.WithAttributes(kv...))
 }
@@ -495,9 +444,6 @@ func (m *Metrics) RecordOAuthFlowFailed(ctx context.Context, issuerID, mcpSlug s
 // a user choice, not an errant config — kept separate from failed so the
 // alertable failure signal stays clean.
 func (m *Metrics) RecordOAuthFlowDeclined(ctx context.Context, issuerID, mcpSlug string, stage OAuthFlowStage) {
-	if m == nil || m.oauthFlowDeclinedCounter == nil {
-		return
-	}
 	kv := append(oauthFlowDimensions(issuerID, mcpSlug), attr.OAuthFlowStage(string(stage)))
 	m.oauthFlowDeclinedCounter.Add(ctx, 1, metric.WithAttributes(kv...))
 }
@@ -506,9 +452,6 @@ func (m *Metrics) RecordOAuthFlowDeclined(ctx context.Context, issuerID, mcpSlug
 // authority lookup failure. It is separate from terminal flow failures because
 // the in-flight challenge or grant remains available for a later retry.
 func (m *Metrics) RecordOAuthAuthorityUnavailable(ctx context.Context, issuerID, mcpSlug string, stage OAuthFlowStage) {
-	if m == nil || m.oauthAuthorityUnavailableCounter == nil {
-		return
-	}
 	kv := append(oauthFlowDimensions(issuerID, mcpSlug), attr.OAuthFlowStage(string(stage)))
 	m.oauthAuthorityUnavailableCounter.Add(ctx, 1, metric.WithAttributes(kv...))
 }
@@ -516,9 +459,6 @@ func (m *Metrics) RecordOAuthAuthorityUnavailable(ctx context.Context, issuerID,
 // RecordOAuthRefreshTokenReplayServed records a successful response from the
 // refresh replay cache, dimensioned by issuer and MCP endpoint.
 func (m *Metrics) RecordOAuthRefreshTokenReplayServed(ctx context.Context, issuerID, mcpSlug string) {
-	if m == nil || m.oauthRefreshTokenReplayServedCounter == nil {
-		return
-	}
 	m.oauthRefreshTokenReplayServedCounter.Add(ctx, 1, metric.WithAttributes(oauthFlowDimensions(issuerID, mcpSlug)...))
 }
 
@@ -537,9 +477,6 @@ const (
 
 // RecordMetaMemberDispatch counts one meta member dispatch.
 func (m *Metrics) RecordMetaMemberDispatch(ctx context.Context, backend string, outcome MetaDispatchOutcome) {
-	if m == nil || m.metaMemberDispatchCounter == nil {
-		return
-	}
 	m.metaMemberDispatchCounter.Add(ctx, 1, metric.WithAttributes(
 		attr.MetaMemberBackend(backend),
 		attr.MetaDispatchOutcome(outcome),

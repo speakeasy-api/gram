@@ -47,7 +47,7 @@ func TestLookupUserByEmailTool_RequiresEmail(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewLookupUserByEmailTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callLookupUserByEmail,
 	}
 

@@ -2720,38 +2720,6 @@ func (q *Queries) GetPlatformMCPInventoryItem(ctx context.Context, arg GetPlatfo
 	return i, err
 }
 
-const getPlatformMCPLifecycle = `-- name: GetPlatformMCPLifecycle :one
-WITH default_project AS (
-    SELECT id
-    FROM projects
-    WHERE organization_id = $1
-      AND slug = 'default'
-      AND deleted IS FALSE
-    LIMIT 1
-)
-SELECT
-    default_project.id AS default_project_id,
-    EXISTS (
-        SELECT 1
-        FROM plugin_github_connections
-        WHERE project_id = default_project.id
-    ) AS marketplace_published
-FROM (VALUES (1)) AS root(value)
-LEFT JOIN default_project ON TRUE
-`
-
-type GetPlatformMCPLifecycleRow struct {
-	DefaultProjectID     uuid.NullUUID
-	MarketplacePublished bool
-}
-
-func (q *Queries) GetPlatformMCPLifecycle(ctx context.Context, organizationID string) (GetPlatformMCPLifecycleRow, error) {
-	row := q.db.QueryRow(ctx, getPlatformMCPLifecycle, organizationID)
-	var i GetPlatformMCPLifecycleRow
-	err := row.Scan(&i.DefaultProjectID, &i.MarketplacePublished)
-	return i, err
-}
-
 const getPlatformMCPNetworkIngressEntitlement = `-- name: GetPlatformMCPNetworkIngressEntitlement :one
 SELECT EXISTS (
     SELECT 1
@@ -4989,60 +4957,6 @@ func (q *Queries) ListPlatformMCPClientConnectionsForUpdate(ctx context.Context,
 			&i.RevokedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listPlatformMCPConnections = `-- name: ListPlatformMCPConnections :many
-SELECT
-    connection.id,
-    connection.authorized_at,
-    connection.reauthorized_at,
-    EXISTS (
-        SELECT 1
-        FROM platform_mcp_onboarding_milestones AS milestone
-        WHERE milestone.organization_id = connection.organization_id
-          AND milestone.milestone = 'connection_ready'
-          AND milestone.connection_id = connection.id
-          AND milestone.connection_generation = connection.active_generation
-    ) AS ready
-FROM platform_mcp_connections AS connection
-JOIN platform_mcp_oauth_clients AS client
-  ON client.id = connection.oauth_client_id
-WHERE connection.organization_id = $1
-  AND connection.revoked_at IS NULL
-  AND client.revoked_at IS NULL
-ORDER BY COALESCE(connection.reauthorized_at, connection.authorized_at) DESC, connection.id DESC
-`
-
-type ListPlatformMCPConnectionsRow struct {
-	ID             uuid.UUID
-	AuthorizedAt   pgtype.Timestamptz
-	ReauthorizedAt pgtype.Timestamptz
-	Ready          bool
-}
-
-func (q *Queries) ListPlatformMCPConnections(ctx context.Context, organizationID string) ([]ListPlatformMCPConnectionsRow, error) {
-	rows, err := q.db.Query(ctx, listPlatformMCPConnections, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListPlatformMCPConnectionsRow
-	for rows.Next() {
-		var i ListPlatformMCPConnectionsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.AuthorizedAt,
-			&i.ReauthorizedAt,
-			&i.Ready,
 		); err != nil {
 			return nil, err
 		}

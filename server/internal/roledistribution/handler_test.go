@@ -120,7 +120,7 @@ func TestHandleRoleDistributionSetupRequestedPoison(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			// Unconfigured processors return errors if invoked: nil proves no dispatch.
+			// Unset processors panic if invoked: a nil return proves no dispatch.
 			h := roledistribution.NewHandler(testenv.NewLogger(t), roledistribution.Processors{})
 			require.NoError(t, h.HandleRoleDistributionSetupRequested(t.Context(), event, gcp.MessageMetadata{}))
 		})

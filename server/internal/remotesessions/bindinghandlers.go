@@ -24,7 +24,7 @@ import (
 // creating an import cycle with agentmanagement's session revocation support.
 // Configure before serving requests. The callback must use the supplied transaction
 // to RequireAgentOwnerForUpdate with OwnedAgentAuthorize, retaining its membership
-// and agent locks through commit. An unconfigured service fails closed.
+// and agent locks through commit.
 func (s *Service) SetBindingAuthorizer(authorize func(context.Context, pgx.Tx, uuid.UUID) error) {
 	s.bindingAuthorizer = authorize
 }
@@ -70,9 +70,6 @@ func (s *Service) beginBindingOperation(ctx context.Context, principal, issuer s
 	auth, err := bindingHuman(ctx)
 	if err != nil {
 		return nil, err
-	}
-	if s.bindingAuthorizer == nil {
-		return nil, oops.C(oops.CodeForbidden)
 	}
 	principalID, err := uuid.Parse(principal)
 	if err != nil {

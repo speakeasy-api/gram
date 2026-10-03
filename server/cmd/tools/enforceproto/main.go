@@ -25,6 +25,7 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -118,7 +119,7 @@ func run() error {
 		return <-receiveDone
 	}
 
-	dispatcher, err := enforcereply.NewDispatcher(ctx, logger, otel.GetMeterProvider(), broker, inbox, enforcereply.DispatcherConfig{WaitTimeout: enforcereply.DefaultWaitTimeout, LaneWaitTimeout: nil, Flags: nil})
+	dispatcher, err := enforcereply.NewDispatcher(ctx, logger, otel.GetMeterProvider(), broker, inbox, enforcereply.DispatcherConfig{WaitTimeout: enforcereply.DefaultWaitTimeout, LaneWaitTimeout: nil, Flags: &feature.InMemory{}})
 	if err != nil {
 		_ = stopAndWait()
 		return fmt.Errorf("create enforcement dispatcher: %w", err)

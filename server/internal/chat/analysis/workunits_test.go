@@ -189,17 +189,10 @@ func TestNewJudges_RejectsDuplicateAndInvalidNames(t *testing.T) {
 	t.Parallel()
 
 	a := stubNamedJudge{name: "work_units"}
-	_, err := NewJudges(a, a)
-	require.ErrorContains(t, err, "registered twice")
+	require.Panics(t, func() { NewJudges(a, a) })
+	require.Panics(t, func() { NewJudges(stubNamedJudge{name: "Not Valid!"}) })
 
-	_, err = NewJudges(a, nil)
-	require.ErrorContains(t, err, "nil judge")
-
-	_, err = NewJudges(stubNamedJudge{name: "Not Valid!"})
-	require.ErrorContains(t, err, "must match")
-
-	judges, err := NewJudges(a, stubNamedJudge{name: "resolution"})
-	require.NoError(t, err)
+	judges := NewJudges(a, stubNamedJudge{name: "resolution"})
 	require.Equal(t, []string{"work_units", "resolution"}, judges.Names())
 	_, ok := judges.Get("resolution")
 	require.True(t, ok)

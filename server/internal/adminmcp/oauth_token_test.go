@@ -35,15 +35,18 @@ func (s *recordingStaffGrantStore) ValidateGrant(_ context.Context, _, _, _, _ s
 	s.validate++
 	return s.connection, s.status
 }
+
 func (s *recordingStaffGrantStore) ExchangeGrant(_ context.Context, _, _, _, _ string, session staffIssuedSession, _ time.Time) error {
 	s.exchange++
 	s.issued = session
 	return s.status
 }
+
 func (s *recordingStaffGrantStore) PrepareRefresh(_ context.Context, _, _ string, _ time.Time) (staffTokenConnection, error) {
 	s.prepare++
 	return s.connection, s.status
 }
+
 func (s *recordingStaffGrantStore) RotateRefresh(_ context.Context, _, _ string, _ staffTokenConnection, session staffIssuedSession, _ time.Time) error {
 	s.rotate++
 	s.issued = session

@@ -13,8 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const xaaProjectID = "11111111-1111-4111-8111-111111111111"
-const xaaServerID = "22222222-2222-4222-8222-222222222222"
+const (
+	xaaProjectID = "11111111-1111-4111-8111-111111111111"
+	xaaServerID  = "22222222-2222-4222-8222-222222222222"
+)
 
 type xaaReaderStub struct {
 	result *srv.ListOktaResourceConnectionsResult
@@ -60,13 +62,9 @@ func xaaCall(t *testing.T, session *mcp.ClientSession, projectID, serverID strin
 
 func TestXAAReadinessContract(t *testing.T) {
 	t.Parallel()
-	live, unavailable := newRegistrar(newTestMCPServer()), newRegistrar(newTestMCPServer())
-	registerXAAReadinessTool(live, &xaaReadinessService{})
-	registerXAAReadinessTool(unavailable, nil)
-	a, b := live.Descriptors()[0], unavailable.Descriptors()[0]
-	require.JSONEq(t, string(a.InputSchema), string(b.InputSchema))
-	require.Equal(t, a.output, b.output)
-	require.Equal(t, a.Meta, b.Meta)
+	live := newRegistrar(newTestMCPServer())
+	registerXAAReadinessTool(live, &xaaReadinessService{connections: &xaaReaderStub{}, enabled: func(context.Context, string) (bool, error) { return true, nil }})
+	a := live.Descriptors()[0]
 	require.Equal(t, ExternalAuthorizationOrgAdmin, a.Meta.Authorization)
 	require.Equal(t, discoveryMCPRead, a.Meta.DiscoveryScopes)
 	require.Equal(t, ProjectScopeExplicit, a.Meta.ProjectScope)
@@ -121,13 +119,12 @@ func TestXAAReadinessProjectsExistingStatesWithoutLeakingSnapshot(t *testing.T) 
 func TestXAAReadinessRefusals(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name, code            string
-		enabled, deny, absent bool
-		flagErr, serviceErr   error
-		project, server       string
-		calls                 int
+		name, code          string
+		enabled, deny       bool
+		flagErr, serviceErr error
+		project, server     string
+		calls               int
 	}{
-		{name: "unavailable", code: unavailableCode, absent: true},
 		{name: "disabled", code: unavailableCode},
 		{name: "flag failure", code: unavailableCode, flagErr: errors.New("private flag detail")},
 		{name: "org admin denial", code: "permission_denied", enabled: true, deny: true},
@@ -143,9 +140,6 @@ func TestXAAReadinessRefusals(t *testing.T) {
 			t.Parallel()
 			reader := &xaaReaderStub{err: tc.serviceErr, result: &srv.ListOktaResourceConnectionsResult{Servers: []*srv.OktaResourceConnectionServer{{ProjectID: xaaProjectID, McpServerID: "44444444-4444-4444-8444-444444444444", State: "verified"}}}}
 			service := &xaaReadinessService{connections: reader, enabled: func(context.Context, string) (bool, error) { return tc.enabled, tc.flagErr }}
-			if tc.absent {
-				service = nil
-			}
 			if tc.name == "wrong project" {
 				reader.result.Servers[0].McpServerID = xaaServerID
 			}

@@ -18,7 +18,6 @@ import (
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -31,8 +30,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-const riskScanServerID = "0198a0b0-0000-7000-8000-000000000001"
-const riskScanProjectID = "0198a0b0-0000-7000-8000-000000000002"
+const (
+	riskScanServerID  = "0198a0b0-0000-7000-8000-000000000001"
+	riskScanProjectID = "0198a0b0-0000-7000-8000-000000000002"
+)
 
 const riskScanRequest = " {\n  \"jsonrpc\": \"2.0\", \"id\": 7, \"method\": \"tools/call\", \"params\": {\"name\": \"lookup\", \"arguments\": {\"query\": \"sample\"}, \"_meta\": {\"progressToken\": \"p\"}}\n}\n"
 
@@ -104,6 +105,7 @@ func TestProxyManagerRiskScanBlocksBeforeUpstream(t *testing.T) {
 		}},
 		remotePolicyDetector{},
 		gcp.NewNoopPublisher[*riskv1.Finding](),
+		newMCPFindingEvidenceForTest(t),
 		mcpriskscan.DefaultPolicyConfig,
 	)
 	built := newRiskScanTestProxyWithEvaluator(t, upstream.URL, evaluator, nil, false)
@@ -150,6 +152,7 @@ func TestProxyManagerRiskScanFlagPublishesAndAllowsUpstream(t *testing.T) {
 		}},
 		remoteResponsePolicyDetector{},
 		published,
+		newMCPFindingEvidenceForTest(t),
 		mcpriskscan.DefaultPolicyConfig,
 	)
 	built := newRiskScanTestProxyWithEvaluator(t, upstream.URL, evaluator, nil, false)
@@ -199,6 +202,7 @@ func TestProxyManagerRiskScanWithholdsRemoteResponse(t *testing.T) {
 		}},
 		remoteResponsePolicyDetector{},
 		published,
+		newMCPFindingEvidenceForTest(t),
 		mcpriskscan.DefaultPolicyConfig,
 	)
 	built := newRiskScanTestProxyWithEvaluator(t, upstream.URL, evaluator, nil, false)
@@ -259,6 +263,7 @@ func TestToolsCallRiskScanFailsClosedWhenResultPayloadIsUnavailable(t *testing.T
 				}},
 				remoteResponsePolicyDetector{},
 				gcp.NewNoopPublisher[*riskv1.Finding](),
+				newMCPFindingEvidenceForTest(t),
 				config,
 			)
 			interceptor := NewToolsCallRiskScanInterceptor(evaluator, mcpriskscan.Event{
@@ -285,10 +290,10 @@ func TestToolsCallRiskScanFailsClosedWhenResultPayloadIsUnavailable(t *testing.T
 	}
 }
 
-func TestToolsCallRiskScanNoopDoesNotRejectUnclassifiedCall(t *testing.T) {
+func TestToolsCallRiskScanDoesNotRejectUnclassifiedCall(t *testing.T) {
 	t.Parallel()
 	interceptor := NewToolsCallRiskScanInterceptor(
-		mcpriskscan.NewNoop(testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), testenv.NewLogger(t)),
+		newRiskScanEvaluatorForTest(t),
 		mcpriskscan.Event{
 			Surface: mcpriskscan.SurfaceRemoteMCP, OrganizationID: "", ProjectID: "", ServerID: "",
 			ToolsetID: "", ToolName: "", ResourceURI: "", PromptName: "",
@@ -453,17 +458,13 @@ func assertRiskScanSelectionRejection(t *testing.T, request string, code int64) 
 
 func newRiskScanTestProxy(t *testing.T, upstreamURL string, observer mcpriskscan.Observer, selection *toolfilter.SessionSelection, tunnel bool) *proxy.Proxy {
 	t.Helper()
-	return newRiskScanTestProxyWithEvaluator(t, upstreamURL, mcpriskscan.NewEvaluator(observer), selection, tunnel)
+	return newRiskScanTestProxyWithEvaluator(t, upstreamURL, mcpriskscan.PrependObserver(observer, newRiskScanEvaluatorForTest(t)), selection, tunnel)
 }
 
 func newRiskScanTestProxyWithEvaluator(t *testing.T, upstreamURL string, evaluator *mcpriskscan.Evaluator, selection *toolfilter.SessionSelection, tunnel bool) *proxy.Proxy {
 	t.Helper()
 	logger := testenv.NewLogger(t)
-	tracerProvider := testenv.NewTracerProvider(t)
-	policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
-	require.NoError(t, err)
-	manager := NewProxyManager(logger, tracerProvider, testenv.NewMeterProvider(t),
-		nil, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, evaluator)
+	manager := newProxyManagerForTest(t, newUnsafePolicyForTest(t), evaluator)
 	if tunnel {
 		return manager.BuildTarget(logger, proxy.ServerIdentity{
 			RemoteMCPServerID:   "",

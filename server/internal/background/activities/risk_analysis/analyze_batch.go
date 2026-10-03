@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
@@ -104,22 +105,11 @@ func NewAnalyzeBatch(
 	shadowMCPBypass shadowmcpscan.BypassChecker,
 	riskRecorder *metering.RiskRecorder,
 	llmAnalyzerEnabled bool,
-) (*AnalyzeBatch, error) {
+) *AnalyzeBatch {
 	logger = logger.With(attr.SlogComponent("risk-analysis-dispatcher"))
 
-	if piiScanner == nil {
-		piiScanner = &StubPIIScanner{}
-	}
-	if promptInjectionScanner == nil {
-		promptInjectionScanner = promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
-	}
-	if findingsPub == nil {
-		findingsPub = gcp.NewNoopPublisher[*riskv1.Finding]()
-	}
 	recommended, err := CompileRecommended(celEng)
-	if err != nil {
-		return nil, fmt.Errorf("compile recommended scopes version %d: %w", recommendedscopes.Version, err)
-	}
+	inv.Require("risk analysis dispatcher", fmt.Sprintf("recommended scopes version %d compile", recommendedscopes.Version), err)
 
 	metrics := newRiskMetrics(meterProvider, logger)
 
@@ -139,7 +129,7 @@ func NewAnalyzeBatch(
 			shadowMCPClient,
 			mcpProvenanceLookup,
 			metrics,
-			shadowmcpscan.WithShadowMCPBypass(shadowMCPBypass),
+			shadowMCPBypass,
 		),
 		judge:                  judge,
 		flags:                  flags,
@@ -159,7 +149,7 @@ func NewAnalyzeBatch(
 		recommended:            recommended,
 		llmAnalyzerEnabled:     llmAnalyzerEnabled,
 		llmFallbackOnce:        sync.Once{},
-	}, nil
+	}
 }
 
 type AnalyzeBatchArgs struct {
@@ -438,8 +428,10 @@ func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) 
 	return messages, nil
 }
 
-const maxConcurrentContentPartAssetReads = 32
-const maxContentPartAssetReadSize = 20 * 1024 * 1024 // 20 MiB
+const (
+	maxConcurrentContentPartAssetReads = 32
+	maxContentPartAssetReadSize        = 20 * 1024 * 1024 // 20 MiB
+)
 
 func (a *AnalyzeBatch) hydrateContentPartBatch(ctx context.Context, rows []repo.GetContentPartBatchRow) ([]string, error) {
 	contents := make([]string, len(rows))

@@ -40,7 +40,7 @@ func requirePluginToolAudiences(t *testing.T, registrar *Registrar) {
 func TestUnavailablePluginToolsKeepReadsForBothAudiencesAndMutationsExternal(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newTestServer(t)
 	requirePluginToolAudiences(t, registrar)
 
 	assistant := map[string]bool{}
@@ -73,14 +73,6 @@ func requireRepublishPluginDeclaration(t *testing.T, registrar *Registrar) {
 	for _, assistant := range registrar.For(AudienceAssistant) {
 		require.NotEqual(t, operationRepublishPlugin, assistant.Name, "republishing stays off the assistant surface")
 	}
-}
-
-func TestUnavailableRepublishPluginToolKeepsTheLiveContract(t *testing.T) {
-	t.Parallel()
-
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
-	requireRepublishPluginDeclaration(t, registrar)
-	require.Equal(t, unavailableRepublishPluginDescription, descriptorByName(t, registrar, operationRepublishPlugin).Description)
 }
 
 func TestRepublishPluginToolResultCarriesTheDashboardLink(t *testing.T) {

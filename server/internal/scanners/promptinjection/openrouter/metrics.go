@@ -218,31 +218,27 @@ func (m *metrics) RecordContext(ctx context.Context, orgID, model, reasoning str
 		attribute.String("model", model),
 		attribute.String("reasoning", reasoning),
 	}
-	if m.contextCoverage != nil {
-		m.contextCoverage.Add(ctx, 1, metric.WithAttributes(
-			append(common,
-				attribute.Bool("prior_user_request_present", priorPresent),
-				attribute.Bool("recent_untrusted_content_present", recentPresent),
-				attribute.String("coverage", coverage),
-			)...,
-		))
-	}
-	if m.contextFields != nil {
-		m.contextFields.Add(ctx, 1, metric.WithAttributes(
-			append(common,
-				attribute.String("field", "prior_user_request"),
-				attribute.Bool("present", priorPresent),
-				attribute.Bool("truncated", priorTruncated),
-			)...,
-		))
-		m.contextFields.Add(ctx, 1, metric.WithAttributes(
-			append(common,
-				attribute.String("field", "recent_untrusted_content"),
-				attribute.Bool("present", recentPresent),
-				attribute.Bool("truncated", recentTruncated),
-			)...,
-		))
-	}
+	m.contextCoverage.Add(ctx, 1, metric.WithAttributes(
+		append(common,
+			attribute.Bool("prior_user_request_present", priorPresent),
+			attribute.Bool("recent_untrusted_content_present", recentPresent),
+			attribute.String("coverage", coverage),
+		)...,
+	))
+	m.contextFields.Add(ctx, 1, metric.WithAttributes(
+		append(common,
+			attribute.String("field", "prior_user_request"),
+			attribute.Bool("present", priorPresent),
+			attribute.Bool("truncated", priorTruncated),
+		)...,
+	))
+	m.contextFields.Add(ctx, 1, metric.WithAttributes(
+		append(common,
+			attribute.String("field", "recent_untrusted_content"),
+			attribute.Bool("present", recentPresent),
+			attribute.Bool("truncated", recentTruncated),
+		)...,
+	))
 }
 
 func (m *metrics) RecordPhysicalCall(ctx context.Context, orgID, model, reasoning string, outcome o11y.Outcome, failureReason string, duration time.Duration) {
@@ -253,12 +249,8 @@ func (m *metrics) RecordPhysicalCall(ctx context.Context, orgID, model, reasonin
 		attribute.String("model", model),
 		attribute.String("reasoning", reasoning),
 	)
-	if m.physicalCalls != nil {
-		m.physicalCalls.Add(ctx, 1, attrs)
-	}
-	if m.callDuration != nil {
-		m.callDuration.Record(ctx, duration.Seconds(), attrs)
-	}
+	m.physicalCalls.Add(ctx, 1, attrs)
+	m.callDuration.Record(ctx, duration.Seconds(), attrs)
 }
 
 func (m *metrics) RecordEvent(ctx context.Context, orgID, model, reasoning string, sessionContextPresent, findingSurfaced, failOpen bool, duration time.Duration) {
@@ -270,18 +262,11 @@ func (m *metrics) RecordEvent(ctx context.Context, orgID, model, reasoning strin
 		attribute.Bool("finding_surfaced", findingSurfaced),
 		attribute.Bool("fail_open", failOpen),
 	)
-	if m.events != nil {
-		m.events.Add(ctx, 1, attrs)
-	}
-	if m.decisionDuration != nil {
-		m.decisionDuration.Record(ctx, duration.Seconds(), attrs)
-	}
+	m.events.Add(ctx, 1, attrs)
+	m.decisionDuration.Record(ctx, duration.Seconds(), attrs)
 }
 
 func (m *metrics) RecordVerdict(ctx context.Context, orgID, kind, target string, operational, findingSurfaced, sessionContextPresent, failOpen bool, model, reasoning string) {
-	if m.verdicts == nil {
-		return
-	}
 	m.verdicts.Add(ctx, 1, metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attribute.String("directive_kind", kind),
@@ -296,9 +281,6 @@ func (m *metrics) RecordVerdict(ctx context.Context, orgID, kind, target string,
 }
 
 func (m *metrics) RecordFailOpen(ctx context.Context, orgID, model, reasoning, reason string) {
-	if m.failOpen == nil {
-		return
-	}
 	m.failOpen.Add(ctx, 1, metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attribute.String("model", model),
@@ -310,9 +292,6 @@ func (m *metrics) RecordFailOpen(ctx context.Context, orgID, model, reasoning, r
 // RecordCompletionTokens records one judge call's generated tokens, including
 // a call truncated at the cap.
 func (m *metrics) RecordCompletionTokens(ctx context.Context, orgID, model, reasoning string, tokens int, truncated bool) {
-	if m.completionTokens == nil {
-		return
-	}
 	m.completionTokens.Record(ctx, int64(tokens), metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attribute.String("model", model),
@@ -330,9 +309,7 @@ func (m *metrics) RecordDetection(ctx context.Context, orgID, kind, target strin
 		attribute.String("model", model),
 		attribute.String("reasoning", reasoning),
 	)
-	if m.detections != nil {
-		m.detections.Add(ctx, 1, attrs)
-	}
+	m.detections.Add(ctx, 1, attrs)
 }
 
 // RecordClassification records one completed judge call: a count tagged by
@@ -346,19 +323,12 @@ func (m *metrics) RecordClassification(ctx context.Context, orgID, label, model,
 		attribute.String("reasoning", reasoning),
 		attr.Outcome(outcome),
 	)
-	if m.classifications != nil {
-		m.classifications.Add(ctx, 1, attrs)
-	}
-	if m.duration != nil {
-		m.duration.Record(ctx, duration.Seconds(), attrs)
-	}
+	m.classifications.Add(ctx, 1, attrs)
+	m.duration.Record(ctx, duration.Seconds(), attrs)
 }
 
 // RecordConfidence records the confidence score of an injection verdict.
 func (m *metrics) RecordConfidence(ctx context.Context, orgID string, confidence float64) {
-	if m.confidence == nil {
-		return
-	}
 	m.confidence.Record(ctx, confidence, metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attribute.String("stage", stageJudge),
@@ -367,9 +337,6 @@ func (m *metrics) RecordConfidence(ctx context.Context, orgID string, confidence
 
 // RecordRateLimited records a judge call rejected by the rate limiter.
 func (m *metrics) RecordRateLimited(ctx context.Context, orgID, model, reasoning string) {
-	if m.rateLimited == nil {
-		return
-	}
 	m.rateLimited.Add(ctx, 1, metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attribute.String("model", model),

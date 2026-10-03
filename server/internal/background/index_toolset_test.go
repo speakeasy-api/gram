@@ -15,23 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
-	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
-
-func TestExecuteIndexToolsetWithoutTemporal(t *testing.T) {
-	t.Parallel()
-
-	run, err := ExecuteIndexToolset(t.Context(), nil, IndexToolsetParams{
-		ProjectID:             uuid.New(),
-		ToolsetID:             uuid.New(),
-		ToolsetSlug:           types.Slug("unavailable-index"),
-		ToolsetVersion:        1,
-		DeploymentID:          uuid.New(),
-		PermanentFailureCount: 0,
-	})
-	require.ErrorIs(t, err, tenv.ErrNotConfigured)
-	require.Nil(t, run)
-}
 
 func TestIndexToolsetWorkflow_PermanentFailureCoolsDownThenRetries(t *testing.T) {
 	t.Parallel()

@@ -150,9 +150,6 @@ func newHooksRequestDecoder(logger *slog.Logger) func(r *http.Request) goahttp.D
 }
 
 func logDecodeFailure(ctx context.Context, logger *slog.Logger, err error, body []byte, contentType, contentEncoding string) {
-	if logger == nil {
-		return
-	}
 	sample := body
 	if len(sample) > decodeBodySampleLimit {
 		sample = sample[:decodeBodySampleLimit]
@@ -974,7 +971,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
 		}
-		if blockID, err := uuid.NewV7(); err == nil && !s.isHookDuplicate(ctx) && s.repo != nil && strings.TrimSpace(ev.Context.OrganizationID) != "" && ev.Context.ProjectID != uuid.Nil {
+		if blockID, err := uuid.NewV7(); err == nil && !s.isHookDuplicate(ctx) && strings.TrimSpace(ev.Context.OrganizationID) != "" && ev.Context.ProjectID != uuid.Nil {
 			userReason = appendBlockURL(userReason, s.blockViewURL(ctx, ev.Context.OrganizationID, blockID))
 			userID := ev.Context.User.ID
 			userEmail := ev.Context.User.Email
@@ -1001,7 +998,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		}
 		return constructBlockResponse(payload.HookEventName, userReason), nil
 	}
-	if s.riskScanner != nil && ev.ConversationID != "" {
+	if ev.ConversationID != "" {
 		// Acknowledged warn is excluded from the enforcement block so it falls
 		// through to the shadow-MCP guard below: an ack clears the risk
 		// challenge but must never bypass unapproved-toolset validation.
@@ -1406,7 +1403,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 	serverPrefix string,
 	detail string,
 ) (uuid.UUID, uuid.UUID, bool) {
-	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) {
+	if policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) {
 		return uuid.Nil, uuid.Nil, false
 	}
 
@@ -1502,7 +1499,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 // gram.hook.block_reason. trace_summaries_mv aggregates with max(), so the
 // trace will surface as blocked regardless of which row arrives first.
 func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, reason string) {
-	if s.telemetryLogger == nil || reason == "" || s.isHookDuplicate(ctx) {
+	if reason == "" || s.isHookDuplicate(ctx) {
 		return
 	}
 

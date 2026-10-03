@@ -298,7 +298,7 @@ func relayRouteKeyLess(left, right relayRouteKey) bool {
 }
 
 func closeIdleRelayDestination(destination *relayDestination) {
-	if destination == nil || destination.httpClient == nil {
+	if destination == nil {
 		return
 	}
 	destination.httpClient.CloseIdleConnections()

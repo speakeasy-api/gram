@@ -28,10 +28,12 @@ import (
 	keysservice "github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/litellm/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan/mcpriskscantest"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	spendcelenv "github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
@@ -72,6 +74,22 @@ type realTestInstance struct {
 	keys      *keysservice.Service
 }
 
+// noopHookSignals stands in for the Temporal-backed signalers and chat title
+// generator, which this suite runs without.
+type noopHookSignals struct{}
+
+func (noopHookSignals) ScheduleChatTitleGeneration(context.Context, string, string, string) error {
+	return nil
+}
+
+func (noopHookSignals) Signal(context.Context, uuid.UUID) error { return nil }
+
+func (noopHookSignals) SignalIdentityMapRefresh(context.Context) error { return nil }
+
+type noopSuggestionSignals struct{}
+
+func (noopSuggestionSignals) Signal(context.Context, uuid.UUID, uuid.UUID) error { return nil }
+
 type recordingMessageObserver struct {
 	mu       sync.Mutex
 	projects []uuid.UUID
@@ -95,7 +113,14 @@ func (r *recordingMessageObserver) count(projectID uuid.UUID) int {
 	return count
 }
 
-func newRealTestService(t *testing.T, scanner risk.RiskScanner) (context.Context, *realTestInstance) {
+func newRealTestService(t *testing.T) (context.Context, *realTestInstance) {
+	t.Helper()
+	return newRealTestServiceWithScannerFactory(t, func(conn *pgxpool.Pool) risk.RiskScanner {
+		return mcpriskscantest.NewRiskScanner(t, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, promptinjection.NoopClassifier)
+	})
+}
+
+func newRealTestServiceWithScanner(t *testing.T, scanner risk.RiskScanner) (context.Context, *realTestInstance) {
 	t.Helper()
 	return newRealTestServiceWithScannerFactory(t, func(*pgxpool.Pool) risk.RiskScanner { return scanner })
 }
@@ -130,7 +155,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	assetStorage := assetstest.NewTestBlobStore(t)
-	chatWriter, shutdownWriter := chat.NewChatMessageWriter(logger, conn, assetStorage)
+	chatWriter, shutdownWriter := chat.NewChatMessageWriter(logger, conn, assetStorage, chat.NewTurnStream(redisClient))
 	t.Cleanup(func() { require.NoError(t, shutdownWriter(t.Context())) })
 	observer := &recordingMessageObserver{mu: sync.Mutex{}, projects: nil}
 	chatWriter.AddObserver(observer)
@@ -140,44 +165,38 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 	require.NoError(t, err)
 	spendEngine, err := spendcelenv.New()
 	require.NoError(t, err)
-	spendGate, err := spendrules.NewGate(logger, cacheAdapter, spendEngine)
-	require.NoError(t, err)
+	spendGate := spendrules.NewGate(logger, cacheAdapter, spendEngine)
 	hookService := hooks.NewService(
 		logger,
 		conn,
 		tracerProvider,
 		meterProvider,
-		nil,
+		telemetryLogger,
 		gcp.NewNoopPublisher[*otelv1.InboundLogRecord](),
 		sessionManager,
 		cacheAdapter,
-		nil,
-		nil,
 		authzEngine,
 		audit.NewLogger(),
 		captureEnabledFeatures{},
-		nil,
+		noopHookSignals{},
 		scanner,
-		nil,
+		promptinjection.NewScanner(logger, promptinjection.NoopClassifier),
 		risk.NewPolicyBypassEvaluator(logger, conn),
 		spendGate,
 		shadowmcp.NewClient(logger, conn, cacheAdapter, serverURL),
 		chatWriter,
-		nil,
-		nil,
-		nil,
-		serverURL,
+		noopHookSignals{},
+		noopSuggestionSignals{},
+		noopHookSignals{},
 		orghost.New(orghost.Config{ServerURL: serverURL, SiteURL: siteURL, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
 		"test-jwt-secret",
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 	)
 	calls := callcache.New(cacheAdapter)
-	traceProcessor := NewTraceProcessor(logger, meterProvider, telemetryLogger, calls)
-	metricProcessor := NewMetricProcessor(logger, meterProvider, telemetryLogger)
-	healthProcessor := NewHealthProcessor(logger, conn)
 	instanceResolver := NewInstanceResolver(logger, conn)
-	traceProcessor.SetInstanceResolver(instanceResolver)
-	metricProcessor.SetInstanceResolver(instanceResolver)
+	traceProcessor := NewTraceProcessor(logger, meterProvider, telemetryLogger, calls, instanceResolver)
+	metricProcessor := NewMetricProcessor(logger, meterProvider, telemetryLogger, instanceResolver)
+	healthProcessor := NewHealthProcessor(logger, conn)
 	traceProcessor.Start(ctx)
 	metricProcessor.Start(ctx)
 	healthProcessor.Start(ctx)
@@ -205,4 +224,15 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 func newDisabledHealthProcessor(t *testing.T) *HealthProcessor {
 	t.Helper()
 	return newHealthProcessor(testenv.NewLogger(t), time.Hour, func(context.Context, repo.RecordLiteLLMInstanceHealthParams) error { return nil })
+}
+
+func newTestCallCache() *callcache.Cache {
+	return callcache.New(newMemoryCache())
+}
+
+func newTestInstanceResolver(t *testing.T) *InstanceResolver {
+	t.Helper()
+	conn, err := testInfra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	return NewInstanceResolver(testenv.NewLogger(t), conn)
 }

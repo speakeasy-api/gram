@@ -165,14 +165,12 @@ type Service struct {
 	// features drives the phased hooks rollout gate applied to every publish (see
 	// publishProject). Both the automated publisher (NewPublisher) and the
 	// dashboard service (NewService) set it, so interactive publishes are gated
-	// too. A nil provider fails CLOSED — non-canary orgs are treated as not
-	// eligible and carry their existing hooks — so a missing provider can never
-	// force-advance an org.
+	// too.
 	features feature.Provider
 	// publisher enqueues the republish that propagates a plugin change to the
 	// project's marketplace repo. Nil on the automated publisher (which is
-	// itself the thing doing the publishing) and in tests; signalPublish is a
-	// no-op then.
+	// itself the thing doing the publishing) and when GitHub publishing is
+	// off; signalPublish is a no-op then.
 	publisher             PluginPublishSignaler
 	publicationRequests   PublicationRequests
 	distributionAdmission *admission.Guard
@@ -196,6 +194,7 @@ func NewService(
 	serverURL string,
 	features feature.Provider,
 	publisher PluginPublishSignaler,
+	distributionAdmission *admission.Guard,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
@@ -214,11 +213,11 @@ func NewService(
 		// features gates human/dashboard-initiated hook-output changes (marketplace
 		// rename via UpdateMarketplaceSettings, browser-login toggle via
 		// productfeatures) on the phased hooks rollout, mirroring the automated
-		// publisher. Fail-closed when nil: non-canary orgs defer those changes.
+		// publisher.
 		features:              features,
 		publisher:             publisher,
 		publicationRequests:   PublicationRequests{Enabled: false},
-		distributionAdmission: admission.NewGuard(nil, nil),
+		distributionAdmission: distributionAdmission,
 	}
 }
 
@@ -230,11 +229,14 @@ func (s *Service) WithPublicationRequests(enabled bool) *Service {
 func NewPublisher(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
+	cacheImpl cache.Cache,
+	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	github *GitHubConfig,
 	env string,
 	serverURL string,
 	features feature.Provider,
+	distributionAdmission *admission.Guard,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
@@ -244,9 +246,9 @@ func NewPublisher(
 		db:        db,
 		repo:      repo.New(db),
 		auth:      nil,
-		authz:     nil,
+		authz:     authzEngine,
 		audit:     auditLogger,
-		cache:     nil,
+		cache:     cacheImpl,
 		github:    github,
 		serverURL: serverURL,
 		keyPrefix: auth.APIKeyPrefix(env),
@@ -254,7 +256,7 @@ func NewPublisher(
 		// The publisher runs the publish workflow itself; it never signals one.
 		publisher:             nil,
 		publicationRequests:   PublicationRequests{Enabled: false},
-		distributionAdmission: admission.NewGuard(nil, nil),
+		distributionAdmission: distributionAdmission,
 	}
 }
 
@@ -1734,18 +1736,8 @@ func collaboratorCacheKey(owner, repo string) string {
 }
 
 // cachedHasDirectCollaborator wraps GitHubPublisher.HasDirectCollaborator
-// with a short-lived cache. Falls back to an uncached live call when no
-// cache is configured (e.g. the publish-only worker instance from
-// NewPublisher, which never serves GetPublishStatus).
+// with a short-lived cache.
 func (s *Service) cachedHasDirectCollaborator(ctx context.Context, owner, repo string) (bool, error) {
-	if s.cache == nil {
-		hasCollaborators, err := s.github.Client.HasDirectCollaborator(ctx, s.github.InstallationID, owner, repo)
-		if err != nil {
-			return false, fmt.Errorf("check repo collaborators: %w", err)
-		}
-		return hasCollaborators, nil
-	}
-
 	key := collaboratorCacheKey(owner, repo)
 
 	var cached bool
@@ -1791,19 +1783,17 @@ func liveVersionCacheKey(owner, repo string) string {
 // it.
 func (s *Service) cachedLiveManifestVersion(ctx context.Context, ac *contextvalues.AuthContext, conn repo.PluginGithubConnection) *string {
 	key := liveVersionCacheKey(conn.RepoOwner, conn.RepoName)
-	if s.cache != nil {
-		var cached string
-		switch err := s.cache.Get(ctx, key, &cached); {
-		case err == nil:
-			if cached == "" {
-				return nil
-			}
-			return &cached
-		case errors.Is(err, redisCache.ErrCacheMiss):
-			// Fall through to the live read below.
-		default:
-			s.logger.WarnContext(ctx, "read live version cache", attr.SlogError(err))
+	var cached string
+	switch err := s.cache.Get(ctx, key, &cached); {
+	case err == nil:
+		if cached == "" {
+			return nil
 		}
+		return &cached
+	case errors.Is(err, redisCache.ErrCacheMiss):
+		// Fall through to the live read below.
+	default:
+		s.logger.WarnContext(ctx, "read live version cache", attr.SlogError(err))
 	}
 
 	version, ok := s.liveManifestVersion(ctx, ac, conn)
@@ -1813,10 +1803,8 @@ func (s *Service) cachedLiveManifestVersion(ctx context.Context, ac *contextvalu
 		return nil
 	}
 
-	if s.cache != nil {
-		if err := s.cache.Set(ctx, key, &version, liveVersionCacheTTL); err != nil {
-			s.logger.WarnContext(ctx, "write live version cache", attr.SlogError(err))
-		}
+	if err := s.cache.Set(ctx, key, &version, liveVersionCacheTTL); err != nil {
+		s.logger.WarnContext(ctx, "write live version cache", attr.SlogError(err))
 	}
 
 	if version == "" {
@@ -2094,9 +2082,6 @@ func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput)
 	if err != nil {
 		return nil, fmt.Errorf("get project with organization metadata: %w", err)
 	}
-	if s.github == nil {
-		return nil, fmt.Errorf("github publishing is not configured")
-	}
 
 	actorDisplayName := "Gram"
 	result, err := s.publishProject(ctx, publishProjectInput{
@@ -2168,17 +2153,13 @@ var canaryHooksOrgSlugs = map[string]bool{
 // hooksRolloutEligible reports whether the org is cleared to receive the current
 // hooksGeneratorVersion. Canary orgs always are. Otherwise the FlagHooksRollout
 // payload — JSON {"version": N} naming the highest hooks version cleared for the
-// org — must reach the current version. It fails closed: a missing provider,
-// payload, parse error, or resolve error all mean "not eligible", so the org
+// org — must reach the current version. It fails closed: a missing payload,
+// parse error, or resolve error all mean "not eligible", so the org
 // keeps its published hooks rather than rolling forward on an incomplete signal.
 func (s *Service) hooksRolloutEligible(ctx context.Context, orgID, orgSlug string) bool {
 	if canaryHooksOrgSlugs[orgSlug] {
 		return true
 	}
-	if s.features == nil {
-		return false
-	}
-
 	payload, err := s.features.FlagPayload(ctx, feature.FlagHooksRollout, orgID, feature.OrgProjectGroups(orgSlug, ""))
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve hooks rollout flag payload; carrying current hooks",
@@ -2566,7 +2547,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// Bust the short-lived HasDirectCollaborator cache so the next
 	// GetPublishStatus read reflects a just-added collaborator immediately
 	// instead of the stale cached value for up to hasCollaboratorsCacheTTL.
-	if len(input.GitHubUsernames) > 0 && s.cache != nil {
+	if len(input.GitHubUsernames) > 0 {
 		if err := s.cache.Delete(ctx, collaboratorCacheKey(repoOwner, repoName)); err != nil {
 			s.logger.WarnContext(ctx, "invalidate collaborator cache", attr.SlogError(err))
 		}
@@ -2604,10 +2585,8 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 
 	// Bust the live-version cache so the dashboard's current-version readout
 	// reflects this publish immediately instead of after the TTL.
-	if s.cache != nil {
-		if err := s.cache.Delete(ctx, liveVersionCacheKey(repoOwner, repoName)); err != nil {
-			s.logger.WarnContext(ctx, "invalidate live version cache", attr.SlogError(err))
-		}
+	if err := s.cache.Delete(ctx, liveVersionCacheKey(repoOwner, repoName)); err != nil {
+		s.logger.WarnContext(ctx, "invalidate live version cache", attr.SlogError(err))
 	}
 
 	// Report publication from the candidate that actually reached the repo and
@@ -3151,7 +3130,6 @@ func (s *Service) persistPluginAPIKeys(
 // --- Internal helpers ---
 
 func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, pluginIDs ...uuid.UUID) ([]PluginInfo, error) {
-
 	// Resolve external rollout state before taking the shared project lock.
 	// Even an empty initial gateway set must be read under the lock so a
 	// concurrent attachment cannot publish a package that omits it.
@@ -3159,11 +3137,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 	if err != nil {
 		return nil, oops.E(oops.CodeUnavailable, err, "resolve gateway distribution project").LogError(ctx, s.logger)
 	}
-	var rollout admission.RolloutConfig
-	var rolloutErr error
-	if s.distributionAdmission != nil {
-		rollout, rolloutErr = s.distributionAdmission.Resolve(ctx, project.ID, project.Slug, project.ProjectSlug)
-	}
+	rollout, rolloutErr := s.distributionAdmission.Resolve(ctx, project.ID, project.Slug, project.ProjectSlug)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin gateway distribution check").LogError(ctx, s.logger)
@@ -3190,9 +3164,6 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 	gatewayRows, err := lockedRepo.ListPluginsWithGatewaysForProject(ctx, repo.ListPluginsWithGatewaysForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnavailable, err, "list live plugin gateways").LogError(ctx, s.logger)
-	}
-	if len(gatewayRows) > 0 && s.distributionAdmission == nil {
-		return nil, mapDistributionAdmissionError(admission.ErrUnavailable)
 	}
 	for _, gateway := range gatewayRows {
 		if err := s.distributionAdmission.CheckGatewayAttachment(ctx, tx, rollout, rolloutErr, project.ID, projectID, gateway.PluginID, gateway.GatewayID); err != nil {

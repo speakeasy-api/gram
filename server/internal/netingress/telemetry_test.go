@@ -18,6 +18,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
+func newTestTelemetry(t *testing.T) *Telemetry {
+	t.Helper()
+	return NewTelemetry(testenv.NewLogger(t), testenv.NewMeterProvider(t))
+}
+
 func TestTelemetryClampsDimensionsAndExcludesSensitiveValues(t *testing.T) {
 	t.Parallel()
 
@@ -55,31 +60,6 @@ func TestTelemetryClampsDimensionsAndExcludesSensitiveValues(t *testing.T) {
 	}
 }
 
-func TestAttestationTelemetryClassifiesUnavailableVerifierAsError(t *testing.T) {
-	t.Parallel()
-
-	reader := sdkmetric.NewManualReader()
-	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	t.Cleanup(func() { require.NoError(t, provider.Shutdown(t.Context())) })
-	telemetry := NewTelemetry(testenv.NewLogger(t), provider)
-	verifier := NewAttestationVerifier(nil, nil, DefaultTokenAudience, time.Second, telemetry)
-
-	_, err := verifier.Verify(t.Context(), "opaque-token", "192.0.2.1:1234")
-	require.Error(t, err)
-
-	var resourceMetrics metricdata.ResourceMetrics
-	require.NoError(t, reader.Collect(t.Context(), &resourceMetrics))
-	points := networkIngressCounterPoints(t, resourceMetrics, NetworkIngressOperationsMetric)
-	require.Len(t, points, 1)
-	require.Equal(t, attribute.NewSet(
-		attr.NetworkIngressOperation(OperationAttestation),
-		attr.NetworkIngressResult(ResultError),
-		attr.NetworkIngressReason(ReasonVerifierUnavailable),
-		attr.Provider("unknown"),
-		attr.NetworkSurface("private"),
-	), points[0].Attributes)
-}
-
 func TestAttestationTelemetryRetainsCachedProviderOnRecheckFailure(t *testing.T) {
 	t.Parallel()
 
@@ -114,7 +94,7 @@ func TestAttestorTelemetryRecordsHostMismatch(t *testing.T) {
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(t.Context())) })
 	telemetry := NewTelemetry(testenv.NewLogger(t), provider)
-	handler, err := NewAttestorHandler(AttestorConfig{
+	handler := NewAttestorHandler(AttestorConfig{
 		Upstream:     &url.URL{Scheme: "https", Host: "upstream.invalid"},
 		ExpectedHost: "private.example.ts.net",
 		TokenPath:    "/unused-on-host-mismatch",
@@ -122,7 +102,6 @@ func TestAttestorTelemetryRecordsHostMismatch(t *testing.T) {
 		Logger:       testenv.NewLogger(t),
 		Telemetry:    telemetry,
 	})
-	require.NoError(t, err)
 
 	request := httptest.NewRequest(http.MethodPost, "https://other.example.ts.net/mcp/server", nil)
 	request.Host = "other.example.ts.net"
@@ -141,14 +120,6 @@ func TestAttestorTelemetryRecordsHostMismatch(t *testing.T) {
 		attr.Provider(ProviderTailscale),
 		attr.NetworkSurface("private"),
 	), points[0].Attributes)
-}
-
-func TestTelemetryNilSafe(t *testing.T) {
-	t.Parallel()
-
-	var telemetry *Telemetry
-	telemetry.Record(t.Context(), OperationAdmission, ResultAllowed, ReasonNone, ProviderTailscale, time.Millisecond)
-	require.NotNil(t, NewTelemetry(testenv.NewLogger(t), nil))
 }
 
 func networkIngressCounterPoints(t *testing.T, metrics metricdata.ResourceMetrics, name string) []metricdata.DataPoint[int64] {

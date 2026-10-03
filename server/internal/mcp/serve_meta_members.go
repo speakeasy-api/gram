@@ -70,9 +70,6 @@ func (s *Service) memberStatus(ctx context.Context, member metaMember) string {
 	case member.backend == metaMemberBackendHosted:
 		return metamcp.StatusAvailable
 	case member.tunneledServerID.Valid:
-		if s.tunnelManager == nil || s.tunnelManager.routes == nil {
-			return metamcp.StatusUnknown
-		}
 		candidates, err := s.tunnelManager.routes.Candidates(ctx, member.tunneledServerID.UUID.String())
 		if err != nil {
 			return metamcp.StatusUnknown

@@ -52,7 +52,6 @@ func newTestCredentialCodec(t *testing.T) *CredentialCodec {
 
 	encryptionClient, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
-	codec, err := NewCredentialCodec(encryptionClient)
-	require.NoError(t, err)
+	codec := NewCredentialCodec(encryptionClient)
 	return codec
 }

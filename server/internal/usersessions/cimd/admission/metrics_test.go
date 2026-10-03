@@ -95,16 +95,3 @@ func TestMetrics_SeparatesModesAndOutcomes(t *testing.T) {
 		attr.CIMDAdmissionOutcome(string(admission.DenialNotListed)),
 	)])
 }
-
-// TestMetrics_NilIsInert: admission runs on an unauthenticated endpoint, so
-// a metrics value that failed to build must degrade to silence rather than
-// panic mid-flow.
-func TestMetrics_NilIsInert(t *testing.T) {
-	t.Parallel()
-
-	var metrics *admission.Metrics
-	require.NotPanics(t, func() {
-		metrics.RecordAdmitted(t.Context(), admission.ModeOpen, admission.AdmitOpen)
-		metrics.RecordDenied(t.Context(), admission.ModePresets, admission.DenialNotListed)
-	})
-}

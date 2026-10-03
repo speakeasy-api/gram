@@ -28,17 +28,12 @@ func NewExpansionAdmission(features *productfeatures.Client, ready, enabled bool
 }
 
 func (a *ExpansionAdmission) SetReconcilerReady(ready bool) {
-	if a != nil {
-		a.ready.Store(ready)
-	}
+	a.ready.Store(ready)
 }
 
 func (a *ExpansionAdmission) CheckExpansion(ctx context.Context, organizationID string) error {
-	if a == nil || !a.enabled {
+	if !a.enabled {
 		return fmt.Errorf("network ingress is disabled")
-	}
-	if a.features == nil {
-		return fmt.Errorf("network ingress admission is unavailable")
 	}
 	entitled, err := a.features.IsFeatureEnabledUncached(ctx, organizationID, productfeatures.FeatureNetworkIngress)
 	if err != nil {

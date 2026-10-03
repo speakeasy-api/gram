@@ -48,21 +48,3 @@ func registerDiagnosticsTools(reg *Registrar, diagnostics *DiagnosticsService) {
 		return nil, output, nil
 	})
 }
-
-func registerUnavailableDiagnosticsTools(reg *Registrar) {
-	for _, tool := range []struct {
-		name        string
-		title       string
-		description string
-	}{
-		{"get_project_overview", "Project Health Overview", "Summarize one project's MCP activity and failures. This is not switched on for your organization yet."},
-		{"get_mcp_diagnostics", "Diagnose an MCP Server", "Diagnose one MCP server that is not working. This is not switched on for your organization yet."},
-	} {
-		addTool(reg, &mcp.Tool{
-			Name:        tool.name,
-			Title:       tool.title,
-			Description: tool.description,
-			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}, unavailableTool("diagnostics"))
-	}
-}

@@ -119,16 +119,14 @@ type normalizedRepublishPlugin struct {
 // outbox path; the signaler is the debounced fallback used when emission is
 // disabled. Either one is enough to request a publish.
 func (s *PluginsService) WithRepublish(publication plugindelivery.PublicationRequests, publisher plugindelivery.PluginPublishSignaler, budget OperationBudget) *PluginsService {
-	if s != nil {
-		s.publication = publication
-		s.publisher = publisher
-		s.republishBudget = budget
-	}
+	s.publication = publication
+	s.publisher = publisher
+	s.republishBudget = budget
 	return s
 }
 
 func (s *PluginsService) republishValid() bool {
-	return s.valid() && s.publicationEvidence != nil && s.republishBudget.valid() && (s.publication.Enabled || s.publisher != nil)
+	return s.publicationEvidence != nil && (s.publication.Enabled || s.publisher != nil)
 }
 
 // RepublishPlugin requests a publish of the project's plugin packages when the

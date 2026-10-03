@@ -50,7 +50,7 @@ func TestShadowDistributionReadReportsRepairForPluginAndTarget(t *testing.T) {
 	require.NoError(t, err)
 
 	flags := newFeatureRollout(principal.OrganizationID)
-	service := NewShadowDistributionReadService(testenv.NewLogger(t), conn, admission.NewGuard(flags, nil), NewPostgresOrganizationSlugResolver(conn))
+	service := NewShadowDistributionReadService(testenv.NewLogger(t), conn, testDistributionGuard(t, flags), NewPostgresOrganizationSlugResolver(conn))
 	pluginResult := service.ForPlugin(ctx, principal.OrganizationID, project.ID, plugin.ID)
 	targetResult := service.ForTarget(ctx, principal.OrganizationID, project.ID, canonicalTarget.CanonicalURL)
 

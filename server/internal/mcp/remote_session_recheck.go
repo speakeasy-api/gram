@@ -78,7 +78,7 @@ type remoteSessionRecheck struct {
 	// interval is the re-check cadence; zero or negative disables the sweep.
 	interval time.Duration
 	batch    int32
-	// limiter paces probes per issuer host; nil without Redis.
+	// limiter paces probes per issuer host.
 	limiter      *ratelimit.Limiter
 	limiterStore ratelimit.Store
 	slots        chan struct{}
@@ -90,16 +90,11 @@ type remoteSessionRecheck struct {
 }
 
 func newRemoteSessionRecheck(interval time.Duration, redisClient *redis.Client, meterProvider metric.MeterProvider) *remoteSessionRecheck {
-	var limiter *ratelimit.Limiter
-	var store ratelimit.Store
-	if redisClient != nil {
-		store = ratelimit.NewRedisStore(redisClient)
-		limiter = ratelimit.New(store, "remote_session_recheck_host", remoteSessionRecheckHostRate, ratelimit.WithMetrics(meterProvider))
-	}
+	store := ratelimit.NewRedisStore(redisClient)
 	return &remoteSessionRecheck{
 		interval:     interval,
 		batch:        remoteSessionRecheckBatch,
-		limiter:      limiter,
+		limiter:      ratelimit.New(store, "remote_session_recheck_host", remoteSessionRecheckHostRate, ratelimit.WithMetrics(meterProvider)),
 		limiterStore: store,
 		slots:        make(chan struct{}, remoteSessionRecheckSlots),
 		mu:           sync.Mutex{},
@@ -382,7 +377,8 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 		}
 		subject := sess.SubjectUrn
 		// A synthetic first-party state: the probe reads only the subject, the id it keys its session on, and the endpoint.
-		state := AuthnChallengeState{FederatedBinding: nil, DelegationRetryUsed: false,
+		state := AuthnChallengeState{
+			FederatedBinding: nil, DelegationRetryUsed: false,
 			Browser:                  nil,
 			Federation:               nil,
 			ID:                       "keepalive:" + sess.ID.String(),
@@ -467,9 +463,6 @@ func (s *Service) placeRemoteSessionRecheck(ctx context.Context, logger *slog.Lo
 var errRemoteSessionRecheckRateLimited = errors.New("remote session re-check issuer host rate limited")
 
 func (s *Service) admitRemoteSessionRecheck(ctx context.Context, logger *slog.Logger, issuerURL string) error {
-	if s.remoteSessionRecheck.limiter == nil {
-		return nil
-	}
 	res, err := s.remoteSessionRecheck.limiter.Allow(ctx, issuerHost(issuerURL))
 	if err != nil {
 		logger.WarnContext(ctx, "remote session re-check limiter unavailable; allowing", attr.SlogError(err))

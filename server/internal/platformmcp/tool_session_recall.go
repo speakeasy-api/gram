@@ -28,9 +28,6 @@ func registerSessionRecallTools(reg *Registrar, svc SessionRecaller) {
 		if err != nil {
 			return nil, ListMySessionsOutput{}, err
 		}
-		if svc == nil {
-			return nil, ListMySessionsOutput{}, ErrUnavailable
-		}
 		output, err := svc.ListMySessions(ctx, principal, input)
 		if err != nil {
 			if result, ok := sessionRecallToolResult(err); ok {
@@ -51,9 +48,6 @@ func registerSessionRecallTools(reg *Registrar, svc SessionRecaller) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, ContinueSessionOutput{}, err
-		}
-		if svc == nil {
-			return nil, ContinueSessionOutput{}, ErrUnavailable
 		}
 		output, err := svc.ContinueSession(ctx, principal, input)
 		if err != nil {
@@ -90,20 +84,4 @@ func sessionRecallToolResult(err error) (*mcp.CallToolResult, bool) {
 		return nil, false
 	}
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, true
-}
-
-// Each stub declares the audiences its live counterpart declares, so the tools
-// do not appear on and disappear from a surface as the rollout flips.
-func registerUnavailableSessionRecallTools(reg *Registrar) {
-	addTool(reg, &mcp.Tool{
-		Name:        "list_my_sessions",
-		Title:       "List My Sessions",
-		Description: "List your own captured coding-agent sessions. Session recall is not available in the current rollout.",
-		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, unavailableTool("session_recall"))
-	addTool(reg, &mcp.Tool{
-		Name:        "continue_session",
-		Title:       "Continue Session",
-		Description: "Recall one of your own previous sessions as a redacted handoff digest. Session recall is not available in the current rollout.",
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, unavailableTool("session_recall"))
 }

@@ -451,46 +451,6 @@ WHERE session.organization_id = @organization_id
   AND connection.active_generation = session.connection_generation
   AND client.revoked_at IS NULL;
 
--- name: GetPlatformMCPLifecycle :one
-WITH default_project AS (
-    SELECT id
-    FROM projects
-    WHERE organization_id = @organization_id
-      AND slug = 'default'
-      AND deleted IS FALSE
-    LIMIT 1
-)
-SELECT
-    default_project.id AS default_project_id,
-    EXISTS (
-        SELECT 1
-        FROM plugin_github_connections
-        WHERE project_id = default_project.id
-    ) AS marketplace_published
-FROM (VALUES (1)) AS root(value)
-LEFT JOIN default_project ON TRUE;
-
--- name: ListPlatformMCPConnections :many
-SELECT
-    connection.id,
-    connection.authorized_at,
-    connection.reauthorized_at,
-    EXISTS (
-        SELECT 1
-        FROM platform_mcp_onboarding_milestones AS milestone
-        WHERE milestone.organization_id = connection.organization_id
-          AND milestone.milestone = 'connection_ready'
-          AND milestone.connection_id = connection.id
-          AND milestone.connection_generation = connection.active_generation
-    ) AS ready
-FROM platform_mcp_connections AS connection
-JOIN platform_mcp_oauth_clients AS client
-  ON client.id = connection.oauth_client_id
-WHERE connection.organization_id = @organization_id
-  AND connection.revoked_at IS NULL
-  AND client.revoked_at IS NULL
-ORDER BY COALESCE(connection.reauthorized_at, connection.authorized_at) DESC, connection.id DESC;
-
 -- name: RecordPlatformMCPConnectionReady :exec
 INSERT INTO platform_mcp_onboarding_milestones (
     organization_id,

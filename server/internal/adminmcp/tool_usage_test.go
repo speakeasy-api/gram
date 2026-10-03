@@ -93,10 +93,8 @@ func TestOrganizationUsageSummaryFailsClosed(t *testing.T) {
 	require.Contains(t, body, `"isError":true`)
 }
 
-func TestOrganizationUsageSummaryContextAvailability(t *testing.T) {
+func TestOrganizationUsageSummaryAppearsInContext(t *testing.T) {
 	t.Parallel()
 	_, body, _ := callStaffReadTool(t, testUsageReads(), "get_admin_context", `{}`)
 	require.Contains(t, body, "inspect current-cycle organization usage estimate")
-	_, body, _ = callStaffReadTool(t, &recordingOrganizationReader{}, "get_admin_context", `{}`)
-	require.NotContains(t, body, "inspect current-cycle organization usage estimate")
 }

@@ -25,10 +25,6 @@ func NewRegistryHTTP(config *Config) *RegistryHTTP {
 
 func (s *RegistryHTTP) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s == nil || s.config == nil {
-			http.NotFound(w, r)
-			return
-		}
 		w.Header().Set("Cache-Control", "no-store")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == registryListPath:

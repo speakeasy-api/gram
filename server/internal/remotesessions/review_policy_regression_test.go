@@ -44,7 +44,7 @@ func TestReviewPreparationDCRScopePresence(t *testing.T) {
 	t.Parallel()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	service := &Service{policy: policy}
+	service := &Service{GlobalIssuers: &GlobalIssuers{policy: policy}}
 	for _, tc := range []struct{ name, field, want string }{
 		{"omitted", "", PreparationStateReady},
 		{"null", `,"scope":null`, PreparationStateIndeterminate},

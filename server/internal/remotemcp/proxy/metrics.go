@@ -27,9 +27,7 @@ type Metrics struct {
 }
 
 // NewMetrics constructs the counter and histograms served by the proxy. Errors
-// from the meter are logged and individual instruments are left nil; Record
-// handles nil instruments so partial construction still produces usable
-// metrics.
+// from the meter are logged; the meter still returns usable instruments.
 func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 	ctx := context.Background()
 
@@ -101,15 +99,9 @@ func (m *Metrics) Record(ctx context.Context, identity ServerIdentity, method st
 
 	attrsOpt := metric.WithAttributes(labels...)
 
-	if m.requests != nil {
-		m.requests.Add(ctx, 1, attrsOpt)
-	}
-	if m.requestDuration != nil {
-		m.requestDuration.Record(ctx, duration.Seconds(), attrsOpt)
-	}
-	if m.responseBytes != nil {
-		m.responseBytes.Record(ctx, responseBytes, attrsOpt)
-	}
+	m.requests.Add(ctx, 1, attrsOpt)
+	m.requestDuration.Record(ctx, duration.Seconds(), attrsOpt)
+	m.responseBytes.Record(ctx, responseBytes, attrsOpt)
 }
 
 // statusClass buckets an upstream HTTP status code into a low-cardinality

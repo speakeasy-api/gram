@@ -13,10 +13,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 func newJWTAccessTokenEnricher(t *testing.T, issuer *idTokenIssuer) *remotesessions.SessionEnricher {
@@ -28,15 +30,17 @@ func newJWTAccessTokenEnricher(t *testing.T, issuer *idTokenIssuer) *remotesessi
 	require.NoError(t, cache.Put(t.Context(), issuer.jwksURI, jwks.CacheState{
 		Document: issuer.keySet, ETag: "", ExpiresAt: time.Now().Add(time.Hour), RefreshedAt: time.Now(), LastErrorAt: time.Time{}, LastError: "", Revision: "",
 	}))
-	keys, err := jwks.NewKeyResolver(
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	store := ratelimit.NewRedisStore(redisClient)
+	keys := jwks.NewKeyResolver(
 		jwks.NewResolver(policy, testenv.NewMeterProvider(t), logger),
 		cache,
-		ratelimit.New(nil, "jwt_access_token_test_refresh", ratelimit.PerMinute(1)),
-		nil,
+		ratelimit.New(store, string(testenv.NewCacheSuffix(t, "jwt_access_token_test_refresh")), ratelimit.PerMinute(1)),
+		ratelimit.New(store, string(testenv.NewCacheSuffix(t, "jwt_access_token_test_refresh_fetch")), ratelimit.PerMinute(1)),
 		logger,
 	)
-	require.NoError(t, err)
-	return remotesessions.NewSessionEnricher(logger, nil, policy, keys, nil, nil, nil)
+	return remotesessions.NewSessionEnricher(logger, nil, policy, keys, nil, tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", policy, nil), nil)
 }
 
 func mintAccessToken(t *testing.T, issuer *idTokenIssuer, typ *string, claims map[string]any) string {
@@ -305,7 +309,7 @@ func TestSessionEnricherJWTAccessTokenSkipsWithoutKeySet(t *testing.T) {
 	require.Empty(t, result.Reason)
 
 	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
-	noKeys := remotesessions.NewSessionEnricher(testenv.NewLogger(t), nil, policy, nil, nil, nil, nil)
+	noKeys := remotesessions.NewSessionEnricher(testenv.NewLogger(t), nil, policy, nil, nil, tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", policy, nil), nil)
 	target := remotesessions.JWTAccessTokenTarget{IssuerID: uuid.New(), IssuerURL: issuer.issuerURL, JWKSURI: issuer.jwksURI, ExternalClientID: "oauth-client"}
 	result = noKeys.JWTAccessToken(t.Context(), target, raw)
 	require.False(t, result.Ran, "an enricher without a key resolver never records the interface")
@@ -333,15 +337,17 @@ func TestSessionEnricherJWTAccessTokenTransientKeySetFailureIsNotRecorded(t *tes
 	issuer := newIDTokenIssuer(t)
 	logger := testenv.NewLogger(t)
 	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
-	keys, err := jwks.NewKeyResolver(
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	store := ratelimit.NewRedisStore(redisClient)
+	keys := jwks.NewKeyResolver(
 		jwks.NewResolver(policy, testenv.NewMeterProvider(t), logger),
 		failingJWKSCache{},
-		ratelimit.New(nil, "jwt_access_token_test_transient", ratelimit.PerMinute(1)),
-		nil,
+		ratelimit.New(store, string(testenv.NewCacheSuffix(t, "jwt_access_token_test_transient")), ratelimit.PerMinute(1)),
+		ratelimit.New(store, string(testenv.NewCacheSuffix(t, "jwt_access_token_test_transient_fetch")), ratelimit.PerMinute(1)),
 		logger,
 	)
-	require.NoError(t, err)
-	enricher := remotesessions.NewSessionEnricher(logger, nil, policy, keys, nil, nil, nil)
+	enricher := remotesessions.NewSessionEnricher(logger, nil, policy, keys, nil, tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", policy, nil), nil)
 	target := remotesessions.JWTAccessTokenTarget{IssuerID: uuid.New(), IssuerURL: issuer.issuerURL, JWKSURI: issuer.jwksURI, ExternalClientID: "oauth-client"}
 	result := enricher.JWTAccessToken(t.Context(), target, mintAccessToken(t, issuer, new("at+jwt"), accessTokenClaims(issuer.issuerURL, "oauth-client")))
 	require.False(t, result.Ran, "a key set that could not be consulted says nothing about the token")

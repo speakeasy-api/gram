@@ -150,14 +150,10 @@ func (noIDTokenVerifier) Verify(context.Context, string, IDTokenExpectation) (Up
 }
 
 // NewIDTokenKeyResolver builds the resolver with refresh and fetch budgets charged to store.
-func NewIDTokenKeyResolver(logger *slog.Logger, policy *guardian.Policy, meterProvider metric.MeterProvider, store ratelimit.Store) (*jwks.KeyResolver, error) {
+func NewIDTokenKeyResolver(logger *slog.Logger, policy *guardian.Policy, meterProvider metric.MeterProvider, store ratelimit.Store) *jwks.KeyResolver {
 	refreshLimiter := ratelimit.New(store, "remote_session_id_token_jwks_refresh", IDTokenKeyRefreshRate)
 	fetchLimiter := ratelimit.New(store, "remote_session_id_token_jwks_fetch", IDTokenKeyFetchRate)
-	keys, err := jwks.NewKeyResolver(jwks.NewResolver(policy, meterProvider, logger), jwks.NewMemoryCache(), refreshLimiter, fetchLimiter, logger)
-	if err != nil {
-		return nil, fmt.Errorf("new id token key resolver: %w", err)
-	}
-	return keys, nil
+	return jwks.NewKeyResolver(jwks.NewResolver(policy, meterProvider, logger), jwks.NewMemoryCache(), refreshLimiter, fetchLimiter, logger)
 }
 
 // IDTokenExpectation is what a verified ID token must say. Nonce is empty on

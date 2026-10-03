@@ -3,6 +3,11 @@ package admin
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -13,10 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
-	"net/http"
-	"net/http/httptest"
-	"testing"
-	"time"
 )
 
 func TestStandaloneImageRoutes_AuthenticateBeforeDecode(t *testing.T) {

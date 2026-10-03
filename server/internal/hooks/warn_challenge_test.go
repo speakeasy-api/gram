@@ -2,14 +2,18 @@ package hooks
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
 
@@ -161,14 +165,14 @@ func TestClaude_PreToolUse_Warn_DeniesWithChallenge(t *testing.T) {
 	assert.Contains(t, *output.PermissionDecisionReason, "danger", "the matched policy is surfaced")
 }
 
-// When no acknowledgement link can be built (missing site URL / cache / user),
+// When no acknowledgement link can be built (ack state cannot be stored, or no user),
 // a warn must fail SAFE to a hard block — never a native ask, never allow, and
 // with no dangling half-challenge. Guards the security-critical fallback path.
 func TestClaude_PreToolUse_Warn_FallsBackToBlockWhenNoLink(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	// Force warnDenyReason to return ok=false: no site URL means no ack link.
-	ti.service.orgHosts = nil
+	// Force warnDenyReason to return ok=false: the ack state cannot be stored.
+	ti.service.cache = &failingPolicyAckCache{Cache: ti.service.cache}
 	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
 		Action:       "warn",
 		PolicyID:     uuid.NewString(),
@@ -409,7 +413,7 @@ func TestIngest_CanonicalWarnFallsBackToBlockWithoutAckLink(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
-	ti.service.orgHosts = nil
+	ti.service.cache = &failingPolicyAckCache{Cache: ti.service.cache}
 	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
 		Action:          "warn",
 		PolicyID:        uuid.NewString(),
@@ -497,4 +501,20 @@ func canonicalWarnTestPayload(t *testing.T, adapter, eventKind, sessionID string
 	}
 
 	return payload
+}
+
+// failingPolicyAckCache rejects writes of risk policy ack state so a warn
+// cannot mint its acknowledgement link.
+type failingPolicyAckCache struct {
+	cache.Cache
+}
+
+func (c *failingPolicyAckCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	if strings.HasPrefix(key, "risk:policy-ack:") {
+		return errors.New("policy ack cache unavailable")
+	}
+	if err := c.Cache.Set(ctx, key, value, ttl); err != nil {
+		return fmt.Errorf("set cache: %w", err)
+	}
+	return nil
 }

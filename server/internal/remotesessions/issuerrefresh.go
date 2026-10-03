@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
@@ -155,24 +155,14 @@ func discoveryFailureMessage(err error) (msg string, transient bool) {
 // Gram's own behavior and display fields cannot be expressed through them —
 // see UpdateRemoteSessionIssuerDiscoveredMetadata, which has no parameter for
 // slug, issuer, name, logo, client setup documentation, oidc, or passthrough.
-func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, resolver *jwks.Resolver, tunnels *tunnelrouting.HTTPClient, issuer repo.RemoteSessionIssuer) (repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams, []string, error) {
+func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, resolver *jwks.Resolver, tunnel httpDoer, issuer repo.RemoteSessionIssuer) (repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams, []string, error) {
 	var zero repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams
 
-	tunnel, err := issuerTunnelTransport(tunnels, issuer.TunneledMcpServerID)
-	if err != nil {
-		return zero, nil, &discoveryError{
-			WellKnownURL: issuer.Issuer,
-			Status:       0,
-			cause:        fmt.Errorf("select issuer discovery transport: %w", err),
-			definitive:   false,
-		}
-	}
-	var doer httpDoer = issuerDiscoveryHTTPClient(policy)
+	var discoveryDoer httpDoer = issuerDiscoveryHTTPClient(policy)
 	if tunnel != nil {
-		doer = tunnel
+		discoveryDoer = tunnel
 	}
-
-	discovered, err := discoverIssuerMetadataWithDoer(ctx, doer, issuer.Issuer)
+	discovered, err := discoverIssuerMetadataWithDoer(ctx, discoveryDoer, issuer.Issuer)
 	if err != nil {
 		return zero, nil, err
 	}
@@ -410,12 +400,12 @@ const issuerDiscoveryFailureRecordTimeout = 5 * time.Second
 // in-flight request from overwriting a newer refresh or a concurrent tier move.
 // A superseded failure record is only skipped bookkeeping: unlike a successful
 // refresh whose snapshot cannot be saved, it must not hide the discovery error.
-func (s *Service) recordIssuerDiscoveryFailure(ctx context.Context, logger *slog.Logger, existing repo.RemoteSessionIssuer, discoveryErr error) error {
+func recordIssuerDiscoveryFailure(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, existing repo.RemoteSessionIssuer, discoveryErr error) error {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), issuerDiscoveryFailureRecordTimeout)
 	defer cancel()
 
 	msg, _ := discoveryFailureMessage(discoveryErr)
-	rows, err := repo.New(s.db).RecordRemoteSessionIssuerMetadataRefreshFailure(ctx, repo.RecordRemoteSessionIssuerMetadataRefreshFailureParams{
+	rows, err := repo.New(db).RecordRemoteSessionIssuerMetadataRefreshFailure(ctx, repo.RecordRemoteSessionIssuerMetadataRefreshFailureParams{
 		MetadataLastError:         msg,
 		MetadataLastErrorUrl:      discoveryRetryURL(discoveryErr),
 		ObservedMetadataFetchedAt: existing.MetadataFetchedAt,

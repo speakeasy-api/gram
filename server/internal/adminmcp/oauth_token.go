@@ -22,8 +22,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
-const staffAccessLifetime = time.Hour
-const staffRefreshLifetime = 24 * time.Hour
+const (
+	staffAccessLifetime  = time.Hour
+	staffRefreshLifetime = 24 * time.Hour
+)
 
 // StaffOAuthTokens exchanges one-use codes and rotates refresh tokens. No HTTP
 // handler in this package accepts an admin browser cookie as a token credential.
@@ -48,10 +50,6 @@ func (s *StaffOAuthTokens) TokenHandler() http.Handler {
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
 			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		if s == nil || s.clients == nil || s.store == nil || s.verifier == nil || s.cipher == nil || s.signer == nil || s.issuer == "" || s.resource == "" {
-			staffOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "token endpoint unavailable")
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 16<<10)

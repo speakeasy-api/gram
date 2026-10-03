@@ -74,8 +74,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
+var (
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
+)
 
 const sessionQuarantineCircuitDeleteAttempts = 3
 
@@ -104,9 +106,10 @@ type Service struct {
 	logger                       *slog.Logger
 	db                           *pgxpool.Pool
 	repo                         *repo.Queries
-	policies                     *policycore.Core
+	policies                     *policycore.MutationCore
+	mcpPolicies                  *policycore.MCPPolicies
 	platformToolsets             map[string]platformtools.Toolset
-	exclusions                   *exclusioncore.Core
+	exclusions                   *exclusioncore.MutationCore
 	auth                         *auth.Auth
 	authz                        *authz.Engine
 	signaler                     RiskAnalysisSignaler
@@ -123,16 +126,15 @@ type Service struct {
 	cache     cache.Cache
 	jwtSecret string
 	// approvalIntake routes a redeemed shadow-MCP block link into the MCP
-	// approval workflow instead of a bypass request. Optional: nil keeps the
-	// legacy bypass flow.
+	// approval workflow instead of a bypass request.
 	approvalIntake ShadowMCPApprovalIntake
-	// flags gates the nl/LLM-judge policy MVP (FlagPromptPolicies). Optional:
-	// when nil the feature is treated as disabled.
+	// flags gates the nl/LLM-judge policy MVP (FlagPromptPolicies).
 	flags feature.Provider
 	// Scanners reused by the rule-playground endpoint (testDetectionRule)
 	// so the dashboard sees the exact same matcher output the worker
-	// produces during chat-message analysis. Optional: when nil the
-	// playground returns an "unsupported" response for that scanner family.
+	// produces during chat-message analysis. piiScanner is nil when no
+	// Presidio analyzer is configured; the playground then returns an
+	// "unsupported" response for PII rules.
 	piiScanner      ra.PIIScanner
 	piScanner       *promptinjection.Scanner
 	gitleaksScanner *gitleaks.Scanner
@@ -140,13 +142,12 @@ type Service struct {
 	// stokenCodec counts prepared rule-playground input.
 	stokenCodec *stokens.Codec
 	// celEng is the shared CEL env, injected at construction; used to compile
-	// and validate scope/detection expressions. nil in the lightweight observer.
+	// and validate scope/detection expressions.
 	celEng         *celenv.Engine
 	builtinPresets *presetlib.Library
 	// promptJudge replays an inline guardrail against a chat session for the
 	// policy-eval workbench (EvaluatePromptGuardrail). It is the same LLM judge
-	// the realtime scanner uses. Optional: when nil the eval endpoint returns
-	// un-matched verdicts (judge unavailable).
+	// the realtime scanner uses.
 	promptJudge promptpolicy.Evaluator
 	// findingsCH reads the ClickHouse risk_findings table: always for the
 	// project-wide listing and reveal, and for the overview endpoint when
@@ -155,7 +156,6 @@ type Service struct {
 	findingEvidence *MCPFindingEvidenceStore
 	// assetStorage reads chat content part assets for the ClickHouse reveal
 	// path, the same store the batch analysis activity hydrates parts from.
-	// Optional: when nil, content-part findings are not reconstructible.
 	assetStorage blobio.Reader
 }
 
@@ -164,49 +164,20 @@ var _ chat.MessageObserver = (*Service)(nil)
 // NewObserver creates a lightweight chat.MessageObserver that signals the risk
 // drain workflow when new messages are stored. Use this in contexts (e.g. the
 // worker process) where the full risk Service is not needed.
-func NewObserver(
-	logger *slog.Logger,
-	tracerProvider trace.TracerProvider,
-	db *pgxpool.Pool,
-	signaler RiskAnalysisSignaler,
-	auditLogger *audit.Logger,
-	riskRecorder *metering.RiskRecorder,
-) chat.MessageObserver {
-	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
+func NewObserver(logger *slog.Logger, signaler RiskAnalysisSignaler) chat.MessageObserver {
+	return &observer{logger: logger.With(attr.SlogComponent("risk")), signaler: signaler}
+}
 
-		logger:                       logger.With(attr.SlogComponent("risk")),
-		db:                           db,
-		repo:                         repo.New(db),
-		policies:                     policycore.New(db),
-		platformToolsets:             nil,
-		exclusions:                   exclusioncore.New(db),
-		auth:                         nil,
-		authz:                        nil,
-		signaler:                     signaler,
-		reconciler:                   nil,
-		resultsCleaner:               nil,
-		completionClient:             nil,
-		shadowMCPClient:              nil,
-		reconcileShadowMCPPolicyURLs: nil,
-		shadowMCPInventoryURLLookup:  nil,
-		audit:                        auditLogger,
-		cache:                        nil,
-		jwtSecret:                    "",
-		approvalIntake:               nil,
-		piiScanner:                   nil,
-		piScanner:                    nil,
-		gitleaksScanner:              nil,
-		riskRecorder:                 riskRecorder,
-		stokenCodec:                  stokens.NewCodec(),
-		flags:                        nil,
-		celEng:                       nil,
-		builtinPresets:               nil,
-		promptJudge:                  nil,
-		findingsCH:                   nil,
-		findingEvidence:              nil,
-		assetStorage:                 nil,
-	}
+type observer struct {
+	logger   *slog.Logger
+	signaler RiskAnalysisSignaler
+}
+
+// OnMessagesStored implements chat.MessageObserver. The caller
+// (notifyObservers) already dispatches this in a goroutine with a
+// detached context, so this method can safely perform I/O.
+func (o *observer) OnMessagesStored(ctx context.Context, projectID uuid.UUID) {
+	signalRiskCoordinator(ctx, o.logger, o.signaler, projectID)
 }
 
 func NewService(
@@ -240,25 +211,21 @@ func NewService(
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
-	var policyCacheInvalidator policycore.PolicyCacheInvalidator
-	if shadowMCPClient != nil {
-		policyCacheInvalidator = shadowMCPClient
-	}
-
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
-		logger: logger,
-		db:     db,
-		repo:   repo.New(db),
-		policies: policycore.NewWithToolAnnotations(db, tooldisposition.New(logger, db, cacheImpl), policycore.MutationDependencies{
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
+		logger:      logger,
+		db:          db,
+		repo:        repo.New(db),
+		mcpPolicies: policycore.NewMCPPolicies(db, tooldisposition.New(logger, db, cacheImpl)),
+		policies: policycore.NewMutationCore(db, policycore.MutationDependencies{
 			Transactor:       db,
 			Auditor:          policyMutationAuditor{logger: auditLogger},
 			Approvals:        approvalIntake,
 			ReconcileURLs:    policycore.ReconcilePolicyURLs(reconcileShadowMCPPolicyURLs),
 			Signaler:         signaler,
-			CacheInvalidator: policyCacheInvalidator,
+			CacheInvalidator: shadowMCPClient,
 		}),
-		exclusions: exclusioncore.New(db, exclusioncore.MutationDependencies{
+		exclusions: exclusioncore.NewMutationCore(db, exclusioncore.MutationDependencies{
 			Transactor:  db,
 			Auditor:     exclusionMutationAuditor{logger: auditLogger},
 			AfterCommit: newExclusionAfterCommit(logger, reconciler),
@@ -319,8 +286,12 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // (notifyObservers) already dispatches this in a goroutine with a
 // detached context, so this method can safely perform I/O.
 func (s *Service) OnMessagesStored(ctx context.Context, projectID uuid.UUID) {
-	if err := s.signaler.Signal(ctx, projectID); err != nil {
-		s.logger.ErrorContext(ctx, "signal risk coordinator",
+	signalRiskCoordinator(ctx, s.logger, s.signaler, projectID)
+}
+
+func signalRiskCoordinator(ctx context.Context, logger *slog.Logger, signaler RiskAnalysisSignaler, projectID uuid.UUID) {
+	if err := signaler.Signal(ctx, projectID); err != nil {
+		logger.ErrorContext(ctx, "signal risk coordinator",
 			attr.SlogError(err),
 			attr.SlogProjectID(projectID.String()),
 		)
@@ -586,9 +557,6 @@ func (s *Service) ListMCPPlatformToolsets(ctx context.Context, _ *gen.ListMCPPla
 	for slug, toolset := range s.platformToolsets {
 		tools := make([]*gen.RiskMCPPlatformTool, 0, len(toolset.Tools))
 		for _, tool := range toolset.Tools {
-			if tool.Executor == nil {
-				continue
-			}
 			descriptor := tool.Executor.Descriptor()
 			tools = append(tools, &gen.RiskMCPPlatformTool{
 				Name:        descriptor.Name,
@@ -635,7 +603,7 @@ func (s *Service) ListRiskPoliciesForMcpServer(ctx context.Context, payload *gen
 		target.PlatformToolset = true
 		target.ToolAnnotations = platformToolAnnotations(toolset, target.ToolName)
 	}
-	policies, err := s.policies.ListEnabledForMCP(
+	policies, err := s.mcpPolicies.ListEnabledForMCP(
 		ctx,
 		authCtx.ActiveOrganizationID,
 		*authCtx.ProjectID,
@@ -1213,9 +1181,7 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 		return oops.E(oops.CodeUnexpected, err, "commit risk policy delete").LogError(ctx, s.logger)
 	}
 
-	if s.shadowMCPClient != nil {
-		s.shadowMCPClient.Invalidate(ctx, *authCtx.ProjectID)
-	}
+	s.shadowMCPClient.Invalidate(ctx, *authCtx.ProjectID)
 
 	s.cleanPolicyResults(ctx, *authCtx.ProjectID, id)
 
@@ -1223,9 +1189,6 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 }
 
 func (s *Service) cleanPolicyResults(ctx context.Context, projectID, policyID uuid.UUID) {
-	if s.resultsCleaner == nil {
-		return
-	}
 	if err := s.resultsCleaner.Clean(ctx, projectID, policyID); err != nil {
 		s.logger.ErrorContext(ctx, "trigger risk policy results cleanup",
 			attr.SlogError(err),
@@ -2014,9 +1977,6 @@ func (s *Service) CompileExpr(ctx context.Context, payload *gen.CompileExprPaylo
 	if expr == "" {
 		return &gen.ExprCompileResult{OK: true, Error: ""}, nil
 	}
-	if s.celEng == nil {
-		return nil, oops.E(oops.CodeUnexpected, nil, "cel engine unavailable")
-	}
 	if _, err := s.celEng.Compile(expr); err != nil {
 		return &gen.ExprCompileResult{OK: false, Error: err.Error()}, nil
 	}
@@ -2415,11 +2375,6 @@ func (s *Service) SuggestCustomDetectionRule(ctx context.Context, payload *gen.S
 		return nil, oops.E(oops.CodeInvalid, nil, "prompt is required")
 	}
 
-	if s.completionClient == nil {
-		s.logger.WarnContext(ctx, "completion client not configured; returning heuristic suggestion")
-		return heuristicCustomRuleSuggestion(prompt, payload.ExistingRuleIds), nil
-	}
-
 	suggestion, err := s.suggestCustomRuleViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), prompt, payload.ExistingRuleIds)
 	if err != nil {
 		s.logger.WarnContext(ctx, "openrouter suggestion failed; returning heuristic suggestion", attr.SlogError(err))
@@ -2474,11 +2429,6 @@ func (s *Service) SuggestExclusion(ctx context.Context, payload *gen.SuggestExcl
 
 	if prompt == "" && len(findings) == 0 {
 		return nil, oops.E(oops.CodeInvalid, nil, "prompt or finding_ids is required")
-	}
-
-	if s.completionClient == nil {
-		s.logger.WarnContext(ctx, "completion client not configured; returning heuristic exclusion suggestion")
-		return heuristicExclusionSuggestion(prompt, findings), nil
 	}
 
 	suggestion, err := s.suggestExclusionViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), prompt, findings, payload.KnownRuleIds)
@@ -2725,9 +2675,6 @@ func (s *Service) platformToolsetByID(id uuid.UUID) (platformtools.Toolset, bool
 
 func platformToolAnnotations(toolset platformtools.Toolset, toolName string) *types.ToolAnnotations {
 	for _, tool := range toolset.Tools {
-		if tool.Executor == nil {
-			continue
-		}
 		descriptor := tool.Executor.Descriptor()
 		if descriptor.Name == toolName {
 			return descriptor.Annotations
@@ -3591,13 +3538,6 @@ func (s *Service) testPresidioRule(ctx context.Context, ruleID, text string, pro
 }
 
 func (s *Service) testPromptInjectionRule(ctx context.Context, orgID, projectID, text string, provenance metering.RiskProvenance) (*gen.TestDetectionRuleResult, error) {
-	if s.piScanner == nil {
-		return &gen.TestDetectionRuleResult{
-			Matches:   nil,
-			Supported: false,
-			Reason:    new("Prompt-injection scanner is not configured on this server."),
-		}, nil
-	}
 	occurredAt := time.Now().UTC()
 	result, verdict, err := s.piScanner.ScanWithVerdict(ctx, text, orgID, projectID, provenance.UserID, judgemessage.New(message.User, "", text))
 	if err != nil {
@@ -3744,10 +3684,6 @@ func customDetectionRuleToType(row repo.RiskCustomDetectionRule) *types.RiskCust
 }
 
 func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID string, sources, presidioEntities, customRuleTitles []string, action string, existingNames []string) string {
-	if s.completionClient == nil {
-		return s.fallbackPolicyName(sources, customRuleTitles, action)
-	}
-
 	// Policy authors think in *what* is detected, not *how* (gitleaks,
 	// presidio). Translate sources to user-facing category labels and
 	// scrub library names so the LLM cannot regurgitate them. See AGE-2378.
@@ -3911,9 +3847,6 @@ func (s *Service) fallbackPolicyName(sources, customRuleTitles []string, action 
 
 func (s *Service) generatePromptPolicyName(ctx context.Context, orgID, projectID, prompt string, existingNames []string) string {
 	fallback := fallbackPromptPolicyName(prompt, existingNames)
-	if s.completionClient == nil {
-		return fallback
-	}
 
 	namePrompt := fmt.Sprintf(
 		"Generate a short, human-friendly name (2-5 words) for a prompt-based security policy.\n"+
@@ -4140,11 +4073,8 @@ func promptPolicyNameFromBase(base string, existing []string) string {
 // promptPoliciesEnabled reports whether the prompt-based policy MVP is enabled
 // for the org. The flag is targeted by PostHog group (org/project slug) the
 // same way the dashboard evaluates it, so we forward the groups built from the
-// auth context. A nil provider or a failed lookup degrades to disabled.
+// auth context. A failed lookup degrades to disabled.
 func (s *Service) promptPoliciesEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
-	if s.flags == nil {
-		return false
-	}
 	groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
 	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagPromptPolicies, authCtx.ActiveOrganizationID, groups)
 	if err != nil {

@@ -77,12 +77,6 @@ func (h *PublicationHandler) HandleBatchWithResult(ctx context.Context, messages
 			continue
 		}
 
-		if h.signal == nil {
-			err = fmt.Errorf("plugin publication signal is not configured")
-			results[requestKey] = err
-			message.Fail(err)
-			continue
-		}
 		err = h.signal(ctx, projectID, request.GetCreatedByUserId())
 		if err != nil {
 			err = fmt.Errorf("signal plugin publication: %w", err)

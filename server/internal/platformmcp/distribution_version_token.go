@@ -22,16 +22,13 @@ type distributionVersionTokenCodec struct {
 	key []byte
 }
 
-func newDistributionVersionTokenCodec(keyMaterial string) (*distributionVersionTokenCodec, error) {
-	if keyMaterial == "" {
-		return nil, ErrDistributionVersionTokenInvalid
-	}
+func newDistributionVersionTokenCodec(keyMaterial string) *distributionVersionTokenCodec {
 	key := sha256.Sum256([]byte("platform-mcp-distribution-version:" + keyMaterial))
-	return &distributionVersionTokenCodec{key: key[:]}, nil
+	return &distributionVersionTokenCodec{key: key[:]}
 }
 
 func (c *distributionVersionTokenCodec) Encode(principal Principal, projectSlug string, version int64) (string, error) {
-	if c == nil || len(c.key) == 0 || principal.OrganizationID == "" || principal.UserID == "" || projectSlug == "" || version < 0 {
+	if principal.OrganizationID == "" || principal.UserID == "" || projectSlug == "" || version < 0 {
 		return "", ErrDistributionVersionTokenInvalid
 	}
 	payload, err := json.Marshal(distributionVersionToken{
@@ -52,7 +49,7 @@ func (c *distributionVersionTokenCodec) Encode(principal Principal, projectSlug 
 }
 
 func (c *distributionVersionTokenCodec) Decode(value string, principal Principal, projectSlug string) (int64, error) {
-	if c == nil || len(c.key) == 0 || value == "" || principal.OrganizationID == "" || principal.UserID == "" || projectSlug == "" {
+	if value == "" || principal.OrganizationID == "" || principal.UserID == "" || projectSlug == "" {
 		return 0, ErrDistributionVersionTokenInvalid
 	}
 	token, err := base64.RawURLEncoding.DecodeString(value)

@@ -3,11 +3,12 @@ package mcpregistry
 import (
 	"encoding/base64"
 	"encoding/json"
+	"strings"
+	"testing"
+
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry/repo"
 	"github.com/stretchr/testify/require"
-	"strings"
-	"testing"
 )
 
 func TestRetainedUnpublishedGet(t *testing.T) {
@@ -214,15 +215,6 @@ func TestOversizeSearchText(t *testing.T) {
 	ctx, s, _ := newTestService(t)
 	_, err := s.List(ctx, ListOptions{Query: strings.Repeat("x", 1025)})
 	require.ErrorIs(t, err, ErrInvalidListOptions)
-}
-
-func TestListUnavailableValidator(t *testing.T) {
-	t.Parallel()
-
-	for _, v := range []*Validator{nil, {}} {
-		_, err := New(nil, v).List(t.Context(), ListOptions{})
-		require.EqualError(t, err, "registry validator unavailable")
-	}
 }
 
 func TestListByteBudget(t *testing.T) {

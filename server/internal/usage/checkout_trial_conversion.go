@@ -159,9 +159,6 @@ func (s *Service) convertEnterpriseTrialForCheckoutTx(ctx context.Context, tx pg
 		Trial:        checkoutConversionTrialSnapshot(convertedTrial.Tier, convertedTrial.EndsAt, convertedTrial.ConvertedAt, convertedTrial.DemotedAt, now),
 		Keys:         afterKeys,
 	}
-	if s.auditLogger == nil {
-		return false, errors.New("audit logger is unavailable")
-	}
 	actorLabel := "System"
 	if err := s.auditLogger.LogOrganizationEnterpriseTrialConverted(ctx, tx, audit.LogOrganizationEnterpriseTrialConvertedEvent{
 		OrganizationID: organizationID, ConversionSource: "stripe_checkout", KeyAccessChanged: &keyAccessChanged,

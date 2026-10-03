@@ -393,7 +393,7 @@ func TestEnforceHandler_MetersCompletedAnalysis(t *testing.T) {
 
 	stub := flaggingStub(map[string]int{llmanalyzer.KeySecretsLeak: 1}, "leaked key")
 	meterPub, readings := capturingMeterPub(t)
-	handler, _, client, _ := newEnforceHandler(t, stub, llmanalyzer.WithRiskRecorder(metering.NewRiskRecorder(meterPub)))
+	handler, _, client, _ := newMeteredEnforceHandler(t, stub, metering.NewRiskRecorder(meterPub))
 	request := userEnforcement("scan-metered", "AKIA-synthetic-key")
 	request.SetOriginRiskPolicyId("018ffad2-1c32-7f73-8a54-85306c37a315")
 	request.SetOriginRiskPolicyVersion(3)
@@ -421,7 +421,7 @@ func TestEnforceHandler_SeparatesMeteredRequestsLinkedToOneMessage(t *testing.T)
 
 	stub := flaggingStub(map[string]int{}, "clean")
 	meterPub, readings := capturingMeterPub(t)
-	handler, _, _, _ := newEnforceHandler(t, stub, llmanalyzer.WithRiskRecorder(metering.NewRiskRecorder(meterPub)))
+	handler, _, _, _ := newMeteredEnforceHandler(t, stub, metering.NewRiskRecorder(meterPub))
 	request := userEnforcement("", "hello")
 	request.SetOriginRiskPolicyId("018ffad2-1c32-7f73-8a54-85306c37a315")
 	request.SetOriginRiskPolicyVersion(3)
@@ -442,7 +442,7 @@ func TestEnforceHandler_DoesNotMeterFailedAnalysis(t *testing.T) {
 	meterPub, readings := capturingMeterPub(t)
 	recorder := metering.NewRiskRecorder(meterPub)
 
-	errored, _, client, _ := newEnforceHandler(t, failingStub(llmanalyzer.ErrTimeout), llmanalyzer.WithRiskRecorder(recorder))
+	errored, _, client, _ := newMeteredEnforceHandler(t, failingStub(llmanalyzer.ErrTimeout), recorder)
 	request := userEnforcement("scan-error-unmetered", "hello")
 	request.SetOriginRiskPolicyId("018ffad2-1c32-7f73-8a54-85306c37a315")
 	request.SetOriginRiskPolicyVersion(3)
@@ -451,7 +451,7 @@ func TestEnforceHandler_DoesNotMeterFailedAnalysis(t *testing.T) {
 	reply, _ := popReply(t, client, "replica-error-unmetered")
 	require.Equal(t, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR, reply.GetStatus())
 
-	disabled, _, client, _ := newEnforceHandler(t, nil, llmanalyzer.WithRiskRecorder(recorder))
+	disabled, _, client, _ := newMeteredEnforceHandler(t, nil, recorder)
 	request.SetRequestId("scan-disabled-unmetered")
 	require.NoError(t, disabled.Handle(t.Context(), request, replyMetadata("replica-disabled-unmetered", "scan-disabled-unmetered", nil)))
 	reply, _ = popReply(t, client, "replica-disabled-unmetered")
@@ -474,7 +474,7 @@ func TestEnforceHandler_MeterFailurePreservesReply(t *testing.T) {
 		testenv.NewMeterProvider(t),
 		analyzer,
 		writer,
-		llmanalyzer.WithRiskRecorder(metering.NewRiskRecorder(meterPub)),
+		metering.NewRiskRecorder(meterPub),
 	)
 	request := userEnforcement("scan-meter-failure", "hello")
 	request.SetOriginRiskPolicyId("018ffad2-1c32-7f73-8a54-85306c37a315")
@@ -492,7 +492,7 @@ func TestEnforceHandler_SkipsMeteringWithInvalidAttribution(t *testing.T) {
 
 	stub := flaggingStub(map[string]int{}, "clean")
 	meterPub, readings := capturingMeterPub(t)
-	handler, _, client, _ := newEnforceHandler(t, stub, llmanalyzer.WithRiskRecorder(metering.NewRiskRecorder(meterPub)))
+	handler, _, client, _ := newMeteredEnforceHandler(t, stub, metering.NewRiskRecorder(meterPub))
 
 	// No policy, no policy-link reason, no message link: attribution is
 	// incomplete, so the reply still lands but nothing is metered.

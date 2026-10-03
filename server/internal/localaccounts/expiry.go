@@ -34,9 +34,6 @@ func HandleTrialFixture(ctx context.Context, db *pgxpool.Pool, features *product
 	if Profile(profile) != ActiveTrial {
 		return true, nil
 	}
-	if features == nil {
-		return true, errors.New("local trial expiry requires product features")
-	}
 	conn, release, err := features.AcquireFeatureCacheLocks(ctx, orgID, profileFeatures())
 	if err != nil {
 		return true, fmt.Errorf("acquire trial feature locks: %w", err)

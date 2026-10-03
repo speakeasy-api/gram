@@ -59,9 +59,8 @@ func TestNetworkIngressExecutorOrphanScanRetriesWhenDesiredIdentitiesAppearDurin
 			return nil, nil
 		}
 	}}
-	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), nil)
-	require.NoError(t, err)
-	executor := networkingress.NewExecutor(ti.conn, nil, registry, networkingress.ExecutorOptions{})
+	registry := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), k8s.NewNetworkIngressMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)))
+	executor := networkingress.NewExecutor(ti.conn, testenv.NewEncryptionClient(t), registry, networkingress.ExecutorOptions{})
 
 	orphans, err := executor.FindOrphans(ctx)
 	require.NoError(t, err)
@@ -72,11 +71,10 @@ func TestNetworkIngressExecutorOrphanScanRetriesWhenDesiredIdentitiesAppearDurin
 func TestNetworkIngressExecutorEmptyProviderInventoryIsUnavailable(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
-	registry, err := k8s.NewNetworkIngressProvisionerRegistry(nil, testenv.NewLogger(t), nil)
-	require.NoError(t, err)
-	executor := networkingress.NewExecutor(ti.conn, nil, registry, networkingress.ExecutorOptions{})
+	registry := k8s.NewNetworkIngressProvisionerRegistry(nil, testenv.NewLogger(t), k8s.NewNetworkIngressMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)))
+	executor := networkingress.NewExecutor(ti.conn, testenv.NewEncryptionClient(t), registry, networkingress.ExecutorOptions{})
 
-	_, err = executor.FindOrphans(ctx)
+	_, err := executor.FindOrphans(ctx)
 	var failure *networkingress.ReconcileError
 	require.ErrorAs(t, err, &failure)
 	require.Equal(t, "orphan_inventory_unavailable", failure.Code)
@@ -101,11 +99,10 @@ func TestNetworkIngressExecutorOrphanScanBoundsUnstableDesiredIdentities(t *test
 		require.NoError(t, err)
 		return []k8s.NetworkIngressOrphan{{OwnerID: id, Kind: "tailnets"}}, nil
 	}}
-	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), nil)
-	require.NoError(t, err)
-	executor := networkingress.NewExecutor(ti.conn, nil, registry, networkingress.ExecutorOptions{})
+	registry := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), k8s.NewNetworkIngressMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)))
+	executor := networkingress.NewExecutor(ti.conn, testenv.NewEncryptionClient(t), registry, networkingress.ExecutorOptions{})
 
-	_, err = executor.FindOrphans(ctx)
+	_, err := executor.FindOrphans(ctx)
 	var failure *networkingress.ReconcileError
 	require.ErrorAs(t, err, &failure)
 	require.Equal(t, "orphan_inventory_unstable", failure.Code)

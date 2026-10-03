@@ -135,20 +135,12 @@ func (m *riskMetrics) RecordScan(ctx context.Context, orgID string, outcome o11y
 		attr.Outcome(outcome),
 	)
 
-	if m.scanEvents != nil {
-		m.scanEvents.Add(ctx, int64(messagesScanned), attrs)
-	}
-
-	if m.scanDuration != nil {
-		m.scanDuration.Record(ctx, duration.Seconds(), attrs)
-	}
+	m.scanEvents.Add(ctx, int64(messagesScanned), attrs)
+	m.scanDuration.Record(ctx, duration.Seconds(), attrs)
 }
 
 // RecordFindingConfidence records the confidence score of an individual finding.
 func (m *riskMetrics) RecordFindingConfidence(ctx context.Context, orgID string, ruleID string, confidence float64) {
-	if m.ruleConfidence == nil {
-		return
-	}
 	m.ruleConfidence.Record(ctx, confidence, metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attr.RiskRuleID(ruleID),
@@ -156,7 +148,7 @@ func (m *riskMetrics) RecordFindingConfidence(ctx context.Context, orgID string,
 }
 
 func (m *riskMetrics) RecordRecommendedScopePrefiltered(ctx context.Context, orgID, source string, count int) {
-	if count <= 0 || m == nil || m.recommendedScopeMessagesPrefiltered == nil {
+	if count <= 0 {
 		return
 	}
 	m.recommendedScopeMessagesPrefiltered.Add(ctx, int64(count), metric.WithAttributes(
@@ -172,9 +164,6 @@ func (m *riskMetrics) RecordRecommendedScopePrefiltered(ctx context.Context, org
 // rate actionable per sender rather than a single opaque number, which is the
 // signal for when the legacy signature fallback can be deleted.
 func (m *riskMetrics) RecordShadowMCPResolution(ctx context.Context, orgID string, hookSource string, resolution string) {
-	if m == nil || m.shadowMCPResolution == nil {
-		return
-	}
 	m.shadowMCPResolution.Add(ctx, 1, metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attribute.String("gram.hook.source", conv.Default(hookSource, "unknown")),
@@ -183,9 +172,6 @@ func (m *riskMetrics) RecordShadowMCPResolution(ctx context.Context, orgID strin
 }
 
 func (m *riskMetrics) RecordRecommendedScopeSuppressed(ctx context.Context, orgID string, cat categories.Category) {
-	if m == nil || m.recommendedScopeFindingsSuppressed == nil {
-		return
-	}
 	m.recommendedScopeFindingsSuppressed.Add(ctx, 1, metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attribute.String("risk.category", string(cat)),
@@ -199,7 +185,7 @@ func (m *riskMetrics) RecordRecommendedScopeSuppressed(ctx context.Context, orgI
 // only knows whether the requests were published; verdict outcomes are
 // recorded by the consumer.
 func (m *riskMetrics) RecordLLMPolicyEvaluation(ctx context.Context, orgID string, policyID string, outcome string, count int) {
-	if m == nil || m.llmPolicyEvaluations == nil || count <= 0 {
+	if count <= 0 {
 		return
 	}
 	m.llmPolicyEvaluations.Add(ctx, int64(count), metric.WithAttributes(

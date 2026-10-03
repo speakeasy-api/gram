@@ -38,8 +38,6 @@ func feedbackToolResult(err error) (*mcp.CallToolResult, bool) {
 		result = operationBudgetResult{Code: "conflict", Message: "That retry key was already used for different feedback. Use a new one."}
 	case errors.Is(err, ErrFeedbackForbidden):
 		result = operationBudgetResult{Code: "forbidden", Message: "This session is no longer connected. Reconnect and try again."}
-	case errors.Is(err, ErrFeedbackUnavailable):
-		result = operationBudgetResult{Code: unavailableCode, Message: "Feedback is not switched on for your organization yet."}
 	default:
 		return nil, false
 	}
@@ -57,7 +55,8 @@ func registerFeedbackTool(reg *Registrar, feedback *FeedbackService) {
 		Description: "Store one short feedback report about this platform for the team to read. Ask the user for consent before submitting. Constraints: never include credentials, URLs, identifiers, payloads, logs, headers, or attachments.",
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
-		Audiences:     bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input SendPlatformMCPFeedbackToolInput) (*mcp.CallToolResult, SendPlatformMCPFeedbackToolOutput, error) {
+		Audiences:     bothAudiences, ProjectScope: ProjectScopeNone,
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input SendPlatformMCPFeedbackToolInput) (*mcp.CallToolResult, SendPlatformMCPFeedbackToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, SendPlatformMCPFeedbackToolOutput{}, err

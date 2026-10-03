@@ -24,11 +24,8 @@ type IssuerKeyCache struct {
 }
 
 // NewIssuerKeyCache builds a durable cache for trusted issuer key sets.
-func NewIssuerKeyCache(db *pgxpool.Pool) (*IssuerKeyCache, error) {
-	if db == nil {
-		return nil, errors.New("idjag: database is required for issuer key cache")
-	}
-	return &IssuerKeyCache{repo: remotesessionsrepo.New(db)}, nil
+func NewIssuerKeyCache(db *pgxpool.Pool) *IssuerKeyCache {
+	return &IssuerKeyCache{repo: remotesessionsrepo.New(db)}
 }
 
 var _ jwks.Cache = (*IssuerKeyCache)(nil)

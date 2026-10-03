@@ -28,7 +28,7 @@ func NewPluginAssignmentMutationReceiptStore(db *pgxpool.Pool) *PluginAssignment
 }
 
 func (s *PluginAssignmentMutationReceiptStore) Execute(ctx context.Context, principal Principal, project ResolvedProject, idempotencyKey string, normalized normalizedSetPluginAssignments, mutate PluginAssignmentMutationTransaction) (OperationReceipt, error) {
-	if s == nil || s.db == nil || s.now == nil || mutate == nil || principal.OrganizationID == "" || principal.UserID == "" || project.ID == uuid.Nil || project.Slug == "" || idempotencyKey == "" || len(idempotencyKey) > 128 {
+	if mutate == nil || principal.OrganizationID == "" || principal.UserID == "" || project.ID == uuid.Nil || project.Slug == "" || idempotencyKey == "" || len(idempotencyKey) > 128 {
 		return OperationReceipt{}, pluginAssignmentMutationInvalid("The plugin assignment receipt request is invalid.")
 	}
 	inputHash, err := pluginAssignmentMutationInputHash(normalized)

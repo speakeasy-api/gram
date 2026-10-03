@@ -67,12 +67,3 @@ func registerLifecycleVisibilityTools(reg *Registrar, registrations *Registratio
 		})
 	}
 }
-
-func registerUnavailableLifecycleVisibilityTools(reg *Registrar) {
-	for _, tool := range []struct{ name, title, description string }{
-		{"disable_mcp", "Turn Off an MCP Server", "Turn off one MCP server. This is not switched on for your organization yet."},
-		{"enable_mcp", "Turn On an MCP Server", "Turn one MCP server back on. This is not switched on for your organization yet."},
-	} {
-		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_lifecycle_visibility"))
-	}
-}

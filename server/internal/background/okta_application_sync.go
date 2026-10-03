@@ -219,9 +219,6 @@ type OktaApplicationSyncTrigger struct {
 var _ identityproviderconnections.ApplicationSyncTrigger = (*OktaApplicationSyncTrigger)(nil)
 
 func (t *OktaApplicationSyncTrigger) TriggerApplicationSync(ctx context.Context) error {
-	if t == nil || t.TemporalEnv == nil {
-		return fmt.Errorf("okta application sync trigger is not configured")
-	}
 	scheduleID := oktaApplicationSyncCoordinatorScheduleID(string(t.TemporalEnv.Queue()))
 	handle := t.TemporalEnv.Client().ScheduleClient().GetHandle(ctx, scheduleID)
 	if err := handle.Trigger(ctx, client.ScheduleTriggerOptions{
@@ -229,8 +226,6 @@ func (t *OktaApplicationSyncTrigger) TriggerApplicationSync(ctx context.Context)
 	}); err != nil {
 		return fmt.Errorf("trigger okta application sync coordinator: %w", err)
 	}
-	if t.Logger != nil {
-		t.Logger.DebugContext(ctx, "triggered okta application sync coordinator", attr.SlogTemporalWorkflowID(scheduleID))
-	}
+	t.Logger.DebugContext(ctx, "triggered okta application sync coordinator", attr.SlogTemporalWorkflowID(scheduleID))
 	return nil
 }

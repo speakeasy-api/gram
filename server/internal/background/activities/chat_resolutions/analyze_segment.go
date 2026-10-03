@@ -179,10 +179,6 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		attr.SlogChatID(args.ChatID.String()),
 	)
 
-	if a.telemetryLogger == nil {
-		return nil
-	}
-
 	attrs := map[attr.Key]any{
 		attr.EventSourceKey:                string(telemetry.EventSourceEvaluation),
 		attr.GenAIEvaluationNameKey:        "chat_resolution",

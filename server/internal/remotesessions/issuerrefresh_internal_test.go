@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/go-jose/go-jose/v4"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -19,19 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
-
-func TestRefreshIssuerMetadataRequiresConfiguredTunnelTransport(t *testing.T) {
-	t.Parallel()
-
-	issuer := repo.RemoteSessionIssuer{
-		Issuer:              "https://idp.example.com",
-		TunneledMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
-	}
-	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
-
-	_, _, err := refreshIssuerMetadata(t.Context(), policy, nil, nil, issuer)
-	require.ErrorContains(t, err, "select issuer discovery transport: tunnel transport is not configured")
-}
 
 // testJWKSet serves a one-key JWK Set over TLS and counts the fetches it saw.
 func testJWKSet(t *testing.T) (*httptest.Server, *atomic.Int64) {

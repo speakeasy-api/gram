@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -54,7 +55,7 @@ func TestReportMetricsBoundsOutcomes(t *testing.T) {
 func TestGuardReportInvalidTargetAndLegacy(t *testing.T) {
 	t.Parallel()
 	reports := &capturedReports{outcomes: nil}
-	guard := NewGuard(nil, reports)
+	guard := NewGuard(&feature.InMemory{}, reports)
 	err := guard.checkURL(t.Context(), nil, RolloutConfig{Mode: ModeReport}, "org", uuid.New(), "://invalid", nil)
 	require.NoError(t, err)
 	require.Equal(t, []ReportOutcome{ReportInvalidTarget}, reports.outcomes)
@@ -72,7 +73,7 @@ func TestGuardReportRecordsAdmissionOutcomesWithoutRefusing(t *testing.T) {
 	target := "https://mcp.example.test/report"
 	desired := []string{"role:developers"}
 	reports := &capturedReports{outcomes: nil}
-	guard := NewGuard(nil, reports)
+	guard := NewGuard(&feature.InMemory{}, reports)
 	rollout := RolloutConfig{Mode: ModeReport}
 	tx := testenv.BeginTx(t, ctx, fixture.conn)
 	require.NoError(t, guard.checkURL(ctx, tx, rollout, fixture.orgID, fixture.projectID, target, nil))

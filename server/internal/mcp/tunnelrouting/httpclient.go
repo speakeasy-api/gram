@@ -84,12 +84,6 @@ func NewHTTPClient(routes route.Store, forwardToken string, policy *guardian.Pol
 // behind by a pod that died without unpublishing costs seconds rather than the
 // transport's default connect window.
 func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, error) {
-	if c == nil || c.routes == nil {
-		return nil, fmt.Errorf("tunnel forwarding is not configured")
-	}
-	if c.forwardToken == "" {
-		return nil, fmt.Errorf("tunnel forward token is not configured")
-	}
 	ctx := req.Context()
 
 	// Buffered so a failover attempt can replay it. The bodies this client

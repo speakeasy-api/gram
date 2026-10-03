@@ -261,9 +261,5 @@ func newAssistantRuntime(
 		}
 	}
 
-	backend, err := assistants.NewRuntimeBackend(logger, tracerProvider, guardianPolicy, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("build assistant runtime backend: %w", err)
-	}
-	return backend, nil
+	return assistants.NewRuntimeBackend(logger, tracerProvider, guardianPolicy, cfg), nil
 }

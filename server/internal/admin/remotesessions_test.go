@@ -3,6 +3,13 @@ package admin
 import (
 	"bytes"
 	"encoding/json"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -10,18 +17,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
-	"log/slog"
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"testing"
-	"time"
 )
 
 func TestStandaloneIssuerRoutes_AuthenticateBeforeDecode(t *testing.T) {
@@ -61,14 +61,12 @@ func TestStandaloneIssuerRoutes_AuthenticateBeforeDecode(t *testing.T) {
 func TestStandaloneIssuerRoutes_ValidAdminDispatch(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
-	enc, err := encryption.NewWithBytes(make([]byte, 32))
-	require.NoError(t, err)
 	tp := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tp, nil)
 	require.NoError(t, err)
 	var auditLog bytes.Buffer
 	auditLogger := slog.New(slog.NewJSONHandler(&auditLog, nil))
-	svc.SetRemoteSessionService(remotesessions.NewGlobalService(auditLogger, tp, testenv.NewMeterProvider(t), db, enc, policy))
+	svc.remoteSessions = remotesessions.NewGlobalIssuers(auditLogger, testenv.NewMeterProvider(t), db, policy)
 	svc.SetAssetService(assets.NewPlatformService(svc.logger, tp, policy, db, assetstest.NewTestBlobStore(t)))
 	sessionID, err := svc.sessions.Store(ctx, StoreParams{Email: "operator@example.com", Name: "Test Operator", OIDCSubject: "sub-admin", HD: testAdminHD, AccessToken: "access-token", RefreshToken: "refresh-token", ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
@@ -139,8 +137,4 @@ func TestStandaloneIssuerRoutes_ValidAdminDispatch(t *testing.T) {
 			require.Equal(t, tc.status, rec.Code, rec.Body.String())
 		})
 	}
-	// The trusted standalone context must not grant access to tenant methods.
-	trusted := contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{SessionID: sessionID, OIDCSubject: "sub-admin", Email: "operator@example.com"})
-	_, err = svc.remoteSessions.ListRemoteSessionIssuers(trusted, nil)
-	require.Error(t, err)
 }

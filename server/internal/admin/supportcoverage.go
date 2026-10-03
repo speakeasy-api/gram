@@ -17,10 +17,6 @@ type SupportCoverageReader interface {
 }
 
 func (s *Service) GetSupportCoverage(ctx context.Context, payload *gen.GetSupportCoveragePayload) (*gen.SupportCoverageResult, error) {
-	if s.supportCoverage == nil {
-		return nil, oops.E(oops.CodeUnavailable, nil, "support coverage is unavailable")
-	}
-
 	result, err := s.supportCoverage.SupportCoverageForOrganization(ctx, payload.OrganizationID, payload.WindowDays)
 	if err != nil {
 		// The reader classifies its own failures — a blank organization id is

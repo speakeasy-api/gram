@@ -91,16 +91,8 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("telemetry"))
 	chRepo := repo.New(chConn)
 
-	// The sessions and chatSessions parameters may be nil for callers that only need
-	// telemetry emission (e.g., Temporal workers using CreateLog). When nil, the HTTP
-	// API auth methods (APIKeyAuth, JWTAuth) will return unauthorized errors.
-	var a *auth.Auth
-	if sessions != nil {
-		a = auth.New(logger, db, sessions, authzEngine)
-	}
-
 	return &Service{
-		auth:                  a,
+		auth:                  auth.New(logger, db, sessions, authzEngine),
 		db:                    db,
 		chatRepo:              chatRepo.New(db),
 		hooksRepo:             hooksRepo.New(db),
@@ -134,16 +126,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	if s.auth == nil {
-		return ctx, oops.E(oops.CodeUnauthorized, nil, "auth not configured")
-	}
 	return s.auth.Authorize(ctx, key, schema)
 }
 
 func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JWTScheme) (context.Context, error) {
-	if s.chatSessions == nil {
-		return ctx, oops.E(oops.CodeUnauthorized, nil, "chat sessions not configured")
-	}
 	return s.chatSessions.Authorize(ctx, token)
 }
 

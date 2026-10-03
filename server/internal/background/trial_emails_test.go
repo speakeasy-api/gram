@@ -8,6 +8,13 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/billingnotifications"
+	"github.com/speakeasy-api/gram/server/internal/email"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/converter"
@@ -285,19 +292,30 @@ func TestTrialLifecycleEmailActivitiesExcludeLocalFixtures(t *testing.T) {
 
 func TestTrialLifecycleEmailActivitiesContinueForNonFixtures(t *testing.T) {
 	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "trial_email_non_fixture")
+	require.NoError(t, err)
+	logger := testenv.NewLogger(t)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	siteURL := testenv.DefaultSiteURL(t)
+	orgHosts := orghost.New(orghost.Config{ServerURL: siteURL, SiteURL: siteURL, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil})
+	emailService := email.NewService(logger, loops.New(t.Context(), logger, policy, ""), email.NewTemplateIDs(nil), false)
 	calls := 0
-	a := &Activities{trialFixtureHandler: func(_ context.Context, orgID string) (bool, error) {
-		require.Equal(t, "org_non_fixture", orgID)
-		calls++
-		return false, nil
-	}}
-	for _, kind := range []TrialLifecycleEmailKind{TrialStartedEmailKind, AdminAddedEmailKind, TrialInactiveEmailKind} {
-		err := a.SendTrialLifecycleEmail(t.Context(), TrialLifecycleEmailInput{Kind: kind, OrganizationID: "org_non_fixture"})
-		require.EqualError(t, err, "trial email service is not configured")
+	a := &Activities{
+		trialEmails:          trialemails.NewService(db, loops.NewWorkflowClient(t.Context(), logger, policy, ""), logger, orgHosts),
+		billingNotifications: billingnotifications.NewService(logger, db, emailService, &feature.InMemory{}, orgHosts),
+		trialFixtureHandler: func(_ context.Context, orgID string) (bool, error) {
+			require.Equal(t, "org_non_fixture", orgID)
+			calls++
+			return false, nil
+		},
 	}
-	_, err := a.ResolveTrialEndingReminder(t.Context(), "org_non_fixture")
-	require.EqualError(t, err, "billing notification service is not configured")
+	for _, kind := range []TrialLifecycleEmailKind{TrialStartedEmailKind, AdminAddedEmailKind, TrialInactiveEmailKind} {
+		require.NoError(t, a.SendTrialLifecycleEmail(t.Context(), TrialLifecycleEmailInput{Kind: kind, OrganizationID: "org_non_fixture"}), "kind %s", kind)
+	}
+	_, err = a.ResolveTrialEndingReminder(t.Context(), "org_non_fixture")
+	require.NoError(t, err)
 	_, err = a.SendTrialEndingSoonEmail(t.Context(), billingnotifications.SendTrialEndingSoonInput{OrganizationID: "org_non_fixture"})
-	require.EqualError(t, err, "billing notification service is not configured")
+	require.NoError(t, err)
 	require.Equal(t, 5, calls)
 }

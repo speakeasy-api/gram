@@ -50,7 +50,7 @@ func (s *AccessRoleMutationReceiptStore) ExecuteUpdate(ctx context.Context, prin
 }
 
 func (s *AccessRoleMutationReceiptStore) execute(ctx context.Context, principal Principal, project ResolvedProject, operation, idempotencyKey string, normalized any, mutate AccessRoleMutationTransaction) (OperationReceipt, error) {
-	if s == nil || s.db == nil || s.now == nil || mutate == nil || !accessRoleMutationOperation(operation) || idempotencyKey == "" || len(idempotencyKey) > 128 {
+	if mutate == nil || !accessRoleMutationOperation(operation) || idempotencyKey == "" || len(idempotencyKey) > 128 {
 		return OperationReceipt{}, accessRoleMutationInvalid("The access role receipt request is invalid.")
 	}
 	inputHash, err := accessRoleMutationInputHash(operation, normalized)

@@ -95,10 +95,6 @@ func (d *TypedCacheObject[T]) SkipCache() TypedCacheObject[T] {
 }
 
 func (d *TypedCacheObject[T]) Delete(ctx context.Context, obj T) error {
-	if d.cache == nil {
-		return nil
-	}
-
 	cacheKey := d.fullKey(obj.CacheKey())
 	d.logger.DebugContext(ctx, "invalidating cache", attr.SlogCacheKey(cacheKey))
 	err := d.cache.Delete(ctx, cacheKey)
@@ -110,10 +106,6 @@ func (d *TypedCacheObject[T]) Delete(ctx context.Context, obj T) error {
 }
 
 func (d *TypedCacheObject[T]) DeleteByKey(ctx context.Context, key string) error {
-	if d.cache == nil {
-		return nil
-	}
-
 	cacheKey := d.fullKey(key)
 	d.logger.DebugContext(ctx, "invalidating cache by key", attr.SlogCacheKey(cacheKey))
 	err := d.cache.Delete(ctx, cacheKey)
@@ -125,10 +117,6 @@ func (d *TypedCacheObject[T]) DeleteByKey(ctx context.Context, key string) error
 }
 
 func (d *TypedCacheObject[T]) DeleteByPrefix(ctx context.Context, prefix string) error {
-	if d.cache == nil {
-		return nil
-	}
-
 	fullPrefix := prefix
 	if d.keySuffix != "" {
 		fullPrefix += ":" + d.keySuffix
@@ -140,9 +128,6 @@ func (d *TypedCacheObject[T]) DeleteByPrefix(ctx context.Context, prefix string)
 }
 
 func (d *TypedCacheObject[T]) Get(ctx context.Context, key string) (T, error) {
-	if d.cache == nil {
-		return *new(T), errors.New("cache is not configured")
-	}
 	var value T
 	err := d.cache.Get(ctx, d.fullKey(key), &value)
 	if err != nil {
@@ -156,9 +141,6 @@ func (d *TypedCacheObject[T]) Get(ctx context.Context, key string) (T, error) {
 // tokens (auth codes, in-flight challenge state) where the race window
 // would let two concurrent callers each redeem the same value.
 func (d *TypedCacheObject[T]) GetAndDelete(ctx context.Context, key string) (T, error) {
-	if d.cache == nil {
-		return *new(T), errors.New("cache is not configured")
-	}
 	var value T
 	err := d.cache.GetAndDelete(ctx, d.fullKey(key), &value)
 	if err != nil {
@@ -168,10 +150,6 @@ func (d *TypedCacheObject[T]) GetAndDelete(ctx context.Context, key string) (T, 
 }
 
 func (d *TypedCacheObject[T]) Store(ctx context.Context, obj T) error {
-	if d.cache == nil {
-		return errors.New("cache is not configured")
-	}
-
 	ttl := obj.TTL()
 	if err := d.cache.Set(ctx, d.fullKey(obj.CacheKey()), obj, ttl); err != nil {
 		return fmt.Errorf("store: %s: %w", d.fullKey(obj.CacheKey()), err)
@@ -180,9 +158,6 @@ func (d *TypedCacheObject[T]) Store(ctx context.Context, obj T) error {
 }
 
 func (d *TypedCacheObject[T]) StoreIfAbsent(ctx context.Context, obj T) (bool, error) {
-	if d.cache == nil {
-		return false, errors.New("cache is not configured")
-	}
 	conditional, ok := d.cache.(ConditionalCache)
 	if !ok {
 		return false, errors.New("cache does not support conditional writes")
@@ -226,10 +201,6 @@ func (d *TypedCacheObject[T]) CompareAndDelete(ctx context.Context, expected T) 
 }
 
 func (d *TypedCacheObject[T]) Update(ctx context.Context, obj T) error {
-	if d.cache == nil {
-		return errors.New("cache is not configured")
-	}
-
 	updateKey := func(key string) error {
 		fullKey := d.fullKey(key)
 		if err := d.cache.Update(ctx, fullKey, obj); err != nil {

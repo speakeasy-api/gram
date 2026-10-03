@@ -202,23 +202,6 @@ func TestSpanRelayExportIncludesSensitiveContent(t *testing.T) {
 	require.Len(t, converted.GetAttributes(), 5)
 }
 
-func TestSpanRelayHandlerMetricRecordersIgnoreUnavailableCounters(t *testing.T) {
-	t.Parallel()
-
-	handler := &SpanRelayHandler{
-		logger:       nil,
-		spansDropped: nil,
-		spansFailed:  nil,
-		relay:        nil,
-	}
-	require.NotPanics(t, func() {
-		handler.recordDroppedSpans(t.Context(), 1, relayReasonInvalid)
-	})
-	require.NotPanics(t, func() {
-		handler.recordFailedSpans(t.Context(), 1, relayReasonNetworkError)
-	})
-}
-
 func TestSpanRelayHandlerCountsInvalidAndMissingDestinationDrops(t *testing.T) {
 	t.Parallel()
 
@@ -350,6 +333,7 @@ func relayTestMessages(spans ...*otelv1.Span) ([]spanRelayMessage, []error) {
 	}
 	return messages, failures
 }
+
 func newRelayTestHandler(t *testing.T, meterProvider metric.MeterProvider) *SpanRelayHandler {
 	t.Helper()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)

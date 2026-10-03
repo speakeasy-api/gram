@@ -35,15 +35,3 @@ func TestProxyMetrics_RecordMCPToolCall_RecordsWithValidCounter(t *testing.T) {
 		McpServerID:         "mcp-abc",
 	}, "search_tickets")
 }
-
-func TestProxyMetrics_RecordMCPToolCall_NilCounterIsSafe(t *testing.T) {
-	t.Parallel()
-
-	m := &ProxyMetrics{mcpToolCallCounter: nil}
-	// Should not panic when counter is nil.
-	m.RecordMCPToolCall(t.Context(), "org-123", "https://x.example.com/x/mcp/server", proxy.ServerIdentity{
-		RemoteMCPServerID:   "srv-abc",
-		TunneledMCPServerID: "",
-		McpServerID:         "mcp-abc",
-	}, "search_tickets")
-}

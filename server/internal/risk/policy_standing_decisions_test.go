@@ -10,22 +10,11 @@ import (
 	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
 	mcpapprovalrepo "github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -37,22 +26,7 @@ func newTestRiskServiceWithRealIntake(t *testing.T) (context.Context, *testInsta
 
 	flags := &feature.InMemory{}
 	ctx, instance := newTestRiskService(t, func(instance *testInstance) {
-		logger := testenv.NewLogger(t)
-		tracerProvider := testenv.NewTracerProvider(t)
-
-		authzEngine := authz.NewEngine(logger, instance.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-		assembler := evidence.NewAssembler(
-			packagemeta.NewClient(riskIntakeNotFoundRegistry{}),
-			repometa.NewClient(riskIntakeNotFoundRegistry{}),
-			advisories.NewClient(riskIntakeEmptyAdvisoryDB{}),
-			domainmeta.NewClient(riskIntakeNotFoundRegistry{}),
-			telemetryrepo.New(instance.chConn),
-			riskIntakeQuietProbes{},
-			riskIntakeQuietProbes{},
-			riskIntakeQuietProbes{},
-		)
-
-		instance.approvalIntake = mcpapproval.NewService(logger, tracerProvider, instance.conn, instance.sessionManager, authzEngine, flags, audit.NewLogger(), assembler, nil)
+		instance.approvalIntake = newTestApprovalIntake(t, instance, flags)
 	})
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

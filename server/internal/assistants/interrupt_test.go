@@ -11,10 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
-	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
-	"github.com/speakeasy-api/gram/server/internal/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 const interruptTestUserID = "user-owner"
@@ -85,22 +82,7 @@ func insertDashboardAssistantFixture(t *testing.T, conn *pgxpool.Pool, dbName st
 
 func newInterruptTestCore(t *testing.T, conn *pgxpool.Pool, backend testRuntimeBackend) *ServiceCore {
 	t.Helper()
-	logger := testenv.NewLogger(t)
-	return NewServiceCore(
-		logger,
-		testenv.NewTracerProvider(t),
-		testenv.NewMeterProvider(t),
-		conn,
-		nil,
-		nil,
-		backend,
-		nil,
-		assistanttokens.New("test-jwt-secret", conn, nil),
-		nil,
-		telemetry.NewStub(logger),
-		nil,
-		newTestAuditLogger(),
-	)
+	return newTestServiceCore(t, conn, backend)
 }
 
 // A stop pressed while the runtime is still cold has no generation to cancel:

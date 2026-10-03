@@ -45,8 +45,9 @@ func TestMCPPolicyScanner_RemoteShadowMCPIsSilent(t *testing.T) {
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		fixedMCPPolicyLookup{policy},
-		risk.NewMCPPolicyScanner(newShadowMCPTestScanner(t, ti), nil),
+		risk.NewMCPPolicyScanner(newShadowMCPTestScanner(t, ti), shadowmcp.NewClient(testenv.NewLogger(t), ti.conn, ti.cacheAdapter, testenv.DefaultSiteURL(t))),
 		gcp.NewNoopPublisher[*riskv1.Finding](),
+		ti.findingEvidence,
 		mcpriskscan.DefaultPolicyConfig,
 	)
 
@@ -72,7 +73,7 @@ func TestMCPPolicyScanner_AccountIdentityDoesNotMakeGitleaksIndeterminate(t *tes
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	detector := risk.NewMCPPolicyScanner(newShadowMCPTestScanner(t, ti), nil)
+	detector := risk.NewMCPPolicyScanner(newShadowMCPTestScanner(t, ti), shadowmcp.NewClient(testenv.NewLogger(t), ti.conn, ti.cacheAdapter, testenv.DefaultSiteURL(t)))
 
 	findings, err := detector.ScanMCPPolicy(ctx, policycore.Policy{
 		ID:             uuid.New(),
@@ -99,7 +100,7 @@ func TestMCPPolicyScanner_UsesResponseMessageSurface(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	include := `kind == "tool_response"`
-	detector := risk.NewMCPPolicyScanner(newShadowMCPTestScanner(t, ti), nil)
+	detector := risk.NewMCPPolicyScanner(newShadowMCPTestScanner(t, ti), shadowmcp.NewClient(testenv.NewLogger(t), ti.conn, ti.cacheAdapter, testenv.DefaultSiteURL(t)))
 	policy := policycore.Policy{
 		ID:             uuid.New(),
 		ProjectID:      *authCtx.ProjectID,
@@ -141,8 +142,9 @@ func TestMCPPolicyScanner_PresidioDeadLetterUsesFailMode(t *testing.T) {
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		fixedMCPPolicyLookup{policy},
-		risk.NewMCPPolicyScanner(newDeadLetterScanner(t, ti, &deadLetterPIIScanner{}), nil),
+		risk.NewMCPPolicyScanner(newDeadLetterScanner(t, ti, &deadLetterPIIScanner{}), shadowmcp.NewClient(testenv.NewLogger(t), ti.conn, ti.cacheAdapter, testenv.DefaultSiteURL(t))),
 		gcp.NewNoopPublisher[*riskv1.Finding](),
+		ti.findingEvidence,
 		mcpriskscan.DefaultPolicyConfig,
 	)
 

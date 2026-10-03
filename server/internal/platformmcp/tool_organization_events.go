@@ -40,14 +40,11 @@ type EventFeedReadService struct {
 	now          func() time.Time
 }
 
-// WithOrganizationEvents enables recent organization-scoped Event Feed summaries.
-// A missing Logs checker leaves the live tool unregistered: the dashboard Event
-// Feed is gated on that product feature, and a nil checker cannot enforce it.
+// WithOrganizationEvents enables recent organization-scoped Event Feed
+// summaries, gated on the same Logs product feature as the dashboard Event Feed.
 func (r *PostgresReader) WithOrganizationEvents(events EventFeedReader, logs FeatureChecker, dashboardURL *url.URL) *PostgresReader {
-	if events != nil && logs != nil && validDashboardURL(dashboardURL) {
-		copyURL := *dashboardURL
-		r.eventFeed = &EventFeedReadService{events: events, logs: logs, dashboardURL: &copyURL, now: time.Now}
-	}
+	copyURL := *dashboardURL
+	r.eventFeed = &EventFeedReadService{events: events, logs: logs, dashboardURL: &copyURL, now: time.Now}
 	return r
 }
 
@@ -74,12 +71,6 @@ type ListOrganizationEventsOutput struct {
 }
 
 func (r *PostgresReader) ListOrganizationEvents(ctx context.Context, principal Principal, input ListOrganizationEventsInput) (ListOrganizationEventsOutput, error) {
-	// WithOrganizationEvents is the only writer of r.eventFeed and only sets it
-	// once the Event Feed reader, Logs checker and dashboard URL are all present,
-	// so a non-nil service establishes the rest.
-	if r.eventFeed == nil {
-		return ListOrganizationEventsOutput{}, ErrUnavailable
-	}
 	enabled, err := r.eventFeed.logs(ctx, principal.OrganizationID)
 	if err != nil {
 		return ListOrganizationEventsOutput{}, fmt.Errorf("resolve logs feature: %w", err)
@@ -193,13 +184,4 @@ func organizationEventsToolResult(err error) (*mcp.CallToolResult, bool) {
 		return nil, false
 	}
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, true
-}
-
-func registerUnavailableOrganizationEventTools(reg *Registrar) {
-	addTool(reg, &mcp.Tool{
-		Name:        "list_organization_events",
-		Title:       "List Organization Events",
-		Description: "List recent Event Feed entries for the current organization. This is not switched on for your organization yet.",
-		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("organization_events"))
 }

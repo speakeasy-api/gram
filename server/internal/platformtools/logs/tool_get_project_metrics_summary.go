@@ -44,10 +44,6 @@ func (s *GetProjectMetricsSummary) Descriptor() core.ToolDescriptor {
 }
 
 func (s *GetProjectMetricsSummary) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if s.telemetry == nil {
-		return fmt.Errorf("telemetry service not configured")
-	}
-
 	input := getProjectMetricsSummaryInput{From: "", To: ""}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err

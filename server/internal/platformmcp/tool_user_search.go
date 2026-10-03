@@ -48,21 +48,3 @@ func registerUserSearchTools(reg *Registrar, diagnostics *DiagnosticsService) {
 		return nil, output, nil
 	})
 }
-
-func registerUnavailableUserSearchTools(reg *Registrar) {
-	for _, tool := range []struct {
-		name        string
-		title       string
-		description string
-	}{
-		{"search_users", "Find People in a Project", "Find the masked people observed in one project's telemetry by partial identity. This is not switched on for your organization yet."},
-		{"get_user_metrics_summary", "One Person's Activity Summary", "Summarize one referenced person's activity across a project. This is not switched on for your organization yet."},
-	} {
-		addTool(reg, &mcp.Tool{
-			Name:        tool.name,
-			Title:       tool.title,
-			Description: tool.description,
-			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("user_search"))
-	}
-}

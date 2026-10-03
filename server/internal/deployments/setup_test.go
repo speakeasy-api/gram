@@ -32,9 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
-var (
-	infra *testenv.Environment
-)
+var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, Temporal: true, ClickHouse: true})
@@ -86,16 +84,26 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 	auditLogger := audit.NewLogger()
 	f := &feature.InMemory{}
 
-	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient, auditLogger))
-	t.Cleanup(func() {
-		worker.Stop()
-	})
-	require.NoError(t, worker.Start(), "start temporal worker")
-
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
+
+	worker, err := background.NewDeploymentProcessingWorker(temporalEnv, logger, tracerProvider, meterProvider, background.DeploymentProcessingDeps{
+		GuardianPolicy:    guardianPolicy,
+		DB:                conn,
+		FeatureProvider:   f,
+		AssetStorage:      assetStorage,
+		EncryptionClient:  enc,
+		FunctionsDeployer: funcs,
+		MCPRegistryClient: mcpRegistryClient,
+		BillingRepository: billingClient,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		worker.Stop()
+	})
+	require.NoError(t, worker.Start(), "start temporal worker")
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
@@ -109,7 +117,7 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 	validator, err := mcpregistry.LoadValidator()
 	require.NoError(t, err)
 	catalog := externalmcp.NewCatalogService(conn, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(conn, validator)), f)
-	svc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, authzEngine, auditLogger, catalog)
+	svc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), authzEngine, auditLogger, catalog)
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
 	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine)
 

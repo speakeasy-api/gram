@@ -12,6 +12,7 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
@@ -27,14 +28,9 @@ type Validator struct {
 }
 
 // NewValidator binds the verification, replay, and subject dependencies.
-func NewValidator(keys assertioncore.VerificationKeys, guard assertioncore.ReplayGuard, store Store) (*Validator, error) {
-	if keys == nil || guard == nil || store == nil {
-		return nil, errors.New("idjag: keys, replay guard, and store are required")
-	}
-	if guard.MaxHold() < assertioncore.ReplayHoldFor(MaxLifetime) {
-		return nil, fmt.Errorf("idjag: replay guard hold %s is shorter than %s", guard.MaxHold(), assertioncore.ReplayHoldFor(MaxLifetime))
-	}
-	return &Validator{keys: keys, guard: guard, store: store}, nil
+func NewValidator(keys assertioncore.VerificationKeys, guard assertioncore.ReplayGuard, store Store) *Validator {
+	inv.Require("idjag validator", "replay guard holds identifiers for as long as assertions stay acceptable", guard.MaxHold() >= assertioncore.ReplayHoldFor(MaxLifetime))
+	return &Validator{keys: keys, guard: guard, store: store}
 }
 
 // Validate authenticates and resolves a presented ID-JAG. It never mints a

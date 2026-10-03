@@ -52,12 +52,10 @@ func TestRiskExclusionMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) 
 
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPRiskMutations, principal.OrganizationID, true)
-	controls, err := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "risk-exclusion-test-key")
-	require.NoError(t, err)
+	controls := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "risk-exclusion-test-key")
 	reconciler := &recordingRiskExclusionReconciler{}
 	exclusions := risk.NewExclusionMutationCore(testenv.NewLogger(t), conn, audit.NewLogger(), reconciler, "risk-exclusion-test-key")
-	handlers, err := NewRiskMutationHandlers(conn, controls, risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil), exclusions, nil)
-	require.NoError(t, err)
+	handlers := NewRiskMutationHandlers(conn, controls, newTestRiskPolicyCore(t, conn, flags), exclusions, risk.NewFalsePositiveCore(audit.NewLogger()), testRiskPolicyCatalog(t))
 	require.NotNil(t, handlers.CreateExclusion)
 	require.NotNil(t, handlers.UpdateExclusion)
 
@@ -104,8 +102,7 @@ func TestRiskExclusionMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) 
 	_, _, err = handlers.CreateExclusion(ctx, nil, changedCreate)
 	requireRiskMutationRefusal(t, err, "conflict")
 
-	reads, err := newRiskReadService(conn, "risk-exclusion-test-key")
-	require.NoError(t, err)
+	reads := newRiskReadService(conn, "risk-exclusion-test-key", testRiskPolicyCatalog(t))
 	listed, err := reads.ListExclusions(ctx, principal, ListRiskExclusionsInput{ProjectSlug: project.Slug})
 	require.NoError(t, err)
 	require.Len(t, listed.Exclusions, 1)

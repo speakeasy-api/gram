@@ -99,20 +99,22 @@ func newLiveVerifier(t *testing.T, issuer *devidptest.Instance) *workload.Verifi
 		string(testenv.NewCacheSuffix(t, "workload-jwks")),
 		ratelimit.PerMinute(1000),
 	)
-	keys, err := jwks.NewKeyResolver(
+	fetchLimiter := ratelimit.New(
+		ratelimit.NewRedisStore(client),
+		string(testenv.NewCacheSuffix(t, "workload-jwks-fetch")),
+		ratelimit.PerMinute(1000),
+	)
+	keys := jwks.NewKeyResolver(
 		jwks.NewResolver(policy, testenv.NewMeterProvider(t), logger),
 		jwks.NewMemoryCache(),
 		limiter,
-		nil,
+		fetchLimiter,
 		logger,
 	)
-	require.NoError(t, err)
 
-	guard, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "workload-replay")), assertioncore.ReplayHoldFor(testMaxLifetime))
-	require.NoError(t, err)
+	guard := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "workload-replay")), assertioncore.ReplayHoldFor(testMaxLifetime))
 
-	verifier, err := workload.NewVerifier(keys, guard)
-	require.NoError(t, err)
+	verifier := workload.NewVerifier(keys, guard)
 	return verifier
 }
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"testing"
 	"time"
 
@@ -15,10 +16,20 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 func TestDistributionServiceAttachesAndRemovesOnlyWorkflowSelectedReadyMCP(t *testing.T) {
@@ -29,8 +40,7 @@ func TestDistributionServiceAttachesAndRemovesOnlyWorkflowSelectedReadyMCP(t *te
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	store, err := NewRegistrationStore(conn)
-	require.NoError(t, err)
+	store := NewRegistrationStore(conn)
 	request := registrationRequest(project, "distribution-fixture", "distribution-registration")
 	receipt, err := store.BeginReceipt(ctx, principal, project, request, time.Now().UTC())
 	require.NoError(t, err)
@@ -62,10 +72,10 @@ func TestDistributionServiceAttachesAndRemovesOnlyWorkflowSelectedReadyMCP(t *te
 	require.NoError(t, err)
 
 	published := 0
-	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(_ context.Context, _ uuid.UUID, _ string, _ string) error {
+	service := testDistributionService(t, conn, func(_ context.Context, _ uuid.UUID, _ string, _ string) error {
 		published++
 		return nil
-	}, testPluginTargets(conn))
+	})
 	_, err = service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: 0})
 	require.ErrorIs(t, err, ErrDistributionNotReady)
 
@@ -171,7 +181,7 @@ func TestDistributionServiceTargetsTheNamedPluginAndRefusesAnUnmatchedOne(t *tes
 	})
 	require.NoError(t, err)
 
-	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(conn))
+	service := testDistributionService(t, conn, func(context.Context, uuid.UUID, string, string) error { return nil })
 
 	// A plugin nobody has is refused rather than redirected to the default,
 	// which is the whole point of naming a target.
@@ -226,7 +236,7 @@ func TestDistributionServicePreservesAdminReplacementOnRemoval(t *testing.T) {
 
 	plugin, err := pluginsrepo.New(conn).GetDefaultPlugin(ctx, pluginsrepo.GetDefaultPluginParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID})
 	require.NoError(t, err)
-	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(conn))
+	service := testDistributionService(t, conn, func(context.Context, uuid.UUID, string, string) error { return nil })
 	distributed, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: 0})
 	require.NoError(t, err)
 
@@ -283,7 +293,7 @@ func TestDistributionServicePreservesPreexistingAttachmentOnRemoval(t *testing.T
 	})
 	require.NoError(t, err)
 
-	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(conn))
+	service := testDistributionService(t, conn, func(context.Context, uuid.UUID, string, string) error { return nil })
 	distributed, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: 0})
 	require.NoError(t, err)
 	require.True(t, distributed.AttachmentLive)
@@ -308,7 +318,7 @@ func TestDistributionServicePreservesAttachmentWhenPublicationFails(t *testing.T
 	principal, project := seedReadyDistributionTarget(t, ctx, conn)
 	publishErr := errors.New("local fixture publication failure")
 	publish := func(context.Context, uuid.UUID, string, string) error { return publishErr }
-	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), publish, testPluginTargets(conn))
+	service := testDistributionService(t, conn, publish)
 
 	distributed, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: 0})
 	require.NoError(t, err)
@@ -332,8 +342,7 @@ func seedReadyDistributionTarget(t *testing.T, ctx context.Context, conn *pgxpoo
 	t.Helper()
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	store, err := NewRegistrationStore(conn)
-	require.NoError(t, err)
+	store := NewRegistrationStore(conn)
 	request := registrationRequest(project, "distribution-publisher-fixture", "distribution-publisher-registration")
 	receipt, err := store.BeginReceipt(ctx, principal, project, request, time.Now().UTC())
 	require.NoError(t, err)
@@ -377,11 +386,40 @@ func testExistingPluginAttacher() ExistingPluginAttacher {
 	}
 }
 
+// testDistributionService wires the distribution service over the plugin
+// inventory and admission guard the server uses.
+func testDistributionService(t *testing.T, conn *pgxpool.Pool, publish ProjectPublisher) *DistributionService {
+	t.Helper()
+	return NewDistributionService(conn, audit.NewLogger(), testExistingPluginAttacher(), publish, testPluginTargets(t, conn), testDistributionGuard(t, &feature.InMemory{}), NewPostgresOrganizationSlugResolver(conn))
+}
+
+func testDistributionGuard(t *testing.T, flags feature.Provider) *admission.Guard {
+	t.Helper()
+	return admission.NewGuard(flags, admission.NewReportMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)))
+}
+
 // testPluginTargets resolves named plugin targets against the same inventory
 // the plugin tools read.
-func testPluginTargets(conn *pgxpool.Pool) *PluginsService {
+func testPluginTargets(t *testing.T, conn *pgxpool.Pool) *PluginsService {
+	t.Helper()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	redisClient, err := platformMCPInfra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
+	require.NoError(t, err)
+	serverURL, err := url.Parse("https://gram.example.test")
+	require.NoError(t, err)
+	flags := &feature.InMemory{}
+	organizations := NewPostgresOrganizationSlugResolver(conn)
+	guard := testDistributionGuard(t, flags)
 	limiter := func() Limiter { return &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}} }
-	return NewPluginsService(conn, OperationBudget{Connection: limiter(), Organization: limiter()}, "test-cursor-key")
+	return NewPluginsService(conn, OperationBudget{Connection: limiter(), Organization: limiter()}, "test-cursor-key", guard).
+		WithAuthorization(authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())).
+		WithRemoteSessions(remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, conn, testenv.NewEncryptionClient(t), policy, newTestTunnelClient(t, policy), cache.NewRedisCacheAdapter(redisClient), serverURL)).
+		WithAssignmentMutations(flags, organizations, audit.NewLogger(), testOperationBudget()).
+		WithDistributionAdmissionReads(NewShadowDistributionReadService(logger, conn, guard, organizations))
 }
 
 // Distribution resolves its target only from the caller's onboarding workflow,
@@ -397,8 +435,7 @@ func TestCatalogRegistrationToolBindsOnboardingSoTheMCPCanBeDistributed(t *testi
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	store, err := NewRegistrationStore(conn)
-	require.NoError(t, err)
+	store := NewRegistrationStore(conn)
 	onboarding := NewOnboardingService(conn)
 	registrations := newRegistrationService(testCatalog{details: CatalogDetails{
 		CatalogCandidate: CatalogCandidate{Name: "Reviewed MCP", ProviderKey: "provider", CatalogRef: "reviewed/mcp", SetupIntent: "authorize"},
@@ -429,9 +466,9 @@ func TestCatalogRegistrationToolBindsOnboardingSoTheMCPCanBeDistributed(t *testi
 	}, ReadinessReady, "fixture", time.Now().UTC(), time.Now().UTC().Add(time.Hour))
 	require.NoError(t, err)
 
-	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(_ context.Context, _ uuid.UUID, _ string, _ string) error {
+	service := testDistributionService(t, conn, func(_ context.Context, _ uuid.UUID, _ string, _ string) error {
 		return nil
-	}, testPluginTargets(conn))
+	})
 	attached, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: 0})
 	require.NoError(t, err, "a registration made through the catalog tool must be distributable")
 	require.True(t, attached.AttachmentLive)

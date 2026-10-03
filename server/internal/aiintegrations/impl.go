@@ -545,7 +545,7 @@ func snapshotFromConfig(cfg Config) audit.AIIntegrationSnapshot {
 // poll loop that rediscovers the refusal. A partial refusal is returned
 // instead, for the caller to pause those schedules.
 func (s *Service) verifyCredentials(ctx context.Context, provider string, creds Credentials, verify bool) ([]ScheduleRejection, error) {
-	if s.credentials == nil || !verify {
+	if !verify {
 		return nil, nil
 	}
 
@@ -557,10 +557,6 @@ func (s *Service) verifyCredentials(ctx context.Context, provider string, creds 
 }
 
 func (s *Service) startUsagePoll(ctx context.Context, organizationSlug string, configID uuid.UUID, provider string) error {
-	if s.configPoller == nil {
-		return nil
-	}
-
 	schedules, err := s.store.ListSyncSchedules(ctx, configID)
 	if err != nil {
 		return err

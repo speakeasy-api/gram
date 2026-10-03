@@ -57,10 +57,6 @@ func newMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) *metric
 }
 
 func (m *metrics) recordLogEnricherDuration(ctx context.Context, enricherName string, duration float64, outcome o11y.Outcome) {
-	if m.logEnricherDuration == nil {
-		return
-	}
-
 	m.logEnricherDuration.Record(
 		ctx,
 		duration,
@@ -72,10 +68,6 @@ func (m *metrics) recordLogEnricherDuration(ctx context.Context, enricherName st
 }
 
 func (m *metrics) recordMetricEnricherDuration(ctx context.Context, enricherName string, duration float64, outcome o11y.Outcome) {
-	if m.metricEnricherDuration == nil {
-		return
-	}
-
 	m.metricEnricherDuration.Record(
 		ctx,
 		duration,
@@ -87,10 +79,6 @@ func (m *metrics) recordMetricEnricherDuration(ctx context.Context, enricherName
 }
 
 func (m *metrics) recordEnricherDuration(ctx context.Context, enricherName string, duration float64, outcome o11y.Outcome) {
-	if m.spanEnricherDuration == nil {
-		return
-	}
-
 	m.spanEnricherDuration.Record(
 		ctx,
 		duration,

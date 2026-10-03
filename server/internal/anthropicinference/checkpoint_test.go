@@ -62,7 +62,7 @@ func TestDeniedToolRetryDoesNotBecomeAccepted(t *testing.T) {
 	}
 	store := &memoryStore{}
 	var calls, promptScans atomic.Int32
-	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scannerFunc(func(_ context.Context, r risk.RealtimeScanRequest) (*risk.ScanResult, error) {
+	service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: store, scanner: scannerFunc(func(_ context.Context, r risk.RealtimeScanRequest) (*risk.ScanResult, error) {
 		calls.Add(1)
 		if r.Text == "prompt" {
 			promptScans.Add(1)
@@ -110,7 +110,7 @@ func TestPartialEvaluationDoesNotAdvanceCheckpoint(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			var calls atomic.Int32
-			service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scannerFunc(func(ctx context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
+			service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: store, scanner: scannerFunc(func(ctx context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
 				if calls.Add(1) == 2 {
 					switch mode {
 					case "error":
@@ -145,7 +145,7 @@ func TestArchivedHistoryWithoutCheckpointIsRescanned(t *testing.T) {
 	frame.Messages = []Message{textMessage("user", "prompt"), textMessage("assistant", "reply"), textMessage("user", "result")}
 	store := &deltaStore{newStart: len(frame.Messages)}
 	scanned := &recordingScanner{}
-	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanned}
+	service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: store, scanner: scanned}
 	_, err := service.Process(t.Context(), Config{}, frame)
 	require.NoError(t, err)
 	require.Len(t, scanned.inputs, 3)
@@ -162,7 +162,7 @@ func TestIncompleteAllowRetainsLastKnownGoodCheckpoint(t *testing.T) {
 			t.Parallel()
 			store := &memoryStore{}
 			scanned := &recordingScanner{}
-			service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanned}
+			service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: store, scanner: scanned}
 			frame := exampleFrame()
 			verdict, err := service.Process(t.Context(), Config{}, frame)
 			require.NoError(t, err)
@@ -240,7 +240,7 @@ func TestCheckpointConflictDoesNotHideAcceptanceErrors(t *testing.T) {
 				}
 				return tc.acceptErr
 			}}
-			service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &recordingScanner{}}
+			service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: store, scanner: &recordingScanner{}}
 			verdict, err := service.Process(ctx, Config{}, exampleFrame())
 			if tc.wantErr != nil {
 				require.ErrorIs(t, err, tc.wantErr)

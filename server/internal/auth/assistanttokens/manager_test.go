@@ -14,9 +14,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 var tokensInfra *testenv.Environment
@@ -42,6 +45,11 @@ type fixture struct {
 	assistantID uuid.UUID
 	threadID    uuid.UUID
 	chatID      uuid.UUID
+}
+
+func newTestManager(t *testing.T, conn *pgxpool.Pool) *Manager {
+	t.Helper()
+	return New("test-secret", conn, authz.NewEngine(testenv.NewLogger(t), conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()))
 }
 
 func newFixture(t *testing.T, dbName string) fixture {
@@ -104,7 +112,7 @@ func TestCheckRevocation_active(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, "tokens_active")
-	m := New("test-secret", f.conn, nil)
+	m := newTestManager(t, f.conn)
 
 	require.NoError(t, m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID))
 }
@@ -119,7 +127,7 @@ func TestCheckRevocation_threadDeleted(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	m := New("test-secret", f.conn, nil)
+	m := newTestManager(t, f.conn)
 
 	err = m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID)
 	requireUnauthorized(t, err)
@@ -135,7 +143,7 @@ func TestCheckRevocation_assistantDeleted(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	m := New("test-secret", f.conn, nil)
+	m := newTestManager(t, f.conn)
 
 	err = m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID)
 	requireUnauthorized(t, err)
@@ -152,7 +160,7 @@ func TestCheckRevocation_assistantPaused(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	m := New("test-secret", f.conn, nil)
+	m := newTestManager(t, f.conn)
 
 	err = m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID)
 	requireUnauthorized(t, err)
@@ -162,7 +170,7 @@ func TestCheckRevocation_threadMissing(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, "tokens_thread_missing")
-	m := New("test-secret", f.conn, nil)
+	m := newTestManager(t, f.conn)
 
 	err := m.checkRevocation(t.Context(), f.projectID, f.assistantID, uuid.New())
 	requireUnauthorized(t, err)
@@ -174,7 +182,7 @@ func TestCheckRevocation_assistantScoped(t *testing.T) {
 	// v2 tokens omit ThreadID — revocation must fall back to an
 	// assistant-only lookup and pass when the assistant is active.
 	f := newFixture(t, "tokens_assistant_scoped")
-	m := New("test-secret", f.conn, nil)
+	m := newTestManager(t, f.conn)
 
 	require.NoError(t, m.checkRevocation(t.Context(), f.projectID, f.assistantID, uuid.Nil))
 }
@@ -182,7 +190,9 @@ func TestCheckRevocation_assistantScoped(t *testing.T) {
 func TestMCPAuthFlowSeparatesStableCallbackFromAttempt(t *testing.T) {
 	t.Parallel()
 
-	manager := New("test-secret", nil, nil)
+	conn, err := tokensInfra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	manager := newTestManager(t, conn)
 	assistantID := uuid.New()
 	attemptID := uuid.NewString()
 	token, err := manager.GenerateMCPAuthFlow(MCPAuthFlowInput{
@@ -215,7 +225,9 @@ func TestMCPAuthFlowSeparatesStableCallbackFromAttempt(t *testing.T) {
 func TestMCPAuthFlowDefaultsAttemptToLegacyFlowID(t *testing.T) {
 	t.Parallel()
 
-	manager := New("test-secret", nil, nil)
+	conn, err := tokensInfra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	manager := newTestManager(t, conn)
 	flowID := uuid.NewString()
 	token, err := manager.GenerateMCPAuthFlow(MCPAuthFlowInput{
 		OrgID:             "org-test",
@@ -254,7 +266,7 @@ func TestCheckRevocation_assistantScoped_assistantPaused(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	m := New("test-secret", f.conn, nil)
+	m := newTestManager(t, f.conn)
 
 	err = m.checkRevocation(t.Context(), f.projectID, f.assistantID, uuid.Nil)
 	requireUnauthorized(t, err)
@@ -264,7 +276,7 @@ func TestGenerate_assistantScopedOmitsThreadClaim(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, "tokens_generate_v2")
-	m := New("test-secret", f.conn, nil)
+	m := newTestManager(t, f.conn)
 
 	token, err := m.Generate(GenerateInput{
 		OrgID:       "org",
@@ -284,7 +296,7 @@ func TestCheckRevocation_cacheHitSkipsDB(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, "tokens_cache_hit")
-	m := New("test-secret", f.conn, nil)
+	m := newTestManager(t, f.conn)
 
 	// Prime cache with the active path.
 	require.NoError(t, m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID))
@@ -305,7 +317,7 @@ func TestCheckRevocation_cacheRespectsTTL(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, "tokens_cache_ttl")
-	m := New("test-secret", f.conn, nil)
+	m := newTestManager(t, f.conn)
 
 	// Force a tiny TTL so we can observe expiry in the test.
 	m.revocation = newRevocationCache(50 * time.Millisecond)

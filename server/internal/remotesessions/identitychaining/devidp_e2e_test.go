@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	identityproviderconnectionsrepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	oktaresourceconnectionsrepo "github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -31,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 const (
@@ -199,11 +201,10 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, guardian.WithTLSRootCAs(idp.RootCAs()))
 	require.NoError(t, err)
 	locks := cache.NewRedisCacheAdapter(redisClient)
-	keys, err := remotesessions.NewIDTokenKeyResolver(logger, policy, meterProvider, ratelimit.NewRedisStore(redisClient))
-	require.NoError(t, err)
+	keys := remotesessions.NewIDTokenKeyResolver(logger, policy, meterProvider, ratelimit.NewRedisStore(redisClient))
 	serverURL, err := url.Parse("https://gram.example.test")
 	require.NoError(t, err)
-	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, db, enc, policy, nil, locks, serverURL, remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(keys)))
+	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, db, enc, policy, tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", policy, nil), locks, serverURL, remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(keys)))
 	chainer := New(logger, db, enc, challenges, remotesessions.NewDelegationService(db, enc, challenges), keys, locks)
 	observed := &recordingObserver{}
 	chainer.SetObserver(observed)

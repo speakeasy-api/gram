@@ -134,7 +134,7 @@ type Service struct {
 	// when none is configured. Set by AttachAuthenticationHost.
 	authenticationHostBaseURL string
 	siteURL                   *url.URL
-	posthog                   *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	posthog                   *posthog.Posthog
 	// features resolves flag-controlled behavior (the managed assistant's
 	// Platform MCP toolset variant). Wired from the environment-aware
 	// provider: the posthog client in production, the CSV-backed in-memory
@@ -149,11 +149,9 @@ type Service struct {
 	// cimd.fetch.attempts).
 	cimdAdmissionMetrics *admission.Metrics
 	// clientAssertionVerifier verifies private_key_jwt client assertions at
-	// the token and revocation endpoints. Nil without Redis, in which case
-	// assertion clients are refused rather than admitted unverified.
+	// the token and revocation endpoints.
 	clientAssertionVerifier *privatekeyjwt.Verifier
-	// workloadGrant runs the workload assertion grant's stages. Nil on a
-	// surface without Redis, which refuses the grant.
+	// workloadGrant runs the workload assertion grant's stages.
 	workloadGrant *workloadGrant
 	// idJAGValidator authenticates enterprise identity grants, enforces replay
 	// protection, and resolves their subjects to provisioned Gram users.
@@ -212,7 +210,7 @@ type Service struct {
 	remoteChallengeMgr *remotesessions.ChallengeManager
 	// validationMetrics counts the consent page's live validation probes.
 	validationMetrics *remotesessionmetrics.Validation
-	// validationLimiter paces verifies per consent challenge; nil without Redis.
+	// validationLimiter paces verifies per consent challenge.
 	validationLimiter *ratelimit.Limiter
 	// autoVerifications admits and drains the probes a committed grant starts off the request path.
 	autoVerifications *autoVerifications
@@ -220,13 +218,10 @@ type Service struct {
 	remoteSessionRecheck *remoteSessionRecheck
 	// remoteProxyManager builds configured remotemcp proxies wired with the
 	// MCP-aware interceptor stack. Only consulted by ServeMCPEndpoint's
-	// remote-backed branch; may be nil in non-HTTP contexts (e.g. the
-	// Temporal worker, which constructs *Service for its programmatic
-	// helpers but never serves a runtime request).
+	// remote-backed branch.
 	remoteProxyManager *remotemcp.ProxyManager
 	tunnelManager      *tunnelManager
-	// Nil when no Redis was wired; every public tunneled request then fails closed.
-	tunnelPublic *tunnelPublicRuntime
+	tunnelPublic       *tunnelPublicRuntime
 
 	// metaRuntime bounds the gateway's per-member upstream work.
 	metaRuntime MetaRuntimeConfig
@@ -406,7 +401,7 @@ func NewService(
 	telemLogger *tm.Logger,
 	telemSvc *tm.Service,
 	vectorToolStore *rag.ToolsetVectorStore,
-	triggerApp *bgtriggers.App,
+	threadRouter *bgtriggers.ThreadRouter,
 	authzEngine *authz.Engine,
 	assistantTokens *assistanttokens.Manager,
 	shadowMCPClient *shadowmcp.Client,
@@ -417,6 +412,8 @@ func NewService(
 	identityResolver IdentityResolver,
 	userSessionSigner *sessiontokens.Signer,
 	remoteChallengeMgr *remotesessions.ChallengeManager,
+	federatedLoginConsumer FederatedLoginConsumer,
+	chainer identityChainer,
 	scanEvaluator *mcpriskscan.Evaluator,
 	remoteProxyManager *remotemcp.ProxyManager,
 	tunnelRoutes route.Store,
@@ -426,34 +423,32 @@ func NewService(
 	redisClient *redis.Client,
 	tunnelPublicConfig TunnelPublicConfig,
 	metaRuntimeConfig MetaRuntimeConfig,
-) (*Service, error) {
+) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
 	logger = logger.With(attr.SlogComponent("mcp"))
 	metrics := mcpmetrics.NewMetrics(meter, logger)
-	hostedToolsCallCheckpoint, err := mcptoolexecution.NewHostedCheckpoint(db, meterProvider, logger, metrics)
-	if err != nil {
-		return nil, fmt.Errorf("initialize hosted MCP kill-switch checkpoint: %w", err)
-	}
-	idJAGValidator, err := newIDJAGValidator(db, redisClient, guardianPolicy, meterProvider, logger)
-	if err != nil {
-		return nil, fmt.Errorf("initialize ID-JAG validator: %w", err)
-	}
+	hostedToolsCallCheckpoint := mcptoolexecution.NewHostedCheckpoint(db, meterProvider, logger, metrics)
+	idJAGValidator := newIDJAGValidator(db, redisClient, guardianPolicy, meterProvider, logger)
+	clientAssertionVerifier := newClientAssertionVerifier(redisClient, guardianPolicy, meterProvider, logger)
+	workloadGrant := newWorkloadGrant(db, redisClient, guardianPolicy, meterProvider, logger)
 
 	platformSvc := platformtoolsruntime.NewService(
 		logger,
 		db,
 		telemSvc,
 		auditLogger,
-		platformtoolsruntime.WithTriggerTools(triggerApp),
-		platformtoolsruntime.WithSlackHTTPClient(guardianPolicy.PooledClient()),
-		platformtoolsruntime.WithExternalTools(platformExtras),
-		platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
+		threadRouter,
+		guardianPolicy.PooledClient(),
+		enc,
+		serverURL,
+		platformFeatureChecker,
+		platformExtras,
 	)
 
 	service := &Service{
-		federatedLoginConsumer:    nil,
-		identityChainer:           nil,
+		federatedLoginConsumer:    federatedLoginConsumer,
+		identityChainer:           chainer,
 		consentBindings:           nil,
 		logger:                    logger,
 		tracer:                    tracer,
@@ -480,8 +475,8 @@ func NewService(
 		features:                  features,
 		cimdResolver:              cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		cimdAdmissionMetrics:      admission.NewMetrics(meterProvider, logger),
-		clientAssertionVerifier:   newClientAssertionVerifier(redisClient, guardianPolicy, meterProvider, logger),
-		workloadGrant:             newWorkloadGrant(db, redisClient, guardianPolicy, meterProvider, logger),
+		clientAssertionVerifier:   clientAssertionVerifier,
+		workloadGrant:             workloadGrant,
 		idJAGValidator:            idJAGValidator,
 		aiToolBlockReads:          defaultAIToolBlockReads(),
 		toolProxy: gateway.NewToolProxy(
@@ -553,7 +548,7 @@ func NewService(
 		tunnelPublic:         newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:          metaRuntimeConfig.withDefaults(),
 	}
-	return service, nil
+	return service
 }
 
 // SetCallbackOrigins pins the IdP callback URLs and assistants' CIMD client
@@ -594,11 +589,9 @@ func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverN
 	// host-only, so a user on an extra platform host would otherwise land on
 	// the canonical host logged out.
 	dashboardURL := s.siteURL
-	if s.serverURL != nil {
-		if base := requestorigin.PlatformHostBaseURL(ctx, s.serverURL.String(), ""); base != "" {
-			if u, err := url.Parse(base); err == nil {
-				dashboardURL = u
-			}
+	if base := requestorigin.PlatformHostBaseURL(ctx, s.serverURL.String(), ""); base != "" {
+		if u, err := url.Parse(base); err == nil {
+			dashboardURL = u
 		}
 	}
 
