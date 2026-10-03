@@ -107,3 +107,27 @@ func TestSafeRedirectPathWithoutOrigin(t *testing.T) {
 	require.Empty(t, safeRedirectPath("https://app.example.com/dashboard", ""))
 	require.Empty(t, safeRedirectPath("//app.example.com", ""))
 }
+
+func TestWithSignedUpParam(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "absolute sign-in url", input: "https://app.example.com/", want: "https://app.example.com/?signed_up=1"},
+		{name: "relative path", input: "/acme/projects/default", want: "/acme/projects/default?signed_up=1"},
+		{name: "existing query is kept", input: "/acme/projects/default/assistants/new?disposition=assistants", want: "/acme/projects/default/assistants/new?disposition=assistants&signed_up=1"},
+		{name: "fragment is kept", input: "/acme?tab=settings#details", want: "/acme?signed_up=1&tab=settings#details"},
+		{name: "unparseable is returned untouched", input: "/acme?%zz", want: "/acme?%zz"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tt.want, withSignedUpParam(tt.input))
+		})
+	}
+}

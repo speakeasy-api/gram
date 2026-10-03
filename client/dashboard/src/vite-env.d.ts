@@ -3,6 +3,8 @@
 declare const __GRAM_SERVER_URL__: string | undefined;
 declare const __PLAYGROUND_PROXY_URL__: string | undefined;
 declare const __GRAM_GIT_SHA__: string | undefined;
+// Google tag id for ad conversions; "" when the build has none. See vite.config.ts.
+declare const __GRAM_GOOGLE_TAG_ID__: string;
 declare const __GRAM_API_URL__: string | undefined;
 
 // Dev-only: which worktree/branch this dev server is serving, for the sidebar

@@ -34,6 +34,7 @@ import {
 import { orgRoutePaths } from "@/routes";
 import { isPortablePath, resolvePortablePath } from "@/lib/portable-path";
 import { safeRedirectPath, UNAUTHENTICATED_PATHS } from "@/lib/session-expired";
+import { useSignupConversion } from "@/hooks/useSignupConversion";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -172,6 +173,11 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   useRegisterOrganizationForTelemetry(session?.organization?.slug ?? "");
   usePylonInAppChat(session?.user);
   useFermatPixel(session?.user, session?.activeOrganizationId ?? "");
+  // A signup lands here with the server's signed-up mark; report it to Google
+  // Ads once the session confirms the organization it created.
+  useSignupConversion(
+    Boolean(session?.session && session.activeOrganizationId),
+  );
 
   // Sync isAdmin into the SDK fetcher so it can attach X-Gram-Scope-Override in production.
   isPlatformAdminRef.current = session?.user.isAdmin ?? false;
