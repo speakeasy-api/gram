@@ -168,6 +168,15 @@ impl McpActor {
                     bearer,
                     reply,
                 } => {
+                    // Reject the whole update before changing credentials. A
+                    // skipped malformed registration could otherwise reconnect
+                    // a previous endpoint under the next turn's bearer.
+                    if let Some(err) = desired.iter().find_map(|server| {
+                        build_mcp_server_config(server, &self.http_client, &self.tokens).err()
+                    }) {
+                        let _ = reply.send(Err(err));
+                        continue;
+                    }
                     let ids: Vec<String> = self.configured.keys().cloned().collect();
                     for id in ids {
                         if self.is_connected(&id) {
@@ -534,6 +543,15 @@ fn build_mcp_server_config(
     http_client: &reqwest::Client,
     tokens: &TokenRegistry,
 ) -> Result<McpServerConfig, RunnerError> {
+    let url = reqwest::Url::parse(&server.url)
+        .map_err(|_| RunnerError::Loop("invalid MCP endpoint URL".into()))?;
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return Err(RunnerError::Loop("invalid MCP endpoint transport".into()));
+    }
     let mut server_headers = http::HeaderMap::new();
     for (k, v) in &server.headers {
         let name = http::HeaderName::from_bytes(k.as_bytes()).map_err(|source| {
@@ -561,4 +579,39 @@ fn build_mcp_server_config(
         &server.id,
         McpTransportBinding::StreamableHttp(transport),
     ))
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn malformed_next_configuration_does_not_rotate_bearer() {
+        let client = reqwest::Client::new();
+        let gram = GramBootstrapClient::new(
+            "http://localhost".into(),
+            crate::http_layer::build_bootstrap_client(client.clone()),
+        );
+        let tokens = TokenRegistry::new("original");
+        let (notices, _) = mpsc::unbounded_channel();
+        let (commands, _) = spawn_mcp_actor(gram, client, "thread", &[], &tokens, notices).unwrap();
+        for raw in [
+            r#"{"id":"server","url":"file:///tmp/socket","headers":{}}"#,
+            r#"{"id":"server","url":"https://new.example/mcp","headers":{"invalid\nheader":"value"}}"#,
+        ] {
+            let server: McpServer = serde_json::from_str(raw).unwrap();
+            let (reply, response) = oneshot::channel();
+            commands
+                .send(McpCmd::BeginTurn {
+                    desired: vec![server],
+                    bearer: "next".into(),
+                    reply,
+                })
+                .await
+                .unwrap();
+            assert!(response.await.unwrap().is_err());
+            assert_eq!(tokens.current().unwrap(), "original");
+        }
+    }
 }

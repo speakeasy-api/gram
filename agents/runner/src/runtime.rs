@@ -1,5 +1,6 @@
 use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
@@ -22,7 +23,7 @@ use dashmap::DashMap;
 use futures::FutureExt;
 use serde_json::Value;
 use tokio::sync::OnceCell;
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tracing::Instrument;
 
 use agentkit_compaction::{AgentBuilderCompactorExt, CompactionReason, Compactor};
@@ -66,7 +67,7 @@ pub struct RuntimeHost {
     /// the check + bootstrap + enqueue + mark-done sequence so concurrent
     /// retries with the same key serialize. A failed admission drops the
     /// guard with `false`, leaving the slot retryable.
-    pub seen: DashMap<String, Arc<tokio::sync::Mutex<bool>>>,
+    pub seen: DashMap<String, Arc<EventSlot>>,
     /// Serializes bootstrap and enqueue without changing the active turn token.
     pub turn_admissions: DashMap<String, Weak<tokio::sync::Mutex<()>>>,
     pub threads: DashMap<String, Arc<OnceCell<Arc<ConfiguredThread>>>>,
@@ -83,7 +84,7 @@ pub struct ConfiguredThread {
     pub thread_id: String,
     pub chat_id: String,
     pub idle_since: Arc<Mutex<Option<Instant>>>,
-    pub inbox_tx: UnboundedSender<QueuedTurn>,
+    pub inbox_tx: mpsc::Sender<QueuedTurn>,
     pub task_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// Broadcasts user interrupts into the thread's agent loop. Bumping the
     /// generation cancels whatever checkpoint the turn in flight captured at
@@ -94,10 +95,23 @@ pub struct ConfiguredThread {
 
 /// A message and its credential travel together. Enqueueing never changes
 /// credentials, reconciles tools, or injects input into the active model turn.
+#[derive(Default)]
+pub struct EventSlot {
+    pub gate: tokio::sync::Mutex<()>,
+    pub accepted: Arc<AtomicBool>,
+}
+
+pub struct TurnAdmission {
+    pub event: Option<EventAdmission>,
+    pub accepted: Arc<AtomicBool>,
+    pub reply: tokio::sync::oneshot::Sender<()>,
+}
+
 pub struct QueuedTurn {
     pub input: RunnerContent,
     pub bearer: String,
     pub mcp_servers: Vec<McpServer>,
+    pub admission: Option<TurnAdmission>,
 }
 
 impl ConfiguredThread {
@@ -118,9 +132,12 @@ impl ConfiguredThread {
             .idle_since
             .lock()
             .map_err(|_| RunnerError::SubmitInput("idle clock poisoned".into()))?;
-        self.inbox_tx
-            .send(turn)
-            .map_err(|_| RunnerError::SubmitInput("loop inbox closed".into()))?;
+        self.inbox_tx.try_send(turn).map_err(|error| match error {
+            mpsc::error::TrySendError::Full(_) => RunnerError::InvocationBusy,
+            mpsc::error::TrySendError::Closed(_) => {
+                RunnerError::SubmitInput("loop inbox closed".into())
+            }
+        })?;
         *idle = None;
         Ok(())
     }
@@ -321,10 +338,11 @@ pub fn admission_lock(host: &RuntimeHost, thread_id: &str) -> Arc<tokio::sync::M
 /// Map + this owner are the final two references only after every waiter leaves.
 /// Removing under the map shard lock prevents new requests joining a detached
 /// slot; successful entries remain until the normal thread eviction boundary.
+#[derive(Clone)]
 pub struct EventAdmission {
     host: Arc<RuntimeHost>,
     key: String,
-    pub slot: Arc<tokio::sync::Mutex<bool>>,
+    pub slot: Arc<EventSlot>,
 }
 
 impl EventAdmission {
@@ -332,7 +350,7 @@ impl EventAdmission {
         let slot = host
             .seen
             .entry(key.clone())
-            .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(false)))
+            .or_insert_with(|| Arc::new(EventSlot::default()))
             .clone();
         Self { host, key, slot }
     }
@@ -347,7 +365,8 @@ impl Drop for EventAdmission {
             // final owners cannot both observe the other and leave an orphan.
             drop(slot);
             same && Arc::strong_count(current) == 1
-                && current.try_lock().is_ok_and(|accepted| !*accepted)
+                && current.gate.try_lock().is_ok()
+                && !current.accepted.load(Ordering::Acquire)
         });
     }
 }
@@ -388,7 +407,7 @@ async fn spawn_thread(
     bootstrap: ThreadBootstrap,
     tokens: TokenRegistry,
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
-    let (inbox_tx, inbox_rx) = mpsc::unbounded_channel::<QueuedTurn>();
+    let (inbox_tx, inbox_rx) = mpsc::channel::<QueuedTurn>(64);
     let (notice_tx, notice_rx) = mpsc::unbounded_channel::<RunnerContent>();
     let (mcp_cmd_tx, mcp_catalog) = spawn_mcp_actor(
         host.gram_client.clone(),
@@ -648,13 +667,13 @@ async fn activate_turn(
         .map_err(|_| RunnerError::Loop("mcp turn admission failed".into()))??;
     // The actor and model clients share this registry. No model work starts
     // until the actor has completed the credential transition.
-    debug_assert_eq!(tokens.current()?, turn.bearer);
+    debug_assert!(tokens.current()? == turn.bearer);
     Ok(notice)
 }
 
 async fn run_loop<S>(
     mut driver: LoopDriver<S>,
-    mut inbox: UnboundedReceiver<QueuedTurn>,
+    mut inbox: mpsc::Receiver<QueuedTurn>,
     mut notices: UnboundedReceiver<RunnerContent>,
     idle_since: Arc<Mutex<Option<Instant>>>,
     turn_end_compactor: Option<PersistingCompactor>,
@@ -691,10 +710,23 @@ where
                 }
             }
             LoopStep::Interrupt(LoopInterrupt::AwaitingInput(req)) => {
+                if let Ok(mut idle) = idle_since.lock()
+                    && inbox.is_empty()
+                    && idle.is_none()
+                {
+                    *idle = Some(Instant::now());
+                }
                 let turn = match inbox.recv().await {
                     Some(turn) => turn,
                     None => return Ok("inbox closed"),
                 };
+                if turn
+                    .admission
+                    .as_ref()
+                    .is_some_and(|admission| admission.reply.is_closed())
+                {
+                    continue; // The HTTP admission was cancelled; its durable event retries.
+                }
                 mark_busy(&idle_since);
                 // Only AwaitingInput admits the next tuple. Finished ran all
                 // turn-end authenticated work before we can reach this point.
@@ -702,9 +734,23 @@ where
                 // tuple, never to the next message's delegator.
                 let _ = drain(&mut notices);
                 let notice = activate_turn(&credential.0, &credential.1, &turn).await?;
+                if turn
+                    .admission
+                    .as_ref()
+                    .is_some_and(|admission| admission.reply.is_closed())
+                {
+                    continue;
+                }
                 let input = invocation_content(turn.input, notice);
                 let items = vec![user_content_item(&input)];
                 req.submit(&mut driver, items)?;
+                if let Some(admission) = turn.admission {
+                    // Publish dedup acceptance before acknowledging, even if the
+                    // HTTP response is cancelled or lost immediately afterwards.
+                    admission.accepted.store(true, Ordering::Release);
+                    let _ = admission.reply.send(());
+                    drop(admission.event);
+                }
             }
             LoopStep::Interrupt(LoopInterrupt::AfterToolResult(info)) => {
                 let drained = drain(&mut notices);
@@ -912,26 +958,39 @@ mod tests {
         let host = empty_host();
         for n in 0..1000 {
             let admission = EventAdmission::new(host.clone(), format!("failed:{n}"));
-            let guard = admission.slot.lock().await;
-            assert!(!*guard);
+            let guard = admission.slot.gate.lock().await;
+            assert!(!admission.slot.accepted.load(Ordering::Acquire));
             drop(guard);
             drop(admission);
             assert!(host.seen.is_empty());
         }
         let retry = EventAdmission::new(host.clone(), "failed:0".into());
-        *retry.slot.lock().await = true;
+        retry.slot.accepted.store(true, Ordering::Release);
         drop(retry);
         let successful_retry = EventAdmission::new(host.clone(), "failed:0".into());
-        assert!(*successful_retry.slot.lock().await);
+        assert!(successful_retry.slot.accepted.load(Ordering::Acquire));
         drop(successful_retry);
         assert!(host.seen.contains_key("failed:0"));
+    }
+
+    #[test]
+    fn queued_slot_owner_keeps_dedup_atomic_when_http_admission_is_cancelled() {
+        let host = empty_host();
+        let http = EventAdmission::new(host.clone(), "thread:event".into());
+        let queued = http.clone();
+        drop(http);
+        assert!(host.seen.contains_key("thread:event"));
+        queued.slot.accepted.store(true, Ordering::Release);
+        drop(queued);
+        let retry = EventAdmission::new(host.clone(), "thread:event".into());
+        assert!(retry.slot.accepted.load(Ordering::Acquire));
     }
 
     #[tokio::test]
     async fn cancelled_admission_keeps_waiters_on_the_same_slot() {
         let host = empty_host();
         let first = EventAdmission::new(host.clone(), "thread:event".into());
-        let first_guard = first.slot.lock().await;
+        let first_guard = first.slot.gate.lock().await;
         let waiting = EventAdmission::new(host.clone(), "thread:event".into());
         assert!(Arc::ptr_eq(&first.slot, &waiting.slot));
         // Cancellation releases the lock before its owner, but the waiter
@@ -941,7 +1000,7 @@ mod tests {
         let retry = EventAdmission::new(host.clone(), "thread:event".into());
         assert!(Arc::ptr_eq(&waiting.slot, &retry.slot));
         let waiter_task = tokio::spawn(async move {
-            let _guard = waiting.slot.lock().await;
+            let _guard = waiting.slot.gate.lock().await;
             std::future::pending::<()>().await;
         });
         tokio::task::yield_now().await;
@@ -996,7 +1055,7 @@ mod tests {
     }
 
     fn insert_thread(host: &RuntimeHost, thread_id: &str, idle_since: Option<Instant>) {
-        let (inbox_tx, _inbox_rx) = mpsc::unbounded_channel::<QueuedTurn>();
+        let (inbox_tx, _inbox_rx) = mpsc::channel::<QueuedTurn>(64);
         let handle = tokio::spawn(async {});
         let configured = Arc::new(ConfiguredThread {
             thread_id: thread_id.to_string(),
@@ -1074,7 +1133,7 @@ mod tests {
     #[derive(Clone)]
     struct QueueTestModel {
         tokens: TokenRegistry,
-        seen: UnboundedSender<(String, Vec<String>)>,
+        seen: mpsc::UnboundedSender<(String, Vec<String>)>,
         finish: Arc<tokio::sync::Semaphore>,
     }
 
@@ -1155,7 +1214,7 @@ mod tests {
         };
         let agent = Agent::builder().model(model).build().unwrap();
         let driver = agent.start(SessionConfig::new("queue-test")).await.unwrap();
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::channel(64);
         let (_notice_tx, notices) = mpsc::unbounded_channel();
         let (cmd, mut commands) = mpsc::channel(2);
         let actor_tokens = tokens.clone();
@@ -1174,10 +1233,11 @@ mod tests {
             "thread".into(),
             (tokens.clone(), cmd),
         ));
-        tx.send(QueuedTurn {
+        tx.try_send(QueuedTurn {
             input: RunnerContent::Text("message-a".into()),
             bearer: "token-a".into(),
             mcp_servers: vec![],
+            admission: None,
         })
         .unwrap();
         let first = tokio::time::timeout(Duration::from_secs(2), seen_rx.recv())
@@ -1185,14 +1245,40 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(first, ("token-a".into(), vec!["message-a".into()]));
-        tx.send(QueuedTurn {
+        let (reply, mut admitted) = tokio::sync::oneshot::channel();
+        let accepted = Arc::new(AtomicBool::new(false));
+        // A cancelled HTTP admission stays retryable and never starts model work.
+        let (cancelled_reply, cancelled) = tokio::sync::oneshot::channel();
+        drop(cancelled);
+        tx.try_send(QueuedTurn {
+            input: RunnerContent::Text("cancelled-message".into()),
+            bearer: "cancelled-token".into(),
+            mcp_servers: vec![],
+            admission: Some(TurnAdmission {
+                event: None,
+                accepted: Arc::new(AtomicBool::new(false)),
+                reply: cancelled_reply,
+            }),
+        })
+        .unwrap();
+        tx.try_send(QueuedTurn {
             input: RunnerContent::Text("message-b".into()),
             bearer: "token-b".into(),
             mcp_servers: vec![],
+            admission: Some(TurnAdmission {
+                event: None,
+                accepted: accepted.clone(),
+                reply,
+            }),
         })
         .unwrap();
         tokio::task::yield_now().await;
         assert_eq!(tokens.current().unwrap(), "token-a");
+        assert!(matches!(
+            admitted.try_recv(),
+            Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+        ));
+        assert!(!accepted.load(Ordering::Acquire));
         assert!(
             seen_rx.try_recv().is_err(),
             "out-of-turn input must not start model work"
@@ -1202,6 +1288,8 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+        admitted.await.unwrap();
+        assert!(accepted.load(Ordering::Acquire));
         assert_eq!(second.0, "token-b");
         assert_eq!(second.1.last().unwrap(), "message-b");
         finish.add_permits(1);
@@ -1217,15 +1305,62 @@ mod tests {
         actor.await.unwrap();
     }
 
+    #[test]
+    fn full_queue_returns_retryable_backpressure_and_dropped_queue_never_acknowledges() {
+        let (tx, rx) = mpsc::channel(1);
+        let thread = ConfiguredThread {
+            thread_id: "thread".into(),
+            chat_id: "chat".into(),
+            idle_since: Arc::new(Mutex::new(None)),
+            inbox_tx: tx,
+            task_handle: Mutex::new(None),
+            cancellation: CancellationController::new(),
+        };
+        let (reply, mut admitted) = tokio::sync::oneshot::channel();
+        let accepted = Arc::new(AtomicBool::new(false));
+        thread
+            .enqueue(QueuedTurn {
+                input: RunnerContent::Text("first".into()),
+                bearer: "one".into(),
+                mcp_servers: vec![],
+                admission: Some(TurnAdmission {
+                    event: None,
+                    accepted: accepted.clone(),
+                    reply,
+                }),
+            })
+            .unwrap();
+        assert!(matches!(
+            thread.enqueue(QueuedTurn {
+                input: RunnerContent::Text("second".into()),
+                bearer: "two".into(),
+                mcp_servers: vec![],
+                admission: None
+            }),
+            Err(RunnerError::InvocationBusy)
+        ));
+        assert!(matches!(
+            admitted.try_recv(),
+            Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+        ));
+        drop(rx); // A failed loop drops pending receipts, never accepts them.
+        assert!(matches!(
+            admitted.try_recv(),
+            Err(tokio::sync::oneshot::error::TryRecvError::Closed)
+        ));
+        assert!(!accepted.load(Ordering::Acquire));
+    }
+
     #[tokio::test]
     async fn queued_tuple_keeps_its_token_until_the_turn_boundary() {
         let tokens = TokenRegistry::new("human-a");
         let model = tokens.clone();
-        let (tx, mut rx) = mpsc::unbounded_channel();
-        tx.send(QueuedTurn {
+        let (tx, mut rx) = mpsc::channel(64);
+        tx.try_send(QueuedTurn {
             input: RunnerContent::Text("message-b".into()),
             bearer: "human-b".into(),
             mcp_servers: vec![],
+            admission: None,
         })
         .unwrap();
         assert_eq!(
@@ -1294,15 +1429,24 @@ mod tests {
         insert_thread(&host, "T", Some(Instant::now()));
         host.seen.insert(
             "T:evt-1".to_string(),
-            Arc::new(tokio::sync::Mutex::new(true)),
+            Arc::new(EventSlot {
+                accepted: Arc::new(AtomicBool::new(true)),
+                gate: tokio::sync::Mutex::new(()),
+            }),
         );
         host.seen.insert(
             "T:evt-2".to_string(),
-            Arc::new(tokio::sync::Mutex::new(true)),
+            Arc::new(EventSlot {
+                accepted: Arc::new(AtomicBool::new(true)),
+                gate: tokio::sync::Mutex::new(()),
+            }),
         );
         host.seen.insert(
             "other:evt-1".to_string(),
-            Arc::new(tokio::sync::Mutex::new(true)),
+            Arc::new(EventSlot {
+                accepted: Arc::new(AtomicBool::new(true)),
+                gate: tokio::sync::Mutex::new(()),
+            }),
         );
 
         evict_thread(&host, "T");

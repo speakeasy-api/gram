@@ -235,15 +235,17 @@ async fn admit_authenticated_turn(
     let event_admission = idempotency_key
         .as_ref()
         .map(|key| crate::runtime::EventAdmission::new(host.clone(), key.clone()));
-    let mut admission_guard = if let Some(ref admission) = event_admission {
-        Some(admission.slot.lock().await)
+    let _admission_guard = if let Some(ref admission) = event_admission {
+        Some(admission.slot.gate.lock().await)
     } else {
         None
     };
-    if let Some(ref guard) = admission_guard
-        && **guard
-    {
-        tracing::info!(key = ?idempotency_key, "dedup: skipping already-queued turn");
+    if event_admission.as_ref().is_some_and(|admission| {
+        admission
+            .slot
+            .accepted
+            .load(std::sync::atomic::Ordering::Acquire)
+    }) {
         return Ok(Json(ThreadTurnResponse::deduped()));
     }
 
@@ -252,31 +254,47 @@ async fn admit_authenticated_turn(
     let admission = crate::runtime::admission_lock(&host, &thread_id);
     let _turn_admission = admission.lock().await;
 
+    let _ = request.mcp_servers; // Authenticated bootstrap, not request overrides, selects destinations.
+    let (reply, admitted) = tokio::sync::oneshot::channel();
+    let accepted = event_admission
+        .as_ref()
+        .map(|admission| admission.slot.accepted.clone())
+        .unwrap_or_else(|| Arc::new(std::sync::atomic::AtomicBool::new(false)));
     let turn = crate::runtime::QueuedTurn {
         input: RunnerContent::from_turn(request.input, request.input_parts),
         bearer: tokens
             .current()
             .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?,
-        mcp_servers: request
-            .mcp_servers
-            .unwrap_or_else(|| bootstrap.mcp_servers.clone()),
+        // Only authenticated bootstrap state may choose credential destinations.
+        mcp_servers: bootstrap.mcp_servers.clone(),
+        admission: Some(crate::runtime::TurnAdmission {
+            event: event_admission.clone(),
+            accepted,
+            reply,
+        }),
     };
     let thread = ensure_thread(&host, &thread_id, bootstrap, tokens)
         .await
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
 
-    thread
-        .enqueue(turn)
-        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+    thread.enqueue(turn).map_err(|e| {
+        let status = if matches!(e, crate::errors::RunnerError::InvocationBusy) {
+            StatusCode::TOO_MANY_REQUESTS
+        } else {
+            StatusCode::SERVICE_UNAVAILABLE
+        };
+        (status, e.to_string())
+    })?;
+    drop(_turn_admission);
+    // Pending tuples remain durable at the server until the loop admits them.
+    // A loop/activation failure drops this sender and leaves the event retryable.
+    admitted.await.map_err(|_| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "turn admission failed".into(),
+        )
+    })?;
 
-    if let Some(ref mut guard) = admission_guard {
-        **guard = true;
-    }
-
-    // The model's response goes out via /chat/completions on the
-    // per-thread task; the HTTP response here is just an ack so the
-    // backend's RunTurn activity can mark the event processed without
-    // blocking on the turn.
     Ok(Json(ThreadTurnResponse::accepted()))
 }
 
@@ -286,6 +304,65 @@ mod tests {
     use super::*;
     use std::time::Duration;
     use tokio::sync::Mutex;
+
+    #[tokio::test]
+    async fn pending_tuple_uses_only_authenticated_destinations_and_waits_for_admission() {
+        let host = build_host(
+            Arc::new(SpanIdentity::default()),
+            "http://localhost".into(),
+            "".into(),
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+        let thread = Arc::new(crate::runtime::ConfiguredThread {
+            thread_id: "thread".into(),
+            chat_id: "chat".into(),
+            idle_since: Arc::new(std::sync::Mutex::new(None)),
+            inbox_tx: tx,
+            task_handle: std::sync::Mutex::new(None),
+            cancellation: agentkit_core::CancellationController::new(),
+        });
+        let cell = Arc::new(tokio::sync::OnceCell::new());
+        assert!(cell.set(thread).is_ok());
+        host.threads.insert("thread".into(), cell);
+        let request = serde_json::from_str(r#"{"input":"message","auth_token":"token","mcp_servers":[{"id":"server","url":"https://untrusted.example/mcp"}]}"#).unwrap();
+        let bootstrap = serde_json::from_str(r#"{"model":"test","completions_url":"http://localhost","chat_id":"chat","mcp_servers":[{"id":"server","url":"https://trusted.example/mcp"}]}"#).unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert(IDEMPOTENCY_HEADER, "event".parse().unwrap());
+        let request_host = host.clone();
+        let pending = tokio::spawn(admit_authenticated_turn(
+            request_host,
+            "thread".into(),
+            headers,
+            request,
+            bootstrap,
+            crate::http_layer::TokenRegistry::new("token"),
+        ));
+        let turn = rx.recv().await.unwrap();
+        assert_eq!(turn.mcp_servers[0].url, "https://trusted.example/mcp");
+        assert_eq!(turn.bearer, "token");
+        assert!(!pending.is_finished(), "queued does not mean accepted");
+        let admission = turn.admission.unwrap();
+        assert!(
+            !admission
+                .accepted
+                .load(std::sync::atomic::Ordering::Acquire)
+        );
+        admission
+            .accepted
+            .store(true, std::sync::atomic::Ordering::Release);
+        admission.reply.send(()).unwrap();
+        assert!(pending.await.unwrap().is_ok());
+        assert!(
+            host.seen
+                .get("thread:event")
+                .unwrap()
+                .accepted
+                .load(std::sync::atomic::Ordering::Acquire)
+        );
+    }
 
     #[tokio::test]
     async fn unauthenticated_request_cannot_hold_same_thread_admission() {
@@ -351,8 +428,13 @@ mod tests {
         assert!(host.threads.is_empty());
         // A valid retry of an already accepted event can finish authentication
         // and dedup while the unauthenticated request remains stuck upstream.
-        host.seen
-            .insert("shared:accepted".into(), Arc::new(Mutex::new(true)));
+        host.seen.insert(
+            "shared:accepted".into(),
+            Arc::new(crate::runtime::EventSlot {
+                gate: Mutex::new(()),
+                accepted: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            }),
+        );
         let mut headers = HeaderMap::new();
         headers.insert(IDEMPOTENCY_HEADER, "accepted".parse().unwrap());
         let valid = serde_json::from_str(r#"{"input":"test","auth_token":"valid"}"#).unwrap();
