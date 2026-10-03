@@ -281,7 +281,8 @@ func (s *Service) GetSetupDocs(ctx context.Context, payload *gen.GetSetupDocsPay
 	callbackURL := s.callbackOrigin.JoinPath("mcp", "remote_login_callback").String()
 
 	return &gen.GetSetupDocsResult{
-		Guides: resolveSetupGuides(registrySpecifier, serverURL, callbackURL),
+		Guides:           resolveSetupGuides(registrySpecifier, serverURL, callbackURL),
+		OauthCallbackURL: callbackURL,
 	}, nil
 }
 

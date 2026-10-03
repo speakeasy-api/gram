@@ -22,8 +22,15 @@ import {
   useRemoteSessionsCount,
 } from "@gram/client/react-query/remoteSessionsCount.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
+import {
+  hasSlackReadScopes,
+  isSlackMcpUrl,
+  isSlackProvider,
+  slackClientMismatch,
+} from "../setup/slack";
 import {
   advertisedScopes,
   normalizeScopes,
@@ -282,6 +289,14 @@ const TIER_BY_SCOPE = {
 
 /** Everything the User Identity row renders and everything it can change. */
 export type UserIdentityDraft = {
+  slackSetup?: {
+    manualActive: boolean;
+    scopesCompatible: boolean;
+    providerCompatible: boolean;
+    canApplyDefaults: boolean;
+    applyDefaults: (scopes: string[]) => void;
+    incompatibleClients: { id: string; hint: string; reason: string }[];
+  };
   providerGroups: ProviderGroup[];
   /** Text the provider menu searches on the server; "" lists every tier. */
   providerSearch: string;
@@ -332,6 +347,8 @@ export type UserIdentityDraft = {
   /** Scopes chosen for a manual client. Empty requests the defaults. */
   scopes: string[];
   setScopes: (values: string[]) => void;
+  /** Text summary for the Slack setup host; scopes remains the editable state. */
+  scopeText: string;
   /** Scopes the server and provider advertise, offered as choices. */
   scopeOptions: string[];
   registrationGuideUrl: string | null;
@@ -382,6 +399,18 @@ export function useUserIdentityDraft({
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [scopes, setScopes] = useState<string[]>([]);
+  const [guidedManual, setGuidedManual] = useState(false);
+  const [guidedInitialBinding, setGuidedInitialBinding] = useState(false);
+  useEffect(() => {
+    if (!enabled && isSlackMcpUrl(upstreamUrl)) {
+      setClientId("");
+      setClientSecret("");
+      setScopes([]);
+      setGuidedManual(false);
+      setGuidedInitialBinding(false);
+      setChoicePick(null);
+    }
+  }, [enabled, upstreamUrl]);
   const [localStatus, setLocalStatus] = useState<UserIdentityStatus>({
     kind: "idle",
   });
@@ -603,6 +632,7 @@ export function useUserIdentityDraft({
       { remoteSessionIssuerId: selectedIssuer?.id ?? "" },
       { enabled: enabled && !!selectedIssuer },
     );
+  const slackEndpoint = isSlackMcpUrl(upstreamUrl);
   const clientOptions = useMemo<ClientOption[]>(() => {
     const names = providerClients.map(clientOptionName);
     return providerClients.map((candidate, index) => ({
@@ -615,6 +645,18 @@ export function useUserIdentityDraft({
       scopes: candidate.scope ?? [],
     }));
   }, [providerClients]);
+  const reusableClientOptions = slackEndpoint
+    ? clientOptions.filter((option) => {
+        const candidate = providerClients.find(
+          (entry) => entry.id === option.id,
+        );
+        return (
+          !!candidate &&
+          isSlackProvider(selectedIssuer) &&
+          !slackClientMismatch(candidate, selectedIssuer?.id ?? "")
+        );
+      })
+    : clientOptions;
   const linkedClientId =
     linkedClients.find(
       (candidate) => candidate.remoteSessionIssuerId === selectedProviderId,
@@ -651,6 +693,7 @@ export function useUserIdentityDraft({
   const discoveredMetadata = selectedDiscovered
     ? (discoveredMetadataQuery.data ?? null)
     : null;
+  const slackCompatible = isSlackProvider(selectedIssuer ?? discoveredMetadata);
   // Nothing is claimed while the answer is outstanding.
   const capabilitiesLoading =
     !!selectedDiscovered && discoveredMetadataQuery.isLoading;
@@ -663,21 +706,26 @@ export function useUserIdentityDraft({
   }
   const automaticAvailable = support.cimd || support.dcr;
   const methodChoiceAvailable = support.cimd && support.dcr;
-  const existingAvailable = clientOptions.length > 0;
+  const existingAvailable = reusableClientOptions.length > 0;
 
-  // Reusing a client beats registering another, and registering beats asking
-  // for credentials by hand. A pick the provider no longer allows falls back.
+  // Slack starts with a new app; reusing a client is an explicit choice.
+  // Other providers prefer reuse, then automatic registration. A pick the
+  // provider no longer allows falls back.
   let defaultChoice: RegistrationChoice = "manual";
-  if (existingAvailable) defaultChoice = "existing";
-  else if (automaticAvailable) defaultChoice = "auto";
+  if (!slackEndpoint) {
+    if (existingAvailable) defaultChoice = "existing";
+    else if (automaticAvailable) defaultChoice = "auto";
+  }
   let choice: RegistrationChoice = choicePick ?? defaultChoice;
   if (choice === "existing" && !existingAvailable) choice = defaultChoice;
   if (choice === "auto" && !automaticAvailable) choice = defaultChoice;
 
   const existingClient =
     choice === "existing"
-      ? (clientOptions.find((candidate) => candidate.id === existingPick) ??
-        clientOptions[0] ??
+      ? (reusableClientOptions.find(
+          (candidate) => candidate.id === existingPick,
+        ) ??
+        reusableClientOptions[0] ??
         null)
       : null;
   const sameAsConnected =
@@ -711,8 +759,26 @@ export function useUserIdentityDraft({
     setClientId("");
     setClientSecret("");
     setScopes([]);
+    setGuidedManual(false);
+    setGuidedInitialBinding(false);
     setLocalStatus({ kind: "idle" });
   };
+
+  // Defaults can change without a menu selection (linked clients, discovery,
+  // or a new upstream). Reset during render so no committed render can save
+  // credentials from the previous provider, including a discovered sentinel
+  // whose issuer URL changes while its id stays the same.
+  const providerBinding = JSON.stringify([
+    upstreamUrl,
+    selectedProviderId,
+    selectedIssuer?.issuer ?? discoveredIssuerUrl,
+  ]);
+  const [previousProviderBinding, setPreviousProviderBinding] =
+    useState(providerBinding);
+  if (previousProviderBinding !== providerBinding) {
+    setPreviousProviderBinding(providerBinding);
+    resetChoice();
+  }
 
   // A client belongs to exactly one provider, so choosing a provider clears
   // the client choice and any outcome from the previous one.
@@ -733,6 +799,17 @@ export function useUserIdentityDraft({
   const commit = useMutation({
     mutationFn: async () => {
       if (!selected) throw new Error("choose an identity provider");
+      if (
+        slackEndpoint &&
+        manualNeeded &&
+        (!slackCompatible ||
+          !hasSlackReadScopes(scopes) ||
+          !clientSecret.trim())
+      ) {
+        throw new Error(
+          "Slack setup requires the reviewed provider, supported read/search access, and a client secret.",
+        );
+      }
 
       // A discovered provider is created from what the upstream publishes, so
       // read its metadata now and send the whole record with the commit.
@@ -806,8 +883,9 @@ export function useUserIdentityDraft({
           scope: requestedScopes.length > 0 ? requestedScopes : undefined,
           // A manual client without a secret is a public client; naming a
           // secret-based method for it is refused by the server.
-          tokenEndpointAuthMethod:
-            manualNeeded && !secret
+          tokenEndpointAuthMethod: guidedManual
+            ? "client_secret_post"
+            : manualNeeded && !secret
               ? "none"
               : serverIdentityAuthMethod(
                   selectedIssuer?.tokenEndpointAuthMethodsSupported ??
@@ -825,6 +903,10 @@ export function useUserIdentityDraft({
           clientMode: choice,
           existingClientId: existingClient?.id,
           clientConfiguration,
+          initialBindingOnly:
+            guidedManual && manualNeeded && guidedInitialBinding
+              ? true
+              : undefined,
           // Only sent when it changes something: CIMD is the server default.
           registrationMethod:
             choice === "auto" && methodChoiceAvailable
@@ -858,13 +940,35 @@ export function useUserIdentityDraft({
       setCleared(false);
       resetChoice();
       setLocalStatus({ kind: "done" });
+      if (slackEndpoint) {
+        setProviderPick(null);
+        toast.success("Identity configured");
+      }
       await Promise.all([
         invalidateAllRemoteSessionClients(queryClient),
         invalidateAllRemoteSessionIssuers(queryClient),
         invalidateAllRemoteSessionsCount(queryClient),
       ]);
     },
-    onError: (error: unknown) => {
+    onError: async (error: unknown) => {
+      if (
+        guidedManual &&
+        error instanceof ServiceError &&
+        error.statusCode === 409
+      ) {
+        resetChoice();
+        setProviderPick(null);
+        setCleared(false);
+        setLocalStatus({ kind: "done" });
+        await Promise.all([
+          invalidateAllRemoteSessionClients(queryClient),
+          invalidateAllRemoteSessionIssuers(queryClient),
+        ]);
+        toast.warning(
+          "Identity changed while saving. Review the saved binding or reload before replacing it. Your submitted credentials were not verified.",
+        );
+        return;
+      }
       // The reachable case is an operator with mcp:write but not
       // project:write: the commit needs project:write to create or register a
       // client, so the button is enabled and the request is refused.
@@ -891,6 +995,12 @@ export function useUserIdentityDraft({
   if (choice === "existing")
     choiceComplete = !!existingClient && !sameAsConnected;
   if (choice === "manual") choiceComplete = clientId.trim() !== "";
+  if (slackEndpoint && manualNeeded)
+    choiceComplete =
+      choiceComplete &&
+      slackCompatible &&
+      !!clientSecret.trim() &&
+      hasSlackReadScopes(scopes);
 
   const canSave =
     !!selected &&
@@ -905,6 +1015,42 @@ export function useUserIdentityDraft({
     choiceComplete;
 
   return {
+    slackSetup: slackEndpoint
+      ? {
+          manualActive: guidedManual && manualNeeded,
+          scopesCompatible: hasSlackReadScopes(scopes),
+          providerCompatible: slackCompatible,
+          canApplyDefaults:
+            slackCompatible &&
+            !connected &&
+            (scopes.length === 0 || hasSlackReadScopes(scopes)) &&
+            !isPending,
+          applyDefaults: (selectedScopes: string[]) => {
+            if (
+              !slackCompatible ||
+              !hasSlackReadScopes(selectedScopes) ||
+              connected ||
+              (scopes.length > 0 && !hasSlackReadScopes(scopes)) ||
+              isPending
+            )
+              return;
+            setChoicePick("manual");
+            setScopes(selectedScopes);
+            setGuidedManual(true);
+            setGuidedInitialBinding(linkedClients.length === 0);
+            setLocalStatus({ kind: "idle" });
+          },
+          incompatibleClients: providerClients.flatMap((candidate) => {
+            const reason = slackClientMismatch(
+              candidate,
+              selectedIssuer?.id ?? "",
+            );
+            return reason
+              ? [{ id: candidate.id, hint: idTail(candidate.clientId), reason }]
+              : [];
+          }),
+        }
+      : undefined,
     providerGroups,
     providerSearch,
     setProviderSearch,
@@ -936,12 +1082,13 @@ export function useUserIdentityDraft({
 
     choice,
     selectChoice: (next: RegistrationChoice): void => {
+      if (slackEndpoint && next !== "manual") resetChoice();
       setChoicePick(next);
       setLocalStatus({ kind: "idle" });
     },
     existingAvailable,
     automaticAvailable,
-    existingOptions: clientOptions,
+    existingOptions: reusableClientOptions,
     existingClientId: existingClient?.id ?? null,
     selectExisting: setExistingPick,
     sameAsConnected,
@@ -955,6 +1102,7 @@ export function useUserIdentityDraft({
     clientSecret,
     setClientSecret,
     scopes,
+    scopeText: scopes.join(" "),
     setScopes: (values: string[]): void => setScopes(normalizeScopes(values)),
     scopeOptions,
     registrationGuideUrl:
@@ -974,6 +1122,8 @@ export function useUserIdentityDraft({
         await runCommit();
       } catch {
         /* reported by onError */
+      } finally {
+        commit.reset();
       }
     },
     saving: isPending,

@@ -153,6 +153,10 @@ on the client's pages and the compatibility-mode switch on its Settings tab;
 everyone else sees neither. The Settings tab also warns that the client's scopes
 have no effect. Browser verification: `[~]`.
 
+### Slack guided setup example
+
+Slack Setup Example is a separate disabled Remote MCP server at `mcp/x/slack-setup/settings#authentication`, with its own unbound project session issuer and no credentials, upstream client, sessions, endpoint, or gateway membership. The existing Slack Service Account and connection fixtures remain unchanged. In a writable local session, select User Identity to inspect the guided choices without saving. Do not change the shared demo during this check; the fixture does not grant Slack access or prove consent. Browser verification: `[~]` (not yet verified); see check 19 in `verify.md`.
+
 ### Upstream session validation outcomes
 
 PG `remote_sessions` ×6 on Linear's CIMD remote session client, one per demo
