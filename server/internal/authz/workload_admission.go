@@ -51,8 +51,8 @@ func (e *Engine) AdmitWorkloadSession(ctx context.Context) (context.Context, err
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 	ctx = contextvalues.WithPrincipalCredentialOwner(ctx, admission.OwnerUserID)
-	// Two sets and no owner set. An empty owner set would read as "the owner
-	// allows nothing" and deny every check.
+	// Intersect ceiling and agent policies, plus human policy for delegated
+	// sessions. No owner set: an empty owner set would deny every check.
 	if admission.AuthorizerUserID != "" {
 		return admittedPoliciesToContext(ctx, admission.Ceiling, admission.Agent, admission.Authorizer), nil
 	}
