@@ -96,7 +96,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	// Execution credentials have an exact configured business-server ceiling,
 	// not an ambient meta-server/resource audience. Never reinterpret them as
 	// user-session or owner credentials on this aggregation surface.
-	if assistanttokens.IsExecutionToken(httpheaders.AuthorizationOrChatSessionToken(r)) {
+	if assistanttokens.IsExecutionToken(r.Header.Get("Authorization")) || assistanttokens.IsExecutionToken(r.Header.Get("Gram-Chat-Session")) {
 		return oops.C(oops.CodeUnauthorized)
 	}
 

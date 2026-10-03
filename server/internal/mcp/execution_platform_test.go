@@ -70,6 +70,12 @@ func TestExecutionPlatformRoutePreservesManagedRestrictionsAfterBusinessDenial(t
 	execution := assistantidentity.Execution{Version: 1, Identity: *resolution.Identity, Issuer: identities.Issuer(), ThreadID: thread, EventID: "platform-event", Mode: assistantidentity.ExecutionWorkload, Ceiling: ceiling}
 	token, err := ti.assistantTokens.GenerateExecution(t.Context(), execution)
 	require.NoError(t, err)
+	metaSlug := "execution-meta-" + uuid.NewString()
+	createMetaMcpEndpoint(t, ctx, ti.conn, *ac.ProjectID, ac.ActiveOrganizationID, metaSlug, uuid.Nil)
+	_, err = servePublicHTTP(t, ctx, ti, metaSlug, makeInitializeBody(), "unrelated-authorization", nil)
+	require.NoError(t, err, "control request reaches public meta endpoint")
+	_, err = servePublicHTTP(t, ctx, ti, metaSlug, makeInitializeBody(), "unrelated-authorization", map[string]string{"Gram-Chat-Session": token})
+	require.Error(t, err, "execution credential in either header keeps meta admission closed")
 	endpoint := &gramMCP.ResolvedMcpEndpoint{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, McpServerID: uuid.NullUUID{UUID: business, Valid: true}, UserSessionIssuerID: resourceIssuer.ID, AudienceURN: urn.NewUserSessionIssuer(resourceIssuer.ID).String(), Slug: "execution-resource", RouteBase: "mcp"}
 	admitted, tokens, _, err := ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), token, ti.serverURL.String(), endpoint)
 	require.NoError(t, err, "issuer-gated native resources reuse workload admission, not human impersonation")

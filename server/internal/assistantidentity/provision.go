@@ -153,8 +153,8 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (
 	return Binding{OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, AssistantID: p.AssistantID, AgentID: agent.ID, Generation: 1}, nil
 }
 
-// ConfiguredCapabilities derives only concrete runtime capabilities from the
-// persisted configuration. Empty configuration produces an empty policy.
+// ConfiguredCapabilities combines the exact execution capability with concrete
+// configuration-derived runtime grants. Empty configuration adds no business grants.
 func ConfiguredCapabilities(ctx context.Context, tx pgx.Tx, org string, project, assistant uuid.UUID) ([]authz.Grant, error) {
 	q := repo.New(tx)
 	a, err := q.GetAssistant(ctx, repo.GetAssistantParams{OrganizationID: org, ProjectID: project, AssistantID: assistant})

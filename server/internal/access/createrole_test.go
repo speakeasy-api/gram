@@ -383,3 +383,13 @@ func TestService_CreateRole_LocalRoleWriteFailureDoesNotAssignMembers(t *testing
 	require.NoError(t, err)
 	require.Empty(t, grants)
 }
+
+func TestService_CreateRole_RejectsExecutionCapability(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	for _, selectors := range [][]*gen.Selector{nil, {{ResourceKind: "assistant", ResourceID: "*", ProjectID: new("*")}}, {{ResourceKind: "assistant", ResourceID: "assistant", ProjectID: new("project")}}} {
+		_, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{Name: "Execution", Grants: []*gen.RoleGrant{{Scope: string(authz.ScopeAssistantExecute), Selectors: selectors}}})
+		require.ErrorContains(t, err, `managed by "assistant_execution" grants`)
+	}
+	ti.roles.AssertNotCalled(t, "CreateRole", mock.Anything, mock.Anything, mock.Anything)
+}

@@ -9,12 +9,13 @@ import "fmt"
 type GrantSurface string
 
 const (
-	GrantSurfaceAccess     GrantSurface = "access"
-	GrantSurfaceRiskPolicy GrantSurface = "risk_policy"
+	GrantSurfaceAccess             GrantSurface = "access"
+	GrantSurfaceAssistantExecution GrantSurface = "assistant_execution"
+	GrantSurfaceRiskPolicy         GrantSurface = "risk_policy"
 )
 
 var scopeGrantSurfaces = map[Scope]GrantSurface{
-	ScopeAssistantExecute:        GrantSurfaceAccess,
+	ScopeAssistantExecute:        GrantSurfaceAssistantExecution,
 	ScopeRoot:                    GrantSurfaceAccess,
 	ScopeOrgRead:                 GrantSurfaceAccess,
 	ScopeOrgBlockedRead:          GrantSurfaceAccess,

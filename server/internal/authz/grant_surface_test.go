@@ -24,6 +24,7 @@ func TestValidateGrantSurface(t *testing.T) {
 		{Scope: string(ScopeAgentAuthorize)},
 		{Scope: string(ScopeAgentTransfer)},
 	}))
+	require.ErrorContains(t, ValidateGrantSurface(GrantSurfaceAccess, []*RoleGrant{{Scope: string(ScopeAssistantExecute)}}), `managed by "assistant_execution" grants`)
 	require.NoError(t, ValidateGrantSurface(GrantSurfaceRiskPolicy, []*RoleGrant{
 		{Scope: string(ScopeRiskPolicyEvaluate)},
 		{Scope: string(ScopeRiskPolicyBypass)},
