@@ -167,15 +167,48 @@ func TestExecutionCapturePersistsSelectionAndGatesDispatch(t *testing.T) {
 	cancel()
 	_, err = core.captureExecution(cancelled, assistant, sourceKindCron, thread.ID, uuid.NullUUID{UUID: root, Valid: true}, "cancelled", []byte(`{}`))
 	require.Error(t, err, "binding lookup failure must not become legacy")
-	state, err := manager.GenerateExecutionMCPAuthFlow(t.Context(), assistanttokens.MCPAuthFlowInput{Execution: execution, OrgID: "org-test", ProjectID: project, AssistantID: assistant.ID, ThreadID: thread.ID, UserID: "user-1", FlowID: "flow-test", AttemptID: "attempt-test"})
+	origin, err := assistantrepo.New(db).InsertAssistantThreadEvent(t.Context(), assistantrepo.InsertAssistantThreadEventParams{AssistantThreadID: thread.ID, AssistantID: assistant.ID, ProjectID: project, EventID: execution.InvocationEventID(), CorrelationID: "execution-thread", Status: eventStatusCompleted, NormalizedPayloadJson: workload, SourcePayloadJson: []byte(`{}`)})
+	require.NoError(t, err)
+	state, err := manager.GenerateExecutionMCPAuthFlow(t.Context(), assistanttokens.MCPAuthFlowInput{OriginatingEventID: origin, Execution: execution, OrgID: "org-test", ProjectID: project, AssistantID: assistant.ID, ThreadID: thread.ID, UserID: "user-1", FlowID: "flow-test", AttemptID: "attempt-test"})
 	require.NoError(t, err)
 	claims, err := manager.ValidateMCPAuthFlow(state)
 	require.NoError(t, err)
 	require.Equal(t, *execution, *claims.Execution)
+	require.Equal(t, origin.String(), claims.OriginatingEventID)
+	require.NoError(t, manager.ValidateExecutionMCPAuthFlow(t.Context(), claims))
+	require.ErrorIs(t, manager.ValidateExecutionMCPAuthFlow(cancelled, claims), context.Canceled, "origin lookup outages remain infrastructure errors")
+	// A later invocation does not reattribute a still-valid older OAuth flow.
+	laterPayload := capture(sourceKindCron, "later-event", `{}`)
+	later, err := decodeExecution(laterPayload)
+	require.NoError(t, err)
+	laterID, err := assistantrepo.New(db).InsertAssistantThreadEvent(t.Context(), assistantrepo.InsertAssistantThreadEventParams{AssistantThreadID: thread.ID, AssistantID: assistant.ID, ProjectID: project, EventID: later.InvocationEventID(), CorrelationID: "execution-thread", Status: eventStatusCompleted, NormalizedPayloadJson: laterPayload, SourcePayloadJson: []byte(`{}`)})
+	require.NoError(t, err)
+	require.NoError(t, manager.ValidateExecutionMCPAuthFlow(t.Context(), claims), "do not bind an older flow to mutable latest event")
+	for _, mutate := range []func(*assistanttokens.MCPAuthFlowClaims){
+		func(c *assistanttokens.MCPAuthFlowClaims) { c.Execution = later },
+		func(c *assistanttokens.MCPAuthFlowClaims) { c.OriginatingEventID = laterID.String() },
+		func(c *assistanttokens.MCPAuthFlowClaims) { c.OriginatingEventID = "" },
+		func(c *assistanttokens.MCPAuthFlowClaims) { c.ThreadID = uuid.NewString() },
+		func(c *assistanttokens.MCPAuthFlowClaims) { c.AssistantID = uuid.NewString() },
+		func(c *assistanttokens.MCPAuthFlowClaims) { c.ProjectID = uuid.NewString() },
+		func(c *assistanttokens.MCPAuthFlowClaims) { c.OrgID = "other-org" },
+	} {
+		mismatched := *claims
+		mutate(&mismatched)
+		require.ErrorIs(t, manager.ValidateExecutionMCPAuthFlow(t.Context(), &mismatched), assistantidentity.ErrInvalidIdentity)
+	}
+	_, err = manager.GenerateExecutionMCPAuthFlow(t.Context(), assistanttokens.MCPAuthFlowInput{OriginatingEventID: origin, Execution: later, OrgID: "org-test", ProjectID: project, AssistantID: assistant.ID, ThreadID: thread.ID})
+	require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity, "cannot sign state for a different persisted invocation")
+	_, err = manager.GenerateMCPAuthFlow(assistanttokens.MCPAuthFlowInput{OriginatingEventID: origin, Execution: execution})
+	require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity, "external legacy flow cannot carry execution linkage")
 	svc := &Service{core: core, logger: core.logger}
 	created, err := svc.enqueueMCPAuthEvent(t.Context(), project, assistant.ID, thread.ID, "attempt-test", mcpAuthEventPayload{GramEventKind: mcpAuthEventKind, ActorUserID: claims.UserID, Execution: claims.Execution})
 	require.NoError(t, err)
 	require.True(t, created)
+	require.NoError(t, manager.ValidateExecutionMCPAuthFlow(t.Context(), claims), "callback retry still pins original event")
+	created, err = svc.enqueueMCPAuthEvent(t.Context(), project, assistant.ID, thread.ID, "attempt-test", mcpAuthEventPayload{GramEventKind: mcpAuthEventKind, ActorUserID: claims.UserID, Execution: claims.Execution})
+	require.NoError(t, err)
+	require.False(t, created, "signed attempt must not enqueue twice")
 	row, err := assistantrepo.New(db).GetLatestAssistantThreadEventByThreadID(t.Context(), assistantrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: thread.ID, ProjectID: project})
 	require.NoError(t, err)
 	continued, err := decodeExecution(row.NormalizedPayloadJson)
@@ -201,6 +234,7 @@ func TestExecutionCapturePersistsSelectionAndGatesDispatch(t *testing.T) {
 	require.Equal(t, thread.ID, retry.ThreadID, "active retry must signal original stored envelope despite changed authority")
 	require.ErrorIs(t, core.checkExecutionDispatch(t.Context(), assistant, thread, event), assistantidentity.ErrExecutionAdmissionRequired, "temporary pause must not invalidate identity incarnation")
 	require.NoError(t, core.DeleteAssistant(t.Context(), project, assistant.ID, urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"), nil))
+	require.ErrorIs(t, manager.ValidateExecutionMCPAuthFlow(t.Context(), claims), assistantidentity.ErrInvalidIdentity, "retired authority cannot resume old flow")
 	require.ErrorIs(t, core.checkExecutionDispatch(t.Context(), assistant, thread, event), assistantidentity.ErrInvalidIdentity)
 	_, err = manager.ValidateExecution(t.Context(), token, target)
 	require.Error(t, err, "revocation must bypass legacy positive cache")

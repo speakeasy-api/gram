@@ -197,23 +197,24 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 	}
 
 	state, err := s.core.assistantTokens.GenerateMCPAuthFlow(assistanttokens.MCPAuthFlowInput{
-		Execution:         nil,
-		OrgID:             claims.OrgID,
-		ProjectID:         projectID,
-		UserID:            claims.UserID,
-		AssistantID:       principal.AssistantID,
-		ThreadID:          threadID,
-		AttemptID:         attemptID,
-		FlowID:            principal.AssistantID.String(),
-		ServerID:          req.ServerID,
-		McpURL:            mcpURL.String(),
-		ClientID:          credentials.ClientID,
-		ClientSecret:      credentials.ClientSecretEncrypted,
-		RedirectURI:       redirectURI,
-		CodeVerifier:      encryptedVerifier,
-		TokenEndpoint:     metadata.TokenEndpoint,
-		OAuthServerIssuer: metadata.Issuer,
-		TTL:               mcpAuthFlowTTL,
+		OriginatingEventID: uuid.Nil,
+		Execution:          nil,
+		OrgID:              claims.OrgID,
+		ProjectID:          projectID,
+		UserID:             claims.UserID,
+		AssistantID:        principal.AssistantID,
+		ThreadID:           threadID,
+		AttemptID:          attemptID,
+		FlowID:             principal.AssistantID.String(),
+		ServerID:           req.ServerID,
+		McpURL:             mcpURL.String(),
+		ClientID:           credentials.ClientID,
+		ClientSecret:       credentials.ClientSecretEncrypted,
+		RedirectURI:        redirectURI,
+		CodeVerifier:       encryptedVerifier,
+		TokenEndpoint:      metadata.TokenEndpoint,
+		OAuthServerIssuer:  metadata.Issuer,
+		TTL:                mcpAuthFlowTTL,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "sign mcp auth flow state").LogError(ctx, s.logger)
@@ -262,8 +263,8 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid callback thread id").LogError(ctx, s.logger)
 	}
-	if claims.Execution != nil {
-		if err := s.core.assistantTokens.ValidateExecutionEnvelope(ctx, *claims.Execution, assistanttokens.ExecutionTarget{EventID: claims.Execution.InvocationEventID(), OrganizationID: claims.OrgID, ProjectID: projectID, AssistantID: assistantID, ThreadID: threadID}); err != nil {
+	if claims.Execution != nil || claims.OriginatingEventID != "" {
+		if err := s.core.assistantTokens.ValidateExecutionMCPAuthFlow(ctx, claims); err != nil {
 			return fmt.Errorf("validate OAuth execution identity: %w", err)
 		}
 	}

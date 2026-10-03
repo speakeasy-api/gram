@@ -51,12 +51,14 @@ type Claims struct {
 const mcpAuthFlowIssuer = "gram-assistants-mcp-auth-flow"
 
 type MCPAuthFlowInput struct {
-	Execution   *assistantidentity.Execution
-	OrgID       string
-	ProjectID   uuid.UUID
-	UserID      string
-	AssistantID uuid.UUID
-	ThreadID    uuid.UUID
+	// OriginatingEventID is the persisted row ID, not the envelope event key.
+	OriginatingEventID uuid.UUID
+	Execution          *assistantidentity.Execution
+	OrgID              string
+	ProjectID          uuid.UUID
+	UserID             string
+	AssistantID        uuid.UUID
+	ThreadID           uuid.UUID
 	// AttemptID uniquely identifies one authorization attempt.
 	AttemptID string
 	// FlowID binds the token to the stable callback path.
@@ -73,21 +75,22 @@ type MCPAuthFlowInput struct {
 }
 
 type MCPAuthFlowClaims struct {
-	Execution         *assistantidentity.Execution `json:"execution,omitempty"`
-	OrgID             string                       `json:"org_id"`
-	ProjectID         string                       `json:"project_id"`
-	UserID            string                       `json:"user_id"`
-	AssistantID       string                       `json:"assistant_id"`
-	ThreadID          string                       `json:"thread_id"`
-	FlowID            string                       `json:"flow_id"`
-	ServerID          string                       `json:"server_id"`
-	McpURL            string                       `json:"mcp_url"`
-	ClientID          string                       `json:"client_id"`
-	ClientSecret      string                       `json:"client_secret,omitempty"`
-	RedirectURI       string                       `json:"redirect_uri"`
-	CodeVerifier      string                       `json:"code_verifier"`
-	TokenEndpoint     string                       `json:"token_endpoint"`
-	OAuthServerIssuer string                       `json:"oauth_server_issuer,omitempty"`
+	OriginatingEventID string                       `json:"originating_event_id,omitempty"`
+	Execution          *assistantidentity.Execution `json:"execution,omitempty"`
+	OrgID              string                       `json:"org_id"`
+	ProjectID          string                       `json:"project_id"`
+	UserID             string                       `json:"user_id"`
+	AssistantID        string                       `json:"assistant_id"`
+	ThreadID           string                       `json:"thread_id"`
+	FlowID             string                       `json:"flow_id"`
+	ServerID           string                       `json:"server_id"`
+	McpURL             string                       `json:"mcp_url"`
+	ClientID           string                       `json:"client_id"`
+	ClientSecret       string                       `json:"client_secret,omitempty"`
+	RedirectURI        string                       `json:"redirect_uri"`
+	CodeVerifier       string                       `json:"code_verifier"`
+	TokenEndpoint      string                       `json:"token_endpoint"`
+	OAuthServerIssuer  string                       `json:"oauth_server_issuer,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -165,7 +168,7 @@ func (m *Manager) Generate(input GenerateInput) (string, error) {
 }
 
 func (m *Manager) GenerateMCPAuthFlow(input MCPAuthFlowInput) (string, error) {
-	if input.Execution != nil {
+	if input.Execution != nil || input.OriginatingEventID != uuid.Nil {
 		return "", assistantidentity.ErrInvalidIdentity
 	}
 	return m.generateMCPAuthFlow(input)
@@ -182,22 +185,27 @@ func (m *Manager) generateMCPAuthFlow(input MCPAuthFlowInput) (string, error) {
 	if attemptID == "" {
 		attemptID = input.FlowID
 	}
+	originatingEventID := ""
+	if input.OriginatingEventID != uuid.Nil {
+		originatingEventID = input.OriginatingEventID.String()
+	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, MCPAuthFlowClaims{
-		Execution:         input.Execution,
-		OrgID:             input.OrgID,
-		ProjectID:         input.ProjectID.String(),
-		UserID:            input.UserID,
-		AssistantID:       input.AssistantID.String(),
-		ThreadID:          input.ThreadID.String(),
-		FlowID:            input.FlowID,
-		ServerID:          input.ServerID,
-		McpURL:            input.McpURL,
-		ClientID:          input.ClientID,
-		ClientSecret:      input.ClientSecret,
-		RedirectURI:       input.RedirectURI,
-		CodeVerifier:      input.CodeVerifier,
-		TokenEndpoint:     input.TokenEndpoint,
-		OAuthServerIssuer: input.OAuthServerIssuer,
+		OriginatingEventID: originatingEventID,
+		Execution:          input.Execution,
+		OrgID:              input.OrgID,
+		ProjectID:          input.ProjectID.String(),
+		UserID:             input.UserID,
+		AssistantID:        input.AssistantID.String(),
+		ThreadID:           input.ThreadID.String(),
+		FlowID:             input.FlowID,
+		ServerID:           input.ServerID,
+		McpURL:             input.McpURL,
+		ClientID:           input.ClientID,
+		ClientSecret:       input.ClientSecret,
+		RedirectURI:        input.RedirectURI,
+		CodeVerifier:       input.CodeVerifier,
+		TokenEndpoint:      input.TokenEndpoint,
+		OAuthServerIssuer:  input.OAuthServerIssuer,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    mcpAuthFlowIssuer,
 			Subject:   input.AssistantID.String(),
@@ -223,21 +231,22 @@ func (m *Manager) ValidateMCPAuthFlow(tokenString string) (*MCPAuthFlowClaims, e
 	}
 
 	token, err := jwt.ParseWithClaims(tokenString, &MCPAuthFlowClaims{
-		Execution:         nil,
-		OrgID:             "",
-		ProjectID:         "",
-		UserID:            "",
-		AssistantID:       "",
-		ThreadID:          "",
-		FlowID:            "",
-		ServerID:          "",
-		McpURL:            "",
-		ClientID:          "",
-		ClientSecret:      "",
-		RedirectURI:       "",
-		CodeVerifier:      "",
-		TokenEndpoint:     "",
-		OAuthServerIssuer: "",
+		OriginatingEventID: "",
+		Execution:          nil,
+		OrgID:              "",
+		ProjectID:          "",
+		UserID:             "",
+		AssistantID:        "",
+		ThreadID:           "",
+		FlowID:             "",
+		ServerID:           "",
+		McpURL:             "",
+		ClientID:           "",
+		ClientSecret:       "",
+		RedirectURI:        "",
+		CodeVerifier:       "",
+		TokenEndpoint:      "",
+		OAuthServerIssuer:  "",
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "",
 			Subject:   "",

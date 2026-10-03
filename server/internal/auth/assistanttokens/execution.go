@@ -2,7 +2,11 @@ package assistanttokens
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5"
+	"reflect"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
@@ -126,8 +130,67 @@ func (m *Manager) GenerateExecutionMCPAuthFlow(ctx context.Context, input MCPAut
 	if input.Execution == nil {
 		return "", assistantidentity.ErrInvalidIdentity
 	}
-	if err := m.ValidateExecutionEnvelope(ctx, *input.Execution, ExecutionTarget{EventID: input.Execution.InvocationEventID(), OrganizationID: input.OrgID, ProjectID: input.ProjectID, AssistantID: input.AssistantID, ThreadID: input.ThreadID}); err != nil {
+	if err := m.validateMCPAuthExecutionOrigin(ctx, *input.Execution, input.OriginatingEventID, input.OrgID, input.ProjectID, input.AssistantID, input.ThreadID); err != nil {
 		return "", fmt.Errorf("assistant execution: %w", err)
 	}
 	return m.generateMCPAuthFlow(input)
+}
+
+// ValidateExecutionMCPAuthFlow requires signature/TTL validation through
+// ValidateMCPAuthFlow first. The signed row ID independently pins the durable
+// invocation; never use the thread's mutable latest event as the resume target.
+func (m *Manager) ValidateExecutionMCPAuthFlow(ctx context.Context, claims *MCPAuthFlowClaims) error {
+	if claims == nil || claims.Execution == nil {
+		return assistantidentity.ErrInvalidIdentity
+	}
+	origin, err := uuid.Parse(claims.OriginatingEventID)
+	if err != nil {
+		return assistantidentity.ErrInvalidIdentity
+	}
+	project, err := uuid.Parse(claims.ProjectID)
+	if err != nil {
+		return assistantidentity.ErrInvalidIdentity
+	}
+	assistant, err := uuid.Parse(claims.AssistantID)
+	if err != nil {
+		return assistantidentity.ErrInvalidIdentity
+	}
+	thread, err := uuid.Parse(claims.ThreadID)
+	if err != nil {
+		return assistantidentity.ErrInvalidIdentity
+	}
+	return m.validateMCPAuthExecutionOrigin(ctx, *claims.Execution, origin, claims.OrgID, project, assistant, thread)
+}
+
+func (m *Manager) validateMCPAuthExecutionOrigin(ctx context.Context, execution assistantidentity.Execution, origin uuid.UUID, org string, project, assistant, thread uuid.UUID) error {
+	if origin == uuid.Nil {
+		return assistantidentity.ErrInvalidIdentity
+	}
+	row, err := m.tokens.GetMCPAuthExecutionOrigin(ctx, tokenrepo.GetMCPAuthExecutionOriginParams{OriginatingEventID: origin, OrganizationID: org, ProjectID: project, AssistantID: assistant, ThreadID: thread})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return assistantidentity.ErrInvalidIdentity
+	}
+	if err != nil {
+		return fmt.Errorf("load OAuth execution origin: %w", err)
+	}
+	var payload struct {
+		Execution *assistantidentity.Execution `json:"_gram_execution"`
+	}
+	if err := json.Unmarshal(row.NormalizedPayloadJson, &payload); err != nil || payload.Execution == nil {
+		return assistantidentity.ErrInvalidIdentity
+	}
+	stored := *payload.Execution
+	if err := stored.Check(); err != nil {
+		return fmt.Errorf("validate stored OAuth execution: %w", err)
+	}
+	if err := execution.Check(); err != nil {
+		return fmt.Errorf("validate OAuth execution state: %w", err)
+	}
+	// Check validates each policy against its canonical digest. JSONB may change
+	// its byte representation; compare the digest and all other envelope fields.
+	stored.Ceiling.Policy = execution.Ceiling.Policy
+	if !reflect.DeepEqual(stored, execution) {
+		return assistantidentity.ErrInvalidIdentity
+	}
+	return m.ValidateExecutionEnvelope(ctx, execution, ExecutionTarget{EventID: row.EventID, OrganizationID: org, ProjectID: project, AssistantID: assistant, ThreadID: thread})
 }
