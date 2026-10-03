@@ -18,7 +18,7 @@ export type ChatSessionLink = {
    */
   childCaptured: boolean;
   /**
-   * Chat id derived for the continuation. Absent when the continuation's session id was unknowable at move time (e.g. Cursor mints ids server-side) — or when the caller's visibility scope cannot read the child, which is deliberately indistinguishable.
+   * Chat id of the child session in this relationship. Absent when its session id was unknowable when the relationship was recorded (e.g. Cursor mints ids server-side) — or when the caller's visibility scope cannot read the child, which is deliberately indistinguishable.
    */
   childChatId?: string | undefined;
   /**
@@ -42,7 +42,7 @@ export type ChatSessionLink = {
    */
   parentCaptured: boolean;
   /**
-   * Chat id of the session the move originated from. Absent when the caller's visibility scope cannot read the parent — a masked end exposes no identity, matching parent_captured.
+   * Chat id of the parent session in this relationship. Absent when the caller's visibility scope cannot read the parent — a masked end exposes no identity, matching parent_captured.
    */
   parentChatId?: string | undefined;
   /**

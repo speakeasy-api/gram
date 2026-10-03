@@ -1225,8 +1225,15 @@ function ChatDetailPanel({
     () => claudeTagMetadata(transcript.messages),
     [transcript.messages],
   );
+  const capturedSource = capturedChat?.source?.trim().toLowerCase() ?? "";
+  const claudeSource =
+    capturedSource.startsWith("claude") ||
+    capturedSource === "cowork" ||
+    (capturedSource === "litellm" &&
+      !!capturedChat?.originatingClient?.startsWith("claude-code"));
   const isClaudeTag =
-    capturedChat?.source === "claude-tag" || tagMetadata.detected;
+    capturedSource === "claude-tag" ||
+    (claudeSource && tagMetadata.detected);
   const chat = useMemo(() => {
     if (!capturedChat || !isClaudeTag) return capturedChat;
     const title =
@@ -1238,7 +1245,12 @@ function ChatDetailPanel({
     return {
       ...capturedChat,
       source: "claude-tag",
-      channelNames: capturedChat.slackChannelId ? [] : tagMetadata.channels,
+      channelNames: tagMetadata.channels.filter(
+        (channel) =>
+          channel !== capturedChat.slackChannelId &&
+          channel.replace(/^#/, "") !==
+            capturedChat.slackChannelName?.replace(/^#/, ""),
+      ),
       title: title || "Claude Tag session",
     };
   }, [capturedChat, isClaudeTag, tagMetadata.title, tagMetadata.channels]);

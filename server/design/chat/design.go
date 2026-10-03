@@ -511,10 +511,10 @@ var WorkUnitsTrendResult = Type("WorkUnitsTrendResult", func() {
 })
 
 var ChatSessionLink = Type("ChatSessionLink", func() {
-	Attribute("parent_chat_id", String, "Chat id of the session the move originated from. Absent when the caller's visibility scope cannot read the parent — a masked end exposes no identity, matching parent_captured.", func() {
+	Attribute("parent_chat_id", String, "Chat id of the parent session in this relationship. Absent when the caller's visibility scope cannot read the parent — a masked end exposes no identity, matching parent_captured.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("child_chat_id", String, "Chat id derived for the continuation. Absent when the continuation's session id was unknowable at move time (e.g. Cursor mints ids server-side) — or when the caller's visibility scope cannot read the child, which is deliberately indistinguishable.", func() {
+	Attribute("child_chat_id", String, "Chat id of the child session in this relationship. Absent when its session id was unknowable when the relationship was recorded (e.g. Cursor mints ids server-side) — or when the caller's visibility scope cannot read the child, which is deliberately indistinguishable.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("parent_title", String, "Title of the parent chat, when it has been captured and titled and the caller's visibility scope can read it.")
@@ -579,7 +579,7 @@ var SummarizeToolCallResult = Type("SummarizeToolCallResult", func() {
 var ChatOverview = Type("ChatOverview", func() {
 	Attribute("slack_team_id", String, "Observed Slack workspace associated with this session.")
 	Attribute("slack_channel_id", String, "Observed Slack channel associated with this session.")
-	Attribute("slack_channel_name", String, "Observed Slack channel name, without the leading hash.")
+	Attribute("slack_channel_name", String, "Observed Slack channel name as reported by the captured envelope.")
 	Attribute("participants", ArrayOf(ChatParticipant), "Distinct observed conversation participants across the session.")
 	Attribute("id", String, "The ID of the chat")
 	Attribute("title", String, "The title of the chat")

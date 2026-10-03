@@ -28,7 +28,7 @@ export function SlackChannelLink({
           className="pointer-events-auto inline-flex hover:underline"
           href={`https://app.slack.com/client/${encodeURIComponent(teamId)}/${encodeURIComponent(channelId)}`}
           target="_blank"
-          rel="noreferrer"
+          rel="noopener noreferrer"
         >
           {content}
         </a>

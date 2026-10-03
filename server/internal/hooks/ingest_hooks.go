@@ -1045,7 +1045,7 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	// hook row and the chat persistence below stamp the same AI-account
 	// attribution.
 	metadata := s.canonicalSessionMetadata(ctx, payload, authCtx, actor)
-	if _, tag := claudeTagTitle(canonicalPromptText(payload)); tag || claudetag.Parse(canonicalPromptText(payload)).Detected {
+	if claudeServiceNameSpecificity(metadata.ServiceName) > 0 && claudetag.Parse(canonicalPromptText(payload)).Detected {
 		metadata.ServiceName = "claude-tag"
 	}
 	// Resolve the product surface once per event: the OTEL-cached service.name
