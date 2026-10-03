@@ -5,6 +5,7 @@ import {
   getMatchStrings,
   jsonEscaped,
   matchRanges,
+  needsWholeMessageMask,
   resultIsSpanlessSensitive,
   withJsonEscaped,
 } from "@/pages/chatLogs/chatHelpers";
@@ -187,6 +188,7 @@ export function FindingContext({
   result,
   kind,
   chatResults,
+  chatResultsComplete,
   revealed,
   canReveal,
   rating,
@@ -198,6 +200,8 @@ export function FindingContext({
   /** This chat's findings, carrying the raw matches the excerpt masks.
    * Undefined while loading, so no message renders before it can be masked. */
   chatResults: RiskResult[] | undefined;
+  /** `chatResults` holds every finding in the chat. */
+  chatResultsComplete: boolean;
   revealed: boolean;
   canReveal: boolean;
   rating: SeverityRating | null;
@@ -220,10 +224,6 @@ export function FindingContext({
     if (revealed && canReveal && auditedReveal && !revealFailed) reveal();
   }, [revealed, canReveal, auditedReveal, revealFailed, reveal]);
 
-  const wholeMessage =
-    kind === "judge" ||
-    (kind === "analyzer" && resultIsSpanlessSensitive(result));
-  const maskable = kind === "chat" || wholeMessage;
   const shown =
     revealed &&
     canReveal &&
@@ -247,6 +247,22 @@ export function FindingContext({
       ? messagePosition(chatQuery.data, messages, idx)
       : null;
   const total = chatQuery.data?.numMessages;
+
+  const resultIsWhole =
+    kind === "judge" ||
+    (kind === "analyzer" && resultIsSpanlessSensitive(result));
+  // Spanless findings, or matches that could not all be loaded, leave only
+  // the whole message to mask.
+  const masksWholeMessage = (messageId: string): boolean =>
+    !chatResultsComplete ||
+    (resultIsWhole && messageId === result.chatMessageId) ||
+    needsWholeMessageMask(
+      chatResults?.filter((r) => r.chatMessageId === messageId),
+    );
+  const maskable =
+    kind === "chat" ||
+    resultIsWhole ||
+    excerpt.some((m) => masksWholeMessage(m.id));
 
   const forbidden =
     chatQuery.error instanceof GramError && chatQuery.error.statusCode === 403;
@@ -320,9 +336,9 @@ export function FindingContext({
               first={i === 0}
               rating={rating}
             >
-              {flagged && wholeMessage && !shown ? (
+              {masksWholeMessage(raw.id) && !shown ? (
                 <RedactionChip
-                  label={`Flagged event · ${message.text.length.toLocaleString()} chars${canReveal ? " · reveal" : ""}`}
+                  label={`${flagged ? "Flagged event" : "Masked message"} · ${message.text.length.toLocaleString()} chars${canReveal ? " · reveal" : ""}`}
                   locked={!canReveal}
                   onClick={canReveal ? onRequestReveal : undefined}
                 />

@@ -328,8 +328,12 @@ function FindingDetail({
 }): JSX.Element {
   const routes = useRoutes();
   const { hasScope } = useRBAC();
-  const canReveal = hasScope(REVEAL_SCOPE);
   const kind = findingKind(result);
+  // Payload reveals need unrestricted chat:read; chat reveals follow the chat.
+  const canReveal = hasScope(
+    REVEAL_SCOPE,
+    kind === "mcp" ? "*" : (result.chatId ?? "*"),
+  );
   const chatLike = isChatLikeKind(kind);
   const [revealed, setRevealed] = useDrawerReveal(result.id);
 
@@ -342,7 +346,7 @@ function FindingDetail({
     mediationSurfaceLabel(result.mediationSurface) ?? "MCP gateway";
 
   const executionQuery = useRiskListResults(
-    { executionId: result.executionId ?? "", limit: 100 },
+    { executionId: result.executionId ?? "", limit: 200 },
     undefined,
     {
       enabled: kind === "mcp" && Boolean(result.executionId),
@@ -357,6 +361,14 @@ function FindingDetail({
   let chatResults: RiskResult[] | undefined;
   if (chatQuery.data) chatResults = chatQuery.data.results;
   else if (!chatQuery.isLoading) chatResults = [];
+  // A failed or partial listing leaves matches unknown, so the excerpt masks
+  // whole messages instead.
+  const chatResultsComplete = Boolean(
+    chatQuery.data && !chatQuery.data.nextCursor,
+  );
+  const siblingsComplete = Boolean(
+    executionQuery.data && !executionQuery.data.nextCursor,
+  );
 
   let siblings: RiskResult[] = [];
   if (kind === "mcp" && result.executionId) {
@@ -567,6 +579,7 @@ function FindingDetail({
           <FindingPayload
             result={result}
             siblings={siblings}
+            siblingsComplete={siblingsComplete}
             revealed={revealed}
             canReveal={canReveal}
             payload={payload}
@@ -581,6 +594,7 @@ function FindingDetail({
             result={result}
             kind={kind}
             chatResults={chatResults}
+            chatResultsComplete={chatResultsComplete}
             revealed={revealed}
             canReveal={canReveal}
             rating={rating}
