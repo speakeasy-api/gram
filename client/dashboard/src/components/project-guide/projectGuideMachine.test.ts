@@ -2,6 +2,7 @@ import { createActor } from "xstate";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   LISTEN_TIMEOUT_SECONDS,
+  MCP_SETUP_CONFIRMATION_DELAY_MS,
   PROJECT_GUIDE_OUTPUT_LIMIT,
   getProjectGuideCurrentStep,
   projectGuideMachine,
@@ -54,6 +55,7 @@ function reachCheckpoint(
   service: ReturnType<typeof coordinator>["service"],
   signals: ProjectGuideOperationSignal[],
 ): void {
+  vi.useFakeTimers();
   openMcp(service);
   service.send({ type: "START" });
   report(service, {
@@ -67,6 +69,7 @@ function reachCheckpoint(
       scope: latestScope(signals),
       result: "MCP ready",
     });
+    vi.advanceTimersByTime(MCP_SETUP_CONFIRMATION_DELAY_MS);
   }
   service.send({
     type: "USER_CHECKPOINT_COMPLETE",
@@ -142,16 +145,21 @@ describe("project guide coordinator contract", () => {
     openMcp(service);
 
     service.send({ type: "SELECT_MCP_SERVER", name: "Linear" });
-    expect(service.getSnapshot().context.output.at(-1)).toMatchObject({
-      kind: "note",
-      message: "Linear selected. Ready to start the journey",
-    });
+    service.send({ type: "SELECT_MCP_SERVER", name: "Notion" });
+    expect(
+      service
+        .getSnapshot()
+        .context.output.filter((entry) =>
+          entry.message.endsWith(" selected. Ready to start the journey"),
+        )
+        .map((entry) => entry.message),
+    ).toEqual(["Notion selected. Ready to start the journey"]);
 
     service.send({ type: "START" });
-    service.send({ type: "SELECT_MCP_SERVER", name: "Notion" });
+    service.send({ type: "SELECT_MCP_SERVER", name: "Linear" });
 
     expect(service.getSnapshot().context.output.at(-1)?.message).not.toBe(
-      "Notion selected. Ready to start the journey",
+      "Linear selected. Ready to start the journey",
     );
     expect(signals).toHaveLength(1);
   });
@@ -237,7 +245,8 @@ describe("project guide coordinator contract", () => {
     });
   });
 
-  it("waits for MCP baseline preparation before advancing", () => {
+  it("shows MCP setup success immediately, then advances after the confirmation dwell", () => {
+    vi.useFakeTimers();
     const { service, signals } = coordinator();
     openMcp(service);
     service.send({ type: "START" });
@@ -262,11 +271,72 @@ describe("project guide coordinator contract", () => {
       result: "Linear mcp server is now setup",
     });
 
+    expect(service.getSnapshot().value).toBe("confirming");
+    expect(service.getSnapshot().context.output.at(-1)).toMatchObject({
+      kind: "result",
+      message: "Linear mcp server is now setup",
+    });
+    expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(0);
+
+    service.send({ type: "USER_CHECKPOINT_COMPLETE", result: "ignored" });
+    vi.advanceTimersByTime(MCP_SETUP_CONFIRMATION_DELAY_MS - 1);
+    expect(service.getSnapshot().value).toBe("confirming");
+    expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(0);
+
+    vi.advanceTimersByTime(1);
     expect(service.getSnapshot().value).toBe("checkpoint");
     expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(1);
     expect(
       service.getSnapshot().context.completedByPath["third-party-mcp"],
     ).toEqual([0]);
+  });
+
+  it("cancels the MCP confirmation dwell on BACK or SWITCH", () => {
+    vi.useFakeTimers();
+
+    const back = coordinator();
+    openMcp(back.service);
+    back.service.send({ type: "START" });
+    report(back.service, {
+      type: "success",
+      scope: latestScope(back.signals),
+      result: "Server installed",
+    });
+    report(back.service, {
+      type: "success",
+      scope: latestScope(back.signals),
+      result: "MCP ready",
+    });
+    expect(back.service.getSnapshot().value).toBe("confirming");
+    back.service.send({ type: "BACK" });
+    vi.advanceTimersByTime(MCP_SETUP_CONFIRMATION_DELAY_MS);
+    expect(back.service.getSnapshot().value).toBe("opening");
+    expect(back.service.getSnapshot().context.activePath).toBeNull();
+
+    const switched = coordinator();
+    openMcp(switched.service);
+    switched.service.send({ type: "START" });
+    report(switched.service, {
+      type: "success",
+      scope: latestScope(switched.signals),
+      result: "Server installed",
+    });
+    report(switched.service, {
+      type: "success",
+      scope: latestScope(switched.signals),
+      result: "MCP ready",
+    });
+    expect(switched.service.getSnapshot().value).toBe("confirming");
+    switched.service.send({
+      type: "SWITCH",
+      path: "secret-block",
+      resumeStep: 0,
+    });
+    vi.advanceTimersByTime(MCP_SETUP_CONFIRMATION_DELAY_MS);
+    expect(switched.service.getSnapshot().value).toBe("ready");
+    expect(switched.service.getSnapshot().context.activePath).toBe(
+      "secret-block",
+    );
   });
 
   it("starts Secret Step 2 immediately after an agent is selected", () => {
@@ -445,6 +515,7 @@ describe("project guide coordinator contract", () => {
   });
 
   it("rejects a duplicate success from the attempt before retry", () => {
+    vi.useFakeTimers();
     const { service, signals } = coordinator();
     openMcp(service);
     service.send({ type: "START" });
@@ -493,6 +564,8 @@ describe("project guide coordinator contract", () => {
         result: "MCP ready",
       },
     });
+    expect(service.getSnapshot().value).toBe("confirming");
+    vi.advanceTimersByTime(MCP_SETUP_CONFIRMATION_DELAY_MS);
     expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(1);
   });
 });
