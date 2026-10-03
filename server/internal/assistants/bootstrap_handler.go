@@ -124,6 +124,11 @@ func (s *Service) allowBootstrap(ctx context.Context, assistantID, tokenThreadID
 		case !res.Allowed:
 			return oops.E(oops.CodeRateLimitExceeded, nil, "thread bootstrap rate limit exceeded")
 		}
+		if tokenThreadID == uuid.Nil {
+			// Legacy credentials use only their original assistant-wide bucket;
+			// bound-thread traffic must not consume their independent allowance.
+			return nil
+		}
 	}
 	return nil
 }

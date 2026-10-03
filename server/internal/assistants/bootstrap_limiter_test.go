@@ -43,10 +43,11 @@ func TestBootstrapAggregateBoundsConcurrentThreadTraffic(t *testing.T) {
 		require.Error(t, service.allowBootstrap(t.Context(), assistant, uuid.New()), "fresh thread IDs cannot bypass aggregate protection")
 	}
 	require.NoError(t, service.allowBootstrap(t.Context(), uuid.New(), uuid.New()), "aggregate buckets must remain assistant-scoped")
-	// Legacy assistant-wide tokens keep their tighter 60-call bucket.
-	legacy := uuid.New()
+	// Exhausted bound capacity must not affect the SAME assistant's legacy
+	// allowance. Its own 60-call limit still applies independently.
 	for range bootstrapRateBurst {
-		require.NoError(t, service.allowBootstrap(t.Context(), legacy, uuid.Nil))
+		require.NoError(t, service.allowBootstrap(t.Context(), assistant, uuid.Nil))
 	}
-	require.Error(t, service.allowBootstrap(t.Context(), legacy, uuid.Nil))
+	require.Error(t, service.allowBootstrap(t.Context(), assistant, uuid.Nil), "legacy bucket must enforce its own limit")
+	require.Error(t, service.allowBootstrap(t.Context(), assistant, uuid.New()), "legacy traffic must not reset or bypass the bound aggregate")
 }
