@@ -1108,6 +1108,10 @@ func (s *Service) ApplyIssuerGate(
 	if err != nil {
 		return ctx, nil, nil, err
 	}
+	newCtx, err = assistanttokens.RefreshBusinessExecution(newCtx)
+	if err != nil {
+		return ctx, nil, nil, fmt.Errorf("refresh assistant execution policy: %w", err)
+	}
 	return newCtx, tokens, toolSelection, nil
 }
 

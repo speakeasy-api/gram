@@ -13,6 +13,10 @@ import (
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 )
 
+// Mirrors assistantidentity.ExecutionVersion without importing its authorization
+// dependencies. The denial-reply integration test writes the shared version.
+const slackExecutionReplyVersion = 1
+
 // NotifyAssistantExecutionDenied uses only the originating Slack event and the
 // assistant's trigger-owned bot credential. Neither target nor message text can
 // be supplied by the model. Human revocation does not prevent this private,
@@ -58,7 +62,7 @@ func (a *App) NotifyAssistantExecutionDenied(ctx context.Context) error {
 		return fmt.Errorf("decode assistant reply origin: %w", err)
 	}
 	e := payload.Execution
-	if e == nil || e.Version != 1 || e.EventID != event || e.ThreadID != principal.ThreadID || e.Identity.AssistantID != principal.AssistantID || e.Identity.ProjectID != *ac.ProjectID || e.Identity.OrganizationID != ac.ActiveOrganizationID || !row.TriggerInstanceID.Valid || row.TriggerInstanceID.UUID != e.Identity.TriggerID || payload.TeamID == "" || payload.UserID == "" || payload.ChannelID == "" {
+	if e == nil || e.Version != slackExecutionReplyVersion || e.EventID != event || e.ThreadID != principal.ThreadID || e.Identity.AssistantID != principal.AssistantID || e.Identity.ProjectID != *ac.ProjectID || e.Identity.OrganizationID != ac.ActiveOrganizationID || !row.TriggerInstanceID.Valid || row.TriggerInstanceID.UUID != e.Identity.TriggerID || payload.TeamID == "" || payload.UserID == "" || payload.ChannelID == "" {
 		return fmt.Errorf("invalid assistant reply origin")
 	}
 	if e.Slack != nil && (payload.TeamID != e.Slack.TeamID || payload.UserID != e.Slack.UserID) {

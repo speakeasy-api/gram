@@ -13,7 +13,6 @@ import (
 	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
-	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 )
 
 const executionMetadataKey = "_gram_execution"
@@ -96,7 +95,7 @@ func (s *ServiceCore) captureExecution(ctx context.Context, assistant assistantR
 	event.TriggerInstanceID = trigger
 	mode, human, fallback := assistantidentity.ExecutionWorkload, "", ""
 	if source != sourceKindSlack {
-		mode, human, fallback, err = selectExecutionActor(ctx, assistant, source, event, slackrepo.New(s.db).ResolveSlackMappingUser, assistantrepo.New(s.db).FindLegacyWakeRequester)
+		mode, human, fallback, err = selectExecutionActor(ctx, assistant, source, event, assistantrepo.New(s.db).FindLegacyWakeRequester)
 		if err != nil {
 			return nil, err
 		}
@@ -137,7 +136,7 @@ func (s *ServiceCore) captureExecution(ctx context.Context, assistant assistantR
 	return marshalExecutionPayload(payload)
 }
 
-func selectExecutionActor(ctx context.Context, assistant assistantRecord, source string, event assistantThreadEventRecord, lookup slackUserLookup, legacy legacyWakeLookup) (assistantidentity.ExecutionMode, string, string, error) {
+func selectExecutionActor(ctx context.Context, assistant assistantRecord, source string, event assistantThreadEventRecord, legacy legacyWakeLookup) (assistantidentity.ExecutionMode, string, string, error) {
 	switch source {
 	case sourceKindDashboard, sourceKindWake:
 		if source == sourceKindDashboard {
@@ -149,32 +148,11 @@ func selectExecutionActor(ctx context.Context, assistant assistantRecord, source
 				return "", "", "", fmt.Errorf("dashboard execution has no authenticated sender")
 			}
 		}
-		human, err := selectTurnUser(ctx, assistant, source, event, lookup, legacy)
+		human, err := selectTurnUser(ctx, assistant, source, event, nil, legacy)
 		if err != nil {
 			return "", "", "", fmt.Errorf("select execution actor: %w", err)
 		}
 		return assistantidentity.ExecutionWorkloadHuman, human, "", nil
-	case sourceKindSlack:
-		mapped := false
-		wrapped := func(ctx context.Context, p slackrepo.ResolveSlackMappingUserParams) (string, error) {
-			if lookup == nil {
-				return "", nil
-			}
-			user, err := lookup(ctx, p)
-			mapped = err == nil && user != ""
-			if err != nil {
-				return "", fmt.Errorf("resolve Slack execution actor: %w", err)
-			}
-			return user, nil
-		}
-		human, err := selectTurnUser(ctx, assistant, source, event, wrapped, legacy)
-		if err != nil {
-			return "", "", "", fmt.Errorf("assistant execution: %w", err)
-		}
-		if mapped {
-			return assistantidentity.ExecutionWorkloadHuman, human, "", nil
-		}
-		return assistantidentity.ExecutionWorkload, "", "slack_mapping_unavailable", nil
 	default:
 		return assistantidentity.ExecutionWorkload, "", "", nil
 	}

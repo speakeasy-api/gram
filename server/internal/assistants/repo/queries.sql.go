@@ -1058,7 +1058,7 @@ func (q *Queries) GetAssistant(ctx context.Context, arg GetAssistantParams) (Get
 }
 
 const getAssistantExecutionReplyOrigin = `-- name: GetAssistantExecutionReplyOrigin :one
-SELECT e.normalized_payload_json, e.trigger_instance_id, e.correlation_id
+SELECT e.normalized_payload_json, e.trigger_instance_id
 FROM assistant_thread_events e
 JOIN assistant_threads t ON t.id = e.assistant_thread_id AND t.project_id = e.project_id AND t.assistant_id = e.assistant_id
 JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
@@ -1078,7 +1078,6 @@ type GetAssistantExecutionReplyOriginParams struct {
 type GetAssistantExecutionReplyOriginRow struct {
 	NormalizedPayloadJson []byte
 	TriggerInstanceID     uuid.NullUUID
-	CorrelationID         string
 }
 
 func (q *Queries) GetAssistantExecutionReplyOrigin(ctx context.Context, arg GetAssistantExecutionReplyOriginParams) (GetAssistantExecutionReplyOriginRow, error) {
@@ -1090,7 +1089,7 @@ func (q *Queries) GetAssistantExecutionReplyOrigin(ctx context.Context, arg GetA
 		arg.EventID,
 	)
 	var i GetAssistantExecutionReplyOriginRow
-	err := row.Scan(&i.NormalizedPayloadJson, &i.TriggerInstanceID, &i.CorrelationID)
+	err := row.Scan(&i.NormalizedPayloadJson, &i.TriggerInstanceID)
 	return i, err
 }
 

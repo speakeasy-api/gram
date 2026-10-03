@@ -22,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
-	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
@@ -30,16 +29,13 @@ import (
 func TestExecutionActorSelectionNeverFabricatesAutonomousHuman(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name, source, payload, mapped, wantHuman, wantFallback string
-		lookupError, errorExpected                             bool
+		name, source, payload, wantHuman, wantFallback string
+		errorExpected                                  bool
 	}{
 		{name: "dashboard", source: sourceKindDashboard, payload: `{"user_id":"human-a"}`, wantHuman: "human-a"},
 		{name: "dashboard missing sender", source: sourceKindDashboard, payload: `{}`, errorExpected: true},
 		{name: "cron", source: sourceKindCron, payload: `{"user_id":"ignored"}`},
 		{name: "ordinary autonomous", source: sourceKindGithub, payload: `{}`},
-		{name: "slack mapped", source: sourceKindSlack, payload: `{"team_id":"workspace","user_id":"sender"}`, mapped: "mapped-human", wantHuman: "mapped-human"},
-		{name: "slack absent", source: sourceKindSlack, payload: `{"team_id":"workspace","user_id":"sender"}`, wantFallback: "slack_mapping_unavailable"},
-		{name: "slack unavailable", source: sourceKindSlack, payload: `{"team_id":"workspace","user_id":"sender"}`, lookupError: true, wantFallback: "slack_mapping_unavailable"},
 		{name: "wake captured requester", source: sourceKindWake, payload: `{"identity_version":1,"requester_user_id":"requester"}`, wantHuman: "requester"},
 		{name: "wake captured owner", source: sourceKindWake, payload: `{"identity_version":1,"requester_user_id":"owner"}`, wantHuman: "owner"},
 		{name: "wake missing capture", source: sourceKindWake, payload: `{"identity_version":1}`, errorExpected: true},
@@ -47,14 +43,7 @@ func TestExecutionActorSelectionNeverFabricatesAutonomousHuman(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			mode, human, fallback, err := selectExecutionActor(t.Context(), assistantRecord{OrganizationID: "org-test", CreatedByUserID: "owner"}, tc.source, assistantThreadEventRecord{NormalizedPayloadJSON: []byte(tc.payload)}, func(_ context.Context, p slackrepo.ResolveSlackMappingUserParams) (string, error) {
-				require.Equal(t, "org-test", p.OrganizationID)
-				require.Equal(t, "workspace", p.SlackTeamID)
-				if tc.lookupError {
-					return "", errors.New("lookup unavailable")
-				}
-				return tc.mapped, nil
-			}, nil)
+			mode, human, fallback, err := selectExecutionActor(t.Context(), assistantRecord{OrganizationID: "org-test", CreatedByUserID: "owner"}, tc.source, assistantThreadEventRecord{NormalizedPayloadJSON: []byte(tc.payload)}, nil)
 			if tc.errorExpected {
 				require.Error(t, err)
 				return

@@ -2,8 +2,11 @@ package assistants
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -39,10 +42,12 @@ func exerciseInvocationCredentials(t *testing.T, db *pgxpool.Pool, core *Service
 	base, err := url.Parse("http://localhost")
 	require.NoError(t, err)
 	sessions := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), db, enc, policy, nil, cache.NoopCache, base)
-	refreshStarted, finishRefresh := make(chan struct{}), make(chan struct{})
+	refreshStarted, finishRefresh := make(chan chan struct{}, 1), make(chan struct{})
 	refreshServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		close(refreshStarted)
+		release := make(chan struct{})
+		refreshStarted <- release
 		select {
+		case <-release:
 		case <-finishRefresh:
 		case <-r.Context().Done():
 			return
@@ -131,28 +136,64 @@ func exerciseInvocationCredentials(t *testing.T, db *pgxpool.Pool, core *Service
 	require.Error(t, err, "caller cannot override selected human")
 	_, err = sessions.ResolveAuthorization(callers["user-2"], assistant.ProjectID, "org-test", issuer.ID, upstream.ID, urn.NewUserSubject("user-2"), "https://other.example/mcp")
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
-	// A refresh must not release a token after the selected user's policy was
-	// revoked while the provider was blocked. No owner credential is retried.
-	refresh, err := enc.Encrypt([]byte("refresh-user-2"))
-	require.NoError(t, err)
-	expired, err := enc.Encrypt([]byte("expired-user-2"))
-	require.NoError(t, err)
-	_, err = q.UpsertRemoteSession(ctx, remoterepo.UpsertRemoteSessionParams{SubjectUrn: urn.NewUserSubject("user-2"), UserSessionIssuerID: issuer.ID, RemoteSessionClientID: client.ID, AccessTokenEncrypted: expired, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)), RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{}, Resource: conv.ToPGText("https://api.example/mcp")})
-	require.NoError(t, err)
-	refreshed := make(chan error, 1)
-	go func() { _, err := resolve("user-2"); refreshed <- err }()
-	select {
-	case <-refreshStarted:
-	case err := <-refreshed:
-		require.NoError(t, err, "refresh must reach provider")
-		t.Fatal("refresh unexpectedly returned")
-	case <-time.After(10 * time.Second):
-		t.Fatal("refresh did not start")
+	// Test both connection revocation and narrower tool revocation while the
+	// provider is blocked. The latter must preserve MCPConnect admission.
+	engine := authz.NewEngine(testenv.NewLogger(t), db, authztest.ChallengeLoggingAlwaysDisabled, nil, authz.EngineOpts{AdmitWorkloadSession: runtimepolicy.AdmitWorkloadSession})
+	toolCheck := authz.MCPToolCallCheck(resource.String(), authz.MCPToolCallDimensions{Tool: "requested_tool", ProjectID: assistant.ProjectID.String()})
+	for _, toolOnly := range []bool{false, true} {
+		refresh, err := enc.Encrypt([]byte("refresh-user-2"))
+		require.NoError(t, err)
+		expired, err := enc.Encrypt([]byte("expired-user-2"))
+		require.NoError(t, err)
+		_, err = q.UpsertRemoteSession(ctx, remoterepo.UpsertRemoteSessionParams{SubjectUrn: urn.NewUserSubject("user-2"), UserSessionIssuerID: issuer.ID, RemoteSessionClientID: client.ID, AccessTokenEncrypted: expired, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)), RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{}, Resource: conv.ToPGText("https://api.example/mcp")})
+		require.NoError(t, err)
+		require.NoError(t, engine.Require(callers["user-2"], toolCheck), "requested tool admitted before refresh")
+		refreshed := make(chan outcome, 1)
+		go func() { tokens, err := resolve("user-2"); refreshed <- outcome{"user-2", tokens, err} }()
+		var release chan struct{}
+		select {
+		case release = <-refreshStarted:
+		case result := <-refreshed:
+			require.NoError(t, result.err, "refresh must reach provider")
+			t.Fatal("refresh unexpectedly returned")
+		case <-time.After(10 * time.Second):
+			t.Fatal("refresh did not start")
+		}
+		principal := urn.NewPrincipal(urn.PrincipalTypeUser, "user-2")
+		deleteExecutionTestScope(t, db, principal, authz.ScopeMCPConnect)
+		if toolOnly {
+			grant := authz.NewGrant(authz.ScopeMCPConnect, resource.String())
+			grant.Selector[authz.SelectorKeyTool] = "still_allowed"
+			putExecutionTestGrant(t, db, principal, grant)
+		}
+		close(release)
+		result := <-refreshed
+		// A provider response alone is insufficient: prove successful refresh
+		// persistence before asserting that authorization rejected dispatch.
+		stored, err := q.GetActiveRemoteSession(ctx, remoterepo.GetActiveRemoteSessionParams{SubjectUrn: urn.NewUserSubject("user-2"), RemoteSessionClientID: client.ID})
+		require.NoError(t, err)
+		plain, err := enc.Decrypt(stored.AccessTokenEncrypted)
+		require.NoError(t, err)
+		require.Equal(t, "fresh-private-user-2", plain)
+		require.True(t, stored.AccessExpiresAt.Time.After(time.Now()))
+		if toolOnly {
+			require.NoError(t, result.err, "MCPConnect remains permitted after refresh")
+			require.Equal(t, "fresh-private-user-2", result.tokens[upstream.ID].Token)
+			require.NoError(t, engine.Require(callers["user-2"], toolCheck), "pre-refresh snapshot still admits the revoked tool")
+			fresh, err := assistanttokens.RefreshBusinessExecution(callers["user-2"])
+			require.NoError(t, err)
+			require.NoError(t, engine.Require(fresh, authz.MCPCheck(authz.ScopeMCPConnect, resource.String(), assistant.ProjectID.String())))
+			invocation, ok := contextvalues.AssistantBusinessInvocationFromContext(fresh)
+			require.True(t, ok)
+			require.Equal(t, "https://api.example/mcp", invocation.Resource)
+			result.err = engine.Require(fresh, toolCheck)
+		}
+		var denied *oops.ShareableError
+		require.ErrorAs(t, result.err, &denied, "must fail authorization, not token refresh")
+		require.Equal(t, oops.CodeForbidden, denied.Code)
+		deleteExecutionTestScope(t, db, principal, authz.ScopeMCPConnect)
+		putExecutionTestGrant(t, db, principal, authz.NewGrant(authz.ScopeMCPConnect, resource.String()))
 	}
-	deleteExecutionTestScope(t, db, urn.NewPrincipal(urn.PrincipalTypeUser, "user-2"), authz.ScopeMCPConnect)
-	releaseRefresh()
-	require.Error(t, <-refreshed, "authority revalidated after provider refresh")
-	putExecutionTestGrant(t, db, urn.NewPrincipal(urn.PrincipalTypeUser, "user-2"), authz.NewGrant(authz.ScopeMCPConnect, resource.String()))
 	_, err = q.SoftDeleteRemoteSessionBySubjectAndClient(ctx, remoterepo.SoftDeleteRemoteSessionBySubjectAndClientParams{SubjectUrn: urn.NewUserSubject("user-2"), RemoteSessionClientID: client.ID, UserSessionIssuerID: issuer.ID, ProjectID: assistant.ProjectID, OrganizationID: "org-test"})
 	require.NoError(t, err)
 	_, err = resolve("user-2")

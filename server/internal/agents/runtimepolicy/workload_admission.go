@@ -136,6 +136,9 @@ func admitWorkloadSessionInTx(ctx context.Context, tx accessrepo.DBTX) (authz.Wo
 	if credential.AuthorizerUserID != "" {
 		principals, err := authz.ResolveUserPrincipals(ctx, tx, authCtx.ActiveOrganizationID, credential.AuthorizerUserID)
 		if err != nil {
+			if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
+				return authz.WorkloadSessionAdmission{}, oops.C(oops.CodeUnauthorized)
+			}
 			return authz.WorkloadSessionAdmission{}, fmt.Errorf("resolve workload delegator: %w", err)
 		}
 		if !slices.Contains(principals, urn.NewPrincipal(urn.PrincipalTypeUser, credential.AuthorizerUserID)) {

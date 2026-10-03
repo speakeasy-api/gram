@@ -3,6 +3,7 @@ package contextvalues
 import (
 	"context"
 	"fmt"
+
 	"github.com/google/uuid"
 )
 
@@ -26,11 +27,11 @@ type AssistantBusinessInvocation struct {
 	ProjectID      uuid.UUID
 	UserID         string
 	Resource       string
-	revalidate     func() error
+	revalidate     func(context.Context) (context.Context, error)
 }
 type assistantBusinessInvocationKey struct{}
 
-func WithAssistantBusinessInvocation(ctx context.Context, org string, project uuid.UUID, user string, revalidate func() error) context.Context {
+func WithAssistantBusinessInvocation(ctx context.Context, org string, project uuid.UUID, user string, revalidate func(context.Context) (context.Context, error)) context.Context {
 	return context.WithValue(ctx, assistantBusinessInvocationKey{}, AssistantBusinessInvocation{OrganizationID: org, ProjectID: project, UserID: user, Resource: "", revalidate: revalidate})
 }
 
@@ -49,9 +50,19 @@ func AssistantBusinessInvocationFromContext(ctx context.Context) (AssistantBusin
 	invocation, ok := ctx.Value(assistantBusinessInvocationKey{}).(AssistantBusinessInvocation)
 	return invocation, ok
 }
-func (i AssistantBusinessInvocation) Revalidate() error {
+func (i AssistantBusinessInvocation) Revalidate(ctx context.Context) error {
+	_, err := i.RevalidatedContext(ctx)
+	return err
+}
+
+// RevalidatedContext preserves request metadata while replacing admitted policy.
+func (i AssistantBusinessInvocation) RevalidatedContext(ctx context.Context) (context.Context, error) {
 	if i.revalidate == nil {
-		return fmt.Errorf("assistant business invocation unavailable")
+		return ctx, fmt.Errorf("assistant business invocation unavailable")
 	}
-	return i.revalidate()
+	fresh, err := i.revalidate(ctx)
+	if err != nil {
+		return ctx, err
+	}
+	return WithAssistantBusinessResource(fresh, i.Resource), nil
 }

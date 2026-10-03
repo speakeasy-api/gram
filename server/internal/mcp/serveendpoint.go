@@ -281,6 +281,11 @@ func (s *Service) serveResolvedMCPEndpoint(
 				return err
 			}
 		}
+		ctx, err = assistanttokens.RefreshBusinessExecution(ctx)
+		if err != nil {
+			return fmt.Errorf("refresh assistant execution policy: %w", err)
+		}
+		r = r.WithContext(ctx)
 		if mcpServer.RemoteMcpServerID.Valid {
 			return s.serveRemoteBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate, sessionToolSelection)
 		}

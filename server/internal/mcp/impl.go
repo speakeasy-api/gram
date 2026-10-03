@@ -1219,6 +1219,11 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		if err != nil {
 			return err
 		}
+		ctx, err = assistanttokens.RefreshBusinessExecution(ctx)
+		if err != nil {
+			return fmt.Errorf("refresh assistant execution policy: %w", err)
+		}
+		r = r.WithContext(ctx)
 		tokenInputs, err = appendRemoteSessionTokenInputs(tokenInputs, gateTokens)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for issuer-gated toolset").LogError(ctx, s.logger)
