@@ -198,7 +198,7 @@ function textLines(payload: string): Piece[][] {
 }
 
 /** Whether the payload is JSON and renders with syntax colors. */
-export function isJsonPayload(payload: string): boolean {
+function isJsonPayload(payload: string): boolean {
   try {
     JSON.parse(payload);
     return true;
