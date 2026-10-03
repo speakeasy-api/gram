@@ -485,6 +485,8 @@ export function organizationFromSdk(
     workos_dashboard_url: org.workosDashboardUrl,
     stripe_customer_id: org.stripeCustomerId,
     stripe_subscription_id: org.stripeSubscriptionId,
+    stripe_customer_dashboard_url: org.stripeCustomerDashboardUrl,
+    stripe_subscription_dashboard_url: org.stripeSubscriptionDashboardUrl,
     whitelisted: org.whitelisted,
     disabled_at: org.disabledAt?.toISOString(),
     trial_state: org.trialState,

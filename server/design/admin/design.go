@@ -71,6 +71,14 @@ var AdminOrganization = Type("AdminOrganization", func() {
 	})
 	Attribute("stripe_customer_id", String, "Stripe customer ID, if billing metadata has a customer.")
 	Attribute("stripe_subscription_id", String, "Current Stripe subscription ID, if subscribed.")
+	Attribute("stripe_customer_dashboard_url", String, func() {
+		Description("Link to the Stripe customer in the Stripe dashboard. Absent when the organization has no Stripe customer or the deployment has no Stripe API key configured.")
+		Format(FormatURI)
+	})
+	Attribute("stripe_subscription_dashboard_url", String, func() {
+		Description("Link to the Stripe subscription in the Stripe dashboard. Absent when the organization has no Stripe subscription or the deployment has no Stripe API key configured.")
+		Format(FormatURI)
+	})
 	Attribute("whitelisted", Boolean, "Whether the organization is whitelisted for full access.")
 	Attribute("disabled_at", String, func() {
 		Description("The time at which the organization was disabled, if any.")
