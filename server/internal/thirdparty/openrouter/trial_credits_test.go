@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -72,9 +73,9 @@ func (r *limitRecorder) handler() http.HandlerFunc {
 		// GetCreditsUsed reads usage before it reports the ceiling, and
 		// RefreshAPIKeyLimit patches the ceiling upstream. Neither carries a
 		// limit this suite asserts on, so both get a canned reply.
-		case req.Method == http.MethodGet && req.URL.Path == "/v1/key":
+		case req.Method == http.MethodGet && strings.HasPrefix(req.URL.Path, "/v1/keys/"):
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"data": map[string]any{"limit": 0.0, "usage_monthly": 0.0},
+				"data": map[string]any{"hash": strings.TrimPrefix(req.URL.Path, "/v1/keys/"), "limit": 0.0, "usage_monthly": 0.0},
 			})
 
 		case req.Method == http.MethodPatch:
