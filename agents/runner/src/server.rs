@@ -6,7 +6,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use tokio::net::TcpListener;
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Notify;
 use tracing::Instrument;
 
 use crate::mcp_actor::McpCmd;
@@ -230,18 +230,14 @@ async fn admit_authenticated_turn(
         .and_then(|v| v.to_str().ok())
         .map(|s| format!("{thread_id}:{s}"));
 
-    // Per-key admission lock: serialize concurrent retries with the same
-    // key across the bootstrap + enqueue window so we can't enqueue twice.
-    // A failed admission drops the guard with `*done == false`, leaving
-    // the slot available for a fresh retry.
-    let admission = idempotency_key.as_ref().map(|key| {
-        host.seen
-            .entry(key.clone())
-            .or_insert_with(|| Arc::new(Mutex::new(false)))
-            .clone()
-    });
-    let mut admission_guard = if let Some(ref slot) = admission {
-        Some(slot.lock().await)
+    // Declare the slot owner before the borrowed mutex guard: on every return
+    // or cancellation the lock drops first, then the last unsuccessful owner
+    // can retire the slot without separating existing waiters from new retries.
+    let event_admission = idempotency_key
+        .as_ref()
+        .map(|key| crate::runtime::EventAdmission::new(host.clone(), key.clone()));
+    let mut admission_guard = if let Some(ref admission) = event_admission {
+        Some(admission.slot.lock().await)
     } else {
         None
     };
@@ -329,6 +325,7 @@ async fn admit_authenticated_turn(
 mod tests {
     use super::*;
     use std::time::Duration;
+    use tokio::sync::Mutex;
 
     #[tokio::test]
     async fn unauthenticated_request_cannot_hold_same_thread_admission() {

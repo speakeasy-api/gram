@@ -306,6 +306,41 @@ pub fn admission_lock(host: &RuntimeHost, thread_id: &str) -> Arc<tokio::sync::M
     lock
 }
 
+/// Owns a dedup slot across admission, including cancellation while waiting.
+/// Map + this owner are the final two references only after every waiter leaves.
+/// Removing under the map shard lock prevents new requests joining a detached
+/// slot; successful entries remain until the normal thread eviction boundary.
+pub struct EventAdmission {
+    host: Arc<RuntimeHost>,
+    key: String,
+    pub slot: Arc<tokio::sync::Mutex<bool>>,
+}
+
+impl EventAdmission {
+    pub fn new(host: Arc<RuntimeHost>, key: String) -> Self {
+        let slot = host
+            .seen
+            .entry(key.clone())
+            .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(false)))
+            .clone();
+        Self { host, key, slot }
+    }
+}
+
+impl Drop for EventAdmission {
+    fn drop(&mut self) {
+        let slot = std::mem::take(&mut self.slot);
+        self.host.seen.remove_if(&self.key, |_, current| {
+            let same = Arc::ptr_eq(current, &slot);
+            // Release our reference under the map lock so two concurrent
+            // final owners cannot both observe the other and leave an orphan.
+            drop(slot);
+            same && Arc::strong_count(current) == 1
+                && current.try_lock().is_ok_and(|accepted| !*accepted)
+        });
+    }
+}
+
 /// Roll back admission even when its HTTP future is cancelled before enqueue.
 pub struct UnclaimedInvocation {
     host: Arc<RuntimeHost>,
@@ -927,6 +962,70 @@ mod tests {
             r#"{"model":"test","completions_url":"http://localhost","chat_id":"chat"}"#,
         )
         .unwrap()
+    }
+
+    #[tokio::test]
+    async fn failed_admission_slots_are_bounded_and_success_is_retained() {
+        let host = empty_host();
+        for n in 0..1000 {
+            let admission = EventAdmission::new(host.clone(), format!("failed:{n}"));
+            let guard = admission.slot.lock().await;
+            assert!(!*guard);
+            drop(guard);
+            drop(admission);
+            assert!(host.seen.is_empty());
+        }
+        let retry = EventAdmission::new(host.clone(), "failed:0".into());
+        *retry.slot.lock().await = true;
+        drop(retry);
+        let successful_retry = EventAdmission::new(host.clone(), "failed:0".into());
+        assert!(*successful_retry.slot.lock().await);
+        drop(successful_retry);
+        assert!(host.seen.contains_key("failed:0"));
+    }
+
+    #[tokio::test]
+    async fn cancelled_admission_keeps_waiters_on_the_same_slot() {
+        let host = empty_host();
+        let first = EventAdmission::new(host.clone(), "thread:event".into());
+        let first_guard = first.slot.lock().await;
+        let waiting = EventAdmission::new(host.clone(), "thread:event".into());
+        assert!(Arc::ptr_eq(&first.slot, &waiting.slot));
+        // Cancellation releases the lock before its owner, but the waiter
+        // prevents removal; fresh retries must still join that same slot.
+        drop(first_guard);
+        drop(first);
+        let retry = EventAdmission::new(host.clone(), "thread:event".into());
+        assert!(Arc::ptr_eq(&waiting.slot, &retry.slot));
+        let waiter_task = tokio::spawn(async move {
+            let _guard = waiting.slot.lock().await;
+            std::future::pending::<()>().await;
+        });
+        tokio::task::yield_now().await;
+        waiter_task.abort();
+        let _ = waiter_task.await;
+        assert!(host.seen.contains_key("thread:event"));
+        drop(retry);
+        assert!(host.seen.is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn concurrent_final_failed_owners_do_not_orphan_slots() {
+        let host = empty_host();
+        for _ in 0..100 {
+            let a = EventAdmission::new(host.clone(), "thread:event".into());
+            let b = EventAdmission::new(host.clone(), "thread:event".into());
+            let gate = Arc::new(tokio::sync::Barrier::new(2));
+            let other_gate = gate.clone();
+            let task = tokio::spawn(async move {
+                other_gate.wait().await;
+                drop(a);
+            });
+            gate.wait().await;
+            drop(b);
+            task.await.unwrap();
+            assert!(host.seen.is_empty());
+        }
     }
 
     fn empty_host() -> Arc<RuntimeHost> {
