@@ -10,7 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 )
 
-const ExecutionVersion = 2
+const ExecutionVersion = 1
 
 type ExecutionMode string
 
@@ -42,12 +42,12 @@ type Execution struct {
 
 func (e Execution) Check() error {
 	if d := e.Slack; d != nil {
-		if e.Version < 2 || e.Mode != ExecutionWorkloadHuman || d.TeamID == "" || d.UserID == "" || d.MembershipID == uuid.Nil || d.MappingID == uuid.Nil || d.ConnectionGeneration == uuid.Nil || d.MappingRevision <= 0 {
+		if e.Mode != ExecutionWorkloadHuman || d.TeamID == "" || d.UserID == "" || d.MembershipID == uuid.Nil || d.MappingID == uuid.Nil || d.ConnectionGeneration == uuid.Nil || d.MappingRevision <= 0 {
 			return ErrInvalidIdentity
 		}
 	}
 	i := e.Identity
-	if (e.Version != 1 && e.Version != ExecutionVersion) || e.Issuer == "" || e.EventID == "" || e.ThreadID == uuid.Nil || i.OrganizationID == "" || i.ProjectID == uuid.Nil || i.AssistantID == uuid.Nil || i.AgentID == uuid.Nil || i.TriggerID == uuid.Nil || i.IssuerID == uuid.Nil || i.Subject == "" || i.AssistantGeneration <= 0 || i.TriggerGeneration <= 0 {
+	if e.Version != ExecutionVersion || e.Issuer == "" || e.EventID == "" || e.ThreadID == uuid.Nil || i.OrganizationID == "" || i.ProjectID == uuid.Nil || i.AssistantID == uuid.Nil || i.AgentID == uuid.Nil || i.TriggerID == uuid.Nil || i.IssuerID == uuid.Nil || i.Subject == "" || i.AssistantGeneration <= 0 || i.TriggerGeneration <= 0 {
 		return ErrInvalidIdentity
 	}
 	switch e.Mode {

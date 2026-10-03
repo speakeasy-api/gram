@@ -127,10 +127,6 @@ func (m *Manager) AuthorizeBusiness(ctx context.Context, raw string, resource uu
 		return ctx, fmt.Errorf("authorize assistant business execution: %w", err)
 	}
 	if e.Mode == assistantidentity.ExecutionWorkloadHuman {
-		// v1 did not capture mapping provenance or delegate human credentials.
-		if e.Version < 2 {
-			return ctx, oops.C(oops.CodeForbidden)
-		}
 		grants, err := assistantidentity.HumanBusinessPolicy(ctx, m.executionDB, *e)
 		if err != nil {
 			return ctx, fmt.Errorf("authorize invoker business policy: %w", err)
