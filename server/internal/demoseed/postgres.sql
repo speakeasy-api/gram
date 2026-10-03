@@ -2512,9 +2512,9 @@ Channel context stays in the Raw view.
      'claude-tag', 'claude-sonnet-4-6', now() - interval '7 minutes', now());
   UPDATE chats SET session_surface = 'claude-tag', slack_team_id = 'T0DEMO0001', slack_channel_id = 'DEMO_CHANNEL', slack_channel_name = 'demo-releases' WHERE id = chat_id AND project_id = proj_a;
   INSERT INTO chat_message_participants (project_id, chat_id, message_id, provider, provider_user_id, provider_team_id, user_id, display_name)
-  SELECT proj_a, chat_id, demo.det_uuid('gram-demo-claude-tag-owner-' || v.n), 'slack',
+  SELECT proj_a, chat_id, demo.det_uuid(v.message_key), 'slack',
     m.slack_user_id, m.slack_team_id, im.user_id, m.display_name
-  FROM (VALUES (1, 1), (2, 3)) v(n, member_number)
+  FROM (VALUES ('gram-demo-claude-tag-owner-1', 1), ('gram-demo-claude-tag-owner-2', 3), ('gram-demo-claude-tag-prompt', 1)) v(message_key, member_number)
   JOIN slack_directory_memberships m ON m.organization_id = demo_org AND m.id = demo.det_uuid('gram-demo-slackmember-' || v.member_number)
   LEFT JOIN slack_identity_mappings im ON im.organization_id = demo_org AND im.slack_team_id = m.slack_team_id AND im.slack_user_id = m.slack_user_id AND im.revoked_at IS NULL;
 
@@ -3618,8 +3618,8 @@ Channel context stays in the Raw view.
     RAISE EXCEPTION 'demo seed postflight: expected 6 Slack mapping examples, found %', stray;
   END IF;
   SELECT count(*) INTO stray FROM chat_message_participants WHERE project_id = proj_a;
-  IF stray <> 2 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 2 message participants, found %', stray;
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 message participants, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM slack_directory_memberships WHERE organization_id = demo_org;

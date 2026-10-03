@@ -59,11 +59,10 @@ func persistClaudeTagMetadata(ctx context.Context, db repo.DBTX, param repo.Crea
 			return fmt.Errorf("lock subsession links: %w", err)
 		}
 		// The envelope is delivered to the parent; from-session identifies its helper.
+		// Reads derive the helper surface from this edge, avoiding cross-chat row
+		// updates while the project advisory lock is held.
 		if err := queries.InsertSubsessionLink(ctx, repo.InsertSubsessionLinkParams{ProjectID: param.ProjectID, ParentChatID: param.ChatID, ChildChatID: uuid.NullUUID{UUID: SessionIDToChatID(metadata.ChildSession), Valid: true}, ParentSessionID: param.ChatID.String(), ChildSessionID: conv.ToPGText(metadata.ChildSession)}); err != nil {
 			return fmt.Errorf("record subsession link: %w", err)
-		}
-		if err := queries.MarkKnownClaudeTagSubsession(ctx, repo.MarkKnownClaudeTagSubsessionParams{ProjectID: param.ProjectID, ChatID: SessionIDToChatID(metadata.ChildSession)}); err != nil {
-			return fmt.Errorf("mark captured Claude Tag helper: %w", err)
 		}
 	}
 	return nil

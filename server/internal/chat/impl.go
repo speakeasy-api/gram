@@ -304,6 +304,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	}
 
 	rows, err := querier.ListChats(ctx, repo.ListChatsParams{
+		ChatID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ProjectID:         *authCtx.ProjectID,
 		ExternalUserID:    externalUserID,
 		UserID:            userID,
@@ -362,6 +363,15 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		}
 	}
 
+	result, err := s.chatOverviews(ctx, authCtx, rows, externalUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &gen.ListChatsResult{Chats: result, Total: int(total)}, nil
+}
+
+// chatOverviews enriches authorized session metadata without reading transcripts.
+func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.AuthContext, rows []repo.ListChatsRow, externalUserID, userID string) ([]*gen.ChatOverview, error) {
 	result := make([]*gen.ChatOverview, 0, len(rows))
 	for _, row := range rows {
 		lastMessageTimestamp := row.CreatedAt.Time.Format(time.RFC3339)
@@ -434,7 +444,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		chat.SlackChannelID = conv.PtrEmpty(channel.SlackChannelID)
 		chat.SlackChannelName = conv.PtrEmpty(channel.SlackChannelName)
 	}
-	return &gen.ListChatsResult{Chats: result, Total: int(total)}, nil
+	return result, nil
 }
 
 const assistantSessionSummaryMetricsBatch = 1000
@@ -1032,6 +1042,45 @@ func (s *Service) loadAuthorizedChat(ctx context.Context, authCtx *contextvalues
 	}
 
 	return chat, nil
+}
+
+// LoadChatOverview returns metadata using the same exact-resource authorization as LoadChat.
+func (s *Service) LoadChatOverview(ctx context.Context, payload *gen.LoadChatOverviewPayload) (*gen.ChatOverview, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	chatID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID")
+	}
+	if _, err := s.loadAuthorizedChat(ctx, authCtx, chatID, chatAccessRead); err != nil {
+		return nil, err
+	}
+	rows, err := s.repo.ListChats(ctx, repo.ListChatsParams{
+		ChatID:         uuid.NullUUID{UUID: chatID, Valid: true},
+		ProjectID:      *authCtx.ProjectID,
+		ExternalUserID: "", UserID: "",
+		FromTime: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		ToTime:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		Search:   "", AssistantID: "", SourceKind: "", ExcludeSourceKind: "", HasRiskFilter: "",
+		MinRiskScore: -1, Pinned: "", Sources: nil, AccountType: "", SortBy: "last_message_timestamp", SortOrder: "desc", PageLimit: 1, PageOffset: 0,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load chat overview").LogError(ctx, s.logger)
+	}
+	if len(rows) == 0 {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	chats, err := s.chatOverviews(ctx, authCtx, rows, externalUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	return chats[0], nil
 }
 
 func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*gen.Chat, error) {

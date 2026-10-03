@@ -24,6 +24,9 @@ type Service interface {
 	// Aggregate work-units analysis results over time for the project: work done
 	// and cost/token efficiency per UTC day.
 	GetWorkUnitsTrend(context.Context, *GetWorkUnitsTrendPayload) (res *WorkUnitsTrendResult, err error)
+	// Load authorized chat overview metadata by exact ID without reading messages
+	// or recording a transcript-open audit event.
+	LoadChatOverview(context.Context, *LoadChatOverviewPayload) (res *ChatOverview, err error)
 	// Load a chat by its ID. Messages within a generation are paginated by `seq`
 	// keyset: omit cursors to receive the newest page, pass `before_seq` to load
 	// older messages (scroll up) or `after_seq` to load newer ones (scroll down).
@@ -89,7 +92,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"listChats", "getAssistantSessionSummary", "getWorkUnitsTrend", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "summarizeToolCall", "submitFeedback", "listSources", "listSessionLinks"}
+var MethodNames = [14]string{"listChats", "getAssistantSessionSummary", "getWorkUnitsTrend", "loadChatOverview", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "summarizeToolCall", "submitFeedback", "listSources", "listSessionLinks"}
 
 type AgentUsage struct {
 	// The agent usage payload discriminator.
@@ -273,6 +276,7 @@ type ChatMessage struct {
 	Generation int
 }
 
+// ChatOverview is the result type of the chat service loadChatOverview method.
 type ChatOverview struct {
 	// Observed Slack workspace associated with this session.
 	SlackTeamID *string
@@ -616,6 +620,17 @@ type ListSourcesResult struct {
 	// The distinct agent sources present in this project's chats (raw source
 	// strings such as 'claude-code', 'Codex', 'playground').
 	Sources []string
+}
+
+// LoadChatOverviewPayload is the payload type of the chat service
+// loadChatOverview method.
+type LoadChatOverviewPayload struct {
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
+	ApikeyToken       *string
+	// The ID of the chat
+	ID string
 }
 
 // LoadChatPayload is the payload type of the chat service loadChat method.

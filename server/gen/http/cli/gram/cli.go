@@ -129,7 +129,7 @@ func UsageCommands() []string {
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|enter-demo|logout|register|info)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
-		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
+		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat-overview|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
 		"data-exports (list-destinations|list-for-org|create-destination|update-destination|delete-destination|list-routes|create-route|update-route|delete-route)",
@@ -897,6 +897,13 @@ func ParseEndpoint(
 		chatGetWorkUnitsTrendToFlag               = chatGetWorkUnitsTrendFlags.String("to", "", "")
 		chatGetWorkUnitsTrendSessionTokenFlag     = chatGetWorkUnitsTrendFlags.String("session-token", "", "")
 		chatGetWorkUnitsTrendProjectSlugInputFlag = chatGetWorkUnitsTrendFlags.String("project-slug-input", "", "")
+
+		chatLoadChatOverviewFlags                 = flag.NewFlagSet("load-chat-overview", flag.ExitOnError)
+		chatLoadChatOverviewIDFlag                = chatLoadChatOverviewFlags.String("id", "REQUIRED", "")
+		chatLoadChatOverviewSessionTokenFlag      = chatLoadChatOverviewFlags.String("session-token", "", "")
+		chatLoadChatOverviewProjectSlugInputFlag  = chatLoadChatOverviewFlags.String("project-slug-input", "", "")
+		chatLoadChatOverviewChatSessionsTokenFlag = chatLoadChatOverviewFlags.String("chat-sessions-token", "", "")
+		chatLoadChatOverviewApikeyTokenFlag       = chatLoadChatOverviewFlags.String("apikey-token", "", "")
 
 		chatLoadChatFlags                 = flag.NewFlagSet("load-chat", flag.ExitOnError)
 		chatLoadChatIDFlag                = chatLoadChatFlags.String("id", "REQUIRED", "")
@@ -4918,6 +4925,7 @@ func ParseEndpoint(
 	chatListChatsFlags.Usage = chatListChatsUsage
 	chatGetAssistantSessionSummaryFlags.Usage = chatGetAssistantSessionSummaryUsage
 	chatGetWorkUnitsTrendFlags.Usage = chatGetWorkUnitsTrendUsage
+	chatLoadChatOverviewFlags.Usage = chatLoadChatOverviewUsage
 	chatLoadChatFlags.Usage = chatLoadChatUsage
 	chatGenerateTitleFlags.Usage = chatGenerateTitleUsage
 	chatCreditUsageFlags.Usage = chatCreditUsageUsage
@@ -6423,6 +6431,9 @@ func ParseEndpoint(
 
 			case "get-work-units-trend":
 				epf = chatGetWorkUnitsTrendFlags
+
+			case "load-chat-overview":
+				epf = chatLoadChatOverviewFlags
 
 			case "load-chat":
 				epf = chatLoadChatFlags
@@ -9323,6 +9334,9 @@ func ParseEndpoint(
 			case "get-work-units-trend":
 				endpoint = c.GetWorkUnitsTrend()
 				data, err = chatc.BuildGetWorkUnitsTrendPayload(*chatGetWorkUnitsTrendFromFlag, *chatGetWorkUnitsTrendToFlag, *chatGetWorkUnitsTrendSessionTokenFlag, *chatGetWorkUnitsTrendProjectSlugInputFlag)
+			case "load-chat-overview":
+				endpoint = c.LoadChatOverview()
+				data, err = chatc.BuildLoadChatOverviewPayload(*chatLoadChatOverviewIDFlag, *chatLoadChatOverviewSessionTokenFlag, *chatLoadChatOverviewProjectSlugInputFlag, *chatLoadChatOverviewChatSessionsTokenFlag, *chatLoadChatOverviewApikeyTokenFlag)
 			case "load-chat":
 				endpoint = c.LoadChat()
 				data, err = chatc.BuildLoadChatPayload(*chatLoadChatIDFlag, *chatLoadChatGenerationFlag, *chatLoadChatLimitFlag, *chatLoadChatBeforeSeqFlag, *chatLoadChatAfterSeqFlag, *chatLoadChatFromStartFlag, *chatLoadChatRiskOnlyFlag, *chatLoadChatQueryFlag, *chatLoadChatSessionTokenFlag, *chatLoadChatProjectSlugInputFlag, *chatLoadChatChatSessionsTokenFlag, *chatLoadChatApikeyTokenFlag)
@@ -14690,6 +14704,7 @@ func chatUsage() {
 	fmt.Fprintln(os.Stderr, `    list-chats: List all chats for a project`)
 	fmt.Fprintln(os.Stderr, `    get-assistant-session-summary: Get assistant session activity totals for a time range.`)
 	fmt.Fprintln(os.Stderr, `    get-work-units-trend: Aggregate work-units analysis results over time for the project: work done and cost/token efficiency per UTC day.`)
+	fmt.Fprintln(os.Stderr, `    load-chat-overview: Load authorized chat overview metadata by exact ID without reading messages or recording a transcript-open audit event.`)
 	fmt.Fprintln(os.Stderr, `    load-chat: Load a chat by its ID. Messages within a generation are paginated by `+"`"+`seq`+"`"+` keyset: omit cursors to receive the newest page, pass `+"`"+`before_seq`+"`"+` to load older messages (scroll up) or `+"`"+`after_seq`+"`"+` to load newer ones (scroll down). Set `+"`"+`from_start`+"`"+` to receive the oldest page (the start of the thread) instead of the newest. Omit `+"`"+`generation`+"`"+` to receive the latest generation. Set `+"`"+`risk_only`+"`"+` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `+"`"+`query`+"`"+` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `+"`"+`risk_only`+"`"+`).`)
 	fmt.Fprintln(os.Stderr, `    generate-title: Read or set a chat's title. Omit `+"`"+`title`+"`"+` to return the current/auto-generated title (titles are generated asynchronously after a completion). Provide `+"`"+`title`+"`"+` to set a manual title that auto-generation will never overwrite; provide an empty `+"`"+`title`+"`"+` to clear the manual title and re-enable auto-generation.`)
 	fmt.Fprintln(os.Stderr, `    credit-usage: Get the total number of chat credits and usage for the current billing period`)
@@ -14808,6 +14823,32 @@ func chatGetWorkUnitsTrendUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat get-work-units-trend --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func chatLoadChatOverviewUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] chat load-chat-overview", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprint(os.Stderr, " -chat-sessions-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Load authorized chat overview metadata by exact ID without reading messages or recording a transcript-open audit event.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+	fmt.Fprintln(os.Stderr, `    -chat-sessions-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat load-chat-overview --id \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func chatLoadChatUsage() {

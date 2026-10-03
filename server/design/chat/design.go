@@ -167,6 +167,34 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WorkUnitsTrend", "type": "query"}`)
 	})
 
+	Method("loadChatOverview", func() {
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ChatSessionsToken)
+		Security(security.ByKey, security.ProjectSlug, func() { Scope("producer") })
+		Description("Load authorized chat overview metadata by exact ID without reading messages or recording a transcript-open audit event.")
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			security.ChatSessionsTokenPayload()
+			security.ByKeyPayload()
+			Attribute("id", String, "The ID of the chat")
+			Required("id")
+		})
+		Result(ChatOverview)
+		HTTP(func() {
+			GET("/rpc/chat.loadOverview")
+			Param("id")
+			security.SessionHeader()
+			security.ProjectHeader()
+			security.ChatSessionsTokenHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "loadChatOverview")
+		Meta("openapi:extension:x-speakeasy-name-override", "loadOverview")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "LoadChatOverview", "type": "query"}`)
+	})
+
 	Method("loadChat", func() {
 		// Reachable with a producer-scoped API key (in addition to a dashboard
 		// session or chat-session token) so backend integrations can pull chat
