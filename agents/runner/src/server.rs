@@ -214,9 +214,13 @@ async fn thread_turn_inner(
                 .await
                 .map_err(|_| "mcp reconcile response unavailable")
         };
-        match tokio::time::timeout(std::time::Duration::from_secs(30), reconcile).await {
-            Ok(Ok(notice)) => notice,
-            _ => {
+        let result = tokio::time::timeout(std::time::Duration::from_secs(30), reconcile)
+            .await
+            .unwrap_or(Err("mcp reconciliation timed out"));
+        match result {
+            Ok(notice) => notice,
+            Err(reason) => {
+                tracing::warn!(thread_id = %thread_id, failure = reason, "mcp reconciliation failed before enqueue");
                 crate::runtime::discard_unclaimed(&host, &thread).await;
                 return Err((
                     StatusCode::SERVICE_UNAVAILABLE,
