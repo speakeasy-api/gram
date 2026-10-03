@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -162,4 +163,14 @@ func exerciseInvocationCredentials(t *testing.T, db *pgxpool.Pool, core *Service
 	after, err := q.ListPrincipalRemoteSessionBindings(ctx, bindingParams)
 	require.NoError(t, err)
 	require.Equal(t, before, after, "sequential and concurrent human invocations must not replace the agent's shared binding")
+	_, err = adminrepo.New(db).AdminDisableOrganization(ctx, assistant.OrganizationID)
+	require.NoError(t, err)
+	_, err = resolve("user-1")
+	require.Error(t, err, "disabled organization cannot release a delegated credential")
+	_, err = adminrepo.New(db).AdminEnableOrganization(ctx, assistant.OrganizationID)
+	require.NoError(t, err)
+	tokens, err = resolve("user-1")
+	require.NoError(t, err)
+	require.Equal(t, "private-user-1", tokens[upstream.ID].Token)
+
 }

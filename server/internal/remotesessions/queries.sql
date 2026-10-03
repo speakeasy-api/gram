@@ -4929,6 +4929,9 @@ JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND NOT i.del
 JOIN user_session_issuers u ON u.id = s.user_session_issuer_id AND NOT u.deleted
 JOIN remote_session_client_user_session_issuers link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = u.id
 JOIN projects p ON p.id = @project_id AND p.organization_id = @organization_id AND NOT p.deleted
+JOIN organization_metadata org ON org.id = p.organization_id AND org.disabled_at IS NULL
+JOIN users person ON s.subject_urn = 'user:' || person.id AND person.deleted_at IS NULL AND person.workos_deleted_at IS NULL
+JOIN organization_user_relationships membership ON membership.organization_id = p.organization_id AND membership.user_id = person.id AND NOT membership.deleted AND membership.deleted_at IS NULL
 WHERE s.subject_urn = @subject_urn AND s.remote_session_client_id = @remote_session_client_id
  AND s.user_session_issuer_id = @user_session_issuer_id AND NOT s.deleted
  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))

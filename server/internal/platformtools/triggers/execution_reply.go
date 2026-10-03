@@ -3,6 +3,7 @@ package triggers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
@@ -26,11 +27,11 @@ func (t *ExecutionDeniedReply) Call(ctx context.Context, _ toolconfig.ToolCallEn
 	var args struct{}
 	decoder := json.NewDecoder(input)
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&args); err != nil {
+	if err := decoder.Decode(&args); err != nil && !errors.Is(err, io.EOF) {
 		return fmt.Errorf("decode denial reply: %w", err)
 	}
 	if err := t.notifier.NotifyAssistantExecutionDenied(ctx); err != nil {
-		return fmt.Errorf("notify execution denial: %w", err)
+		return fmt.Errorf("assistant refusal delivery unavailable")
 	}
 	if _, err := io.WriteString(output, `{"sent":true}`); err != nil {
 		return fmt.Errorf("write denial reply: %w", err)
