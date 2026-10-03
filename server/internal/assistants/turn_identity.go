@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 )
@@ -92,6 +93,23 @@ func (s *ServiceCore) turnUserID(ctx context.Context, assistant assistantRecord,
 	}
 	if !active {
 		return "", fmt.Errorf("turn user is not an active organization member")
+	}
+	// Resolve the selected identity's current grants, never the transport actor's
+	// grants. Trusted event provenance establishes identity, not project access.
+	principals, err := authz.ResolveUserPrincipals(ctx, s.db, assistant.OrganizationID, user)
+	if err != nil {
+		return "", fmt.Errorf("resolve turn user principals: %w", err)
+	}
+	grants, err := authz.LoadGrants(ctx, s.db, assistant.OrganizationID, principals)
+	if err != nil {
+		return "", fmt.Errorf("load turn user grants: %w", err)
+	}
+	allowed, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: assistant.ProjectID.String(), Dimensions: nil})
+	if err != nil {
+		return "", fmt.Errorf("check turn user project access: %w", err)
+	}
+	if !allowed {
+		return "", fmt.Errorf("turn user does not have access to assistant project")
 	}
 	return user, nil
 }

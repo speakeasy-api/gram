@@ -34,6 +34,7 @@ func insertDashboardAssistantFixture(t *testing.T, conn *pgxpool.Pool, dbName st
 		OrganizationID: "org-test",
 	})
 	require.NoError(t, err)
+	seedTurnProjectAccess(t, conn, "org-test", interruptTestUserID, proj.ID)
 
 	assistant, err := assistantsrepo.New(conn).CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{
 		ProjectID:       proj.ID,

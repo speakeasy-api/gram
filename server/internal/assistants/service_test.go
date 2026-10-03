@@ -837,6 +837,7 @@ func insertAssistantFixture(t *testing.T, conn *pgxpool.Pool) (projectID, assist
 		OrganizationID: "org-test",
 	})
 	require.NoError(t, err)
+	seedTurnProjectAccess(t, conn, "org-test", "fixture-owner", proj.ID)
 
 	assistant, err := assistantsrepo.New(conn).CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{
 		ProjectID:       proj.ID,
