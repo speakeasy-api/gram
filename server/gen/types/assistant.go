@@ -20,6 +20,9 @@ type Assistant struct {
 	IdentityState *string
 	// The dedicated agent ID for an active identity binding.
 	AgentID *string
+	// Detail-only identity health and rollout information. Configuration is not
+	// permission or consent.
+	IdentityDiagnostics *AssistantIdentityDiagnostics
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64
 	// The assistant name.

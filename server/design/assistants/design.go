@@ -83,7 +83,7 @@ var _ = Service("assistants", func() {
 	})
 
 	Method("upgradeAssistantIdentity", func() {
-		Description("Explicitly upgrade a legacy assistant to a dedicated agent and stable trigger workload identities. Existing assistants are never upgraded implicitly.")
+		Description("Explicitly upgrade one legacy assistant or repair missing live trigger bindings for its existing identity. Requires authorized project write access and enabled provisioning. Idempotent; never widens existing policy or restores revoked identities. Existing assistants are never upgraded implicitly.")
 		Payload(func() {
 			Attribute("id", String, "The assistant ID.", func() { Format(FormatUUID) })
 			Required("id")

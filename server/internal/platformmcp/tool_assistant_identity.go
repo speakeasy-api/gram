@@ -30,11 +30,12 @@ type UpgradeAssistantIdentityInput struct {
 }
 
 type UpgradeAssistantIdentityOutput struct {
-	ProjectID          string  `json:"project_id"`
-	AssistantID        string  `json:"assistant_id"`
-	IdentityState      *string `json:"identity_state,omitempty"`
-	AgentID            *string `json:"agent_id,omitempty"`
-	IdentityGeneration *int64  `json:"identity_generation,omitempty"`
+	ProjectID          string                              `json:"project_id"`
+	AssistantID        string                              `json:"assistant_id"`
+	IdentityState      *string                             `json:"identity_state,omitempty"`
+	AgentID            *string                             `json:"agent_id,omitempty"`
+	IdentityGeneration *int64                              `json:"identity_generation,omitempty"`
+	Diagnostics        *types.AssistantIdentityDiagnostics `json:"diagnostics,omitempty"`
 }
 
 type assistantIdentityService struct {
@@ -82,15 +83,16 @@ func (s *assistantIdentityService) upgrade(ctx context.Context, principal Princi
 	if assistant == nil || assistant.ID != assistantID.String() || assistant.ProjectID != projectID.String() {
 		return zero, ErrUnavailable
 	}
-	return UpgradeAssistantIdentityOutput{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, IdentityState: assistant.IdentityState, AgentID: assistant.AgentID, IdentityGeneration: assistant.IdentityGeneration}, nil
+	return UpgradeAssistantIdentityOutput{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, IdentityState: assistant.IdentityState, AgentID: assistant.AgentID, IdentityGeneration: assistant.IdentityGeneration, Diagnostics: assistant.IdentityDiagnostics}, nil
 }
 
 func registerAssistantIdentityTool(reg *Registrar, service *assistantIdentityService) {
+	registerAssistantIdentityInspectionTool(reg, service)
 	addTool(reg, &mcp.Tool{
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Name:        upgradeAssistantIdentityToolName,
 		Title:       "Upgrade Assistant Workload Identity",
-		Description: "Explicitly upgrade one legacy assistant in an exact project to a dedicated agent and stable workload identity bindings. Ask the user to confirm the exact project and assistant before setting confirmed: true. Requires organization administrator access and the same project:write and ordinary actor authorization as the dashboard. Repeating an already active upgrade is safe; tombstoned identities cannot be restored. Returns only identity configuration state, never credentials, instructions, bindings, or policy. ACTIVE does not prove execution permission or runtime readiness.",
+		Description: "Explicitly upgrade one legacy assistant, or repair missing live trigger roots for an active identity, in an exact project. Provisioning rollout must be enabled. Ask the user to confirm the exact project and assistant before setting confirmed: true. Requires organization administrator access and the same project:write and ordinary actor authorization as the dashboard. Repeating an already active upgrade is safe and does not widen permissions; suspended or revoked authority must be managed through existing agent/workload controls; tombstoned identities cannot be restored. Returns only identity configuration state, never credentials, instructions, or policy contents. ACTIVE does not prove execution permission or runtime readiness.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: nil, ReadOnlyHint: false, Title: ""},
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: nil}, func(ctx context.Context, _ *mcp.CallToolRequest, input UpgradeAssistantIdentityInput) (*mcp.CallToolResult, UpgradeAssistantIdentityOutput, error) {
 		return principalToolCall(ctx, assistantIdentityToolResult, func(principal Principal) (UpgradeAssistantIdentityOutput, error) {

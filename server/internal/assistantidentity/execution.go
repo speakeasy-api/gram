@@ -85,6 +85,9 @@ func (e Execution) Check() error {
 // ValidateExecution intentionally bypasses the legacy token revocation cache.
 // Passing this check establishes identity only, not model/tool authorization.
 func (s *Service) ValidateExecution(ctx context.Context, db DB, e Execution) error {
+	if err := s.CheckRollout(e); err != nil {
+		return err
+	}
 	if err := e.Check(); err != nil {
 		return err
 	}

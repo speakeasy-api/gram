@@ -9,6 +9,10 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  AssistantIdentityDiagnostics,
+  AssistantIdentityDiagnostics$inboundSchema,
+} from "./assistantidentitydiagnostics.js";
+import {
   AssistantMCPServerRef,
   AssistantMCPServerRef$inboundSchema,
 } from "./assistantmcpserverref.js";
@@ -63,6 +67,10 @@ export type Assistant = {
    * The assistant ID.
    */
   id: string;
+  /**
+   * Safe workload configuration diagnostics, not a permission or OAuth consent decision. Shared by the dashboard and Platform MCP.
+   */
+  identityDiagnostics?: AssistantIdentityDiagnostics | undefined;
   /**
    * The current or last retained assistant identity binding generation.
    */
@@ -137,6 +145,9 @@ export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
       ),
       created_by_user_id: z.optional(z.string()),
       id: z.string(),
+      identity_diagnostics: z.optional(
+        AssistantIdentityDiagnostics$inboundSchema,
+      ),
       identity_generation: z.optional(z.int()),
       identity_state: z.optional(IdentityState$inboundSchema),
       instructions: z.string(),
@@ -159,6 +170,7 @@ export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
         "agent_id": "agentId",
         "created_at": "createdAt",
         "created_by_user_id": "createdByUserId",
+        "identity_diagnostics": "identityDiagnostics",
         "identity_generation": "identityGeneration",
         "identity_state": "identityState",
         "max_concurrency": "maxConcurrency",

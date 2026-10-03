@@ -70,7 +70,8 @@ func TestExecutionAuthorizationLivePolicyAndPlatformIsolation(t *testing.T) {
 	putExecutionTestGrant(t, db, urn.NewPrincipal(urn.PrincipalTypeUser, "user-2"), businessGrant)
 	engine := authz.NewEngine(testenv.NewLogger(t), db, authztest.ChallengeLoggingAlwaysDisabled, nil, authz.EngineOpts{AdmitWorkloadSession: runtimepolicy.AdmitWorkloadSession})
 	manager := assistanttokens.New("test-secret", db, engine)
-	manager.ConfigureExecutionIdentity(executionTestIssuer(t), testIdentityService)
+	signer := executionTestIssuer(t)
+	manager.ConfigureExecutionIdentity(signer, testIdentityService)
 	core.assistantTokens = manager
 	putExecutionTestGrant(t, db, urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"), businessGrant)
 	exerciseInvocationCredentials(t, db, core, manager, assistant, root, thread, server)
@@ -91,6 +92,17 @@ func TestExecutionAuthorizationLivePolicyAndPlatformIsolation(t *testing.T) {
 			require.NotNil(t, dispatched.Load())
 			token := *dispatched.Load()
 			require.True(t, assistanttokens.IsExecutionToken(token), "bound production turn must never mint an owner token")
+			// Rollback stops bound issuance/use without deleting identities, inventing
+			// an execute grant, or substituting the legacy user token path.
+			stopped, gateErr := assistantidentity.New(testIdentityService.Issuer(), false, assistantidentity.Rollout{DisableExecution: true})
+			require.NoError(t, gateErr)
+			manager.ConfigureExecutionIdentity(signer, stopped)
+			_, gateErr = manager.GenerateExecution(t.Context(), *execution)
+			require.ErrorIs(t, gateErr, assistantidentity.ErrRolloutDisabled)
+			_, _, gateErr = manager.AuthorizeRuntime(t.Context(), token)
+			require.Error(t, gateErr)
+			manager.ConfigureExecutionIdentity(signer, testIdentityService)
+
 			ctx, claims, err := manager.AuthorizeRuntime(t.Context(), "Bearer "+token)
 			require.NoError(t, err)
 			require.Empty(t, claims.UserID)

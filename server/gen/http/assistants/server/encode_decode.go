@@ -2206,6 +2206,9 @@ func marshalTypesAssistantToAssistantResponseBody(v *types.Assistant) *Assistant
 		CreatedAt:          v.CreatedAt,
 		UpdatedAt:          v.UpdatedAt,
 	}
+	if v.IdentityDiagnostics != nil {
+		res.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(v.IdentityDiagnostics)
+	}
 	if v.Toolsets != nil {
 		res.Toolsets = make([]*AssistantToolsetRefResponseBody, len(v.Toolsets))
 		for i, val := range v.Toolsets {
@@ -2241,6 +2244,56 @@ func marshalTypesAssistantToAssistantResponseBody(v *types.Assistant) *Assistant
 		}
 	} else {
 		res.Skills = []*AssistantSkillRefResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody
+// builds a value of type *AssistantIdentityDiagnosticsResponseBody from a
+// value of type *types.AssistantIdentityDiagnostics.
+func marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(v *types.AssistantIdentityDiagnostics) *AssistantIdentityDiagnosticsResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AssistantIdentityDiagnosticsResponseBody{
+		Health:                 v.Health,
+		ProvisioningEnabled:    v.ProvisioningEnabled,
+		ExecutionEnabled:       v.ExecutionEnabled,
+		SlackDelegationEnabled: v.SlackDelegationEnabled,
+		BindingsTruncated:      v.BindingsTruncated,
+		LastEventID:            v.LastEventID,
+		LastExecutionMode:      v.LastExecutionMode,
+		LastFallbackReason:     v.LastFallbackReason,
+		LastEventStatus:        v.LastEventStatus,
+		LastInitiatingUserID:   v.LastInitiatingUserID,
+	}
+	if v.Bindings != nil {
+		res.Bindings = make([]*AssistantIdentityBindingResponseBody, len(v.Bindings))
+		for i, val := range v.Bindings {
+			if val == nil {
+				res.Bindings[i] = nil
+				continue
+			}
+			res.Bindings[i] = marshalTypesAssistantIdentityBindingToAssistantIdentityBindingResponseBody(val)
+		}
+	} else {
+		res.Bindings = []*AssistantIdentityBindingResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTypesAssistantIdentityBindingToAssistantIdentityBindingResponseBody
+// builds a value of type *AssistantIdentityBindingResponseBody from a value of
+// type *types.AssistantIdentityBinding.
+func marshalTypesAssistantIdentityBindingToAssistantIdentityBindingResponseBody(v *types.AssistantIdentityBinding) *AssistantIdentityBindingResponseBody {
+	res := &AssistantIdentityBindingResponseBody{
+		TriggerID:     v.TriggerID,
+		TriggerKind:   v.TriggerKind,
+		TriggerStatus: v.TriggerStatus,
+		State:         v.State,
+		Generation:    v.Generation,
 	}
 
 	return res

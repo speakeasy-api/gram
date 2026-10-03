@@ -866,6 +866,8 @@ trackedFiles:
   src/models/components/archiveskillrequestbody.ts: {}
   src/models/components/asset.ts: {}
   src/models/components/assistant.ts: {}
+  src/models/components/assistantidentitybinding.ts: {}
+  src/models/components/assistantidentitydiagnostics.ts: {}
   src/models/components/assistantmcpserverref.ts: {}
   src/models/components/assistantmemory.ts: {}
   src/models/components/assistantsessionsummary.ts: {}

@@ -32,6 +32,9 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (
 	if s == nil {
 		return Binding{}, ErrInvalidIdentity
 	}
+	if s.rollout.DisableProvisioning {
+		return Binding{}, ErrProvisioningDisabled
+	}
 	q := repo.New(tx)
 	if p.ActorUserID == "" || p.ActorUserID == urn.AllUsersPrincipalID {
 		return Binding{}, ErrActorIneligible

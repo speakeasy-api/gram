@@ -115,6 +115,9 @@ type GetAssistantResponseBody struct {
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
 	// The dedicated agent ID for an active identity binding.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Detail-only identity health and rollout information. Configuration is not
+	// permission or consent.
+	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -155,6 +158,9 @@ type CreateAssistantResponseBody struct {
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
 	// The dedicated agent ID for an active identity binding.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Detail-only identity health and rollout information. Configuration is not
+	// permission or consent.
+	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -195,6 +201,9 @@ type UpgradeAssistantIdentityResponseBody struct {
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
 	// The dedicated agent ID for an active identity binding.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Detail-only identity health and rollout information. Configuration is not
+	// permission or consent.
+	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -235,6 +244,9 @@ type UpdateAssistantResponseBody struct {
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
 	// The dedicated agent ID for an active identity binding.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Detail-only identity health and rollout information. Configuration is not
+	// permission or consent.
+	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -300,6 +312,9 @@ type GetManagedAssistantResponseBody struct {
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
 	// The dedicated agent ID for an active identity binding.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Detail-only identity health and rollout information. Configuration is not
+	// permission or consent.
+	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -340,6 +355,9 @@ type EnsureManagedAssistantResponseBody struct {
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
 	// The dedicated agent ID for an active identity binding.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Detail-only identity health and rollout information. Configuration is not
+	// permission or consent.
+	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -2239,6 +2257,9 @@ type AssistantResponseBody struct {
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
 	// The dedicated agent ID for an active identity binding.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Detail-only identity health and rollout information. Configuration is not
+	// permission or consent.
+	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -2263,6 +2284,51 @@ type AssistantResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// Last update timestamp.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// AssistantIdentityDiagnosticsResponseBody is used to define fields on
+// response body types.
+type AssistantIdentityDiagnosticsResponseBody struct {
+	// legacy, ready, suspended, or unavailable; ready only describes identity
+	// configuration.
+	Health string `json:"health"`
+	// Whether new identities and explicit upgrades are enabled on this serving
+	// tier.
+	ProvisioningEnabled bool `json:"provisioning_enabled"`
+	// Whether workload token issuance and use are enabled on this serving tier.
+	ExecutionEnabled bool `json:"execution_enabled"`
+	// Whether mapped Slack delegation is enabled on this serving tier.
+	SlackDelegationEnabled bool `json:"slack_delegation_enabled"`
+	// At most 100 current trigger roots, including roots without a binding.
+	Bindings []*AssistantIdentityBindingResponseBody `json:"bindings"`
+	// More roots exist than are returned.
+	BindingsTruncated bool `json:"bindings_truncated"`
+	// Most recent persisted event ID; not a token.
+	LastEventID *string `json:"last_event_id,omitempty"`
+	// Captured mode of the most recent event, or legacy. Not a prediction for the
+	// next message.
+	LastExecutionMode *string `json:"last_execution_mode,omitempty"`
+	// Bounded reason for autonomous execution when no delegating user was resolved.
+	LastFallbackReason *string `json:"last_fallback_reason,omitempty"`
+	// Persisted processing status, not a tool permission or consent verdict.
+	LastEventStatus *string `json:"last_event_status,omitempty"`
+	// Selected human delegator, absent for autonomous work; never the acting agent.
+	LastInitiatingUserID *string `json:"last_initiating_user_id,omitempty"`
+}
+
+// AssistantIdentityBindingResponseBody is used to define fields on response
+// body types.
+type AssistantIdentityBindingResponseBody struct {
+	// Exact trigger root ID.
+	TriggerID string `json:"trigger_id"`
+	// Trigger definition slug.
+	TriggerKind string `json:"trigger_kind"`
+	// Current trigger status.
+	TriggerStatus string `json:"trigger_status"`
+	// ready, missing, or unavailable. Never interprets missing authority as legacy.
+	State string `json:"state"`
+	// Retained workload binding generation, zero if never configured.
+	Generation int64 `json:"generation"`
 }
 
 // AssistantToolsetRefResponseBody is used to define fields on response body
@@ -2369,6 +2435,9 @@ func NewGetAssistantResponseBody(res *types.Assistant) *GetAssistantResponseBody
 		CreatedAt:          res.CreatedAt,
 		UpdatedAt:          res.UpdatedAt,
 	}
+	if res.IdentityDiagnostics != nil {
+		body.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(res.IdentityDiagnostics)
+	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
 		for i, val := range res.Toolsets {
@@ -2426,6 +2495,9 @@ func NewCreateAssistantResponseBody(res *types.Assistant) *CreateAssistantRespon
 		Status:             res.Status,
 		CreatedAt:          res.CreatedAt,
 		UpdatedAt:          res.UpdatedAt,
+	}
+	if res.IdentityDiagnostics != nil {
+		body.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(res.IdentityDiagnostics)
 	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
@@ -2486,6 +2558,9 @@ func NewUpgradeAssistantIdentityResponseBody(res *types.Assistant) *UpgradeAssis
 		CreatedAt:          res.CreatedAt,
 		UpdatedAt:          res.UpdatedAt,
 	}
+	if res.IdentityDiagnostics != nil {
+		body.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(res.IdentityDiagnostics)
+	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
 		for i, val := range res.Toolsets {
@@ -2543,6 +2618,9 @@ func NewUpdateAssistantResponseBody(res *types.Assistant) *UpdateAssistantRespon
 		Status:             res.Status,
 		CreatedAt:          res.CreatedAt,
 		UpdatedAt:          res.UpdatedAt,
+	}
+	if res.IdentityDiagnostics != nil {
+		body.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(res.IdentityDiagnostics)
 	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
@@ -2624,6 +2702,9 @@ func NewGetManagedAssistantResponseBody(res *types.Assistant) *GetManagedAssista
 		CreatedAt:          res.CreatedAt,
 		UpdatedAt:          res.UpdatedAt,
 	}
+	if res.IdentityDiagnostics != nil {
+		body.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(res.IdentityDiagnostics)
+	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
 		for i, val := range res.Toolsets {
@@ -2681,6 +2762,9 @@ func NewEnsureManagedAssistantResponseBody(res *types.Assistant) *EnsureManagedA
 		Status:             res.Status,
 		CreatedAt:          res.CreatedAt,
 		UpdatedAt:          res.UpdatedAt,
+	}
+	if res.IdentityDiagnostics != nil {
+		body.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(res.IdentityDiagnostics)
 	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))

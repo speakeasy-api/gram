@@ -21,6 +21,7 @@ import { Loader2 } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useState } from "react";
 import { AssistantMCPServersSection } from "./AssistantMCPServersSection";
+import { AssistantIdentitySettings } from "./AssistantIdentitySettings";
 import { AssistantOverviewSettings } from "./AssistantOverviewSettings";
 import { AssistantSkillsSection } from "./AssistantSkillsSection";
 import { AssistantTriggersList } from "./AssistantTriggersList";
@@ -142,6 +143,11 @@ export function AssistantDraftPanel(): JSX.Element {
           >
             <Stack gap={5}>
               <AssistantOverviewSettings
+                assistant={a}
+                onUpdated={() => void draft.refetchAssistant()}
+              />
+
+              <AssistantIdentitySettings
                 assistant={a}
                 onUpdated={() => void draft.refetchAssistant()}
               />

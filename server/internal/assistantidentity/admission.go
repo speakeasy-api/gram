@@ -13,6 +13,9 @@ import (
 // requires no new capability grant. Business operations separately intersect the
 // saved ceiling with current authority at their resource-specific boundaries.
 func (s *Service) AdmitModel(ctx context.Context, db DB, e Execution) error {
+	if err := s.CheckRollout(e); err != nil {
+		return err
+	}
 	if err := e.Check(); err != nil {
 		return fmt.Errorf("assistant execution admission: %w", err)
 	}
