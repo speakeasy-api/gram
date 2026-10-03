@@ -434,5 +434,9 @@ func combineUpstreamVerdict(verdict remotesessions.ValidationOutcome, reason str
 	if verdict == remotesessions.ValidationOutcomeValid || !upstream.Inactive {
 		return verdict, reason
 	}
-	return remotesessions.ValidationOutcomeInactive, "Inactive at " + issuer
+	return remotesessions.ValidationOutcomeInactive, inactiveReason(issuer)
+}
+
+func inactiveReason(issuer string) string {
+	return "Inactive at " + issuer
 }
