@@ -18,6 +18,7 @@ import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -114,6 +115,16 @@ function MCPOverview() {
     throwOnError: false,
     enabled: gatewaysEnabled,
   });
+  const {
+    data: endpointsResult,
+    isLoading: isLoadingEndpoints,
+    isFetching: isFetchingEndpoints,
+    isError: isEndpointsError,
+    refetch: refetchEndpoints,
+  } = useMcpEndpoints({ gramProject }, undefined, {
+    throwOnError: false,
+    enabled: gatewaysEnabled,
+  });
   // Plugin membership only drives the "Included in plugins" filter, so a failed
   // fetch degrades to an empty option list rather than breaking the listing.
   const { data: pluginsResult, refetch: refetchPlugins } = usePlugins(
@@ -130,7 +141,10 @@ function MCPOverview() {
     // invisible here until some other refetch happened to run.
     void refetchMembers();
     refetchReach();
-    if (gatewaysEnabled) void refetchGateways();
+    if (gatewaysEnabled) {
+      void refetchGateways();
+      void refetchEndpoints();
+    }
   };
   // Until AGE-1902 moves hosted rows here, this grid only renders mcp_servers-backed MCPs.
   const mcpServers = useMemo(
@@ -147,6 +161,19 @@ function MCPOverview() {
     () => gatewaysResult?.metaMcpServers ?? [],
     [gatewaysResult],
   );
+  const endpointsByGatewayId = useMemo(() => {
+    const grouped = new Map<
+      string,
+      NonNullable<typeof endpointsResult>["mcpEndpoints"]
+    >();
+    for (const endpoint of endpointsResult?.mcpEndpoints ?? []) {
+      if (!endpoint.metaMcpServerId) continue;
+      const endpoints = grouped.get(endpoint.metaMcpServerId) ?? [];
+      endpoints.push(endpoint);
+      grouped.set(endpoint.metaMcpServerId, endpoints);
+    }
+    return grouped;
+  }, [endpointsResult]);
 
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useViewMode();
@@ -180,10 +207,15 @@ function MCPOverview() {
     toolsets.isLoading ||
     isLoadingMcpServers ||
     isLoadingGateways ||
+    isLoadingEndpoints ||
     isLoadingReach;
 
   const hasRefreshError =
-    toolsets.isError || isMcpServersError || isGatewaysError || isReachError;
+    toolsets.isError ||
+    isMcpServersError ||
+    isGatewaysError ||
+    isEndpointsError ||
+    isReachError;
 
   // A failed reach read with the filter on leaves every row excluded for a
   // reason that is not the filter's answer, so the listing says so outright
@@ -204,6 +236,7 @@ function MCPOverview() {
   const isRefreshing =
     isFetchingMcpServers ||
     isFetchingGateways ||
+    isFetchingEndpoints ||
     toolsets.isFetching ||
     isFetchingMembers ||
     isFetchingReach;
@@ -436,7 +469,11 @@ function MCPOverview() {
             ) : (
               <>
                 {filteredGateways.map((gateway) => (
-                  <GatewayTableRow key={gateway.id} gateway={gateway} />
+                  <GatewayTableRow
+                    key={gateway.id}
+                    gateway={gateway}
+                    endpoints={endpointsByGatewayId.get(gateway.id) ?? []}
+                  />
                 ))}
                 {filteredToolsets.map((toolset) => (
                   <MCPTableRow key={toolset.id} toolset={toolset} />

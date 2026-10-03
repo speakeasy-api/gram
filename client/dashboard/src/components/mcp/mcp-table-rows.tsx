@@ -3,10 +3,11 @@ import { Badge } from "@/components/ui/Badge";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { DotRow } from "@/components/ui/DotRow";
 import { Text } from "@/components/ui/Text";
-import { useMcpUrl } from "@/hooks/useToolsetUrl";
+import { useMcpEndpointUrl, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
@@ -163,11 +164,19 @@ export function MCPTableRow({
 /** A Gateway Endpoint: a meta MCP server fronting member servers. */
 export function GatewayTableRow({
   gateway,
+  endpoints,
 }: {
   gateway: MetaMcpServer;
+  endpoints: McpEndpoint[];
 }): JSX.Element {
   const routes = useRoutes();
   const memberCount = gateway.memberCount ?? 0;
+  const endpoint = useMemo(
+    () =>
+      endpoints.find((candidate) => candidate.customDomainId) ?? endpoints[0],
+    [endpoints],
+  );
+  const { mcpUrl } = useMcpEndpointUrl(endpoint);
   return (
     <DotRow
       href={routes.mcp.gateway.overview.href(gateway.id)}
@@ -178,12 +187,27 @@ export function GatewayTableRow({
       <td className={CELL}>
         <Badge variant="neutral">Gateway</Badge>
       </td>
-      {/* A gateway's address is minted per endpoint, not per gateway, so
-          there is nothing to show at the listing level. */}
-      <td className={CELL}>
-        <Text small muted>
-          —
-        </Text>
+      <td className={`max-w-xs ${CELL}`}>
+        {mcpUrl ? (
+          <div
+            className="relative z-20 flex items-center gap-1.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Text small muted className="truncate font-mono text-xs">
+              {mcpUrl.replace(/^https?:\/\//, "")}
+            </Text>
+            <CopyButton
+              text={mcpUrl}
+              size="sm"
+              icon={Link2}
+              tooltip="Copy MCP URL"
+            />
+          </div>
+        ) : (
+          <Text small muted>
+            —
+          </Text>
+        )}
       </td>
       <td className={CELL}>
         <Text small muted>
