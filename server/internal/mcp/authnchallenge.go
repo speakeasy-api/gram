@@ -921,6 +921,7 @@ func (s *Service) authenticateIssuerGate(
 		if execution, ok := assistanttokens.BusinessExecution(executionCtx); ok && execution.HumanUserID != "" {
 			selected = urn.NewUserSubject(execution.HumanUserID)
 		}
+		executionCtx = contextvalues.WithAssistantBusinessResource(executionCtx, endpoint.UpstreamResource)
 		newCtx, subject = s.identityValidator.StampAssistant(executionCtx), &selected
 	}
 	if subject == nil {

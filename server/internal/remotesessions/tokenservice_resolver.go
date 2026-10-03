@@ -49,6 +49,10 @@ func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, proje
 		if e.ProjectID != projectID || e.OrganizationID != organizationID || caller.Kind != urn.SessionSubjectKindUser || caller.ID != e.UserID {
 			return zero, ErrInvalidAuthorizationRequest
 		}
+		if e.Resource == "" || (resource != "" && resource != e.Resource) {
+			return zero, nil
+		}
+		resource = e.Resource
 		if err := e.Revalidate(); err != nil {
 			return zero, fmt.Errorf("revalidate invocation authority: %w", err)
 		}
@@ -62,7 +66,7 @@ func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, proje
 			return zero, fmt.Errorf("select invocation credential: %w", err)
 		}
 		// Legacy unbound grants cannot establish the credential's target resource.
-		if !selected.Resource.Valid || selected.Resource.String == "" || (resource != "" && selected.Resource.String != resource) {
+		if !selected.Resource.Valid || selected.Resource.String != resource {
 			return zero, nil
 		}
 		resolved, err := m.resolveCredentialToken(ctx, selected, resource)

@@ -25,13 +25,26 @@ type AssistantBusinessInvocation struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
 	UserID         string
+	Resource       string
 	revalidate     func() error
 }
 type assistantBusinessInvocationKey struct{}
 
 func WithAssistantBusinessInvocation(ctx context.Context, org string, project uuid.UUID, user string, revalidate func() error) context.Context {
-	return context.WithValue(ctx, assistantBusinessInvocationKey{}, AssistantBusinessInvocation{OrganizationID: org, ProjectID: project, UserID: user, revalidate: revalidate})
+	return context.WithValue(ctx, assistantBusinessInvocationKey{}, AssistantBusinessInvocation{OrganizationID: org, ProjectID: project, UserID: user, Resource: "", revalidate: revalidate})
 }
+
+// WithAssistantBusinessResource pins the server-resolved upstream resource for
+// this authorized MCP route. An unqualified route cannot select human tokens.
+func WithAssistantBusinessResource(ctx context.Context, resource string) context.Context {
+	invocation, ok := AssistantBusinessInvocationFromContext(ctx)
+	if !ok {
+		return ctx
+	}
+	invocation.Resource = resource
+	return context.WithValue(ctx, assistantBusinessInvocationKey{}, invocation)
+}
+
 func AssistantBusinessInvocationFromContext(ctx context.Context) (AssistantBusinessInvocation, bool) {
 	invocation, ok := ctx.Value(assistantBusinessInvocationKey{}).(AssistantBusinessInvocation)
 	return invocation, ok

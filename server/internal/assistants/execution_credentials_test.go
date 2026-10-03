@@ -71,6 +71,7 @@ func exerciseInvocationCredentials(t *testing.T, db *pgxpool.Pool, core *Service
 		require.NoError(t, err)
 		callers[user], err = manager.AuthorizeBusiness(ctx, token, resource, nil)
 		require.NoError(t, err)
+		callers[user] = contextvalues.WithAssistantBusinessResource(callers[user], "https://api.example/mcp")
 		encrypted, err := enc.Encrypt([]byte("private-" + user))
 		require.NoError(t, err)
 		_, err = q.UpsertRemoteSession(ctx, remoterepo.UpsertRemoteSessionParams{SubjectUrn: urn.NewUserSubject(user), UserSessionIssuerID: issuer.ID, RemoteSessionClientID: client.ID, AccessTokenEncrypted: encrypted, Scopes: []string{}, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Resource: conv.ToPGText("https://api.example/mcp")})
@@ -81,6 +82,11 @@ func exerciseInvocationCredentials(t *testing.T, db *pgxpool.Pool, core *Service
 	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remoterepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: otherIssuer.ID}))
 	_, err = sessions.ResolveAccessTokens(callers["user-2"], assistant.ProjectID, "org-test", otherIssuer.ID, urn.NewUserSubject("user-2"))
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "consent from another issuer must not supply delegated credentials")
+	for _, target := range []string{"", "https://other.example/mcp"} {
+		wrongResource := contextvalues.WithAssistantBusinessResource(callers["user-2"], target)
+		_, err := sessions.ResolveAccessTokens(wrongResource, assistant.ProjectID, "org-test", issuer.ID, urn.NewUserSubject("user-2"))
+		require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "empty-resource batch resolution must enforce the server-pinned upstream")
+	}
 	identity, err := testIdentityService.Resolve(ctx, db, assistant.OrganizationID, assistant.ProjectID, assistant.ID, root)
 	require.NoError(t, err)
 	ownerSession, err := q.GetActiveRemoteSession(ctx, remoterepo.GetActiveRemoteSessionParams{SubjectUrn: urn.NewUserSubject("user-1"), RemoteSessionClientID: client.ID})
