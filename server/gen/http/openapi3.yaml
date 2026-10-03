@@ -103088,7 +103088,6 @@ components:
                         - risk_policy:bypass
                         - chat:read
                         - chat:write
-                        - assistant:execute
                         - agent:read
                         - agent:write
                         - agent:authorize

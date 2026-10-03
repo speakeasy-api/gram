@@ -305,3 +305,43 @@ describe("member assignment under directory sync", () => {
     expect(screen.queryByText("Enrolled Person")).toBeNull();
   });
 });
+
+describe("exact assistant execution grants", () => {
+  const executionGrant = {
+    scope: "assistant:execute" as const,
+    selectors: [
+      {
+        resourceKind: "assistant" as const,
+        resourceId: "assistant-id",
+        projectId: "project-id",
+      },
+    ],
+  };
+  it("shows existing exact selectors and preserves them when saving unrelated edits", () => {
+    renderEditor({ ...role, grants: [executionGrant] });
+    expect(
+      screen.getByText("Assistant: assistant-id; project: project-id"),
+    ).toBeTruthy();
+    fireEvent.change(
+      screen.getByPlaceholderText("Describe what this role can do..."),
+      { target: { value: "Updated description" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    const form = mocks.update.mock.calls[0]![0].request.updateRoleForm;
+    expect(form.addGrants).toEqual([]);
+    expect(form.removeGrants).toEqual([]);
+  });
+  it("allows explicit removal without exposing an unrestricted replacement", () => {
+    renderEditor({ ...role, grants: [executionGrant] });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove assistant execution" }),
+    );
+    expect(
+      screen.queryByText("Assistant: assistant-id; project: project-id"),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    const form = mocks.update.mock.calls[0]![0].request.updateRoleForm;
+    expect(form.addGrants).toEqual([]);
+    expect(form.removeGrants).toEqual([executionGrant]);
+  });
+});

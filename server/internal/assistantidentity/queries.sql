@@ -206,6 +206,10 @@ ORDER BY s.id;
 INSERT INTO audit_logs (organization_id, project_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
 VALUES (@organization_id, @project_id, @actor_user_id, 'user', 'assistant:identity_provision', @assistant_id, 'assistant', @metadata);
 
+-- name: RecordExecutionUpgrade :exec
+INSERT INTO audit_logs (organization_id, project_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
+VALUES (@organization_id, @project_id, @actor_user_id, 'user', 'assistant:execution_upgrade', @assistant_id, 'assistant', @metadata);
+
 -- The following package-local fixtures exercise corrupted/hard-deleted states
 -- that public management APIs intentionally cannot produce.
 -- name: FixtureCreateOrganization :exec

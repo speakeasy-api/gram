@@ -41,3 +41,10 @@ func TestExecutionSelectorRequiresExactAssistantAndProject(t *testing.T) {
 	selector[SelectorKeyResourceID] = WildcardResource
 	require.Error(t, ValidateSelector(ScopeAssistantExecute, selector))
 }
+
+func TestRootCannotReplaceExactExecutionCapability(t *testing.T) {
+	t.Parallel()
+	allowed, err := GrantsAuthorize([]Grant{NewGrant(ScopeRoot, WildcardResource)}, AssistantExecuteCheck("assistant", "project"))
+	require.NoError(t, err)
+	require.False(t, allowed)
+}

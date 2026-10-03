@@ -13,6 +13,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -124,6 +126,10 @@ func TestExecutionAuthorizationLivePolicyAndPlatformIsolation(t *testing.T) {
 			deleteExecutionTestScope(t, db, principal, authz.ScopeAssistantExecute)
 			_, _, err = manager.AuthorizeRuntime(t.Context(), token)
 			require.Error(t, err, "model rechecks live policy")
+			_, err = manager.AuthorizeBusiness(t.Context(), token, server, nil)
+			require.Error(t, err, "execution revocation also stops business tools")
+			_, _, err = manager.AuthorizePlatform(t.Context(), token)
+			require.NoError(t, err, "assistant-owned reply remains independent")
 			putExecutionTestGrant(t, db, principal, assistantidentity.ExecutionGrant(assistant.ID, project))
 			_, _, err = manager.AuthorizeRuntime(t.Context(), token)
 			require.NoError(t, err)
@@ -181,6 +187,17 @@ func TestExecutionExistingBindingNeedsExplicitUpgrade(t *testing.T) {
 	_, err = core.UpgradeAssistantIdentity(t.Context(), "org-test", project, assistant.ID, "user-1")
 	require.NoError(t, err)
 	require.ErrorIs(t, testIdentityService.AdmitModel(t.Context(), db, *old), assistantidentity.ErrExecutionAdmissionRequired, "upgrade cannot widen previously captured ceiling")
+	_, err = core.UpgradeAssistantIdentity(t.Context(), "org-test", project, assistant.ID, "user-1")
+	require.NoError(t, err)
+	count, err := audittest.AuditLogCountByAction(t.Context(), db, audit.Action("assistant:execution_upgrade"))
+	require.NoError(t, err)
+	require.EqualValues(t, 1, count, "no-op retry must not claim another authority change")
+	event, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.Action("assistant:execution_upgrade"))
+	require.NoError(t, err)
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal(event.Metadata, &metadata))
+	require.Equal(t, "assistant:execute", metadata["capability"])
+
 	raw, err = core.captureExecution(t.Context(), assistant, sourceKindCron, thread, uuid.NullUUID{UUID: root, Valid: true}, "new-event", []byte(`{}`))
 	require.NoError(t, err)
 	fresh, err := decodeExecution(raw)

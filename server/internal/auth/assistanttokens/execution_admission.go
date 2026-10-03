@@ -102,6 +102,9 @@ func (m *Manager) AuthorizeBusiness(ctx context.Context, raw string, resource uu
 	if err != nil {
 		return ctx, fmt.Errorf("authorize assistant business execution: %w", err)
 	}
+	if err := m.authz.Require(ctx, authz.AssistantExecuteCheck(e.Identity.AssistantID.String(), e.Identity.ProjectID.String())); err != nil {
+		return ctx, fmt.Errorf("authorize business execution capability: %w", err)
+	}
 	// A trusted server hook may only intersect an additional policy. It cannot
 	// choose another principal, credential, resource or platform route.
 	if restriction != nil {

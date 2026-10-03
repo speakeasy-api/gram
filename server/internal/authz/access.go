@@ -73,6 +73,10 @@ func GrantsContainSelector(grants []Grant, scope Scope, selector Selector) bool 
 // Selector matching handles wildcard grants natively ({"resource_id":"*"}
 // matches any check), so we only need one entry per scope level.
 func (c Check) expand() []Check {
+	// Execution authority must be explicitly provisioned for this assistant.
+	if c.Scope == ScopeAssistantExecute {
+		return []Check{c}
+	}
 	checks := []Check{
 		{Scope: ScopeRoot, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch},
 		{Scope: c.Scope, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch},

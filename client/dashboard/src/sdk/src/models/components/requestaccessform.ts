@@ -26,7 +26,6 @@ export const RequestAccessFormScope = {
   RiskPolicyBypass: "risk_policy:bypass",
   ChatRead: "chat:read",
   ChatWrite: "chat:write",
-  AssistantExecute: "assistant:execute",
   AgentRead: "agent:read",
   AgentWrite: "agent:write",
   AgentAuthorize: "agent:authorize",

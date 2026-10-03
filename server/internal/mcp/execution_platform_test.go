@@ -83,7 +83,19 @@ func TestExecutionPlatformRoutePreservesManagedRestrictionsAfterBusinessDenial(t
 	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), rejected, token, ti.serverURL.String(), &wrong)
 	require.Error(t, err)
 	require.NotEmpty(t, rejected.Header().Get("WWW-Authenticate"))
-	_, err = ti.assistantTokens.AuthorizeBusiness(t.Context(), token, uuid.New(), nil)
+	meta := *endpoint
+	meta.MetaMcpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), token, ti.serverURL.String(), &meta)
+	require.Error(t, err, "shared gate must not resolve meta member credentials")
+	grants, err := accessrepo.New(ti.conn).ListPrincipalGrantsByOrg(t.Context(), accessrepo.ListPrincipalGrantsByOrgParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeAgent, resolution.Identity.AgentID.String()).String()})
+	require.NoError(t, err)
+	for _, grant := range grants {
+		if grant.Scope == string(authz.ScopeMCPConnect) {
+			_, err = accessrepo.New(ti.conn).DeletePrincipalGrant(t.Context(), accessrepo.DeletePrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, ID: grant.ID})
+			require.NoError(t, err)
+		}
+	}
+	_, err = ti.assistantTokens.AuthorizeBusiness(t.Context(), token, business, nil)
 	require.Error(t, err)
 	_, err = servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, toolsListBody(), token)
 	require.ErrorContains(t, err, "not found", "binding does not grant managed-assistant capabilities")

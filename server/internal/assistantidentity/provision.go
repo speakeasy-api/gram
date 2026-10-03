@@ -74,11 +74,15 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (
 				return Binding{}, err
 			}
 			if changed {
-				metadata, err := json.Marshal(provisioningMetadata{CreatorUserID: nullableString(assistant.CreatedByUserID.String, assistant.CreatedByUserID.Valid), ConsentUserID: p.ActorUserID, ProvisioningActorUserID: p.ActorUserID, AgentID: old.OriginalAgentID, Generation: old.Generation})
+				metadata, err := json.Marshal(struct {
+					provisioningMetadata
+					Capability authz.Scope    `json:"capability"`
+					Selector   authz.Selector `json:"selector"`
+				}{provisioningMetadata: provisioningMetadata{CreatorUserID: nullableString(assistant.CreatedByUserID.String, assistant.CreatedByUserID.Valid), ConsentUserID: p.ActorUserID, ProvisioningActorUserID: p.ActorUserID, AgentID: old.OriginalAgentID, Generation: old.Generation}, Capability: authz.ScopeAssistantExecute, Selector: ExecutionGrant(p.AssistantID, p.ProjectID).Selector})
 				if err != nil {
 					return Binding{}, fmt.Errorf("encode execution upgrade provenance: %w", err)
 				}
-				if err := q.RecordProvisioning(ctx, repo.RecordProvisioningParams{OrganizationID: p.OrganizationID, ProjectID: uuid.NullUUID{UUID: p.ProjectID, Valid: true}, ActorUserID: p.ActorUserID, AssistantID: p.AssistantID.String(), Metadata: metadata}); err != nil {
+				if err := q.RecordExecutionUpgrade(ctx, repo.RecordExecutionUpgradeParams{OrganizationID: p.OrganizationID, ProjectID: uuid.NullUUID{UUID: p.ProjectID, Valid: true}, ActorUserID: p.ActorUserID, AssistantID: p.AssistantID.String(), Metadata: metadata}); err != nil {
 					return Binding{}, fmt.Errorf("record execution upgrade: %w", err)
 				}
 			}

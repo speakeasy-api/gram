@@ -879,6 +879,11 @@ func (s *Service) authenticateIssuerGate(
 	refreshableUserSession := subject != nil && refreshable
 	if subject == nil && assistanttokens.IsExecutionToken(authToken) {
 		rejectExecution := func(err error) error {
+			var failure *oops.ShareableError
+			if !errors.As(err, &failure) || (failure.Code != oops.CodeForbidden && failure.Code != oops.CodeUnauthorized) {
+				endpoint.LogWith(s.logger).ErrorContext(ctx, "mcp execution admission unavailable", attr.SlogError(err))
+				return err
+			}
 			reason := issuerGateFailureReason(err)
 			var denied *oops.ShareableError
 			if errors.As(err, &denied) && denied.Code == oops.CodeForbidden {
@@ -888,6 +893,9 @@ func (s *Service) authenticateIssuerGate(
 			endpoint.LogWith(s.logger).WarnContext(ctx, "mcp issuer gate rejected execution credential", attr.SlogOAuthFailureReason(reason), attr.SlogError(err))
 			_ = WriteAuthenticateChallenge(w, protectedResourceURL, "expired or invalid access token")
 			return err
+		}
+		if endpoint.MetaMcpServerID.Valid {
+			return ctx, nil, nil, rejectExecution(oops.C(oops.CodeUnauthorized))
 		}
 		// First-party runtime admission is distinct from an MCP resource JWT.
 		// The server-resolved resource, live agent policy and saved ceiling all

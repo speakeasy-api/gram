@@ -1663,7 +1663,7 @@ var RequestAccessForm = Type("RequestAccessForm", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope being requested.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "assistant:execute", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest")
 	})
 	Attribute("resource_id", String, "Optional resource ID the scope applies to.")
 	Attribute("resource_name", String, "Optional human-readable name for the resource (e.g. project name, MCP server name).")

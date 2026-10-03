@@ -1117,6 +1117,30 @@ func (q *Queries) LockTrigger(ctx context.Context, arg LockTriggerParams) (LockT
 	return i, err
 }
 
+const recordExecutionUpgrade = `-- name: RecordExecutionUpgrade :exec
+INSERT INTO audit_logs (organization_id, project_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
+VALUES ($1, $2, $3, 'user', 'assistant:execution_upgrade', $4, 'assistant', $5)
+`
+
+type RecordExecutionUpgradeParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	ActorUserID    string
+	AssistantID    string
+	Metadata       []byte
+}
+
+func (q *Queries) RecordExecutionUpgrade(ctx context.Context, arg RecordExecutionUpgradeParams) error {
+	_, err := q.db.Exec(ctx, recordExecutionUpgrade,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ActorUserID,
+		arg.AssistantID,
+		arg.Metadata,
+	)
+	return err
+}
+
 const recordProvisioning = `-- name: RecordProvisioning :exec
 INSERT INTO audit_logs (organization_id, project_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
 VALUES ($1, $2, $3, 'user', 'assistant:identity_provision', $4, 'assistant', $5)
