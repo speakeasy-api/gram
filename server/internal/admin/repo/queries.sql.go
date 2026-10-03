@@ -320,6 +320,115 @@ func (q *Queries) AdminGetIssuerFixture(ctx context.Context, id uuid.UUID) (Admi
 	return i, err
 }
 
+const adminGetMcpServerAuth = `-- name: AdminGetMcpServerAuth :one
+SELECT
+    m.id,
+    COALESCE(m.name, t.name, m.slug, m.id::text)::text AS name,
+    FALSE AS toolset_only,
+    m.toolset_id,
+    m.remote_mcp_server_id,
+    m.tunneled_mcp_server_id,
+    m.visibility,
+    m.created_at,
+    m.user_session_issuer_id,
+    t.external_oauth_server_id,
+    t.oauth_proxy_server_id,
+    COALESCE((
+        SELECT e.slug FROM mcp_endpoints e
+        WHERE e.mcp_server_id = m.id AND e.deleted IS FALSE AND e.is_domain_root IS NOT TRUE
+        ORDER BY (e.custom_domain_id IS NULL), e.created_at, e.id
+        LIMIT 1
+    ), m.slug, CASE WHEN w.wrapper_count <= 1 THEN t.mcp_slug END, '')::text AS url_slug,
+    COALESCE(t.slug, '')::text AS toolset_slug,
+    w.wrapper_count AS toolset_wrapper_count
+FROM mcp_servers m
+LEFT JOIN toolsets t ON t.id = m.toolset_id AND t.project_id = m.project_id AND t.deleted IS FALSE
+CROSS JOIN LATERAL (
+    SELECT count(*)::bigint AS wrapper_count FROM mcp_servers o
+    WHERE o.toolset_id = m.toolset_id AND o.project_id = m.project_id AND o.deleted IS FALSE
+) w
+WHERE m.id = $1
+  AND m.project_id = $2
+  AND m.deleted IS FALSE
+UNION ALL
+SELECT
+    t.id,
+    t.name,
+    TRUE AS toolset_only,
+    t.id AS toolset_id,
+    NULL::uuid AS remote_mcp_server_id,
+    NULL::uuid AS tunneled_mcp_server_id,
+    CASE WHEN t.mcp_is_public THEN 'public' ELSE 'private' END AS visibility,
+    t.created_at,
+    t.user_session_issuer_id,
+    t.external_oauth_server_id,
+    t.oauth_proxy_server_id,
+    COALESCE(t.mcp_slug, '')::text AS url_slug,
+    t.slug AS toolset_slug,
+    0::bigint AS toolset_wrapper_count
+FROM toolsets t
+WHERE t.id = $1
+  AND t.project_id = $2
+  AND t.deleted IS FALSE
+  AND t.mcp_enabled IS TRUE
+  AND NOT EXISTS (SELECT 1 FROM mcp_servers m
+                   WHERE m.toolset_id = t.id AND m.deleted IS FALSE)
+`
+
+type AdminGetMcpServerAuthParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type AdminGetMcpServerAuthRow struct {
+	ID                    uuid.UUID
+	Name                  string
+	ToolsetOnly           bool
+	ToolsetID             uuid.NullUUID
+	RemoteMcpServerID     uuid.NullUUID
+	TunneledMcpServerID   uuid.NullUUID
+	Visibility            string
+	CreatedAt             pgtype.Timestamptz
+	UserSessionIssuerID   uuid.NullUUID
+	ExternalOauthServerID uuid.NullUUID
+	OauthProxyServerID    uuid.NullUUID
+	UrlSlug               string
+	ToolsetSlug           string
+	ToolsetWrapperCount   int64
+}
+
+// The server describeMcpServerHealth reports on, keyed on the mcp_servers id or,
+// for a toolset-only server, the toolset id. A toolset-backed wrapper takes its
+// issuer from its own row, not its toolset's, matching how the MCP endpoint
+// resolves it; the legacy OAuth columns live on the toolset only.
+// toolset_wrapper_count counts live wrappers of the toolset, so the caller can
+// drop a toolset slug that would also select another wrapper's calls.
+// url_slug is the slug in the /mcp/<slug> path clients call: the primary live
+// endpoint's (custom domain first, as mcpendpoints.PrimaryEndpoint ranks them;
+// a domain root has no such path), else the server's own slug, else the
+// toolset's mcp_slug when no other wrapper shares that toolset.
+func (q *Queries) AdminGetMcpServerAuth(ctx context.Context, arg AdminGetMcpServerAuthParams) (AdminGetMcpServerAuthRow, error) {
+	row := q.db.QueryRow(ctx, adminGetMcpServerAuth, arg.ID, arg.ProjectID)
+	var i AdminGetMcpServerAuthRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.ToolsetOnly,
+		&i.ToolsetID,
+		&i.RemoteMcpServerID,
+		&i.TunneledMcpServerID,
+		&i.Visibility,
+		&i.CreatedAt,
+		&i.UserSessionIssuerID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.UrlSlug,
+		&i.ToolsetSlug,
+		&i.ToolsetWrapperCount,
+	)
+	return i, err
+}
+
 const adminGetOrganization = `-- name: AdminGetOrganization :one
 SELECT
     om.id,
@@ -569,6 +678,173 @@ func (q *Queries) AdminGetProjectDetailByID(ctx context.Context, id uuid.UUID) (
 		&i.AssistantCount,
 	)
 	return i, err
+}
+
+const adminGetUserSessionIssuer = `-- name: AdminGetUserSessionIssuer :one
+SELECT
+    i.id,
+    i.slug,
+    i.classification,
+    i.authn_challenge_mode,
+    (EXTRACT(EPOCH FROM i.session_duration) / 3600)::bigint AS session_duration_hours,
+    i.attachment_scope,
+    i.client_id_metadata_admission_mode,
+    i.use_authentication_host,
+    i.trusted_remote_session_issuer_id,
+    i.trusted_remote_session_client_id,
+    i.created_at
+FROM user_session_issuers i
+WHERE i.id = $1
+  AND i.deleted IS FALSE
+  AND (i.project_id = $2::uuid
+       OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = $3::text)))
+`
+
+type AdminGetUserSessionIssuerParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type AdminGetUserSessionIssuerRow struct {
+	ID                            uuid.UUID
+	Slug                          string
+	Classification                string
+	AuthnChallengeMode            string
+	SessionDurationHours          int64
+	AttachmentScope               pgtype.Text
+	ClientIDMetadataAdmissionMode pgtype.Text
+	UseAuthenticationHost         bool
+	TrustedRemoteSessionIssuerID  uuid.NullUUID
+	TrustedRemoteSessionClientID  uuid.NullUUID
+	CreatedAt                     pgtype.Timestamptz
+}
+
+// The issuer a server in the project points at. It may be attached to the
+// project, the organization or the platform; one attached anywhere else is not
+// visible to the project and reads as absent.
+func (q *Queries) AdminGetUserSessionIssuer(ctx context.Context, arg AdminGetUserSessionIssuerParams) (AdminGetUserSessionIssuerRow, error) {
+	row := q.db.QueryRow(ctx, adminGetUserSessionIssuer, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var i AdminGetUserSessionIssuerRow
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Classification,
+		&i.AuthnChallengeMode,
+		&i.SessionDurationHours,
+		&i.AttachmentScope,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.UseAuthenticationHost,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const adminListIssuerRemoteSessionClients = `-- name: AdminListIssuerRemoteSessionClients :many
+SELECT
+    c.id,
+    (c.client_id_metadata_uri IS NOT NULL)::boolean AS is_cimd,
+    (c.client_id_issued_at IS NOT NULL)::boolean AS is_dcr,
+    c.token_endpoint_auth_method,
+    c.scope,
+    c.grant_types,
+    (c.identity_provider_connection_id IS NOT NULL)::boolean AS has_identity_provider_connection,
+    c.attachment_scope,
+    c.upstream_rejected_at,
+    r.id AS issuer_id,
+    r.slug AS issuer_slug,
+    r.name AS issuer_name,
+    r.issuer AS issuer_url,
+    r.attachment_scope AS issuer_attachment_scope,
+    (r.tunneled_mcp_server_id IS NOT NULL)::boolean AS issuer_tunneled,
+    r.oidc AS issuer_oidc,
+    r.passthrough AS issuer_passthrough,
+    r.code_challenge_methods_supported AS issuer_code_challenge_methods_supported,
+    r.client_id_metadata_document_supported AS issuer_cimd_supported,
+    r.scope_override AS issuer_scope_override,
+    r.metadata_fetched_at AS issuer_metadata_fetched_at,
+    r.metadata_last_error_at AS issuer_metadata_last_error_at,
+    r.jwks_last_error_at AS issuer_jwks_last_error_at
+FROM remote_session_client_user_session_issuers a
+JOIN remote_session_clients c ON c.id = a.remote_session_client_id AND c.deleted IS FALSE
+JOIN remote_session_issuers r ON r.id = c.remote_session_issuer_id AND r.deleted IS FALSE
+WHERE a.user_session_issuer_id = $1
+ORDER BY c.created_at, c.id
+`
+
+type AdminListIssuerRemoteSessionClientsRow struct {
+	ID                                  uuid.UUID
+	IsCimd                              bool
+	IsDcr                               bool
+	TokenEndpointAuthMethod             pgtype.Text
+	Scope                               []string
+	GrantTypes                          []string
+	HasIdentityProviderConnection       bool
+	AttachmentScope                     pgtype.Text
+	UpstreamRejectedAt                  pgtype.Timestamptz
+	IssuerID                            uuid.UUID
+	IssuerSlug                          string
+	IssuerName                          pgtype.Text
+	IssuerUrl                           string
+	IssuerAttachmentScope               pgtype.Text
+	IssuerTunneled                      bool
+	IssuerOidc                          bool
+	IssuerPassthrough                   bool
+	IssuerCodeChallengeMethodsSupported []string
+	IssuerCimdSupported                 bool
+	IssuerScopeOverride                 []string
+	IssuerMetadataFetchedAt             pgtype.Timestamptz
+	IssuerMetadataLastErrorAt           pgtype.Timestamptz
+	IssuerJwksLastErrorAt               pgtype.Timestamptz
+}
+
+// Live remote session clients attached to the issuer, with their upstream
+// issuer. Only the columns the health report exposes: no secrets, JWKS bodies
+// or error text.
+func (q *Queries) AdminListIssuerRemoteSessionClients(ctx context.Context, userSessionIssuerID uuid.UUID) ([]AdminListIssuerRemoteSessionClientsRow, error) {
+	rows, err := q.db.Query(ctx, adminListIssuerRemoteSessionClients, userSessionIssuerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListIssuerRemoteSessionClientsRow
+	for rows.Next() {
+		var i AdminListIssuerRemoteSessionClientsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.IsCimd,
+			&i.IsDcr,
+			&i.TokenEndpointAuthMethod,
+			&i.Scope,
+			&i.GrantTypes,
+			&i.HasIdentityProviderConnection,
+			&i.AttachmentScope,
+			&i.UpstreamRejectedAt,
+			&i.IssuerID,
+			&i.IssuerSlug,
+			&i.IssuerName,
+			&i.IssuerUrl,
+			&i.IssuerAttachmentScope,
+			&i.IssuerTunneled,
+			&i.IssuerOidc,
+			&i.IssuerPassthrough,
+			&i.IssuerCodeChallengeMethodsSupported,
+			&i.IssuerCimdSupported,
+			&i.IssuerScopeOverride,
+			&i.IssuerMetadataFetchedAt,
+			&i.IssuerMetadataLastErrorAt,
+			&i.IssuerJwksLastErrorAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const adminListObservedOktaApplicationNames = `-- name: AdminListObservedOktaApplicationNames :many
@@ -979,6 +1255,60 @@ func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrgan
 			&i.UpdatedAt,
 			&i.MemberCount,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListOtherServersUsingIssuer = `-- name: AdminListOtherServersUsingIssuer :many
+SELECT m.id, COALESCE(m.name, t.name, m.slug, m.id::text)::text AS name
+FROM mcp_servers m
+LEFT JOIN toolsets t ON t.id = m.toolset_id AND t.project_id = m.project_id AND t.deleted IS FALSE
+WHERE m.project_id = $1
+  AND m.user_session_issuer_id = $2::uuid
+  AND m.id <> $3
+  AND m.deleted IS FALSE
+UNION ALL
+SELECT t.id, t.name
+FROM toolsets t
+WHERE t.project_id = $1
+  AND t.user_session_issuer_id = $2
+  AND t.id <> $3
+  AND t.deleted IS FALSE
+  AND t.mcp_enabled IS TRUE
+  AND NOT EXISTS (SELECT 1 FROM mcp_servers w
+                   WHERE w.toolset_id = t.id AND w.deleted IS FALSE)
+ORDER BY name, id
+`
+
+type AdminListOtherServersUsingIssuerParams struct {
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	ExcludeID           uuid.UUID
+}
+
+type AdminListOtherServersUsingIssuerRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+// Live servers in the project, other than the one described, that share the
+// issuer: mcp_servers rows and toolset-only toolsets.
+func (q *Queries) AdminListOtherServersUsingIssuer(ctx context.Context, arg AdminListOtherServersUsingIssuerParams) ([]AdminListOtherServersUsingIssuerRow, error) {
+	rows, err := q.db.Query(ctx, adminListOtherServersUsingIssuer, arg.ProjectID, arg.UserSessionIssuerID, arg.ExcludeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListOtherServersUsingIssuerRow
+	for rows.Next() {
+		var i AdminListOtherServersUsingIssuerRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1461,6 +1791,94 @@ func (q *Queries) AdminProjectBelongsToOrganization(ctx context.Context, arg Adm
 	return exists, err
 }
 
+const adminRemoteSessionStats = `-- name: AdminRemoteSessionStats :many
+SELECT
+    remote_session_client_id,
+    count(DISTINCT subject_urn) FILTER (WHERE deleted IS FALSE)::bigint AS linked_subjects,
+    COALESCE(sum(grant_generation - 1), 0)::bigint AS reauthorizations,
+    min(created_at)::timestamptz AS first_linked_at
+FROM remote_sessions
+WHERE remote_session_client_id = ANY($1::uuid[])
+GROUP BY remote_session_client_id
+`
+
+type AdminRemoteSessionStatsRow struct {
+	RemoteSessionClientID uuid.UUID
+	LinkedSubjects        int64
+	Reauthorizations      int64
+	FirstLinkedAt         pgtype.Timestamptz
+}
+
+// Per client: distinct users with a live upstream session, fresh
+// authorizations beyond each session's first, and the first link. Keyed on
+// the client alone: a session is one per (subject, client), and its
+// user_session_issuer_id records only which issuer first linked it.
+func (q *Queries) AdminRemoteSessionStats(ctx context.Context, remoteSessionClientIds []uuid.UUID) ([]AdminRemoteSessionStatsRow, error) {
+	rows, err := q.db.Query(ctx, adminRemoteSessionStats, remoteSessionClientIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminRemoteSessionStatsRow
+	for rows.Next() {
+		var i AdminRemoteSessionStatsRow
+		if err := rows.Scan(
+			&i.RemoteSessionClientID,
+			&i.LinkedSubjects,
+			&i.Reauthorizations,
+			&i.FirstLinkedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminRemoteSessionValidationCounts = `-- name: AdminRemoteSessionValidationCounts :many
+SELECT
+    remote_session_client_id,
+    validation_status::text AS validation_status,
+    count(*)::bigint AS sessions
+FROM remote_sessions
+WHERE remote_session_client_id = ANY($1::uuid[])
+  AND deleted IS FALSE
+  AND validation_status IS NOT NULL
+GROUP BY remote_session_client_id, validation_status
+`
+
+type AdminRemoteSessionValidationCountsRow struct {
+	RemoteSessionClientID uuid.UUID
+	ValidationStatus      string
+	Sessions              int64
+}
+
+// Live sessions per client and last validation status. Sessions never
+// validated have a NULL status and are left out. Keyed on the client alone,
+// as AdminRemoteSessionStats is.
+func (q *Queries) AdminRemoteSessionValidationCounts(ctx context.Context, remoteSessionClientIds []uuid.UUID) ([]AdminRemoteSessionValidationCountsRow, error) {
+	rows, err := q.db.Query(ctx, adminRemoteSessionValidationCounts, remoteSessionClientIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminRemoteSessionValidationCountsRow
+	for rows.Next() {
+		var i AdminRemoteSessionValidationCountsRow
+		if err := rows.Scan(&i.RemoteSessionClientID, &i.ValidationStatus, &i.Sessions); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminResolveOrganizationID = `-- name: AdminResolveOrganizationID :one
 SELECT id
 FROM organization_metadata
@@ -1619,6 +2037,45 @@ type AdminUpdateOrganizationParams struct {
 func (q *Queries) AdminUpdateOrganization(ctx context.Context, arg AdminUpdateOrganizationParams) error {
 	_, err := q.db.Exec(ctx, adminUpdateOrganization, arg.AccountType, arg.Whitelisted, arg.ID)
 	return err
+}
+
+const adminUserSessionStats = `-- name: AdminUserSessionStats :one
+SELECT
+    count(DISTINCT subject_urn) FILTER (WHERE subject_urn LIKE 'user:%')::bigint AS distinct_subjects_ever,
+    count(DISTINCT subject_urn) FILTER (WHERE subject_urn LIKE 'user:%' AND created_at >= $1)::bigint AS distinct_subjects_in_window,
+    min(created_at)::timestamptz AS first_issued_at,
+    max(created_at)::timestamptz AS last_issued_at,
+    count(*) FILTER (WHERE deleted IS FALSE AND refresh_expires_at > clock_timestamp())::bigint AS live
+FROM user_sessions
+WHERE user_session_issuer_id = $2
+`
+
+type AdminUserSessionStatsParams struct {
+	WindowStart         pgtype.Timestamptz
+	UserSessionIssuerID uuid.UUID
+}
+
+type AdminUserSessionStatsRow struct {
+	DistinctSubjectsEver     int64
+	DistinctSubjectsInWindow int64
+	FirstIssuedAt            pgtype.Timestamptz
+	LastIssuedAt             pgtype.Timestamptz
+	Live                     int64
+}
+
+// A refresh soft-deletes a session row and inserts a new one, so
+// last_issued_at includes refreshes.
+func (q *Queries) AdminUserSessionStats(ctx context.Context, arg AdminUserSessionStatsParams) (AdminUserSessionStatsRow, error) {
+	row := q.db.QueryRow(ctx, adminUserSessionStats, arg.WindowStart, arg.UserSessionIssuerID)
+	var i AdminUserSessionStatsRow
+	err := row.Scan(
+		&i.DistinctSubjectsEver,
+		&i.DistinctSubjectsInWindow,
+		&i.FirstIssuedAt,
+		&i.LastIssuedAt,
+		&i.Live,
+	)
+	return i, err
 }
 
 const getProjectByID = `-- name: GetProjectByID :one

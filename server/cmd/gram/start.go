@@ -1177,7 +1177,7 @@ func newStartCommand() *cli.Command {
 				RAG: ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager,
 				ShadowMCP: shadowMCPClient, MCPRisk: mcpPolicyEvaluator, Audit: auditLogger, PlatformExtras: assistantPlatformExtras,
 				PlatformFeatureChecker: platformFeatureChecker, PlatformToolsets: platformToolsets,
-				Identity: identityResolver, Challenges: remoteChallengeManager,
+				Identity: identityResolver, Challenges: remoteChallengeManager, CallbackOrigins: callbackOrigins,
 			})
 			if err != nil {
 				return err
@@ -1198,6 +1198,7 @@ func newStartCommand() *cli.Command {
 			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
 			assistantsCore.SetFeatureProvider(featureFlags)
 			assistantsCore.SetSiteURL(siteURL)
+			assistantsCore.SetOutboundCallbackOrigin(callbackOrigins.Outbound)
 			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
@@ -1480,7 +1481,7 @@ func newStartCommand() *cli.Command {
 				metering.NewRiskRecorder(publishers.MeterReadings),
 			)
 			hooks.Attach(mux, hooksService)
-			anthropicinference.Attach(mux, logger, anthropicinference.NewService(logger, db, chatWriter, riskScanner), aiintegrations.NewAnthropicInferenceResolver(db, encryptionClient))
+			anthropicinference.Attach(mux, logger, anthropicinference.NewService(logger, meterProvider, db, chatWriter, riskScanner, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}), aiintegrations.NewAnthropicInferenceResolver(db, encryptionClient))
 			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, auditLogger, c.String("environment"))
 			litellm.Attach(mux, litellmService)
 			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
@@ -1637,7 +1638,15 @@ func newStartCommand() *cli.Command {
 			templates.Attach(mux, templates.NewService(logger, tracerProvider, db, sessionManager, toolsetsSvc, authzEngine, auditLogger))
 			assetsService := assets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, chatSessionsManager, assetStorage, c.String(usersessions.JWTSigningKeyFlag), authzEngine, auditLogger)
 			assets.Attach(mux, assetsService)
-			deploymentsService := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, authzEngine, auditLogger)
+			if err := externalmcp.EnsureNativeCatalogSource(ctx, db); err != nil {
+				return fmt.Errorf("ensure native catalog source: %w", err)
+			}
+			catalogValidator, err := mcpregistry.LoadValidator()
+			if err != nil {
+				return fmt.Errorf("catalog validator: %w", err)
+			}
+			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, catalogValidator)), featureFlags)
+			deploymentsService := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, authzEngine, auditLogger, mcpCatalog)
 			deployments.Attach(mux, deploymentsService)
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger, featureFlags))
 			// Hoisted so the services that authenticate as a customer's GCP identity
@@ -1740,7 +1749,7 @@ func newStartCommand() *cli.Command {
 					telemetryrepo.New(chDB),
 					remoteProber,
 					remoteProber,
-					mcpapprovalcatalog.New(logger, db, mcpRegistryClient),
+					mcpapprovalcatalog.New(logger, db, mcpCatalog),
 				),
 				func(ctx context.Context, run mcpapproval.ResearchRun) error {
 					_, err := background.ExecuteMcpResearchWorkflow(ctx, temporalEnv, activities.McpResearchInput{
@@ -1763,7 +1772,6 @@ func newStartCommand() *cli.Command {
 					return fmt.Errorf("registry discovery readiness: %w", err)
 				}
 			}
-			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, nil)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, mcpCatalog, authzEngine, callbackOrigins.ForNewClient(true)))
 			riskSignaler := background.NewThrottledSignaler(
 				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
@@ -1787,6 +1795,7 @@ func newStartCommand() *cli.Command {
 				Redis:                     redisClient,
 				ServerURL:                 serverURL,
 				CallbackOrigin:            callbackOrigins.ForNewClient(true),
+				OutboundCallbackOrigin:    callbackOrigins.Outbound,
 				DashboardURL:              siteURL,
 				Environment:               c.String("environment"),
 				JWTSigningKey:             c.String(usersessions.JWTSigningKeyFlag),
@@ -1819,8 +1828,10 @@ func newStartCommand() *cli.Command {
 				RiskFindings:              riskFindings,
 				RiskFindingList:           riskFindings,
 				RiskFalsePositiveFindings: riskFindings,
+				UserSearch:                telemetryrepo.New(chDB),
 				Telemetry:                 telemetryrepo.New(chDB),
 				ToolUsage:                 telemetryrepo.New(chDB),
+				ToolCallSearch:            telemetryrepo.New(chDB),
 				TelemetryDrilldown:        telemetryrepo.New(chDB),
 				WorkflowRun:               posthogClient,
 				CanonicalIdentity:         telemSvc,
@@ -2047,6 +2058,7 @@ func newStartCommand() *cli.Command {
 						FunctionsVersion:             runnerVersion,
 						RagService:                   ragService,
 						MCPRegistryClient:            mcpRegistryClient,
+						MCPCatalog:                   mcpCatalog,
 						TelemetryLogger:              telemLogger,
 						ClickhouseConn:               chDB,
 						MeterReadConn:                meterReadConn,

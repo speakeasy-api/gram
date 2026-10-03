@@ -3941,6 +3941,12 @@ SET client_id = coalesce(sqlc.narg('client_id')::text, client_id),
     client_secret_encrypted = coalesce(sqlc.narg('client_secret_encrypted')::text, client_secret_encrypted)
 WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL;
 
+-- name: SetOrganizationRemoteSessionClientCallbackBaseURLFixture :exec
+-- Test fixture: record a callback origin on an organization-level login client.
+UPDATE remote_session_clients
+SET callback_base_url = @callback_base_url
+WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL;
+
 -- name: SoftDeleteOrganizationRemoteSessionClientFixture :exec
 UPDATE remote_session_clients SET deleted_at = clock_timestamp()
 WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL;

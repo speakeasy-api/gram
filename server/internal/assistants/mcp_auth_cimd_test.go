@@ -560,3 +560,69 @@ func TestHandleAssistantClientMetadataDocumentNotFoundOnCustomDomain(t *testing.
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
+
+// newPinnedCIMDAuthTestService moves the server URL to ai.example.test while
+// the outbound origin stays pinned to app.example.test.
+func newPinnedCIMDAuthTestService(t *testing.T, conn *pgxpool.Pool) *Service {
+	t.Helper()
+	svc := newCIMDAuthTestService(t, conn)
+	serverURL, err := url.Parse("https://ai.example.test")
+	require.NoError(t, err)
+	svc.core.serverURL = serverURL
+	outbound, err := url.Parse("https://app.example.test")
+	require.NoError(t, err)
+	svc.core.SetOutboundCallbackOrigin(outbound)
+	return svc
+}
+
+func TestMCPAuthURLsUsePinnedOutboundOrigin(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_mcp_oauth_pinned_origin")
+	require.NoError(t, err)
+	projectID, assistantID, _, _ := insertAssistantFixture(t, conn)
+	service := newPinnedCIMDAuthTestService(t, conn)
+
+	redirectURI := service.core.mcpAuthRedirectURI(assistantID)
+	require.Equal(t, "https://app.example.test/rpc/assistantMcpAuth/"+assistantID.String()+"/oauth/callback", redirectURI)
+
+	client, err := service.getOrRegisterMCPAuthClient(t.Context(), projectID, assistantID, "https://auth.example.com", "", redirectURI, true)
+	require.NoError(t, err)
+	require.Equal(t, "https://app.example.test/.well-known/oauth-client/assistants/"+assistantID.String(), client.ClientID)
+}
+
+func TestHandleAssistantClientMetadataDocumentUsesPinnedOutboundOrigin(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_mcp_oauth_cimd_document_pinned")
+	require.NoError(t, err)
+	seedAssistantOrgMetadata(t, conn)
+	_, assistantID, _, _ := insertAssistantFixture(t, conn)
+	service := newPinnedCIMDAuthTestService(t, conn)
+
+	// The same document is served on the server URL host and the pinned host.
+	for _, host := range []string{"ai.example.test", "app.example.test"} {
+		req := assistantCIMDDocumentRequest(t, assistantID.String(), false)
+		req.Host = host
+		rec := httptest.NewRecorder()
+		require.NoError(t, service.handleAssistantClientMetadataDocument(rec, req))
+		require.Equal(t, http.StatusOK, rec.Code)
+		var got map[string]any
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+		require.Equal(t, "https://app.example.test/.well-known/oauth-client/assistants/"+assistantID.String(), got["client_id"], host)
+		require.Equal(t, []any{"https://app.example.test/rpc/assistantMcpAuth/" + assistantID.String() + "/oauth/callback"}, got["redirect_uris"], host)
+	}
+}
+
+func TestAssistantCIMDAllowedFollowsPinnedOutboundOrigin(t *testing.T) {
+	t.Parallel()
+
+	svc := newPinnedCIMDAuthTestService(t, nil)
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagAssistantOAuthCIMD, "org-test", true)
+	svc.core.SetFeatureProvider(flags)
+	plain, err := url.Parse("http://localhost:8080")
+	require.NoError(t, err)
+	svc.core.serverURL = plain
+	require.True(t, svc.assistantCIMDAllowed(t.Context(), "org-test", "acme"), "client_id uses the pinned https origin")
+}

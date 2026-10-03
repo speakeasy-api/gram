@@ -4207,6 +4207,228 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: getProject
+  /admin/project.mcpServerHealth:
+    get:
+      description: 'Describes one MCP server''s health: authentication configuration and session counts (admin view, no auth scoping). Tool calls come from getMcpServerToolCalls.'
+      operationId: adminDescribeMcpServerHealth
+      parameters:
+        - allowEmptyValue: true
+          description: Organization the project must belong to. A project outside it is reported as not found.
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: Organization the project must belong to. A project outside it is reported as not found.
+            type: string
+        - allowEmptyValue: true
+          description: Project ID.
+          in: query
+          name: project_id
+          required: true
+          schema:
+            description: Project ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The server id from listProjectMcpServers; the toolset ID for toolset-only servers.
+          in: query
+          name: mcp_server_id
+          required: true
+          schema:
+            description: The server id from listProjectMcpServers; the toolset ID for toolset-only servers.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Window in days for distinct_subjects_in_window.
+          in: query
+          name: window_days
+          schema:
+            default: 14
+            description: Window in days for distinct_subjects_in_window.
+            enum:
+              - 14
+              - 30
+              - 90
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMcpServerHealth'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: describeMcpServerHealth admin
+      tags:
+        - admin
+      x-speakeasy-name-override: describeMcpServerHealth
+      x-speakeasy-react-hook:
+        name: AdminDescribeMcpServerHealth
+  /admin/project.mcpServerToolCalls:
+    get:
+      description: Reads one MCP server's tool call outcomes and series over a window (admin view, no auth scoping). Returns logging:disabled without reading telemetry when the organization's logs are off.
+      operationId: adminGetMcpServerToolCalls
+      parameters:
+        - allowEmptyValue: true
+          description: Organization the project must belong to. A project outside it is reported as not found.
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: Organization the project must belong to. A project outside it is reported as not found.
+            type: string
+        - allowEmptyValue: true
+          description: Project ID.
+          in: query
+          name: project_id
+          required: true
+          schema:
+            description: Project ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The server id from listProjectMcpServers; the toolset ID for toolset-only servers.
+          in: query
+          name: mcp_server_id
+          required: true
+          schema:
+            description: The server id from listProjectMcpServers; the toolset ID for toolset-only servers.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Window in days. 90 days is bucketed weekly, shorter windows daily.
+          in: query
+          name: window_days
+          schema:
+            default: 14
+            description: Window in days. 90 days is bucketed weekly, shorter windows daily.
+            enum:
+              - 14
+              - 30
+              - 90
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMcpServerToolCalls'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getMcpServerToolCalls admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getMcpServerToolCalls
+      x-speakeasy-react-hook:
+        name: AdminGetMcpServerToolCalls
   /admin/project.mcpServers:
     get:
       tags:
@@ -6913,6 +7135,441 @@ components:
         - visibility
         - source
         - created_at
+    AdminMcpServerHealth:
+      type: object
+      properties:
+        correlation:
+          $ref: '#/components/schemas/AdminMcpServerHealthCorrelation'
+        legacy_auth:
+          type: string
+          description: Legacy authentication in force. Set only when the server has no user session issuer.
+          enum:
+            - external_oauth
+            - oauth_proxy
+            - gram_private
+        server:
+          $ref: '#/components/schemas/AdminMcpServerHealthServer'
+        user_session_issuer:
+          $ref: '#/components/schemas/AdminMcpServerHealthUserSessionIssuer'
+      description: 'Health of one MCP server: its authentication configuration and session counts. Tool calls are read separately through getMcpServerToolCalls. Never carries secrets, error text, subjects, users or emails.'
+      required:
+        - server
+        - correlation
+    AdminMcpServerHealthCorrelation:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: The mcp_servers row ID stamped on proxied calls. Absent for toolset-only servers.
+        toolset_slug:
+          type: string
+          description: The toolset slug stamped on hosted calls. Absent when the server has no toolset or several live servers share it.
+        url_slug:
+          type: string
+          description: The slug in the server's /mcp/<slug> URL, matched against hook-observed calls. Absent when the server has no slug.
+      description: The identities telemetry is matched on for this server.
+    AdminMcpServerHealthRemoteSessionClient:
+      type: object
+      properties:
+        attachment_scope:
+          type: string
+          description: Where the row is attached. global is platform-wide.
+          enum:
+            - project
+            - organization
+            - global
+        grant_types:
+          type: array
+          items:
+            type: string
+          description: Grant types recorded for the client.
+        has_identity_provider_connection:
+          type: boolean
+          description: Whether the client is backed by an identity provider connection.
+        id:
+          type: string
+          description: The remote session client ID.
+        issuer:
+          $ref: '#/components/schemas/AdminMcpServerHealthRemoteSessionIssuer'
+        registration:
+          type: string
+          description: How the client was registered upstream.
+          enum:
+            - cimd
+            - dcr
+            - static
+        scope:
+          type: array
+          items:
+            type: string
+          description: Scopes recorded for the client.
+        sessions:
+          $ref: '#/components/schemas/AdminMcpServerHealthRemoteSessions'
+        token_endpoint_auth_method:
+          type: string
+          description: The client's token endpoint auth method. Absent when unset.
+          enum:
+            - client_secret_basic
+            - client_secret_post
+            - none
+            - private_key_jwt
+        upstream_rejected_at:
+          type: string
+          description: When the upstream last rejected the client's credentials.
+          format: date-time
+      description: A remote session client attached to the issuer, with its upstream issuer and session counts. Never carries secrets.
+      required:
+        - id
+        - registration
+        - scope
+        - grant_types
+        - has_identity_provider_connection
+        - attachment_scope
+        - issuer
+        - sessions
+    AdminMcpServerHealthRemoteSessionIssuer:
+      type: object
+      properties:
+        attachment_scope:
+          type: string
+          description: Where the row is attached. global is platform-wide.
+          enum:
+            - project
+            - organization
+            - global
+        cimd_supported:
+          type: boolean
+          description: Whether the issuer accepts a Client ID Metadata Document URL as client_id.
+        id:
+          type: string
+          description: The remote session issuer ID.
+        issuer:
+          type: string
+          description: The upstream issuer URL.
+        jwks_last_error_at:
+          type: string
+          description: Last failed JWK Set fetch.
+          format: date-time
+        metadata_fetched_at:
+          type: string
+          description: Last successful metadata discovery.
+          format: date-time
+        metadata_last_error_at:
+          type: string
+          description: Last failed metadata discovery.
+          format: date-time
+        name:
+          type: string
+          description: Display name of the issuer.
+        networking:
+          type: string
+          description: Whether Gram reaches the issuer over the public internet or a tunnel.
+          enum:
+            - public
+            - tunneled
+        oidc:
+          type: boolean
+          description: Whether the issuer is treated as an OpenID Connect provider.
+        passthrough:
+          type: boolean
+          description: Whether upstream tokens are passed through to the server.
+        pkce:
+          type: string
+          description: PKCE support classified from the issuer's advertised code challenge methods.
+          enum:
+            - supported
+            - unsupported
+            - none
+            - uncaptured
+        scope_override:
+          type: array
+          items:
+            type: string
+          description: Operator-pinned scopes sent in place of the discovered set. Absent when unset.
+        slug:
+          type: string
+          description: The issuer slug.
+      description: The upstream authorization server a remote session client is registered with. Error columns are exposed as timestamps only.
+      required:
+        - id
+        - slug
+        - issuer
+        - attachment_scope
+        - networking
+        - oidc
+        - passthrough
+        - pkce
+        - cimd_supported
+    AdminMcpServerHealthRemoteSessions:
+      type: object
+      properties:
+        first_linked_at:
+          type: string
+          description: When the first upstream session was linked.
+          format: date-time
+        linked_subjects:
+          type: integer
+          description: Distinct users holding a live upstream session.
+          format: int64
+        reauthorizations:
+          type: integer
+          description: Fresh authorizations beyond each session's first.
+          format: int64
+        validation_status_counts:
+          type: object
+          description: 'Live sessions per last validation status: valid, rejected_by_member, inactive or unknown. Sessions never validated are left out.'
+          additionalProperties:
+            type: integer
+            format: int64
+      description: Upstream sessions brokered through one remote session client, whichever issuer first linked them.
+      required:
+        - linked_subjects
+        - reauthorizations
+        - validation_status_counts
+    AdminMcpServerHealthServer:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+          description: The mcp_servers row ID, or the toolset ID for a toolset-only server.
+        name:
+          type: string
+          description: Display name of the server.
+        source:
+          type: string
+          description: What backs the server. toolset_only is a toolset with no mcp_servers row.
+          enum:
+            - toolset
+            - remote
+            - tunneled
+            - unproxied
+            - toolset_only
+        visibility:
+          type: string
+          description: The visibility of the server.
+          enum:
+            - disabled
+            - private
+            - public
+      description: The server the health report describes, as listProjectMcpServers lists it.
+      required:
+        - id
+        - name
+        - source
+        - visibility
+        - created_at
+    AdminMcpServerHealthServerRef:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The mcp_servers row ID, or the toolset ID for a toolset-only server.
+        name:
+          type: string
+          description: Display name of the server.
+      description: Another server in the project that shares the issuer.
+      required:
+        - id
+        - name
+    AdminMcpServerHealthTrustedRemoteSession:
+      type: object
+      properties:
+        client_id:
+          type: string
+          description: The remote session client ID Gram uses with the trusted issuer.
+        issuer_id:
+          type: string
+          description: The trusted remote session issuer ID.
+      description: The external authorization server whose assertions the issuer trusts.
+      required:
+        - issuer_id
+        - client_id
+    AdminMcpServerHealthUserSessionIssuer:
+      type: object
+      properties:
+        attachment_scope:
+          type: string
+          description: Where the row is attached. global is platform-wide.
+          enum:
+            - project
+            - organization
+            - global
+        authn_challenge_mode:
+          type: string
+          description: How multi-remote authn challenges are presented.
+          enum:
+            - chain
+            - interactive
+        classification:
+          type: string
+          description: custom, or project_default_idp for the auto-provisioned issuer of private servers.
+          enum:
+            - custom
+            - project_default_idp
+        client_id_metadata_admission_mode:
+          type: string
+          description: The stored CIMD admission mode. Absent when unset, which admits as open.
+          enum:
+            - disabled
+            - presets
+            - reporting
+            - open
+        created_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+          description: The user session issuer ID.
+        other_servers_using_issuer:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMcpServerHealthServerRef'
+          description: Other live servers in the project that share this issuer.
+        remote_session_clients:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMcpServerHealthRemoteSessionClient'
+          description: Remote session clients attached to the issuer.
+        session_duration_hours:
+          type: integer
+          description: How long a user session lasts, in whole hours.
+          format: int64
+        sessions:
+          $ref: '#/components/schemas/AdminMcpServerHealthUserSessions'
+        slug:
+          type: string
+          description: The issuer slug.
+        trusted_remote_session:
+          $ref: '#/components/schemas/AdminMcpServerHealthTrustedRemoteSession'
+        use_authentication_host:
+          type: boolean
+          description: Whether the issuer announces the authentication host as its origin.
+      description: The user session issuer that authenticates the server's users.
+      required:
+        - id
+        - slug
+        - classification
+        - authn_challenge_mode
+        - session_duration_hours
+        - attachment_scope
+        - use_authentication_host
+        - other_servers_using_issuer
+        - created_at
+        - sessions
+        - remote_session_clients
+    AdminMcpServerHealthUserSessions:
+      type: object
+      properties:
+        distinct_subjects_ever:
+          type: integer
+          description: Distinct users that ever received a session from the issuer.
+          format: int64
+        distinct_subjects_in_window:
+          type: integer
+          description: Distinct users that received a session inside the window.
+          format: int64
+        first_issued_at:
+          type: string
+          description: When the first session was issued.
+          format: date-time
+        last_issued_at:
+          type: string
+          description: When the latest session was issued or refreshed.
+          format: date-time
+        live:
+          type: integer
+          description: Sessions whose refresh deadline has not passed.
+          format: int64
+      description: User sessions the issuer has minted. A refresh replaces a session row, so last_issued_at includes refreshes. For an organization- or global-attached issuer the counts span every project using the issuer.
+      required:
+        - distinct_subjects_ever
+        - distinct_subjects_in_window
+        - live
+    AdminMcpServerToolCallBucket:
+      type: object
+      properties:
+        bucket_start:
+          type: string
+          format: date-time
+        failed:
+          type: integer
+          description: Failed tool calls in the bucket.
+          format: int64
+        total:
+          type: integer
+          description: Tool calls in the bucket.
+          format: int64
+      description: Tool calls in one bucket of the series.
+      required:
+        - bucket_start
+        - total
+        - failed
+    AdminMcpServerToolCallOutcomes:
+      type: object
+      properties:
+        blocked:
+          type: integer
+          format: int64
+        client_error:
+          type: integer
+          format: int64
+        failed:
+          type: integer
+          format: int64
+        server_error:
+          type: integer
+          format: int64
+        success:
+          type: integer
+          format: int64
+        unauthorized:
+          type: integer
+          format: int64
+        unknown:
+          type: integer
+          format: int64
+      description: Tool calls inside the window by outcome class. In-band tool errors (isError inside HTTP 200) count as success.
+      required:
+        - success
+        - unauthorized
+        - client_error
+        - server_error
+        - blocked
+        - failed
+        - unknown
+    AdminMcpServerToolCalls:
+      type: object
+      properties:
+        bucket_seconds:
+          type: integer
+          description: Width of each series bucket.
+          format: int64
+        daily:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMcpServerToolCallBucket'
+          description: Tool calls per bucket, oldest first.
+        outcomes:
+          $ref: '#/components/schemas/AdminMcpServerToolCallOutcomes'
+        type:
+          type: string
+          enum:
+            - logging:disabled
+            - logging:enabled
+        watermark:
+          type: string
+          description: Telemetry is complete up to this time.
+          format: date-time
+        window_days:
+          type: integer
+          description: Length of the window in days.
+          format: int64
+      description: 'One MCP server''s tool calls over a window, discriminated on type. logging:disabled carries nothing else: the organization''s logs are off, so calls were never recorded. logging:enabled carries every other field. Outcomes also count hook-observed calls; the daily series counts only calls that reached Gram directly.'
+      required:
+        - type
     AdminMdmVendorOption:
       type: object
       properties:

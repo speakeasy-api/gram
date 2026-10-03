@@ -613,7 +613,7 @@ func TestListChats_Filter_SearchResolvedUserEmail(t *testing.T) {
 	require.NotNil(t, authCtx.Email)
 
 	now := time.Now().UTC()
-	chatID, err := repo.New(ti.conn).UpsertExternalChat(ctx, repo.UpsertExternalChatParams{
+	upserted, err := repo.New(ti.conn).UpsertExternalChat(ctx, repo.UpsertExternalChatParams{
 		ID:             uuid.New(),
 		ProjectID:      ti.projectID,
 		OrganizationID: ti.orgID,
@@ -632,7 +632,7 @@ func TestListChats_Filter_SearchResolvedUserEmail(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Total)
 	require.Len(t, result.Chats, 1)
-	require.Equal(t, chatID.String(), result.Chats[0].ID)
+	require.Equal(t, upserted.ID.String(), result.Chats[0].ID)
 
 	payload.Offset = 1
 	result, err = ti.service.ListChats(ctx, payload)
@@ -918,6 +918,64 @@ func TestListChats_SortByLastMessageTimestampAscending(t *testing.T) {
 	require.Len(t, result.Chats, 2)
 	require.Equal(t, firstActiveChat.String(), result.Chats[0].ID)
 	require.Equal(t, lastActiveChat.String(), result.Chats[1].ID)
+}
+
+// TestListChats_SortByNumMessages verifies that the message count is computed
+// before paging when it drives the order, and that every page row reports it.
+func TestListChats_SortByNumMessages(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := externalUserCtx(t, ti, "ext-num-messages")
+	r := repo.New(ti.conn)
+
+	now := time.Now().UTC()
+	seedWithMessages := func(title string, count int) uuid.UUID {
+		chatID := seedChat(t, ctx, ti, "", "ext-num-messages", title)
+		for i := range count {
+			_, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+				ChatID:    chatID,
+				ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+				CreatedAt: pgtype.Timestamptz{Time: now.Add(time.Duration(i-count) * time.Minute), InfinityModifier: pgtype.Finite, Valid: true},
+			})
+			require.NoError(t, err)
+		}
+		return chatID
+	}
+	oneMessage := seedWithMessages("one", 1)
+	threeMessages := seedWithMessages("three", 3)
+	twoMessages := seedWithMessages("two", 2)
+
+	payload := defaultPayload()
+	payload.SortBy = "num_messages"
+	payload.SortOrder = "desc"
+	payload.Limit = 2
+
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 3, result.Total)
+	require.Len(t, result.Chats, 2)
+	require.Equal(t, threeMessages.String(), result.Chats[0].ID)
+	require.Equal(t, 3, result.Chats[0].NumMessages)
+	require.Equal(t, twoMessages.String(), result.Chats[1].ID)
+	require.Equal(t, 2, result.Chats[1].NumMessages)
+
+	payload.Offset = 2
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 3, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, oneMessage.String(), result.Chats[0].ID)
+	require.Equal(t, 1, result.Chats[0].NumMessages)
+
+	payload.Offset = 0
+	payload.SortOrder = "asc"
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Len(t, result.Chats, 2)
+	require.Equal(t, oneMessage.String(), result.Chats[0].ID)
+	require.Equal(t, 1, result.Chats[0].NumMessages)
+	require.Equal(t, twoMessages.String(), result.Chats[1].ID)
+	require.Equal(t, 2, result.Chats[1].NumMessages)
 }
 
 // TestListChats_Pagination verifies that limit/offset correctly pages through results and that
