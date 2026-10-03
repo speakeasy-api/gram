@@ -8,6 +8,17 @@ SELECT COUNT(*) as count
 FROM projects
 WHERE deleted = FALSE;
 
+-- name: StatOrganizationMembershipsCount :one
+SELECT COUNT(*) as count
+FROM organization_user_relationships
+WHERE deleted IS FALSE;
+
+-- name: StatOrganizationMembershipsMissingWorkosMembershipCount :one
+SELECT COUNT(*) as count
+FROM organization_user_relationships
+WHERE deleted IS FALSE
+  AND workos_membership_id IS NULL;
+
 -- name: StatHTTPSecuritySchemes :many
 WITH latest_deployments AS (
   SELECT DISTINCT ON (project_id) 
