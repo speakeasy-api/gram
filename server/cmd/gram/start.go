@@ -1080,6 +1080,7 @@ func newStartCommand() *cli.Command {
 			}
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cache.NewRedisCacheAdapter(redisClient))
 			triggerApp.SetIdentityService(assistantIdentities)
+			assistantTokenManager.ConfigureExecutionIdentity(callerAssertions, assistantIdentities)
 
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 

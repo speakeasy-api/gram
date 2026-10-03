@@ -590,6 +590,11 @@ DO UPDATE SET
   updated_at = clock_timestamp()
 RETURNING id;
 
+-- name: GetEnqueuedAssistantThread :one
+SELECT assistant_thread_id FROM assistant_thread_events
+WHERE project_id = @project_id AND assistant_id = @assistant_id
+  AND event_id = @event_id AND deleted IS FALSE;
+
 -- name: InsertAssistantThreadEvent :one
 INSERT INTO assistant_thread_events (
   assistant_thread_id,
@@ -965,6 +970,21 @@ WHERE t.id = @thread_id
 ORDER BY r.created_at DESC
 LIMIT 1;
 
+-- name: FailPendingExecutionEvent :execrows
+UPDATE assistant_thread_events
+SET status = @failed_status, last_error = @last_error, updated_at = clock_timestamp()
+WHERE id = @event_id AND project_id = @project_id AND assistant_thread_id = @thread_id
+  AND status = @pending_status AND deleted IS FALSE;
+
+-- name: GetNextPendingExecutionEvent :one
+SELECT e.id, e.event_id, e.normalized_payload_json
+FROM assistant_thread_events e
+JOIN assistant_threads t ON t.id = e.assistant_thread_id AND t.project_id = e.project_id
+WHERE e.project_id = @project_id AND e.assistant_thread_id = @thread_id
+  AND e.status = @pending_status AND e.deleted IS FALSE AND t.deleted IS FALSE
+ORDER BY e.created_at ASC
+LIMIT 1;
+
 -- name: ClaimNextPendingEvent :one
 WITH next_event AS (
   SELECT e.id, t.skill_set_snapshot
@@ -1051,6 +1071,7 @@ WHERE project_id = @project_id
 UPDATE assistant_thread_events
 SET
   status = @pending_status,
+  attempts = GREATEST(0, attempts - CASE WHEN @restore_attempt::boolean THEN 1 ELSE 0 END),
   last_error = @last_error,
   updated_at = clock_timestamp()
 WHERE id = @event_id

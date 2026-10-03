@@ -2014,26 +2014,30 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 			ShouldSignal: false,
 		}, nil
 	}
+	// Only active assistants may signal retries. Preserve the stored identity.
+	// An ingress retry must signal the original persisted invocation even if
+	// its authority changed after the first insert. Dispatch validates that
+	// envelope; re-resolving here could strand it or change its attribution.
+	existingThread, err := assistantrepo.New(s.db).GetEnqueuedAssistantThread(ctx, assistantrepo.GetEnqueuedAssistantThreadParams{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, EventID: task.EventID})
+	if err == nil {
+		return EnqueueResult{AssistantID: assistant.ID, ThreadID: existingThread, ShouldSignal: true}, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return EnqueueResult{}, fmt.Errorf("find previously enqueued assistant event: %w", err)
+	}
 
 	sourceKind, sourceRefJSON, normalizedPayloadJSON, sourcePayloadJSON, err := buildAssistantEventPayload(task)
 	if err != nil {
 		return EnqueueResult{}, err
 	}
-	// Persist the event source: wakes reuse an existing thread whose source may be Slack.
+	// Reject invalid ingress before creating a chat or thread. Reserved metadata
+	// is sanitized by captureExecution after the trusted thread is resolved.
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(normalizedPayloadJSON, &payload); err != nil {
-		return EnqueueResult{}, fmt.Errorf("encode trigger event source: %w", err)
+		return EnqueueResult{}, fmt.Errorf("decode trigger event payload: %w", err)
 	}
 	if payload == nil {
 		return EnqueueResult{}, fmt.Errorf("trigger event payload must be a JSON object")
-	}
-	payload["_gram_source_kind"], err = json.Marshal(sourceKind)
-	if err != nil {
-		return EnqueueResult{}, fmt.Errorf("encode trigger event source: %w", err)
-	}
-	normalizedPayloadJSON, err = json.Marshal(payload)
-	if err != nil {
-		return EnqueueResult{}, fmt.Errorf("encode trigger event source: %w", err)
 	}
 	triggerInstanceID, err := conv.PtrToNullUUID(conv.PtrEmpty(task.TriggerInstanceID))
 	if err != nil {
@@ -2076,6 +2080,23 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		return EnqueueResult{}, fmt.Errorf("upsert assistant thread: %w", err)
 	}
 
+	// UpsertAssistantThread serializes concurrent insertion into this thread;
+	// check again after waiting, before capturing any new authority.
+	existingThread, err = queries.GetEnqueuedAssistantThread(ctx, assistantrepo.GetEnqueuedAssistantThreadParams{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, EventID: task.EventID})
+	if err == nil {
+		if err := tx.Commit(ctx); err != nil {
+			return EnqueueResult{}, fmt.Errorf("commit duplicate assistant enqueue: %w", err)
+		}
+		return EnqueueResult{AssistantID: assistant.ID, ThreadID: existingThread, ShouldSignal: true}, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return EnqueueResult{}, fmt.Errorf("find concurrent assistant enqueue: %w", err)
+	}
+	normalizedPayloadJSON, err = s.captureExecution(ctx, assistant, sourceKind, threadID, triggerInstanceID, task.EventID, normalizedPayloadJSON)
+	if err != nil {
+		return EnqueueResult{}, err
+	}
+
 	_, err = queries.InsertAssistantThreadEvent(ctx, assistantrepo.InsertAssistantThreadEventParams{
 		AssistantThreadID:     threadID,
 		AssistantID:           assistant.ID,
@@ -2090,7 +2111,12 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	// pgx.ErrNoRows means the event was already enqueued by an earlier attempt
 	// (idempotent retry). We still signal: a turn whose earlier coordinator
 	// signal failed must be picked up when the client retries.
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, pgx.ErrNoRows) {
+		threadID, err = queries.GetEnqueuedAssistantThread(ctx, assistantrepo.GetEnqueuedAssistantThreadParams{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, EventID: task.EventID})
+		if err != nil {
+			return EnqueueResult{}, fmt.Errorf("find winning assistant enqueue: %w", err)
+		}
+	} else if err != nil {
 		return EnqueueResult{}, fmt.Errorf("insert assistant thread event: %w", err)
 	}
 
@@ -2574,6 +2600,44 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		Attempt:           0,
 	})
 
+	// Cold admission must not provision a VM for an event we already know
+	// cannot execute. Keep the execution-time recheck below for lifecycle races.
+	preflightProcessed := false
+	if runtimeRecord.State == runtimeStateStarting && thread.CorrelationID != warmupCorrelationID {
+		for {
+			pending, err := assistantrepo.New(s.db).GetNextPendingExecutionEvent(ctx, assistantrepo.GetNextPendingExecutionEventParams{ProjectID: projectID, ThreadID: threadID, PendingStatus: eventStatusPending})
+			if errors.Is(err, pgx.ErrNoRows) {
+				if err := s.stopRuntimeRecord(ctx, projectID, runtimeRecord.ID, runtimeStateStopped); err != nil {
+					return ProcessThreadEventsResult{}, err
+				}
+				return ProcessThreadEventsResult{AssistantID: assistant.ID, ProcessedAnyEvent: preflightProcessed, WarmUntil: time.Time{}, WarmTTLSeconds: assistant.WarmTTLSeconds, RuntimeActive: false, RetryAdmission: true, BootstrappedRuntime: false}, nil
+			}
+			if err != nil {
+				return ProcessThreadEventsResult{}, fmt.Errorf("read cold execution event: %w", err)
+			}
+			var event assistantThreadEventRecord
+			event.ID = pending.ID
+			event.EventID = pending.EventID
+			event.NormalizedPayloadJSON = pending.NormalizedPayloadJson
+			err = classifyExecutionDispatchError(s.checkExecutionDispatch(ctx, assistant, thread, event))
+			if err == nil {
+				break
+			}
+			if !errors.Is(err, errExecutionDenied) {
+				return ProcessThreadEventsResult{}, err
+			}
+			changed, failErr := assistantrepo.New(s.db).FailPendingExecutionEvent(ctx, assistantrepo.FailPendingExecutionEventParams{EventID: event.ID, ProjectID: projectID, ThreadID: threadID, PendingStatus: eventStatusPending, FailedStatus: eventStatusFailed, LastError: conv.ToPGText(err.Error())})
+			if failErr != nil {
+				return ProcessThreadEventsResult{}, fmt.Errorf("fail pending cold execution: %w", failErr)
+			}
+			if changed == 0 {
+				continue
+			}
+			s.emitAssistantTelemetry(ctx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant cold execution denied", "ERROR", err)
+			preflightProcessed = true
+		}
+	}
+
 	ensureResult, err := s.runtime.Ensure(ctx, runtimeRecord)
 	if err != nil {
 		// Ensure failed: mark the runtime row failed so the coordinator's
@@ -2604,7 +2668,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		bootstrappedRuntime = true
 	}
 
-	processedAny := false
+	processedAny := preflightProcessed
 	for {
 		event, ok, err := s.claimNextPendingEvent(ctx, thread.ProjectID, thread.ID)
 		if err != nil {
@@ -2628,6 +2692,15 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				attr.SlogError(runErr),
 			)
 			s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_failed", "assistant turn failed", "ERROR", runErr)
+
+			if errors.Is(runErr, errExecutionDenied) {
+				if err := s.failEvent(ctx, thread.ProjectID, event.ID, runErr); err != nil {
+					return ProcessThreadEventsResult{}, err
+				}
+				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant execution denied", "ERROR", runErr)
+				processedAny = true
+				continue
+			}
 
 			teardownExhausted := errors.Is(runErr, ErrRuntimeUnhealthy) && event.Attempts >= maxRuntimeTeardowns
 			outcome := turnErrorBucket(runErr)
@@ -2774,7 +2847,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 
 			// Terminal failure after maxEventAttempts — stop retrying this
 			// event. The warm runtime stays up for subsequent events.
-			if event.Attempts >= maxEventAttempts {
+			if event.Attempts >= maxEventAttempts && !errors.Is(runErr, ErrRuntimeInvocationBusy) {
 				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event exceeded max attempts", "ERROR", runErr)
 				if err := s.failEvent(ctx, thread.ProjectID, event.ID, fmt.Errorf("exceeded %d attempts: %w", maxEventAttempts, runErr)); err != nil {
 					return ProcessThreadEventsResult{}, err
@@ -2795,7 +2868,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			}
 			// Transient turn-level failure (LLM 5xx, MCP blip) — reset event,
 			// keep the warm runtime, let the coordinator re-kick on the next
-			// admit cycle.
+			// admit cycle, after AssistantThreadWorkflow's durable admission backoff.
 			s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_requeued", "assistant event requeued for retry", "WARN", runErr)
 			if err := s.resetEventToPending(ctx, thread.ProjectID, event.ID, runErr); err != nil {
 				return ProcessThreadEventsResult{}, err
@@ -2856,6 +2929,9 @@ func (s *ServiceCore) processEventTurn(
 	runtime assistantRuntimeRecord,
 	event assistantThreadEventRecord,
 ) ([]byte, error) {
+	if err := s.checkExecutionDispatch(ctx, assistant, thread, event); err != nil {
+		return nil, classifyExecutionDispatchError(err)
+	}
 	skills, err := s.loadAssistantSkills(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
 	if err != nil {
 		return nil, err
@@ -2879,8 +2955,18 @@ func (s *ServiceCore) processEventTurn(
 	prompt, actorUserID := "", assistant.CreatedByUserID
 	var inputParts []runtimeContentPart
 	if mcpAuthPrompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
-		// MCP auth resumption is a system event with no human sender — act as
-		// the assistant's creator.
+		// Signed callback state retains the initiating actor. Only historical
+		// persisted callbacks without this field retain legacy owner behavior.
+		var resume mcpAuthEventPayload
+		if err := json.Unmarshal(event.NormalizedPayloadJSON, &resume); err != nil {
+			return nil, fmt.Errorf("decode OAuth continuation: %w", err)
+		}
+		if resume.ActorUserID != "" {
+			if err := s.checkTurnUser(ctx, assistant, resume.ActorUserID); err != nil {
+				return nil, err
+			}
+			actorUserID = resume.ActorUserID
+		}
 		prompt = mcpAuthPrompt
 	} else {
 		adapter, err := getSourceAdapter(thread.SourceKind)
@@ -3180,6 +3266,8 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	}
 
 	return threadBootstrap{
+		AssistantID:    assistant.ID.String(),
+		ProjectID:      assistant.ProjectID.String(),
 		Model:          assistant.Model,
 		Instructions:   instructions,
 		CompletionsURL: completionsEndpoint.String(),
@@ -3853,10 +3941,11 @@ func (s *ServiceCore) failEvent(ctx context.Context, projectID, eventID uuid.UUI
 
 func (s *ServiceCore) resetEventToPending(ctx context.Context, projectID, eventID uuid.UUID, runErr error) error {
 	err := assistantrepo.New(s.db).ResetAssistantThreadEventToPending(ctx, assistantrepo.ResetAssistantThreadEventToPendingParams{
-		PendingStatus: eventStatusPending,
-		LastError:     conv.ToPGText(runErr.Error()),
-		EventID:       eventID,
-		ProjectID:     projectID,
+		RestoreAttempt: errors.Is(runErr, ErrRuntimeInvocationBusy),
+		PendingStatus:  eventStatusPending,
+		LastError:      conv.ToPGText(runErr.Error()),
+		EventID:        eventID,
+		ProjectID:      projectID,
 	})
 	if err != nil {
 		return fmt.Errorf("reset assistant thread event to pending: %w", err)

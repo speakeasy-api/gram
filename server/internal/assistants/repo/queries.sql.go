@@ -899,6 +899,37 @@ func (q *Queries) FailAssistantThreadEvent(ctx context.Context, arg FailAssistan
 	return err
 }
 
+const failPendingExecutionEvent = `-- name: FailPendingExecutionEvent :execrows
+UPDATE assistant_thread_events
+SET status = $1, last_error = $2, updated_at = clock_timestamp()
+WHERE id = $3 AND project_id = $4 AND assistant_thread_id = $5
+  AND status = $6 AND deleted IS FALSE
+`
+
+type FailPendingExecutionEventParams struct {
+	FailedStatus  string
+	LastError     pgtype.Text
+	EventID       uuid.UUID
+	ProjectID     uuid.UUID
+	ThreadID      uuid.UUID
+	PendingStatus string
+}
+
+func (q *Queries) FailPendingExecutionEvent(ctx context.Context, arg FailPendingExecutionEventParams) (int64, error) {
+	result, err := q.db.Exec(ctx, failPendingExecutionEvent,
+		arg.FailedStatus,
+		arg.LastError,
+		arg.EventID,
+		arg.ProjectID,
+		arg.ThreadID,
+		arg.PendingStatus,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const findLegacyWakeRequester = `-- name: FindLegacyWakeRequester :many
 SELECT DISTINCT actor_id::text
 FROM audit_logs
@@ -1426,6 +1457,25 @@ func (q *Queries) GetAssistantThreadIDByCorrelation(ctx context.Context, arg Get
 	return id, err
 }
 
+const getEnqueuedAssistantThread = `-- name: GetEnqueuedAssistantThread :one
+SELECT assistant_thread_id FROM assistant_thread_events
+WHERE project_id = $1 AND assistant_id = $2
+  AND event_id = $3 AND deleted IS FALSE
+`
+
+type GetEnqueuedAssistantThreadParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	EventID     string
+}
+
+func (q *Queries) GetEnqueuedAssistantThread(ctx context.Context, arg GetEnqueuedAssistantThreadParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getEnqueuedAssistantThread, arg.ProjectID, arg.AssistantID, arg.EventID)
+	var assistant_thread_id uuid.UUID
+	err := row.Scan(&assistant_thread_id)
+	return assistant_thread_id, err
+}
+
 const getLatestAssistantRuntimeByThreadID = `-- name: GetLatestAssistantRuntimeByThreadID :one
 SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE assistant_thread_id = $1
@@ -1549,6 +1599,35 @@ func (q *Queries) GetManagedAssistantByProject(ctx context.Context, projectID uu
 		&i.UpdatedAt,
 		&i.DeletedAt,
 	)
+	return i, err
+}
+
+const getNextPendingExecutionEvent = `-- name: GetNextPendingExecutionEvent :one
+SELECT e.id, e.event_id, e.normalized_payload_json
+FROM assistant_thread_events e
+JOIN assistant_threads t ON t.id = e.assistant_thread_id AND t.project_id = e.project_id
+WHERE e.project_id = $1 AND e.assistant_thread_id = $2
+  AND e.status = $3 AND e.deleted IS FALSE AND t.deleted IS FALSE
+ORDER BY e.created_at ASC
+LIMIT 1
+`
+
+type GetNextPendingExecutionEventParams struct {
+	ProjectID     uuid.UUID
+	ThreadID      uuid.UUID
+	PendingStatus string
+}
+
+type GetNextPendingExecutionEventRow struct {
+	ID                    uuid.UUID
+	EventID               string
+	NormalizedPayloadJson []byte
+}
+
+func (q *Queries) GetNextPendingExecutionEvent(ctx context.Context, arg GetNextPendingExecutionEventParams) (GetNextPendingExecutionEventRow, error) {
+	row := q.db.QueryRow(ctx, getNextPendingExecutionEvent, arg.ProjectID, arg.ThreadID, arg.PendingStatus)
+	var i GetNextPendingExecutionEventRow
+	err := row.Scan(&i.ID, &i.EventID, &i.NormalizedPayloadJson)
 	return i, err
 }
 
@@ -3365,22 +3444,25 @@ const resetAssistantThreadEventToPending = `-- name: ResetAssistantThreadEventTo
 UPDATE assistant_thread_events
 SET
   status = $1,
-  last_error = $2,
+  attempts = GREATEST(0, attempts - CASE WHEN $2::boolean THEN 1 ELSE 0 END),
+  last_error = $3,
   updated_at = clock_timestamp()
-WHERE id = $3
-  AND project_id = $4
+WHERE id = $4
+  AND project_id = $5
 `
 
 type ResetAssistantThreadEventToPendingParams struct {
-	PendingStatus string
-	LastError     pgtype.Text
-	EventID       uuid.UUID
-	ProjectID     uuid.UUID
+	PendingStatus  string
+	RestoreAttempt bool
+	LastError      pgtype.Text
+	EventID        uuid.UUID
+	ProjectID      uuid.UUID
 }
 
 func (q *Queries) ResetAssistantThreadEventToPending(ctx context.Context, arg ResetAssistantThreadEventToPendingParams) error {
 	_, err := q.db.Exec(ctx, resetAssistantThreadEventToPending,
 		arg.PendingStatus,
+		arg.RestoreAttempt,
 		arg.LastError,
 		arg.EventID,
 		arg.ProjectID,

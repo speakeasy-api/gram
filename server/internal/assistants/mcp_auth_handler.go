@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -89,12 +90,14 @@ func (e *mcpOAuthTokenError) Error() string {
 }
 
 type mcpAuthEventPayload struct {
-	GramEventKind    string `json:"gram_event_kind"`
-	Status           string `json:"status"`
-	ServerID         string `json:"mcp_server_id"`
-	McpSlug          string `json:"mcp_slug"`
-	Error            string `json:"error,omitempty"`
-	ErrorDescription string `json:"error_description,omitempty"`
+	ActorUserID      string                       `json:"_gram_resume_user_id,omitempty"`
+	Execution        *assistantidentity.Execution `json:"_gram_execution,omitempty"`
+	GramEventKind    string                       `json:"gram_event_kind"`
+	Status           string                       `json:"status"`
+	ServerID         string                       `json:"mcp_server_id"`
+	McpSlug          string                       `json:"mcp_slug"`
+	Error            string                       `json:"error,omitempty"`
+	ErrorDescription string                       `json:"error_description,omitempty"`
 }
 
 func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request) error {
@@ -194,22 +197,24 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 	}
 
 	state, err := s.core.assistantTokens.GenerateMCPAuthFlow(assistanttokens.MCPAuthFlowInput{
-		OrgID:             claims.OrgID,
-		ProjectID:         projectID,
-		UserID:            claims.UserID,
-		AssistantID:       principal.AssistantID,
-		ThreadID:          threadID,
-		AttemptID:         attemptID,
-		FlowID:            principal.AssistantID.String(),
-		ServerID:          req.ServerID,
-		McpURL:            mcpURL.String(),
-		ClientID:          credentials.ClientID,
-		ClientSecret:      credentials.ClientSecretEncrypted,
-		RedirectURI:       redirectURI,
-		CodeVerifier:      encryptedVerifier,
-		TokenEndpoint:     metadata.TokenEndpoint,
-		OAuthServerIssuer: metadata.Issuer,
-		TTL:               mcpAuthFlowTTL,
+		OriginatingEventID: uuid.Nil,
+		Execution:          nil,
+		OrgID:              claims.OrgID,
+		ProjectID:          projectID,
+		UserID:             claims.UserID,
+		AssistantID:        principal.AssistantID,
+		ThreadID:           threadID,
+		AttemptID:          attemptID,
+		FlowID:             principal.AssistantID.String(),
+		ServerID:           req.ServerID,
+		McpURL:             mcpURL.String(),
+		ClientID:           credentials.ClientID,
+		ClientSecret:       credentials.ClientSecretEncrypted,
+		RedirectURI:        redirectURI,
+		CodeVerifier:       encryptedVerifier,
+		TokenEndpoint:      metadata.TokenEndpoint,
+		OAuthServerIssuer:  metadata.Issuer,
+		TTL:                mcpAuthFlowTTL,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "sign mcp auth flow state").LogError(ctx, s.logger)
@@ -258,6 +263,11 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid callback thread id").LogError(ctx, s.logger)
 	}
+	if claims.Execution != nil || claims.OriginatingEventID != "" {
+		if err := s.core.assistantTokens.ValidateExecutionMCPAuthFlow(ctx, claims); err != nil {
+			return fmt.Errorf("validate OAuth execution identity: %w", err)
+		}
+	}
 	mcpURL, err := url.Parse(claims.McpURL)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid callback mcp url").LogError(ctx, s.logger)
@@ -268,6 +278,8 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 	}
 
 	payload := mcpAuthEventPayload{
+		ActorUserID:      claims.UserID,
+		Execution:        claims.Execution,
 		GramEventKind:    mcpAuthEventKind,
 		Status:           mcpAuthStatusSuccess,
 		ServerID:         claims.ServerID,
@@ -350,6 +362,12 @@ func (s *Service) enqueueMCPAuthEvent(ctx context.Context, projectID, assistantI
 		return false, oops.E(oops.CodeForbidden, nil, "assistant thread assistant mismatch").LogError(ctx, s.logger)
 	}
 
+	if payload.Execution != nil {
+		// Copy before changing delivery linkage; retain root event and selected actor.
+		execution := *payload.Execution
+		execution.ContinuationEventID = mcpAuthEventKind + ":" + flowID
+		payload.Execution = &execution
+	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "marshal mcp auth event").LogError(ctx, s.logger)
