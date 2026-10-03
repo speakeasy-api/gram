@@ -368,7 +368,7 @@ export function XaaReadinessTable({
   return (
     <div
       role="region"
-      aria-label="Cross App Access servers"
+      aria-label="Server connections"
       tabIndex={0}
       className="min-w-0 overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
     >
