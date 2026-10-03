@@ -53,6 +53,9 @@ func (a *Activities) CleanupMCPFindingEvidence(ctx context.Context) error {
 func cleanupMCPEvidence(ctx context.Context, findings, executions func(context.Context, int32) (int64, error)) error {
 	// A saturated finding table must not starve payload cleanup.
 	findingsErr := cleanupMCPFindingEvidenceBatches(ctx, findings)
+	if findingsErr != nil {
+		findingsErr = fmt.Errorf("finding matches: %w", findingsErr)
+	}
 	executionsErr := cleanupMCPFindingEvidenceBatches(ctx, executions)
 	if executionsErr != nil {
 		executionsErr = fmt.Errorf("execution payloads: %w", executionsErr)
@@ -64,13 +67,13 @@ func cleanupMCPFindingEvidenceBatches(ctx context.Context, cleanup func(context.
 	for range mcpFindingEvidenceCleanupMaxBatchesPerAttempt {
 		n, err := cleanup(ctx, mcpFindingEvidenceCleanupBatchSize)
 		if err != nil {
-			return fmt.Errorf("cleanup MCP finding evidence: %w", err)
+			return fmt.Errorf("cleanup MCP evidence batch: %w", err)
 		}
 		if n < int64(mcpFindingEvidenceCleanupBatchSize) {
 			return nil
 		}
 	}
-	return fmt.Errorf("MCP finding evidence cleanup per-attempt batch budget exhausted")
+	return fmt.Errorf("MCP evidence cleanup per-attempt batch budget exhausted")
 }
 
 // Include every attempt, intervening backoff, and queue/workflow-task headroom.

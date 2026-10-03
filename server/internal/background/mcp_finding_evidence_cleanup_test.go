@@ -110,6 +110,17 @@ func TestCleanupMCPEvidenceDrainsBothTables(t *testing.T) {
 		require.ErrorIs(t, err, failure)
 		require.Equal(t, 1, executions)
 	})
+	t.Run("finding saturation does not starve payloads", func(t *testing.T) {
+		t.Parallel()
+		executions := 0
+		err := cleanupMCPEvidence(t.Context(),
+			func(_ context.Context, limit int32) (int64, error) { return int64(limit), nil },
+			func(context.Context, int32) (int64, error) { executions++; return 0, nil },
+		)
+		require.ErrorContains(t, err, "finding matches")
+		require.ErrorContains(t, err, "budget exhausted")
+		require.Equal(t, 1, executions)
+	})
 	t.Run("payload failure", func(t *testing.T) {
 		t.Parallel()
 		failure := errors.New("database unavailable")
