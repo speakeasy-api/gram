@@ -153,6 +153,36 @@ func resolvePresidioScoreThreshold(v float64) float64 {
 // constants) once the analyzer scales.
 const presidioMaxMessageBytes = 50 * 1024
 
+// PresidioMaxMessageBytes exposes the per-message cap so callers outside this
+// package (the async publish path and offline volume analysis) can reason
+// about what the inline scanner actually reads.
+const PresidioMaxMessageBytes = presidioMaxMessageBytes
+
+// PrepareScanText applies the exact preparation analyzeOne performs before it
+// counts stokens and calls /analyze: JSON payloads are re-emitted as YAML and
+// the result is capped at PresidioMaxMessageBytes on a rune boundary. It is
+// exported so the async lane and offline analysis measure the real scanned
+// surface instead of reimplementing it.
+func PrepareScanText(text string) (prepared string, truncated bool) {
+	return capScanText(NormalizeScanText(text))
+}
+
+// NormalizeScanText applies only the JSON-to-YAML reformat, without the size
+// cap. The async lane publishes raw content today, so exporting the two halves
+// separately lets callers adopt the normalization without inheriting the cap.
+func NormalizeScanText(text string) string {
+	return reformatJSONAsYAML(text)
+}
+
+// capScanText applies only the size cap, for callers that already hold the
+// reformatted text and need its pre-truncation size.
+func capScanText(text string) (string, bool) {
+	if len(text) <= presidioMaxMessageBytes {
+		return text, false
+	}
+	return truncateAtRuneBoundary(text, presidioMaxMessageBytes), true
+}
+
 // presidioThrottleHeartbeatInterval is how often the byte-throttle wait loop
 // calls onProgress while blocked. Must stay well below the Temporal activity
 // HeartbeatTimeout (60s in drain_risk_analysis.go) so a queue of large
@@ -467,14 +497,14 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 	}
 
 	// Reformat JSON payloads as YAML with literal block scalars for strings
-	// containing newlines before both token counting and the analyzer request.
-	text = reformatJSONAsYAML(text)
-
-	truncated := len(text) > presidioMaxMessageBytes
-	if originalSize := len(text); truncated {
-		text = truncateAtRuneBoundary(text, presidioMaxMessageBytes)
+	// containing newlines before both token counting and the analyzer request,
+	// then cap the result at presidioMaxMessageBytes.
+	prepared := reformatJSONAsYAML(text)
+	preparedSize := len(prepared)
+	text, truncated := capScanText(prepared)
+	if truncated {
 		p.logger.WarnContext(ctx, "presidio: truncating oversized message",
-			attr.SlogRiskScanTextSize(originalSize),
+			attr.SlogRiskScanTextSize(preparedSize),
 			attr.SlogRiskScanBatchIndex(idx),
 		)
 		if p.truncations != nil {
