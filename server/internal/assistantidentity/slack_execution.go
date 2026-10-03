@@ -10,8 +10,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 )
 
-// SlackDelegation pins the trusted directory observation, not an email or a
-// model-selected identity. Reassignment, unmapping and reconnect invalidate it.
+// SlackDelegation pins the trusted directory observation. Reassignment, unmapping
+// and reconnect invalidate it.
 type SlackDelegation struct {
 	TeamID               string    `json:"team_id"`
 	UserID               string    `json:"user_id"`
