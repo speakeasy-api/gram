@@ -548,12 +548,9 @@ async fn spawn_thread(
     if !bootstrap.instructions.is_empty() {
         transcript.push(Item::text(ItemKind::System, &bootstrap.instructions));
     }
-    if !bootstrap.mcp_servers.is_empty() {
-        transcript.push(Item::text(
-            ItemKind::System,
-            mcp_disclosure_item(&bootstrap.mcp_servers),
-        ));
-    }
+    // Membership changes per turn; keep only discovery guidance in the system
+    // prompt. Reconciliation supplies current attachment changes with the turn.
+    transcript.push(Item::text(ItemKind::System, mcp_discovery_guidance()));
     transcript.extend(normalize_history(&bootstrap.history)?);
 
     let permissions = CompositePermissionChecker::new(PermissionDecision::Allow).with_policy(
@@ -697,17 +694,13 @@ async fn spawn_thread(
     Ok(configured)
 }
 
-fn mcp_disclosure_item(servers: &[McpServer]) -> String {
-    let ids: Vec<&str> = servers.iter().map(|s| s.id.as_str()).collect();
-    format!(
-        "<mcp-servers>\nAttached MCP servers: {ids}.\nTheir tools are not present in the \
-         declared tool schema. Use the tool_search tool to discover tool schemas and \
-         per-server connection status, including authorization links for servers that \
-         require auth. Call a discovered tool by its exact name — directly, or from a \
-         compose script via tool(name, input). Servers connect on first search, so an \
-         empty result before any search only means discovery has not run yet.\n</mcp-servers>",
-        ids = ids.join(", "),
-    )
+fn mcp_discovery_guidance() -> &'static str {
+    "<mcp-servers>\nMCP tools are not present in the declared tool schema. \
+     Use the tool_search tool to discover currently attached servers, tool schemas, \
+     and per-server connection status, including authorization links for servers that \
+     require auth. Call a discovered tool by its exact name — directly, or from a \
+     compose script via tool(name, input). Servers connect on first search, so an \
+     empty result before any search only means discovery has not run yet.\n</mcp-servers>"
 }
 
 async fn activate_turn(
