@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -99,7 +100,7 @@ func (s *ServiceCore) checkTurnUser(ctx context.Context, assistant assistantReco
 		return fmt.Errorf("check turn user eligibility: %w", err)
 	}
 	if !active {
-		return fmt.Errorf("turn user is not an active organization member")
+		return fmt.Errorf("turn user is not an active organization member: %w", assistantidentity.ErrActorIneligible)
 	}
 	// Resolve the selected identity's current grants, never the transport actor's
 	// grants. Trusted event provenance establishes identity, not project access.
@@ -116,7 +117,7 @@ func (s *ServiceCore) checkTurnUser(ctx context.Context, assistant assistantReco
 		return fmt.Errorf("check turn user project access: %w", err)
 	}
 	if !allowed {
-		return fmt.Errorf("turn user does not have access to assistant project")
+		return fmt.Errorf("turn user does not have access to assistant project: %w", assistantidentity.ErrActorIneligible)
 	}
 	return nil
 }

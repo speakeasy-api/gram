@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -16,17 +17,42 @@ import (
 
 const executionMetadataKey = "_gram_execution"
 
+var errExecutionDenied = errors.New("assistant execution denied")
+
+func reservedExecutionKey(key string) string {
+	for _, reserved := range []string{executionMetadataKey, "_gram_resume_user_id", "gram_event_kind", "_gram_source_kind"} {
+		// Match encoding/json's case-folded struct field lookup, including
+		// Unicode folds. Never lowercase unrelated user payload keys/values.
+		if strings.EqualFold(key, reserved) {
+			return reserved
+		}
+	}
+	return ""
+}
+
+func classifyExecutionDispatchError(err error) error {
+	if errors.Is(err, assistantidentity.ErrInvalidIdentity) || errors.Is(err, assistantidentity.ErrActorIneligible) || errors.Is(err, assistantidentity.ErrExecutionAdmissionRequired) {
+		return fmt.Errorf("%w: %w", errExecutionDenied, err)
+	}
+	return err
+}
+
 // captureExecution runs only after ingress normalization. Never copy a caller's
 // reserved metadata, including on legacy paths. An insertion retry cannot replace
 // the original event because InsertAssistantThreadEvent is DO NOTHING.
 func (s *ServiceCore) captureExecution(ctx context.Context, assistant assistantRecord, source string, threadID uuid.UUID, trigger uuid.NullUUID, eventID string, raw []byte) ([]byte, error) {
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &payload); err != nil || payload == nil {
-		return nil, fmt.Errorf("invalid normalized execution payload")
+		return nil, fmt.Errorf("trigger event payload must be a JSON object")
 	}
-	delete(payload, executionMetadataKey)
-	delete(payload, "_gram_resume_user_id")
-	delete(payload, "gram_event_kind")
+	for key := range payload {
+		if reservedExecutionKey(key) != "" {
+			delete(payload, key)
+		}
+	}
+	// All duplicate and case-variant reserved keys were discarded. Only the
+	// server-derived source is reintroduced; continuations use a trusted path.
+	payload["_gram_source_kind"], _ = json.Marshal(source)
 	if s.identities == nil {
 		return nil, fmt.Errorf("assistant identity resolver unavailable")
 	}
@@ -136,6 +162,11 @@ func decodeExecution(raw []byte) (*assistantidentity.Execution, error) {
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return nil, fmt.Errorf("assistant execution: %w", err)
 	}
+	for key := range payload {
+		if canonical := reservedExecutionKey(key); canonical != "" && key != canonical {
+			return nil, assistantidentity.ErrInvalidIdentity
+		}
+	}
 	value, exists := payload[executionMetadataKey]
 	if !exists {
 		return nil, nil
@@ -156,7 +187,7 @@ func decodeExecution(raw []byte) (*assistantidentity.Execution, error) {
 func (s *ServiceCore) checkExecutionDispatch(ctx context.Context, assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) error {
 	execution, err := decodeExecution(event.NormalizedPayloadJSON)
 	if err != nil {
-		return fmt.Errorf("assistant execution: %w", err)
+		return fmt.Errorf("assistant execution payload: %w: %w", assistantidentity.ErrInvalidIdentity, err)
 	}
 	if execution == nil {
 		// Legacy envelopes do not have live identity validation. Re-read the

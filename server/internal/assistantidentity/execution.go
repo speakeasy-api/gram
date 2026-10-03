@@ -85,7 +85,13 @@ func (s *Service) ValidateExecution(ctx context.Context, db DB, e Execution) err
 	if s == nil || e.Issuer != s.issuer {
 		return ErrInvalidIdentity
 	}
-	return s.Validate(ctx, db, e.Identity)
+	err := s.Validate(ctx, db, e.Identity)
+	// Normalize only known authority failures. Storage, network and context
+	// errors must retain their identity so dispatch can retry infrastructure.
+	if errors.Is(err, ErrBrokenMapping) || errors.Is(err, ErrTombstoned) || errors.Is(err, ErrActorIneligible) || errors.Is(err, ErrNotFound) {
+		return ErrInvalidIdentity
+	}
+	return err
 }
 
 func (s *Service) Issuer() string { return s.issuer }

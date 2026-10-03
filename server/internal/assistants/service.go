@@ -2030,21 +2030,14 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	if err != nil {
 		return EnqueueResult{}, err
 	}
-	// Persist the event source: wakes reuse an existing thread whose source may be Slack.
+	// Reject invalid ingress before creating a chat or thread. Reserved metadata
+	// is sanitized by captureExecution after the trusted thread is resolved.
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(normalizedPayloadJSON, &payload); err != nil {
-		return EnqueueResult{}, fmt.Errorf("encode trigger event source: %w", err)
+		return EnqueueResult{}, fmt.Errorf("decode trigger event payload: %w", err)
 	}
 	if payload == nil {
 		return EnqueueResult{}, fmt.Errorf("trigger event payload must be a JSON object")
-	}
-	payload["_gram_source_kind"], err = json.Marshal(sourceKind)
-	if err != nil {
-		return EnqueueResult{}, fmt.Errorf("encode trigger event source: %w", err)
-	}
-	normalizedPayloadJSON, err = json.Marshal(payload)
-	if err != nil {
-		return EnqueueResult{}, fmt.Errorf("encode trigger event source: %w", err)
 	}
 	triggerInstanceID, err := conv.PtrToNullUUID(conv.PtrEmpty(task.TriggerInstanceID))
 	if err != nil {
@@ -2662,6 +2655,15 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			)
 			s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_failed", "assistant turn failed", "ERROR", runErr)
 
+			if errors.Is(runErr, errExecutionDenied) {
+				if err := s.failEvent(ctx, thread.ProjectID, event.ID, runErr); err != nil {
+					return ProcessThreadEventsResult{}, err
+				}
+				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant execution denied", "ERROR", runErr)
+				processedAny = true
+				continue
+			}
+
 			teardownExhausted := errors.Is(runErr, ErrRuntimeUnhealthy) && event.Attempts >= maxRuntimeTeardowns
 			outcome := turnErrorBucket(runErr)
 			if teardownExhausted {
@@ -2890,7 +2892,7 @@ func (s *ServiceCore) processEventTurn(
 	event assistantThreadEventRecord,
 ) ([]byte, error) {
 	if err := s.checkExecutionDispatch(ctx, assistant, thread, event); err != nil {
-		return nil, err
+		return nil, classifyExecutionDispatchError(err)
 	}
 	skills, err := s.loadAssistantSkills(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
 	if err != nil {
