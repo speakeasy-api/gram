@@ -171,19 +171,3 @@ func TestCapBoundsRecordsPerMCPServer(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, records, 3, "evicted records are deleted, not just unlinked from the live set")
 }
-
-// TestStoreWithoutRedisIsInert keeps environments with no cache wired working:
-// every caller simply resolves as unknown rather than erroring.
-func TestStoreWithoutRedisIsInert(t *testing.T) {
-	t.Parallel()
-
-	store := NewStore(nil, 0)
-
-	require.NoError(t, store.Store(t.Context(), uuid.New(), "widgets", "session-1", Info{
-		Name:    "claude-code",
-		Version: "2.1",
-	}, 1))
-
-	_, err := store.Load(t.Context(), uuid.New(), "widgets", "session-1", 2)
-	require.ErrorIs(t, err, ErrNotFound)
-}

@@ -594,16 +594,14 @@ func (p *Publisher) persistRecommendations(ctx context.Context, projectID uuid.U
 		return fmt.Errorf("commit skill efficacy recommendations: %w", err)
 	}
 
-	if p.signaler != nil {
-		signalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), recommendationSignalTimeout)
-		defer cancel()
-		if err := p.signaler.Signal(signalCtx, projectID, input.SkillID); err != nil {
-			p.logger.ErrorContext(signalCtx, "signal skill suggestion after efficacy recommendations",
-				attr.SlogError(err),
-				attr.SlogProjectID(projectID.String()),
-				attr.SlogResourceID(input.SkillID.String()),
-			)
-		}
+	signalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), recommendationSignalTimeout)
+	defer cancel()
+	if err := p.signaler.Signal(signalCtx, projectID, input.SkillID); err != nil {
+		p.logger.ErrorContext(signalCtx, "signal skill suggestion after efficacy recommendations",
+			attr.SlogError(err),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogResourceID(input.SkillID.String()),
+		)
 	}
 
 	return nil

@@ -260,7 +260,7 @@ func NewActivities(
 
 	riskRecorder := metering.NewRiskRecorder(publishers.MeterReadings)
 
-	analyzeBatch, err := risk_analysis.NewAnalyzeBatch(
+	analyzeBatch := risk_analysis.NewAnalyzeBatch(
 		logger,
 		tracerProvider,
 		meterProvider,
@@ -282,108 +282,67 @@ func NewActivities(
 		customRuleScanner,
 		celEng,
 		builtinPresets,
-		&shadowMCPPolicyBypassChecker{
-			evaluator: risk.NewPolicyBypassEvaluator(logger, db),
-		},
+		risk.NewShadowMCPBypassChecker(risk.NewPolicyBypassEvaluator(logger, db)),
 		riskRecorder,
 		llmAnalyzerEnabled,
 	)
-	if err != nil {
-		panic(fmt.Errorf("new analyze batch: %w", err))
-	}
 
 	telemetryLogPublisher := telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
-
-	// Directory changes tighten identity-map staleness via an immediate sync
-	// trigger; workers without a Temporal env fall back to the schedule alone.
-	var identityMapRefresh activities.IdentityMapRefreshSignaler
-	if temporalEnv != nil {
-		identityMapRefresh = NewIdentityMapRefreshSignaler(temporalEnv, logger)
-	}
 
 	// The chat analysis judge roster. Adding a new session analysis is
 	// registering its judge here; enabling it per organization is a
 	// chat_analysis_settings row.
-	chatAnalysisJudges, err := analysis.NewJudges(
+	chatAnalysisJudges := analysis.NewJudges(
 		analysis.NewWorkUnitsJudge(logger, tracerProvider, chatClient, judgeRateLimiter),
 		businessmemory.NewJudge(logger, tracerProvider, db, chatClient, judgeRateLimiter),
 	)
-	if err != nil {
-		panic(fmt.Errorf("new chat analysis judges: %w", err))
-	}
 
 	// The scheduled refresh shares the remotesessions single-flight primitive,
-	// which needs the Redis lock cache; workers wired without one (e.g.
-	// deployment-processing test workers) get a nil activity and the wrapper
-	// fails loudly if the sweep is ever scheduled there.
-	var remoteSessionRefresh *activities.RemoteSessionRefresh
-	if cacheAdapter != nil {
-		remoteSessionRefresh = activities.NewRemoteSessionRefresh(
-			logger,
-			db,
-			remotesessions.NewRefreshService(logger, meterProvider, db, encryption, guardianPolicy, tunnelHTTPClient, cacheAdapter,
-				remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier),
-				remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher),
-				remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher),
-				remotesessions.WithRefreshTokenEndpointAssertionSigner(remoteSessionAssertionSigner),
-			),
-		)
-	}
+	// which needs the Redis lock cache.
+	remoteSessionRefresh := activities.NewRemoteSessionRefresh(
+		logger,
+		db,
+		remotesessions.NewRefreshService(logger, meterProvider, db, encryption, guardianPolicy, tunnelHTTPClient, cacheAdapter,
+			remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier),
+			remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher),
+			remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher),
+			remotesessions.WithRefreshTokenEndpointAssertionSigner(remoteSessionAssertionSigner),
+		),
+	)
 
-	// The research agent needs completions and guardian egress; workers wired
-	// without either (test workers) get a nil activity and the wrapper fails
-	// loudly if a research run is ever scheduled there.
-	var mcpResearch *activities.McpResearch
-	if db != nil && chatClient != nil && guardianPolicy != nil && piScanner != nil && features != nil {
-		// One menu instance shared by search (writer), fetch (enforcer), and
-		// the runner (briefing seeder): the run's fetchable URLs are exactly
-		// what these three observed.
-		researchMenu := platformresearch.NewURLMenu()
-		mcpResearch = activities.NewMcpResearch(logger, db, researchagent.New(
-			chatClient,
-			// Every page the agent fetches goes through the same judge the
-			// risk pipeline uses: a page that tries to steer the reviewer is
-			// a finding about the server, not just a hazard to the run.
-			researchagent.NewScannerJudge(logger, piScanner, riskRecorder),
-			researchMenu,
-			researchagent.ProductionToolset(
-				platformresearch.NewWebSearchTool(platformresearch.NewSearchClient(chatClient), researchMenu),
-				platformresearch.NewFetchPageTool(platformresearch.ConfigureFetchClient(guardianPolicy.Client()), researchMenu),
-			)...,
-		), features)
-	}
+	// One menu instance shared by search (writer), fetch (enforcer), and the
+	// runner (briefing seeder): the run's fetchable URLs are exactly what these
+	// three observed.
+	researchMenu := platformresearch.NewURLMenu()
+	mcpResearch := activities.NewMcpResearch(logger, db, researchagent.New(
+		chatClient,
+		// Every page the agent fetches goes through the same judge the risk
+		// pipeline uses: a page that tries to steer the reviewer is a finding
+		// about the server, not just a hazard to the run.
+		researchagent.NewScannerJudge(logger, piScanner, riskRecorder),
+		researchMenu,
+		researchagent.ProductionToolset(
+			platformresearch.NewWebSearchTool(platformresearch.NewSearchClient(chatClient), researchMenu),
+			platformresearch.NewFetchPageTool(platformresearch.ConfigureFetchClient(guardianPolicy.Client()), researchMenu),
+		)...,
+	), features)
 
 	// The recheck sweep rebuilds the intake path's evidence assembler from the
-	// worker's own clients; workers wired without the full ingredient set
-	// (test workers) get a nil activity and no schedule.
-	var mcpApprovalRecheck *activities.McpApprovalRecheck
-	if db != nil && guardianPolicy != nil && mcpCatalog != nil && features != nil && auditLogger != nil {
-		recheckProber := remoteprobe.New(logger, guardianPolicy)
-		mcpApprovalRecheck = activities.NewMcpApprovalRecheck(logger, db, mcpapprovalevidence.NewAssembler(
-			packagemeta.NewClient(guardianPolicy.PooledClient()),
-			repometa.NewClient(guardianPolicy.PooledClient(), repometa.WithToken(githubEvidenceToken)),
-			mcpapprovaladvisories.NewClient(guardianPolicy.PooledClient()),
-			domainmeta.NewClient(guardianPolicy.PooledClient()),
-			telemetryRepo,
-			recheckProber,
-			recheckProber,
-			mcpapprovalcatalog.New(logger, db, mcpCatalog),
-		), features, auditLogger)
-	}
+	// worker's own clients.
+	recheckProber := remoteprobe.New(logger, guardianPolicy)
+	mcpApprovalRecheck := activities.NewMcpApprovalRecheck(logger, db, mcpapprovalevidence.NewAssembler(
+		packagemeta.NewClient(guardianPolicy.PooledClient()),
+		repometa.NewClient(guardianPolicy.PooledClient(), repometa.WithToken(githubEvidenceToken)),
+		mcpapprovaladvisories.NewClient(guardianPolicy.PooledClient()),
+		domainmeta.NewClient(guardianPolicy.PooledClient()),
+		telemetryRepo,
+		recheckProber,
+		recheckProber,
+		mcpapprovalcatalog.New(logger, db, mcpCatalog),
+	), features, auditLogger)
 
-	var skillSuggestionSignaler efficacy.SuggestionSignaler
-	if temporalEnv != nil {
-		skillSuggestionSignaler = &TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0}
-	}
-
-	var skillSuggestionAnalyzer *activities.SkillSuggestionAnalyzer
-	if db != nil && chatClient != nil && skillSuggestionSignaler != nil && judgeRateLimiter != nil {
-		engine, err := suggest.NewEngine(suggest.DefaultConfig(), logger, db, telemetryRepo, chatrepo.New(db), chatClient, judgeRateLimiter)
-		if err != nil {
-			panic(fmt.Errorf("new skill suggestion engine: %w", err))
-		}
-		skillSuggestionAnalyzer = activities.NewSkillSuggestionAnalyzer(db, engine, skillSuggestionSignaler)
-	}
+	skillSuggestionSignaler := &TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0}
+	suggestionEngine := suggest.NewEngine(suggest.DefaultConfig(), logger, db, telemetryRepo, chatrepo.New(db), chatClient, judgeRateLimiter)
 
 	conversionPolicyReconciler, _ := openrouterProvisioner.(activities.ConversionPolicyReconciler)
 
@@ -392,13 +351,7 @@ func NewActivities(
 	// activity from the worker.
 	growthEmitter := growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(db), siteURL)
 
-	// The Okta client needs the assertion signer to mint tokens; workers
-	// without one record every applications sync as failed.
-	var oktaClients okta.ClientFactory
-	if guardianPolicy != nil && remoteSessionAssertionSigner != nil {
-		oktaClients = okta.NewClientFactory(logger, guardianPolicy, remoteSessionAssertionSigner)
-	}
-	oktaApplicationSyncer := oktaapplications.NewSyncer(logger, meterProvider, db, oktaClients)
+	oktaApplicationSyncer := oktaapplications.NewSyncer(logger, meterProvider, db, okta.NewClientFactory(logger, guardianPolicy, remoteSessionAssertionSigner))
 
 	return &Activities{
 		db:                               db,
@@ -461,7 +414,7 @@ func NewActivities(
 		reapSoftDeletedAssistantMems:     activities.NewReapSoftDeletedAssistantMemories(logger, db),
 		signalAssistantCoordinator:       activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		signalAssistantThread:            activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
-		processWorkOSOrganizationEvents:  activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient, cacheAdapter, identityMapRefresh),
+		processWorkOSOrganizationEvents:  activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient, cacheAdapter, NewIdentityMapRefreshSignaler(temporalEnv, logger)),
 		processWorkOSGlobalRoleEvents:    activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosClient),
 		processWorkOSUserEvents:          activities.NewProcessWorkOSUserEvents(logger, db, workosClient),
 		cancelAssistantsSubscription:     activities.NewCancelAssistantsSubscription(logger, billingRepo),
@@ -491,7 +444,7 @@ func NewActivities(
 			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter), skillSuggestionSignaler, riskRecorder),
 			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
-		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
+		skillSuggestionAnalyzer: activities.NewSkillSuggestionAnalyzer(db, suggestionEngine, skillSuggestionSignaler),
 		remoteSessionRefresh:    remoteSessionRefresh,
 		trialEmails:             trialEmailsService,
 		trialFixtureHandler:     trialFixtureHandler,
@@ -517,10 +470,6 @@ func (a *Activities) SendTrialLifecycleEmail(ctx context.Context, input TrialLif
 			return err
 		}
 	}
-	if a.trialEmails == nil {
-		return fmt.Errorf("trial email service is not configured")
-	}
-
 	switch input.Kind {
 	case TrialStartedEmailKind:
 		if err := a.trialEmails.TrialStarted(ctx, input.OrganizationID); err != nil {
@@ -549,9 +498,6 @@ func (a *Activities) ResolveTrialEndingReminder(ctx context.Context, organizatio
 			return billingnotifications.TrialReminderState{}, err
 		}
 	}
-	if a.billingNotifications == nil {
-		return billingnotifications.TrialReminderState{}, fmt.Errorf("billing notification service is not configured")
-	}
 	state, err := a.billingNotifications.ResolveTrialReminder(ctx, organizationID)
 	if err != nil {
 		return billingnotifications.TrialReminderState{}, fmt.Errorf("resolve trial reminder: %w", err)
@@ -566,9 +512,6 @@ func (a *Activities) SendTrialEndingSoonEmail(ctx context.Context, input billing
 			return billingnotifications.SendTrialEndingSoonResult{}, err
 		}
 	}
-	if a.billingNotifications == nil {
-		return billingnotifications.SendTrialEndingSoonResult{}, fmt.Errorf("billing notification service is not configured")
-	}
 	result, err := a.billingNotifications.SendTrialEndingSoon(ctx, input)
 	if err != nil {
 		return billingnotifications.SendTrialEndingSoonResult{}, fmt.Errorf("send trial ending soon notification: %w", err)
@@ -577,9 +520,6 @@ func (a *Activities) SendTrialEndingSoonEmail(ctx context.Context, input billing
 }
 
 func (a *Activities) SendAccessPausedEmail(ctx context.Context, input billingnotifications.SendAccessPausedInput) error {
-	if a.billingNotifications == nil {
-		return fmt.Errorf("billing notification service is not configured")
-	}
 	if err := a.billingNotifications.SendAccessPaused(ctx, input); err != nil {
 		return fmt.Errorf("send access paused notification: %w", err)
 	}
@@ -587,9 +527,6 @@ func (a *Activities) SendAccessPausedEmail(ctx context.Context, input billingnot
 }
 
 func (a *Activities) SendPaygActivatedEmail(ctx context.Context, input billingnotifications.SendPaygActivatedInput) error {
-	if a.billingNotifications == nil {
-		return fmt.Errorf("billing notification service is not configured")
-	}
 	if err := a.billingNotifications.SendPaygActivated(ctx, input); err != nil {
 		return fmt.Errorf("send PAYG activated notification: %w", err)
 	}
@@ -874,9 +811,6 @@ func (a *Activities) FetchUnanalyzedMessages(ctx context.Context, input risk_ana
 }
 
 func (a *Activities) AnalyzeBatch(ctx context.Context, input risk_analysis.AnalyzeBatchArgs) (*risk_analysis.AnalyzeBatchResult, error) {
-	if a.analyzeBatch == nil {
-		return nil, fmt.Errorf("analyze batch: gitleaks detector pool not initialized")
-	}
 	result, err := a.analyzeBatch.Do(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("analyze batch: %w", err)
@@ -1072,9 +1006,6 @@ func (a *Activities) ClaimDueRemoteSessionRefreshCandidates(
 	ctx context.Context,
 	input activities.ClaimDueRemoteSessionRefreshCandidatesInput,
 ) ([]activities.RemoteSessionRefreshCandidate, error) {
-	if a.remoteSessionRefresh == nil {
-		return nil, fmt.Errorf("claim due remote session refresh candidates: refresh service not configured")
-	}
 	candidates, err := a.remoteSessionRefresh.ClaimDueCandidates(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("claim due remote session refresh candidates: %w", err)
@@ -1083,9 +1014,6 @@ func (a *Activities) ClaimDueRemoteSessionRefreshCandidates(
 }
 
 func (a *Activities) RefreshRemoteSession(ctx context.Context, input activities.RefreshRemoteSessionInput) (activities.RefreshRemoteSessionResult, error) {
-	if a.remoteSessionRefresh == nil {
-		return activities.RefreshRemoteSessionResult{RateLimited: false}, fmt.Errorf("refresh remote session: refresh lock cache not configured")
-	}
 	result, err := a.remoteSessionRefresh.Do(ctx, input)
 	if err != nil {
 		return activities.RefreshRemoteSessionResult{RateLimited: false}, fmt.Errorf("refresh remote session: %w", err)
@@ -1117,9 +1045,6 @@ func (a *Activities) DemoteExpiredTrial(ctx context.Context, args activities.Dem
 // RunMcpResearch executes one research-agent run for an MCP approval request
 // and lands the outcome on its report row.
 func (a *Activities) RunMcpResearch(ctx context.Context, input activities.McpResearchInput) error {
-	if a.mcpResearch == nil {
-		return fmt.Errorf("run mcp research: research activity not configured on this worker")
-	}
 	if err := a.mcpResearch.Run(ctx, input); err != nil {
 		return fmt.Errorf("run mcp research: %w", err)
 	}
@@ -1130,9 +1055,6 @@ func (a *Activities) RunMcpResearch(ctx context.Context, input activities.McpRes
 // without reaching its own failure handling. A no-op for reports that
 // already resolved.
 func (a *Activities) MarkMcpResearchInterrupted(ctx context.Context, input activities.McpResearchInput) error {
-	if a.mcpResearch == nil {
-		return fmt.Errorf("mark mcp research interrupted: research activity not configured on this worker")
-	}
 	if err := a.mcpResearch.MarkInterrupted(ctx, input); err != nil {
 		return fmt.Errorf("mark mcp research interrupted: %w", err)
 	}
@@ -1142,9 +1064,6 @@ func (a *Activities) MarkMcpResearchInterrupted(ctx context.Context, input activ
 // ListMcpApprovalRecheckPage returns one page of approved MCP approval
 // requests with the decision snapshots their daily recheck compares against.
 func (a *Activities) ListMcpApprovalRecheckPage(ctx context.Context, args activities.McpApprovalRecheckPageArgs) ([]activities.McpApprovalRecheckTarget, error) {
-	if a.mcpApprovalRecheck == nil {
-		return nil, fmt.Errorf("list mcp approval recheck page: recheck activity not configured on this worker")
-	}
 	targets, err := a.mcpApprovalRecheck.ListPage(ctx, args)
 	if err != nil {
 		return nil, fmt.Errorf("list mcp approval recheck page: %w", err)
@@ -1155,9 +1074,6 @@ func (a *Activities) ListMcpApprovalRecheckPage(ctx context.Context, args activi
 // RecheckMcpApprovalRequest re-gathers one approved request's evidence and
 // flags permission-relevant drift from the snapshot its approval rested on.
 func (a *Activities) RecheckMcpApprovalRequest(ctx context.Context, target activities.McpApprovalRecheckTarget) error {
-	if a.mcpApprovalRecheck == nil {
-		return fmt.Errorf("recheck mcp approval request: recheck activity not configured on this worker")
-	}
 	if err := a.mcpApprovalRecheck.Recheck(ctx, target); err != nil {
 		return fmt.Errorf("recheck mcp approval request: %w", err)
 	}

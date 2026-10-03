@@ -30,14 +30,6 @@ type Client struct {
 
 type Option func(*Client)
 
-func WithHTTPClient(httpClient *guardian.HTTPClient) Option {
-	return func(c *Client) {
-		if httpClient != nil {
-			c.httpClient = httpClient
-		}
-	}
-}
-
 func WithBaseURL(baseURL string) Option {
 	return func(c *Client) {
 		if baseURL != "" {
@@ -63,9 +55,6 @@ func WithAPIKey(apiKey string) Option {
 }
 
 func New(guardianPolicy *guardian.Policy, opts ...Option) *Client {
-	if guardianPolicy == nil {
-		panic("cursor client requires guardian policy")
-	}
 	c := &Client{
 		httpClient: guardianPolicy.PooledClient(),
 		baseURL:    defaultBaseURL,

@@ -27,6 +27,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/speakeasy-api/gram/server/internal/inv"
 )
 
 const (
@@ -86,15 +88,10 @@ type TailscaleNetworkIngressProvisioner struct {
 
 var _ NetworkIngressProvisioner = (*TailscaleNetworkIngressProvisioner)(nil)
 
-func NewTailscaleNetworkIngressProvisioner(clientset kubernetes.Interface, dynamicClient dynamic.Interface, config TailscaleNetworkIngressConfig) (*TailscaleNetworkIngressProvisioner, error) {
-	if clientset == nil || dynamicClient == nil {
-		return nil, fmt.Errorf("%w: Kubernetes clients are required", ErrNetworkIngressInvalidDesiredState)
-	}
-	if config.OperatorNamespace == "" {
-		return nil, fmt.Errorf("%w: Tailscale operator namespace is required", ErrNetworkIngressInvalidDesiredState)
-	}
+func NewTailscaleNetworkIngressProvisioner(clientset kubernetes.Interface, dynamicClient dynamic.Interface, config TailscaleNetworkIngressConfig) *TailscaleNetworkIngressProvisioner {
+	inv.Require("tailscale network ingress provisioner", "operator namespace is set", config.OperatorNamespace != "")
 	config.ClusterCIDRs = append([]string{"169.254.169.254/32"}, config.ClusterCIDRs...)
-	return &TailscaleNetworkIngressProvisioner{clientset: clientset, dynamic: dynamicClient, config: config}, nil
+	return &TailscaleNetworkIngressProvisioner{clientset: clientset, dynamic: dynamicClient, config: config}
 }
 
 func (config TailscaleNetworkIngressConfig) validateApply() error {

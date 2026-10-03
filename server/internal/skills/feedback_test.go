@@ -66,7 +66,7 @@ func TestFeedbackRecorderValidatesInputBeforeWriting(t *testing.T) {
 	t.Parallel()
 
 	_, ti := newTestService(t)
-	recorder := feedbackrecorder.NewRecorder(ti.conn, testenv.NewLogger(t), nil)
+	recorder := feedbackrecorder.NewRecorder(ti.conn, testenv.NewLogger(t), discardFeedbackSignaler{})
 	valid := feedbackrecorder.RecordInput{
 		ProjectID:      ti.projectID,
 		SkillID:        uuid.NullUUID{},
@@ -114,7 +114,7 @@ func TestFeedbackRecorderResolvesActiveNameOrPreservesUnresolvedName(t *testing.
 
 	ctx, ti := newTestService(t)
 	created := createSkill(t, ctx, ti, "resolved-feedback", "Resolved")
-	recorder := feedbackrecorder.NewRecorder(ti.conn, testenv.NewLogger(t), nil)
+	recorder := feedbackrecorder.NewRecorder(ti.conn, testenv.NewLogger(t), discardFeedbackSignaler{})
 
 	resolved, err := recorder.Record(ctx, feedbackrecorder.RecordInput{
 		ProjectID:      ti.projectID,
@@ -158,7 +158,7 @@ func TestFeedbackRecorderExactIDsAndEmptyNote(t *testing.T) {
 	created := createSkill(t, ctx, ti, "exact-feedback", "Exact")
 	skillID := uuid.MustParse(created.Skill.ID)
 	versionID := uuid.MustParse(created.Version.ID)
-	recorder := feedbackrecorder.NewRecorder(ti.conn, testenv.NewLogger(t), nil)
+	recorder := feedbackrecorder.NewRecorder(ti.conn, testenv.NewLogger(t), discardFeedbackSignaler{})
 
 	feedback, err := recorder.Record(ctx, feedbackrecorder.RecordInput{
 		ProjectID:      ti.projectID,
@@ -182,7 +182,7 @@ func TestFeedbackRecorderNoteUnicodeBoundary(t *testing.T) {
 	t.Parallel()
 
 	_, ti := newTestService(t)
-	recorder := feedbackrecorder.NewRecorder(ti.conn, testenv.NewLogger(t), nil)
+	recorder := feedbackrecorder.NewRecorder(ti.conn, testenv.NewLogger(t), discardFeedbackSignaler{})
 	input := feedbackrecorder.RecordInput{
 		ProjectID:      ti.projectID,
 		SkillID:        uuid.NullUUID{},
@@ -204,6 +204,10 @@ func TestFeedbackRecorderNoteUnicodeBoundary(t *testing.T) {
 	_, err = recorder.Record(t.Context(), input)
 	require.ErrorContains(t, err, "4000")
 }
+
+type discardFeedbackSignaler struct{}
+
+func (discardFeedbackSignaler) Signal(context.Context, uuid.UUID, uuid.UUID) error { return nil }
 
 type feedbackDurabilitySignaler struct {
 	repo      *repo.Queries

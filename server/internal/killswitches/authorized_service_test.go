@@ -80,8 +80,9 @@ type lifecycleOnlyStub struct{ GenericService }
 
 func TestNewAuthorizedServiceRequiresCustomerReadService(t *testing.T) {
 	t.Parallel()
-	_, err := NewAuthorizedService(&lifecycleOnlyStub{GenericService: &genericServiceStub{}}, &authorizerStub{})
-	require.ErrorIs(t, err, ErrInvalidArgument)
+	require.Panics(t, func() {
+		NewAuthorizedService(&lifecycleOnlyStub{GenericService: &genericServiceStub{}}, &authorizerStub{})
+	})
 }
 
 type authorizationCheck struct {
@@ -104,12 +105,11 @@ func TestAuthorizedServiceDerivesTenantAndActorForAllSixMethods(t *testing.T) {
 	t.Parallel()
 	generic := &genericServiceStub{}
 	authorizer := &authorizerStub{}
-	service, err := NewAuthorizedService(generic, authorizer)
-	require.NoError(t, err)
+	service := NewAuthorizedService(generic, authorizer)
 	ctx := validatedCustomerContext(t, "org_trusted", "user_trusted", "admin@example.com")
 	prescriptionID := PrescriptionID("00000000-0000-0000-0000-000000000001")
 
-	_, err = service.ListDefinitions(ctx)
+	_, err := service.ListDefinitions(ctx)
 	require.NoError(t, err)
 	_, err = service.ActivatePrescription(ctx, AuthorizedActivatePrescriptionRequest{OperationID: uuid.New(), Definition: "definition", PrincipalKind: "user", PrincipalInput: "principal", ResourceKind: "tool", Desired: testDesired([]string{"tool:a"})})
 	require.NoError(t, err)
@@ -173,8 +173,7 @@ func TestAuthorizedServiceRejectsAdminRevokedAfterContextPreparation(t *testing.
 	require.NoError(t, engine.Require(ctx, check))
 
 	generic := &genericServiceStub{}
-	service, err := NewAuthorizedService(generic, engine)
-	require.NoError(t, err)
+	service := NewAuthorizedService(generic, engine)
 	_, err = service.ListDefinitions(ctx)
 	requireOopsCode(t, err, oops.CodeForbidden)
 	require.Empty(t, generic.calls)
@@ -220,8 +219,7 @@ func TestAuthorizedServiceRejectsCredentialAndBypassMatrixAcrossAllMethods(t *te
 			t.Parallel()
 			generic := &genericServiceStub{}
 			authorizer := &authorizerStub{err: test.authzErr}
-			service, err := NewAuthorizedService(generic, authorizer)
-			require.NoError(t, err)
+			service := NewAuthorizedService(generic, authorizer)
 			ctx := test.context(t)
 			for _, invoke := range authorizedMethodInvocations() {
 				requireOopsCode(t, invoke(ctx, service), test.wantCode)
@@ -236,9 +234,8 @@ func TestAuthorizedServicePreservesLifecycleErrors(t *testing.T) {
 	t.Parallel()
 	for _, target := range []error{ErrOperationConflict, &VersionConflictError{Expected: 1, Actual: 2}, ErrOperationUnavailable} {
 		generic := &genericServiceStub{err: target}
-		service, err := NewAuthorizedService(generic, &authorizerStub{})
-		require.NoError(t, err)
-		_, err = service.ActivatePrescription(validatedCustomerContext(t, "org", "user", "user@example.com"), AuthorizedActivatePrescriptionRequest{OperationID: uuid.New()})
+		service := NewAuthorizedService(generic, &authorizerStub{})
+		_, err := service.ActivatePrescription(validatedCustomerContext(t, "org", "user", "user@example.com"), AuthorizedActivatePrescriptionRequest{OperationID: uuid.New()})
 		require.Error(t, err)
 		require.True(t, errors.Is(err, target) || errors.Is(err, ErrVersionConflict))
 	}

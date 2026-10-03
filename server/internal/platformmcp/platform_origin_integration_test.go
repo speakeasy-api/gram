@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -42,8 +43,7 @@ func TestJWTAuthenticatorBindsTokensToPlatformHost(t *testing.T) {
 	require.NoError(t, err)
 
 	encryptionClient := testEncryption(t)
-	codec, err := NewCredentialCodec(encryptionClient)
-	require.NoError(t, err)
+	codec := NewCredentialCodec(encryptionClient)
 	signer := sessiontokens.NewSigner("test-key")
 	now := time.Now().UTC()
 	store := NewPostgresOAuthStore(conn)
@@ -69,8 +69,7 @@ func TestJWTAuthenticatorBindsTokensToPlatformHost(t *testing.T) {
 
 	base, err := url.Parse(testCanonicalBaseURL)
 	require.NoError(t, err)
-	authenticator, err := NewJWTAuthenticator(signer, conn, encryptionClient, base)
-	require.NoError(t, err)
+	authenticator := NewJWTAuthenticator(signer, conn, encryptionClient, base)
 	for _, tc := range []struct {
 		name    string
 		surface requestorigin.Surface
@@ -126,7 +125,7 @@ func TestMemberMCPURLsFollowPlatformHost(t *testing.T) {
 
 	serverURL, err := url.Parse(testCanonicalBaseURL)
 	require.NoError(t, err)
-	service := NewPluginsService(conn, allowBudget(), "member-urls-platform-host-key").
+	service := NewPluginsService(conn, allowBudget(), "member-urls-platform-host-key", testDistributionGuard(t, &feature.InMemory{})).
 		WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).
 		withMemberMCPConnectionReader(testMemberMCPConnectionReader{}).
 		WithInstallLinks(serverURL, serverURL)

@@ -32,8 +32,7 @@ type authenticationHostHarness struct {
 func newAuthenticationHostHarness(t *testing.T, ti *testInstance) authenticationHostHarness {
 	t.Helper()
 
-	authenticationHost, err := mcp.NewAuthenticationHost(testAuthenticationHostURL, ti.serverURL, "test")
-	require.NoError(t, err)
+	authenticationHost := mcp.NewAuthenticationHost(testAuthenticationHostURL, ti.serverURL, "test")
 	mcp.AttachAuthenticationHost(authenticationHost, ti.service)
 
 	passed := false
@@ -505,8 +504,7 @@ func TestNewAuthenticationHost_Disabled(t *testing.T) {
 
 	serverURL, err := url.Parse("https://app.example.com")
 	require.NoError(t, err)
-	authenticationHost, err := mcp.NewAuthenticationHost("", serverURL, "prod")
-	require.NoError(t, err)
+	authenticationHost := mcp.NewAuthenticationHost("", serverURL, "prod")
 
 	passed := false
 	next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { passed = true })
@@ -532,15 +530,12 @@ func TestNewAuthenticationHost_InvalidURLsRefused(t *testing.T) {
 		"auth.example.com",
 		"https://",
 	} {
-		_, err := mcp.NewAuthenticationHost(raw, serverURL, "prod")
-		require.Error(t, err, raw)
+		require.Panics(t, func() { mcp.NewAuthenticationHost(raw, serverURL, "prod") }, raw)
 	}
 
-	_, err = mcp.NewAuthenticationHost("https://auth.example.com/", serverURL, "prod")
-	require.NoError(t, err)
+	require.NotPanics(t, func() { mcp.NewAuthenticationHost("https://auth.example.com/", serverURL, "prod") })
 
 	localServerURL, err := url.Parse("http://localhost:8080")
 	require.NoError(t, err)
-	_, err = mcp.NewAuthenticationHost("http://127.0.0.1:8080", localServerURL, "local")
-	require.NoError(t, err)
+	require.NotPanics(t, func() { mcp.NewAuthenticationHost("http://127.0.0.1:8080", localServerURL, "local") })
 }

@@ -53,7 +53,7 @@ func key(organizationID, projectID, sessionID string) string {
 
 func Read(ctx context.Context, cacheImpl cache.Cache, organizationID, projectID, sessionID string) (*Quarantine, error) {
 	k := key(organizationID, projectID, sessionID)
-	if cacheImpl == nil || k == "" {
+	if k == "" {
 		return nil, nil
 	}
 	var q Quarantine
@@ -69,7 +69,7 @@ func Read(ctx context.Context, cacheImpl cache.Cache, organizationID, projectID,
 
 func Write(ctx context.Context, cacheImpl cache.Cache, q Quarantine) error {
 	k := key(q.OrganizationID, q.ProjectID, q.SessionID)
-	if cacheImpl == nil || k == "" {
+	if k == "" {
 		return nil
 	}
 	if err := cacheImpl.Set(ctx, k, q, TTL); err != nil {
@@ -80,7 +80,7 @@ func Write(ctx context.Context, cacheImpl cache.Cache, q Quarantine) error {
 
 func Delete(ctx context.Context, cacheImpl cache.Cache, organizationID, projectID, sessionID string) error {
 	k := key(organizationID, projectID, sessionID)
-	if cacheImpl == nil || k == "" {
+	if k == "" {
 		return nil
 	}
 	if err := cacheImpl.Delete(ctx, k); err != nil {

@@ -18,16 +18,13 @@ import (
 // and aggregate by name — the same arrangement `mcp.tool.call` already uses.
 const InstrumentMCPRequest = "mcp.request"
 
-// RequestCounter owns the census counter. A nil *RequestCounter is valid —
-// Record becomes a no-op — so tests and callers that do not care about
-// metrics can pass nil.
+// RequestCounter owns the census counter.
 type RequestCounter struct {
 	requests metric.Int64Counter
 }
 
 // NewRequestCounter constructs the census counter. An instrument creation
-// failure is logged and leaves the instrument nil; Record handles nil
-// instruments so partial construction still produces a usable value.
+// failure is logged.
 func NewRequestCounter(meter metric.Meter, logger *slog.Logger) *RequestCounter {
 	requests, err := meter.Int64Counter(
 		InstrumentMCPRequest,
@@ -72,10 +69,6 @@ func NewRequestCounter(meter metric.Meter, logger *slog.Logger) *RequestCounter 
 // (the header is never sent there), and on other methods it identifies the
 // pre-2025-06-18 cohort.
 func (c *RequestCounter) Record(ctx context.Context, protocolVersion, method string, surface Surface) {
-	if c == nil || c.requests == nil {
-		return
-	}
-
 	c.requests.Add(ctx, 1, metric.WithAttributes(
 		attr.MCPNegotiatedProtocolVersion(mcpversions.Clamp(mcpversions.Sanitize(protocolVersion))),
 		attr.McpMethod(mcprequests.ClampMethod(method)),

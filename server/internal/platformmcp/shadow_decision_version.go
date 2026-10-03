@@ -15,16 +15,13 @@ import (
 
 type shadowDecisionVersionCodec struct{ key []byte }
 
-func newShadowDecisionVersionCodec(keyMaterial string) (*shadowDecisionVersionCodec, error) {
-	if keyMaterial == "" {
-		return nil, ErrShadowInventoryUnavailable
-	}
+func newShadowDecisionVersionCodec(keyMaterial string) *shadowDecisionVersionCodec {
 	key := sha256.Sum256([]byte("platform-mcp-shadow-decision-version:" + keyMaterial))
-	return &shadowDecisionVersionCodec{key: key[:]}, nil
+	return &shadowDecisionVersionCodec{key: key[:]}
 }
 
 func (c *shadowDecisionVersionCodec) Encode(state mcpapproval.DecisionVersionState) (string, error) {
-	if c == nil || len(c.key) != sha256.Size || state.RequestID == uuid.Nil {
+	if state.RequestID == uuid.Nil {
 		return "", ErrShadowInventoryUnavailable
 	}
 	payload, err := json.Marshal(state)

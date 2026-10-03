@@ -20,8 +20,7 @@ func testReferencePrincipal() Principal {
 func TestSubjectReference_RoundTripsWithinItsSession(t *testing.T) {
 	t.Parallel()
 
-	codec, err := newSubjectReferenceCodec("key-material")
-	require.NoError(t, err)
+	codec := newSubjectReferenceCodec("key-material")
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 	principal := testReferencePrincipal()
@@ -47,8 +46,7 @@ func TestSubjectReference_RoundTripsWithinItsSession(t *testing.T) {
 func TestSubjectReference_Rejected(t *testing.T) {
 	t.Parallel()
 
-	codec, err := newSubjectReferenceCodec("key-material")
-	require.NoError(t, err)
+	codec := newSubjectReferenceCodec("key-material")
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 	principal := testReferencePrincipal()
@@ -134,10 +132,8 @@ func TestSubjectReference_Rejected(t *testing.T) {
 func TestSubjectReference_ForgedSignatureRejected(t *testing.T) {
 	t.Parallel()
 
-	codec, err := newSubjectReferenceCodec("key-material")
-	require.NoError(t, err)
-	other, err := newSubjectReferenceCodec("different-key-material")
-	require.NoError(t, err)
+	codec := newSubjectReferenceCodec("key-material")
+	other := newSubjectReferenceCodec("different-key-material")
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 	principal := testReferencePrincipal()
@@ -149,16 +145,6 @@ func TestSubjectReference_ForgedSignatureRejected(t *testing.T) {
 	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
 }
 
-// TestSubjectReference_UnavailableWithoutKeyMaterial pins that a deployment
-// with no key material cannot mint references at all, rather than minting
-// unbound ones.
-func TestSubjectReference_UnavailableWithoutKeyMaterial(t *testing.T) {
-	t.Parallel()
-
-	_, err := newSubjectReferenceCodec("")
-	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
-}
-
 // TestSubjectReference_CursorBoundToItsQuery pins that a cursor resumes only
 // the query that minted it. A position replayed against a different MCP,
 // outcome class, or window is a page of a different question, and answering it
@@ -166,8 +152,7 @@ func TestSubjectReference_UnavailableWithoutKeyMaterial(t *testing.T) {
 func TestSubjectReference_CursorBoundToItsQuery(t *testing.T) {
 	t.Parallel()
 
-	codec, err := newSubjectReferenceCodec("key-material")
-	require.NoError(t, err)
+	codec := newSubjectReferenceCodec("key-material")
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 	principal := testReferencePrincipal()
@@ -198,8 +183,7 @@ func TestSubjectReference_CursorBoundToItsQuery(t *testing.T) {
 func TestSubjectReference_KindsAreNotInterchangeable(t *testing.T) {
 	t.Parallel()
 
-	codec, err := newSubjectReferenceCodec("key-material")
-	require.NoError(t, err)
+	codec := newSubjectReferenceCodec("key-material")
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 	principal := testReferencePrincipal()

@@ -328,7 +328,6 @@ func newTestClientForServer(t *testing.T, server *httptest.Server) *ChatClient {
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
 		&mockUsageTrackingStrategy{},
-		&mockChatTitleGenerator{},
 		&mockTelemetryLogger{},
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}

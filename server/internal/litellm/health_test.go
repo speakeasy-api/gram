@@ -128,7 +128,7 @@ func TestClassifyHealthErrorUsesFixedCategories(t *testing.T) {
 func TestManagedInstanceIngestUpdatesHealth(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newRealTestService(t, nil)
+	ctx, ti := newRealTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -178,7 +178,7 @@ func TestManagedInstanceIngestUpdatesHealth(t *testing.T) {
 func TestHealthProcessorPersistsAcceptedUpdatesAcrossLifecycleChanges(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newRealTestService(t, nil)
+	ctx, ti := newRealTestService(t)
 	created, err := ti.service.CreateInstance(ctx, &gen.CreateInstancePayload{Name: "health-lifecycle", FailurePosture: "fail_closed"})
 	require.NoError(t, err)
 

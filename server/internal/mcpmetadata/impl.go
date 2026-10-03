@@ -979,11 +979,8 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	authCtx, authOk := contextvalues.GetAuthContext(ctx)
 
 	if privateNetworkInstall && (authCtx == nil || authCtx.ActiveOrganizationID == "") {
-		if s.serverURL != nil {
-			http.Redirect(w, r, s.loginRedirectURL(r), http.StatusFound)
-			return nil
-		}
-		return s.serveNotFoundPage(w, mcpSlug)
+		http.Redirect(w, r, s.loginRedirectURL(r), http.StatusFound)
+		return nil
 	}
 
 	var ic *installContext
@@ -1006,13 +1003,8 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	if !ic.isPublic() {
 		// If no auth context, redirect to login page
 		if authCtx == nil {
-			if s.serverURL != nil {
-				http.Redirect(w, r, s.loginRedirectURL(r), http.StatusFound)
-				return nil
-			}
-			// Fallback if serverURL is nil
-			s.logger.InfoContext(ctx, "serving not found page: serverURL is nil", attr.SlogToolsetMCPSlug(mcpSlug))
-			return s.serveNotFoundPage(w, mcpSlug)
+			http.Redirect(w, r, s.loginRedirectURL(r), http.StatusFound)
+			return nil
 		}
 
 		// Ought one to check if the user has access to the organization rather than just if the org is active?
@@ -1238,9 +1230,6 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 func (s *Service) requireMetaInstallAdmission(ctx context.Context, mode networkaccess.Mode, organizationID string) error {
 	if mode.IsPublicOnly() {
 		return nil
-	}
-	if s.metaInstallAdmission == nil {
-		return fmt.Errorf("%w: meta install page is unavailable", errToolsetNotFound)
 	}
 	if err := s.metaInstallAdmission(ctx, organizationID); err != nil {
 		return fmt.Errorf("%w: meta install page is unavailable", errToolsetNotFound)

@@ -54,23 +54,15 @@ type MCPPolicyScanner struct {
 
 // NewMCPPolicyScanner creates an MCP policy scanner over the shared detectors.
 func NewMCPPolicyScanner(scanner *Scanner, resolver destructivetool.Resolver) *MCPPolicyScanner {
-	var destructive *destructivetool.Scanner
-	if resolver != nil {
-		destructive = destructivetool.NewScanner(resolver)
-	}
 	return &MCPPolicyScanner{
 		scanner:         scanner,
 		cliDestructive:  clidestructive.NewScanner(),
-		destructiveTool: destructive,
+		destructiveTool: destructivetool.NewScanner(resolver),
 	}
 }
 
 // ScanMCPPolicy runs one policy against the request's message view.
 func (s *MCPPolicyScanner) ScanMCPPolicy(ctx context.Context, policy policycore.Policy, request MCPScanRequest) ([]scanners.Finding, error) {
-	if s == nil || s.scanner == nil {
-		return nil, errors.New("MCP policy scanner is unavailable")
-	}
-
 	messageType := request.MessageType
 	if messageType == "" {
 		messageType = message.ToolRequest
@@ -160,7 +152,7 @@ func (s *MCPPolicyScanner) ScanMCPPolicy(ctx context.Context, policy policycore.
 				scanErr = errors.Join(scanErr, completionError(source, nil))
 			}
 		case shadowmcp.SourceDestructiveTool:
-			if s.destructiveTool == nil || request.ToolsetID == "" {
+			if request.ToolsetID == "" {
 				scanErr = errors.Join(scanErr, errors.New("destructive tool detector lacks hosted toolset attribution"))
 				continue
 			}
@@ -206,9 +198,6 @@ func (s *MCPPolicyScanner) scanPromptPolicy(ctx context.Context, policy policyco
 	}
 	if !s.scanner.projectFlagEnabled(ctx, policy.OrganizationID, policy.ProjectID, feature.FlagPromptPolicies) {
 		return nil, errors.New("prompt policy detector is disabled")
-	}
-	if s.scanner.promptPolicy == nil {
-		return nil, errors.New("prompt policy detector is unavailable")
 	}
 	config := promptpolicy.Config{Temperature: nil, FailOpen: true}
 	if policy.ModelConfig != nil {

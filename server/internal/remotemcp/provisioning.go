@@ -57,9 +57,6 @@ type RemoteMCPProvisioningResult struct {
 }
 
 func NewRemoteMCPProvisioningService(db *pgxpool.Pool, policy *guardian.Policy, auditLogger *audit.Logger, iconSetter mcpservers.DefaultServerIconSetter) *RemoteMCPProvisioningService {
-	if auditLogger == nil {
-		auditLogger = audit.NewLogger()
-	}
 	return &RemoteMCPProvisioningService{db: db, policy: policy, audit: auditLogger, iconSetter: iconSetter}
 }
 
@@ -68,7 +65,7 @@ func NewRemoteMCPProvisioningService(db *pgxpool.Pool, policy *guardian.Policy, 
 // MCP server, and the required user-session issuer. OAuth auto-configuration
 // and best-effort endpoint creation remain outside this core transaction.
 func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.Context, authCtx *contextvalues.AuthContext, input DashboardRemoteMCPProvisioningInput) (RemoteMCPProvisioningResult, error) {
-	if s == nil || s.db == nil || s.policy == nil || s.audit == nil || authCtx == nil || authCtx.ProjectID == nil || input.URL == "" || !dashboardRemoteMCPTransportSupported(input.TransportType) {
+	if authCtx == nil || authCtx.ProjectID == nil || input.URL == "" || !dashboardRemoteMCPTransportSupported(input.TransportType) {
 		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeBadRequest, nil, "invalid dashboard remote MCP provisioning input")
 	}
 	if _, err := proxy.ValidateRemoteMCPURL(ctx, s.policy, input.URL); err != nil {
@@ -128,9 +125,7 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 	if err := tx.Commit(ctx); err != nil {
 		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeUnexpected, err, "commit dashboard remote MCP provisioning")
 	}
-	if s.iconSetter != nil {
-		s.iconSetter.ScheduleDefaultRemoteServerIcon(ctx, *authCtx.ProjectID, mcpServer.ID, remote.ID)
-	}
+	s.iconSetter.ScheduleDefaultRemoteServerIcon(ctx, *authCtx.ProjectID, mcpServer.ID, remote.ID)
 
 	return RemoteMCPProvisioningResult{RemoteMCPServer: remote, MCPServer: mcpServer}, nil
 }
@@ -158,7 +153,7 @@ func remoteMCPDisplayName(rawURL string, name pgtype.Text) string {
 // matching audit event. Both dashboard workflows use it so their source records
 // cannot diverge while the atomic workflow adds its linked MCP server.
 func createRemoteMCPSource(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, input remoteMCPSourceInput) (repo.RemoteMcpServer, error) {
-	if tx == nil || auditLogger == nil || authCtx == nil || authCtx.ProjectID == nil {
+	if authCtx == nil || authCtx.ProjectID == nil {
 		return repo.RemoteMcpServer{}, oops.E(oops.CodeBadRequest, nil, "invalid remote MCP source input")
 	}
 	remoteID, err := uuid.NewV7()
@@ -202,7 +197,7 @@ func createRemoteMCPSource(ctx context.Context, tx pgx.Tx, auditLogger *audit.Lo
 // write. It prevents a stale session from creating linked resources after the
 // project is deleted or moved out of the caller's active organization.
 func requireLiveProjectForActiveOrganization(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext) error {
-	if tx == nil || authCtx == nil || authCtx.ProjectID == nil || authCtx.ActiveOrganizationID == "" {
+	if authCtx == nil || authCtx.ProjectID == nil || authCtx.ActiveOrganizationID == "" {
 		return oops.E(oops.CodeBadRequest, nil, "invalid project ownership check")
 	}
 	var projectID uuid.UUID

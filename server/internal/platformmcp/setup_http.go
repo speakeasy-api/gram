@@ -33,7 +33,7 @@ func NewDashboardSetupService(store *RegistrationStore, gate CatalogRegistration
 }
 
 func (s *DashboardSetupService) StartDashboardSetup(ctx context.Context, userID, organizationID, handoff string) (ProviderSetupResult, error) {
-	if s == nil || s.store == nil || s.store.db == nil || s.gate == nil || s.authorizer == nil || s.adapters == nil || !s.setupBudget.valid() || userID == "" || organizationID == "" || handoff == "" {
+	if userID == "" || organizationID == "" || handoff == "" {
 		return ProviderSetupResult{}, ErrUnavailable
 	}
 
@@ -114,7 +114,8 @@ func NewDashboardSetupHTTP(starter DashboardSetupStarter, sessionManager Dashboa
 
 func (s *DashboardSetupHTTP) Attach(mux interface {
 	Handle(string, string, http.HandlerFunc)
-}) {
+},
+) {
 	mux.Handle(http.MethodPost, providerSetupStartPath, handlerFunc(s.Handler()))
 }
 
@@ -125,10 +126,6 @@ func (s *DashboardSetupHTTP) Handler() http.Handler {
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
 			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		if s == nil || s.starter == nil || s.sessions == nil {
-			http.Error(w, "unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		ctx, err := s.sessions.AuthenticateWithCookie(r.Context())

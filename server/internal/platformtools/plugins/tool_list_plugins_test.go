@@ -94,14 +94,6 @@ func TestListPluginsToolReturnsSummariesWithoutServers(t *testing.T) {
 	}
 }
 
-func TestListPluginsToolRequiresService(t *testing.T) {
-	t.Parallel()
-
-	var out bytes.Buffer
-	err := NewListPluginsTool(nil).Call(t.Context(), testToolCallEnv(), bytes.NewBufferString(`{}`), &out)
-	require.ErrorContains(t, err, "plugins service not configured")
-}
-
 // Not read-only: listing lazily provisions a missing Default plugin (and
 // audit logs it) for an org admin, so the descriptor must not promise a pure
 // read. It stays non-destructive and idempotent because the heal converges.

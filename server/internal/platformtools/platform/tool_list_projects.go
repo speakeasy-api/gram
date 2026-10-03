@@ -35,10 +35,6 @@ func (t *ListProjects) Descriptor() core.ToolDescriptor {
 }
 
 func (t *ListProjects) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if t.reader == nil {
-		return fmt.Errorf("platform reader not configured")
-	}
-
 	input := platformmcp.ListProjectsInput{Limit: 0}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err

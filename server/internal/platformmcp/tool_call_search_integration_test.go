@@ -5,11 +5,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -39,10 +42,11 @@ func TestSearchToolCallsNarrowsToOneServerWithoutReportedNames(t *testing.T) {
 	require.True(t, configured.Name.Valid)
 
 	fixedNow := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
-	codec, err := newSubjectReferenceCodec("tool-call-search-integration-key")
-	require.NoError(t, err)
+	codec := newSubjectReferenceCodec("tool-call-search-integration-key")
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).
-		WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil))
+		WithAuthorization(engine).
+		WithToolExposure(NewMCPToolExposureService(testenv.NewLogger(t), conn, audit.NewLogger(), engine, NewLiveOrgAdminAuthorizer(conn, engine), "tool-call-search-exposure-key", plugins.PublicationRequests{Enabled: false}, nil, testOperationBudget(), testOperationBudget(), func(context.Context, uuid.UUID, uuid.UUID) error { return nil }))
 	search := &recordingToolCallSearchReader{}
 	service := &DiagnosticsService{
 		db:              conn,
@@ -59,7 +63,7 @@ func TestSearchToolCallsNarrowsToOneServerWithoutReportedNames(t *testing.T) {
 		reader:          reader,
 		readiness:       nil,
 		budget:          allowBudget(),
-		identityGate:    nil,
+		identityGate:    literalIdentityGate{},
 		now:             func() time.Time { return fixedNow },
 	}
 

@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -46,8 +47,9 @@ func restartPreparationService(t *testing.T, ti *testInstance) *remotesessions.S
 	origin, err := url.Parse(testServerURL)
 	require.NoError(t, err)
 	enc := testenv.NewEncryptionClient(t)
-	return remotesessions.NewService(logger, tracer, meter, ti.conn, ti.sessionManager, authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), enc, ti.envEntries, policy, nil, audit.NewLogger(), origin, remotesessions.NewIdentityCommitter(logger, ti.conn, enc, audit.NewLogger(), origin, policy, nil, nil), remotesessions.NewRefreshService(logger, meter, ti.conn, enc, policy, nil, ti.redisCache), ti.features)
+	return remotesessions.NewService(logger, tracer, meter, ti.conn, ti.sessionManager, authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), enc, ti.envEntries, policy, ti.tunnels, audit.NewLogger(), origin, remotesessions.NewIdentityCommitter(logger, ti.conn, enc, audit.NewLogger(), origin, policy, ti.tunnels, registration.NewMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t))), remotesessions.NewRefreshService(logger, meter, ti.conn, enc, policy, ti.tunnels, ti.redisCache), ti.features)
 }
+
 func preparationDCRFixture(t *testing.T, endpoint string) (context.Context, *testInstance, remotesessions.PreparationInput, uuid.UUID) {
 	t.Helper()
 	ctx, ti, in := preparationFixture(t)
@@ -67,6 +69,7 @@ func preparationDCRFixture(t *testing.T, endpoint string) (context.Context, *tes
 	in.Scopes = []string{"read", "write"}
 	return ctx, ti, in, interactive
 }
+
 func assertPreparationInteractiveUntouched(t *testing.T, ctx context.Context, ti *testInstance, id, user uuid.UUID) {
 	t.Helper()
 	auth, _ := contextvalues.GetAuthContext(ctx)
@@ -84,6 +87,7 @@ func assertPreparationInteractiveUntouched(t *testing.T, ctx context.Context, ti
 	require.NoError(t, err)
 	require.EqualValues(t, 1, attached)
 }
+
 func TestPreparationDCRIntegration_TimeoutRestartDoesNotReplay(t *testing.T) {
 	t.Parallel()
 	var posts atomic.Int32
@@ -143,6 +147,7 @@ func TestPreparationDCRIntegration_TimeoutRestartDoesNotReplay(t *testing.T) {
 	require.Equal(t, "indeterminate", afterCrash.State)
 	require.Equal(t, int32(1), posts.Load())
 }
+
 func TestPreparationDCRIntegration_EffectiveGrantsAndNarrowedScopePersist(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, grants, state string }{
@@ -259,6 +264,7 @@ func TestPreparationDCRIntegration_UnlinkedTombstoneCleanupOnIssuerDelete(t *tes
 	require.NoError(t, err)
 	require.Zero(t, count)
 }
+
 func TestPreparationDCRIntegration_StaleRebindIdentityAndConfirmationRetry(t *testing.T) {
 	t.Parallel()
 	ctx, ti, in := preparationFixture(t)

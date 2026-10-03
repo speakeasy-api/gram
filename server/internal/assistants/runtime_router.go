@@ -6,6 +6,8 @@ import (
 	"net/url"
 
 	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/inv"
 )
 
 // runtimeRouter fans RuntimeBackend calls out to the backend named by each
@@ -19,14 +21,13 @@ type runtimeRouter struct {
 	target   string
 }
 
-func newRuntimeRouter(target string, backends map[string]RuntimeBackend) (*runtimeRouter, error) {
-	if len(backends) == 0 {
-		return nil, fmt.Errorf("assistant runtime router requires at least one backend")
-	}
-	if _, ok := backends[target]; !ok {
-		return nil, fmt.Errorf("assistant runtime target backend %q is not configured", target)
-	}
-	return &runtimeRouter{backends: backends, target: target}, nil
+func newRuntimeRouter(target string, backends map[string]RuntimeBackend) *runtimeRouter {
+	_, targetConfigured := backends[target]
+	inv.Require("assistant runtime router",
+		"has at least one backend", len(backends) > 0,
+		"target backend "+target+" is configured", targetConfigured,
+	)
+	return &runtimeRouter{backends: backends, target: target}
 }
 
 // route resolves the backend that owns a runtime row. A row referencing a

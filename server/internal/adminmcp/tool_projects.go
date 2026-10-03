@@ -51,7 +51,7 @@ type ProjectSummary struct {
 	UpdatedAt        string `json:"updated_at"`
 }
 
-func registerProjectTools(server *mcp.Server, organizations OrganizationReader, projects ProjectReader) {
+func registerProjectTools(server *mcp.Server, reader Reader) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_organization_projects",
 		Title:       "List Organization Projects",
@@ -59,14 +59,11 @@ func registerProjectTools(server *mcp.Server, organizations OrganizationReader, 
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input OrganizationIDInput) (*mcp.CallToolResult, ListOrganizationProjectsOutput, error) {
 		output := ListOrganizationProjectsOutput{Projects: []ProjectListing{}}
-		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
+		org, err := readExactOrganization(ctx, reader, input.OrganizationID)
 		if err != nil {
 			return nil, output, err
 		}
-		if projects == nil {
-			return nil, output, errProjectUnavailable
-		}
-		result, err := projects.ListOrganizationProjects(ctx, &gen.ListOrganizationProjectsPayload{OrganizationID: org.ID})
+		result, err := reader.ListOrganizationProjects(ctx, &gen.ListOrganizationProjectsPayload{OrganizationID: org.ID})
 		if err != nil || result == nil || len(result.Projects) > maxOrganizationProjects {
 			return nil, output, errProjectUnavailable
 		}
@@ -97,14 +94,11 @@ func registerProjectTools(server *mcp.Server, organizations OrganizationReader, 
 		if err != nil || id.String() != input.ProjectID {
 			return nil, ProjectSummary{}, errors.New("provide an exact project ID from list_organization_projects")
 		}
-		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
+		org, err := readExactOrganization(ctx, reader, input.OrganizationID)
 		if err != nil {
 			return nil, ProjectSummary{}, err
 		}
-		if projects == nil {
-			return nil, ProjectSummary{}, errProjectUnavailable
-		}
-		project, err := projects.GetProject(ctx, &gen.GetProjectPayload{
+		project, err := reader.GetProject(ctx, &gen.GetProjectPayload{
 			IDOrSlug: input.ProjectID, OrganizationIDOrSlug: &org.ID,
 		})
 		if err != nil || project == nil || project.ID != input.ProjectID || project.OrganizationID != org.ID {

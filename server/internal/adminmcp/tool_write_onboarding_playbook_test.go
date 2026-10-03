@@ -141,7 +141,7 @@ func TestOnboardingPlaybookWriteApprovalAndExecution(t *testing.T) {
 
 	staff := &contextvalues.AdminAuthContext{SessionID: "browser-session", OIDCSubject: "staff-subject", Email: "staff@example.test"}
 	memory := testenv.NewMemoryCache()
-	approval := newStaffProposalApproval(f.store, NewStaffOAuthAuthorization(nil, nil, memory, &fakeAdminVerifier{result: staff}, f.cipher, staffAudience), memory, writer.writes)
+	approval := newStaffProposalApproval(f.store, NewStaffOAuthAuthorization(postgresStaffClientStore{db: f.db}, postgresStaffAuthorizationStore{db: f.db}, memory, &fakeAdminVerifier{result: staff}, f.cipher, staffAudience), memory, writer.writes)
 	approval.operations = map[WriteOperation]approvableOperation{OperationAssignOrganizationOnboardingPlaybook: writer} //nolint:exhaustive // Only selected write operations are enabled by this test.
 	handler := middleware.AdminOriginCheck(nil)(approval.Handler())
 	page := httptest.NewRecorder()

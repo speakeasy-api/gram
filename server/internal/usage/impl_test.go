@@ -25,20 +25,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	"github.com/speakeasy-api/gram/server/internal/trialemails"
+	"github.com/speakeasy-api/gram/server/internal/trialemails/trialemailstest"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, ClickHouse: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -201,6 +202,13 @@ var _ openrouter.Provisioner = (*recordingOpenRouterProvisioner)(nil)
 
 // --- test helpers ---
 
+func newTestProductFeatures(t *testing.T, db *pgxpool.Pool) *productfeatures.Client {
+	t.Helper()
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	return productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), db, redisClient)
+}
+
 func mustParseURL(t *testing.T, s string) *url.URL {
 	t.Helper()
 	u, err := url.Parse(s)
@@ -233,7 +241,7 @@ func newTestService(t *testing.T, billingRepo billing.Repository, orgID string, 
 		openRouter:    openrouter.NewDevelopment(""),
 		stripeClient:  nil,
 		stripeHandler: nil,
-		trial:         trialemails.NoopNotifier{},
+		trial:         trialemailstest.NoopNotifier{},
 		now:           time.Now,
 	}
 }

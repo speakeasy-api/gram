@@ -84,9 +84,10 @@ func stripeExportReadingOutcomes(t *testing.T, reader *sdkmetric.ManualReader) m
 func TestMeterReadingStripeExporterDisabledAcknowledgesWithoutProcessing(t *testing.T) {
 	t.Parallel()
 
+	conn, _ := newMeteringPostgres(t)
 	client := &captureV2MeterEventClient{inputs: nil, err: errors.New("must not be called")}
 	meterProvider, reader := newStripeExporterMetricReader(t)
-	exporter := metering.NewMeterReadingStripeExporter(testenv.NewLogger(t), meterProvider, nil, client, nil, false)
+	exporter := metering.NewMeterReadingStripeExporter(testenv.NewLogger(t), meterProvider, conn, client, tumStripeCatalog, false)
 
 	require.NoError(t, exporter.Handle(t.Context(), new(meteringv1.MeterReading), gcp.MessageMetadata{}))
 	require.Empty(t, client.inputs)
@@ -96,9 +97,10 @@ func TestMeterReadingStripeExporterDisabledAcknowledgesWithoutProcessing(t *test
 func TestMeterReadingStripeExporterNacksUnsupportedKindWithoutOutcome(t *testing.T) {
 	t.Parallel()
 
+	conn, _ := newMeteringPostgres(t)
 	client := &captureV2MeterEventClient{inputs: nil, err: errors.New("must not be called")}
 	meterProvider, reader := newStripeExporterMetricReader(t)
-	exporter := metering.NewMeterReadingStripeExporter(testenv.NewLogger(t), meterProvider, nil, client, nil, true)
+	exporter := metering.NewMeterReadingStripeExporter(testenv.NewLogger(t), meterProvider, conn, client, tumStripeCatalog, true)
 	reading := new(meteringv1.MeterReading)
 	reading.SetKind(meteringv1.MeterReading_KIND_UNSPECIFIED)
 

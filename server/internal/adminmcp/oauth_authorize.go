@@ -25,10 +25,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
-const staffChallengePrefix = "adminMCPChallenge:"
-const staffBrowserProofCookie = "__Host-admin-mcp-proof"
-const staffCodeLifetime = 10 * time.Minute
-const staffAuthorizationLifetime = 24 * time.Hour
+const (
+	staffChallengePrefix       = "adminMCPChallenge:"
+	staffBrowserProofCookie    = "__Host-admin-mcp-proof"
+	staffCodeLifetime          = 10 * time.Minute
+	staffAuthorizationLifetime = 24 * time.Hour
+)
 
 type staffChallenge struct {
 	ID            string    `json:"id"`
@@ -94,10 +96,6 @@ func (s *StaffOAuthAuthorization) AuthorizeHandler() http.Handler {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		if !s.ready() {
-			staffOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "authorization unavailable")
-			return
-		}
 		request := usersessions.AuthorizationRequestFromQuery(r.URL.Query())
 		if err := request.ValidateRedirectableFields(); err != nil {
 			staffRequestError(w, err)
@@ -153,10 +151,6 @@ func (s *StaffOAuthAuthorization) ConnectHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
-		if !s.ready() {
-			staffOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "authorization unavailable")
-			return
-		}
 		switch r.Method {
 		case http.MethodGet:
 			s.connectGet(w, r)
@@ -374,10 +368,6 @@ func (s *StaffOAuthAuthorization) staffSession(r *http.Request) (*contextvalues.
 		return nil, "", errors.New("staff session identity mismatch")
 	}
 	return staff, cookie.Value, nil
-}
-
-func (s *StaffOAuthAuthorization) ready() bool {
-	return s != nil && s.clients != nil && s.store != nil && s.verifier != nil && s.cipher != nil && s.resource != ""
 }
 
 func staffRequestError(w http.ResponseWriter, err error) {

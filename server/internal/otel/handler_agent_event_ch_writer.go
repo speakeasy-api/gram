@@ -76,9 +76,7 @@ func (w *agentEventCHWriter) skip(ctx context.Context, reason, id string) {
 		attr.SlogReason(reason),
 		attr.SlogValueString(id),
 	)
-	if w.rowsSkipped != nil {
-		w.rowsSkipped.Add(ctx, 1, metric.WithAttributes(attr.Reason(reason)))
-	}
+	w.rowsSkipped.Add(ctx, 1, metric.WithAttributes(attr.Reason(reason)))
 }
 
 func (w *agentEventCHWriter) write(ctx context.Context, rows []chrepo.AgentEventRow) error {
@@ -87,9 +85,7 @@ func (w *agentEventCHWriter) write(ctx context.Context, rows []chrepo.AgentEvent
 	}
 
 	err := w.inserter.InsertAgentEvents(ctx, rows)
-	if w.rowsInserted != nil {
-		w.rowsInserted.Add(ctx, int64(len(rows)), metric.WithAttributes(attr.Outcome(o11y.OutcomeFromError(err))))
-	}
+	w.rowsInserted.Add(ctx, int64(len(rows)), metric.WithAttributes(attr.Outcome(o11y.OutcomeFromError(err))))
 	if err != nil {
 		return fmt.Errorf("insert agent_events: %w", err)
 	}

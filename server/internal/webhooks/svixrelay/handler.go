@@ -161,9 +161,7 @@ func (h *Handler) Handle(ctx context.Context, ev *webhooksv1.Event, _ gcp.Messag
 		if out != nil {
 			messageID = out.Id
 		}
-		if h.delivered != nil {
-			h.delivered.Add(ctx, 1)
-		}
+		h.delivered.Add(ctx, 1)
 		h.logger.InfoContext(ctx, "webhook event delivered",
 			attr.SlogOrganizationID(orgID),
 			attr.SlogOutboxPublicID(eventID),
@@ -273,9 +271,7 @@ func decodePayload(raw []byte) (map[string]any, error) {
 }
 
 func (h *Handler) drop(ctx context.Context, reason string) {
-	if h.dropped != nil {
-		h.dropped.Add(ctx, 1, metric.WithAttributes(attr.WebhookDropReason(reason)))
-	}
+	h.dropped.Add(ctx, 1, metric.WithAttributes(attr.WebhookDropReason(reason)))
 }
 
 // svixStatus returns the HTTP status behind a Svix SDK error, or 0 when the

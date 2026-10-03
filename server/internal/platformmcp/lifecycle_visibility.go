@@ -85,19 +85,8 @@ type LifecycleVisibilityService struct {
 	organizations OrganizationSlugResolver
 }
 
-func NewLifecycleVisibilityService(db *pgxpool.Pool, auditLogger *audit.Logger, locker LifecycleVisibilityLocker, updater LifecycleVisibilityUpdater, publisher ProjectPublisher, reconcile func(context.Context, []uuid.UUID) error, readiness *ReadinessService, keyMaterial string) (*LifecycleVisibilityService, error) {
-	if db == nil || auditLogger == nil || locker == nil || updater == nil || reconcile == nil || readiness == nil || keyMaterial == "" {
-		return nil, ErrLifecycleVisibilityInvalid
-	}
-	return &LifecycleVisibilityService{db: db, audit: auditLogger, locker: locker, updater: updater, publisher: publisher, reconcile: reconcile, readiness: readiness, key: lifecycleMetadataVersionKey(keyMaterial), now: time.Now, admission: admission.NewGuard(nil, nil), organizations: nil}, nil
-}
-
-func (s *LifecycleVisibilityService) WithDistributionAdmission(guard *admission.Guard, organizations OrganizationSlugResolver) *LifecycleVisibilityService {
-	if s != nil {
-		s.admission = guard
-		s.organizations = organizations
-	}
-	return s
+func NewLifecycleVisibilityService(db *pgxpool.Pool, auditLogger *audit.Logger, locker LifecycleVisibilityLocker, updater LifecycleVisibilityUpdater, publisher ProjectPublisher, reconcile func(context.Context, []uuid.UUID) error, readiness *ReadinessService, keyMaterial string, guard *admission.Guard, organizations OrganizationSlugResolver) *LifecycleVisibilityService {
+	return &LifecycleVisibilityService{db: db, audit: auditLogger, locker: locker, updater: updater, publisher: publisher, reconcile: reconcile, readiness: readiness, key: lifecycleMetadataVersionKey(keyMaterial), now: time.Now, admission: guard, organizations: organizations}
 }
 
 func (s *LifecycleVisibilityService) Disable(ctx context.Context, principal Principal, input UpdateMCPVisibilityInput) (UpdateMCPVisibilityResult, error) {
@@ -109,7 +98,7 @@ func (s *LifecycleVisibilityService) Enable(ctx context.Context, principal Princ
 }
 
 func (s *LifecycleVisibilityService) update(ctx context.Context, principal Principal, input UpdateMCPVisibilityInput, from, to, operation string) (UpdateMCPVisibilityResult, error) {
-	if s == nil || s.db == nil || s.audit == nil || s.updater == nil || s.readiness == nil || len(s.key) == 0 || principal.OrganizationID == "" || principal.UserID == "" || input.ProjectSlug == "" || input.RegistrationID == "" || input.MCPID == "" || input.ExpectedVersion == "" || input.IdempotencyKey == "" || len(input.IdempotencyKey) > 128 {
+	if principal.OrganizationID == "" || principal.UserID == "" || input.ProjectSlug == "" || input.RegistrationID == "" || input.MCPID == "" || input.ExpectedVersion == "" || input.IdempotencyKey == "" || len(input.IdempotencyKey) > 128 {
 		return UpdateMCPVisibilityResult{}, ErrLifecycleVisibilityInvalid
 	}
 	registrationID, err := uuid.Parse(input.RegistrationID)
@@ -120,10 +109,7 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, ErrLifecycleVisibilityInvalid
 	}
-	store, err := NewRegistrationStore(s.db)
-	if err != nil {
-		return UpdateMCPVisibilityResult{}, err
-	}
+	store := NewRegistrationStore(s.db)
 	project, err := store.ResolveProject(ctx, principal.OrganizationID, input.ProjectSlug)
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, err
@@ -135,15 +121,11 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 	}
 	var rollout admission.RolloutConfig
 	var rolloutErr error
-	if s.organizations == nil {
-		rolloutErr = ErrLifecycleVisibilityUnavailable
+	organizationSlug, slugErr := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
+	if slugErr != nil {
+		rolloutErr = slugErr
 	} else {
-		organizationSlug, slugErr := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
-		if slugErr != nil {
-			rolloutErr = slugErr
-		} else {
-			rollout, rolloutErr = s.admission.Resolve(ctx, principal.OrganizationID, organizationSlug, project.Slug)
-		}
+		rollout, rolloutErr = s.admission.Resolve(ctx, principal.OrganizationID, organizationSlug, project.Slug)
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -257,9 +239,7 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 			result.Readiness = MCPReadiness{State: string(readiness.State), CheckedAt: readinessTimestamp(readiness.CheckedAt), ExpiresAt: readinessTimestamp(readiness.ExpiresAt)}
 		}
 	}
-	if s.publisher != nil {
-		result.Published = s.publisher(ctx, project.ID, principal.UserID, "Update Platform MCP visibility") == nil
-	}
+	result.Published = s.publisher(ctx, project.ID, principal.UserID, "Update Platform MCP visibility") == nil
 	return result, nil
 }
 

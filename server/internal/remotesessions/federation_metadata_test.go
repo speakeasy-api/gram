@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/dns"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
@@ -61,8 +60,6 @@ func TestFederatedEndpointHostPolicy(t *testing.T) {
 	p.issuer.TunneledMcpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	p.metadata.TokenEndpoint = "https://10.0.0.1/token"
 	p.metadata.JwksURI = "https://10.0.0.1/keys"
-	require.ErrorIs(t, m.validateFederatedMetadataHosts(t.Context(), p.issuer, p.metadata), ErrFederatedConfiguration, "missing tunnel transport fails closed")
-	m.tunnels = &tunnelrouting.HTTPClient{}
 	require.NoError(t, m.validateFederatedMetadataHosts(t.Context(), p.issuer, p.metadata))
 	p.metadata.AuthorizationEndpoint = "https://10.0.0.1/authorize"
 	require.ErrorIs(t, m.validateFederatedMetadataHosts(t.Context(), p.issuer, p.metadata), ErrFederatedConfiguration, "browser redirect does not use tunnel")

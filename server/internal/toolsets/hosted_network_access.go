@@ -26,7 +26,7 @@ import (
 // within a caller-owned transaction. The caller must authorize the target and
 // hold the organization's ingress and project admission locks first.
 func SetHostedNetworkAccessInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor *contextvalues.AuthContext, toolsetID uuid.UUID, mode networkaccess.Mode) error {
-	if actor == nil || actor.ProjectID == nil || auditLogger == nil {
+	if actor == nil || actor.ProjectID == nil {
 		return oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor")
 	}
 	toolsets := repo.New(tx)

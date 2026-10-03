@@ -45,21 +45,18 @@ type OrganizationChatAnalysisSettings struct {
 	IsDefault              bool   `json:"is_default"`
 }
 
-func registerConfigurationTools(server *mcp.Server, organizations OrganizationReader, configuration ConfigurationReader) {
+func registerConfigurationTools(server *mcp.Server, reader Reader) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_organization_features",
 		Title:       "Get Organization Features",
 		Description: "Read feature and entitlement flags for an exact organization ID. These are configuration and setup signals, not usage or adoption metrics. Does not return credentials.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input OrganizationIDInput) (*mcp.CallToolResult, OrganizationFeatures, error) {
-		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
+		org, err := readExactOrganization(ctx, reader, input.OrganizationID)
 		if err != nil {
 			return nil, OrganizationFeatures{}, err
 		}
-		if configuration == nil {
-			return nil, OrganizationFeatures{}, errConfigurationUnavailable
-		}
-		features, err := configuration.GetOrganizationFeaturesStrict(ctx, org.ID)
+		features, err := reader.GetOrganizationFeaturesStrict(ctx, org.ID)
 		if err != nil || features == nil {
 			return nil, OrganizationFeatures{}, errConfigurationUnavailable
 		}
@@ -85,14 +82,11 @@ func registerConfigurationTools(server *mcp.Server, organizations OrganizationRe
 		Description: "Read enabled state and daily caps for chat analysis judges for an exact organization ID. Does not trigger analysis or change settings.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input OrganizationIDInput) (*mcp.CallToolResult, OrganizationChatAnalysisSettings, error) {
-		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
+		org, err := readExactOrganization(ctx, reader, input.OrganizationID)
 		if err != nil {
 			return nil, OrganizationChatAnalysisSettings{}, err
 		}
-		if configuration == nil {
-			return nil, OrganizationChatAnalysisSettings{}, errConfigurationUnavailable
-		}
-		settings, err := configuration.GetOrganizationChatAnalysisSettings(ctx, &gen.GetOrganizationChatAnalysisSettingsPayload{OrganizationID: org.ID})
+		settings, err := reader.GetOrganizationChatAnalysisSettings(ctx, &gen.GetOrganizationChatAnalysisSettingsPayload{OrganizationID: org.ID})
 		if err != nil || settings == nil || settings.OrganizationID != org.ID {
 			return nil, OrganizationChatAnalysisSettings{}, errConfigurationUnavailable
 		}

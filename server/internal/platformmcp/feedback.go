@@ -32,7 +32,6 @@ var (
 	ErrFeedbackInvalid     = errors.New("invalid platform mcp feedback")
 	ErrFeedbackConflict    = errors.New("platform mcp feedback idempotency conflict")
 	ErrFeedbackRateLimited = errors.New("platform mcp feedback rate limited")
-	ErrFeedbackUnavailable = errors.New("platform mcp feedback unavailable")
 	ErrFeedbackForbidden   = errors.New("platform mcp feedback connection is no longer active")
 )
 
@@ -65,9 +64,6 @@ func NewFeedbackService(db *pgxpool.Pool) *FeedbackService {
 }
 
 func (s *FeedbackService) Submit(ctx context.Context, principal Principal, input FeedbackInput) (FeedbackResult, error) {
-	if s == nil || s.db == nil {
-		return FeedbackResult{}, ErrFeedbackUnavailable
-	}
 	if err := validateFeedbackInput(principal, input); err != nil {
 		return FeedbackResult{}, err
 	}

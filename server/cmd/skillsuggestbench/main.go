@@ -172,7 +172,6 @@ func main() {
 		nil,
 		nil,
 		nil,
-		nil,
 	)
 
 	results := runBench(client, set, models, *runs, *concurrency, *timeout, reasoning)

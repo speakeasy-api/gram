@@ -1,8 +1,6 @@
 package adminmcp
 
 import (
-	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -11,6 +9,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
@@ -31,25 +30,21 @@ type StaffOAuth struct {
 // NewStaffOAuth builds the staff OAuth handlers. The zero WriteConfig keeps
 // every connection read-only: consent refuses admin:write unless at least one
 // write operation is switched on.
-func NewStaffOAuth(baseURL *url.URL, db *pgxpool.Pool, challengeCache cache.Cache, verifier adminSessionVerifier, cipher *encryption.Client, signer *sessiontokens.Signer, writes WriteConfig, logger *slog.Logger) (*StaffOAuth, error) {
-	if baseURL == nil || baseURL.Scheme != "https" || baseURL.Host == "" || (baseURL.Path != "" && baseURL.Path != "/") || db == nil || challengeCache == nil || verifier == nil || cipher == nil || signer == nil {
-		return nil, errors.New("staff OAuth configuration is incomplete")
-	}
+func NewStaffOAuth(baseURL *url.URL, db *pgxpool.Pool, challengeCache cache.Cache, verifier adminSessionVerifier, cipher *encryption.Client, signer *sessiontokens.Signer, writes WriteConfig, logger *slog.Logger) *StaffOAuth {
 	base := *baseURL
 	base.RawQuery = ""
 	base.Fragment = ""
-	issuer, err := url.JoinPath(base.String(), "admin-mcp", "oauth")
-	if err != nil {
-		return nil, fmt.Errorf("build staff OAuth issuer: %w", err)
-	}
-	resource, err := url.JoinPath(base.String(), "admin-mcp")
-	if err != nil {
-		return nil, fmt.Errorf("build staff MCP resource: %w", err)
-	}
-	protectedResourceURL, err := url.JoinPath(base.String(), ".well-known", "oauth-protected-resource", "admin-mcp")
-	if err != nil {
-		return nil, fmt.Errorf("build staff MCP resource metadata URL: %w", err)
-	}
+	issuer, issuerErr := url.JoinPath(base.String(), "admin-mcp", "oauth")
+	resource, resourceErr := url.JoinPath(base.String(), "admin-mcp")
+	protectedResourceURL, protectedResourceErr := url.JoinPath(base.String(), ".well-known", "oauth-protected-resource", "admin-mcp")
+	inv.Require("staff OAuth",
+		"base URL uses https", baseURL.Scheme == "https",
+		"base URL has a host", baseURL.Host != "",
+		"base URL has no path", baseURL.Path == "" || baseURL.Path == "/",
+		"issuer URL builds", issuerErr,
+		"resource URL builds", resourceErr,
+		"resource metadata URL builds", protectedResourceErr,
+	)
 	clients := NewStaffOAuthClients(db)
 	clientStore := clients.store
 	authorization := NewStaffOAuthAuthorization(clientStore, postgresStaffAuthorizationStore{db: db}, challengeCache, verifier, cipher, resource)
@@ -63,7 +58,7 @@ func NewStaffOAuth(baseURL *url.URL, db *pgxpool.Pool, challengeCache cache.Cach
 		resource:             resource,
 		protectedResourceURL: protectedResourceURL,
 		writes:               writes,
-	}, nil
+	}
 }
 
 func (s *StaffOAuth) scopesSupported() []string {
@@ -81,7 +76,8 @@ func (s *StaffOAuth) ProtectedResourceURL() string { return s.protectedResourceU
 
 func (s *StaffOAuth) Attach(mux interface {
 	Handle(string, string, http.HandlerFunc)
-}) {
+},
+) {
 	mux.Handle("GET", "/.well-known/oauth-protected-resource/admin-mcp", s.handler(s.ProtectedResourceHandler()))
 	mux.Handle("GET", "/.well-known/oauth-authorization-server/admin-mcp/oauth", s.handler(s.AuthorizationServerHandler()))
 	mux.Handle("POST", Path+"/register", s.handler(s.Clients.RegisterHandler()))

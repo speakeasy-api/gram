@@ -71,9 +71,6 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		attr.SlogAssistantID(principalAssistantID.String()),
 		attr.SlogAssistantThreadID(threadID.String()),
 	}
-	if s.chatWriter == nil {
-		return oops.E(oops.CodeUnexpected, nil, "chat writer not configured").LogError(ctx, s.logger, logAttrs...)
-	}
 	if len(messages) == 0 {
 		return oops.E(oops.CodeBadRequest, nil, "compacted transcript is empty").LogError(ctx, s.logger, logAttrs...)
 	}

@@ -100,10 +100,6 @@ func NewWorkflowRunService(logger *slog.Logger, emitter WorkflowRunEmitter) *Wor
 	return &WorkflowRunService{logger: logger, emitter: emitter}
 }
 
-func (s *WorkflowRunService) valid() bool {
-	return s != nil && s.emitter != nil
-}
-
 // Record validates one run report and emits it. An endpoint that fails the
 // credential contract is dropped from its item rather than rejecting the whole
 // report: the items most worth seeing are the ones a workflow excluded.

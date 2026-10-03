@@ -74,7 +74,7 @@ type ProviderAdapters struct {
 func NewProviderAdapters(adapters []ProviderAdapter) *ProviderAdapters {
 	byProviderKey := make(map[string]ProviderAdapter, len(adapters))
 	for _, adapter := range adapters {
-		if adapter == nil || adapter.ProviderKey() == "" {
+		if adapter.ProviderKey() == "" {
 			continue
 		}
 		byProviderKey[adapter.ProviderKey()] = adapter
@@ -83,7 +83,7 @@ func NewProviderAdapters(adapters []ProviderAdapter) *ProviderAdapters {
 }
 
 func (a *ProviderAdapters) Get(providerKey string) (ProviderAdapter, error) {
-	if a == nil || providerKey == "" {
+	if providerKey == "" {
 		return nil, ErrProviderAdapterUnavailable
 	}
 	adapter, ok := a.byProviderKey[providerKey]

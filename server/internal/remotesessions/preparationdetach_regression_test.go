@@ -2,8 +2,9 @@ package remotesessions_test
 
 import (
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"testing"
+
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 
 	"github.com/google/uuid"
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"

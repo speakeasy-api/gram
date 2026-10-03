@@ -322,19 +322,6 @@ func (s *Service) serveTokenGrant(
 	}
 }
 
-// refuseClientlessTokenGrant answers a JWT bearer request that presents no
-// client authentication with the response a missing client_id produces.
-func refuseClientlessTokenGrant(
-	ctx context.Context,
-	w http.ResponseWriter,
-	r *http.Request,
-	creds presentedClientCredentials,
-	logger *slog.Logger,
-) error {
-	logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", creds.clientID, creds.method, r.PostForm.Get("grant_type"), "missing_client_id")
-	return writeTokenError(ctx, w, logger, http.StatusUnauthorized, oautherr.CodeInvalidClient, "client_id is required")
-}
-
 // authenticateTokenClient resolves and authenticates the client a token
 // request presents. It returns the authenticated client row, or nil once it
 // has written the refusal, in which case the error is the result of writing
@@ -889,21 +876,19 @@ func (s *Service) handleTokenRefreshTokenGrant(
 
 		rotationWinner := true
 		ownsLock := false
-		if s.userSessionRefreshReplayCoordination != nil {
-			var coordinationErr error
-			if leases, ok := s.userSessionRefreshReplayCoordination.(cache.LeaseCache); ok {
-				rotationWinner, coordinationErr = leases.AcquireLease(ctx, lockKey, lockOwner, refreshTokenReplayGracePeriod)
-			} else {
-				coordinationErr = errors.New("refresh replay cache does not support ownership-aware leases")
-			}
-			if coordinationErr != nil {
-				// The database claim remains authoritative when Redis is
-				// unavailable; only the compatibility grace period is lost.
-				rotationWinner = true
-				logger.WarnContext(ctx, "failed to coordinate refresh token replay grace period", attr.SlogError(coordinationErr))
-			} else {
-				ownsLock = rotationWinner
-			}
+		var coordinationErr error
+		if leases, ok := s.userSessionRefreshReplayCoordination.(cache.LeaseCache); ok {
+			rotationWinner, coordinationErr = leases.AcquireLease(ctx, lockKey, lockOwner, refreshTokenReplayGracePeriod)
+		} else {
+			coordinationErr = errors.New("refresh replay cache does not support ownership-aware leases")
+		}
+		if coordinationErr != nil {
+			// The database claim remains authoritative when Redis is
+			// unavailable; only the compatibility grace period is lost.
+			rotationWinner = true
+			logger.WarnContext(ctx, "failed to coordinate refresh token replay grace period", attr.SlogError(coordinationErr))
+		} else {
+			ownsLock = rotationWinner
 		}
 		if rotationWinner {
 			releaseLease, rotationErr := s.rotateRefreshToken(
@@ -1238,9 +1223,6 @@ func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger 
 }
 
 func (s *Service) releaseRefreshTokenReplayLock(ctx context.Context, lockKey, lockOwner string, logger *slog.Logger) {
-	if s.userSessionRefreshReplayCoordination == nil {
-		return
-	}
 	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 	defer cancel()
 	leases, ok := s.userSessionRefreshReplayCoordination.(cache.LeaseCache)

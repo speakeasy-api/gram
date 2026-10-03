@@ -113,7 +113,7 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		return findingsFromResults(out), nil
 	}
 
-	if a.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
+	if !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
 		// Fresh slice per index (not one shared slice) so setEventMatch below
 		// stamps each finding with its own message rather than aliasing.
 		for _, idx := range indices {
@@ -165,7 +165,6 @@ func (a *AnalyzeBatch) projectFlagEnabled(ctx context.Context, orgID string, pro
 }
 
 func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, indices []int) error {
-
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(indices))
 	requestID := batchScanRequestID(args, "prompt_policy")

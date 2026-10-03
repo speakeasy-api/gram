@@ -1,16 +1,16 @@
 package gram
 
 import (
+	"context"
+	"log/slog"
 	"net"
+	"net/url"
 
 	"github.com/urfave/cli/v2"
 
-	"context"
-	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/tunnel/route"
-	"log/slog"
-	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -24,13 +24,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
 
 type mcpRemoteSessionDependencies struct {
-	Verifier   remotesessions.IDTokenVerifier
-	Refresher  *remotesessions.IssuerMetadataRefresher
-	Enricher   *remotesessions.SessionEnricher
-	Challenges *remotesessions.ChallengeManager
+	IDTokenKeys *jwks.KeyResolver
+	Verifier    remotesessions.IDTokenVerifier
+	Refresher   *remotesessions.IssuerMetadataRefresher
+	Enricher    *remotesessions.SessionEnricher
+	Challenges  *remotesessions.ChallengeManager
 }
 
 // Both listener processes must use identical identity verification and private
@@ -39,24 +41,20 @@ type mcpRemoteSessionDependencies struct {
 // calls (token exchange, refresh, revocation, dynamic client registration) for
 // remote session issuers bound to a tunneled MCP server, instead of dialing
 // them from cloud egress.
-func newTunnelHTTPClient(c *cli.Context, guardianPolicy *guardian.Policy, redisClient *redis.Client) (*tunnelrouting.HTTPClient, error) {
+func newTunnelHTTPClient(c *cli.Context, guardianPolicy *guardian.Policy, redisClient *redis.Client) *tunnelrouting.HTTPClient {
 	// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a typo
 	// here would strand tunnels fail-closed with no signal. Reject
 	// misconfiguration at startup instead.
 	cidrs := c.StringSlice("tunnel-gateway-cidr-blocks")
 	for _, cidr := range cidrs {
-		if _, _, err := net.ParseCIDR(cidr); err != nil {
-			return nil, fmt.Errorf("invalid tunnel gateway CIDR block %q: %w", cidr, err)
-		}
+		_, _, err := net.ParseCIDR(cidr)
+		inv.Require("tunnel gateway CIDR blocks", cidr+" parses", err)
 	}
-	return tunnelrouting.NewHTTPClient(route.NewRedis(redisClient), c.String("tunnel-forward-token"), guardianPolicy, cidrs), nil
+	return tunnelrouting.NewHTTPClient(route.NewRedis(redisClient), c.String("tunnel-forward-token"), guardianPolicy, cidrs)
 }
 
 func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, redisClient *redis.Client, serverURL *url.URL, callbackOrigins remotesessions.CallbackOrigins, auditLogger *audit.Logger, assertionSigner remotesessions.TokenEndpointAssertionSigner) (*mcpRemoteSessionDependencies, error) {
-	idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, guardianPolicy, meterProvider, ratelimit.NewRedisStore(redisClient))
-	if err != nil {
-		return nil, fmt.Errorf("initialize remote session id token key resolver: %w", err)
-	}
+	idTokenKeys := remotesessions.NewIDTokenKeyResolver(logger, guardianPolicy, meterProvider, ratelimit.NewRedisStore(redisClient))
 	verifier := remotesessions.NewIDTokenVerifier(idTokenKeys)
 	refresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, tunnels, auditLogger)
 	enricher := remotesessions.NewSessionEnricher(logger, enc, guardianPolicy, idTokenKeys,
@@ -71,5 +69,5 @@ func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.T
 		remotesessions.WithRegistrationAuditLogger(auditLogger),
 		remotesessions.WithTokenEndpointAssertionSigner(assertionSigner),
 		remotesessions.WithCallbackOrigins(callbackOrigins))
-	return &mcpRemoteSessionDependencies{Verifier: verifier, Refresher: refresher, Enricher: enricher, Challenges: challenges}, nil
+	return &mcpRemoteSessionDependencies{IDTokenKeys: idTokenKeys, Verifier: verifier, Refresher: refresher, Enricher: enricher, Challenges: challenges}, nil
 }

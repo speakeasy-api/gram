@@ -7,7 +7,6 @@ import (
 	"errors"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 type ListSkillsToolInput struct {
@@ -126,9 +125,8 @@ type CompareSkillVersionsToolInput struct {
 	Window      string `json:"window,omitempty" jsonschema:"how far back to look: 1h, 24h, 7d, or 30d (default and maximum)"`
 }
 
-// approveSkillSuggestionAnnotations and dismissSkillSuggestionAnnotations are
-// shared by the live and unavailable registrations, so a client sees the same
-// safety and retry semantics before and after skills are switched on.
+// approveSkillSuggestionAnnotations and dismissSkillSuggestionAnnotations set
+// the safety and retry semantics a client sees for the two review mutations.
 // Approving adds a version rather than removing anything, and a repeat is
 // refused once the suggestion is closed; dismissing discards the suggestion
 // and settles on the same state when repeated.
@@ -145,9 +143,7 @@ type skillsRefusalResult struct {
 	Message string `json:"message"`
 }
 
-// skillInsightsToolMeta is shared by the live insight tools and their stubs, so
-// a tool keeps one audience and authority whichever one a deployment serves.
-// Session cost is organization spend, so like query_skill_usage these are
+// skillInsightsToolMeta is shared by the insight tools. Session cost is organization spend, so like query_skill_usage these are
 // administrator reads even though the skills they name are member-readable.
 var skillInsightsToolMeta = ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}
 
@@ -155,25 +151,6 @@ var skillInsightsToolMeta = ToolMeta{Authorization: ExternalAuthorizationOrgAdmi
 // questions with two answers, so they are two tools with fixed shapes rather
 // than one tool whose result changes with its arguments.
 func registerSkillInsightsTools(reg *Registrar, skills *SkillsService) {
-	if !skills.insightsValid() {
-		for _, tool := range []struct {
-			name        string
-			title       string
-			description string
-		}{
-			{"list_skill_insights", "Skill Insights", "See which of a project's skills are paying off. This is not switched on for your organization yet."},
-			{"compare_skill_versions", "Compare Skill Versions", "See whether a newer version of a skill is doing better than the ones before it. This is not switched on for your organization yet."},
-		} {
-			addTool(reg, &mcp.Tool{
-				Name:        tool.name,
-				Title:       tool.title,
-				Description: tool.description,
-				Annotations: readOnlyAnnotations(),
-			}, skillInsightsToolMeta, unavailableTool("skill_insights"))
-		}
-		return
-	}
-
 	addTool(reg, &mcp.Tool{
 		Name:        "list_skill_insights",
 		Title:       "Skill Insights",
@@ -371,58 +348,6 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	})
 
 	registerSkillInsightsTools(reg, skills)
-}
-
-// registerUnavailableSkillsTools declares the same tools the live registration
-// declares, so a rollout flip changes what a tool answers rather than whether
-// the tool exists.
-func registerUnavailableSkillsTools(reg *Registrar) {
-	for _, tool := range []struct {
-		name        string
-		title       string
-		description string
-		readOnly    bool
-		authority   ExternalAuthorization
-		audiences   []Audience
-	}{
-		{"list_skills", "List Skills", "List the skills in a project. This is not switched on for your organization yet.", true, ExternalAuthorizationMember, bothAudiences},
-		{"get_skill", "Get Skill", "Read one skill in a project. This is not switched on for your organization yet.", true, ExternalAuthorizationMember, bothAudiences},
-		{"list_skill_versions", "List Skill Versions", "List a skill's versions. This is not switched on for your organization yet.", true, ExternalAuthorizationMember, bothAudiences},
-		{"list_skill_feedback", "List Skill Feedback", "Review privacy-minimized feedback for one skill. This is not switched on for your organization yet.", true, ExternalAuthorizationMember, bothAudiences},
-		{"list_skill_suggestions", "List Skill Suggestions", "Review open proposed skill improvements. This is not switched on for your organization yet.", true, ExternalAuthorizationMember, bothAudiences},
-		{"list_skill_suggestion_feedback", "List Feedback Behind a Skill Suggestion", "Review feedback cited by a proposed skill change. This is not switched on for your organization yet.", true, ExternalAuthorizationMember, bothAudiences},
-		{"approve_skill_suggestion", "Approve a Skill Suggestion", "Take a proposed skill improvement as a new version. This is not switched on for your organization yet.", false, ExternalAuthorizationMember, externalOnly},
-		{"dismiss_skill_suggestion", "Dismiss a Skill Suggestion", "Discard a proposed skill improvement. This is not switched on for your organization yet.", false, ExternalAuthorizationMember, externalOnly},
-		{"create_skill", "Create Skill", "Write a new skill from complete SKILL.md content. This is not switched on for your organization yet.", false, ExternalAuthorizationMember, bothAudiences},
-		{"add_skill_version", "Add Skill Version", "Change what a skill tells an agent, by recording a new version. This is not switched on for your organization yet.", false, ExternalAuthorizationMember, bothAudiences},
-		{"update_skill_metadata", "Rename a Skill", "Rename a skill, or change how it is described. This is not switched on for your organization yet.", false, ExternalAuthorizationMember, bothAudiences},
-		{"distribute_skill", "Give a Skill to a Plugin or Assistant", "Give a skill to one plugin or assistant. This is not switched on for your organization yet.", false, ExternalAuthorizationOrgAdmin, bothAudiences},
-		{"list_skill_distributions", "List Where Skills Are Distributed", "List which plugins carry which skills in a project. This is not switched on for your organization yet.", true, ExternalAuthorizationMember, bothAudiences},
-		{"undistribute_skill", "Take a Skill Back from a Plugin or Assistant", "Take a skill back from one plugin or assistant. This is not switched on for your organization yet.", false, ExternalAuthorizationOrgAdmin, bothAudiences},
-	} {
-		manifest := &mcp.Tool{
-			Name:        tool.name,
-			Title:       tool.title,
-			Description: tool.description,
-		}
-		switch {
-		case tool.readOnly:
-			manifest.Annotations = readOnlyAnnotations()
-		case tool.name == "approve_skill_suggestion":
-			manifest.Annotations = approveSkillSuggestionAnnotations()
-		case tool.name == "dismiss_skill_suggestion":
-			manifest.Annotations = dismissSkillSuggestionAnnotations()
-		}
-		var discoveryScopes []authz.Scope
-		if tool.authority == ExternalAuthorizationMember {
-			discoveryScopes = discoverySkillRead
-			if tool.name == "create_skill" || tool.name == "add_skill_version" || tool.name == "update_skill_metadata" || tool.name == "approve_skill_suggestion" || tool.name == "dismiss_skill_suggestion" {
-				discoveryScopes = discoverySkillWrite
-			}
-		}
-		addTool(reg, manifest, ToolMeta{Authorization: tool.authority, Audiences: tool.audiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryScopes}, unavailableTool("skills"))
-	}
-	registerSkillInsightsTools(reg, nil)
 }
 
 // skillsToolCall runs one skill call and turns a refusal into a structured

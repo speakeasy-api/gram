@@ -8,6 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/require"
+
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
@@ -21,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/stretchr/testify/require"
 )
 
 // These exercise the real enforcement scanner and detector adapters with stored
@@ -49,8 +50,7 @@ func TestScanner_InferencePromptInjectionCompleteness(t *testing.T) {
 				calls.Add(1)
 				return []promptinjection.Result{tc.verdict}, tc.err
 			})
-			scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, promptinjection.NewScanner(testenv.NewLogger(t), classifier), nil, &feature.InMemory{}, testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
-			require.NoError(t, err)
+			scanner := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, promptinjection.NewScanner(testenv.NewLogger(t), classifier), testPromptPolicyScanner(t), &feature.InMemory{}, testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 			auth, _ := contextvalues.GetAuthContext(ctx)
 			req := realtimeScanRequest(auth.ActiveOrganizationID, *auth.ProjectID, auth.UserID, "untrusted tool output", message.ToolResponse, "read_file")
 			result, err := scanner.ScanForEnforcement(ctx, req)
@@ -70,16 +70,15 @@ func TestScanner_InferencePromptInjectionCompleteness(t *testing.T) {
 func TestScanner_InferencePromptPolicyCompleteness(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name                                                   string
-		verdict                                                *promptpolicy.Verdict
-		err                                                    error
-		unavailable, disabled, incomplete, failClosed, blocked bool
+		name                                      string
+		verdict                                   *promptpolicy.Verdict
+		err                                       error
+		disabled, incomplete, failClosed, blocked bool
 	}{
 		{name: "judge error", err: errors.New("judge unavailable"), incomplete: true},
 		{name: "inner deadline", err: context.DeadlineExceeded, incomplete: true},
 		{name: "nil verdict", incomplete: true},
 		{name: "incomplete verdict", verdict: &promptpolicy.Verdict{}, incomplete: true},
-		{name: "missing judge", unavailable: true, incomplete: true},
 		{name: "disabled judge", disabled: true, incomplete: true},
 		{name: "fail-closed judge error", err: errors.New("judge unavailable"), incomplete: true, failClosed: true, blocked: true},
 		{name: "completed match", verdict: matchedJudgeVerdict(1, "unsafe operation"), blocked: true},
@@ -95,15 +94,11 @@ func TestScanner_InferencePromptPolicyCompleteness(t *testing.T) {
 			insertPromptBasedBlockPolicyWithConfig(t, ti, ctx, "inference prompt policy", "Block unsafe operations", modelConfig)
 			judge := &fakePromptJudge{verdict: tc.verdict, err: tc.err}
 			detector := promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate)
-			if tc.unavailable {
-				detector = nil
-			}
 			flags := promptPoliciesFlag(ctx)
 			if tc.disabled {
 				flags = &feature.InMemory{}
 			}
-			scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, detector, flags, testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
-			require.NoError(t, err)
+			scanner := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, testPIScanner(t), detector, flags, testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 			auth, _ := contextvalues.GetAuthContext(ctx)
 			req := realtimeScanRequest(auth.ActiveOrganizationID, *auth.ProjectID, auth.UserID, "read a file", message.ToolRequest, "read_file")
 			result, err := scanner.ScanForEnforcement(ctx, req)
@@ -120,7 +115,7 @@ func TestScanner_InferencePromptPolicyCompleteness(t *testing.T) {
 			require.Equal(t, result, outcome.Result)
 			require.NoError(t, ctx.Err())
 			wantCalls := int32(2)
-			if tc.disabled || tc.unavailable {
+			if tc.disabled {
 				wantCalls = 0
 			}
 			require.Equal(t, wantCalls, judge.calls.Load(), "one evaluation per scan when enabled")

@@ -161,14 +161,12 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 	// legacy, matching attachment, so an outage never leaves the managed
 	// assistant with no toolset at all.
 	variant := feature.VariantAssistantToolsLegacy
-	if s.features != nil {
-		resolved, err := feature.FlagVariant(ctx, s.features, feature.FlagAssistantPlatformMCP,
-			authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
-		if err != nil {
-			s.logger.WarnContext(ctx, "resolve assistant platform mcp variant", attr.SlogError(err))
-		} else {
-			variant = feature.AssistantToolsVariant(resolved)
-		}
+	resolved, err := feature.FlagVariant(ctx, s.features, feature.FlagAssistantPlatformMCP,
+		authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve assistant platform mcp variant", attr.SlogError(err))
+	} else {
+		variant = feature.AssistantToolsVariant(resolved)
 	}
 
 	if slug != wantedToolsetSlug(variant) {
@@ -285,9 +283,6 @@ func (s *Service) listPlatformToolsetTools(
 
 	tools := make([]*toolListEntry, 0, len(toolset.Tools))
 	for _, extra := range toolset.Tools {
-		if extra.Executor == nil {
-			continue
-		}
 		if !available(extra.RequiredFeature) {
 			continue
 		}
@@ -329,9 +324,6 @@ func (s *Service) callPlatformToolsetTool(
 	var matched platformtools.ExternalTool
 	var found bool
 	for _, extra := range toolset.Tools {
-		if extra.Executor == nil {
-			continue
-		}
 		if extra.Executor.Descriptor().Name == params.Name {
 			matched = extra
 			found = true
@@ -553,16 +545,12 @@ func platformToolCallError(ctx context.Context, logger *slog.Logger, err error, 
 
 // platformToolFeatureAvailable reports whether a platform tool gated on
 // `feature` should be visible to `orgID`. Tools without a required feature
-// are always available; gated tools without a wired-in checker fail closed so
-// a missing dependency can't silently unmask a gated tool. A nil cache
-// disables memoization; a non-nil cache is read and written so callers
-// iterating over many tools avoid duplicate checker calls.
+// are always available. A nil cache disables memoization; a non-nil cache is
+// read and written so callers iterating over many tools avoid duplicate
+// checker calls.
 func (s *Service) platformToolFeatureAvailable(ctx context.Context, orgID, feature string, cache map[string]bool) bool {
 	if feature == "" {
 		return true
-	}
-	if s.platformFeatureChecker == nil {
-		return false
 	}
 	if cache != nil {
 		if v, ok := cache[feature]; ok {

@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -167,7 +168,7 @@ func TestHandleClientMetadataDocument_PinsNullClientURLsToOutboundOrigin(t *test
 	// The server URL has moved; the client's identity has not.
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	mgr := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, testenv.NewEncryptionClient(t), policy, nil, ti.redisCache, mustURL(t, movedOrigin),
+	mgr := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, testenv.NewEncryptionClient(t), policy, ti.tunnels, ti.redisCache, mustURL(t, movedOrigin),
 		remotesessions.WithCallbackOrigins(remotesessions.CallbackOrigins{Outbound: mustURL(t, cimdServerURL), Registration: nil}))
 	rec := httptest.NewRecorder()
 	require.NoError(t, mgr.HandleClientMetadataDocument(rec, cimdDocumentRequest(t, created.ID, false)))
@@ -285,7 +286,7 @@ func TestIdentityCommit_DynamicRegistrationRecordsRegistrationOrigin(t *testing.
 
 			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 			require.NoError(t, err)
-			committer := remotesessions.NewIdentityCommitter(testenv.NewLogger(t), ti.conn, testenv.NewEncryptionClient(t), audit.NewLogger(), mustURL(t, movedOrigin), policy, nil, nil)
+			committer := remotesessions.NewIdentityCommitter(testenv.NewLogger(t), ti.conn, testenv.NewEncryptionClient(t), audit.NewLogger(), mustURL(t, movedOrigin), policy, ti.tunnels, registration.NewMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)))
 			committer.SetCallbackOrigins(pinnedCallbackOrigins(t, tc.registration))
 
 			userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "dcr-origin-usi")

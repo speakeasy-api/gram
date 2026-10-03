@@ -31,23 +31,13 @@ type slackImageFetcher interface {
 	FetchImageFile(ctx context.Context, fileID string, token string) (*slackapi.ImageFile, error)
 }
 
-// SetSlackImageInlining wires the environment loader and Slack file
-// downloader used to inline image attachments from triggering Slack messages
-// as vision content. Set after construction to match the existing
-// post-construction injection pattern; when unset, turns carry attachment
-// metadata only.
-func (s *ServiceCore) SetSlackImageInlining(envLoader toolconfig.EnvironmentLoader, fetcher slackImageFetcher) {
-	s.envLoader = envLoader
-	s.slackImages = fetcher
-}
-
 // slackTurnImageParts downloads the image attachments of a Slack trigger
 // event and renders them as image_url input parts with data: URIs. Strictly
 // best-effort: every failure logs and degrades to nil — the turn's
 // message-context block already tells the model the files exist and that the
 // Slack platform tools can reach them.
 func (s *ServiceCore) slackTurnImageParts(ctx context.Context, thread assistantThreadRecord, event assistantThreadEventRecord) []runtimeContentPart {
-	if s.envLoader == nil || s.slackImages == nil || !event.TriggerInstanceID.Valid {
+	if !event.TriggerInstanceID.Valid {
 		return nil
 	}
 

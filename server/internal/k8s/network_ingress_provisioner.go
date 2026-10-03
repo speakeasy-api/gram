@@ -13,6 +13,8 @@ import (
 
 	"github.com/google/uuid"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
+
+	"github.com/speakeasy-api/gram/server/internal/inv"
 )
 
 const (
@@ -194,22 +196,20 @@ type NetworkIngressProvisionerRegistry struct {
 	providers map[string]NetworkIngressProvisioner
 }
 
-func NewNetworkIngressProvisionerRegistry(providers map[string]NetworkIngressProvisioner, logger *slog.Logger, metrics *NetworkIngressMetrics) (*NetworkIngressProvisionerRegistry, error) {
+func NewNetworkIngressProvisionerRegistry(providers map[string]NetworkIngressProvisioner, logger *slog.Logger, metrics *NetworkIngressMetrics) *NetworkIngressProvisionerRegistry {
 	registry := &NetworkIngressProvisionerRegistry{providers: make(map[string]NetworkIngressProvisioner, len(providers))}
 	for provider, provisioner := range providers {
 		provider = strings.TrimSpace(provider)
-		if provider == "" || provisioner == nil {
-			return nil, fmt.Errorf("%w: provider registry entry is invalid", ErrNetworkIngressInvalidDesiredState)
-		}
+		inv.Require("network ingress provisioner registry",
+			"provider name is set", provider != "",
+			"provisioner is set", provisioner != nil,
+		)
 		registry.providers[provider] = ObserveNetworkIngressProvisioner(provider, provisioner, logger, metrics)
 	}
-	return registry, nil
+	return registry
 }
 
 func (r *NetworkIngressProvisionerRegistry) Provisioner(provider string) (NetworkIngressProvisioner, error) {
-	if r == nil {
-		return nil, ErrNetworkIngressUnsupportedProvider
-	}
 	provisioner, ok := r.providers[provider]
 	if !ok {
 		return nil, fmt.Errorf("%w: %q", ErrNetworkIngressUnsupportedProvider, provider)

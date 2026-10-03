@@ -78,7 +78,7 @@ func (i *ToolsCallAuthzInterceptor) InterceptToolsCallRequest(ctx context.Contex
 	// only constructs a ToolsCallRequest with non-nil Params, so this branch
 	// is unreachable in practice. The guard exists so direct callers (tests,
 	// future programmatic use) are safe.
-	if i.authz == nil || call == nil || call.Params == nil {
+	if call == nil || call.Params == nil {
 		return nil
 	}
 

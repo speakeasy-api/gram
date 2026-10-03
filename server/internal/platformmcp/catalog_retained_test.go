@@ -40,6 +40,7 @@ func (r *retainedCatalogRecord) Discover(context.Context, mcpregistry.DiscoveryO
 	}
 	return page, nil
 }
+
 func (r *retainedCatalogRecord) GetByName(_ context.Context, name string) (mcpregistry.Entry, error) {
 	r.reads++
 	if name != "reviewed/mcp" {

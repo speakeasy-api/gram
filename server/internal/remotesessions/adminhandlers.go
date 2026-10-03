@@ -70,11 +70,11 @@ func logGlobalMutation(ctx context.Context, logger *slog.Logger, authCtx globalA
 
 // CreateGlobalIssuer creates a global remote_session_issuer (project_id NULL,
 // organization_id NULL), reusing CreateRemoteSessionIssuer with NULL scoping.
-func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.CreateGlobalIssuerPayload) (*types.RemoteSessionIssuer, error) {
+func (s *GlobalIssuers) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.CreateGlobalIssuerPayload) (*types.RemoteSessionIssuer, error) {
 	return s.createGlobalIssuer(ctx, payload, nil)
 }
 
-func (s *Service) createGlobalIssuer(ctx context.Context, payload *adminrsgen.CreateGlobalIssuerPayload, callerTx pgx.Tx) (*types.RemoteSessionIssuer, error) {
+func (s *GlobalIssuers) createGlobalIssuer(ctx context.Context, payload *adminrsgen.CreateGlobalIssuerPayload, callerTx pgx.Tx) (*types.RemoteSessionIssuer, error) {
 	authCtx, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
@@ -211,7 +211,7 @@ func (s *Service) createGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 // reported: ListGlobalIssuerConvergenceCandidates is the surface for those, and
 // answering that question here would put another organization's configuration
 // in front of a form that is only asking about the shared catalog.
-func (s *Service) GetGlobalIssuerDuplicatePreflight(ctx context.Context, payload *adminrsgen.GetGlobalIssuerDuplicatePreflightPayload) (*types.RemoteSessionIssuerDuplicatePreflight, error) {
+func (s *GlobalIssuers) GetGlobalIssuerDuplicatePreflight(ctx context.Context, payload *adminrsgen.GetGlobalIssuerDuplicatePreflightPayload) (*types.RemoteSessionIssuerDuplicatePreflight, error) {
 	_, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
@@ -240,7 +240,7 @@ func (s *Service) GetGlobalIssuerDuplicatePreflight(ctx context.Context, payload
 
 // ListGlobalIssuers lists the global remote_session_issuers, each with the
 // global and tenant-owned client counts that decide whether it can be deleted.
-func (s *Service) ListGlobalIssuers(ctx context.Context, payload *adminrsgen.ListGlobalIssuersPayload) (*adminrsgen.ListGlobalRemoteSessionIssuersResult, error) {
+func (s *GlobalIssuers) ListGlobalIssuers(ctx context.Context, payload *adminrsgen.ListGlobalIssuersPayload) (*adminrsgen.ListGlobalRemoteSessionIssuersResult, error) {
 	_, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
@@ -286,7 +286,7 @@ func (s *Service) ListGlobalIssuers(ctx context.Context, payload *adminrsgen.Lis
 // GetGlobalIssuer resolves a global remote_session_issuer by id, with the same
 // client counts the listing carries and the active identity-chaining binding
 // count, so the detail view can describe a delete without a second round trip.
-func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGlobalIssuerPayload) (*adminrsgen.GlobalRemoteSessionIssuer, error) {
+func (s *GlobalIssuers) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGlobalIssuerPayload) (*adminrsgen.GlobalRemoteSessionIssuer, error) {
 	_, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
@@ -320,11 +320,11 @@ func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGl
 }
 
 // UpdateGlobalIssuer patches a global remote_session_issuer.
-func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.UpdateGlobalIssuerPayload) (*types.RemoteSessionIssuer, error) {
+func (s *GlobalIssuers) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.UpdateGlobalIssuerPayload) (*types.RemoteSessionIssuer, error) {
 	return s.updateGlobalIssuer(ctx, payload, nil)
 }
 
-func (s *Service) updateGlobalIssuer(ctx context.Context, payload *adminrsgen.UpdateGlobalIssuerPayload, callerTx pgx.Tx) (*types.RemoteSessionIssuer, error) {
+func (s *GlobalIssuers) updateGlobalIssuer(ctx context.Context, payload *adminrsgen.UpdateGlobalIssuerPayload, callerTx pgx.Tx) (*types.RemoteSessionIssuer, error) {
 	authCtx, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
@@ -499,7 +499,7 @@ func (s *Service) updateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 // DeleteGlobalIssuer soft-deletes a global remote_session_issuer, blocked when
 // any global clients still reference it (the operator deletes the clients
 // first). Mirrors the org-scoped DeleteIssuer.
-func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.DeleteGlobalIssuerPayload) error {
+func (s *GlobalIssuers) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.DeleteGlobalIssuerPayload) error {
 	authCtx, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return err
@@ -604,7 +604,7 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.De
 // FetchGlobalIssuerMetadata fetches an upstream issuer's RFC 8414 metadata
 // document and returns a draft suitable for CreateGlobalIssuer. Keyed by issuer
 // URL, so no record need exist and nothing is persisted.
-func (s *Service) FetchGlobalIssuerMetadata(ctx context.Context, payload *adminrsgen.FetchGlobalIssuerMetadataPayload) (*types.RemoteSessionIssuerDraft, error) {
+func (s *GlobalIssuers) FetchGlobalIssuerMetadata(ctx context.Context, payload *adminrsgen.FetchGlobalIssuerMetadataPayload) (*types.RemoteSessionIssuerDraft, error) {
 	_, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
@@ -634,7 +634,7 @@ func (s *Service) FetchGlobalIssuerMetadata(ctx context.Context, payload *adminr
 // Like every other global mutation this records a structured-log line rather
 // than an auditlogs row, since audit_log.organization_id is NOT NULL and a
 // global issuer belongs to no organization.
-func (s *Service) RefreshGlobalIssuerMetadata(ctx context.Context, payload *adminrsgen.RefreshGlobalIssuerMetadataPayload) (*types.RemoteSessionIssuerRefresh, error) {
+func (s *GlobalIssuers) RefreshGlobalIssuerMetadata(ctx context.Context, payload *adminrsgen.RefreshGlobalIssuerMetadataPayload) (*types.RemoteSessionIssuerRefresh, error) {
 	authCtx, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
@@ -658,9 +658,9 @@ func (s *Service) RefreshGlobalIssuerMetadata(ctx context.Context, payload *admi
 		return nil, oops.E(oops.CodeUnexpected, err, "get global remote session issuer").LogError(ctx, logger)
 	}
 
-	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, s.jwksResolver, s.tunnels, existing)
+	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, s.jwksResolver, nil, existing)
 	if err != nil {
-		return nil, s.recordIssuerDiscoveryFailure(ctx, logger, existing, err)
+		return nil, recordIssuerDiscoveryFailure(ctx, s.db, logger, existing, err)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -790,7 +790,7 @@ func loadPlatformMigrationPair(ctx context.Context, r *repo.Queries, logger *slo
 // ListGlobalIssuerConvergenceCandidates lists the tenant issuers that name the same
 // upstream authorization server as a given global issuer, so a platform admin
 // can see who could be consolidated onto the shared catalog entry.
-func (s *Service) ListGlobalIssuerConvergenceCandidates(ctx context.Context, payload *adminrsgen.ListGlobalIssuerConvergenceCandidatesPayload) (*adminrsgen.ListIssuerConvergenceCandidatesResult, error) {
+func (s *GlobalIssuers) ListGlobalIssuerConvergenceCandidates(ctx context.Context, payload *adminrsgen.ListGlobalIssuerConvergenceCandidatesPayload) (*adminrsgen.ListIssuerConvergenceCandidatesResult, error) {
 	_, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
@@ -869,7 +869,7 @@ func (s *Service) ListGlobalIssuerConvergenceCandidates(ctx context.Context, pay
 // GetGlobalIssuerMigratePreflight reports what consolidating a tenant issuer
 // onto a global one would do, and every blocker that would make it fail, so the
 // confirmation dialog is authoritative before the mutation runs.
-func (s *Service) GetGlobalIssuerMigratePreflight(ctx context.Context, payload *adminrsgen.GetGlobalIssuerMigratePreflightPayload) (*adminrsgen.IssuerMigratePreflight, error) {
+func (s *GlobalIssuers) GetGlobalIssuerMigratePreflight(ctx context.Context, payload *adminrsgen.GetGlobalIssuerMigratePreflightPayload) (*adminrsgen.IssuerMigratePreflight, error) {
 	_, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
@@ -921,7 +921,7 @@ func (s *Service) GetGlobalIssuerMigratePreflight(ctx context.Context, payload *
 //
 // Like every other platform-admin mutation this records a structured-log line
 // rather than an auditlogs row.
-func (s *Service) MigrateToGlobalIssuer(ctx context.Context, payload *adminrsgen.MigrateToGlobalIssuerPayload) (*adminrsgen.MigrateRemoteSessionIssuerResult, error) {
+func (s *GlobalIssuers) MigrateToGlobalIssuer(ctx context.Context, payload *adminrsgen.MigrateToGlobalIssuerPayload) (*adminrsgen.MigrateRemoteSessionIssuerResult, error) {
 	authCtx, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err

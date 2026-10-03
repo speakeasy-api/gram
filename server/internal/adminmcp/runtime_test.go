@@ -35,22 +35,11 @@ func staffPrincipal() Principal {
 	return Principal{Subject: "staff-subject", Email: "staff@example.test", ClientID: "test-client", ConnectionID: "test-connection", Scopes: []string{"admin:read"}}
 }
 
-func TestRuntimeFailsClosedWithoutAuthenticator(t *testing.T) {
-	t.Parallel()
-
-	handler := NewRuntime(nil, "").Handler()
-	request := httptest.NewRequest(http.MethodPost, Path, nil)
-	request.Header.Set("Authorization", "Bearer token")
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, request)
-	require.Equal(t, http.StatusServiceUnavailable, response.Code)
-}
-
 func TestRuntimeRequiresBearerAndIgnoresBrowserCookie(t *testing.T) {
 	t.Parallel()
 
 	auth := &testAuthenticator{principal: staffPrincipal()}
-	handler := NewRuntime(auth, "https://staff.example.test/.well-known/oauth-protected-resource/admin-mcp").Handler()
+	handler := NewRuntime(auth, "https://staff.example.test/.well-known/oauth-protected-resource/admin-mcp", &recordingOrganizationReader{}).Handler()
 	request := httptest.NewRequest(http.MethodPost, Path, nil)
 	request.AddCookie(&http.Cookie{Name: "gram_admin", Value: "browser-session"})
 	response := httptest.NewRecorder()
@@ -73,7 +62,7 @@ func TestRuntimeRejectsInvalidIdentityAndReadScope(t *testing.T) {
 		request := httptest.NewRequest(http.MethodPost, Path, nil)
 		request.Header.Set("Authorization", "Bearer test-token")
 		response := httptest.NewRecorder()
-		NewRuntime(auth, "").Handler().ServeHTTP(response, request)
+		NewRuntime(auth, "", &recordingOrganizationReader{}).Handler().ServeHTTP(response, request)
 		require.Equal(t, http.StatusUnauthorized, response.Code)
 		require.Equal(t, 1, auth.calls)
 	}
@@ -86,7 +75,7 @@ func TestRuntimeRejectsInvalidToken(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, Path, nil)
 	request.Header.Set("Authorization", "Bearer test-token")
 	response := httptest.NewRecorder()
-	NewRuntime(auth, "").Handler().ServeHTTP(response, request)
+	NewRuntime(auth, "", &recordingOrganizationReader{}).Handler().ServeHTTP(response, request)
 	require.Equal(t, http.StatusUnauthorized, response.Code)
 	require.NotContains(t, response.Body.String(), "invalid token")
 }
@@ -98,7 +87,7 @@ func TestRuntimeReportsIdentityOutage(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, Path, nil)
 	request.Header.Set("Authorization", "Bearer test-token")
 	response := httptest.NewRecorder()
-	NewRuntime(auth, "").Handler().ServeHTTP(response, request)
+	NewRuntime(auth, "", &recordingOrganizationReader{}).Handler().ServeHTTP(response, request)
 	require.Equal(t, http.StatusServiceUnavailable, response.Code)
 	require.Empty(t, response.Header().Get("WWW-Authenticate"))
 }
@@ -112,7 +101,7 @@ func TestRuntimeRejectsUnauthenticatedDiscovery(t *testing.T) {
 		request.AddCookie(&http.Cookie{Name: "gram_admin", Value: "browser-session"})
 		request.Header.Set("Content-Type", "application/json")
 		response := httptest.NewRecorder()
-		NewRuntime(auth, "").Handler().ServeHTTP(response, request)
+		NewRuntime(auth, "", &recordingOrganizationReader{}).Handler().ServeHTTP(response, request)
 		require.Equal(t, http.StatusUnauthorized, response.Code)
 		require.Zero(t, auth.calls)
 	}
@@ -123,7 +112,7 @@ func TestRuntimeRejectsUnsupportedMethodWithoutCaching(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, Path, nil)
 	response := httptest.NewRecorder()
-	NewRuntime(nil, "").Handler().ServeHTTP(response, request)
+	NewRuntime(&testAuthenticator{}, "", &recordingOrganizationReader{}).Handler().ServeHTTP(response, request)
 	require.Equal(t, http.StatusMethodNotAllowed, response.Code)
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
 }
@@ -132,7 +121,7 @@ func TestContextToolReturnsOnlyAuthenticatedContext(t *testing.T) {
 	t.Parallel()
 
 	auth := &testAuthenticator{principal: staffPrincipal()}
-	handler := NewRuntime(auth, "").Handler()
+	handler := NewRuntime(auth, "", &recordingOrganizationReader{}).Handler()
 	request := httptest.NewRequest(http.MethodPost, Path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_admin_context","arguments":{}}}`))
 	request.Header.Set("Authorization", "Bearer test-token")
 	request.Header.Set("Content-Type", "application/json")
@@ -153,7 +142,7 @@ func TestContextToolReturnsOnlyAuthenticatedContext(t *testing.T) {
 	require.Equal(t, "staff@example.test", message.Result.StructuredContent.Email)
 	require.True(t, message.Result.StructuredContent.ReadOnly)
 	require.Equal(t, []string{"admin:read"}, message.Result.StructuredContent.Scopes)
-	require.Equal(t, []string{"inspect staff admin context"}, message.Result.StructuredContent.Workflows)
+	require.Contains(t, message.Result.StructuredContent.Workflows, "inspect staff admin context")
 	require.NotContains(t, response.Body.String(), "test-token")
 	require.NotContains(t, response.Body.String(), "test-connection")
 }

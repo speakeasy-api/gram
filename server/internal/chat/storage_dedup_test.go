@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -100,7 +101,7 @@ func TestStoreMessages_DeduplicatesContentAddressableWrites(t *testing.T) {
 	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
 
 	counting := newCountingBlobStore(t)
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, counting)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, counting, chattest.NewTurnStream(t, infra))
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 
 	s := chat.NewChatMessageCaptureStrategy(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, writer)

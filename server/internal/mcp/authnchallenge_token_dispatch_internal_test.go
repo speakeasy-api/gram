@@ -192,8 +192,7 @@ func TestServeTokenGrantClientlessSkipsClientResolution(t *testing.T) {
 }
 
 // Requests refused before any client authentication keep the credential
-// event vocabulary: an unsupported grant logs unsupported_grant_type, and a
-// clientless JWT bearer request logs missing_client_id.
+// event vocabulary: an unsupported grant logs unsupported_grant_type.
 func TestServeTokenRefusalsBeforeClientAuthenticationLogReasons(t *testing.T) {
 	t.Parallel()
 
@@ -214,15 +213,6 @@ func TestServeTokenRefusalsBeforeClientAuthenticationLogReasons(t *testing.T) {
 			message:   "oauth token request rejected",
 			reason:    "unsupported_grant_type",
 			grantType: "urn:example:grant-type:unknown",
-		},
-		{
-			name:      "jwt-bearer without client",
-			form:      url.Values{"grant_type": {oauthwire.GrantTypeJWTBearer}, "assertion": {"header.payload.signature"}},
-			status:    http.StatusUnauthorized,
-			body:      `{"error":"invalid_client","error_description":"client_id is required"}`,
-			message:   "oauth token client authentication rejected",
-			reason:    "missing_client_id",
-			grantType: oauthwire.GrantTypeJWTBearer,
 		},
 	}
 	for _, tc := range cases {

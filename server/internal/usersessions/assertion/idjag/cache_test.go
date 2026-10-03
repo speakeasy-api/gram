@@ -24,8 +24,7 @@ func TestIssuerKeyCacheRejectsLatePreRotationWrite(t *testing.T) {
 		Issuer: "https://issuer.example.com", JwksUri: pgtype.Text{String: uri, Valid: true},
 	})
 	require.NoError(t, err)
-	cache, err := NewIssuerKeyCache(db)
-	require.NoError(t, err)
+	cache := NewIssuerKeyCache(db)
 	key := issuerCacheKey("test-org", id, "https://issuer.example.com", uri)
 	prior, err := cache.Get(ctx, key)
 	require.NoError(t, err)
@@ -57,8 +56,7 @@ func TestIssuerKeyCachePreservesLastSuccessfulFetchAcrossError(t *testing.T) {
 		Issuer: "https://issuer.example.com", JwksUri: pgtype.Text{String: uri, Valid: true},
 	})
 	require.NoError(t, err)
-	cache, err := NewIssuerKeyCache(db)
-	require.NoError(t, err)
+	cache := NewIssuerKeyCache(db)
 	key := issuerCacheKey("test-org", id, "https://issuer.example.com", uri)
 	prior, err := cache.Get(ctx, key)
 	require.NoError(t, err)
@@ -114,8 +112,7 @@ func TestIssuerKeyCacheRejectsConfigurationABA(t *testing.T) {
 		Issuer: issuer, JwksUri: pgtype.Text{String: uri, Valid: true},
 	})
 	require.NoError(t, err)
-	cache, err := NewIssuerKeyCache(db)
-	require.NoError(t, err)
+	cache := NewIssuerKeyCache(db)
 	key := issuerCacheKey("test-org", id, issuer, uri)
 	prior, err := cache.Get(ctx, key)
 	require.NoError(t, err)
@@ -149,8 +146,7 @@ func TestIssuerKeyCacheScopesOrganizationRows(t *testing.T) {
 		Issuer: issuer, JwksUri: pgtype.Text{String: uri, Valid: true},
 	})
 	require.NoError(t, err)
-	cache, err := NewIssuerKeyCache(db)
-	require.NoError(t, err)
+	cache := NewIssuerKeyCache(db)
 	_, err = cache.Get(ctx, issuerCacheKey(organizationID, id, issuer, uri))
 	require.NoError(t, err)
 	_, err = cache.Get(ctx, issuerCacheKey("another-organization", id, issuer, uri))

@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -39,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -59,7 +61,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
-	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
@@ -69,7 +70,7 @@ import (
 // worker flags are accepted but never read: this command has no Temporal
 // dependency by design.
 func mcpServerFlags() []cli.Flag {
-	flags := mcpRuntimeFlags()
+	flags := mcpRuntimeFlags(false)
 	return append(flags,
 		&cli.StringFlag{Name: "address", Value: ":8080", Usage: "HTTP address to listen on", EnvVars: []string{"GRAM_SERVER_ADDRESS"}},
 		&cli.StringFlag{Name: "ssl-key-file", Usage: "The SSL key file path to use for the server", EnvVars: []string{"GRAM_SSL_KEY_FILE"}},
@@ -210,10 +211,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return fmt.Errorf("configure caller assertions: %w", err)
 	}
 
-	authenticationHost, err := mcp.NewAuthenticationHost(c.String("authentication-host-url"), serverURL, serviceEnv)
-	if err != nil {
-		return fmt.Errorf("invalid authentication host url: %w", err)
-	}
+	authenticationHost := mcp.NewAuthenticationHost(c.String("authentication-host-url"), serverURL, serviceEnv)
 	platformHosts, err := parsePlatformHosts(c, authenticationHost)
 	if err != nil {
 		return err
@@ -224,9 +222,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	}
 
 	enc, err := encryption.New(c.String("encryption-key"))
-	if err != nil {
-		return fmt.Errorf("create encryption client: %w", err)
-	}
+	inv.Require("encryption client", "encryption-key is a valid AES-256 key", err)
 	env := environments.NewEnvironmentEntries(logger, db, enc, mcpmetadata_repo.New(db))
 	auditLogger := newAuditLogger()
 
@@ -250,10 +246,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	}
 	shutdown.funcs = append(shutdown.funcs, stop)
 
-	roleClient, err := newAccessRoleProvider(ctx, logger, guardianPolicy, c)
-	if err != nil {
-		return fmt.Errorf("create access role provider: %w", err)
-	}
+	roleClient := newAccessRoleProvider(ctx, logger, guardianPolicy, c)
 	authzEngine := authz.NewEngine(logger, db,
 		authz.ChallengeLoggingEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureAuthzChallengeLogging)),
 		roleClient, authz.EngineOpts{
@@ -308,10 +301,10 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// Platform memory tools and dynamic tool search need a completions client.
 	// The chat writer captures any transcript they produce but carries none of
 	// the Temporal-backed observers `gram start` attaches.
-	chatWriter, stop := chat.NewChatMessageWriter(logger, db, assetStorage)
+	chatWriter, stop := chat.NewChatMessageWriter(logger, db, assetStorage, chat.NewTurnStream(redisClient))
 	shutdown.funcs = append(shutdown.funcs, stop)
 	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, enc, openRouter),
-		chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), nil, telemLogger)
+		chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), telemLogger)
 	memoryService := memory.NewMemoryService(logger, tracerProvider, meterProvider, db, completions, auditLogger)
 	ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completions)
 	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
@@ -324,10 +317,6 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	drainRisk = func(ctx context.Context) error {
 		return errors.Join(mcpRiskEvaluator.Drain(ctx), mcpRiskScanner.Shutdown(ctx))
 	}
-	slackClient := slack_client.NewSlackClient(guardianPolicy)
-	// Listing and reading triggers works without Temporal; scheduling one
-	// returns an error from the trigger tool instead of dispatching.
-	triggerApp := newTriggersApp(logger, db, enc, nil, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cacheImpl)
 	assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
 	platformExtras := append([]platformtools.ExternalTool{}, platformtoolsruntime.MemoryExternalTools(memoryService)...)
 	platformExtras = append(platformExtras, platformtoolsruntime.AssistantSkillTools(logger, db)...)
@@ -340,29 +329,23 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
 
-	tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, redisClient)
-	if err != nil {
-		return fmt.Errorf("build tunnel http client: %w", err)
-	}
+	tunnelHTTPClient := newTunnelHTTPClient(c, guardianPolicy, redisClient)
 	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner)
 	if err != nil {
 		return err
 	}
-	mcpService, err := newMCPService(c, mcpServiceDependencies{
+	mcpService := newMCPService(c, mcpServiceDependencies{
 		CallerAssertions: callerAssertions,
 		Logger:           logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
 		Sessions: sessionManager, ChatSessions: chatSessions, Environment: env,
 		Posthog: posthogClient, Features: featureFlags, ServerURL: serverURL, SiteURL: siteURL,
 		Encryption: enc, Guardian: guardianPolicy, Functions: functionsOrchestrator,
 		BillingTracker: billingTracker, Billing: billingRepo, Telemetry: telemLogger, TelemetryService: telemSvc,
-		RAG: ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager,
+		RAG: ragService, ThreadRouter: bgtriggers.NewThreadRouter(db), Authz: authzEngine, AssistantTokens: assistantTokenManager,
 		ShadowMCP: shadowMCPClient, MCPRisk: mcpRiskEvaluator, Audit: auditLogger,
 		PlatformExtras: platformExtras, PlatformFeatureChecker: productFeatures.PlatformFeatureCheck,
-		PlatformToolsets: map[string]platformtools.Toolset{}, Identity: identityResolver, Challenges: remoteSessionDeps.Challenges, CallbackOrigins: callbackOrigins,
+		PlatformToolsets: map[string]platformtools.Toolset{}, Identity: identityResolver, Challenges: remoteSessionDeps.Challenges, IDTokenKeys: remoteSessionDeps.IDTokenKeys, CallbackOrigins: callbackOrigins,
 	})
-	if err != nil {
-		return err
-	}
 	// Consent runs on this tier in production. Compose the same attachment
 	// service and transactional owner authorizer as gram start, without mounting
 	// its dashboard RPC routes or introducing a Temporal client.
@@ -400,10 +383,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// containment still resolve through the same admission checks.
 	admission := networkingress.NewExpansionAdmission(productFeatures, false, c.Bool("network-ingress-enabled"))
 	metadata := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cacheImpl, authzEngine, auditLogger, admission.CheckExpansion)
-	runtime, err := buildMCPServerRuntime(mcpServerRuntimeDependencies{Logger: logger, DB: db, Encryption: enc, MCP: mcpService, Metadata: metadata})
-	if err != nil {
-		return fmt.Errorf("build MCP server runtime: %w", err)
-	}
+	runtime := buildMCPServerRuntime(mcpServerRuntimeDependencies{Logger: logger, DB: db, Encryption: enc, MCP: mcpService, Metadata: metadata})
 
 	mux, err := newMCPServerMux(c, logger, db, serverURL, authenticationHost, platformHosts, chatSessions, publishers)
 	if err != nil {

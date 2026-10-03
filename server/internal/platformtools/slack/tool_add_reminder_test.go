@@ -18,7 +18,7 @@ func TestAddReminderTool_RequiresUserToken(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewAddReminderTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callAddReminder,
 	}
 
@@ -86,7 +86,7 @@ func TestAddReminderTool_RequiresTextAndTime(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewAddReminderTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callAddReminder,
 	}
 

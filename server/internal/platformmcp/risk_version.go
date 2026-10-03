@@ -31,12 +31,9 @@ type riskVersionEnvelope struct {
 	MAC     string `json:"m"`
 }
 
-func newRiskVersionCodec(keyMaterial string) (*riskVersionCodec, error) {
-	if keyMaterial == "" {
-		return nil, ErrRiskMutationUnavailable
-	}
+func newRiskVersionCodec(keyMaterial string) *riskVersionCodec {
 	key := sha256.Sum256([]byte("platform-mcp-risk-version:" + keyMaterial))
-	return &riskVersionCodec{key: key[:]}, nil
+	return &riskVersionCodec{key: key[:]}
 }
 
 // RiskPolicyVersionState is the complete locked policy state needed for an
@@ -234,7 +231,7 @@ func riskPolicyVersionURLGrants(ctx context.Context, db riskrepo.DBTX, policy po
 }
 
 func (c *riskVersionCodec) encode(kind string, state any) (string, error) {
-	if c == nil || len(c.key) == 0 || kind == "" {
+	if kind == "" {
 		return "", errRiskVersionInvalid
 	}
 	payload, err := json.Marshal(state)

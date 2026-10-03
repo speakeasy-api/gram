@@ -9,10 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestValidDynamicClientRegistrationEndpoint(t *testing.T) {
@@ -30,8 +28,10 @@ func TestValidDynamicClientRegistrationEndpoint(t *testing.T) {
 func TestDiscoverSupportedIssuerMetadataRejectsEmptyCandidates(t *testing.T) {
 	t.Parallel()
 
-	service := &CatalogIdentityProviderAttachmentService{}
-	_, err := service.discoverSupportedIssuerMetadata(t.Context(), []string{"", "  "})
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_issuer_metadata_empty")
+	require.NoError(t, err)
+	service := attachmentTestService(t, conn)
+	_, err = service.discoverSupportedIssuerMetadata(t.Context(), []string{"", "  "})
 
 	require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
 }
@@ -82,9 +82,9 @@ func TestCatalogIssuerIdentityIsExact(t *testing.T) {
 		}))
 	}))
 	defer server.Close()
-	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_issuer_metadata")
 	require.NoError(t, err)
-	service := &CatalogIdentityProviderAttachmentService{policy: policy}
+	service := attachmentTestService(t, conn)
 	metadata, err := service.discoverSupportedIssuerMetadata(t.Context(), []string{server.URL + "/tenant/"})
 	require.NoError(t, err)
 	require.Equal(t, server.URL+"/tenant/", metadata.Issuer)

@@ -52,8 +52,7 @@ func TestParsePlatformHostsRefusesAuthenticationHost(t *testing.T) {
 
 	serverURL, err := url.Parse("https://app.example.com")
 	require.NoError(t, err)
-	authenticationHost, err := mcp.NewAuthenticationHost("https://auth.example.com", serverURL, "prod")
-	require.NoError(t, err)
+	authenticationHost := mcp.NewAuthenticationHost("https://auth.example.com", serverURL, "prod")
 
 	parse := func(hosts ...string) (map[string]string, error) {
 		set := flag.NewFlagSet("platform-hosts", flag.ContinueOnError)

@@ -56,20 +56,6 @@ func modeGuidance(mode string) string {
 	}
 }
 
-func registerUnavailableClientAdmissionTools(reg *Registrar) {
-	addTool(reg, &mcp.Tool{
-		Name:        "get_mcp_client_admission",
-		Title:       "Which Apps Can Sign In",
-		Description: "Show which apps can sign in to an MCP server. This is not switched on for your organization yet.",
-		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("client_admission"))
-	addTool(reg, &mcp.Tool{
-		Name:        "set_mcp_client_admission",
-		Title:       "Choose Which Apps Can Sign In",
-		Description: "Choose which apps can sign in to an MCP server. This is not switched on for your organization yet.",
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("client_admission"))
-}
-
 // registerClientAdmissionTools serves the CIMD half of MCP Server -> Settings
 // -> Authentication. Both tools are connection-less: the registration is
 // resolved by user and project, so the managed project assistant reaches the

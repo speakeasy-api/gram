@@ -59,7 +59,7 @@ type ScoreSink interface {
 // ScoreEventSink emits the synthetic per-session telemetry events derived from
 // published work-units verdicts — the rows attribute_metrics_summaries_mv
 // folds into the work-units efficiency measures. Satisfied by
-// *telemetry.Logger; nil disables emission.
+// *telemetry.Logger.
 type ScoreEventSink interface {
 	LogBulk(ctx context.Context, params []telemetry.LogParams) error
 }
@@ -113,9 +113,7 @@ type Publisher struct {
 	evaluationTimeout time.Duration
 }
 
-// NewPublisher constructs a Publisher over the given judge roster. events may
-// be nil, which disables work-units score event emission (scores still
-// publish).
+// NewPublisher constructs a Publisher over the given judge roster.
 func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, scores ScoreSink, events ScoreEventSink, judges *Judges) *Publisher {
 	return &Publisher{
 		logger:            logger.With(attr.SlogComponent("chat-analysis-publisher")),
@@ -430,10 +428,6 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input r
 // work-units evaluations. Best-effort: on failure every affected evaluation
 // publishes without a score event rather than failing the pass.
 func (p *Publisher) loadScoreEventFacts(ctx context.Context, projectID uuid.UUID, inputs []repo.GetChatAnalysisJudgeInputsRow, published map[uuid.UUID]struct{}) map[string]telemetryrepo.ChatSessionFacts {
-	if p.events == nil {
-		return nil
-	}
-
 	var chatIDs []string
 	for _, input := range inputs {
 		if input.Judge != WorkUnitsJudgeName {
@@ -473,7 +467,7 @@ func (p *Publisher) loadScoreEventFacts(ctx context.Context, projectID uuid.UUID
 // bounded by the publication guard — a retried evaluation whose score row is
 // already visible takes the alreadyPublished path and never reaches this.
 func (p *Publisher) emitWorkUnitsScoreEvent(ctx context.Context, projectID uuid.UUID, input repo.GetChatAnalysisJudgeInputsRow, judged JudgeResult, sessionFacts map[string]telemetryrepo.ChatSessionFacts) {
-	if p.events == nil || input.Judge != WorkUnitsJudgeName {
+	if input.Judge != WorkUnitsJudgeName {
 		return
 	}
 

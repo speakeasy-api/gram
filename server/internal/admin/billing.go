@@ -48,9 +48,6 @@ func (s *Service) GetInferenceKeys(ctx context.Context, payload *gen.GetInferenc
 	if len(keys) == 0 {
 		return []*gen.AdminInferenceKey{}, nil
 	}
-	if s.openRouterUsage == nil {
-		return nil, oops.E(oops.CodeUnavailable, ErrOpenRouterUnavailable, "OpenRouter usage is temporarily unavailable").LogWarn(ctx, s.logger)
-	}
 
 	result := make([]*gen.AdminInferenceKey, len(keys))
 	group, groupCtx := errgroup.WithContext(ctx)
@@ -100,9 +97,6 @@ func (s *Service) SetInferenceKeyMonthlyLimit(ctx context.Context, payload *gen.
 	organizationID, err := s.canonicalAdminOrganizationID(ctx, payload.OrganizationID)
 	if err != nil {
 		return nil, err
-	}
-	if s.openRouterSpendCap == nil {
-		return nil, oops.E(oops.CodeUnavailable, nil, "inference limit updates are temporarily unavailable").LogWarn(ctx, s.logger)
 	}
 
 	key, err := usagerepo.New(s.db).GetMaterializedOpenRouterInferenceKey(ctx, usagerepo.GetMaterializedOpenRouterInferenceKeyParams{
@@ -177,6 +171,7 @@ func (s *Service) GetPaygBillingSummary(ctx context.Context, payload *gen.GetPay
 		EstimatedTotalUsd: summary.EstimatedTotalUsd,
 	}, nil
 }
+
 func (s *Service) GetMeterUsage(ctx context.Context, payload *gen.GetMeterUsagePayload) (*gen.AdminMeterUsageResponse, error) {
 	organization, err := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
 		ID:        payload.OrganizationID,
@@ -187,9 +182,6 @@ func (s *Service) GetMeterUsage(ctx context.Context, payload *gen.GetMeterUsageP
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve meter usage organization").LogError(ctx, s.logger)
-	}
-	if s.billing == nil {
-		return nil, oops.E(oops.CodeUnavailable, nil, "billing operations are temporarily unavailable").LogWarn(ctx, s.logger)
 	}
 
 	report, err := s.billing.GetMeterUsageForOrganization(ctx, organization.ID, &usagegen.GetMeterUsagePayload{
@@ -236,9 +228,6 @@ func (s *Service) GetSpendBreakdown(ctx context.Context, payload *gen.GetSpendBr
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve spend breakdown organization").LogError(ctx, s.logger)
-	}
-	if s.billing == nil {
-		return nil, oops.E(oops.CodeUnavailable, nil, "billing operations are temporarily unavailable").LogWarn(ctx, s.logger)
 	}
 
 	report, err := s.billing.GetSpendBreakdownForOrganization(ctx, organization.ID, &usagegen.GetSpendBreakdownPayload{
@@ -556,9 +545,6 @@ func (s *Service) stripeCustomerAssignmentOrganization(ctx context.Context, orga
 }
 
 func (s *Service) canonicalBillingOrganization(ctx context.Context, organizationID string) (repo.AdminGetOrganizationRow, error) {
-	if s.billing == nil {
-		return repo.AdminGetOrganizationRow{}, oops.E(oops.CodeUnavailable, nil, "billing operations are temporarily unavailable").LogWarn(ctx, s.logger)
-	}
 	return s.canonicalAdminOrganization(ctx, organizationID)
 }
 

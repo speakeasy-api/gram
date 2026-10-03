@@ -177,20 +177,3 @@ func TestWorkflowRunRecordRejectsMalformedReports(t *testing.T) {
 		require.Emptyf(t, emitter.captured(), "%s must not be emitted", name)
 	}
 }
-
-func TestWorkflowRunToolRegisteredAsStubWithoutEmitter(t *testing.T) {
-	t.Parallel()
-
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
-
-	var found bool
-	for _, descriptor := range registrar.Descriptors() {
-		if descriptor.Name == recordWorkflowRunToolName {
-			found = true
-			require.Contains(t, descriptor.Description, "not switched on for your organization yet")
-			require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization)
-			require.Equal(t, ProjectScopeNone, descriptor.Meta.ProjectScope)
-		}
-	}
-	require.True(t, found, "%s must stay in the catalogue as a stub", recordWorkflowRunToolName)
-}

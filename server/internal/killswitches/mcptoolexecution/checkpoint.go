@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 )
@@ -38,44 +39,22 @@ type Checkpoint struct {
 
 // NewCheckpoint builds the private MCP tool-execution checkpoint
 // from the registered adapters and authoritative PostgreSQL evaluator.
-func NewCheckpoint(db *pgxpool.Pool, timeout time.Duration, meterProvider metric.MeterProvider, logger *slog.Logger) (*Checkpoint, error) {
-	registry, err := NewRegistry(db)
-	if err != nil {
-		return nil, err
-	}
-	evaluation, err := killswitches.NewEvaluator(db, registry, timeout, meterProvider, logger)
-	if err != nil {
-		return nil, fmt.Errorf("build mcp tool-execution evaluator: %w", err)
-	}
-	return newCheckpoint(registry, evaluation, timeout)
+func NewCheckpoint(db *pgxpool.Pool, timeout time.Duration, meterProvider metric.MeterProvider, logger *slog.Logger) *Checkpoint {
+	registry := NewRegistry(db)
+	return newCheckpoint(registry, killswitches.NewEvaluator(db, registry, timeout, meterProvider, logger), timeout)
 }
 
-func newCheckpoint(registry *killswitches.Registry, evaluation evaluator, timeout time.Duration) (*Checkpoint, error) {
-	if registry == nil {
-		return nil, errors.New("mcp tool-execution registry is required")
-	}
-	if evaluation == nil {
-		return nil, errors.New("mcp tool-execution evaluator is required")
-	}
-	if timeout <= 0 {
-		return nil, errors.New("mcp tool-execution checkpoint timeout must be positive")
-	}
-	principal, err := registeredPrincipalAdapter(registry)
-	if err != nil {
-		return nil, err
-	}
-	resource, ok := registry.ResourceAdapter(ResourceKindMCPServer)
-	if !ok {
-		return nil, errors.New("mcp-server resource adapter is not registered")
-	}
-	transport, ok := registry.TransportAdapter(TransportAdapterPrivateProxyJSONRPC)
-	if !ok {
-		return nil, errors.New("private proxy transport adapter is not registered")
-	}
-	coverage, ok := registry.Coverage(DefinitionKeyMCPToolExecution, SurfacePrivateProxyToolsCall)
-	if !ok {
-		return nil, errors.New("private proxy coverage contract is not registered")
-	}
+func newCheckpoint(registry *killswitches.Registry, evaluation evaluator, timeout time.Duration) *Checkpoint {
+	resource, resourceOK := registry.ResourceAdapter(ResourceKindMCPServer)
+	transport, transportOK := registry.TransportAdapter(TransportAdapterPrivateProxyJSONRPC)
+	coverage, coverageOK := registry.Coverage(DefinitionKeyMCPToolExecution, SurfacePrivateProxyToolsCall)
+	inv.Require("mcp tool-execution checkpoint",
+		"timeout is positive", timeout > 0,
+		"mcp-server resource adapter is registered", resourceOK,
+		"private proxy transport adapter is registered", transportOK,
+		"private proxy coverage contract is registered", coverageOK,
+	)
+	principal := registeredPrincipalAdapter(registry)
 
 	return &Checkpoint{
 		principal:     principal,
@@ -85,16 +64,13 @@ func newCheckpoint(registry *killswitches.Registry, evaluation evaluator, timeou
 		failurePolicy: coverage.FailurePolicy,
 		timeout:       timeout,
 		recorder:      nil,
-	}, nil
+	}
 }
 
 // WithIdentityCoverageRecorder returns a checkpoint copy that records the
 // principal and resource classifications produced by its authoritative
 // derivation, avoiding a second pair of database lookups for metrics.
 func (c *Checkpoint) WithIdentityCoverageRecorder(recorder IdentityCoverageRecorder) *Checkpoint {
-	if c == nil {
-		return nil
-	}
 	result := *c
 	result.recorder = recorder
 	return &result
@@ -104,10 +80,6 @@ func (c *Checkpoint) WithIdentityCoverageRecorder(recorder IdentityCoverageRecor
 // unsupported provenance continues without inventing an acting user. Every
 // other resolution or evaluator failure follows the registered failure policy.
 func (c *Checkpoint) Evaluate(ctx context.Context, organizationID, mcpServerID string) (killswitches.TransportDisposition, error) {
-	if c == nil {
-		return killswitches.NewInfrastructureRejectionDisposition(), errors.New("mcp tool-execution checkpoint is unavailable")
-	}
-
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 

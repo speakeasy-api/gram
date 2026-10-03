@@ -21,9 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcpRepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessionsRepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -497,16 +495,7 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 	projectID := proj.ID
 	projectSlug := proj.Slug
 
-	logger := testenv.NewLogger(t)
-	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	service := &Service{
-		tracer:   testenv.NewTracerProvider(t).Tracer("test"),
-		logger:   logger,
-		auth:     nil,
-		authz:    authzEngine,
-		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger()),
-		signaler: &stubWorkflowSignaler{signalledThreads: nil},
-	}
+	service := newTestService(t, conn, newTestServiceCore(t, conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}))
 
 	sessionID := "session-test"
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{

@@ -11,8 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/chat"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 )
@@ -60,10 +59,10 @@ func complianceSystemActivity(id string) anthropicapi.Activity {
 func complianceDiscoveryService(t *testing.T, serverURL string) (*ComplianceImportService, *anthropicapi.Client) {
 	t.Helper()
 
-	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
-	require.NoError(t, err)
+	_, conn, _, _ := newStoreTestDB(t)
+	policy := newTestGuardianPolicy(t)
 	client := anthropicapi.New(policy, anthropicapi.WithBaseURL(serverURL), anthropicapi.WithAPIKey("anthropic-key"))
-	svc := NewComplianceImportService(testenv.NewLogger(t), nil, policy, nil, func(context.Context, string, int) {})
+	svc := NewComplianceImportService(testenv.NewLogger(t), conn, policy, newTestChatWriter(t, conn), func(context.Context, string, int) {})
 	return svc, client
 }
 
@@ -252,10 +251,9 @@ func TestWriteMessagePagesAdvancesActivitiesCursor(t *testing.T) {
 	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, &watermark)
 	cfg := created.Config
 
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
-	t.Cleanup(func() { _ = shutdown(context.Background()) })
+	writer := chattest.NewMessageWriter(t, infra, conn)
 
-	svc := NewComplianceImportService(testenv.NewLogger(t), conn, nil, writer, func(context.Context, string, int) {})
+	svc := NewComplianceImportService(testenv.NewLogger(t), conn, newTestGuardianPolicy(t), writer, func(context.Context, string, int) {})
 
 	in := make(chan messagePageBatch, 4)
 	in <- messagePageBatch{chatID: uuid.Nil, rows: nil, lastID: "", activitiesCursor: "", cursorOnly: false}

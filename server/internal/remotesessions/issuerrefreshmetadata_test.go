@@ -515,7 +515,6 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateDoesNotFillFromPr
 	requireIssuerSnapshotUnchanged(t, before, kept)
 	require.True(t, kept.MetadataLastErrorAt.Valid)
 	require.True(t, kept.MetadataLastErrorUrl.Valid)
-
 }
 
 // A document Postgres cannot hold as jsonb is not retained verbatim; the

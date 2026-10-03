@@ -3,9 +3,10 @@ package authz
 import (
 	"context"
 	"fmt"
-	"github.com/ClickHouse/clickhouse-go/v2"
 	"log/slog"
 	"time"
+
+	"github.com/ClickHouse/clickhouse-go/v2"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/codes"
@@ -109,9 +110,7 @@ func (w *ChallengeCHWriter) processBatch(ctx context.Context, messages []*authzv
 				attr.SlogError(err),
 				attr.SlogValueString(message.GetId()),
 			)
-			if w.challengesSkipped != nil {
-				w.challengesSkipped.Add(ctx, 1)
-			}
+			w.challengesSkipped.Add(ctx, 1)
 			continue
 		}
 		rows = append(rows, row)
@@ -123,9 +122,7 @@ func (w *ChallengeCHWriter) processBatch(ctx context.Context, messages []*authzv
 	}
 
 	err := w.repo.InsertChallenges(ctx, rows)
-	if w.challengesInserted != nil {
-		w.challengesInserted.Add(ctx, int64(len(rows)), metric.WithAttributes(attr.Outcome(o11y.OutcomeFromError(err))))
-	}
+	w.challengesInserted.Add(ctx, int64(len(rows)), metric.WithAttributes(attr.Outcome(o11y.OutcomeFromError(err))))
 	if err == nil {
 		return failed
 	}

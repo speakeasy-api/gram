@@ -46,7 +46,7 @@ const (
 type riskPolicyMutationService struct {
 	db       *pgxpool.Pool
 	controls *RiskMutationControls
-	policies *policycore.Core
+	policies *policycore.MutationCore
 	catalog  policycatalog.Catalog
 }
 
@@ -105,50 +105,23 @@ type preparedRiskPolicyCreate struct {
 	params     riskrepo.CreateRiskPolicyParams
 }
 
-// NewRiskPolicyMutationHandlers retains the policy-only composition used by the
-// preceding rollout slice.
-func NewRiskPolicyMutationHandlers(db *pgxpool.Pool, controls *RiskMutationControls, policies *policycore.Core) (*RiskMutationHandlers, error) {
-	return newRiskMutationHandlers(db, controls, policies, nil, nil)
-}
-
 // NewRiskMutationHandlers activates policy, exclusion, and per-finding
-// false-positive mutation callbacks. A nil exclusions or falsePositives core
-// leaves the matching tools registered as stable "not enabled" stubs.
-func NewRiskMutationHandlers(db *pgxpool.Pool, controls *RiskMutationControls, policies *policycore.Core, exclusions *exclusioncore.Core, falsePositives *risk.FalsePositiveCore) (*RiskMutationHandlers, error) {
-	return newRiskMutationHandlers(db, controls, policies, exclusions, falsePositives)
-}
-
-func newRiskMutationHandlers(db *pgxpool.Pool, controls *RiskMutationControls, policies *policycore.Core, exclusions *exclusioncore.Core, falsePositives *risk.FalsePositiveCore) (*RiskMutationHandlers, error) {
-	if db == nil || controls == nil || policies == nil {
-		return nil, ErrRiskMutationUnavailable
-	}
-	catalog, err := policycatalog.Build()
-	if err != nil {
-		return nil, fmt.Errorf("build risk policy mutation catalog: %w", err)
-	}
+// false-positive mutation callbacks.
+func NewRiskMutationHandlers(db *pgxpool.Pool, controls *RiskMutationControls, policies *policycore.MutationCore, exclusions *exclusioncore.MutationCore, falsePositives *risk.FalsePositiveCore, catalog policycatalog.Catalog) *RiskMutationHandlers {
 	policyService := &riskPolicyMutationService{db: db, controls: controls, policies: policies, catalog: catalog}
-	handlers := &RiskMutationHandlers{
+	exclusionService := newRiskExclusionMutationService(controls, exclusions, catalog)
+	findingService := newRiskFindingFalsePositiveService(controls, falsePositives)
+	return &RiskMutationHandlers{
 		Controls:                    controls,
 		CreatePolicy:                policyService.createPolicyTool,
 		UpdatePolicy:                policyService.updatePolicyTool,
 		RemoveSelf:                  policyService.removeSelfFromPolicyTool,
 		ChangeAudience:              policyService.changePolicyAudienceTool,
-		CreateExclusion:             nil,
-		UpdateExclusion:             nil,
-		MarkFindingsFalsePositive:   nil,
-		UnmarkFindingsFalsePositive: nil,
+		CreateExclusion:             exclusionService.createExclusionTool,
+		UpdateExclusion:             exclusionService.updateExclusionTool,
+		MarkFindingsFalsePositive:   findingService.markTool,
+		UnmarkFindingsFalsePositive: findingService.unmarkTool,
 	}
-	if exclusions != nil {
-		exclusionService := newRiskExclusionMutationService(controls, exclusions, catalog)
-		handlers.CreateExclusion = exclusionService.createExclusionTool
-		handlers.UpdateExclusion = exclusionService.updateExclusionTool
-	}
-	if falsePositives != nil {
-		findingService := newRiskFindingFalsePositiveService(controls, falsePositives)
-		handlers.MarkFindingsFalsePositive = findingService.markTool
-		handlers.UnmarkFindingsFalsePositive = findingService.unmarkTool
-	}
-	return handlers, nil
 }
 
 func (s *riskPolicyMutationService) createPolicyTool(ctx context.Context, _ *mcp.CallToolRequest, raw map[string]any) (*mcp.CallToolResult, CreateRiskPolicyToolOutput, error) {
@@ -933,9 +906,11 @@ func (s *riskPolicyMutationService) updateReceiptResult(ctx context.Context, db 
 func riskReceiptProject(project ResolvedProject) RiskMutationReceiptProject {
 	return RiskMutationReceiptProject{ID: project.ID.String(), Slug: project.Slug}
 }
+
 func riskPolicyReceiptSummary(row riskrepo.RiskPolicy) RiskPolicyReceiptSummary {
 	return RiskPolicyReceiptSummary{ID: row.ID.String(), PolicyType: row.PolicyType, Enabled: row.Enabled, Action: row.Action}
 }
+
 func riskMutationToolReceipt(receipt OperationReceipt) RiskMutationToolReceipt {
 	return RiskMutationToolReceipt{ID: receipt.ID.String(), Replayed: receipt.Replayed}
 }
@@ -979,17 +954,21 @@ func mapRiskPolicyMutationError(err error) error {
 func invalidRiskPolicyRequest() error {
 	return &RiskMutationError{Code: "invalid_request", Message: "The risk policy mutation request is invalid.", Cause: ErrRiskMutationInvalid}
 }
+
 func riskPolicyNotFound() error {
 	return &RiskMutationError{Code: "not_found", Message: "The requested risk policy is not available in this project.", Cause: ErrRiskMutationNotFound}
 }
+
 func invalidUserMessage(value *string) bool {
 	return value != nil && utf8.RuneCountInString(*value) > maxRiskPolicyUserMessageRunes
 }
+
 func canonicalStrings(values []string) []string {
 	result := slices.Clone(values)
 	slices.Sort(result)
 	return slices.Compact(result)
 }
+
 func allIn(values, allowed []string) bool {
 	for _, value := range values {
 		if !slices.Contains(allowed, value) {

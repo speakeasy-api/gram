@@ -48,9 +48,6 @@ func NewPostgresShadowAILibrary(queries *agentrepo.Queries) *PostgresShadowAILib
 }
 
 func (l *PostgresShadowAILibrary) LoadLibrary(ctx context.Context, organizationID string) (*aitargets.OrganizationList, error) {
-	if l == nil || l.queries == nil {
-		return nil, ErrShadowAIUnavailable
-	}
 	list, err := aitargets.LoadOrganizationList(ctx, l.queries, organizationID)
 	if err != nil {
 		return nil, fmt.Errorf("load ai scan library: %w", err)
@@ -69,21 +66,14 @@ type ShadowAIService struct {
 }
 
 func NewShadowAIService(detections shadowAIDetectionReader, library shadowAILibraryReader, authorizer Authorizer, budget OperationBudget) *ShadowAIService {
-	if detections == nil || library == nil || authorizer == nil || !budget.valid() {
-		return nil
-	}
 	return &ShadowAIService{detections: detections, library: library, authorizer: authorizer, budget: budget}
-}
-
-func (s *ShadowAIService) valid() bool {
-	return s != nil && s.detections != nil && s.library != nil && s.authorizer != nil && s.budget.valid()
 }
 
 // admit rechecks org:admin live rather than trusting the session that
 // installed the package: the dashboard withholds user and device counts below
 // that grant, and this surface must not be the way around it.
 func (s *ShadowAIService) admit(ctx context.Context, principal Principal) error {
-	if !s.valid() || principal.OrganizationID == "" {
+	if principal.OrganizationID == "" {
 		return ErrShadowAIUnavailable
 	}
 	if err := s.authorizer.RequireLiveOrgAdmin(ctx, principal); err != nil {

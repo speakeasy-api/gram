@@ -67,10 +67,6 @@ func NewRiskFindingListService(db *pgxpool.Pool, clickhouse RiskFindingListReade
 	return &RiskFindingListService{projects: postgresRiskProjectResolver{queries: platformrepo.New(db)}, policies: riskrepo.New(db), clickhouse: clickhouse, cursor: codec, now: time.Now}
 }
 
-func (s *RiskFindingListService) valid() bool {
-	return s != nil
-}
-
 type ListRiskFindingPageInput struct {
 	ProjectID    string `json:"project_id,omitempty"`
 	ProjectSlug  string `json:"project_slug,omitempty"`
@@ -295,9 +291,6 @@ func pushdownPolicyIDs(policies map[string]riskrepo.ListRiskFindingPoliciesRow, 
 
 func (s *RiskFindingListService) List(ctx context.Context, principal Principal, input ListRiskFindingPageInput) (ListRiskFindingPageOutput, error) {
 	var zero ListRiskFindingPageOutput
-	if !s.valid() {
-		return zero, ErrUnavailable
-	}
 	if principal.OrganizationID == "" || (input.ProjectID != "" && input.ProjectSlug != "") {
 		return zero, ErrRiskReadInvalid
 	}
@@ -468,9 +461,6 @@ func (s *RiskFindingListService) finding(policies map[string]riskrepo.ListRiskFi
 
 func (s *RiskFindingListService) ListByChat(ctx context.Context, principal Principal, input ListRiskFindingsByChatInput) (ListRiskFindingsByChatOutput, error) {
 	var zero ListRiskFindingsByChatOutput
-	if !s.valid() {
-		return zero, ErrUnavailable
-	}
 	if principal.OrganizationID == "" || (input.ProjectID != "" && input.ProjectSlug != "") {
 		return zero, ErrRiskReadInvalid
 	}
@@ -560,9 +550,6 @@ func ruleBreakdownWindow(input GetRiskRuleBreakdownInput, now time.Time) (time.T
 
 func (s *RiskFindingListService) RuleBreakdown(ctx context.Context, principal Principal, input GetRiskRuleBreakdownInput) (GetRiskRuleBreakdownOutput, error) {
 	var zero GetRiskRuleBreakdownOutput
-	if !s.valid() {
-		return zero, ErrUnavailable
-	}
 	if principal.OrganizationID == "" || (input.ProjectID != "" && input.ProjectSlug != "") || !validRiskCategory(input.Category) {
 		return zero, ErrRiskReadInvalid
 	}

@@ -691,11 +691,7 @@ func (r *ClientRotator) upstreamRecognizesClient(ctx context.Context, row repo.G
 	if err != nil {
 		return false, fmt.Errorf("build probe request: %w", err)
 	}
-	doer, err := upstreamHTTPDoer(r.policy.Client(), r.tunnels, row.IssuerTunneledMcpServerID)
-	if err != nil {
-		return false, fmt.Errorf("select probe transport: %w", err)
-	}
-	resp, err := doer.Do(req)
+	resp, err := upstreamHTTPDoer(r.policy.Client(), r.tunnels, row.IssuerTunneledMcpServerID).Do(req)
 	if err != nil {
 		return false, fmt.Errorf("post probe to token endpoint: %w", err)
 	}

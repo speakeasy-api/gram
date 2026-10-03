@@ -28,16 +28,13 @@ type inventoryCursorCodec struct {
 	key []byte
 }
 
-func newInventoryCursorCodec(keyMaterial string) (*inventoryCursorCodec, error) {
-	if keyMaterial == "" {
-		return nil, ErrInventoryCursorInvalid
-	}
+func newInventoryCursorCodec(keyMaterial string) *inventoryCursorCodec {
 	key := sha256.Sum256([]byte("platform-mcp-inventory-cursor:" + keyMaterial))
-	return &inventoryCursorCodec{key: key[:]}, nil
+	return &inventoryCursorCodec{key: key[:]}
 }
 
 func (c *inventoryCursorCodec) Encode(cursor inventoryCursor) (string, error) {
-	if c == nil || len(c.key) == 0 || cursor.OrganizationID == "" || cursor.Binding == "" || cursor.ProjectID == "" || cursor.AfterMCPID == "" || cursor.Query != "" {
+	if cursor.OrganizationID == "" || cursor.Binding == "" || cursor.ProjectID == "" || cursor.AfterMCPID == "" || cursor.Query != "" {
 		return "", ErrInventoryCursorInvalid
 	}
 	payload, err := json.Marshal(cursor)
@@ -54,7 +51,7 @@ func (c *inventoryCursorCodec) Encode(cursor inventoryCursor) (string, error) {
 
 func (c *inventoryCursorCodec) Decode(value string, principal Principal, projectID uuid.UUID, query string) (uuid.UUID, error) {
 	binding := principalCursorBinding(principal)
-	if c == nil || len(c.key) == 0 || value == "" || principal.OrganizationID == "" || binding == "" || projectID == uuid.Nil || normalizeInventoryQuery(query) != "" {
+	if value == "" || principal.OrganizationID == "" || binding == "" || projectID == uuid.Nil || normalizeInventoryQuery(query) != "" {
 		return uuid.Nil, ErrInventoryCursorInvalid
 	}
 	token, err := base64.RawURLEncoding.DecodeString(value)

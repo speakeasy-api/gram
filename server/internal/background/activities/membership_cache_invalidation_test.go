@@ -1,6 +1,7 @@
 package activities_test
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -33,7 +34,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipCreatedInvalidatesUserInfoCac
 		},
 	})
 	capturingCache := newCaptureCache()
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, capturingCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, capturingCache, &recordingIdentityMapSignaler{mu: sync.Mutex{}, count: 0})
 
 	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)

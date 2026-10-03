@@ -2260,19 +2260,16 @@ func TestServeInstallPage_MetaBackedEndpoint_NetworkIngressAdmission(t *testing.
 	t.Parallel()
 
 	for _, mode := range []networkaccess.Mode{networkaccess.ModePublicOnly, networkaccess.ModeDual} {
-		for _, admissionState := range []string{"unavailable", "denied", "allowed"} {
+		for _, admissionState := range []string{"denied", "allowed"} {
 			t.Run(string(mode)+"/"+admissionState, func(t *testing.T) {
 				t.Parallel()
 				var admittedOrg string
-				var admission func(context.Context, string) error
-				if admissionState != "unavailable" {
-					admission = func(_ context.Context, orgID string) error {
-						admittedOrg = orgID
-						if admissionState == "denied" {
-							return fmt.Errorf("rollout unavailable")
-						}
-						return nil
+				admission := func(_ context.Context, orgID string) error {
+					admittedOrg = orgID
+					if admissionState == "denied" {
+						return fmt.Errorf("rollout unavailable")
 					}
+					return nil
 				}
 				ctx, ti := newTestMCPMetadataServiceWithAdmission(t, admission)
 				slug := "meta-admission-" + uuid.New().String()[:8]
@@ -2291,7 +2288,7 @@ func TestServeInstallPage_MetaBackedEndpoint_NetworkIngressAdmission(t *testing.
 					require.NotContains(t, rr.Body.String(), "Install Page Gateway")
 				}
 				require.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
-				if mode.IsPublicOnly() || admissionState == "unavailable" {
+				if mode.IsPublicOnly() {
 					require.Empty(t, admittedOrg)
 				} else {
 					require.Equal(t, meta.OrganizationID, admittedOrg)
@@ -2306,19 +2303,16 @@ func TestServeInstallPage_MetaBackedEndpoint_NetworkIngressAdmission(t *testing.
 func TestServeInstallPage_PrivateMetaBackedEndpoint_NetworkIngressAdmission(t *testing.T) {
 	t.Parallel()
 
-	for _, admissionState := range []string{"unavailable", "denied", "allowed"} {
+	for _, admissionState := range []string{"denied", "allowed"} {
 		t.Run(admissionState, func(t *testing.T) {
 			t.Parallel()
 			var admittedOrg string
-			var admission func(context.Context, string) error
-			if admissionState != "unavailable" {
-				admission = func(_ context.Context, orgID string) error {
-					admittedOrg = orgID
-					if admissionState == "denied" {
-						return fmt.Errorf("rollout unavailable")
-					}
-					return nil
+			admission := func(_ context.Context, orgID string) error {
+				admittedOrg = orgID
+				if admissionState == "denied" {
+					return fmt.Errorf("rollout unavailable")
 				}
+				return nil
 			}
 
 			ctx, ti := newTestMCPMetadataServiceWithAdmission(t, admission)
@@ -2352,11 +2346,7 @@ func TestServeInstallPage_PrivateMetaBackedEndpoint_NetworkIngressAdmission(t *t
 				require.NotContains(t, rr.Body.String(), "Install Page Gateway")
 			}
 			require.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
-			if admissionState == "unavailable" {
-				require.Empty(t, admittedOrg)
-			} else {
-				require.Equal(t, meta.OrganizationID, admittedOrg)
-			}
+			require.Equal(t, meta.OrganizationID, admittedOrg)
 		})
 	}
 }
@@ -2452,7 +2442,6 @@ func TestServeInstallPage_MetaBackedEndpoint_WrongOrgReturnsNotFound(t *testing.
 	assert.Contains(t, rr.Body.String(), "Server Not Found")
 	assert.NotContains(t, rr.Body.String(), "Install Page Gateway")
 	assert.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
-
 }
 
 // A live endpoint whose backend server is disabled renders the not-found page

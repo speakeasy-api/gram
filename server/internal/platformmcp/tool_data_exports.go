@@ -26,9 +26,6 @@ type DataExportReadService struct {
 }
 
 func newDataExportReadService(db *pgxpool.Pool, encryptionClient *encryption.Client, dashboardURL *url.URL) *DataExportReadService {
-	if encryptionClient == nil || !validDashboardURL(dashboardURL) {
-		return nil
-	}
 	copyURL := *dashboardURL
 	return &DataExportReadService{db: db, encryption: encryptionClient, dashboardURL: &copyURL}
 }
@@ -84,9 +81,6 @@ type ListDataExportsOutput struct {
 }
 
 func (r *PostgresReader) ListDataExports(ctx context.Context, principal Principal, input ListDataExportsInput) (ListDataExportsOutput, error) {
-	if r == nil || r.reader == nil || r.dataExports == nil {
-		return ListDataExportsOutput{}, ErrUnavailable
-	}
 	if input.ProjectID != "" && input.ProjectSlug != "" {
 		return ListDataExportsOutput{}, fmt.Errorf("only one of project_id or project_slug may be supplied")
 	}
@@ -184,13 +178,4 @@ func registerDataExportTools(reg *Registrar, reader *PostgresReader) {
 		output, err := reader.ListDataExports(ctx, principal, input)
 		return nil, output, err
 	})
-}
-
-func registerUnavailableDataExportTools(reg *Registrar) {
-	addTool(reg, &mcp.Tool{
-		Name:        "list_data_exports",
-		Title:       "List Data Exports",
-		Description: "List configured OpenTelemetry data exports and the route-to-destination relationships. This is not switched on for your organization yet.",
-		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("data_exports"))
 }

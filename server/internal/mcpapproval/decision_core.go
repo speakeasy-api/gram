@@ -51,7 +51,7 @@ type DecisionCommandInput struct {
 // ResolveDecisionTarget resolves one exact project target without returning its
 // raw value. Cross-organization targets are indistinguishable from missing.
 func (s *Service) ResolveDecisionTarget(ctx context.Context, organizationID string, projectID uuid.UUID, targetKind, targetKey string) (uuid.UUID, error) {
-	if s == nil || s.db == nil || organizationID == "" || projectID == uuid.Nil || strings.TrimSpace(targetKey) == "" || (targetKind != targetKindServerURL && targetKind != targetKindStdioCommand) {
+	if organizationID == "" || projectID == uuid.Nil || strings.TrimSpace(targetKey) == "" || (targetKind != targetKindServerURL && targetKind != targetKindStdioCommand) {
 		return uuid.Nil, oops.E(oops.CodeBadRequest, nil, "invalid approval target")
 	}
 	request, err := repo.New(s.db).GetApprovalRequestByTarget(ctx, repo.GetApprovalRequestByTargetParams{ProjectID: projectID, TargetKind: targetKind, TargetKey: targetKey})
@@ -68,7 +68,7 @@ func (s *Service) ResolveDecisionTarget(ctx context.Context, organizationID stri
 // transaction. The request lock, validation callback, frozen evidence, audit,
 // legacy drain, and enforcement grants share one commit boundary.
 func (s *Service) DecideInTransaction(ctx context.Context, tx pgx.Tx, input DecisionCommandInput) (*gen.ApprovalDecision, error) {
-	if s == nil || s.db == nil || s.audit == nil || tx == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || input.RequestID == uuid.Nil || input.ActorUserID == "" {
+	if input.OrganizationID == "" || input.ProjectID == uuid.Nil || input.RequestID == uuid.Nil || input.ActorUserID == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid approval decision command")
 	}
 	if input.Decision != decisionApproved && input.Decision != decisionDenied {

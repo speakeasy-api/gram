@@ -159,8 +159,7 @@ func TestPlatformBreakGlassDelegationWritesOneAtomicAuditWithClosedSurface(t *te
 
 	conn, orgID := newLifecycleDatabase(t, "killswitch_platform_break_glass_audit")
 	lifecycle := newLifecycleServiceForTest(t, conn, nil, nil, NewAuditBeforeCommitHook(audit.NewLogger()))
-	facade, err := NewFacade(lifecycle)
-	require.NoError(t, err)
+	facade := NewFacade(lifecycle)
 	service := &PlatformService{logger: testenv.NewLogger(t), sessions: &platformAdminReaderStub{results: []bool{true}}, generic: facade}
 
 	result, err := service.ActivatePrescription(
@@ -189,10 +188,8 @@ func TestManagementAuditAndBreakGlassRemainAvailableDuringEvaluatorIncident(t *t
 
 	conn, orgID := newLifecycleDatabase(t, "killswitch_management_evaluator_incident")
 	lifecycle := newLifecycleServiceForTest(t, conn, nil, nil, NewAuditBeforeCommitHook(audit.NewLogger()))
-	facade, err := NewFacade(lifecycle)
-	require.NoError(t, err)
-	customer, err := NewAuthorizedService(facade, &authorizerStub{})
-	require.NoError(t, err)
+	facade := NewFacade(lifecycle)
+	customer := NewAuthorizedService(facade, &authorizerStub{})
 	customerCtx := validatedCustomerContext(t, orgID, "user:customer-admin", "customer-admin@example.com")
 
 	activated, err := customer.ActivatePrescription(customerCtx, AuthorizedActivatePrescriptionRequest{
@@ -201,10 +198,9 @@ func TestManagementAuditAndBreakGlassRemainAvailableDuringEvaluatorIncident(t *t
 	})
 	require.NoError(t, err)
 
-	evaluator, err := newEvaluator(evaluationQueryFunc(func(context.Context, repo.EvaluateCurrentPrescriptionsParams) (repo.EvaluateCurrentPrescriptionsRow, error) {
+	evaluator := newEvaluator(evaluationQueryFunc(func(context.Context, repo.EvaluateCurrentPrescriptionsParams) (repo.EvaluateCurrentPrescriptionsRow, error) {
 		return repo.EvaluateCurrentPrescriptionsRow{}, errors.New("evaluator database unavailable")
-	}), lifecycle.registry, time.Second, nil)
-	require.NoError(t, err)
+	}), lifecycle.registry, time.Second, testEvaluationMetrics(t))
 	evaluation := evaluator.Evaluate(t.Context(), evaluationRequest("block-tools"))
 	require.Equal(t, EvaluationResultInfrastructureFailure, evaluation.Kind())
 

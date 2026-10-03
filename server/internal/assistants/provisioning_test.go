@@ -11,8 +11,6 @@ import (
 
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
-	"github.com/speakeasy-api/gram/server/internal/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -20,8 +18,7 @@ import (
 
 func newProvisioningCore(t *testing.T, conn *pgxpool.Pool) *ServiceCore {
 	t.Helper()
-	logger := testenv.NewLogger(t)
-	return NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger())
+	return newTestServiceCore(t, conn, testRuntimeBackend{backend: runtimeBackendFlyIO})
 }
 
 func newProvisioningProject(t *testing.T, conn *pgxpool.Pool, slug string) uuid.UUID {

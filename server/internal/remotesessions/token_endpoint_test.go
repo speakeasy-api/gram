@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
@@ -137,7 +138,7 @@ func newClientEndpointManager(t *testing.T) (*ChallengeManager, *encryption.Clie
 	require.NoError(t, err)
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	return &ChallengeManager{enc: enc, policy: policy}, enc
+	return &ChallengeManager{enc: enc, policy: policy, locks: cache.NoopCache}, enc
 }
 
 func resourceClientRow(t *testing.T, enc *encryption.Client, tokenEndpoint string) repo.GetRemoteSessionClientWithIssuerByIDRow {

@@ -198,7 +198,7 @@ func (t *writeTools) status(ctx context.Context, input ProposalIDInput) (Proposa
 }
 
 func registerWriteTools(server *mcp.Server, tools *writeTools) {
-	if tools == nil || !tools.available() {
+	if !tools.available() {
 		return
 	}
 	for _, op := range AllWriteOperations {
@@ -220,9 +220,6 @@ func registerWriteTools(server *mcp.Server, tools *writeTools) {
 // operation that has no implementation is a startup error, so a misconfigured
 // server cannot expose an unreviewed write.
 func AttachWrites(runtime *Runtime, oauth *StaffOAuth, features *productfeatures.Client, writes WriteConfig) error {
-	if runtime == nil || oauth == nil || oauth.Approval == nil || features == nil {
-		return errors.New("staff write tools are not configured")
-	}
 	auditLogger := audit.NewLogger()
 	store := oauth.Approval.store
 	tools := newWriteTools(store, writes, oauth.Resource(), map[WriteOperation]operationWriter{ //nolint:exhaustive // Only implemented operations are listed.

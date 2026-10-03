@@ -247,10 +247,6 @@ func TestProjectFlagModeUnknownOrMissingReadsOff(t *testing.T) {
 	flags.SetFlagVariant(feature.FlagRiskLLMAnalyzer, fx.orgID, feature.Variant("experimental"))
 	mode, _ = ProjectFlagMode(t.Context(), logger, fx.queries, flags, fx.orgID, fx.projectID, feature.FlagRiskLLMAnalyzer)
 	require.Equal(t, feature.VariantRiskLLMOff, mode, "an unrecognized variant is off even with the boolean on")
-
-	mode, slug = ProjectFlagMode(t.Context(), logger, fx.queries, nil, fx.orgID, fx.projectID, feature.FlagRiskLLMAnalyzer)
-	require.Equal(t, feature.VariantRiskLLMOff, mode, "no provider is off")
-	require.Empty(t, slug)
 }
 
 func TestProjectFlagModeFailureReadsOffAndIsNotMemoized(t *testing.T) {

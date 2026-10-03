@@ -9,8 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
-	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattest"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -37,10 +36,9 @@ func testConcurrentCheckpoints(t *testing.T, singleConnection bool) {
 		small, err := pgxpool.NewWithConfig(t.Context(), poolConfig)
 		require.NoError(t, err)
 		t.Cleanup(small.Close)
-		writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), small, assetstest.NewTestBlobStore(t))
-		t.Cleanup(func() { require.NoError(t, shutdown(context.WithoutCancel(t.Context()))) })
+		writer := chattest.NewMessageWriter(t, infra, small)
 		db = small
-		store = &postgresStore{db: small, writer: writer, logger: testenv.NewLogger(t)}
+		store = &postgresStore{db: small, writer: writer, titles: &recordingTitleGenerator{}, logger: testenv.NewLogger(t)}
 	}
 	frame := exampleFrame()
 	frame.Messages = []Message{textMessage("user", "prompt"), textMessage("assistant", "reply"), textMessage("user", "result")}
@@ -65,8 +63,8 @@ func testConcurrentCheckpoints(t *testing.T, singleConnection bool) {
 			return nil, nil
 		})
 	}
-	first := &Service{logger: testenv.NewLogger(t), store: store, scanner: scan(firstEntered, firstRelease, &firstCalls)}
-	second := NewService(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, store.writer, scan(secondEntered, secondRelease, &secondCalls), nil)
+	first := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: store, scanner: scan(firstEntered, firstRelease, &firstCalls)}
+	second := NewService(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, store.writer, scan(secondEntered, secondRelease, &secondCalls), &recordingTitleGenerator{})
 	firstResult, secondResult := make(chan error, 1), make(chan error, 1)
 	firstVerdict, secondVerdict := make(chan Verdict, 1), make(chan Verdict, 1)
 	go func() {
@@ -155,7 +153,7 @@ func TestPostgresCheckpointRequiresSuccessfulEvaluation(t *testing.T) {
 			return &risk.ScanResult{Action: "block"}, nil
 		}
 		return nil, nil
-	}), nil)
+	}), &recordingTitleGenerator{})
 	for range 2 {
 		promptScanned = make(chan struct{})
 		verdict, err := service.Process(t.Context(), config, frame)
@@ -237,7 +235,7 @@ func TestPostgresCanceledEvaluationPreservesPreviousCheckpoint(t *testing.T) {
 	store, db, config := newTestStore(t)
 	frame := exampleFrame()
 	frame.Messages = []Message{textMessage("user", "first prompt"), textMessage("assistant", "first reply")}
-	service := NewService(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, store.writer, &recordingScanner{}, nil)
+	service := NewService(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, store.writer, &recordingScanner{}, &recordingTitleGenerator{})
 	_, err := service.Process(t.Context(), config, frame)
 	require.NoError(t, err)
 	previous := transcriptHashes(frame.Messages)
@@ -299,7 +297,7 @@ func TestPostgresLastKnownGoodPreservesDeniedAttempts(t *testing.T) {
 	store, db, config := newTestStore(t)
 	frame := exampleFrame()
 	scanned := &recordingScanner{}
-	service := NewService(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, store.writer, scanned, nil)
+	service := NewService(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, store.writer, scanned, &recordingTitleGenerator{})
 	verdict, err := service.Process(t.Context(), config, frame)
 	require.NoError(t, err)
 	require.Equal(t, "allow", verdict.Action)

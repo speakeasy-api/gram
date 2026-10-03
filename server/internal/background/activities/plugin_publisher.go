@@ -65,10 +65,6 @@ type ListPluginPublishCandidatesResult struct {
 }
 
 func (p *PluginPublisher) ListCandidates(ctx context.Context, input ListPluginPublishCandidatesInput) (*ListPluginPublishCandidatesResult, error) {
-	if p.db == nil {
-		return nil, fmt.Errorf("database is not configured")
-	}
-
 	limit := input.Limit
 	if limit <= 0 {
 		limit = 100
@@ -106,10 +102,6 @@ func (p *PluginPublisher) ListCandidates(ctx context.Context, input ListPluginPu
 }
 
 func (p *PluginPublisher) RepairOrphanedAPIKeyCreators(ctx context.Context) error {
-	if p.db == nil {
-		return fmt.Errorf("database is not configured")
-	}
-
 	repaired, err := keysrepo.New(p.db).RepairOrphanedAPIKeyCreators(ctx)
 	if err != nil {
 		return fmt.Errorf("repair orphaned api key creators: %w", err)
@@ -121,10 +113,6 @@ func (p *PluginPublisher) RepairOrphanedAPIKeyCreators(ctx context.Context) erro
 }
 
 func (p *PluginPublisher) PublishProject(ctx context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
-	if p.publisher == nil {
-		return nil, fmt.Errorf("plugin publisher is not configured")
-	}
-
 	// Publishing runs from a Temporal activity, so nothing in the context
 	// identifies a request. Say so, rather than letting the audit log record
 	// this as a surface we failed to classify.

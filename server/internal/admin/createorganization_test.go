@@ -137,6 +137,10 @@ func countOrganizationsForWorkOSID(t *testing.T, ctx context.Context, conn *pgxp
 	return count
 }
 
+type noopIdentityMapSignaler struct{}
+
+func (noopIdentityMapSignaler) SignalIdentityMapRefresh(context.Context) error { return nil }
+
 // runOrganizationWebhook runs the WorkOS event sync for one organization, which
 // is the other writer that can create the row this endpoint creates.
 //
@@ -150,7 +154,7 @@ func runOrganizationWebhook(t *testing.T, ctx context.Context, conn *pgxpool.Poo
 	stub := workos.NewStubClient()
 	stub.SetEventPages([][]events.Event{{event}})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, noopIdentityMapSignaler{})
 	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{
 		WorkOSOrganizationID: workosOrgID,
 		SinceEventID:         nil,

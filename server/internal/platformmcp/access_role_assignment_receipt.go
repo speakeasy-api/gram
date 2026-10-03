@@ -39,7 +39,7 @@ func NewAccessRoleAssignmentReceiptStore(db *pgxpool.Pool) *AccessRoleAssignment
 }
 
 func (s *AccessRoleAssignmentReceiptStore) Execute(ctx context.Context, principal Principal, project ResolvedProject, idempotencyKey string, normalized normalizedAccessRoleAssignment, mutate AccessRoleAssignmentTransaction) (OperationReceipt, error) {
-	if s == nil || s.db == nil || s.now == nil || mutate == nil || idempotencyKey == "" || len(idempotencyKey) > 128 {
+	if mutate == nil || idempotencyKey == "" || len(idempotencyKey) > 128 {
 		return OperationReceipt{}, accessRoleMutationInvalid("The access role assignment receipt request is invalid.")
 	}
 	payload, err := json.Marshal(normalized)

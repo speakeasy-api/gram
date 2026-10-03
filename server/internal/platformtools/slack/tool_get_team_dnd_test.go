@@ -47,7 +47,7 @@ func TestGetTeamDndTool_RequiresUserIDs(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewGetTeamDndTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callGetTeamDnd,
 	}
 

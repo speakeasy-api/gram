@@ -22,8 +22,8 @@ type policyMutationAuditor struct {
 // NewPolicyMutationCore composes the shared risk policy command for non-Goa
 // adapters. It preserves the same audit, approval, URL-grant, signal, and cache
 // dependencies used by the dashboard service.
-func NewPolicyMutationCore(db *pgxpool.Pool, auditLogger *audit.Logger, approvals policycore.ApprovalCoordinator, signaler policycore.PolicySignaler, cacheInvalidator policycore.PolicyCacheInvalidator) *policycore.Core {
-	return policycore.New(db, policycore.MutationDependencies{
+func NewPolicyMutationCore(db *pgxpool.Pool, auditLogger *audit.Logger, approvals policycore.ApprovalCoordinator, signaler policycore.PolicySignaler, cacheInvalidator policycore.PolicyCacheInvalidator) *policycore.MutationCore {
+	return policycore.NewMutationCore(db, policycore.MutationDependencies{
 		Transactor:       db,
 		Auditor:          policyMutationAuditor{logger: auditLogger},
 		Approvals:        approvals,

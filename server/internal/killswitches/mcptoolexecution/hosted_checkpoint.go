@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 )
@@ -31,43 +32,26 @@ type HostedCheckpoint struct {
 
 // NewHostedCheckpoint builds the production checkpoint from the registered M2
 // contracts and the authoritative PostgreSQL evaluator.
-func NewHostedCheckpoint(db *pgxpool.Pool, meterProvider metric.MeterProvider, logger *slog.Logger, recorder IdentityCoverageRecorder) (*HostedCheckpoint, error) {
-	registry, err := NewRegistry(db)
-	if err != nil {
-		return nil, err
-	}
-
-	coverage, ok := registry.Coverage(DefinitionKeyMCPToolExecution, SurfaceHostedToolsCall)
-	if !ok {
-		return nil, errors.New("hosted tools/call coverage contract is not registered")
-	}
-	principal, err := registeredPrincipalAdapter(registry)
-	if err != nil {
-		return nil, err
-	}
-	resource, ok := registry.ResourceAdapter(ResourceKindMCPServer)
-	if !ok {
-		return nil, errors.New("mcp server resource adapter is not registered")
-	}
-	transport, ok := registry.TransportAdapter(coverage.TransportAdapter)
-	if !ok {
-		return nil, errors.New("hosted MCP JSON-RPC transport adapter is not registered")
-	}
-
-	eval, err := killswitches.NewEvaluator(db, registry, hostedEvaluatorTimeout, meterProvider, logger)
-	if err != nil {
-		return nil, fmt.Errorf("construct evaluator: %w", err)
-	}
+func NewHostedCheckpoint(db *pgxpool.Pool, meterProvider metric.MeterProvider, logger *slog.Logger, recorder IdentityCoverageRecorder) *HostedCheckpoint {
+	registry := NewRegistry(db)
+	coverage, coverageOK := registry.Coverage(DefinitionKeyMCPToolExecution, SurfaceHostedToolsCall)
+	resource, resourceOK := registry.ResourceAdapter(ResourceKindMCPServer)
+	transport, transportOK := registry.TransportAdapter(coverage.TransportAdapter)
+	inv.Require("hosted mcp tool-execution checkpoint",
+		"hosted tools/call coverage contract is registered", coverageOK,
+		"mcp server resource adapter is registered", resourceOK,
+		"hosted MCP JSON-RPC transport adapter is registered", transportOK,
+	)
 
 	return &HostedCheckpoint{
-		principal:     principal,
+		principal:     registeredPrincipalAdapter(registry),
 		resource:      resource,
-		evaluator:     eval,
+		evaluator:     killswitches.NewEvaluator(db, registry, hostedEvaluatorTimeout, meterProvider, logger),
 		transport:     transport,
 		failurePolicy: coverage.FailurePolicy,
 		recorder:      recorder,
 		logger:        logger,
-	}, nil
+	}
 }
 
 // Evaluate revalidates principal membership and server ownership on every call.
@@ -108,7 +92,7 @@ func (c *HostedCheckpoint) Evaluate(ctx context.Context, organizationID string, 
 		ResourceKind:        ResourceKindMCPServer,
 		ResourceKey:         resourceKey,
 	})
-	if cause := result.InfrastructureError(); cause != nil && c.logger != nil {
+	if cause := result.InfrastructureError(); cause != nil {
 		c.logger.ErrorContext(ctx, "hosted MCP kill-switch evaluation unavailable", attr.SlogError(cause))
 	}
 	return c.transport(result, c.failurePolicy)
@@ -123,9 +107,7 @@ func (c *HostedCheckpoint) noMatch(reason killswitches.NoMatchReason) (killswitc
 }
 
 func (c *HostedCheckpoint) infrastructureRejection(ctx context.Context, cause error) (killswitches.TransportDisposition, error) {
-	if c.logger != nil {
-		c.logger.ErrorContext(ctx, "hosted MCP kill-switch checkpoint unavailable", attr.SlogError(cause))
-	}
+	c.logger.ErrorContext(ctx, "hosted MCP kill-switch checkpoint unavailable", attr.SlogError(cause))
 	result, err := killswitches.NewInfrastructureFailureResult(cause)
 	if err != nil {
 		return killswitches.TransportDisposition{}, fmt.Errorf("construct infrastructure-failure result: %w", err)

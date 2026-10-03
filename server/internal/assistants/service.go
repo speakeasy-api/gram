@@ -391,6 +391,12 @@ type DashboardIngestor interface {
 	IngestDirect(ctx context.Context, instanceID uuid.UUID, payload []byte, receivedAt time.Time) (*bgtriggers.Task, error)
 }
 
+// contextWindowResolver looks up a model's context window; satisfied by
+// *openrouter.ContextWindowResolver.
+type contextWindowResolver interface {
+	Resolve(ctx context.Context, modelID string) (int, error)
+}
+
 type ServiceCore struct {
 	logger            *slog.Logger
 	tracer            trace.Tracer
@@ -404,7 +410,7 @@ type ServiceCore struct {
 	serverURL         *url.URL
 	siteURL           *url.URL
 	telemetryLogger   *telemetry.Logger
-	contextWindow     *openrouter.ContextWindowResolver
+	contextWindow     contextWindowResolver
 	wakeCanceller     WakeCanceller
 	chatWriter        *chat.ChatMessageWriter
 	assetStorage      assets.BlobStore
@@ -432,8 +438,14 @@ func NewServiceCore(
 	assistantTokens *assistanttokens.Manager,
 	serverURL *url.URL,
 	telemetryLogger *telemetry.Logger,
-	contextWindow *openrouter.ContextWindowResolver,
+	contextWindow contextWindowResolver,
 	auditLogger *audit.Logger,
+	chatWriter *chat.ChatMessageWriter,
+	assetStorage assets.BlobStore,
+	assetSigningKey string,
+	envLoader toolconfig.EnvironmentLoader,
+	slackImages slackImageFetcher,
+	featureFlags feature.Provider,
 ) *ServiceCore {
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/assistants")
 	turnClassified, err := meter.Int64Counter(
@@ -460,13 +472,13 @@ func NewServiceCore(
 		telemetryLogger:   telemetryLogger,
 		contextWindow:     contextWindow,
 		wakeCanceller:     nil,
-		chatWriter:        nil,
-		assetStorage:      nil,
-		assetSigningKey:   "",
-		envLoader:         nil,
-		slackImages:       nil,
+		chatWriter:        chatWriter,
+		assetStorage:      assetStorage,
+		assetSigningKey:   assetSigningKey,
+		envLoader:         envLoader,
+		slackImages:       slackImages,
 		dashboardIngestor: nil,
-		featureFlags:      nil,
+		featureFlags:      featureFlags,
 		turnClassified:    turnClassified,
 		outboundOrigin:    nil,
 	}
@@ -480,33 +492,9 @@ func (s *ServiceCore) SetWakeCanceller(c WakeCanceller) {
 
 // SetDashboardIngestor wires the trigger App used to ingest dashboard sidebar
 // messages. Set after construction to match the existing post-construction
-// injection pattern. SendDashboardMessage fails if the ingestor was never set.
+// injection pattern.
 func (s *ServiceCore) SetDashboardIngestor(i DashboardIngestor) {
 	s.dashboardIngestor = i
-}
-
-// SetChatMessageWriter wires the chat writer used by self-heal. Set after
-// construction (rather than via NewServiceCore) to match the existing
-// post-construction injection pattern and avoid churning every test call
-// site. Self-heal is skipped if the writer was never set.
-func (s *ServiceCore) SetChatMessageWriter(w *chat.ChatMessageWriter) {
-	s.chatWriter = w
-}
-
-// SetAssetStorage wires the blob store history replay uses to fetch
-// structured message content that overflowed content_raw. Set after
-// construction to match the existing post-construction injection pattern;
-// without it, oversized messages replay their plain-text projection.
-func (s *ServiceCore) SetAssetStorage(storage assets.BlobStore) {
-	s.assetStorage = storage
-}
-
-// SetFeatureProvider wires PostHog flag evaluation. Set after construction
-// to match the existing post-construction injection pattern and avoid
-// churning every test call site. A nil provider leaves every flag-gated
-// grant off (fail closed).
-func (s *ServiceCore) SetFeatureProvider(p feature.Provider) {
-	s.featureFlags = p
 }
 
 // SetSiteURL wires the dashboard base URL used to smart-link CIMD client
@@ -543,7 +531,7 @@ func (s *ServiceCore) mcpAuthRedirectURI(assistantID uuid.UUID) string {
 // runner reads this from `runtimeStartupConfig` and uses it to threshold
 // input-token-aware compaction.
 func (s *ServiceCore) resolveAssistantContextWindow(ctx context.Context, model string) uint64 {
-	if s.contextWindow == nil || model == "" {
+	if model == "" {
 		return 0
 	}
 	resolved := model
@@ -1551,14 +1539,12 @@ func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, 
 		)
 	}
 
-	if s.wakeCanceller != nil {
-		if cancelErr := s.wakeCanceller.CancelAssistantWakes(ctx, projectID, assistantID); cancelErr != nil {
-			s.logger.WarnContext(ctx, "cancel pending wakes on assistant delete failed",
-				attr.SlogAssistantID(assistantID.String()),
-				attr.SlogProjectID(projectID.String()),
-				attr.SlogError(cancelErr),
-			)
-		}
+	if cancelErr := s.wakeCanceller.CancelAssistantWakes(ctx, projectID, assistantID); cancelErr != nil {
+		s.logger.WarnContext(ctx, "cancel pending wakes on assistant delete failed",
+			attr.SlogAssistantID(assistantID.String()),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogError(cancelErr),
+		)
 	}
 
 	return nil
@@ -2903,9 +2889,6 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 // turn — a flag-provider outage must not take down bootstrap or reconcile, nor
 // silently strip the managed assistant's tools.
 func (s *ServiceCore) assistantToolsVariant(ctx context.Context, projectID uuid.UUID) feature.Variant {
-	if s.featureFlags == nil {
-		return feature.VariantAssistantToolsLegacy
-	}
 	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve organization for assistant tools variant", attr.SlogError(err))
@@ -3459,10 +3442,6 @@ const selfHealRecoveryNoticeTemplate = "[gram self-heal] Earlier conversation hi
 // /configure pulls this generation as the live history; assistant/tool
 // turns are dropped — they're the most likely source of the rejection.
 func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID, assistantID uuid.UUID) error {
-	if s.chatWriter == nil {
-		return fmt.Errorf("self-heal: chat writer not configured")
-	}
-
 	chatRow, err := chatrepo.New(s.db).GetChat(ctx, chatrepo.GetChatParams{
 		ID:        chatID,
 		ProjectID: projectID,
@@ -3632,9 +3611,6 @@ const historyAssetReadConcurrency = 8
 // spilled row. Failed reads are logged and left absent; those rows degrade to
 // the text projection.
 func (s *ServiceCore) prefetchHistoryContentAssets(ctx context.Context, messages []chatrepo.ChatMessage) map[int][]byte {
-	if s.assetStorage == nil {
-		return nil
-	}
 	var mu sync.Mutex
 	spilled := make(map[int][]byte)
 	eg, egCtx := errgroup.WithContext(ctx)

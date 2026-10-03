@@ -124,9 +124,6 @@ type VariantProvider interface {
 // FlagVariant resolves a multivariate flag's variant, returning "" for
 // providers that only expose the bool contract or when no variant matched.
 func FlagVariant(ctx context.Context, provider Provider, flag Flag, distinctID string, groups map[string]string) (Variant, error) {
-	if provider == nil {
-		return "", nil
-	}
 	resolver, ok := provider.(VariantProvider)
 	if !ok {
 		return "", nil
@@ -160,9 +157,6 @@ type EvaluationProvider interface {
 // the legacy bool contract. Callers that need a fail-safe carry-forward decision
 // must not treat that legacy false as an explicit disable.
 func EvaluateFlag(ctx context.Context, provider Provider, flag Flag, distinctID string, groups map[string]string) (Evaluation, error) {
-	if provider == nil {
-		return EvaluationIndeterminate, nil
-	}
 	if evaluator, ok := provider.(EvaluationProvider); ok {
 		evaluation, err := evaluator.EvaluateFlag(ctx, flag, distinctID, groups)
 		if err != nil {

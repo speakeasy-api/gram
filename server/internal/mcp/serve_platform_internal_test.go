@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -38,7 +39,7 @@ func runPlatformInitialize(t *testing.T, requested string) (string, mcpversions.
 	// resolution hands the handler the default.
 	resolution := mcpversions.Resolve("", mcpversions.SupportedPlatformToolset())
 
-	body, err := handlePlatformInitialize(t.Context(), testenv.NewLogger(t), nil, req, &resolution)
+	body, err := handlePlatformInitialize(t.Context(), testenv.NewLogger(t), mcpmetrics.NewMetrics(testenv.NewMeterProvider(t).Meter("test"), testenv.NewLogger(t)), req, &resolution)
 	require.NoError(t, err)
 
 	var response struct {
@@ -98,7 +99,7 @@ func TestHandlePlatformInitialize_MalformedParamsNegotiateTheDefault(t *testing.
 	}
 	resolution := mcpversions.Resolve("", mcpversions.SupportedPlatformToolset())
 
-	body, err := handlePlatformInitialize(t.Context(), testenv.NewLogger(t), nil, req, &resolution)
+	body, err := handlePlatformInitialize(t.Context(), testenv.NewLogger(t), mcpmetrics.NewMetrics(testenv.NewMeterProvider(t).Meter("test"), testenv.NewLogger(t)), req, &resolution)
 	require.NoError(t, err)
 
 	var response struct {

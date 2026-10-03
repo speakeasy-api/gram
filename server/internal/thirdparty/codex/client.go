@@ -56,14 +56,6 @@ type Client struct {
 
 type Option func(*Client)
 
-func WithHTTPClient(httpClient *guardian.HTTPClient) Option {
-	return func(c *Client) {
-		if httpClient != nil {
-			c.httpClient = httpClient
-		}
-	}
-}
-
 func WithBaseURL(baseURL string) Option {
 	return func(c *Client) {
 		if baseURL != "" {
@@ -105,9 +97,6 @@ func NewWorkspaceClient(guardianPolicy *guardian.Policy, workspaceID string, opt
 }
 
 func newScoped(guardianPolicy *guardian.Policy, s scope, opts ...Option) *Client {
-	if guardianPolicy == nil {
-		panic("codex compliance client requires guardian policy")
-	}
 	c := &Client{
 		httpClient: guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),
 		baseURL:    defaultBaseURL,

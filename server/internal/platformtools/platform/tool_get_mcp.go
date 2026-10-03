@@ -35,10 +35,6 @@ func (t *GetMCP) Descriptor() core.ToolDescriptor {
 }
 
 func (t *GetMCP) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if t.reader == nil {
-		return fmt.Errorf("platform reader not configured")
-	}
-
 	input := platformmcp.GetMCPInput{ProjectID: "", MCPID: ""}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err

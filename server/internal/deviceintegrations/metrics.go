@@ -23,9 +23,7 @@ const (
 	meterSyncAutoPause = "gram.device_integration.sync.auto_pause"
 )
 
-// syncMetrics holds the sync pipeline's OpenTelemetry instruments. Instruments
-// are nil-guarded at every call site, so a construction failure degrades to no
-// metrics rather than a panic.
+// syncMetrics holds the sync pipeline's OpenTelemetry instruments.
 type syncMetrics struct {
 	outcome   metric.Int64Counter
 	autoPause metric.Int64Counter
@@ -57,9 +55,6 @@ func newSyncMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) *sy
 }
 
 func (m *syncMetrics) recordOutcome(ctx context.Context, provider string, outcome o11y.Outcome) {
-	if m.outcome == nil {
-		return
-	}
 	m.outcome.Add(ctx, 1, metric.WithAttributes(
 		attr.Provider(provider),
 		attr.Outcome(outcome),
@@ -67,9 +62,6 @@ func (m *syncMetrics) recordOutcome(ctx context.Context, provider string, outcom
 }
 
 func (m *syncMetrics) recordAutoPause(ctx context.Context, provider string) {
-	if m.autoPause == nil {
-		return
-	}
 	m.autoPause.Add(ctx, 1, metric.WithAttributes(
 		attr.Provider(provider),
 	))

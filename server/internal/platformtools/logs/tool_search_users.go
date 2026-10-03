@@ -52,10 +52,6 @@ func (s *SearchUsers) Descriptor() core.ToolDescriptor {
 }
 
 func (s *SearchUsers) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if s.telemetry == nil {
-		return fmt.Errorf("telemetry service not configured")
-	}
-
 	input := searchUsersInput{Filter: nil, UserType: "internal", GroupBy: "employee", Cursor: nil, Sort: "desc", Limit: 50}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err

@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"maps"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
+
+	"github.com/speakeasy-api/gram/server/internal/feature"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -109,7 +110,7 @@ func testDispatcher(te *inboxTestEnv, publisher *captureEnforcementPublisher, wa
 
 func testDispatcherWithPresidio(te *inboxTestEnv, gitleaksPub *captureEnforcementPublisher, presidioPub *capturePresidioPublisher, waitTimeout time.Duration) *Dispatcher {
 	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
-	return testDispatcherWithLanes(te, gitleaksPub, presidioPub, llmPub, DispatcherConfig{WaitTimeout: waitTimeout, LaneWaitTimeout: nil, Flags: nil})
+	return testDispatcherWithLanes(te, gitleaksPub, presidioPub, llmPub, DispatcherConfig{WaitTimeout: waitTimeout, LaneWaitTimeout: nil, Flags: &feature.InMemory{}})
 }
 
 func testDispatcherWithLanes(te *inboxTestEnv, gitleaksPub *captureEnforcementPublisher, presidioPub *capturePresidioPublisher, llmPub *captureLLMPublisher, cfg DispatcherConfig) *Dispatcher {
@@ -560,7 +561,7 @@ func TestDispatchPublishesLLMLaneFields(t *testing.T) {
 	te := setupInboxTest(t, "replica-dispatch-llm")
 	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
 	llmPub.onPublish = replyOK[*riskv1.LLMEnforcement](te, llmLane)
-	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: nil})
+	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: &feature.InMemory{}})
 
 	origins := testOrigins(llmLane)
 	origin := origins[llmLane]
@@ -630,7 +631,7 @@ func TestDispatchLLMLaneFallsBackToOriginMessageFields(t *testing.T) {
 	te := setupInboxTest(t, "replica-dispatch-llm-fallback")
 	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
 	llmPub.onPublish = replyOK[*riskv1.LLMEnforcement](te, llmLane)
-	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: nil})
+	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: &feature.InMemory{}})
 
 	origins := testOrigins(llmLane)
 	origin := origins[llmLane]
@@ -661,7 +662,7 @@ func TestDispatchFansOutGitleaksAndLLMLanes(t *testing.T) {
 	presidioPub := &capturePresidioPublisher{messages: nil, attributes: nil, onPublish: nil}
 	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
 	llmPub.onPublish = replyOK[*riskv1.LLMEnforcement](te, llmLane)
-	dispatcher := testDispatcherWithLanes(te, gitleaksPub, presidioPub, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: nil})
+	dispatcher := testDispatcherWithLanes(te, gitleaksPub, presidioPub, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: &feature.InMemory{}})
 
 	origins := testOrigins(gitleaksLane, llmLane)
 	outcome, err := dispatcher.Dispatch(t.Context(), llmDispatchRequest([]Lane{gitleaksLane, llmLane}, origins))
@@ -699,7 +700,7 @@ func TestDispatchHonoursLaneWaitTimeoutOverride(t *testing.T) {
 		LaneWaitTimeout: map[riskv1.EnforcementScanner]time.Duration{ //nolint:exhaustive // only the LLM lane is overridden
 			riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER: 25 * time.Millisecond,
 		},
-		Flags: nil,
+		Flags: &feature.InMemory{},
 	})
 
 	origins := testOrigins(gitleaksLane, llmLane)
@@ -722,7 +723,7 @@ func TestDispatchRejectsLLMLaneWithPolicyID(t *testing.T) {
 
 	te := setupInboxTest(t, "replica-dispatch-llm-policy")
 	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
-	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: nil})
+	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: &feature.InMemory{}})
 
 	policyLane := Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER, PolicyID: uuid.NewString()}
 	_, err := dispatcher.Dispatch(t.Context(), llmDispatchRequest([]Lane{policyLane}, testOrigins(policyLane)))

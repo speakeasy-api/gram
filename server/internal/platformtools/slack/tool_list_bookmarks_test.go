@@ -47,7 +47,7 @@ func TestListBookmarksTool_RequiresChannel(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewListBookmarksTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callListBookmarks,
 	}
 

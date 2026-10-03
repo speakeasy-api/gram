@@ -105,7 +105,7 @@ func NewValidatorBoundary() *ValidatorBoundary {
 type contextKey struct{}
 
 func (b *ValidatorBoundary) withIdentity(ctx context.Context, kind Kind, userID string) context.Context {
-	if b == nil || !b.initialized {
+	if !b.initialized {
 		return ctx
 	}
 	return context.WithValue(ctx, contextKey{}, Identity{kind: kind, userID: userID, agentID: "", apiKeyID: "", expiresAt: time.Time{}})
@@ -115,7 +115,7 @@ func (b *ValidatorBoundary) withIdentity(ctx context.Context, kind Kind, userID 
 // by sessiontokens.Signer.ValidateBearer. Zero or malformed proofs leave the
 // context unstamped.
 func (b *ValidatorBoundary) StampValidatedSession(ctx context.Context, session sessiontokens.ValidatedSession) context.Context {
-	if b == nil || !b.initialized || !session.Valid() {
+	if !b.initialized || !session.Valid() {
 		return ctx
 	}
 	subject := session.Subject()
@@ -147,7 +147,7 @@ func (b *ValidatorBoundary) StampAssistant(ctx context.Context) context.Context 
 
 // StampAPIKey records an accepted Gram API key.
 func (b *ValidatorBoundary) StampAPIKey(ctx context.Context, keyID string) context.Context {
-	if b == nil || !b.initialized {
+	if !b.initialized {
 		return ctx
 	}
 	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAPIKey, userID: "", agentID: "", apiKeyID: keyID, expiresAt: time.Time{}})
@@ -173,7 +173,7 @@ func (b *ValidatorBoundary) StampAgent(ctx context.Context, agentID uuid.UUID) c
 }
 
 func (b *ValidatorBoundary) stampAgentID(ctx context.Context, agentID string) context.Context {
-	if b == nil || !b.initialized {
+	if !b.initialized {
 		return ctx
 	}
 	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAgent, agentID: agentID, userID: "", apiKeyID: "", expiresAt: time.Time{}})
@@ -183,7 +183,7 @@ func (b *ValidatorBoundary) stampAgentID(ctx context.Context, agentID string) co
 // endpoint-bound challenge resolved by the identity provider. It establishes
 // identity for discovery only and must never authorize tool execution.
 func (b *ValidatorBoundary) StampConsentDiscovery(ctx context.Context, userID string, expiresAt time.Time) context.Context {
-	if b == nil || !b.initialized || userID == "" || expiresAt.IsZero() || !expiresAt.After(time.Now()) {
+	if !b.initialized || userID == "" || expiresAt.IsZero() || !expiresAt.After(time.Now()) {
 		return ctx
 	}
 	return context.WithValue(ctx, contextKey{}, Identity{kind: KindConsentDiscovery, userID: userID, agentID: "", apiKeyID: "", expiresAt: expiresAt})

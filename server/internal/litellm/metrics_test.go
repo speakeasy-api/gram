@@ -156,7 +156,7 @@ func TestMetricProcessorCannotConsumeTraceQueueCapacity(t *testing.T) {
 		case <-releaseMetrics:
 		}
 		return nil
-	}, traceProcessorWorkers, traceProcessorQueueSize)
+	}, traceProcessorWorkers, traceProcessorQueueSize, newTestInstanceResolver(t))
 	metricProcessor.Start(t.Context())
 	for range traceProcessorWorkers {
 		require.True(t, metricProcessor.Enqueue(t.Context(), batch))
@@ -173,7 +173,7 @@ func TestMetricProcessorCannotConsumeTraceQueueCapacity(t *testing.T) {
 	traceProcessor := newTraceProcessor(testenv.NewLogger(t), testenv.NewMeterProvider(t), func(context.Context, []telemetry.LogParams) error {
 		tracePersisted <- struct{}{}
 		return nil
-	}, 1, 1)
+	}, 1, 1, newTestCallCache(), newTestInstanceResolver(t))
 	traceProcessor.Start(t.Context())
 	require.True(t, traceProcessor.Enqueue(t.Context(), batch))
 	require.Eventually(t, func() bool { return len(tracePersisted) == 1 }, time.Second, 10*time.Millisecond)

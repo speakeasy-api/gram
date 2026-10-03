@@ -17,6 +17,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type staticWorkloadVerifier struct {
@@ -131,6 +133,7 @@ func TestAttestorHandlerStreamsAndCancels(t *testing.T) {
 			token: "token",
 		},
 		IdentityParsers{ProviderTailscale: TailscaleIdentityParser{}},
+		newTestTelemetry(t),
 	)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		flusher, ok := w.(http.Flusher)
 		if !ok {
@@ -267,14 +270,16 @@ func TestNewAttestorHandlerRequiresHTTPS(t *testing.T) {
 
 	target, err := url.Parse("http://gram-private.example")
 	require.NoError(t, err)
-	_, err = NewAttestorHandler(AttestorConfig{
-		Upstream:     target,
-		ExpectedHost: "private.example.ts.net",
-		TokenPath:    "/token",
-		Transport:    http.DefaultTransport,
-		Logger:       nil,
+	require.Panics(t, func() {
+		NewAttestorHandler(AttestorConfig{
+			Upstream:     target,
+			ExpectedHost: "private.example.ts.net",
+			TokenPath:    "/token",
+			Transport:    http.DefaultTransport,
+			Logger:       testenv.NewLogger(t),
+			Telemetry:    newTestTelemetry(t),
+		})
 	})
-	require.ErrorContains(t, err, "must use HTTPS")
 }
 
 func TestNewAttestorTransportDisablesAmbientProxy(t *testing.T) {
@@ -314,13 +319,13 @@ func newTestAttestor(t *testing.T, upstream *httptest.Server, tokenPath string) 
 	t.Helper()
 	target, err := url.Parse(upstream.URL)
 	require.NoError(t, err)
-	handler, err := NewAttestorHandler(AttestorConfig{
+	handler := NewAttestorHandler(AttestorConfig{
 		Upstream:     target,
 		ExpectedHost: "private.example.ts.net",
 		TokenPath:    tokenPath,
 		Transport:    upstream.Client().Transport,
-		Logger:       nil,
+		Logger:       testenv.NewLogger(t),
+		Telemetry:    newTestTelemetry(t),
 	})
-	require.NoError(t, err)
 	return handler
 }

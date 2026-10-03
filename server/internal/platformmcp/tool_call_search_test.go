@@ -149,10 +149,11 @@ const toolCallSearchTestProject = "00000000-0000-0000-0000-000000000001"
 func newToolCallSearchService(t *testing.T, search ToolCallSearchReader, auditor DrilldownAuditor) *DiagnosticsService {
 	t.Helper()
 
-	codec, err := newSubjectReferenceCodec("tool-call-search-test-key")
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_tool_call_search_unit")
 	require.NoError(t, err)
+	codec := newSubjectReferenceCodec("tool-call-search-test-key")
 	return &DiagnosticsService{
-		db:              nil,
+		db:              conn,
 		telemetry:       stubDiagnosticsTelemetry{watermark: toolCallSearchTestNow.Add(-time.Minute).UnixNano()},
 		drilldown:       nil,
 		search:          search,
@@ -165,7 +166,7 @@ func newToolCallSearchService(t *testing.T, search ToolCallSearchReader, auditor
 		reader:          diagnosticsProjectReader{output: ListProjectsOutput{}},
 		readiness:       nil,
 		budget:          allowBudget(),
-		identityGate:    nil,
+		identityGate:    literalIdentityGate{},
 		now:             func() time.Time { return toolCallSearchTestNow },
 	}
 }
@@ -881,7 +882,7 @@ func TestSearchToolCalls_FoldsThePersonReferenceLikeItsProducer(t *testing.T) {
 	reader := &recordingToolCallSearchReader{}
 	service := newToolCallSearchService(t, reader, &recordingDrilldownAuditor{})
 	principal := testPrincipal()
-	service = service.WithCanonicalIdentityGate(stubCanonicalIdentityGate{orgID: principal.OrganizationID})
+	service.identityGate = stubCanonicalIdentityGate{orgID: principal.OrganizationID}
 
 	// A canonical address minted the way list_mcp_usage_users mints one, for a
 	// person whose calls are recorded under an alias.
@@ -896,7 +897,8 @@ func TestSearchToolCalls_FoldsThePersonReferenceLikeItsProducer(t *testing.T) {
 
 	// An organization outside the rollout keeps the literal comparison, exactly
 	// as its producer does.
-	outside := newToolCallSearchService(t, reader, &recordingDrilldownAuditor{}).WithCanonicalIdentityGate(stubCanonicalIdentityGate{orgID: "another-organization"})
+	outside := newToolCallSearchService(t, reader, &recordingDrilldownAuditor{})
+	outside.identityGate = stubCanonicalIdentityGate{orgID: "another-organization"}
 	outsideReference, err := outside.references.EncodeScoped(principal, subjectKindUser, toolCallSearchUserScope(toolCallSearchTestProject), FormatSubjectIdentity(SubjectIdentityEmail, "work@example.test"), toolCallSearchTestNow)
 	require.NoError(t, err)
 	_, err = outside.SearchToolCalls(t.Context(), principal, SearchToolCallsInput{ProjectID: toolCallSearchTestProject, UserReference: outsideReference})
@@ -1163,34 +1165,6 @@ func TestSearchToolCalls_ResponseCapTrimsThePage(t *testing.T) {
 	require.Empty(t, output.NextCursor)
 }
 
-// TestToolCallSearchTools_RequireTheDrilldownComposition pins that the pair is
-// withheld, not served unbound, when any dependency a page relies on is absent.
-func TestToolCallSearchTools_RequireTheDrilldownComposition(t *testing.T) {
-	t.Parallel()
-
-	reader := &recordingToolCallSearchReader{}
-	require.False(t, (*DiagnosticsService)(nil).toolCallSearchValid())
-	require.True(t, newToolCallSearchService(t, reader, &recordingDrilldownAuditor{}).toolCallSearchValid())
-
-	withoutReferences := newToolCallSearchService(t, reader, &recordingDrilldownAuditor{})
-	withoutReferences.references = nil
-	require.False(t, withoutReferences.toolCallSearchValid())
-	_, err := withoutReferences.SearchToolCalls(t.Context(), testPrincipal(), SearchToolCallsInput{ProjectID: toolCallSearchTestProject})
-	require.ErrorIs(t, err, ErrUnavailable)
-
-	withoutAuditor := newToolCallSearchService(t, reader, nil)
-	require.False(t, withoutAuditor.toolCallSearchValid())
-
-	withoutSearch := newToolCallSearchService(t, nil, &recordingDrilldownAuditor{})
-	require.False(t, withoutSearch.toolCallSearchValid())
-	require.Same(t, withoutSearch, withoutSearch.WithToolCallSearch(nil))
-	require.True(t, withoutSearch.WithToolCallSearch(reader).toolCallSearchValid())
-
-	// mcp_id needs Postgres to resolve the server's telemetry identities.
-	_, err = newToolCallSearchService(t, reader, &recordingDrilldownAuditor{}).SearchToolCalls(t.Context(), testPrincipal(), SearchToolCallsInput{ProjectID: toolCallSearchTestProject, MCPID: "00000000-0000-0000-0000-000000000002"})
-	require.ErrorIs(t, err, ErrUnavailable)
-}
-
 // TestToolCallSearchTools_AreRegisteredForBothAudiences pins the manifest: both
 // tools serve the external endpoint and the assistant, are read-only, name their
 // project explicitly, and the row-level search is admin-gated while key
@@ -1198,23 +1172,19 @@ func TestToolCallSearchTools_RequireTheDrilldownComposition(t *testing.T) {
 func TestToolCallSearchTools_AreRegisteredForBothAudiences(t *testing.T) {
 	t.Parallel()
 
-	live := newRegistrar(newTestMCPServer())
-	registerToolCallSearchTools(live, nil)
-	unavailable := newRegistrar(newTestMCPServer())
-	registerUnavailableToolCallSearchTools(unavailable)
+	registrar := newRegistrar(newTestMCPServer())
+	registerToolCallSearchTools(registrar, newToolCallSearchService(t, &recordingToolCallSearchReader{}, &recordingDrilldownAuditor{}))
 
-	for _, registrar := range []*Registrar{live, unavailable} {
-		search := descriptorByName(t, registrar, "search_tool_calls")
-		require.Equal(t, ExternalAuthorizationOrgAdmin, search.Meta.Authorization)
-		require.Equal(t, bothAudiences, search.Meta.Audiences)
-		require.Equal(t, ProjectScopeExplicit, search.Meta.ProjectScope)
-		require.True(t, search.Annotations.ReadOnlyHint)
+	search := descriptorByName(t, registrar, "search_tool_calls")
+	require.Equal(t, ExternalAuthorizationOrgAdmin, search.Meta.Authorization)
+	require.Equal(t, bothAudiences, search.Meta.Audiences)
+	require.Equal(t, ProjectScopeExplicit, search.Meta.ProjectScope)
+	require.True(t, search.Annotations.ReadOnlyHint)
 
-		keys := descriptorByName(t, registrar, "list_attribute_keys")
-		require.Equal(t, ExternalAuthorizationMember, keys.Meta.Authorization)
-		require.Equal(t, bothAudiences, keys.Meta.Audiences)
-		require.Equal(t, ProjectScopeExplicit, keys.Meta.ProjectScope)
-		require.Equal(t, discoveryProjectRead, keys.Meta.DiscoveryScopes)
-		require.True(t, keys.Annotations.ReadOnlyHint)
-	}
+	keys := descriptorByName(t, registrar, "list_attribute_keys")
+	require.Equal(t, ExternalAuthorizationMember, keys.Meta.Authorization)
+	require.Equal(t, bothAudiences, keys.Meta.Audiences)
+	require.Equal(t, ProjectScopeExplicit, keys.Meta.ProjectScope)
+	require.Equal(t, discoveryProjectRead, keys.Meta.DiscoveryScopes)
+	require.True(t, keys.Annotations.ReadOnlyHint)
 }

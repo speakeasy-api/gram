@@ -66,11 +66,3 @@ func TestToolsCallKillswitchInterceptor(t *testing.T) {
 		})
 	}
 }
-
-func TestToolsCallKillswitchInterceptorMissingCheckpointFailsClosed(t *testing.T) {
-	t.Parallel()
-	interceptor := NewToolsCallKillswitchInterceptor(nil, "org-id", "server-id", testenv.NewLogger(t))
-	var rejection *proxy.RejectError
-	require.ErrorAs(t, interceptor.InterceptToolsCallRequest(t.Context(), nil), &rejection)
-	require.Equal(t, proxy.NewKillswitchInfrastructureRejection(), rejection)
-}

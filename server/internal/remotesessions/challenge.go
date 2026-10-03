@@ -1148,10 +1148,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	// a platform admin can move a binding, so a change landing mid-flow is an
 	// operator repointing the issuer, and the route this exchange takes is
 	// whichever one they chose.
-	doer, err := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, clientRow.TunneledMcpServerID)
-	if err != nil {
-		return none, oops.E(oops.CodeUnauthorized, err, "the identity provider's tunnel transport is unavailable").LogError(ctx, logger)
-	}
+	doer := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, clientRow.TunneledMcpServerID)
 	audience := conv.FromPGTextOrEmpty[string](client.Audience)
 	assertionIssuer := state.AssertionIssuer
 	if authMethod == TokenEndpointAuthMethodPrivateKeyJWT && assertionIssuer == "" {
@@ -1394,10 +1391,6 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 }
 
 func (m *ChallengeManager) recordCIMDAuthorizationFailure(ctx context.Context, state RemoteLoginState, code, description string) {
-	if m.registrationTelemetry == nil {
-		return
-	}
-
 	// Classify first: access_denied is the ordinary user cancellation and is
 	// not recorded, so the lookup that only decides whether this was a CIMD
 	// client is wasted on the most common denial there is.
@@ -1601,22 +1594,12 @@ func (m *ChallengeManager) identityFromExchange(ctx context.Context, logger *slo
 	// An issuer with no published key set cannot have its tokens verified;
 	// that is a configuration state, not an event worth a warning per grant.
 	if tok.IDToken != "" && issuer.JwksUri.Valid && issuer.JwksUri.String != "" {
-		// A bound issuer publishes its key set inside the customer network, so
-		// without that transport the token cannot be verified at all. Falling
-		// back to direct egress would read a key set from whatever answers on
-		// the public internet at the same URL, so this stores no identity
-		// rather than trusting one the tunnel never vouched for.
-		transport, terr := issuerTunnelTransport(m.tunnels, issuer.TunneledMcpServerID)
-		if terr != nil {
-			logIdentityFailure(ctx, logger, "id token not verified; key set transport unavailable", terr, attr.SlogRemoteSessionClientID(clientRowID.String()))
-			return nil, nil, noAccess
-		}
 		identity, err := m.idTokens.Verify(ctx, tok.IDToken, IDTokenExpectation{
 			issuer:      issuer.IssuerUrl,
 			clientID:    externalClientID,
 			jwksURI:     issuer.JwksUri.String,
 			fetchScope:  issuer.RemoteSessionIssuerID.String(),
-			transport:   transport,
+			transport:   issuerTunnelTransport(m.tunnels, issuer.TunneledMcpServerID),
 			signingAlgs: issuer.IDTokenSigningAlgValuesSupported,
 			nonce:       nonce,
 			subject:     "",

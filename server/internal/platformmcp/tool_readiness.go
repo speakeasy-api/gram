@@ -49,7 +49,8 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 		Authorization: ExternalAuthorizationOrgAdmin,
 		// Assistants only read their own persisted, actor-scoped evidence. A
 		// forced provider probe stays external because it requires a connection.
-		Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPReadinessToolInput) (*mcp.CallToolResult, GetMCPReadinessToolOutput, error) {
+		Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit,
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPReadinessToolInput) (*mcp.CallToolResult, GetMCPReadinessToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, GetMCPReadinessToolOutput{}, err
@@ -84,7 +85,8 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 		Authorization: ExternalAuthorizationOrgAdmin,
 		// Assistants receive a repair projection from their persisted,
 		// actor-scoped evidence; no provider probe or OAuth connection is used.
-		Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPRepairPlanToolInput) (*mcp.CallToolResult, GetMCPRepairPlanToolOutput, error) {
+		Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit,
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPRepairPlanToolInput) (*mcp.CallToolResult, GetMCPRepairPlanToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, GetMCPRepairPlanToolOutput{}, err

@@ -118,9 +118,6 @@ type RuntimeBackendStatus struct {
 }
 
 func validateRuntimeBackend(runtime RuntimeBackend, backend string) error {
-	if runtime == nil {
-		return fmt.Errorf("assistant runtime backend is not configured")
-	}
 	if runtime.SupportsBackend(backend) {
 		return nil
 	}

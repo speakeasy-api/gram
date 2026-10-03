@@ -31,6 +31,7 @@ import (
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -38,6 +39,7 @@ import (
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 // TestRemoteLoginCallback_AuthenticatedSubject covers the private-toolset
@@ -386,7 +388,7 @@ func buildChallengeManagerForTest(
 	policy, err := guardian.NewUnsafePolicy(ti.tracerProvider, []string{})
 	require.NoError(t, err)
 
-	mgr := remotesessions.NewChallengeManager(ti.logger, ti.tracerProvider, testenv.NewMeterProvider(t), ti.conn, ti.enc, policy, nil, ti.cacheAdapter, ti.serverURL)
+	mgr := remotesessions.NewChallengeManager(ti.logger, ti.tracerProvider, testenv.NewMeterProvider(t), ti.conn, ti.enc, policy, tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", policy, nil), ti.cacheAdapter, ti.serverURL)
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](
 		ti.logger.With(attr.SlogCacheNamespace("authn_challenge")),
 		ti.cacheAdapter,

@@ -9,13 +9,18 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
 	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,7 +42,14 @@ func TestKeysService_InitialAgentPolicyCannotElevateCredentialAuthority(t *testi
 			upsertGrant(t, ctx, ti, caller, authz.ScopeAgentWrite, "*")
 			logger := testenv.NewLogger(t)
 			engine := authz.NewEngine(logger, ti.conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-			management := agentmanagement.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.sessionManager, engine, audit.NewLogger(), ti.features, nil, nil)
+			tracerProvider := testenv.NewTracerProvider(t)
+			redisClient, err := infra.NewRedisClient(t, 0)
+			require.NoError(t, err)
+			policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+			require.NoError(t, err)
+			chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+			revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), ti.conn, testenv.NewEncryptionClient(t), policy, tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", policy, nil))
+			management := agentmanagement.NewService(logger, tracerProvider, ti.conn, ti.sessionManager, engine, audit.NewLogger(), ti.features, chatSessions, revoker)
 			agent, err := management.Create(ctx, &agentgen.CreatePayload{Name: "Initial policy agent", OwnerUserID: &ownerID, PolicyGrants: []*agentgen.AgentPolicyGrantForm{{Scope: string(authz.ScopeMCPConnect), Effect: "allow", Selector: &agentgen.AgentPolicySelector{ResourceKind: "mcp", ResourceID: "*"}}}})
 			require.NoError(t, err)
 			agentID, err := uuid.Parse(agent.ID)

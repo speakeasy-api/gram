@@ -18,10 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// SetMCPServerURL sets the public Gram server origin that platform-domain MCP
-// URLs are built on.
-func (s *Service) SetMCPServerURL(serverURL *url.URL) { s.mcpServerURL = serverURL }
-
 type adminMCPServer struct {
 	server    *gen.AdminMcpServer
 	createdAt time.Time
@@ -134,15 +130,7 @@ func (s *Service) primaryEndpointURL(rows []repo.AdminListProjectMcpServerRowsRo
 	if primary == nil {
 		return nil
 	}
-	domain := domains[primary.ID]
-	serverURL := ""
-	switch {
-	case s.mcpServerURL != nil:
-		serverURL = s.mcpServerURL.String()
-	case domain == "":
-		return nil
-	}
-	u, err := mcpendpoints.EndpointURL(primary, domain, serverURL)
+	u, err := mcpendpoints.EndpointURL(primary, domains[primary.ID], s.mcpServerURL.String())
 	if err != nil {
 		return nil
 	}
@@ -186,9 +174,6 @@ func (s *Service) mcpURL(customDomain pgtype.Text, path ...string) *string {
 	base := s.mcpServerURL
 	if customDomain.Valid {
 		base = &url.URL{Scheme: "https", Host: customDomain.String}
-	}
-	if base == nil {
-		return nil
 	}
 	joined := base.JoinPath(append([]string{"mcp"}, path...)...).String()
 	return &joined

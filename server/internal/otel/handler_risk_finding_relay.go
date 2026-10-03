@@ -112,9 +112,7 @@ func (h *RiskFindingRelayHandler) HandleBatchWithResult(
 		relayMessages = append(relayMessages, relayMessage)
 	}
 	for reason, count := range dropped {
-		if h.findingsDropped != nil {
-			h.findingsDropped.Add(ctx, int64(count), metric.WithAttributes(attr.Reason(string(reason))))
-		}
+		h.findingsDropped.Add(ctx, int64(count), metric.WithAttributes(attr.Reason(string(reason))))
 	}
 
 	return h.handleBatch(ctx, relayMessages)
@@ -188,9 +186,7 @@ func (h *RiskFindingRelayHandler) handleBatch(ctx context.Context, messages []ri
 					message.fail(deliveryErr)
 				}
 			}
-			if h.findingsFailed != nil {
-				h.findingsFailed.Add(ctx, int64(len(group.messages)), metric.WithAttributes(attr.Reason(string(relayReasonConfigError))))
-			}
+			h.findingsFailed.Add(ctx, int64(len(group.messages)), metric.WithAttributes(attr.Reason(string(relayReasonConfigError))))
 			h.logger.ErrorContext(
 				ctx,
 				"load risk finding relay destination",
@@ -201,9 +197,7 @@ func (h *RiskFindingRelayHandler) handleBatch(ctx context.Context, messages []ri
 			continue
 		}
 		if destination == nil {
-			if h.findingsDropped != nil {
-				h.findingsDropped.Add(ctx, int64(len(group.messages)), metric.WithAttributes(attr.Reason(string(relayReasonNoDestination))))
-			}
+			h.findingsDropped.Add(ctx, int64(len(group.messages)), metric.WithAttributes(attr.Reason(string(relayReasonNoDestination))))
 			continue
 		}
 
@@ -215,9 +209,7 @@ func (h *RiskFindingRelayHandler) handleBatch(ctx context.Context, messages []ri
 				if message.fail != nil {
 					message.fail(exclusionErr)
 				}
-				if h.findingsFailed != nil {
-					h.findingsFailed.Add(ctx, 1, metric.WithAttributes(attr.Reason(string(relayReasonConfigError))))
-				}
+				h.findingsFailed.Add(ctx, 1, metric.WithAttributes(attr.Reason(string(relayReasonConfigError))))
 				h.logger.ErrorContext(
 					ctx,
 					"evaluate risk finding exclusions",
@@ -229,9 +221,7 @@ func (h *RiskFindingRelayHandler) handleBatch(ctx context.Context, messages []ri
 				continue
 			}
 			if excluded {
-				if h.findingsDropped != nil {
-					h.findingsDropped.Add(ctx, 1, metric.WithAttributes(attr.Reason(string(relayReasonExcluded))))
-				}
+				h.findingsDropped.Add(ctx, 1, metric.WithAttributes(attr.Reason(string(relayReasonExcluded))))
 				continue
 			}
 			eligible = append(eligible, message)
@@ -245,9 +235,7 @@ func (h *RiskFindingRelayHandler) handleBatch(ctx context.Context, messages []ri
 			return buildRiskFindingRelayExport(batch, observedAt), nil
 		})
 		if err != nil {
-			if h.findingsDropped != nil {
-				h.findingsDropped.Add(ctx, int64(len(eligible)), metric.WithAttributes(attr.Reason(string(relayReasonInvalid))))
-			}
+			h.findingsDropped.Add(ctx, int64(len(eligible)), metric.WithAttributes(attr.Reason(string(relayReasonInvalid))))
 			h.logger.ErrorContext(
 				ctx,
 				"build risk finding relay exports",
@@ -279,10 +267,8 @@ func (h *RiskFindingRelayHandler) handleBatch(ctx context.Context, messages []ri
 							message.fail(err)
 						}
 					}
-					if h.findingsFailed != nil {
-						h.findingsFailed.Add(ctx, int64(len(item.batch.items)), metric.WithAttributes(attr.Reason(string(reason))))
-					}
-				} else if h.findingsDropped != nil {
+					h.findingsFailed.Add(ctx, int64(len(item.batch.items)), metric.WithAttributes(attr.Reason(string(reason))))
+				} else {
 					h.findingsDropped.Add(ctx, int64(len(item.batch.items)), metric.WithAttributes(attr.Reason(string(reason))))
 				}
 				h.logger.WarnContext(

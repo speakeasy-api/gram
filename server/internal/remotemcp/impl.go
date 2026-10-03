@@ -59,8 +59,10 @@ type Service struct {
 	beforeClaim func(holderPID uint32, previousURL string)
 }
 
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
+var (
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
+)
 
 func NewService(
 	logger *slog.Logger,
@@ -72,6 +74,7 @@ func NewService(
 	policy *guardian.Policy,
 	auditLogger *audit.Logger,
 	iconSetter mcpservers.DefaultServerIconSetter,
+	distributionAdmission *admission.Guard,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 
@@ -85,7 +88,7 @@ func NewService(
 		policy:                policy,
 		audit:                 auditLogger,
 		provisioning:          NewRemoteMCPProvisioningService(db, policy, auditLogger, iconSetter),
-		distributionAdmission: admission.NewGuard(nil, nil),
+		distributionAdmission: distributionAdmission,
 		beforeClaim:           nil,
 	}
 }

@@ -110,7 +110,7 @@ func newSuggestionEngine(t *testing.T, ti *testInstance, config suggest.Config, 
 	t.Helper()
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	engine, err := suggest.NewEngine(
+	engine := suggest.NewEngine(
 		config,
 		testenv.NewLogger(t),
 		ti.conn,
@@ -119,7 +119,6 @@ func newSuggestionEngine(t *testing.T, ti *testInstance, config suggest.Config, 
 		completion,
 		openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient)),
 	)
-	require.NoError(t, err)
 	return engine
 }
 
@@ -467,8 +466,7 @@ func TestSuggestionEngineRateLimitFailureConsumesNothing(t *testing.T) {
 	allowed, err := limiter.Allow(ctx, key)
 	require.NoError(t, err)
 	require.True(t, allowed.Allowed)
-	engine, err := suggest.NewEngine(suggest.DefaultConfig(), testenv.NewLogger(t), ti.conn, &suggestionInsightsStub{}, chatrepo.New(ti.conn), completion, limiter)
-	require.NoError(t, err)
+	engine := suggest.NewEngine(suggest.DefaultConfig(), testenv.NewLogger(t), ti.conn, &suggestionInsightsStub{}, chatrepo.New(ti.conn), completion, limiter)
 
 	_, err = engine.Run(ctx, suggest.RunInput{ProjectID: ti.projectID, SkillID: uuid.MustParse(created.Skill.ID), Now: now})
 	require.ErrorIs(t, err, suggest.ErrRetryable)

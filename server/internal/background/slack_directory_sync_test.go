@@ -87,16 +87,6 @@ func TestSlackDirectoryWorkflowDoesNotRetryAuthorizationFailure(t *testing.T) {
 	require.Equal(t, 1, attempts)
 }
 
-func TestSlackDirectorySchedulerWithoutTemporal(t *testing.T) {
-	t.Parallel()
-	scheduler := NewSlackDirectorySyncScheduler(nil)
-	input := slackdirectoryconnections.SyncInput{OrganizationID: "org_example", ConnectionID: uuid.New(), Generation: uuid.New(), ActorID: "user_example", StartedAt: time.Time{}}
-	require.ErrorContains(t, scheduler.Start(t.Context(), input), "not configured")
-	state, err := scheduler.State(t.Context(), input.ConnectionID, input.Generation)
-	require.ErrorContains(t, err, "not configured")
-	require.Equal(t, "unknown", state.Status)
-}
-
 func TestSlackDirectoryRetryDelayFitsRemainingBudget(t *testing.T) {
 	t.Parallel()
 	started := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)

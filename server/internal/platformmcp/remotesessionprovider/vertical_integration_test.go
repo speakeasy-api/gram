@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -41,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 var verticalSliceInfra *testenv.Environment
@@ -68,8 +70,7 @@ func TestReviewedRemoteSessionProviderVerticalSlice(t *testing.T) {
 
 	upstream := newReviewedUpstream(t)
 	principal, project := seedPlatformRegistration(t, ctx, conn)
-	store, err := platformmcp.NewRegistrationStore(conn)
-	require.NoError(t, err)
+	store := platformmcp.NewRegistrationStore(conn)
 	registration := registerReviewedMCP(t, ctx, conn, store, principal, project, upstream.URL+"/mcp")
 
 	probePolicy := testProbeFixturePolicy(t, upstream)
@@ -280,7 +281,7 @@ func newChallengeManager(t *testing.T, conn *pgxpool.Pool, policy *guardian.Poli
 	require.NoError(t, err)
 	baseURL, err := url.Parse("https://gram.test")
 	require.NoError(t, err)
-	return remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), policy, nil, cache.NewRedisCacheAdapter(redisClient), baseURL)
+	return remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), policy, tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", policy, nil), cache.NewRedisCacheAdapter(redisClient), baseURL)
 }
 
 func seedPlatformRegistration(t *testing.T, ctx context.Context, conn *pgxpool.Pool) (platformmcp.Principal, platformmcp.ResolvedProject) {

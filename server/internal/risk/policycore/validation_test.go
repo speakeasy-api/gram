@@ -109,6 +109,7 @@ func TestValidateMCPScopeSources(t *testing.T) {
 		`source "shadow_mcp" cannot be used by an MCP-scoped policy`,
 	)
 }
+
 func TestValidateMCPScopeAction(t *testing.T) {
 	t.Parallel()
 

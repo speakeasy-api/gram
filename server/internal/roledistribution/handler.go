@@ -76,34 +76,22 @@ func (h *Handler) HandleRoleDistributionSetupRequested(ctx context.Context, even
 		if parseErr != nil || id == uuid.Nil || strings.TrimSpace(event.GetOrganizationId()) == "" || event.GetCursor() != "" {
 			return invalid("setup requires a valid role URN, organization, and no cursor")
 		}
-		if h.processors.Setup == nil {
-			err = fmt.Errorf("setup processor is not configured")
-		} else {
-			var processed bool
-			processed, err = h.processors.Setup(ctx, setup, event.GetOrganizationId())
-			if err == nil && !processed {
-				logger.LogAttrs(ctx, slog.LevelInfo, "role distribution setup skipped or already completed")
-			}
+		var processed bool
+		processed, err = h.processors.Setup(ctx, setup, event.GetOrganizationId())
+		if err == nil && !processed {
+			logger.LogAttrs(ctx, slog.LevelInfo, "role distribution setup skipped or already completed")
 		}
 	case global != "":
 		id, parseErr := uuid.Parse(global)
 		if parseErr != nil || id == uuid.Nil {
 			return invalid("global role requires a valid UUID")
 		}
-		if h.processors.GlobalFanout == nil {
-			err = fmt.Errorf("global fanout processor is not configured")
-		} else {
-			err = h.processors.GlobalFanout(ctx, id, event.GetCursor())
-		}
+		err = h.processors.GlobalFanout(ctx, id, event.GetCursor())
 	case bootstrap != "":
 		if strings.TrimSpace(bootstrap) == "" {
 			return invalid("bootstrap requires an organization")
 		}
-		if h.processors.OrganizationBootstrap == nil {
-			err = fmt.Errorf("organization bootstrap processor is not configured")
-		} else {
-			err = h.processors.OrganizationBootstrap(ctx, bootstrap, event.GetCursor())
-		}
+		err = h.processors.OrganizationBootstrap(ctx, bootstrap, event.GetCursor())
 	}
 	if err != nil {
 		logger.LogAttrs(ctx, slog.LevelError, "role distribution processing failed; requesting retry", slog.Attr{Key: errorKey, Value: slog.AnyValue(err)})

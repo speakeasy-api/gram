@@ -551,7 +551,7 @@ func TestSkillInsightsAreMeteredWithTelemetryReadsNotSkillAuthoring(t *testing.T
 	require.Empty(t, fixture.skillsLane.keys, "a permitted insights read spends nothing from the authoring allowance")
 }
 
-func TestSkillInsightsRefuseWhenSkillsAreOffOrTheReaderIsAbsent(t *testing.T) {
+func TestSkillInsightsRefuseWhenSkillsAreOff(t *testing.T) {
 	t.Parallel()
 
 	off := newInsightsFixture(t, testInsightRegistry(), &stubSkillInsightsReader{})
@@ -560,17 +560,6 @@ func TestSkillInsightsRefuseWhenSkillsAreOffOrTheReaderIsAbsent(t *testing.T) {
 	require.ErrorIs(t, err, ErrSkillsUnavailable)
 	_, err = off.service.CompareSkillVersions(t.Context(), testPrincipal(), CompareSkillVersionsInput{ProjectSlug: testSkillProjectSlug, SkillID: testInsightSkillA})
 	require.ErrorIs(t, err, ErrSkillsUnavailable)
-
-	withoutReader := testSkillsService(t, &recordingSkillsManagement{skill: testSkill()})
-	_, err = withoutReader.ListSkillInsights(t.Context(), testPrincipal(), ListSkillInsightsInput{ProjectSlug: testSkillProjectSlug})
-	require.ErrorIs(t, err, ErrSkillsUnavailable)
-	_, err = withoutReader.CompareSkillVersions(t.Context(), testPrincipal(), CompareSkillVersionsInput{ProjectSlug: testSkillProjectSlug, SkillID: testInsightSkillA})
-	require.ErrorIs(t, err, ErrSkillsUnavailable)
-
-	var absent *SkillsService
-	_, err = absent.ListSkillInsights(t.Context(), testPrincipal(), ListSkillInsightsInput{ProjectSlug: testSkillProjectSlug})
-	require.ErrorIs(t, err, ErrSkillsUnavailable)
-	require.Nil(t, absent.WithInsights(&stubSkillInsightsReader{}, OperationBudget{Connection: nil, Organization: nil}))
 }
 
 func TestSkillInsightsWrapReaderFailuresAsErrorsNotRefusals(t *testing.T) {
@@ -620,51 +609,30 @@ func TestSkillInsightsOutputsProjectOnlyAllowlistedFields(t *testing.T) {
 	require.ElementsMatch(t, wantCompared, uniqueKeys(t, compared))
 }
 
-// The reader flips what the insight tools answer, never whether they exist or
-// who may call them, so a client sees one stable contract across the rollout.
-func TestSkillInsightsToolsAreDeclaredWithAndWithoutTheirReader(t *testing.T) {
+func TestSkillInsightsToolsDeclareOneContract(t *testing.T) {
 	t.Parallel()
 
 	live := newInsightsFixture(t, testInsightRegistry(), &stubSkillInsightsReader{rows: testInsightRows()}).service
-	for _, test := range []struct {
-		name    string
-		service *SkillsService
-		served  bool
+	_, registrar := newTestServer(t, func(services *Services) { services.Skills = live })
+
+	for _, call := range []struct {
+		tool      string
+		arguments string
 	}{
-		{name: "reader attached", service: live, served: true},
-		{name: "no reader", service: testSkillsService(t, &recordingSkillsManagement{skill: testSkill()}), served: false},
-		{name: "skills absent", service: nil, served: false},
+		{tool: "list_skill_insights", arguments: `{"project_slug":"` + testSkillProjectSlug + `"}`},
+		{tool: "compare_skill_versions", arguments: `{"project_slug":"` + testSkillProjectSlug + `","skill_id":"` + testInsightSkillA + `"}`},
 	} {
-		_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, test.service, nil, nil, nil, nil, CatalogDescriptor{})
+		descriptor := descriptorByName(t, registrar, call.tool)
+		require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization, call.tool)
+		require.Equal(t, bothAudiences, descriptor.Meta.Audiences, call.tool)
+		require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope, call.tool)
+		require.NotNil(t, descriptor.Annotations, call.tool)
+		require.True(t, descriptor.Annotations.ReadOnlyHint, call.tool)
+		require.Contains(t, string(descriptor.InputSchema), `"project_slug"`, call.tool)
 
-		for _, call := range []struct {
-			tool      string
-			arguments string
-		}{
-			{tool: "list_skill_insights", arguments: `{"project_slug":"` + testSkillProjectSlug + `"}`},
-			{tool: "compare_skill_versions", arguments: `{"project_slug":"` + testSkillProjectSlug + `","skill_id":"` + testInsightSkillA + `"}`},
-		} {
-			descriptor := descriptorByName(t, registrar, call.tool)
-			require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization, test.name, call.tool)
-			require.Equal(t, bothAudiences, descriptor.Meta.Audiences, test.name, call.tool)
-			require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope, test.name, call.tool)
-			require.NotNil(t, descriptor.Annotations, test.name, call.tool)
-			require.True(t, descriptor.Annotations.ReadOnlyHint, test.name, call.tool)
-
-			result, err := descriptor.Invoke(ContextWithPrincipal(t.Context(), testPrincipal()), json.RawMessage(call.arguments))
-			if test.served {
-				require.Contains(t, string(descriptor.InputSchema), `"project_slug"`, test.name, call.tool)
-				require.NoError(t, err, test.name, call.tool)
-				require.NotNil(t, result, test.name, call.tool)
-				continue
-			}
-			var refusal *ToolRefusalError
-			require.ErrorAs(t, err, &refusal, test.name, call.tool)
-			var body featureUnavailableResult
-			require.NoError(t, json.Unmarshal([]byte(refusal.Payload), &body), test.name, call.tool)
-			require.Equal(t, unavailableCode, body.Code, test.name, call.tool)
-			require.Equal(t, "skill_insights", body.Feature, test.name, call.tool)
-		}
+		result, err := descriptor.Invoke(ContextWithPrincipal(t.Context(), testPrincipal()), json.RawMessage(call.arguments))
+		require.NoError(t, err, call.tool)
+		require.NotNil(t, result, call.tool)
 	}
 }
 
@@ -674,7 +642,7 @@ func TestSkillInsightsToolSchemasDoNotVaryTheirShape(t *testing.T) {
 	t.Parallel()
 
 	live := newInsightsFixture(t, testInsightRegistry(), &stubSkillInsightsReader{rows: testInsightRows()}).service
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, live, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newTestServer(t, func(services *Services) { services.Skills = live })
 
 	listed := string(descriptorByName(t, registrar, "list_skill_insights").InputSchema)
 	require.NotContains(t, listed, `"skill_id"`, "ranking never takes a skill; comparing one skill's versions is its own tool")
@@ -692,7 +660,7 @@ func TestSkillInsightsToolsReturnStructuredRefusals(t *testing.T) {
 	t.Parallel()
 
 	live := newInsightsFixture(t, testInsightRegistry(), &stubSkillInsightsReader{rows: testInsightRows()}).service
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, live, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newTestServer(t, func(services *Services) { services.Skills = live })
 
 	for _, call := range []struct {
 		tool      string

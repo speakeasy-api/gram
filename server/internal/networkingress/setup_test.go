@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -137,7 +138,7 @@ func newTestServiceWithRequester(t *testing.T, enabled bool, requester networkin
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	admission := networkingress.NewExpansionAdmission(features, true, enabled)
 	enc := testenv.NewEncryptionClient(t)
-	service := networkingress.NewServiceWithPublication(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), enc, audit.NewLogger(), admission, requester, publicationRequester, nil)
+	service := networkingress.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), enc, audit.NewLogger(), admission, requester, publicationRequester, &background.NetworkIngressClient{Client: nil, Queue: "test-network-ingress"})
 
 	ti := &testInstance{service: service, conn: conn, features: features, orgID: orgID, orgSlug: orgSlug}
 	productfeaturestest.Enable(t, ctx, conn, features, orgID, productfeatures.FeatureNetworkIngress)

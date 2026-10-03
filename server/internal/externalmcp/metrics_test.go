@@ -66,16 +66,3 @@ func TestHeaderRecoveryMetrics_CountersHaveNoDimensions(t *testing.T) {
 	}
 	require.Empty(t, expected)
 }
-
-func TestHeaderRecoveryMetrics_NilAndZeroAreSafe(t *testing.T) {
-	t.Parallel()
-	for _, metrics := range []*externalmcp.Metrics{nil, {}} {
-		require.NotPanics(t, func() {
-			metrics.RecordHeaderMismatch(t.Context())
-			metrics.RecordRecoveryAttempt(t.Context())
-			metrics.RecordRecoverySuccess(t.Context())
-			metrics.RecordRecoveryFailure(t.Context())
-			metrics.RecordRecoveryExhaustion(t.Context())
-		})
-	}
-}

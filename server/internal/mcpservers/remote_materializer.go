@@ -59,7 +59,7 @@ func nilIfEmpty(value string) *string {
 }
 
 func VerifyLiveRemoteMCPSourceInTransaction(ctx context.Context, tx pgx.Tx, projectID, remoteMCPServerID uuid.UUID) error {
-	if tx == nil || projectID == uuid.Nil || remoteMCPServerID == uuid.Nil {
+	if projectID == uuid.Nil || remoteMCPServerID == uuid.Nil {
 		return fmt.Errorf("invalid remote MCP source verification input")
 	}
 

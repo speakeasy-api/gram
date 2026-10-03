@@ -117,7 +117,7 @@ func registerIssuerTools(server *mcp.Server, reads IssuerReader) {
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input IssuerConvergenceInput) (*mcp.CallToolResult, IssuerConvergencePage, error) {
 		out := IssuerConvergencePage{Items: []IssuerConvergenceCandidate{}}
-		if reads == nil || !verifiedStaff(ctx) {
+		if !verifiedStaff(ctx) {
 			return nil, out, errIssuerUnavailable
 		}
 		if !validIssuerID(input.TargetID) || input.Limit < 0 || input.Limit > maxIssuerPage || len(input.Cursor) > maxIssuerCursor {
@@ -164,7 +164,7 @@ func registerIssuerTools(server *mcp.Server, reads IssuerReader) {
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input IssuerPageInput) (*mcp.CallToolResult, IssuerPage, error) {
 		result := IssuerPage{Items: []IssuerSummary{}}
-		if reads == nil || !verifiedStaff(ctx) {
+		if !verifiedStaff(ctx) {
 			return nil, result, errIssuerUnavailable
 		}
 		if input.Limit < 0 || input.Limit > maxIssuerPage || len(input.Cursor) > maxIssuerCursor {
@@ -197,7 +197,7 @@ func registerIssuerTools(server *mcp.Server, reads IssuerReader) {
 		Description: "Read one global issuer by exact ID. Returns identification and dependency counts, not credentials or full provider metadata.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input IssuerIDInput) (*mcp.CallToolResult, IssuerSummary, error) {
-		if reads == nil || !verifiedStaff(ctx) || !validIssuerID(input.ID) {
+		if !verifiedStaff(ctx) || !validIssuerID(input.ID) {
 			return nil, IssuerSummary{}, errIssuerUnavailable
 		}
 		item, err := reads.GetGlobalIssuer(ctx, &gen.GetGlobalIssuerPayload{ID: input.ID})
@@ -216,7 +216,7 @@ func registerIssuerTools(server *mcp.Server, reads IssuerReader) {
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input DuplicateIssuerInput) (*mcp.CallToolResult, DuplicateIssuerResult, error) {
 		out := DuplicateIssuerResult{Matches: []DuplicateIssuerMatch{}}
-		if reads == nil || !verifiedStaff(ctx) || len(input.Issuer) > 2048 || len(input.Issuer) < 8 {
+		if !verifiedStaff(ctx) || len(input.Issuer) > 2048 || len(input.Issuer) < 8 {
 			return nil, out, errIssuerUnavailable
 		}
 		value, err := reads.GetGlobalIssuerDuplicatePreflight(ctx, &gen.GetGlobalIssuerDuplicatePreflightPayload{Issuer: &input.Issuer})
@@ -237,17 +237,19 @@ func registerIssuerTools(server *mcp.Server, reads IssuerReader) {
 		Description: "Check exact tenant source and global target issuer IDs for current migration blockers and counts. Does not migrate or approve a change; repeat before any later action. Names and endpoint values are omitted.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input IssuerMigrationInput) (*mcp.CallToolResult, IssuerMigrationResult, error) {
-		if reads == nil || !verifiedStaff(ctx) || !validIssuerID(input.SourceID) || !validIssuerID(input.TargetID) || input.SourceID == input.TargetID {
+		if !verifiedStaff(ctx) || !validIssuerID(input.SourceID) || !validIssuerID(input.TargetID) || input.SourceID == input.TargetID {
 			return nil, IssuerMigrationResult{}, errIssuerUnavailable
 		}
 		value, err := reads.GetGlobalIssuerMigratePreflight(ctx, &gen.GetGlobalIssuerMigratePreflightPayload{SourceID: input.SourceID, TargetID: input.TargetID})
 		if err != nil || value == nil || len(value.EndpointMismatches) > 64 || len(value.Warnings) > 64 || len(value.ConflictingMcpServerNames) > 100 {
 			return nil, IssuerMigrationResult{}, errIssuerUnavailable
 		}
-		out := IssuerMigrationResult{SourceID: input.SourceID, TargetID: input.TargetID, CanMigrate: value.CanMigrate,
+		out := IssuerMigrationResult{
+			SourceID: input.SourceID, TargetID: input.TargetID, CanMigrate: value.CanMigrate,
 			ClientCount: value.ClientCount, ConflictingServers: len(value.ConflictingMcpServerNames),
 			EndpointMismatches: []string{}, WarningFields: []string{}, TrustedIssuerCount: value.TrustedUserSessionIssuerCount,
-			EMABindingCount: value.EmaBindingCount, TargetTenantClients: value.TargetTenantClientCount}
+			EMABindingCount: value.EmaBindingCount, TargetTenantClients: value.TargetTenantClientCount,
+		}
 		for _, field := range value.EndpointMismatches {
 			if field == nil || len(field.Field) > 80 {
 				return nil, IssuerMigrationResult{}, errIssuerUnavailable
@@ -286,7 +288,9 @@ func issuerSummary(item *gen.GlobalRemoteSessionIssuer) (IssuerSummary, bool) {
 		(item.EmaBindingCount != nil && *item.EmaBindingCount < 0) {
 		return IssuerSummary{}, false
 	}
-	return IssuerSummary{ID: item.Issuer.ID, Slug: item.Issuer.Slug, Name: item.Issuer.Name, Issuer: item.Issuer.Issuer,
+	return IssuerSummary{
+		ID: item.Issuer.ID, Slug: item.Issuer.Slug, Name: item.Issuer.Name, Issuer: item.Issuer.Issuer,
 		GlobalClients: item.GlobalClientCount, TenantClients: item.TenantClientCount,
-		TrustedIssuers: item.TrustedUserSessionIssuerCount, EMABindings: item.EmaBindingCount}, true
+		TrustedIssuers: item.TrustedUserSessionIssuerCount, EMABindings: item.EmaBindingCount,
+	}, true
 }

@@ -40,7 +40,7 @@ func (p *FileProxy) serveFile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	blob := r.URL.Query().Get("t")
-	if blob == "" || p.enc == nil {
+	if blob == "" {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}

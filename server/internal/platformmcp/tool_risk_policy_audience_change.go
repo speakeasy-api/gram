@@ -19,13 +19,8 @@ type changeRiskPolicyAudienceInput struct {
 	RemovePrincipals []string `json:"remove_principals"`
 }
 
-func registerChangeRiskPolicyAudience(reg *Registrar, catalogAvailable bool, handlers *RiskMutationHandlers) {
-	handler := unavailableRiskMutationTool[UpdateRiskPolicyToolOutput]()
-	description := "Change exact positive user/role grants on a targeted risk policy. Risk policy mutations are not enabled in this rollout."
-	if catalogAvailable && handlers != nil && handlers.Controls != nil && handlers.ChangeAudience != nil {
-		handler = handlers.ChangeAudience
-		description = "Atomically add and remove exact organization user/ROLE principal URNs on one targeted risk policy, preserving settings and unrelated grants. Read get_risk_policy first and confirm the delta. Both arrays are required (empty allowed), max 100 each, with at least one change; duplicates, overlap, already-present additions and absent removals are refused. The resulting audience must contain 1–100 principals. Everyone deltas are refused. Removal changes only explicit positive grants, not role-derived or inherited coverage, and never creates an exclusion or proves effective non-membership. For removal of the authenticated user use remove_self_from_risk_policy; do not bypass its refusal. Reuse the idempotency key only for the same confirmed request; re-read after writing."
-	}
+func registerChangeRiskPolicyAudience(reg *Registrar, handlers *RiskMutationHandlers) {
+	description := "Atomically add and remove exact organization user/ROLE principal URNs on one targeted risk policy, preserving settings and unrelated grants. Read get_risk_policy first and confirm the delta. Both arrays are required (empty allowed), max 100 each, with at least one change; duplicates, overlap, already-present additions and absent removals are refused. The resulting audience must contain 1–100 principals. Everyone deltas are refused. Removal changes only explicit positive grants, not role-derived or inherited coverage, and never creates an exclusion or proves effective non-membership. For removal of the authenticated user use remove_self_from_risk_policy; do not bypass its refusal. Reuse the idempotency key only for the same confirmed request; re-read after writing."
 	principals := func() *jsonschema.Schema {
 		return &jsonschema.Schema{Type: "array", Items: stringSchema("Exact organization user or ROLE principal URN; Everyone is not supported.", 1, 0), MaxItems: new(100), UniqueItems: true}
 	}
@@ -41,7 +36,7 @@ func registerChangeRiskPolicyAudience(reg *Registrar, catalogAvailable bool, han
 		{Properties: map[string]*jsonschema.Schema{"add_principals": {MinItems: new(1)}}},
 		{Properties: map[string]*jsonschema.Schema{"remove_principals": {MinItems: new(1)}}},
 	}
-	addTool(reg, &mcp.Tool{Meta: nil, OutputSchema: nil, Icons: nil, Name: operationChangeRiskPolicyAudience, Title: "Change Risk Policy Audience", Description: description, InputSchema: schema, Annotations: &mcp.ToolAnnotations{OpenWorldHint: nil, ReadOnlyHint: false, Title: "", DestructiveHint: new(true), IdempotentHint: true}}, ToolMeta{DiscoveryScopes: nil, Authorization: ExternalAuthorizationOrgAdmin, Audiences: []Audience{AudienceExternal}, ProjectScope: ProjectScopeExplicit}, instrumentRiskMutation(reg, operationChangeRiskPolicyAudience, handler))
+	addTool(reg, &mcp.Tool{Meta: nil, OutputSchema: nil, Icons: nil, Name: operationChangeRiskPolicyAudience, Title: "Change Risk Policy Audience", Description: description, InputSchema: schema, Annotations: &mcp.ToolAnnotations{OpenWorldHint: nil, ReadOnlyHint: false, Title: "", DestructiveHint: new(true), IdempotentHint: true}}, ToolMeta{DiscoveryScopes: nil, Authorization: ExternalAuthorizationOrgAdmin, Audiences: []Audience{AudienceExternal}, ProjectScope: ProjectScopeExplicit}, instrumentRiskMutation(reg, operationChangeRiskPolicyAudience, handlers.ChangeAudience))
 }
 
 func (s *riskPolicyMutationService) changePolicyAudienceTool(ctx context.Context, _ *mcp.CallToolRequest, raw map[string]any) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {

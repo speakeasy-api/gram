@@ -25,11 +25,8 @@ type IssuerVerificationKeys struct {
 
 // NewIssuerVerificationKeys binds a rate-limited key resolver to its durable
 // trusted-issuer cache.
-func NewIssuerVerificationKeys(keys assertioncore.VerificationKeys, cache jwks.Cache) (*IssuerVerificationKeys, error) {
-	if keys == nil || cache == nil {
-		return nil, errors.New("idjag: key resolver and cache are required")
-	}
-	return &IssuerVerificationKeys{keys: keys, cache: cache}, nil
+func NewIssuerVerificationKeys(keys assertioncore.VerificationKeys, cache jwks.Cache) *IssuerVerificationKeys {
+	return &IssuerVerificationKeys{keys: keys, cache: cache}
 }
 
 var _ assertioncore.VerificationKeys = (*IssuerVerificationKeys)(nil)

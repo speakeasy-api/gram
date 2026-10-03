@@ -31,7 +31,6 @@ const (
 	ReasonMissingAttestation   = "missing_attestation"
 	ReasonInvalidSource        = "invalid_source"
 	ReasonAttestationRejected  = "attestation_rejected"
-	ReasonVerifierUnavailable  = "verifier_unavailable"
 	ReasonHostMismatch         = "host_mismatch"
 	ReasonIdentityInvalid      = "identity_invalid"
 	ReasonIdentityRequired     = "identity_required"
@@ -59,23 +58,14 @@ type Telemetry struct {
 }
 
 func NewTelemetry(logger *slog.Logger, meterProvider metric.MeterProvider) *Telemetry {
-	if logger != nil {
-		logger = logger.With(attr.SlogComponent("network_ingress_telemetry"))
-	}
-	if meterProvider == nil {
-		return &Telemetry{
-			logger:     logger,
-			operations: nil,
-			duration:   nil,
-		}
-	}
+	logger = logger.With(attr.SlogComponent("network_ingress_telemetry"))
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/networkingress")
 	operations, err := meter.Int64Counter(
 		OperationsMetric,
 		metric.WithDescription("Private network ingress trust-boundary operations by bounded operation, result, reason, provider, and network surface."),
 		metric.WithUnit("{operation}"),
 	)
-	if err != nil && logger != nil {
+	if err != nil {
 		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(OperationsMetric), attr.SlogError(err))
 	}
 	duration, err := meter.Float64Histogram(
@@ -84,16 +74,13 @@ func NewTelemetry(logger *slog.Logger, meterProvider metric.MeterProvider) *Tele
 		metric.WithUnit("s"),
 		metric.WithExplicitBucketBoundaries(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
 	)
-	if err != nil && logger != nil {
+	if err != nil {
 		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(DurationMetric), attr.SlogError(err))
 	}
 	return &Telemetry{logger: logger, operations: operations, duration: duration}
 }
 
 func (t *Telemetry) Record(ctx context.Context, operation, result, reason, provider string, duration time.Duration) {
-	if t == nil {
-		return
-	}
 	operation, result, reason, provider = clampOperation(operation), clampResult(result), clampReason(reason), clampProvider(provider)
 	attributes := []attribute.KeyValue{
 		attr.NetworkIngressOperation(operation),
@@ -102,14 +89,10 @@ func (t *Telemetry) Record(ctx context.Context, operation, result, reason, provi
 		attr.Provider(provider),
 		attr.NetworkSurface("private"),
 	}
-	if t.operations != nil {
-		t.operations.Add(ctx, 1, metric.WithAttributes(attributes...))
-	}
-	if t.duration != nil {
-		t.duration.Record(ctx, duration.Seconds(), metric.WithAttributes(attributes...))
-	}
+	t.operations.Add(ctx, 1, metric.WithAttributes(attributes...))
+	t.duration.Record(ctx, duration.Seconds(), metric.WithAttributes(attributes...))
 	trace.SpanFromContext(ctx).SetAttributes(attributes...)
-	if t.logger != nil && result != ResultAllowed {
+	if result != ResultAllowed {
 		logAttrs := []any{
 			attr.SlogNetworkIngressOperation(operation),
 			attr.SlogNetworkIngressResult(result),
@@ -146,7 +129,7 @@ func clampResult(value string) string {
 func clampReason(value string) string {
 	switch value {
 	case ReasonNone, ReasonMissingAttestation, ReasonInvalidSource, ReasonAttestationRejected,
-		ReasonVerifierUnavailable, ReasonHostMismatch, ReasonIdentityInvalid, ReasonIdentityRequired,
+		ReasonHostMismatch, ReasonIdentityInvalid, ReasonIdentityRequired,
 		ReasonProviderUnsupported, ReasonOriginInvalid, ReasonTokenReadFailed, ReasonUpstreamFailed,
 		ReasonRateLimited, ReasonCacheHit, ReasonNegativeCacheHit, ReasonTokenReviewDenied,
 		ReasonAuthorityRejected, ReasonAuthorityUnavailable, ReasonNamespaceRejected,

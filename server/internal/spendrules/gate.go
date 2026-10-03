@@ -100,24 +100,14 @@ type Gate struct {
 	programCount atomic.Int64
 }
 
-func NewGate(logger *slog.Logger, cacheImpl cache.Cache, celEng *celenv.Engine) (*Gate, error) {
-	if celEng == nil {
-		return nil, fmt.Errorf("spend gate CEL engine is required")
-	}
-	if cacheImpl == nil {
-		// The hot-path CheckBlocked dereferences the cache on every call;
-		// a nil cache would panic there rather than failing open, so reject
-		// it at construction.
-		return nil, fmt.Errorf("spend gate cache is required")
-	}
-
+func NewGate(logger *slog.Logger, cacheImpl cache.Cache, celEng *celenv.Engine) *Gate {
 	return &Gate{
 		logger:       logger.With(attr.SlogComponent("spendrules_gate")),
 		cache:        cacheImpl,
 		celEng:       celEng,
 		programs:     sync.Map{},
 		programCount: atomic.Int64{},
-	}, nil
+	}
 }
 
 // CheckBlocked reports whether the given actor is currently blocked by a spend
@@ -126,7 +116,7 @@ func NewGate(logger *slog.Logger, cacheImpl cache.Cache, celEng *celenv.Engine) 
 // should treat them as "not blocked" (fail-open); they are returned for logging.
 func (g *Gate) CheckBlocked(ctx context.Context, organizationID, userID string) (*Block, error) {
 	actorKey := spendGateActorKey(organizationID, userID)
-	if actorKey == "" || g.celEng == nil {
+	if actorKey == "" {
 		return nil, nil
 	}
 

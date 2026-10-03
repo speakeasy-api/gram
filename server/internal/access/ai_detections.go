@@ -71,7 +71,7 @@ func (s *Service) ListAIDetections(ctx context.Context, payload *gen.ListAIDetec
 		Categories:           nil,
 		UserEmails:           userEmails,
 		ExactUserEmail:       "",
-		CanonicalIdentityOrg: s.canonicalFoldOrg(ctx, ac.ActiveOrganizationID),
+		CanonicalIdentityOrg: s.foldGate.CanonicalOrgFor(ctx, ac.ActiveOrganizationID),
 	})
 	if err != nil {
 		return nil, err
@@ -110,7 +110,7 @@ func (s *Service) ListEmployeeAIDetections(ctx context.Context, payload *gen.Lis
 		Categories:           nil,
 		UserEmails:           nil,
 		ExactUserEmail:       userEmail,
-		CanonicalIdentityOrg: s.canonicalFoldOrg(ctx, ac.ActiveOrganizationID),
+		CanonicalIdentityOrg: s.foldGate.CanonicalOrgFor(ctx, ac.ActiveOrganizationID),
 	})
 	if err != nil {
 		return nil, err
@@ -143,7 +143,7 @@ func (s *Service) ListAIDetectionUsers(ctx context.Context, payload *gen.ListAID
 		return nil, oops.E(oops.CodeBadRequest, nil, "target id is required").LogError(ctx, s.logger)
 	}
 
-	canonicalOrg := s.canonicalFoldOrg(ctx, ac.ActiveOrganizationID)
+	canonicalOrg := s.foldGate.CanonicalOrgFor(ctx, ac.ActiveOrganizationID)
 	// The target's own row comes off the same aggregation the inventory lists,
 	// so this page and the table it was opened from agree on the name, counts
 	// and access decision. Neither read depends on the other, so they run
@@ -315,7 +315,7 @@ func (s *Service) ReadAIDetections(ctx context.Context, input AIDetectionsReadIn
 		Categories:           nil,
 		UserEmails:           nil,
 		ExactUserEmail:       "",
-		CanonicalIdentityOrg: s.canonicalFoldOrg(ctx, input.OrganizationID),
+		CanonicalIdentityOrg: s.foldGate.CanonicalOrgFor(ctx, input.OrganizationID),
 	})
 	if err != nil {
 		return nil, err

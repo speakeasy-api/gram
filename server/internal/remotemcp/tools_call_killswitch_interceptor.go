@@ -41,11 +41,6 @@ func (i *ToolsCallKillswitchInterceptor) Name() string {
 }
 
 func (i *ToolsCallKillswitchInterceptor) InterceptToolsCallRequest(ctx context.Context, _ *proxy.ToolsCallRequest) error {
-	if i.checkpoint == nil {
-		i.logInfrastructureFailure(ctx, errors.New("mcp tool-execution checkpoint is unavailable"))
-		return proxy.NewKillswitchInfrastructureRejection()
-	}
-
 	disposition, err := i.checkpoint.Evaluate(ctx, i.organizationID, i.mcpServerID)
 	if err != nil {
 		i.logInfrastructureFailure(ctx, err)
@@ -70,8 +65,5 @@ func (i *ToolsCallKillswitchInterceptor) InterceptToolsCallRequest(ctx context.C
 }
 
 func (i *ToolsCallKillswitchInterceptor) logInfrastructureFailure(ctx context.Context, err error) {
-	if i.logger == nil {
-		return
-	}
 	i.logger.ErrorContext(ctx, "mcp tool-execution checkpoint failed", attr.SlogError(err))
 }

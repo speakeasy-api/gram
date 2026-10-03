@@ -3,6 +3,7 @@ package risk_analysis_test
 import (
 	"context"
 	"log"
+	"net/url"
 	"os"
 	"testing"
 
@@ -12,10 +13,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -23,7 +27,7 @@ import (
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Presidio: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, ClickHouse: true, Redis: true, Presidio: true})
 	if err != nil {
 		log.Fatalf("launch test infrastructure: %v", err)
 	}
@@ -147,4 +151,16 @@ func seedMessages(t *testing.T, conn *pgxpool.Pool, td testData, count int) []uu
 		ids = append(ids, msgID)
 	}
 	return ids
+}
+
+func newShadowMCPClient(t *testing.T, conn *pgxpool.Pool) *shadowmcp.Client {
+	t.Helper()
+	return shadowmcp.NewClient(testenv.NewLogger(t), conn, cache.NoopCache, &url.URL{Scheme: "https", Host: "app.getgram.ai"})
+}
+
+func newMCPProvenanceLookup(t *testing.T) *telemetryrepo.Queries {
+	t.Helper()
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	return telemetryrepo.New(chConn)
 }

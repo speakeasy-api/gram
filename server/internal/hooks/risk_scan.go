@@ -67,10 +67,6 @@ func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents
 	ctx, span := s.tracer.Start(ctx, "hooks.scanHookEventForEnforcement")
 	defer span.End()
 
-	if s.riskScanner == nil {
-		return nil
-	}
-
 	// Empty body + tool attribution still matters for tool-scoped policies; only
 	// skip when there is neither.
 	if text == "" && toolName == "" {
@@ -132,6 +128,7 @@ func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents
 
 	return result
 }
+
 func hookRiskOperationID(ev hookevents.Event, messageType message.Type, toolName string) string {
 	var token string
 	switch payload := ev.Raw.(type) {
@@ -226,7 +223,7 @@ func (s *Service) warnAcknowledged(ctx context.Context, ev hookevents.Event, sca
 	ctx, span := s.tracer.Start(ctx, "hooks.warnAcknowledged")
 	defer span.End()
 
-	if s.riskScanner == nil || scanResult == nil {
+	if scanResult == nil {
 		return false
 	}
 	return s.riskScanner.HasAcknowledgedChallenge(ctx, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, toolName, scanResult.CallFingerprint)
@@ -246,14 +243,14 @@ func (s *Service) warnAcknowledged(ctx context.Context, ev hookevents.Event, sca
 // permissionDecisionReason vs systemMessage; Cursor AgentMessage vs
 // UserMessage) should route each accordingly.
 //
-// ok=false means an ack link could not be produced (missing site URL / cache /
+// ok=false means an ack link could not be produced (ack state not stored, or no
 // user id) — the caller MUST fall back to a plain block (fail-safe): a warn must
 // never silently allow.
 func (s *Service) warnDenyReason(ctx context.Context, ev hookevents.Event, scanResult *risk.ScanResult, toolName string) (agentReason, userReason string, ok bool) {
 	ctx, span := s.tracer.Start(ctx, "hooks.warnDenyReason")
 	defer span.End()
 
-	if s.siteURL == nil || s.cache == nil || ev.Context.User.ID == "" {
+	if ev.Context.User.ID == "" {
 		return "", "", false
 	}
 	// Record the challenge (log-safe fields only — never the matched value).

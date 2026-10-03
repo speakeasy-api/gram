@@ -25,12 +25,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-var (
-	infra *testenv.Environment
-)
+var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true, Temporal: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -89,6 +87,8 @@ func newTestProjectsService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
+	temporalEnv, _ := infra.NewTemporalEnv(t)
+
 	svc := projects.NewService(
 		logger,
 		tracerProvider,
@@ -102,7 +102,7 @@ func newTestProjectsService(t *testing.T) (context.Context, *testInstance) {
 			workos.NewStubClient()),
 
 		auditLogger,
-		nil,
+		temporalEnv,
 		false,
 	)
 

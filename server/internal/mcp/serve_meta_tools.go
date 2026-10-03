@@ -262,10 +262,7 @@ func (s *Service) handleMetaExecuteToolCall(
 		Params:  params,
 	}
 
-	// The authoritative route fronts a meta MCP, not the hosted member's
-	// mcp_server. Meta resources are outside the mcp_tool_execution contract,
-	// so do not report the synthetic member dispatch as hosted coverage.
-	body, err := handleToolsCall(ctx, logger, s.metrics, nil, s.authz, s.guardianPolicy, s.db, s.env,
+	body, err := handleToolsCall(ctx, logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env,
 		inputs, syntheticReq, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache,
 		s.telemLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
 		s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
@@ -460,16 +457,20 @@ func (s *Service) buildMemberDispatch(
 		mcpServerID:           &serverID,
 		// Meta members keep their toolset-keyed per-tool checks; the meta
 		// surface's RBAC model is outside the wrapper-governance cutover.
-		wrapperRBACResourceID:    "",
-		wrapperIsPublic:          nil,
-		metaMcpServerID:          gate.metaServerID.String(),
-		clientInfoScope:          metaClientInfoScope(gate.metaServerID),
-		skipProxyTools:           true,
-		toolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		toolsetIsPublic:          new(toolset.McpIsPublic),
-		tags:                     nil,
-		protocolVersion:          gate.protocolVersion,
-		identityCoverageRecorded: false,
+		wrapperRBACResourceID: "",
+		wrapperIsPublic:       nil,
+		metaMcpServerID:       gate.metaServerID.String(),
+		clientInfoScope:       metaClientInfoScope(gate.metaServerID),
+		skipProxyTools:        true,
+		toolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		toolsetIsPublic:       new(toolset.McpIsPublic),
+		tags:                  nil,
+		protocolVersion:       gate.protocolVersion,
+		// The authoritative route fronts a meta MCP, not the hosted member's
+		// mcp_server. Meta resources are outside the mcp_tool_execution
+		// contract, so the synthetic member dispatch never reports hosted
+		// coverage.
+		identityCoverageRecorded: true,
 		toolSelection:            gate.toolSelection,
 	}
 	return toolset, inputs, nil

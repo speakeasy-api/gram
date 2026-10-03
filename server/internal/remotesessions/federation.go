@@ -94,10 +94,7 @@ func (m *ChallengeManager) LoadFederatedProvider(ctx context.Context, organizati
 	if err != nil || !validIssuerDiscoveryURL(issuerURL) || issuerURL.RawQuery != "" || issuerURL.Fragment != "" {
 		return nil, ErrFederatedConfiguration
 	}
-	doer, err := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, row.RemoteSessionIssuer.TunneledMcpServerID)
-	if err != nil {
-		return nil, ErrFederatedConfiguration
-	}
+	doer := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, row.RemoteSessionIssuer.TunneledMcpServerID)
 	// OIDC Discovery uses the issuer path, without OAuth metadata fallbacks or
 	// the package's legacy trailing-slash issuer normalization.
 	doc, discoveryErr := m.loadFederatedMetadata(ctx, organizationID, row.RemoteSessionIssuer, doer)
@@ -327,7 +324,7 @@ func (m *ChallengeManager) verifyFederatedIdentity(ctx context.Context, p *Feder
 }
 
 func (m *ChallengeManager) verifyFederatedIdentityMode(ctx context.Context, p *FederatedProvider, tok tokenResponse, code, nonce, subject string, doer httpDoer, refresh bool) (*FederatedIdentity, error) {
-	if tok.IDToken == "" || (!refresh && nonce == "") || m.idTokens == nil {
+	if tok.IDToken == "" || (!refresh && nonce == "") {
 		return nil, ErrFederatedIdentity
 	}
 	algorithms, err := acceptedIDTokenAlgorithms(p.metadata.IDTokenSigningAlgValuesSupported)
@@ -522,9 +519,5 @@ func (m *ChallengeManager) federatedTokenClient(p *FederatedProvider) (httpDoer,
 	if err != nil {
 		return nil, tokenEndpointClientAuth{}, ErrFederatedConfiguration
 	}
-	doer, err := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, p.issuer.TunneledMcpServerID)
-	if err != nil {
-		return nil, tokenEndpointClientAuth{}, ErrFederatedConfiguration
-	}
-	return doer, tokenEndpointClientAuth{Method: method, RemoteSessionClientID: p.client.ID, OrganizationID: p.organizationID, JSONWebKeySetID: p.client.JsonWebKeySetID.UUID, ClientID: p.client.ClientID, ClientSecret: secret, AssertionAudience: audience, AssertionSigner: m.assertions}, nil
+	return upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, p.issuer.TunneledMcpServerID), tokenEndpointClientAuth{Method: method, RemoteSessionClientID: p.client.ID, OrganizationID: p.organizationID, JSONWebKeySetID: p.client.JsonWebKeySetID.UUID, ClientID: p.client.ClientID, ClientSecret: secret, AssertionAudience: audience, AssertionSigner: m.assertions}, nil
 }

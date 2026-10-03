@@ -7,8 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
-	"github.com/speakeasy-api/gram/server/internal/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestRuntimeContent_MarshalTextAsBareString(t *testing.T) {
@@ -103,8 +101,9 @@ func TestRuntimeContent_ImagePartMissingURLDetected(t *testing.T) {
 
 func historyContentCore(t *testing.T) *ServiceCore {
 	t.Helper()
-	logger := testenv.NewLogger(t)
-	return NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger())
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_history_content")
+	require.NoError(t, err)
+	return newTestServiceCore(t, conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil})
 }
 
 func historyContentRow(content string, contentRaw []byte) chatrepo.ChatMessage {

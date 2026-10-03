@@ -80,6 +80,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	networkIngressPins NetworkIngressPinChecker,
+	publicationRequests OrganizationPublicationRequester,
 	expectedTargetCNAME string,
 	expectedARecords []netip.Addr,
 ) *Service {
@@ -94,7 +95,7 @@ func NewService(
 		temporalClient:      temporal,
 		audit:               auditLogger,
 		networkIngressPins:  networkIngressPins,
-		publicationRequests: nil,
+		publicationRequests: publicationRequests,
 		expectedTargetCNAME: expectedTargetCNAME,
 		expectedARecords:    expectedARecords,
 	}
@@ -102,11 +103,6 @@ func NewService(
 
 type OrganizationPublicationRequester interface {
 	Organization(context.Context, pgx.Tx, string, string) error
-}
-
-func (s *Service) WithPublicationRequests(requester OrganizationPublicationRequester) *Service {
-	s.publicationRequests = requester
-	return s
 }
 
 // domainView builds the API view of a custom domain, annotated with the DNS
@@ -611,7 +607,7 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 		return nil, oops.E(oops.CodeUnexpected, err, "log root endpoint update").LogError(ctx, s.logger)
 	}
 
-	if s.publicationRequests != nil && beforeRoute.RootMcpEndpointID != targetID {
+	if beforeRoute.RootMcpEndpointID != targetID {
 		if err := s.publicationRequests.Organization(ctx, dbtx, authCtx.ActiveOrganizationID, authCtx.UserID); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "enqueue root endpoint publication").LogError(ctx, s.logger)
 		}
@@ -720,9 +716,6 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 		return oops.E(oops.CodeUnexpected, err, "lock custom domain for deletion").LogError(ctx, s.logger)
 	}
 
-	if s.networkIngressPins == nil {
-		return oops.E(oops.CodeUnexpected, nil, "network ingress pin checker is unavailable").LogError(ctx, s.logger)
-	}
 	pinned, err := s.networkIngressPins(ctx, dbtx, authCtx.ActiveOrganizationID, domain.ID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "check custom domain network ingress pin").LogError(ctx, s.logger)
@@ -788,7 +781,7 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 		return oops.E(oops.CodeUnexpected, err, "failed to create custom domain deletion audit log").LogError(ctx, s.logger)
 	}
 
-	if s.publicationRequests != nil && len(deletedEndpoints) > 0 {
+	if len(deletedEndpoints) > 0 {
 		if err := s.publicationRequests.Organization(ctx, dbtx, authCtx.ActiveOrganizationID, authCtx.UserID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "enqueue custom domain publication").LogError(ctx, s.logger)
 		}

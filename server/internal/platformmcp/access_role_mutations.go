@@ -105,7 +105,6 @@ type UpdateMCPAccessRoleOutput struct {
 
 // AccessRoleMutationBackend matches the transaction-scoped access manager API.
 type AccessRoleMutationBackend interface {
-	MutationReady() bool
 	GetRoleByIDTx(context.Context, pgx.Tx, string, string) (*accessgen.Role, error)
 	CreateRoleTx(context.Context, pgx.Tx, string, string, access.RoleAuditActor, *accessgen.CreateRolePayload) (access.RoleCreateResult, access.RoleReconciliation, error)
 	UpdateRoleTx(context.Context, pgx.Tx, string, string, access.RoleAuditActor, *accessgen.UpdateRolePayload) (access.RoleUpdateResult, access.RoleReconciliation, error)
@@ -145,27 +144,17 @@ type AccessRoleMutationService struct {
 	versionKey []byte
 }
 
-func NewAccessRoleMutationService(reads *AccessReadService, flags feature.Provider, budget OperationBudget, keyMaterial string, backend AccessRoleMutationBackend) (*AccessRoleMutationService, error) {
-	if reads == nil || reads.db == nil || reads.references == nil || reads.now == nil || flags == nil || !budget.valid() || keyMaterial == "" || backend == nil || !backend.MutationReady() {
-		return nil, ErrAccessRoleMutationUnavailable
-	}
+func NewAccessRoleMutationService(reads *AccessReadService, flags feature.Provider, budget OperationBudget, keyMaterial string, backend AccessRoleMutationBackend) *AccessRoleMutationService {
 	key := sha256.Sum256([]byte("platform-mcp-access-role-version:" + keyMaterial))
 	return &AccessRoleMutationService{
 		reads: reads, flags: flags, budget: budget, backend: backend,
 		receipts: NewAccessRoleMutationReceiptStore(reads.db), versionKey: key[:],
-	}, nil
-}
-
-func (s *AccessRoleMutationService) valid() bool {
-	return s != nil && s.reads != nil && s.reads.valid() && s.flags != nil && s.budget.valid() && s.backend != nil && s.receipts != nil && len(s.versionKey) == sha256.Size
+	}
 }
 
 func (s *AccessRoleMutationService) Create(ctx context.Context, principal Principal, input CreateMCPAccessRoleInput) (CreateMCPAccessRoleOutput, error) {
 	if !input.Confirmed {
 		return CreateMCPAccessRoleOutput{}, accessRoleMutationConfirmationRequired()
-	}
-	if !s.valid() {
-		return CreateMCPAccessRoleOutput{}, accessRoleMutationUnavailable(nil)
 	}
 	name, description, idempotencyKey, err := normalizeAccessRoleIdentity(input.Name, input.Description, input.IdempotencyKey)
 	if err != nil {
@@ -208,9 +197,6 @@ func (s *AccessRoleMutationService) Create(ctx context.Context, principal Princi
 func (s *AccessRoleMutationService) Update(ctx context.Context, principal Principal, input UpdateMCPAccessRoleInput) (UpdateMCPAccessRoleOutput, error) {
 	if !input.Confirmed {
 		return UpdateMCPAccessRoleOutput{}, accessRoleMutationConfirmationRequired()
-	}
-	if !s.valid() {
-		return UpdateMCPAccessRoleOutput{}, accessRoleMutationUnavailable(nil)
 	}
 	input.ProjectID = strings.TrimSpace(input.ProjectID)
 	input.RoleReference = strings.TrimSpace(input.RoleReference)
@@ -472,7 +458,7 @@ func (s *AccessRoleMutationService) roleVersion(state *accessgen.Role) (string, 
 }
 
 func accessRoleVersion(versionKey []byte, state *accessgen.Role) (string, error) {
-	if state == nil || len(versionKey) != sha256.Size || uuid.Validate(state.ID) != nil || state.Name == "" {
+	if state == nil || uuid.Validate(state.ID) != nil || state.Name == "" {
 		return "", ErrAccessRoleMutationInvalid
 	}
 	canonical := canonicalAccessRoleVersion{RoleID: state.ID, Name: state.Name, Description: state.Description, Grants: canonicalAccessRoleGrants(state.Grants)}
@@ -568,7 +554,7 @@ func overlappingAccessRoleRules(add, remove []normalizedMCPAccessRoleRule) bool 
 }
 
 func accessMemberRoleVersion(versionKey []byte, memberID string, roleIDs []string) (string, error) {
-	if len(versionKey) != sha256.Size || strings.TrimSpace(memberID) == "" {
+	if strings.TrimSpace(memberID) == "" {
 		return "", ErrAccessRoleMutationInvalid
 	}
 	canonicalRoles := sortedStrings(roleIDs)

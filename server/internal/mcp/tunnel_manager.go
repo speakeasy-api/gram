@@ -84,14 +84,7 @@ func (m *tunnelManager) buildProxy(
 	options ...remotemcp.BuildOption,
 ) (*proxy.Proxy, error) {
 	mcpServer := params.MCPServer
-	if m.proxyManager == nil {
-		return nil, oops.E(oops.CodeUnexpected, nil, "remote MCP proxy manager is unavailable").LogError(ctx, logger)
-	}
-
 	tunnelID := mcpServer.TunneledMcpServerID.UUID.String()
-	if m.routes == nil {
-		return nil, oops.E(oops.CodeGatewayError, nil, "tunnel route store unavailable").LogError(ctx, logger)
-	}
 
 	candidates, err := m.routes.Candidates(ctx, tunnelID)
 	if err != nil {

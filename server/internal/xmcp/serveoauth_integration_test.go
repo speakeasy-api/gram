@@ -36,12 +36,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 // TestAttach_OAuthFullDance_PublicRemoteBackend drives register → authorize
@@ -338,7 +340,7 @@ func buildXmcpChallengeManagerForTest(
 	policy, err := guardian.NewUnsafePolicy(ti.tracerProvider, []string{})
 	require.NoError(t, err)
 
-	mgr := remotesessions.NewChallengeManager(ti.logger, ti.tracerProvider, testenv.NewMeterProvider(t), ti.conn, ti.enc, policy, nil, ti.cacheAdapter, ti.serverURL)
+	mgr := remotesessions.NewChallengeManager(ti.logger, ti.tracerProvider, testenv.NewMeterProvider(t), ti.conn, ti.enc, policy, tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", policy, nil), ti.cacheAdapter, ti.serverURL)
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](
 		ti.logger.With(attr.SlogCacheNamespace("authn_challenge")),
 		ti.cacheAdapter,

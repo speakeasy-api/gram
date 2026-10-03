@@ -54,9 +54,6 @@ func NewReportMetrics(provider metric.MeterProvider, logger *slog.Logger) *Repor
 }
 
 func (m *ReportMetrics) RecordReport(ctx context.Context, outcome ReportOutcome) {
-	if m == nil || m.evaluations == nil {
-		return
-	}
 	switch outcome {
 	case ReportEmptyAudience, ReportNotRequired, ReportCovered, ReportApprovalRequired, ReportInvalidTarget, ReportUnavailable:
 	default:

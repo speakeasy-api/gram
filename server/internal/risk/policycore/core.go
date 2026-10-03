@@ -60,24 +60,23 @@ type MCPPrincipal struct {
 // Core provides transport-neutral policy reads and projections. Authorization
 // remains the responsibility of the calling service.
 type Core struct {
-	db              repo.DBTX
-	queries         *repo.Queries
-	mutations       *MutationDependencies
+	db      repo.DBTX
+	queries *repo.Queries
+}
+
+func New(db repo.DBTX) *Core {
+	return &Core{db: db, queries: repo.New(db)}
+}
+
+// MCPPolicies matches enabled policies against MCP traffic, resolving tool
+// annotations for annotation-scoped policies.
+type MCPPolicies struct {
+	*Core
 	toolAnnotations ToolAnnotationsResolver
 }
 
-func New(db repo.DBTX, mutations ...MutationDependencies) *Core {
-	core := &Core{db: db, queries: repo.New(db), mutations: nil, toolAnnotations: nil}
-	if len(mutations) > 0 {
-		core.mutations = &mutations[0]
-	}
-	return core
-}
-
-func NewWithToolAnnotations(db repo.DBTX, resolver ToolAnnotationsResolver, mutations ...MutationDependencies) *Core {
-	core := New(db, mutations...)
-	core.toolAnnotations = resolver
-	return core
+func NewMCPPolicies(db repo.DBTX, resolver ToolAnnotationsResolver) *MCPPolicies {
+	return &MCPPolicies{Core: New(db), toolAnnotations: resolver}
 }
 
 // PageCursor identifies one policy in deterministic keyset order.
@@ -116,7 +115,7 @@ func (c *Core) List(ctx context.Context, organizationID string, projectID uuid.U
 // ListEnabledForMCP returns enabled MCP-scoped policies that apply to one
 // concrete MCP target. Policies without an MCP scope are excluded. Gateway
 // membership is resolved on every persisted-server call.
-func (c *Core) ListEnabledForMCP(
+func (c *MCPPolicies) ListEnabledForMCP(
 	ctx context.Context,
 	organizationID string,
 	projectID uuid.UUID,
@@ -166,7 +165,7 @@ func (c *Core) ListEnabledForMCP(
 	}
 
 	annotations := target.ToolAnnotations
-	if annotations == nil && !target.PlatformToolset && needsAnnotations && target.ToolName != "" && c.toolAnnotations != nil {
+	if annotations == nil && !target.PlatformToolset && needsAnnotations && target.ToolName != "" {
 		annotations, err = c.toolAnnotations.ToolAnnotations(ctx, target.ServerID, projectID, target.ToolName)
 		if err != nil {
 			return nil, fmt.Errorf("resolve MCP tool annotations: %w", err)

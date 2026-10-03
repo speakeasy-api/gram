@@ -112,7 +112,7 @@ func TestOrganizationActivityFailsClosed(t *testing.T) {
 	require.NotContains(t, body, longCursor)
 }
 
-func TestOrganizationActivityPageAndContextAvailability(t *testing.T) {
+func TestOrganizationActivityPageAndContext(t *testing.T) {
 	t.Parallel()
 	reads := testActivityReads()
 	reads.result.Logs = make([]*gen.AuditLog, maxOrganizationActivityPage)
@@ -127,6 +127,4 @@ func TestOrganizationActivityPageAndContextAvailability(t *testing.T) {
 
 	_, body, _ := callStaffReadTool(t, reads, "get_admin_context", `{}`)
 	require.Contains(t, body, "inspect paginated organization activity (without snapshots or metadata)")
-	_, body, _ = callStaffReadTool(t, &recordingOrganizationReader{}, "get_admin_context", `{}`)
-	require.NotContains(t, body, "inspect paginated organization activity")
 }

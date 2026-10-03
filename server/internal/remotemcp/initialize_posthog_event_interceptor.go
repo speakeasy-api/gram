@@ -52,7 +52,7 @@ func (i *InitializePostHogEventInterceptor) Name() string {
 // Always returns nil — the interceptor emits the event as a side-effect;
 // PostHog enqueue failures are logged but do not surface to the user.
 func (i *InitializePostHogEventInterceptor) InterceptInitializeRequest(ctx context.Context, init *proxy.InitializeRequest) error {
-	if i.posthog == nil || init == nil || init.UserRequest == nil {
+	if init == nil || init.UserRequest == nil {
 		return nil
 	}
 

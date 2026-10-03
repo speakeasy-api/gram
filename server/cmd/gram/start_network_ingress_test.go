@@ -61,17 +61,15 @@ func TestNetworkIngressAdmissionReady(t *testing.T) {
 	t.Parallel()
 
 	for _, tt := range []struct {
-		name               string
-		reconcileQueue     string
-		temporalQueue      string
-		lifecycleReady     bool
-		temporalConfigured bool
-		want               bool
+		name           string
+		reconcileQueue string
+		temporalQueue  string
+		lifecycleReady bool
+		want           bool
 	}{
-		{name: "dedicated worker", reconcileQueue: "network-ingress", temporalQueue: "main", lifecycleReady: true, temporalConfigured: true, want: true},
-		{name: "shared queue starts fail closed", reconcileQueue: "main", temporalQueue: "main", lifecycleReady: true, temporalConfigured: true, want: false},
-		{name: "missing temporal", reconcileQueue: "network-ingress", temporalQueue: "main", lifecycleReady: true},
-		{name: "lifecycle disabled", reconcileQueue: "network-ingress", temporalQueue: "main", temporalConfigured: true},
+		{name: "dedicated worker", reconcileQueue: "network-ingress", temporalQueue: "main", lifecycleReady: true, want: true},
+		{name: "shared queue starts fail closed", reconcileQueue: "main", temporalQueue: "main", lifecycleReady: true, want: false},
+		{name: "lifecycle disabled", reconcileQueue: "network-ingress", temporalQueue: "main"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -79,7 +77,6 @@ func TestNetworkIngressAdmissionReady(t *testing.T) {
 				tt.reconcileQueue,
 				tt.temporalQueue,
 				tt.lifecycleReady,
-				tt.temporalConfigured,
 			))
 		})
 	}

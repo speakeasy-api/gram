@@ -88,16 +88,13 @@ func (i *ToolsListMCPConnectFilterInterceptor) Name() string {
 // A response carrying a JSON-RPC error rather than a result is left alone: it
 // holds no inventory to filter or label. Every other response is labelled
 // caller-varying before returning, including the ones with no filtering left
-// to do, since an upstream that offered no tools and a nil engine both still
-// describe what this caller may reach. An empty filtered result is a valid
-// outcome, meaning the caller can reach nothing in this server, and commits
-// via [proxy.ToolsListResponse.SetPrivateTools] as an empty array.
+// to do, since an upstream that offered no tools still describes what this
+// caller may reach. An empty filtered result is a valid outcome, meaning the
+// caller can reach nothing in this server, and commits via
+// [proxy.ToolsListResponse.SetPrivateTools] as an empty array.
 func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx context.Context, list *proxy.ToolsListResponse) error {
 	if list == nil || list.Result == nil {
 		return nil
-	}
-	if i.authz == nil {
-		return markCallerVarying(list)
 	}
 	tools := list.Result.Tools
 	if len(tools) == 0 {

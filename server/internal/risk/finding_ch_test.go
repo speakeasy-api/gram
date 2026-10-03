@@ -104,10 +104,9 @@ func newCHWriterWithMeter(t *testing.T, mp metric.MeterProvider) (*risk.FindingC
 	ins := &fakeCHInserter{}
 	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, testPepperVersion, map[string][]byte{testPepperVersion: testPepperKey}))
 	require.NoError(t, err)
-	// nil exclusions DB: these unit-test findings carry non-UUID project/policy
-	// ids, so exclusion resolution fails-open before any DB access. Exclusion
-	// filtering against a real DB is covered by the integration test below.
-	w := risk.NewFindingCHWriter(testenv.NewLogger(t), nil, mp, ins, fp)
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	w := risk.NewFindingCHWriter(testenv.NewLogger(t), conn, mp, ins, fp)
 	return w, ins
 }
 

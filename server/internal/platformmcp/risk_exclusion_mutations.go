@@ -24,7 +24,7 @@ const maxRiskExclusionMatchRunes = 256
 
 type riskExclusionMutationService struct {
 	controls   *RiskMutationControls
-	exclusions *exclusioncore.Core
+	exclusions *exclusioncore.MutationCore
 	catalog    policycatalog.Catalog
 }
 
@@ -62,7 +62,7 @@ type preparedRiskExclusionCreate struct {
 	params     riskrepo.CreateRiskExclusionParams
 }
 
-func newRiskExclusionMutationService(controls *RiskMutationControls, exclusions *exclusioncore.Core, catalog policycatalog.Catalog) *riskExclusionMutationService {
+func newRiskExclusionMutationService(controls *RiskMutationControls, exclusions *exclusioncore.MutationCore, catalog policycatalog.Catalog) *riskExclusionMutationService {
 	return &riskExclusionMutationService{controls: controls, exclusions: exclusions, catalog: catalog}
 }
 

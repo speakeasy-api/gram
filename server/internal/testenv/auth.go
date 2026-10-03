@@ -23,12 +23,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
+
+// NewGrowthEmitter returns a growth signals emitter enriched from db whose
+// PostHog client sends nothing.
+func NewGrowthEmitter(t *testing.T, logger *slog.Logger, db *pgxpool.Pool) *growthsignals.Emitter {
+	t.Helper()
+	return growthsignals.NewEmitter(logger, posthog.New(t.Context(), logger, "", "", ""), growthsignals.NewDatabaseEnricher(db), DefaultSiteURL(t))
+}
 
 // NewTestManager creates a sessions.Manager backed by a mock WorkOS httptest.Server.
 // It also creates an identity.Resolver internally and wires it into the session
@@ -60,12 +69,12 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 		srv.URL,
 		"test-client-id",
 		idpClient,
-		nil, // no WorkOS client in tests
+		workos.NewStubClient(),
 		orgRepo.New(db),
 		userRepo.New(db),
 		fakePylon,
 		fakePosthog,
-		nil,
+		NewGrowthEmitter(t, logger, db),
 		suffix,
 	)
 

@@ -171,8 +171,4 @@ func TestStaffAuthenticatorFailsClosedOnDependencyErrors(t *testing.T) {
 	verifier.err = errors.New("Google unavailable")
 	_, err = auth.Authenticate(t.Context(), token)
 	require.ErrorIs(t, err, ErrAuthUnavailable)
-	verifier.err = nil
-	auth.cipher = nil
-	_, err = auth.Authenticate(t.Context(), token)
-	require.ErrorIs(t, err, ErrAuthUnavailable)
 }

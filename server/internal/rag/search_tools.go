@@ -63,10 +63,6 @@ func NewToolsetVectorStore(
 	db *pgxpool.Pool,
 	chatClient openrouter.CompletionClient,
 ) *ToolsetVectorStore {
-	if db == nil {
-		return nil
-	}
-
 	return &ToolsetVectorStore{
 		logger:         logger.With(attr.SlogComponent("toolset_vector_store")),
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/rag"),

@@ -88,15 +88,6 @@ func TestAdmitWorkloadIdentity_EmptyPolicyAdmitsNothing(t *testing.T) {
 	require.ErrorIs(t, fixture.admit(t, newStaticWorkloadIdentityLookup()), errWorkloadNotAdmitted)
 }
 
-// An unwired policy reads as "no admissions", never as "no check to run".
-func TestAdmitWorkloadIdentity_UnconfiguredLookupAdmitsNothing(t *testing.T) {
-	t.Parallel()
-
-	fixture := newWorkloadIdentityFixture()
-
-	require.ErrorIs(t, fixture.admit(t, nil), errWorkloadNotAdmitted)
-}
-
 // Varying one field at a time proves no part of the key is ignored.
 func TestAdmitWorkloadIdentity_EveryPartOfTheKeyMustMatch(t *testing.T) {
 	t.Parallel()

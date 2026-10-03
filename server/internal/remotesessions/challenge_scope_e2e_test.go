@@ -73,7 +73,7 @@ func TestBuildAuthorizationUrl_ScopeResolution(t *testing.T) {
 				ti.conn,
 				enc,
 				policy,
-				nil,
+				ti.tunnels,
 				cache.NoopCache,
 				mustURL(t, "http://localhost"),
 			)
@@ -170,7 +170,7 @@ func TestBuildAuthorizationUrl_OrgLevelIssuer(t *testing.T) {
 		ti.conn,
 		enc,
 		policy,
-		nil,
+		ti.tunnels,
 		cache.NoopCache,
 		mustURL(t, "http://localhost"),
 	)

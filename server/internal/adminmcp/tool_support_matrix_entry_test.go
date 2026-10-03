@@ -93,12 +93,6 @@ func TestGetSupportMatrixEntryFailsClosed(t *testing.T) {
 		require.Nil(t, reader.input)
 		requireSupportMatrixEntryError(t, result, errSupportMatrixUnavailable.Error())
 	})
-	t.Run("nil reader", func(t *testing.T) {
-		t.Parallel()
-		result := callSupportMatrixEntryTool(t, nil, input, true)
-		require.True(t, result.IsError)
-		requireSupportMatrixEntryError(t, result, errSupportMatrixUnavailable.Error())
-	})
 	for _, tc := range []struct {
 		name   string
 		mutate func(*gen.SupportMatrix)

@@ -21,6 +21,7 @@ import (
 	cdrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -156,6 +157,7 @@ func newTestCustomDomainsService(t *testing.T) (context.Context, *serviceTestIns
 				CustomDomainID: uuid.NullUUID{UUID: customDomainID, Valid: true},
 			})
 		},
+		plugins.PublicationRequests{Enabled: false},
 		"cname.example.net.",
 		nil,
 	)

@@ -46,8 +46,7 @@ type postMessageResponse struct {
 	Ts      string `json:"ts"`
 }
 
-// NewSendMessageTool returns the Slack send-message tool. router may be nil,
-// in which case route_replies "self" is rejected.
+// NewSendMessageTool returns the Slack send-message tool.
 func NewSendMessageTool(httpClient *guardian.HTTPClient, router ThreadRouter) core.PlatformToolExecutor {
 	readOnly := false
 	destructive := false
@@ -170,9 +169,6 @@ func routeRepliesToAssistant(ctx context.Context, router ThreadRouter, thread bg
 }
 
 func callerAssistantThread(ctx context.Context, router ThreadRouter, env toolconfig.ToolCallEnv) (bgtriggers.AssistantThread, error) {
-	if router == nil {
-		return bgtriggers.AssistantThread{}, fmt.Errorf("route_replies %q is not available here", routeRepliesSelf)
-	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return bgtriggers.AssistantThread{}, fmt.Errorf("route_replies %q requires a project", routeRepliesSelf)

@@ -59,17 +59,8 @@ type UserSearchReader interface {
 // sensitive budget, volume cap, auditor) because every page carries masked
 // identities and person references exactly as list_mcp_usage_users does.
 func (s *DiagnosticsService) WithUserSearch(reader UserSearchReader) *DiagnosticsService {
-	if s != nil && reader != nil {
-		s.userSearch = reader
-	}
+	s.userSearch = reader
 	return s
-}
-
-// userSearchValid reports whether search_users and get_user_metrics_summary
-// are servable. Postgres is not needed: both read ClickHouse alone.
-func (s *DiagnosticsService) userSearchValid() bool {
-	return s != nil && s.userSearch != nil && s.telemetry != nil && s.reader != nil && s.references != nil &&
-		s.sensitiveBudget.valid() && s.volume.valid() && s.auditor != nil && s.now != nil
 }
 
 // SearchUsersInput asks which people a partial identity matches in one
@@ -116,9 +107,6 @@ type userSearch struct {
 }
 
 func (s *DiagnosticsService) SearchUsers(ctx context.Context, principal Principal, input SearchUsersInput) (SearchUsersOutput, error) {
-	if !s.userSearchValid() {
-		return SearchUsersOutput{}, ErrUnavailable
-	}
 	search, err := normalizeUserSearch(input)
 	if err != nil {
 		return SearchUsersOutput{}, err
@@ -525,9 +513,6 @@ type GetUserMetricsSummaryOutput struct {
 }
 
 func (s *DiagnosticsService) GetUserMetricsSummary(ctx context.Context, principal Principal, input GetUserMetricsSummaryInput) (GetUserMetricsSummaryOutput, error) {
-	if !s.userSearchValid() {
-		return GetUserMetricsSummaryOutput{}, ErrUnavailable
-	}
 	projectID := strings.TrimSpace(input.ProjectID)
 	mcpID := strings.TrimSpace(input.MCPID)
 	if projectID == "" || strings.TrimSpace(input.UserReference) == "" {

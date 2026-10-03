@@ -33,7 +33,7 @@ func (i *PlatformMCPSelectedUseInterceptor) Name() string {
 }
 
 func (i *PlatformMCPSelectedUseInterceptor) InterceptToolsCallResponse(ctx context.Context, call *proxy.ToolsCallResponse) error {
-	if i == nil || i.recorder == nil || call == nil || call.Request == nil || call.Request.Params == nil || call.Result == nil || call.Result.IsError {
+	if call == nil || call.Request == nil || call.Request.Params == nil || call.Result == nil || call.Result.IsError {
 		return nil
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

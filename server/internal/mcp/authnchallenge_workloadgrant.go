@@ -75,39 +75,21 @@ type workloadGrant struct {
 }
 
 // newWorkloadGrant assembles the grant over the database and the shared Redis
-// client, or returns nil when there is no Redis. The replay guard cannot
-// promise single use without a shared store, so a surface built without one
-// refuses the grant rather than accepting replays.
+// client, whose replay guard enforces single use.
 func newWorkloadGrant(db *pgxpool.Pool, redisClient *redis.Client, policy *guardian.Policy, meterProvider metric.MeterProvider, logger *slog.Logger) *workloadGrant {
-	if redisClient == nil {
-		return nil
-	}
 	store := ratelimit.NewRedisStore(redisClient)
-	keys, err := jwks.NewKeyResolver(
+	keys := jwks.NewKeyResolver(
 		jwks.NewResolver(policy, meterProvider, logger),
 		jwks.NewMemoryCache(),
 		ratelimit.New(store, "workload_assertion_jwks_refresh", workloadKeyRefreshRate),
 		ratelimit.New(store, "workload_assertion_jwks_fetch", workloadKeyFetchRate),
 		logger,
 	)
-	if err != nil {
-		logger.ErrorContext(context.Background(), "workload assertion key resolver unavailable, the workload grant will be refused", attr.SlogError(err))
-		return nil
-	}
-	guard, err := replay.NewRedisGuard(redisClient, "workload_assertion_jti", assertioncore.ReplayHoldFor(workloadAssertionMaxLifetime))
-	if err != nil {
-		logger.ErrorContext(context.Background(), "workload assertion replay guard unavailable, the workload grant will be refused", attr.SlogError(err))
-		return nil
-	}
-	verifier, err := workload.NewVerifier(keys, guard)
-	if err != nil {
-		logger.ErrorContext(context.Background(), "workload assertion verifier unavailable, the workload grant will be refused", attr.SlogError(err))
-		return nil
-	}
+	guard := replay.NewRedisGuard(redisClient, "workload_assertion_jti", assertioncore.ReplayHoldFor(workloadAssertionMaxLifetime))
 	return &workloadGrant{
 		issuers:    newWorkloadIssuerAdmission(workloadIssuerStoreLookup(db), newWorkloadIssuerLookupBudget(redisClient, meterProvider)),
 		identities: workloadIdentityStoreLookup(db),
-		verifier:   verifier,
+		verifier:   workload.NewVerifier(keys, guard),
 	}
 }
 
@@ -295,9 +277,6 @@ func admitWorkloadAssertion(
 // which is where a grant is accepted or refused; metadata is advisory, and
 // clients cache it for their whole process lifetime anyway.
 func (s *Service) workloadAssertionGrantAdvertised(endpoint *ResolvedMcpEndpoint) bool {
-	if s.workloadGrant == nil {
-		return false
-	}
 	_, ok := agentAuthorizationTarget(endpoint)
 	return ok
 }
@@ -322,13 +301,6 @@ func (s *Service) handleWorkloadAssertionGrant(
 ) error {
 	presented := presentedWorkload{issuerURL: "", subject: "", issuerID: uuid.Nil}
 
-	// A deployment without the grant's dependencies answers as it did before
-	// the grant existed. Reaching the workload path at all still takes the
-	// agent authorization rollout below, a trusted issuer row and an admitted
-	// subject.
-	if s.workloadGrant == nil {
-		return refuseClientlessTokenGrant(ctx, w, r, creds, logger)
-	}
 	// A workload acts through its assigned agent's policy, which the MCP side
 	// honours only under the agent authorization rollout. Minting without it
 	// would issue sessions refused on first use.

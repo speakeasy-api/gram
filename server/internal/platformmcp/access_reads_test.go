@@ -137,8 +137,7 @@ func TestRoleAuthzGrantsSkipsLegacyMalformedSelectors(t *testing.T) {
 func TestAccessReferencesAreBoundByKindPrincipalAndExpiry(t *testing.T) {
 	t.Parallel()
 
-	codec, err := newSubjectReferenceCodec("access-read-test-key")
-	require.NoError(t, err)
+	codec := newSubjectReferenceCodec("access-read-test-key")
 	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
 	principal := Principal{UserID: "user-a", OrganizationID: "org-a", ConnectionID: "connection-a", Generation: "generation-a"}
 	reference, err := codec.Encode(principal, subjectKindAccessMember, "internal-user-id", now)

@@ -7,6 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type stubNetworkIngressProvisioner struct{}
@@ -97,10 +99,9 @@ func TestNetworkIngressProvisionerRegistry(t *testing.T) {
 	t.Parallel()
 
 	provisioner := stubNetworkIngressProvisioner{}
-	registry, err := NewNetworkIngressProvisionerRegistry(map[string]NetworkIngressProvisioner{
+	registry := NewNetworkIngressProvisionerRegistry(map[string]NetworkIngressProvisioner{
 		NetworkIngressProviderTailscale: provisioner,
-	}, nil, nil)
-	require.NoError(t, err)
+	}, testenv.NewLogger(t), NewNetworkIngressMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)))
 
 	got, err := registry.Provisioner(NetworkIngressProviderTailscale)
 	require.NoError(t, err)
@@ -108,9 +109,10 @@ func TestNetworkIngressProvisionerRegistry(t *testing.T) {
 	_, err = registry.Provisioner("unknown")
 	require.ErrorIs(t, err, ErrNetworkIngressUnsupportedProvider)
 
-	_, err = NewNetworkIngressProvisionerRegistry(map[string]NetworkIngressProvisioner{"": provisioner}, nil, nil)
-	require.ErrorIs(t, err, ErrNetworkIngressInvalidDesiredState)
-	_, err = NewNetworkIngressProvisionerRegistry(map[string]NetworkIngressProvisioner{"nil": nil}, nil, nil)
-	require.ErrorIs(t, err, ErrNetworkIngressInvalidDesiredState)
-
+	require.Panics(t, func() {
+		NewNetworkIngressProvisionerRegistry(map[string]NetworkIngressProvisioner{"": provisioner}, testenv.NewLogger(t), NewNetworkIngressMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)))
+	})
+	require.Panics(t, func() {
+		NewNetworkIngressProvisionerRegistry(map[string]NetworkIngressProvisioner{"nil": nil}, testenv.NewLogger(t), NewNetworkIngressMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)))
+	})
 }

@@ -69,10 +69,6 @@ func (s *Service) ensureHookChat(
 	projectID uuid.UUID,
 	title string,
 ) error {
-	if queries == nil {
-		queries = s.repo
-	}
-
 	existing, err := queries.GetChatProjectID(ctx, chatID)
 	switch {
 	case err == nil:
@@ -375,7 +371,7 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, ev *hookevents.Use
 		}
 		return constructBlockResponse(payload.HookEventName, reason), nil
 	}
-	if s.riskScanner != nil && ev.Prompt != "" && ev.ConversationID != "" {
+	if ev.Prompt != "" && ev.ConversationID != "" {
 		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
 			// Warn (challenge) defers to the tool call: Claude Code can only show
 			// a native [y/n] confirmation at PreToolUse, not at prompt submit.
@@ -505,10 +501,6 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 }
 
 func (s *Service) sessionCaptureEnabled(ctx context.Context, metadata *SessionMetadata, projectID uuid.UUID) (bool, error) {
-	if s.productFeatures == nil {
-		return false, nil
-	}
-
 	// Check if session capture is enabled for this org
 	enabled, err := s.productFeatures.IsFeatureEnabled(ctx, metadata.GramOrgID, productfeatures.FeatureSessionCapture)
 	if err != nil {
@@ -703,7 +695,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	}
 
 	// Schedule chat title generation for assistant messages
-	if role == "assistant" && s.chatTitleGenerator != nil {
+	if role == "assistant" {
 		if err := s.chatTitleGenerator.ScheduleChatTitleGeneration(
 			context.WithoutCancel(ctx),
 			chatID.String(),
@@ -722,10 +714,6 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 // shape as persistToolCallEvent. projectID is the value persistConversationEvent
 // already parsed, so this never re-parses it.
 func (s *Service) logConversationTelemetry(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, projectID uuid.UUID) {
-	if s.telemetryLogger == nil {
-		return
-	}
-
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  time.Now(),
 		ToolInfo:   telemetryToolInfo(metadata, projectID, ""),

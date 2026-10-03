@@ -43,9 +43,6 @@ func NewAuthorize(logger *slog.Logger, meterProvider metric.MeterProvider) *Auth
 
 // Record counts one authorize-URL attempt.
 func (m *Authorize) Record(ctx context.Context, issuerURL string, pkceSupport PKCESupportState) {
-	if m == nil || m.flows == nil {
-		return
-	}
 	m.flows.Add(ctx, 1, metric.WithAttributes(
 		attr.OAuthIssuer(issuerURL),
 		attr.PKCESupport(pkceSupport),

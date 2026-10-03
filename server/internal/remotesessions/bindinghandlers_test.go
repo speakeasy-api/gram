@@ -46,15 +46,14 @@ func TestBindingsRequireOrdinaryHuman(t *testing.T) {
 	apiAuth := *auth
 	apiAuth.APIKeyID = uuid.NewString()
 	tests := map[string]context.Context{
-		"missing":                 t.Context(),
-		"attributed-only":         contextvalues.SetAuthContext(t.Context(), auth),
-		"api-key":                 contextvalues.WithValidatedGramSession(t.Context(), &apiAuth, false),
-		"support":                 contextvalues.WithValidatedSupportSession(ordinary, auth),
-		"impersonated":            contextvalues.WithValidatedGramSession(t.Context(), auth, true),
-		"unconfigured-authorizer": ordinary,
-		"oauth":                   contextvalues.SetOAuthClientID(ordinary, "oauth-client"),
-		"assistant":               contextvalues.SetAssistantPrincipal(ordinary, contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()}),
-		"principal credential":    contextvalues.WithPrincipalCredentialAuthorization(ordinary, auth, urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()), contextvalues.PrincipalCredential{}),
+		"missing":              t.Context(),
+		"attributed-only":      contextvalues.SetAuthContext(t.Context(), auth),
+		"api-key":              contextvalues.WithValidatedGramSession(t.Context(), &apiAuth, false),
+		"support":              contextvalues.WithValidatedSupportSession(ordinary, auth),
+		"impersonated":         contextvalues.WithValidatedGramSession(t.Context(), auth, true),
+		"oauth":                contextvalues.SetOAuthClientID(ordinary, "oauth-client"),
+		"assistant":            contextvalues.SetAssistantPrincipal(ordinary, contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()}),
+		"principal credential": contextvalues.WithPrincipalCredentialAuthorization(ordinary, auth, urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()), contextvalues.PrincipalCredential{}),
 	}
 	for name, ctx := range tests {
 		t.Run(name, func(t *testing.T) {

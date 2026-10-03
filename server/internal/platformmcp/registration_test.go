@@ -73,14 +73,6 @@ func TestOperationReceiptFromRowPreservesRegistrationAssociation(t *testing.T) {
 	require.Equal(t, receiptStatusPending, receipt.Status)
 }
 
-func TestNewRegistrationStoreRequiresDatabase(t *testing.T) {
-	t.Parallel()
-
-	store, err := NewRegistrationStore(nil)
-	require.ErrorIs(t, err, ErrRegistrationInvalid)
-	require.Nil(t, store)
-}
-
 func TestPlatformMCPEndpointSlugStaysWithinDatabaseCharacterLimit(t *testing.T) {
 	t.Parallel()
 

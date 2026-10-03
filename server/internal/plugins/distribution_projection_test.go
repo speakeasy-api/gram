@@ -2,6 +2,8 @@ package plugins_test
 
 import (
 	"encoding/json"
+	"testing"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
@@ -12,7 +14,6 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 //nolint:paralleltest,tparallel // Complete reads before the parent changes the shared plugin assignments.

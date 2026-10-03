@@ -63,17 +63,10 @@ type Service struct {
 	foldGate CanonicalFoldGate
 }
 
-// canonicalFoldOrg resolves the org id to fold under. A nil gate means no
-// caller wired the rollout flag in, which fails closed: no fold.
-func (s *Service) canonicalFoldOrg(ctx context.Context, orgID string) string {
-	if s.foldGate == nil {
-		return ""
-	}
-	return s.foldGate.CanonicalOrgFor(ctx, orgID)
-}
-
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
+var (
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
+)
 
 func NewService(
 	logger *slog.Logger,
@@ -1588,28 +1581,25 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	// pre-filled grant dialog for the requester and scope. Resolve an MCP's
 	// project from the tenant-qualified resource rather than trusting browser
 	// state or a client-supplied project id.
-	manageAccessLink := ""
-	if s.siteURL != nil {
-		accessURL := s.siteURL.JoinPath(org.Slug, "access", "roles")
-		q := url.Values{}
-		q.Set("grant_user", ac.UserID)
-		q.Set("scope", payload.Scope)
-		if payload.ResourceID != nil && *payload.ResourceID != "" {
-			q.Set("resource_id", *payload.ResourceID)
-			if strings.HasPrefix(payload.Scope, "mcp:") {
-				projectID, resolveErr := s.resourceProjectID(ctx, ac.ActiveOrganizationID, *payload.ResourceID)
-				if resolveErr != nil {
-					logger.WarnContext(ctx, "could not resolve MCP project for access request link",
-						attr.SlogError(resolveErr),
-					)
-				} else {
-					q.Set("project_id", projectID)
-				}
+	accessURL := s.siteURL.JoinPath(org.Slug, "access", "roles")
+	q := url.Values{}
+	q.Set("grant_user", ac.UserID)
+	q.Set("scope", payload.Scope)
+	if payload.ResourceID != nil && *payload.ResourceID != "" {
+		q.Set("resource_id", *payload.ResourceID)
+		if strings.HasPrefix(payload.Scope, "mcp:") {
+			projectID, resolveErr := s.resourceProjectID(ctx, ac.ActiveOrganizationID, *payload.ResourceID)
+			if resolveErr != nil {
+				logger.WarnContext(ctx, "could not resolve MCP project for access request link",
+					attr.SlogError(resolveErr),
+				)
+			} else {
+				q.Set("project_id", projectID)
 			}
 		}
-		accessURL.RawQuery = q.Encode()
-		manageAccessLink = accessURL.String()
 	}
+	accessURL.RawQuery = q.Encode()
+	manageAccessLink := accessURL.String()
 
 	tmpl := email.AccessRequest{
 		RequesterName:    conv.Default(requester.DisplayName, requester.Email),

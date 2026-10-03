@@ -5,13 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -91,8 +89,7 @@ func testRiskReadService(t *testing.T, projects riskProjectResolver, policies *s
 	fingerprint, err := policycatalog.Fingerprint(catalog)
 	require.NoError(t, err)
 	cursor := newRiskCursorCodec("test-key")
-	versions, err := newRiskVersionCodec("test-key")
-	require.NoError(t, err)
+	versions := newRiskVersionCodec("test-key")
 	return &RiskReadService{
 		projects: projects, exclusions: exclusions, loadPolicyPage: policies.loadPage,
 		cursor: cursor, catalog: catalog, catalogFingerprint: fingerprint,
@@ -318,110 +315,4 @@ func TestRiskPolicyGetDistinguishesNotFoundFromInfrastructureFailure(t *testing.
 	_, err = service.GetPolicy(t.Context(), testRiskPrincipal("user"), input)
 	require.ErrorIs(t, err, infrastructureErr)
 	require.NotErrorIs(t, err, ErrRiskReadNotFound)
-}
-
-func TestUnavailableRiskToolRegistrationSurvivesCatalogFailure(t *testing.T) {
-	t.Parallel()
-
-	server := mcp.NewServer(&mcp.Implementation{Name: "risk-unavailable-test", Version: "0.0.1"}, nil)
-	reg := newRegistrar(server)
-	buildCalls := 0
-	require.NotPanics(t, func() {
-		registerUnavailableRiskToolsWithCatalog(reg, func() (policycatalog.Catalog, error) {
-			buildCalls++
-			return policycatalog.Catalog{}, errors.New("catalog unavailable")
-		})
-	})
-	require.Equal(t, 1, buildCalls)
-	require.Len(t, reg.Descriptors(), 11, "three reads, six policy/exclusion writes, two finding writes")
-	for _, name := range []string{operationMarkRiskFindingsFalsePositive, operationUnmarkRiskFindingsFalsePositive} {
-		_, err := descriptorByName(t, reg, name).Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","finding_ids":["`+uuid.NewString()+`"],"confirmed":true,"idempotency_key":"key"}`))
-		var refusal *ToolRefusalError
-		require.ErrorAs(t, err, &refusal, name)
-		require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`, name)
-	}
-
-	create := descriptorByName(t, reg, "create_risk_policy")
-	_, err := create.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","policy_type":"standard","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key"}`))
-	var refusal *ToolRefusalError
-	require.ErrorAs(t, err, &refusal)
-	require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`)
-
-	_, err = create.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","policy_type":"standard","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key","unknown":true}`))
-	require.ErrorContains(t, err, "arguments do not match the tool schema")
-	_, err = create.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","policy_type":"standard","name":"policy","enabled":true,"sources":["`+strings.Repeat("x", 257)+`"],"idempotency_key":"key"}`))
-	require.ErrorContains(t, err, "arguments do not match the tool schema")
-
-	for _, test := range []struct {
-		name      string
-		arguments string
-	}{
-		{name: "prompt policy branch", arguments: `{"project_slug":"project","policy_type":"prompt_based","name":"policy","enabled":true,"prompt":"instruction","idempotency_key":"key"}`},
-		{name: "policy update patch", arguments: `{"project_slug":"project","policy_id":"11111111-1111-4111-8111-111111111111","expected_version":"version","idempotency_key":"key","patch":{"action":"catalog-unavailable-value","sources":["catalog-unavailable-value"]}}`},
-		{name: "source exclusion branch", arguments: `{"project_slug":"project","match_type":"source","match_value":"catalog-unavailable-value","enabled":true,"rule_id_filter":"catalog-unavailable-value","idempotency_key":"key"}`},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			toolName := map[string]string{"prompt policy branch": "create_risk_policy", "policy update patch": "update_risk_policy", "source exclusion branch": "create_risk_exclusion"}[test.name]
-			_, err := descriptorByName(t, reg, toolName).Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(test.arguments))
-			var refusal *ToolRefusalError
-			require.ErrorAs(t, err, &refusal)
-			require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`)
-		})
-	}
-}
-
-func TestRiskToolRegistrationAndStableStubs(t *testing.T) {
-	t.Parallel()
-
-	server := mcp.NewServer(&mcp.Implementation{Name: "risk-test", Version: "0.0.1"}, nil)
-	reg := newRegistrar(server)
-	registerUnavailableRiskTools(reg)
-
-	wanted := map[string]ProjectScope{
-		"list_risk_policies": ProjectScopeDefaultable, "get_risk_policy": ProjectScopeDefaultable, "list_risk_exclusions": ProjectScopeDefaultable, "get_risk_analysis_status": ProjectScopeDefaultable,
-		"change_risk_policy_audience": ProjectScopeExplicit, "remove_self_from_risk_policy": ProjectScopeExplicit, "create_risk_policy": ProjectScopeExplicit, "update_risk_policy": ProjectScopeExplicit, "create_risk_exclusion": ProjectScopeExplicit, "update_risk_exclusion": ProjectScopeExplicit,
-		"mark_risk_findings_false_positive": ProjectScopeExplicit, "unmark_risk_findings_false_positive": ProjectScopeExplicit,
-	}
-	require.Len(t, reg.Descriptors(), len(wanted))
-	for _, descriptor := range reg.Descriptors() {
-		require.Equal(t, wanted[descriptor.Name], descriptor.Meta.ProjectScope, descriptor.Name)
-		if descriptor.Name == operationRemoveSelfFromRiskPolicy || descriptor.Name == "change_risk_policy_audience" {
-			require.Equal(t, []Audience{AudienceExternal}, descriptor.Meta.Audiences)
-		} else {
-			require.ElementsMatch(t, bothAudiences, descriptor.Meta.Audiences, descriptor.Name)
-		}
-		require.NotEmpty(t, descriptor.InputSchema, descriptor.Name)
-		if strings.HasPrefix(descriptor.Name, "list_") || strings.HasPrefix(descriptor.Name, "get_") {
-			require.NotNil(t, descriptor.Annotations)
-			require.True(t, descriptor.Annotations.ReadOnlyHint)
-		}
-	}
-
-	listPolicies := descriptorByName(t, reg, "list_risk_policies")
-	_, err := listPolicies.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_id":"11111111-1111-4111-8111-111111111111","project_slug":"project"}`))
-	require.ErrorContains(t, err, "arguments do not match the tool schema")
-
-	createPolicy := descriptorByName(t, reg, "create_risk_policy")
-	_, err = createPolicy.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","policy_type":"standard","name":"policy","enabled":true,"sources":["presidio"],"presidio_entities":["not-pinned"],"idempotency_key":"key"}`))
-	require.ErrorContains(t, err, "arguments do not match the tool schema")
-	domains := make([]string, 51)
-	for i := range domains {
-		domains[i] = fmt.Sprintf("domain-%d.example", i)
-	}
-	payload, err := json.Marshal(map[string]any{"project_slug": "project", "policy_type": "standard", "name": "policy", "enabled": true, "sources": []string{"gitleaks"}, "approved_email_domains": domains, "idempotency_key": "key"})
-	require.NoError(t, err)
-	_, err = createPolicy.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), payload)
-	require.ErrorContains(t, err, "arguments do not match the tool schema")
-	updatePolicy := descriptorByName(t, reg, "update_risk_policy")
-	require.Contains(t, updatePolicy.Description, "MCP-scoped policies support flag and block actions only.")
-	require.Contains(t, string(updatePolicy.InputSchema), "MCP-scoped policies support flag and block only.")
-
-	create := descriptorByName(t, reg, "create_risk_exclusion")
-	_, err = create.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","match_type":"regex","match_value":"x","enabled":true,"idempotency_key":"key"}`))
-	require.ErrorContains(t, err, "arguments do not match the tool schema")
-	_, err = create.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","match_type":"exact","match_value":"x","enabled":true,"idempotency_key":"key"}`))
-	var refusal *ToolRefusalError
-	require.ErrorAs(t, err, &refusal)
-	require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`)
 }

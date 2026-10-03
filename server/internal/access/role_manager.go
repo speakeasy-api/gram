@@ -69,12 +69,6 @@ func NewRoleManager(logger *slog.Logger, db *pgxpool.Pool, roles RoleProvider, a
 	}
 }
 
-// MutationReady reports whether this manager has every dependency required for
-// role writes and post-commit WorkOS reconciliation.
-func (r *RoleManager) MutationReady() bool {
-	return r != nil && r.db != nil && r.logger != nil && r.roles != nil && r.audit != nil
-}
-
 // ListRoles returns active roles for an organization from local records and enriches them with local grants and member counts.
 func (r *RoleManager) ListRoles(ctx context.Context, gramOrgID string) (*gen.ListRolesResult, error) {
 	rows, err := repo.New(r.db).ListActiveOrganizationRoles(ctx, gramOrgID)
@@ -1149,7 +1143,7 @@ func (r *RoleManager) CurrentMemberRoleReconciliationTx(ctx context.Context, tx 
 
 // ReconcileMemberRoles starts a bounded, detached desired-state WorkOS sync.
 func (r *RoleManager) ReconcileMemberRoles(ctx context.Context, reconciliation MemberRoleReconciliation) {
-	if r == nil || r.roles == nil || reconciliation.membershipID == "" {
+	if reconciliation.membershipID == "" {
 		return
 	}
 	r.runWorkOSSyncs(ctx, []workosSync{r.memberRoleSync(reconciliation)})
@@ -1620,7 +1614,7 @@ func (r *RoleManager) ReconcileRole(ctx context.Context, reconciliation RoleReco
 // local transaction commits. Platform MCP calls it for fresh writes and exact
 // receipt replays so a transient provider failure can converge on retry.
 func (r *RoleManager) ReconcileRoleIdentity(ctx context.Context, workosOrgID, slug, name, description string, create bool) {
-	if r == nil || r.roles == nil || workosOrgID == "" || slug == "" || name == "" {
+	if workosOrgID == "" || slug == "" || name == "" {
 		return
 	}
 	r.runWorkOSSyncs(ctx, []workosSync{func(ctx context.Context) {

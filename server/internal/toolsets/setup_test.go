@@ -30,13 +30,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/externalmcptest"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functionstest"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
@@ -45,9 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
-var (
-	infra *testenv.Environment
-)
+var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, Temporal: true, ClickHouse: true})
@@ -107,16 +108,26 @@ func newTestToolsetsService(t *testing.T, policies ...*guardian.Policy) (context
 	auditLogger := audit.NewLogger()
 	f := &feature.InMemory{}
 
-	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient, auditLogger))
-	t.Cleanup(func() {
-		worker.Stop()
-	})
-	require.NoError(t, worker.Start(), "start temporal worker")
-
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
+
+	worker, err := background.NewDeploymentProcessingWorker(temporalEnv, logger, tracerProvider, meterProvider, background.DeploymentProcessingDeps{
+		GuardianPolicy:    guardianPolicy,
+		DB:                conn,
+		FeatureProvider:   f,
+		AssetStorage:      assetStorage,
+		EncryptionClient:  enc,
+		FunctionsDeployer: funcs,
+		MCPRegistryClient: mcpRegistryClient,
+		BillingRepository: billingClient,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		worker.Stop()
+	})
+	require.NoError(t, worker.Start(), "start temporal worker")
 
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
@@ -126,8 +137,11 @@ func newTestToolsetsService(t *testing.T, policies ...*guardian.Policy) (context
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, false)
-	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, authzEngine, auditLogger)
+	svc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, temporalEnv, false)
+	catalogValidator, err := mcpregistry.LoadValidator()
+	require.NoError(t, err)
+	catalog := externalmcp.NewCatalogService(conn, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(conn, catalogValidator)), f)
+	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), authzEngine, auditLogger, catalog)
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
 	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine)
 
@@ -206,27 +220,34 @@ func newTestToolsetsServiceWithGitHubPublishing(t *testing.T) (context.Context, 
 		Org:            "test-org",
 		InstallationID: 12345,
 	}
-	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai", f)
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
 
-	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider,
-		background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient, auditLogger),
-		&background.WorkerOptions{PluginPublisher: pluginPublisher},
-	)
+	pluginPublisher := plugins.NewPublisher(logger, conn, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, ghConfig, "local", "https://app.getgram.ai", f, admission.NewGuard(f, admission.NewReportMetrics(meterProvider, logger)))
+
+	billingClient := billing.NewStubClient(logger, tracerProvider)
+	worker, err := background.NewDeploymentProcessingWorker(temporalEnv, logger, tracerProvider, meterProvider, background.DeploymentProcessingDeps{
+		GuardianPolicy:    guardianPolicy,
+		DB:                conn,
+		FeatureProvider:   f,
+		AssetStorage:      assetStorage,
+		EncryptionClient:  enc,
+		FunctionsDeployer: funcs,
+		MCPRegistryClient: mcpRegistryClient,
+		BillingRepository: billingClient,
+	})
+	require.NoError(t, err)
+	worker.RegisterPluginPublishing(pluginPublisher)
 	t.Cleanup(func() {
 		worker.Stop()
 	})
 	require.NoError(t, worker.Start(), "start temporal worker")
 
-	redisClient, err := infra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-
-	billingClient := billing.NewStubClient(logger, tracerProvider)
-
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, true)
+	svc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, temporalEnv, true)
 
 	return ctx, &testInstance{
 		service:        svc,

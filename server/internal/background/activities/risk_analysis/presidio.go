@@ -477,9 +477,7 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 			attr.SlogRiskScanTextSize(originalSize),
 			attr.SlogRiskScanBatchIndex(idx),
 		)
-		if p.truncations != nil {
-			p.truncations.Add(ctx, 1)
-		}
+		p.truncations.Add(ctx, 1)
 	}
 
 	stokenCount, countErr := p.stokenCodec.Count(ctx, text)
@@ -502,9 +500,7 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 		}
 
 		lastErr = err
-		if p.attemptFailures != nil {
-			p.attemptFailures.Add(ctx, 1)
-		}
+		p.attemptFailures.Add(ctx, 1)
 
 		// Bail only when the outer ctx is cancelled — inner per-request
 		// timeouts (analyzeRequestTimeout) and other transient errors
@@ -535,9 +531,7 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 		attr.SlogRiskScanTextSize(len(text)),
 		attr.SlogRiskScanBatchIndex(idx),
 	)
-	if p.deadLetters != nil {
-		p.deadLetters.Add(ctx, 1)
-	}
+	p.deadLetters.Add(ctx, 1)
 
 	ruleID, description := DescribePresidioDeadLetter()
 	return scanners.Result{
@@ -592,9 +586,7 @@ func (p *PresidioClient) acquireThrottle(ctx context.Context, cost int64, onProg
 	start := time.Now()
 	for {
 		if p.throttle.TryAcquire(cost) {
-			if p.throttleWaitDuration != nil {
-				p.throttleWaitDuration.Record(ctx, time.Since(start).Seconds())
-			}
+			p.throttleWaitDuration.Record(ctx, time.Since(start).Seconds())
 			return nil
 		}
 		if onProgress != nil {
@@ -611,14 +603,10 @@ func (p *PresidioClient) analyze(ctx context.Context, text string, entities []st
 	start := time.Now()
 	defer func() {
 		duration := time.Since(start)
-		if p.requestDuration != nil {
-			p.requestDuration.Record(ctx, duration.Seconds())
-		}
+		p.requestDuration.Record(ctx, duration.Seconds())
 		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
-			if p.requestFailures != nil {
-				p.requestFailures.Add(ctx, 1)
-			}
+			p.requestFailures.Add(ctx, 1)
 		}
 		span.End()
 	}()
@@ -633,9 +621,7 @@ func (p *PresidioClient) analyze(ctx context.Context, text string, entities []st
 		return nil, fmt.Errorf("marshal presidio request: %w", err)
 	}
 
-	if p.requestSize != nil {
-		p.requestSize.Record(ctx, int64(len(body)))
-	}
+	p.requestSize.Record(ctx, int64(len(body)))
 
 	reqCtx, cancel := context.WithTimeout(ctx, p.requestTimeout)
 	defer cancel()

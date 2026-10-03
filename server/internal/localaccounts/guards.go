@@ -365,9 +365,6 @@ func Resolve(ctx context.Context, pool Queryer, c Config) (Target, error) {
 	if _, err := validateConfig(c); err != nil {
 		return Target{}, err
 	}
-	if pool == nil {
-		return Target{}, errors.New("local database pool is required")
-	}
 	id, err := selectedUser(ctx, c)
 	if err != nil {
 		return Target{}, err

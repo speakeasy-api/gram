@@ -113,7 +113,7 @@ func TestUploadFileTool_RejectsBadBase64(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewUploadFileTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callUploadFile,
 	}
 

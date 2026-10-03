@@ -27,9 +27,7 @@ func (a *AnalyzeBatch) scanPresidio(ctx context.Context, args AnalyzeBatchArgs, 
 	}
 	if err != nil {
 		a.logger.WarnContext(ctx, "presidio scan returned errors, using partial results", attr.SlogError(err))
-		if a.metrics.presidioScanSkipped != nil {
-			a.metrics.presidioScanSkipped.Add(ctx, 1)
-		}
+		a.metrics.presidioScanSkipped.Add(ctx, 1)
 		err = fmt.Errorf("analyze batch: %w", err)
 	}
 	return results, err

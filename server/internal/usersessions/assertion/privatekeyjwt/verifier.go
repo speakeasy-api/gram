@@ -3,11 +3,11 @@ package privatekeyjwt
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/go-jose/go-jose/v4/jwt"
 
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/replay"
@@ -62,17 +62,9 @@ type Verifier struct {
 // request time would notice: the guard would report success and the replay
 // would be accepted. Checked here so the mismatch is a wiring error, not a
 // silent weakening.
-func NewVerifier(keys *jwks.KeyResolver, guard *replay.Guard) (*Verifier, error) {
-	if keys == nil {
-		return nil, errors.New("privatekeyjwt: Verifier requires a key resolver")
-	}
-	if guard == nil {
-		return nil, errors.New("privatekeyjwt: Verifier requires a replay guard")
-	}
-	if guard.MaxHold() < DefaultMaxReplayHold {
-		return nil, fmt.Errorf("privatekeyjwt: replay guard holds identifiers for %s, but assertions stay acceptable for up to %s", guard.MaxHold(), DefaultMaxReplayHold)
-	}
-	return &Verifier{keys: keys, guard: guard}, nil
+func NewVerifier(keys *jwks.KeyResolver, guard *replay.Guard) *Verifier {
+	inv.Require("privatekeyjwt verifier", "replay guard holds identifiers for as long as assertions stay acceptable", guard.MaxHold() >= DefaultMaxReplayHold)
+	return &Verifier{keys: keys, guard: guard}
 }
 
 // Verify authenticates a client from its assertion, returning what was

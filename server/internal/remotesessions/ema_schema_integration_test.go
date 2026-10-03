@@ -1,8 +1,9 @@
 package remotesessions_test
 
 import (
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"testing"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -37,12 +38,16 @@ func TestEMASchema_ClientIssuerConstraint(t *testing.T) {
 	otherClient := preparationManualClient(t, ctx, ti, *auth.ProjectID, otherIssuer, "other-client")
 	_, err := ti.service.PrepareIdentityChaining(ctx, in)
 	require.NoError(t, err)
-	b, err := q.GetEMABinding(ctx, repo.GetEMABindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID,
-		UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource})
+	b, err := q.GetEMABinding(ctx, repo.GetEMABindingParams{
+		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID,
+		UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource,
+	})
 	require.NoError(t, err)
-	_, err = q.SetEMABinding(ctx, repo.SetEMABindingParams{ID: b.ID, ProjectID: b.ProjectID, OrganizationID: b.OrganizationID,
+	_, err = q.SetEMABinding(ctx, repo.SetEMABindingParams{
+		ID: b.ID, ProjectID: b.ProjectID, OrganizationID: b.OrganizationID,
 		ExpectedGeneration: b.Generation, Generation: b.Generation + 1, State: b.State, GrantSource: b.GrantSource,
-		RequestedScopes: b.RequestedScopes, RemoteSessionClientID: conv.ToNullUUID(otherClient)})
+		RequestedScopes: b.RequestedScopes, RemoteSessionClientID: conv.ToNullUUID(otherClient),
+	})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 

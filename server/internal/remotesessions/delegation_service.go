@@ -15,10 +15,12 @@ import (
 
 // Keep the existing consumer API stable; the delegation package owns all
 // retained secrets, storage operations and refresh state transitions.
-type DelegationBinding = delegation.Binding
-type DelegationAssertion = delegation.Assertion
-type DelegationAuthorizer = delegation.Authorizer
-type DelegationOfflineStatus = delegation.OfflineStatus
+type (
+	DelegationBinding       = delegation.Binding
+	DelegationAssertion     = delegation.Assertion
+	DelegationAuthorizer    = delegation.Authorizer
+	DelegationOfflineStatus = delegation.OfflineStatus
+)
 
 var (
 	ErrDelegationTemporary        = delegation.ErrTemporary
@@ -29,7 +31,7 @@ var (
 type DelegationService struct{ service *delegation.Service }
 
 func NewDelegationService(db *pgxpool.Pool, enc *encryption.Client, manager *ChallengeManager) *DelegationService {
-	return &DelegationService{service: delegation.New(db, enc, delegationDependencies(manager.LoadFederatedDelegationProvider, manager.LoadFederatedProvider, manager.RefreshFederatedIdentity, nil))}
+	return &DelegationService{service: delegation.New(db, enc, delegationDependencies(manager.LoadFederatedDelegationProvider, manager.LoadFederatedProvider, manager.RefreshFederatedIdentity, time.Now))}
 }
 
 func delegationDependencies(binding, provider func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error), refresh func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error), now func() time.Time) delegation.Dependencies {
@@ -61,12 +63,14 @@ func delegationDependencies(binding, provider func(context.Context, string, uuid
 		return &delegation.RefreshResult{Identity: identity, Credentials: result.Credentials}, delegationRefreshError(err)
 	}}
 }
+
 func delegationConfigurationError(err error) error {
 	if errors.Is(err, ErrFederatedConfiguration) {
 		return ErrDelegationConfiguration
 	}
 	return err
 }
+
 func delegationRefreshError(err error) error {
 	if err == nil {
 		return nil
@@ -104,6 +108,7 @@ func (p delegationProvider) OfflineConfigurationHash() string { return p.p.Offli
 func (p delegationProvider) OfflineRequested() bool {
 	return slices.Contains(p.p.client.Scope, "offline_access")
 }
+
 func (p delegationProvider) OfflineSupported() bool {
 	policy, err := p.p.OfflinePolicy()
 	return err == nil && policy.Enabled
@@ -119,18 +124,21 @@ func (i delegationIdentity) DiscardCredentials()   { i.i.DiscardCredentials() }
 func (i delegationIdentity) WithCredentials(consume func(delegation.Credentials) error) error {
 	return i.i.WithCredentials(func(c EphemeralFederatedCredentials) error { return consume(c) })
 }
+
 func (s *DelegationService) RetainVerifiedLogin(ctx context.Context, p *FederatedProvider, human string, i *FederatedIdentity, requested bool) error {
 	if p == nil || i == nil {
 		return ErrDelegationConfiguration
 	}
 	return s.service.RetainVerifiedLogin(ctx, delegationProvider{p}, human, delegationIdentity{i}, requested) //nolint:wrapcheck // Compatibility facade preserves the public sentinel error and message contract.
 }
+
 func (s *DelegationService) OfflineStatus(ctx context.Context, p *FederatedProvider, human string) (DelegationOfflineStatus, error) {
 	if p == nil {
 		return DelegationOfflineStatus{}, ErrDelegationConfiguration
 	}
 	return s.service.OfflineStatus(ctx, delegationProvider{p}, human) //nolint:wrapcheck // Compatibility facade preserves the public sentinel error and message contract.
 }
+
 func (s *DelegationService) RecordOfflineRefusal(ctx context.Context, p *FederatedProvider, human string) error {
 	if p == nil {
 		return ErrDelegationConfiguration
@@ -154,6 +162,7 @@ type delegationAuthority struct{ authority DelegationAuthorizer }
 func (a delegationAuthority) AuthorizeDelegation(ctx context.Context, b DelegationBinding) error {
 	return delegationConfigurationError(a.authority.AuthorizeDelegation(ctx, b))
 }
+
 func (s *DelegationService) Resolve(ctx context.Context, b DelegationBinding, authority DelegationAuthorizer) (DelegationAssertion, error) {
 	if authority != nil {
 		authority = delegationAuthority{authority}
@@ -169,6 +178,7 @@ func (s *DelegationService) Check(ctx context.Context, b DelegationBinding, auth
 	}
 	return s.service.Check(ctx, b, authority) //nolint:wrapcheck // Compatibility facade preserves the public sentinel error and message contract.
 }
+
 func (s *DelegationService) Revoke(ctx context.Context, b DelegationBinding, authority DelegationAuthorizer) error {
 	if authority != nil {
 		authority = delegationAuthority{authority}

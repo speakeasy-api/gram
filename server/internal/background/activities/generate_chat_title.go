@@ -174,10 +174,6 @@ func truncateRunes(s string, maxRunes int) string {
 }
 
 func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID string, conversationContext string) string {
-	if g.chatClient == nil {
-		return defaultChatTitle
-	}
-
 	titleCtx, cancel := context.WithTimeout(ctx, titleCompletionTimeout)
 	defer cancel()
 

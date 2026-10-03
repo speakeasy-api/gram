@@ -36,10 +36,6 @@ func (s *ListRiskPolicies) Descriptor() core.ToolDescriptor {
 }
 
 func (s *ListRiskPolicies) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if s.risk == nil {
-		return fmt.Errorf("risk service not configured")
-	}
-
 	input := listRiskPoliciesInput{}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err

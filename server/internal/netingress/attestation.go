@@ -64,16 +64,12 @@ type AttestationVerifier struct {
 	telemetry      *Telemetry
 }
 
-func NewAttestationVerifier(reviewer TokenReviewer, lookup AttestorIngressLookup, audience string, maxTTL time.Duration, telemetry ...*Telemetry) *AttestationVerifier {
+func NewAttestationVerifier(reviewer TokenReviewer, lookup AttestorIngressLookup, audience string, maxTTL time.Duration, telemetry *Telemetry) *AttestationVerifier {
 	if audience == "" {
 		audience = DefaultTokenAudience
 	}
 	if maxTTL <= 0 {
 		maxTTL = 30 * time.Second
-	}
-	var metrics *Telemetry
-	if len(telemetry) > 0 {
-		metrics = telemetry[0]
 	}
 	return &AttestationVerifier{
 		reviewer:       reviewer,
@@ -87,7 +83,7 @@ func NewAttestationVerifier(reviewer TokenReviewer, lookup AttestorIngressLookup
 		globalLimiter:  rate.NewLimiter(globalReviewRate, globalReviewBurst),
 		rechecks:       singleflight.Group{},
 		recheckJoined:  nil,
-		telemetry:      metrics,
+		telemetry:      telemetry,
 	}
 }
 
@@ -98,15 +94,11 @@ func (v *AttestationVerifier) Verify(ctx context.Context, token, source string) 
 		if err == nil {
 			result = ResultAllowed
 			provider = ingress.Provider
-		} else if reason != ReasonVerifierUnavailable && (errors.Is(err, ErrAttestationRejected) || reason == ReasonRateLimited) {
+		} else if errors.Is(err, ErrAttestationRejected) || reason == ReasonRateLimited {
 			result = ResultDenied
 		}
 		v.telemetry.Record(ctx, OperationAttestation, result, reason, provider, time.Since(started))
 	}()
-	if v.reviewer == nil || v.lookup == nil {
-		reason = ReasonVerifierUnavailable
-		return Ingress{}, fmt.Errorf("%w: verifier is not configured", ErrAttestationRejected)
-	}
 	if token == "" || strings.TrimSpace(token) != token || len(token) > maxAttestationBytes || source == "" {
 		reason = ReasonAttestationRejected
 		return Ingress{}, fmt.Errorf("%w: invalid bearer token", ErrAttestationRejected)
@@ -296,7 +288,7 @@ func (v *AttestationVerifier) markChecked(hash [32]byte, now time.Time) {
 func (v *AttestationVerifier) allowSource(source string) bool {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	if v.globalLimiter == nil || !v.globalLimiter.Allow() {
+	if !v.globalLimiter.Allow() {
 		return false
 	}
 	limiter, ok := v.sourceLimiters[source]

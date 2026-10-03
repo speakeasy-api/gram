@@ -10,45 +10,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
 
-func TestOperationBudgetsValidRequiresAccessReads(t *testing.T) {
-	t.Parallel()
-
-	budget := allowBudget()
-	budgets := OperationBudgets{
-		Catalog: budget, Registration: budget, ReviewRequests: budget, Handoff: budget, SetupStart: budget,
-		Repair: budget, Docs: budget, Skills: budget, LifecycleMetadata: budget,
-		Plugins: budget, AccessReads: budget, AccessRoleMutations: budget, Diagnostics: budget,
-		SensitiveDiagnostics: budget, SensitiveSessionRecall: budget, RiskMutations: budget, RiskFindings: budget,
-		DrilldownVolume: DrilldownVolumeBudget{Rows: allowOperationLimiter{}, MetricQueries: allowOperationLimiter{}},
-	}
-	require.True(t, budgets.Valid())
-
-	budgets.RiskFindings.Connection = nil
-	require.False(t, budgets.Valid())
-	budgets.RiskFindings.Connection = allowOperationLimiter{}
-	budgets.RiskFindings.Organization = nil
-	require.False(t, budgets.Valid())
-	budgets.RiskFindings = budget
-
-	budgets.AccessReads.Connection = nil
-	require.False(t, budgets.Valid())
-	budgets.AccessReads.Connection = allowOperationLimiter{}
-	budgets.AccessReads.Organization = nil
-	require.False(t, budgets.Valid())
-	budgets.AccessReads = budget
-	budgets.Plugins.Connection = nil
-	require.False(t, budgets.Valid())
-	budgets.Plugins.Connection = allowOperationLimiter{}
-	budgets.Plugins.Organization = nil
-	require.False(t, budgets.Valid())
-	budgets.Plugins = budget
-	budgets.AccessRoleMutations.Connection = nil
-	require.False(t, budgets.Valid())
-	budgets.AccessRoleMutations.Connection = allowOperationLimiter{}
-	budgets.AccessRoleMutations.Organization = nil
-	require.False(t, budgets.Valid())
-}
-
 func TestOperationBudgetChargesConnectionBeforeOrganization(t *testing.T) {
 	t.Parallel()
 

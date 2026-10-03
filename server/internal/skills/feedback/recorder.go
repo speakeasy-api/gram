@@ -93,7 +93,7 @@ func (r *Recorder) Record(ctx context.Context, input RecordInput) (repo.SkillFee
 		return repo.SkillFeedback{}, fmt.Errorf("create skill feedback: %w", err)
 	}
 
-	if r.signaler != nil && stored.SkillID.Valid {
+	if stored.SkillID.Valid {
 		signalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), signalTimeout)
 		defer cancel()
 		if err := r.signaler.Signal(signalCtx, input.ProjectID, stored.SkillID.UUID); err != nil {

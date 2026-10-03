@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	extkeysrepo "github.com/speakeasy-api/gram/server/internal/externalkeys/repo"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -110,23 +111,13 @@ type Provisioner struct {
 
 // NewProvisioner wires a provisioner over the shared identity resolver, KMS
 // factory, and audit logger.
-func NewProvisioner(logger *slog.Logger, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, kmsClients gcpkms.ProvisioningClientFactory, auditLogger *audit.Logger, cfg Config) (*Provisioner, error) {
-	if err := gcpkms.ValidateKeyRingName(cfg.KeyRing); err != nil {
-		return nil, fmt.Errorf("identity provider connections key ring: %w", err)
-	}
-	if cfg.SigningCredentialID == uuid.Nil {
-		return nil, errors.New("identity provider connections signing credential id is required")
-	}
-	if cfg.ServerURL == nil {
-		return nil, errors.New("identity provider connections server url is required")
-	}
+func NewProvisioner(logger *slog.Logger, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, kmsClients gcpkms.ProvisioningClientFactory, auditLogger *audit.Logger, cfg Config) *Provisioner {
 	// The JWKS URL is handed to the identity provider; it must never be plaintext.
-	if !urls.IsAbsoluteHTTPSOrLoopback(cfg.ServerURL.String()) {
-		return nil, errors.New("identity provider connections server url must be an absolute https URL")
-	}
-	if auditLogger == nil {
-		return nil, errors.New("identity provider connections audit logger is required")
-	}
+	inv.Require("identity provider connections provisioner",
+		"key ring is valid", gcpkms.ValidateKeyRingName(cfg.KeyRing),
+		"signing credential id is set", cfg.SigningCredentialID != uuid.Nil,
+		"server url is an absolute https URL", urls.IsAbsoluteHTTPSOrLoopback(cfg.ServerURL.String()),
+	)
 
 	return &Provisioner{
 		logger:      logger.With(attr.SlogComponent("identityproviderconnections")),
@@ -135,7 +126,7 @@ func NewProvisioner(logger *slog.Logger, db *pgxpool.Pool, gcpIdentity *gcpauth.
 		kmsClients:  kmsClients,
 		audit:       auditLogger,
 		cfg:         cfg,
-	}, nil
+	}
 }
 
 // ProvisionClientParams names the connection to provision.

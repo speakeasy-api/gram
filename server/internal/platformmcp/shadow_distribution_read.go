@@ -57,10 +57,6 @@ func NewShadowDistributionReadService(logger *slog.Logger, db *pgxpool.Pool, gua
 	return &ShadowDistributionReadService{logger: logger, db: db, guard: guard, organizations: organizations, now: time.Now}
 }
 
-func (s *ShadowDistributionReadService) valid() bool {
-	return s != nil && s.logger != nil && s.db != nil && s.guard != nil && s.organizations != nil && s.now != nil
-}
-
 func (s *ShadowDistributionReadService) ForPlugin(ctx context.Context, organizationID string, projectID, pluginID uuid.UUID) DistributionAdmission {
 	return s.read(ctx, organizationID, projectID, DistributionAdmissionNotApplicable, func(ctx context.Context, tx pgx.Tx) ([]distributionAdmissionTarget, error) {
 		targets, err := platformrepo.New(tx).ListDirectRemoteAdmissionTargetsForPlugin(ctx, platformrepo.ListDirectRemoteAdmissionTargetsForPluginParams{PluginID: pluginID, OrganizationID: organizationID, ProjectID: projectID})
@@ -152,7 +148,7 @@ func (s *ShadowDistributionReadService) ForTarget(ctx context.Context, organizat
 
 func (s *ShadowDistributionReadService) read(ctx context.Context, organizationID string, projectID uuid.UUID, emptyState string, load func(context.Context, pgx.Tx) ([]distributionAdmissionTarget, error)) DistributionAdmission {
 	result := s.unavailable()
-	if !s.valid() || organizationID == "" || projectID == uuid.Nil {
+	if organizationID == "" || projectID == uuid.Nil {
 		return result
 	}
 	organizationSlug, err := s.organizations.OrganizationSlug(ctx, organizationID)
@@ -217,9 +213,6 @@ func (s *ShadowDistributionReadService) read(ctx context.Context, organizationID
 }
 
 func (s *ShadowDistributionReadService) warn(ctx context.Context, operation string, err error) {
-	if s == nil || s.logger == nil {
-		return
-	}
 	attrs := []any{attr.SlogReason(operation)}
 	if err != nil {
 		attrs = append(attrs, attr.SlogError(err))
@@ -228,9 +221,6 @@ func (s *ShadowDistributionReadService) warn(ctx context.Context, operation stri
 }
 
 func (s *ShadowDistributionReadService) unavailable() DistributionAdmission {
-	if s == nil {
-		return unavailableDistributionAdmission(nil)
-	}
 	return unavailableDistributionAdmission(s.now)
 }
 

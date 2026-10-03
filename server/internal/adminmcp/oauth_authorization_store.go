@@ -17,7 +17,7 @@ type postgresStaffAuthorizationStore struct{ db *pgxpool.Pool }
 // Authorize rotates the active connection generation and creates a one-use
 // grant in the same transaction, invalidating every earlier access session.
 func (s postgresStaffAuthorizationStore) Authorize(ctx context.Context, input staffAuthorization) error {
-	if s.db == nil || input.Subject == "" || input.ClientID == "" || input.SessionEnc == "" || input.ResourceURI == "" || input.CodeHash == "" {
+	if input.Subject == "" || input.ClientID == "" || input.SessionEnc == "" || input.ResourceURI == "" || input.CodeHash == "" {
 		return fmt.Errorf("staff authorization state is incomplete")
 	}
 	tx, err := s.db.Begin(ctx)

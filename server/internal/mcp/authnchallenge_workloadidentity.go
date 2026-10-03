@@ -113,10 +113,9 @@ func admitWorkloadIdentity(
 	externalSubject string,
 ) error {
 	switch {
-	// An unwired policy reads as "no admissions", an unbuildable key as "no
-	// row could answer", and an empty subject is refused rather than looked up
-	// so it can never match a row holding one.
-	case lookup == nil, endpoint == nil, workloadIssuerID == uuid.Nil, externalSubject == "":
+	// An unbuildable key reads as "no row could answer", and an empty subject
+	// is refused rather than looked up so it can never match a row holding one.
+	case endpoint == nil, workloadIssuerID == uuid.Nil, externalSubject == "":
 		return errWorkloadNotAdmitted
 	}
 

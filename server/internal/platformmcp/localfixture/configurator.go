@@ -45,7 +45,7 @@ func NewClientConfigurator(config *Config, oauth *OAuthHTTP, db *pgxpool.Pool, p
 }
 
 func (c *ClientConfigurator) ConfigureProviderClient(ctx context.Context, request platformmcp.ProviderSetupRequest, descriptor remotesessionprovider.Descriptor) error {
-	if c == nil || c.config == nil || c.oauth == nil || c.db == nil || c.policy == nil || !c.matchesDescriptor(descriptor) {
+	if !c.matchesDescriptor(descriptor) {
 		return platformmcp.ErrProviderAdapterUnavailable
 	}
 
@@ -97,9 +97,6 @@ func (c *ClientConfigurator) matchesDescriptor(descriptor remotesessionprovider.
 }
 
 func (c *ClientConfigurator) restoreClient(clientID string) error {
-	if c.oauth == nil {
-		return fmt.Errorf("%w: local fixture OAuth service is unavailable", platformmcp.ErrProviderAdapterUnavailable)
-	}
 	if err := c.oauth.RestoreRegisteredClient(clientID); err != nil {
 		return fmt.Errorf("restore local fixture client: %w", err)
 	}

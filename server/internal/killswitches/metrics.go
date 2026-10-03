@@ -26,10 +26,6 @@ type evaluationMetrics struct {
 }
 
 func newEvaluationMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *evaluationMetrics {
-	if meterProvider == nil {
-		return nil
-	}
-
 	histogram, err := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/killswitches").Float64Histogram(
 		meterKillswitchEvaluationDuration,
 		metric.WithDescription("Duration of authoritative kill-switch evaluation in seconds"),
@@ -37,10 +33,7 @@ func newEvaluationMetrics(meterProvider metric.MeterProvider, logger *slog.Logge
 		metric.WithExplicitBucketBoundaries(0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1),
 	)
 	if err != nil {
-		if logger != nil {
-			logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(meterKillswitchEvaluationDuration), attr.SlogError(err))
-		}
-		return nil
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(meterKillswitchEvaluationDuration), attr.SlogError(err))
 	}
 	return &evaluationMetrics{
 		duration:               histogram,
@@ -51,7 +44,7 @@ func newEvaluationMetrics(meterProvider metric.MeterProvider, logger *slog.Logge
 }
 
 func (m *evaluationMetrics) enabled(ctx context.Context) bool {
-	return m != nil && m.duration != nil && m.duration.Enabled(ctx)
+	return m.duration.Enabled(ctx)
 }
 
 func (m *evaluationMetrics) record(ctx context.Context, outcome string, duration time.Duration) {

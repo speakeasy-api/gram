@@ -22,10 +22,6 @@ func NewMarkTriggerFired(app *bgtriggers.App) *MarkTriggerFired {
 }
 
 func (m *MarkTriggerFired) Do(ctx context.Context, input MarkTriggerFiredInput) error {
-	if m.app == nil {
-		return fmt.Errorf("trigger app is not configured")
-	}
-
 	// A trigger firing on its schedule has no request behind it. Marked here
 	// rather than in MarkInstanceFired so the App method keeps whatever
 	// surface its caller carries.

@@ -45,9 +45,6 @@ func (s *Service) UploadSkillContent(ctx context.Context, payload *gen.UploadSki
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if s.productFeatures == nil {
-		return oops.E(oops.CodeUnexpected, nil, "skill capture settings are unavailable")
-	}
 
 	skillsEnabled, err := s.productFeatures.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureSkills)
 	if err != nil {
@@ -100,9 +97,7 @@ func (s *Service) UploadSkillContent(ctx context.Context, payload *gen.UploadSki
 		}
 	}
 
-	if s.piScanner != nil {
-		s.scanCapturedSkillVersion(ctx, authCtx, result.SkillVersionID, payload.Content)
-	}
+	s.scanCapturedSkillVersion(ctx, authCtx, result.SkillVersionID, payload.Content)
 	return nil
 }
 

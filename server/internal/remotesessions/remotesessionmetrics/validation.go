@@ -33,9 +33,6 @@ func NewValidation(logger *slog.Logger, meterProvider metric.MeterProvider) *Val
 
 // Record counts one probe by outcome (a remotesessions.ValidationOutcome), trigger and issuer URL.
 func (m *Validation) Record(ctx context.Context, issuerURL string, trigger ValidationTrigger, outcome string) {
-	if m == nil || m.probes == nil {
-		return
-	}
 	m.probes.Add(ctx, 1, metric.WithAttributes(
 		attr.OAuthIssuer(issuerURL),
 		attr.OAuthValidationTrigger(trigger),

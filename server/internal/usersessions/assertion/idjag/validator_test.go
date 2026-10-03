@@ -117,8 +117,7 @@ func newTestValidator(t *testing.T, key *jose.JSONWebKey) (*Validator, *testStor
 	}
 	keys := &testKeys{key: key, err: nil, calls: 0}
 	guard := &testGuard{claimed: make(map[string]bool), calls: 0}
-	validator, err := NewValidator(keys, guard, store)
-	require.NoError(t, err)
+	validator := NewValidator(keys, guard, store)
 	request := Request{
 		OrganizationID: "org-test", UserSessionIssuerID: uuid.New(),
 		Audience: testAudience, Resource: testResource, ClientID: testClientID,

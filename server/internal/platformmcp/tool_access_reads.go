@@ -52,42 +52,8 @@ func registerAccessReadTools(reg *Registrar, accessReads *AccessReadService) {
 	})
 }
 
-func registerUnavailableAccessReadTools(reg *Registrar) {
-	// Each stub declares the same audiences as its live registration, so an
-	// audience sees one stable catalogue whether or not the service is wired.
-	// list_access_members also carries its live input schema: the assistant
-	// advertises that schema to a model, which must see one contract either way.
-	for _, tool := range []struct {
-		name         string
-		title        string
-		description  string
-		audiences    []Audience
-		projectScope ProjectScope
-		inputSchema  *jsonschema.Schema
-	}{
-		{"list_access_roles", "List MCP Access Roles", "List MCP access roles. This is not switched on for your organization yet.", externalOnly, ProjectScopeNone, nil},
-		{"list_access_members", "Find Organization Members for MCP Access", "Find organization members for MCP access. This is not switched on for your organization yet.", bothAudiences, ProjectScopeNone, listAccessMembersInputSchema()},
-		{"get_mcp_access", "Inspect Access to One MCP Server", "Inspect access to one MCP server. This is not switched on for your organization yet.", externalOnly, ProjectScopeExplicit, nil},
-	} {
-		stub := &mcp.Tool{
-			Name:        tool.name,
-			Title:       tool.title,
-			Description: tool.description,
-			Annotations: readOnlyAnnotations(),
-		}
-		// The SDK's InputSchema field is untyped, so a nil *jsonschema.Schema
-		// stored in it would read as a present-but-empty schema and panic; only
-		// a declared schema is assigned, the rest stay inferred.
-		if tool.inputSchema != nil {
-			stub.InputSchema = tool.inputSchema
-		}
-		addTool(reg, stub, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: tool.audiences, ProjectScope: tool.projectScope}, unavailableTool("mcp_access_reads"))
-	}
-}
-
-// listAccessMembersInputSchema is the one input contract both the live tool
-// and its unavailable stub advertise. It is inferred from the typed input, as
-// the live registration would infer it on its own.
+// listAccessMembersInputSchema is the input contract list_access_members
+// advertises. It is inferred from the typed input.
 func listAccessMembersInputSchema() *jsonschema.Schema {
 	schema, err := jsonschema.For[ListAccessMembersInput](nil)
 	if err != nil {

@@ -1,11 +1,12 @@
 package remotesessions_test
 
 import (
+	"testing"
+
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	"testing"
 
 	adminrsgen "github.com/speakeasy-api/gram/server/gen/admin_remote_sessions"
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"

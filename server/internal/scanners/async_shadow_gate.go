@@ -57,7 +57,7 @@ func NewAsyncShadowGate(logger *slog.Logger, flags feature.Provider, db repo.DBT
 }
 
 func (g *AsyncShadowGate) Decide(ctx context.Context, projectID, chatMessageID string) AsyncShadowGateReason {
-	if g == nil || g.flags == nil || g.db == nil || chatMessageID == "" {
+	if chatMessageID == "" {
 		return AsyncShadowGateReasonGateError
 	}
 

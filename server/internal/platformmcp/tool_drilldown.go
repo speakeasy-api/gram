@@ -114,24 +114,3 @@ func registerDrilldownTools(reg *Registrar, diagnostics *DiagnosticsService) {
 		return nil, output, nil
 	})
 }
-
-func registerUnavailableDrilldownTools(reg *Registrar) {
-	for _, tool := range []struct {
-		name        string
-		title       string
-		description string
-	}{
-		{"query_mcp_events", "MCP Calls by Tool and Outcome", "Break one MCP server's calls down by tool and outcome. This is not switched on for your organization yet."},
-		{"list_mcp_usage_users", "MCP Server Users", "List the masked people observed using one MCP server. This is not switched on for your organization yet."},
-		{"get_user_mcp_status", "One Person's MCP Server Status", "Report one referenced person's categorical usage against one MCP server. This is not switched on for your organization yet."},
-		{"query_mcp_traces", "Recent MCP Calls", "List recent calls for one MCP server. This is not switched on for your organization yet."},
-		{"query_mcp_metrics", "MCP Server Totals", "Return one MCP server's totals. This is not switched on for your organization yet."},
-	} {
-		addTool(reg, &mcp.Tool{
-			Name:        tool.name,
-			Title:       tool.title,
-			Description: tool.description,
-			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("diagnostics"))
-	}
-}

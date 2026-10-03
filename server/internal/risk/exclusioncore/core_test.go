@@ -27,7 +27,7 @@ func TestCreateValidatesBeforeOpeningTransaction(t *testing.T) {
 	t.Parallel()
 
 	transactor := &recordingTransactor{}
-	core := New(nil, MutationDependencies{Transactor: transactor})
+	core := NewMutationCore(nil, MutationDependencies{Transactor: transactor})
 
 	_, err := core.Create(t.Context(), CreateMutation{Params: repo.CreateRiskExclusionParams{MatchType: "exact", MatchValue: ""}})
 

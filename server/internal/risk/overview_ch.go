@@ -28,13 +28,9 @@ const riskOverviewRowLimit = 200
 
 // overviewFromClickHouse reports whether GetRiskOverview should serve from
 // ClickHouse for this org. Per-org PostHog rollout flag, targeted by org and
-// slug groups the same way the dashboard evaluates flags. A nil provider,
-// missing ClickHouse connection, or a failed lookup degrades to the Postgres
-// path.
+// slug groups the same way the dashboard evaluates flags. A failed lookup
+// degrades to the Postgres path.
 func (s *Service) overviewFromClickHouse(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
-	if s.findingsCH == nil || s.flags == nil {
-		return false
-	}
 	groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
 	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagRiskOverviewFromClickHouse, authCtx.ActiveOrganizationID, groups)
 	if err != nil {

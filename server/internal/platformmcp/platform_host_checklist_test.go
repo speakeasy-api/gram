@@ -90,24 +90,26 @@ func TestPlatformHostVerificationChecklistPlatformMCP(t *testing.T) {
 
 			encryptionClient := testEncryption(t)
 			signer := sessiontokens.NewSigner("platform-host-checklist-key")
-			oauth, err := NewOAuthHTTP(OAuthHTTPConfig{
-				BaseURL:       serverURL,
-				Cache:         &memoryCache{values: map[string]any{}},
-				Store:         NewPostgresOAuthStore(conn),
-				Identity:      testIdentity{},
-				Gate:          allowGate{},
-				Authorizer:    allowAuthorizer{},
-				Organizations: testOrganizationSelector{organizations: []OrganizationOption{{ID: organizationID, Name: "Platform host checklist organization"}}},
-				Signer:        signer,
-				Encryption:    encryptionClient,
+			oauth := NewOAuthHTTP(OAuthHTTPConfig{
+				BaseURL:        serverURL,
+				Cache:          &memoryCache{values: map[string]any{}},
+				Store:          NewPostgresOAuthStore(conn),
+				Identity:       testIdentity{},
+				Gate:           allowGate{},
+				Authorizer:     allowAuthorizer{},
+				Organizations:  testOrganizationSelector{organizations: []OrganizationOption{{ID: organizationID, Name: "Platform host checklist organization"}}},
+				Signer:         signer,
+				Encryption:     encryptionClient,
+				Telemetry:      NewOAuthTelemetry(testenv.NewLogger(t), testenv.NewMeterProvider(t)),
+				Logger:         testenv.NewLogger(t),
+				GuardianPolicy: oauthTestGuardianPolicy(t),
+				MeterProvider:  testenv.NewMeterProvider(t),
 			})
-			require.NoError(t, err)
-			authenticator, err := NewJWTAuthenticator(signer, conn, encryptionClient, serverURL)
-			require.NoError(t, err)
-			runtime := NewRuntime(testenv.NewLogger(t), authenticator, allowGate{}, allowAuthorizer{}, oauth.ProtectedResourceURL(), "platform-host-checklist-cursor", nil, nil, nil, nil, nil)
+			authenticator := NewJWTAuthenticator(signer, conn, encryptionClient, serverURL)
+			runtime := newTestRuntime(t, authenticator, allowGate{}, allowAuthorizer{}, oauth.ProtectedResourceURL(), &testReadinessRecorder{})
 
 			logger := testenv.NewLogger(t)
-			mcpSecurity, err := middleware.MCPSecurity(logger, append([]string{serverURL.String()}, slices.Sorted(maps.Values(platformHosts))...), nil)
+			mcpSecurity, err := middleware.MCPSecurity(logger, append([]string{serverURL.String()}, slices.Sorted(maps.Values(platformHosts))...), func(*http.Request) bool { return false })
 			require.NoError(t, err)
 			mux := goahttp.NewMuxer()
 			mux.Use(mcpSecurity)

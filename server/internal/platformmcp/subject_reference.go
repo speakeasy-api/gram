@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/must"
 )
 
 // SubjectReferenceTTL bounds how long an opaque reference stays usable. A
@@ -101,20 +103,9 @@ type subjectReferenceCodec struct {
 	aead cipher.AEAD
 }
 
-func newSubjectReferenceCodec(keyMaterial string) (*subjectReferenceCodec, error) {
-	if keyMaterial == "" {
-		return nil, ErrSubjectReferenceNotFound
-	}
+func newSubjectReferenceCodec(keyMaterial string) *subjectReferenceCodec {
 	key := sha256.Sum256([]byte("platform-mcp-subject-reference:" + keyMaterial))
-	block, err := aes.NewCipher(key[:])
-	if err != nil {
-		return nil, fmt.Errorf("build platform mcp subject reference cipher: %w", err)
-	}
-	aead, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("build platform mcp subject reference aead: %w", err)
-	}
-	return &subjectReferenceCodec{aead: aead}, nil
+	return &subjectReferenceCodec{aead: must.Value(cipher.NewGCM(must.Value(aes.NewCipher(key[:]))))}
 }
 
 // referenceAAD binds a reference to its organization, session, and kind through
@@ -141,7 +132,7 @@ func (c *subjectReferenceCodec) Encode(principal Principal, kind, value string, 
 // the organization, session, and kind.
 func (c *subjectReferenceCodec) EncodeScoped(principal Principal, kind, scope, value string, now time.Time) (string, error) {
 	binding := principalCursorBinding(principal)
-	if c == nil || c.aead == nil || principal.OrganizationID == "" || binding == "" || kind == "" || value == "" {
+	if principal.OrganizationID == "" || binding == "" || kind == "" || value == "" {
 		return "", ErrSubjectReferenceNotFound
 	}
 	payload, err := json.Marshal(subjectReference{
@@ -182,7 +173,7 @@ func (c *subjectReferenceCodec) decodeForReceiptLookup(token string, principal P
 
 func (c *subjectReferenceCodec) decodeScoped(token string, principal Principal, kind, scope string, now time.Time, allowExpired bool) (string, error) {
 	binding := principalCursorBinding(principal)
-	if c == nil || c.aead == nil || token == "" || principal.OrganizationID == "" || binding == "" || kind == "" {
+	if token == "" || principal.OrganizationID == "" || binding == "" || kind == "" {
 		return "", ErrSubjectReferenceNotFound
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(token)

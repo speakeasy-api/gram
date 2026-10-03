@@ -45,53 +45,43 @@ type Metrics struct {
 }
 
 func NewMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) *Metrics {
-	metrics := &Metrics{logger: logger, failures: nil, postRegistrationCommitFailures: nil}
-	if meterProvider == nil {
-		return metrics
-	}
 	failures, err := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/oauth/registration").Int64Counter(
 		failureMetric,
 		metric.WithDescription("Automatic OAuth client registration failures by bounded method, outcome, reason, and retryability, with HTTP status where the provider answered"),
 		metric.WithUnit("{failure}"),
 	)
-	if err != nil && logger != nil {
+	if err != nil {
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(failureMetric), attr.SlogError(err))
 	}
-	metrics.failures = failures
 	postRegistrationCommitFailures, err := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/oauth/registration").Int64Counter(
 		postRegistrationCommitFailureMetric,
 		metric.WithDescription("Upstream OAuth client registrations that succeeded but could not be committed locally"),
 		metric.WithUnit("{failure}"),
 	)
-	if err != nil && logger != nil {
+	if err != nil {
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(postRegistrationCommitFailureMetric), attr.SlogError(err))
 	}
-	metrics.postRegistrationCommitFailures = postRegistrationCommitFailures
-	return metrics
+	return &Metrics{logger: logger, failures: failures, postRegistrationCommitFailures: postRegistrationCommitFailures}
 }
 
 // RecordPostRegistrationCommitFailure emits only the bounded registration
 // method. It deliberately carries no tenant, provider, client, URL, message,
 // credential, response, or status attributes.
 func (m *Metrics) RecordPostRegistrationCommitFailure(ctx context.Context, method Method) {
-	if m == nil || !validMethod(method) {
+	if !validMethod(method) {
 		return
 	}
-	if m.postRegistrationCommitFailures != nil {
-		m.postRegistrationCommitFailures.Add(ctx, 1, metric.WithAttributes(attr.OAuthRegistrationMethod(method)))
-	}
-	if m.logger != nil {
-		m.logger.LogAttrs(ctx, slog.LevelError, "oauth client registration could not be committed locally",
-			attr.SlogEvent(postRegistrationCommitFailureEvent),
-			attr.SlogOAuthRegistrationMethod(method),
-		)
-	}
+	m.postRegistrationCommitFailures.Add(ctx, 1, metric.WithAttributes(attr.OAuthRegistrationMethod(method)))
+	m.logger.LogAttrs(ctx, slog.LevelError, "oauth client registration could not be committed locally",
+		attr.SlogEvent(postRegistrationCommitFailureEvent),
+		attr.SlogOAuthRegistrationMethod(method),
+	)
 }
 
 // RecordFailure increments the failure counter only for a valid bounded
 // contract. HTTP status is the sole optional dimension.
 func (m *Metrics) RecordFailure(ctx context.Context, method Method, failure Failure) {
-	if m == nil || !validMethod(method) || !validFailure(failure) {
+	if !validMethod(method) || !validFailure(failure) {
 		return
 	}
 	attributes := []attribute.KeyValue{
@@ -103,13 +93,8 @@ func (m *Metrics) RecordFailure(ctx context.Context, method Method, failure Fail
 	if failure.HTTPStatus != nil {
 		attributes = append(attributes, attr.HTTPResponseStatusCode(*failure.HTTPStatus))
 	}
-	if m.failures != nil {
-		m.failures.Add(ctx, 1, metric.WithAttributes(attributes...))
-	}
+	m.failures.Add(ctx, 1, metric.WithAttributes(attributes...))
 
-	if m.logger == nil {
-		return
-	}
 	logAttributes := []slog.Attr{
 		attr.SlogEvent(failureEvent),
 		attr.SlogOAuthRegistrationMethod(method),

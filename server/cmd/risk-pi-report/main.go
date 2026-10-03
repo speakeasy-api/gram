@@ -1210,7 +1210,6 @@ func newOpenRouterClient(apiKey string) openrouter.CompletionClient {
 		&openrouter.PlatformKeyResolver{Provisioner: prov},
 		nil, // message capture  (nil-guarded)
 		nil, // usage tracking   (nil-guarded)
-		nil, // chat title gen   (nil-guarded)
 		nil, // telemetry logger (nil-guarded)
 	)
 }
@@ -1222,9 +1221,11 @@ type devProvisioner struct{ apiKey string }
 func (d *devProvisioner) ProvisionAPIKey(_ context.Context, _ string, _ openrouter.KeyType) (string, error) {
 	return d.apiKey, nil
 }
+
 func (d *devProvisioner) RefreshAPIKeyLimit(_ context.Context, _ string, _ openrouter.KeyType, _ *int) (int, error) {
 	return 0, fmt.Errorf("not implemented in bench")
 }
+
 func (*devProvisioner) AddAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
 	return openrouter.DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}, nil
 }
@@ -1236,15 +1237,19 @@ func (*devProvisioner) RemoveAPIKeyDisableCause(context.Context, string, openrou
 func (d *devProvisioner) DisableAPIKey(_ context.Context, _ string, _ openrouter.KeyType) error {
 	return fmt.Errorf("not implemented in bench")
 }
+
 func (d *devProvisioner) GetCreditsUsed(_ context.Context, _ string, _ openrouter.KeyType) (float64, int, error) {
 	return 0, 0, fmt.Errorf("not implemented in bench")
 }
+
 func (d *devProvisioner) GetKeyUsage(_ context.Context, _ string) (float64, *int64, error) {
 	return 0, nil, fmt.Errorf("not implemented in bench")
 }
+
 func (d *devProvisioner) ReconcileMonthlyCredits(_ context.Context, _ string, _ openrouter.KeyType, currentLimit int64, _ int64, _ *int64) (int64, error) {
 	return currentLimit, nil
 }
+
 func (d *devProvisioner) GetModelUsage(_ context.Context, _ string, _ string, _ openrouter.KeyType) (*openrouter.ModelUsage, error) {
 	return nil, fmt.Errorf("not implemented in bench")
 }

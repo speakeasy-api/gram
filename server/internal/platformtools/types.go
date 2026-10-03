@@ -56,7 +56,7 @@ type Dependencies struct {
 	Logger           *slog.Logger
 	DB               *pgxpool.Pool
 	TelemetryService TelemetryService
-	TriggerApp       *bgtriggers.App
+	ThreadRouter     *bgtriggers.ThreadRouter
 	SlackHTTPClient  *guardian.HTTPClient
 	Audit            *audit.Logger
 

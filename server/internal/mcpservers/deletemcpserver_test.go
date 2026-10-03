@@ -10,7 +10,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/assistants"
+	"github.com/speakeasy-api/gram/server/internal/assistants/assistantstest"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -499,7 +499,7 @@ func TestDeleteMcpServer_DetachesFromAssistants(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, otherBefore, otherAfter, "another project's independent attachments must survive deletion")
 
-	core := assistants.NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, nil, nil, nil, nil, nil, nil, nil, nil, audit.NewLogger())
+	core := assistantstest.NewServiceCore(t, infra, ti.conn)
 	reloaded, err := core.GetAssistant(ctx, *authCtx.ProjectID, assistant.ID)
 	require.NoError(t, err)
 	require.Len(t, reloaded.MCPServers, 1)

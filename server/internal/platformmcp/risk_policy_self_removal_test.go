@@ -47,45 +47,36 @@ func TestSelfRemovalToolContract(t *testing.T) {
 		called = true
 		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](selfRemovalUnavailable())
 	}
-	for _, enabled := range []bool{false, true} {
-		reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
-		reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
-		registerRiskMutationHandlers(reg, catalog, enabled, &RiskMutationHandlers{ChangeAudience: nil, CreatePolicy: nil, UpdatePolicy: nil, CreateExclusion: nil, UpdateExclusion: nil, Controls: &RiskMutationControls{}, RemoveSelf: handler})
-		descriptor := descriptorByName(t, reg, operationRemoveSelfFromRiskPolicy)
-		require.Equal(t, externalOnly, descriptor.Meta.Audiences)
-		require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization)
-		require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
-		require.True(t, *descriptor.Annotations.DestructiveHint)
-		require.True(t, descriptor.Annotations.IdempotentHint)
-		for _, entry := range reg.For(AudienceAssistant) {
-			require.NotEqual(t, operationRemoveSelfFromRiskPolicy, entry.Name)
-		}
-		schema := new(jsonschema.Schema)
-		require.NoError(t, json.Unmarshal(descriptor.InputSchema, schema))
-		resolved, err := schema.Resolve(nil)
-		require.NoError(t, err)
-		args := map[string]any{"project_slug": "default", "policy_id": "11111111-1111-4111-8111-111111111111", "expected_version": "version", "idempotency_key": "key", "confirmed": true}
-		require.NoError(t, resolved.Validate(args))
-		args["user_id"] = "someone-else"
-		require.Error(t, resolved.Validate(args))
-		delete(args, "user_id")
-		args["confirmed"] = false
-		require.Error(t, resolved.Validate(args))
-		args["confirmed"] = true
-		encoded, err := json.Marshal(args)
-		require.NoError(t, err)
-		_, err = descriptor.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("self")), encoded)
-		if enabled {
-			requireRiskMutationRefusal(t, err, unavailableCode)
-			require.ErrorContains(t, err, "organization-scoped coordination")
-			require.True(t, called)
-		} else {
-			var refusal *ToolRefusalError
-			require.ErrorAs(t, err, &refusal)
-			require.Contains(t, refusal.Payload, "feature_unavailable")
-			require.False(t, called)
-		}
+	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
+	registerRiskMutationHandlers(reg, catalog, &RiskMutationHandlers{ChangeAudience: nil, CreatePolicy: nil, UpdatePolicy: nil, CreateExclusion: nil, UpdateExclusion: nil, Controls: &RiskMutationControls{}, RemoveSelf: handler})
+	descriptor := descriptorByName(t, reg, operationRemoveSelfFromRiskPolicy)
+	require.Equal(t, externalOnly, descriptor.Meta.Audiences)
+	require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization)
+	require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
+	require.True(t, *descriptor.Annotations.DestructiveHint)
+	require.True(t, descriptor.Annotations.IdempotentHint)
+	for _, entry := range reg.For(AudienceAssistant) {
+		require.NotEqual(t, operationRemoveSelfFromRiskPolicy, entry.Name)
 	}
+	schema := new(jsonschema.Schema)
+	require.NoError(t, json.Unmarshal(descriptor.InputSchema, schema))
+	resolved, err := schema.Resolve(nil)
+	require.NoError(t, err)
+	args := map[string]any{"project_slug": "default", "policy_id": "11111111-1111-4111-8111-111111111111", "expected_version": "version", "idempotency_key": "key", "confirmed": true}
+	require.NoError(t, resolved.Validate(args))
+	args["user_id"] = "someone-else"
+	require.Error(t, resolved.Validate(args))
+	delete(args, "user_id")
+	args["confirmed"] = false
+	require.Error(t, resolved.Validate(args))
+	args["confirmed"] = true
+	encoded, err := json.Marshal(args)
+	require.NoError(t, err)
+	_, err = descriptor.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("self")), encoded)
+	requireRiskMutationRefusal(t, err, unavailableCode)
+	require.ErrorContains(t, err, "organization-scoped coordination")
+	require.True(t, called)
 }
 
 func TestSelfRemovalToolRequiresOrgAdmin(t *testing.T) {
@@ -97,7 +88,7 @@ func TestSelfRemovalToolRequiresOrgAdmin(t *testing.T) {
 	reg := newRegistrar(server)
 	reg.withExternalAuthorizer(denyExternalCallAuthorizer{err: &ExternalAuthorizationError{RequiredScope: "org:admin", cause: ErrForbidden}})
 	called := false
-	registerRiskMutationHandlers(reg, catalog, true, &RiskMutationHandlers{ChangeAudience: nil, CreatePolicy: nil, UpdatePolicy: nil, CreateExclusion: nil, UpdateExclusion: nil, Controls: &RiskMutationControls{}, RemoveSelf: func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {
+	registerRiskMutationHandlers(reg, catalog, &RiskMutationHandlers{ChangeAudience: nil, CreatePolicy: nil, UpdatePolicy: nil, CreateExclusion: nil, UpdateExclusion: nil, Controls: &RiskMutationControls{}, RemoveSelf: func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {
 		called = true
 		return nil, UpdateRiskPolicyToolOutput{}, nil
 	}})

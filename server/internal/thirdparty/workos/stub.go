@@ -322,6 +322,25 @@ func (s *StubClient) UpdateUserExternalID(_ context.Context, workosUserID, exter
 	return nil
 }
 
+func (s *StubClient) EnsureUserExternalID(_ context.Context, workosUserID, gramUserID string) error {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	for _, state := range s.orgs {
+		user, ok := state.users[workosUserID]
+		if !ok {
+			continue
+		}
+		if user.ExternalID != "" && user.ExternalID != gramUserID {
+			return fmt.Errorf("workos user %s external_id mismatch: got %q, want %q", workosUserID, user.ExternalID, gramUserID)
+		}
+		user.ExternalID = gramUserID
+		state.users[workosUserID] = user
+	}
+	s.userExternalIDUpdates = append(s.userExternalIDUpdates, UserExternalIDUpdate{WorkOSUserID: workosUserID, ExternalID: gramUserID})
+	return nil
+}
+
 func (s *StubClient) UpdateOrganizationExternalID(_ context.Context, workosOrgID, externalID string) error {
 	s.mut.Lock()
 	defer s.mut.Unlock()
@@ -442,6 +461,22 @@ func (s *StubClient) DeleteOrganizationMembership(_ context.Context, membershipI
 
 func (s *StubClient) ListOrgMemberships(_ context.Context, orgID string) ([]Member, error) {
 	return s.ListMembers(context.Background(), orgID)
+}
+
+func (s *StubClient) ListUserMemberships(_ context.Context, userID string) ([]Member, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	members := make([]Member, 0)
+	for _, orgID := range s.orgOrder {
+		for _, member := range s.orgs[orgID].memberships {
+			if member.UserID == userID {
+				members = append(members, member)
+			}
+		}
+	}
+
+	return members, nil
 }
 
 func (s *StubClient) GetOrgMembership(_ context.Context, workOSUserID, workOSOrgID string) (*Member, error) {

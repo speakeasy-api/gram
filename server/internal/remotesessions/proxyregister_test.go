@@ -47,7 +47,7 @@ func TestRegisterDynamicClientDoesNotFollowRedirects(t *testing.T) {
 	serverURL, err := url.Parse(registration.URL)
 	require.NoError(t, err)
 
-	_, err = RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registration.URL}, nil)
+	_, err = RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registration.URL}, &captureRegistrationFailures{})
 	require.Error(t, err)
 	require.Zero(t, redirectedTo.Load(), "DCR must not resend registration data to a redirect target")
 }
@@ -71,7 +71,7 @@ func TestRegisterDynamicClientCarriesRegistrationStamps(t *testing.T) {
 	serverURL, err := url.Parse(registration.URL)
 	require.NoError(t, err)
 
-	registered, err := RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registration.URL + "/register"}, nil)
+	registered, err := RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registration.URL + "/register"}, &captureRegistrationFailures{})
 	require.NoError(t, err)
 
 	require.True(t, registered.ClientIDIssuedAt.Valid)
@@ -100,7 +100,7 @@ func TestRegisterDynamicClientOmitsAbsentRegistrationStamps(t *testing.T) {
 	serverURL, err := url.Parse(registration.URL)
 	require.NoError(t, err)
 
-	registered, err := RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registration.URL}, nil)
+	registered, err := RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registration.URL}, &captureRegistrationFailures{})
 	require.NoError(t, err)
 
 	require.False(t, registered.ClientIDIssuedAt.Valid)
@@ -127,7 +127,7 @@ func TestRegisterDynamicClient_RefusesPlaintextNonLoopbackEndpoint(t *testing.T)
 		"ftp://idp.example.com/register",
 		"/register",
 	} {
-		_, err := RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: endpoint}, nil)
+		_, err := RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: endpoint}, &captureRegistrationFailures{})
 		require.ErrorIs(t, err, ErrInvalidDynamicClientRegistrationEndpoint, endpoint)
 	}
 }
@@ -312,7 +312,7 @@ func TestRegisterDynamicClientCanonicalRedirectURI(t *testing.T) {
 	serverURL, err := url.Parse("https://gram.example.com")
 	require.NoError(t, err)
 
-	registered, err := RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registration.URL}, nil)
+	registered, err := RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registration.URL}, &captureRegistrationFailures{})
 	require.NoError(t, err)
 	require.Equal(t, "canonical-client", registered.ClientID)
 }

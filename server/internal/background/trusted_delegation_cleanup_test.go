@@ -3,10 +3,11 @@ package background
 import (
 	"context"
 	"errors"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/stretchr/testify/mock"

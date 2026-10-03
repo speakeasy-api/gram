@@ -121,7 +121,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 			ID:    actorUserID,
 			Email: userEmail,
 		},
-	}, s.now())
+	}, s.nowFunc())
 	if err != nil {
 		return nil, fmt.Errorf("normalize cursor hook event: %w", err)
 	}
@@ -469,18 +469,16 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 		FunctionID:     nil,
 	}
 
-	if s.telemetryLogger != nil {
-		s.telemetryLogger.Log(ctx, telemetry.LogParams{
-			Timestamp:  s.now(),
-			ToolInfo:   toolInfo,
-			UserInfo:   telemetry.UserInfoByIDAndEmail(userID, userEmail),
-			Attributes: withAgentActor(ctx, attrs),
-		})
+	s.telemetryLogger.Log(ctx, telemetry.LogParams{
+		Timestamp:  s.nowFunc(),
+		ToolInfo:   toolInfo,
+		UserInfo:   telemetry.UserInfoByIDAndEmail(userID, userEmail),
+		Attributes: withAgentActor(ctx, attrs),
+	})
 
-		s.logger.DebugContext(ctx, "Wrote Cursor hook to ClickHouse",
-			attr.SlogEvent("cursor_hook_written"),
-		)
-	}
+	s.logger.DebugContext(ctx, "Wrote Cursor hook to ClickHouse",
+		attr.SlogEvent("cursor_hook_written"),
+	)
 }
 
 // writeCursorMetricsToClickHouse writes Cursor token-usage metrics to ClickHouse
@@ -488,10 +486,6 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 // log entry with a `cursor:usage:metrics` URN so usage can be aggregated
 // independently of tool-call events.
 func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, userID string) {
-	if s.telemetryLogger == nil {
-		return
-	}
-
 	hasTokens := (payload.InputTokens != nil && *payload.InputTokens > 0) ||
 		(payload.OutputTokens != nil && *payload.OutputTokens > 0) ||
 		(payload.CacheReadTokens != nil && *payload.CacheReadTokens > 0) ||
@@ -554,7 +548,7 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 	}
 
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
-		Timestamp:  s.now(),
+		Timestamp:  s.nowFunc(),
 		ToolInfo:   toolInfo,
 		UserInfo:   telemetry.UserInfoByID(userID),
 		Attributes: withAgentActor(ctx, attrs),
@@ -931,15 +925,13 @@ func (s *Service) persistCursorAgentResponse(ctx context.Context, payload *gen.C
 		return err
 	}
 
-	if s.chatTitleGenerator != nil {
-		if err := s.chatTitleGenerator.ScheduleChatTitleGeneration(
-			context.WithoutCancel(ctx),
-			chatID.String(),
-			metadata.GramOrgID,
-			metadata.ProjectID,
-		); err != nil {
-			s.logger.WarnContext(ctx, "failed to schedule chat title generation for Cursor", attr.SlogError(err))
-		}
+	if err := s.chatTitleGenerator.ScheduleChatTitleGeneration(
+		context.WithoutCancel(ctx),
+		chatID.String(),
+		metadata.GramOrgID,
+		metadata.ProjectID,
+	); err != nil {
+		s.logger.WarnContext(ctx, "failed to schedule chat title generation for Cursor", attr.SlogError(err))
 	}
 
 	return nil

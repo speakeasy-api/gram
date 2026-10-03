@@ -35,9 +35,6 @@ func NewRevoke(logger *slog.Logger, meterProvider metric.MeterProvider) *Revoke 
 // URL dimension names the actual upstream for platform administrators; empty
 // when the revocation died before an issuer was resolved.
 func (m *Revoke) Record(ctx context.Context, issuerURL string, outcome RevokeOutcome) {
-	if m == nil || m.outcome == nil {
-		return
-	}
 	m.outcome.Add(ctx, 1, metric.WithAttributes(
 		attr.OAuthIssuer(issuerURL),
 		attr.Outcome(outcome),

@@ -47,9 +47,6 @@ func (s *Service) submitPreparationDCRWithTunnel(ctx context.Context, in Prepara
 	if (method != oauthwire.AuthMethodClientSecretBasic && method != oauthwire.AuthMethodClientSecretPost) || !urls.IsAbsoluteHTTPSOrLoopback(endpoint) {
 		return result, PreparationStateManualSetupRequired
 	}
-	if s.policy == nil {
-		return result, PreparationStateIndeterminate
-	}
 	body, _ := json.Marshal(struct {
 		GrantTypes []string `json:"grant_types"`
 		AuthMethod string   `json:"token_endpoint_auth_method"`
@@ -66,11 +63,7 @@ func (s *Service) submitPreparationDCRWithTunnel(ctx context.Context, in Prepara
 	request.Header.Set("Accept", "application/json")
 	client := s.policy.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	doer, err := upstreamHTTPDoer(client, s.tunnels, tunnelID)
-	if err != nil {
-		return result, PreparationStateIndeterminate
-	}
-	response, err := doer.Do(request)
+	response, err := upstreamHTTPDoer(client, s.tunnels, tunnelID).Do(request)
 	if err != nil {
 		return result, PreparationStateIndeterminate
 	}
@@ -110,6 +103,7 @@ func (s *Service) submitPreparationDCRWithTunnel(ctx context.Context, in Prepara
 	}
 	return result, validatePreparationDCR(result, in.Scopes, method)
 }
+
 func validatePreparationDCR(result preparationDCRResponse, requested []string, method string) string {
 	if (method != oauthwire.AuthMethodClientSecretBasic && method != oauthwire.AuthMethodClientSecretPost) || strings.TrimSpace(result.ClientID) == "" || result.ClientSecret == "" || (result.TokenEndpointAuthMethod != oauthwire.AuthMethodClientSecretBasic && result.TokenEndpointAuthMethod != oauthwire.AuthMethodClientSecretPost) || result.ClientIDIssuedAt < 0 || result.ClientSecretExpiresAt < 0 {
 		return PreparationStateIndeterminate
@@ -135,6 +129,7 @@ func validatePreparationDCR(result preparationDCRResponse, requested []string, m
 	}
 	return PreparationStateReady
 }
+
 func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, in PreparationInput, claim repo.RemoteSessionEmaBinding, issuer repo.RemoteSessionIssuer, method string) (result *PreparationResult, returnErr error) {
 	var emptyClient repo.RemoteSessionClient
 	// The caller holds the connection-scoped binding lock, not a transaction.

@@ -10,8 +10,6 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
-
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // sampleWireValues supplies a valid sample for a type whose JSON form cannot be
@@ -28,12 +26,8 @@ var sampleWireValues = map[reflect.Type]any{
 func TestEveryAdvertisedOutputSchemaAcceptsAPopulatedResult(t *testing.T) {
 	t.Parallel()
 
-	// Both registration branches: with no reader the deployment substitutes
-	// "not switched on" stubs for the tools that need one, and a reader with no
-	// pool registers the live handlers, whose result types are the ones under
-	// test. Neither handler is ever called.
-	for _, reader := range []Reader{nil, NewPostgresReader(testenv.NewLogger(t), nil)} {
-		server, registrar := newServer(reader, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	{
+		server, registrar := newTestServer(t)
 		bindExternalTestPrincipal(server)
 		registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 
@@ -88,7 +82,7 @@ func TestEveryAdvertisedOutputSchemaAcceptsAPopulatedResult(t *testing.T) {
 func TestFindAndGetMCPOutputSchemasAcceptPluginMemberships(t *testing.T) {
 	t.Parallel()
 
-	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	server, registrar := newTestServer(t)
 	bindExternalTestPrincipal(server)
 	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 

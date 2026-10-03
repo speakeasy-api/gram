@@ -37,7 +37,7 @@ func requirePluginToolAudiences(t *testing.T, registrar *Registrar) {
 func TestUnavailablePluginToolsKeepReadsForBothAudiencesAndMutationsExternal(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newTestServer(t)
 	requirePluginToolAudiences(t, registrar)
 
 	assistant := map[string]bool{}

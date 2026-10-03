@@ -418,7 +418,7 @@ func newStripeCheckoutTestInstance(t *testing.T) *stripeCheckoutTestInstance {
 		logger:        logger,
 		auth:          nil,
 		authz:         authzEngine,
-		serverURL:     nil,
+		serverURL:     mustParseURL(t, "https://api.example.test"),
 		siteURL:       siteURL,
 		db:            db,
 		repo:          repo.New(db),
@@ -431,6 +431,7 @@ func newStripeCheckoutTestInstance(t *testing.T) *stripeCheckoutTestInstance {
 		stripeClient:  stripe,
 		stripeHandler: nil,
 		featureFlags:  flags,
+		now:           time.Now,
 	}
 
 	return &stripeCheckoutTestInstance{
@@ -614,20 +615,6 @@ func TestCreateStripeCheckoutAllowsGatedOrganizationAdmin(t *testing.T) {
 	require.Greater(t, checkouts[0].ExpiresAt, time.Now().UTC())
 	require.LessOrEqual(t, checkouts[0].ExpiresAt.Sub(time.Now().UTC()), maximumStripeCheckoutSessionLifetime)
 	require.Contains(t, checkouts[0].IdempotencyKey, "checkout-session:"+ti.orgID+":")
-}
-
-func TestCreateStripeCheckoutFailsClosedWithoutRolloutProvider(t *testing.T) {
-	t.Parallel()
-
-	ti := newStripeCheckoutTestInstance(t)
-	ti.service.featureFlags = nil
-
-	_, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
-	require.Error(t, err)
-	requireOopsCode(t, err, oops.CodeUnavailable)
-	uniqueCustomers, _, checkouts := ti.stripe.snapshot()
-	require.Zero(t, uniqueCustomers)
-	require.Empty(t, checkouts)
 }
 
 func TestCreateStripeCheckoutAlignsStripeTrialEndWithoutConvertingProductTrial(t *testing.T) {

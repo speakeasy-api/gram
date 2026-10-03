@@ -85,9 +85,6 @@ type normalizedSetPluginAssignments struct {
 // WithAssignmentMutations enables the separately gated write half of the plugin
 // service. Inventory reads remain available when any write dependency is absent.
 func (s *PluginsService) WithAssignmentMutations(flags feature.Provider, organizations OrganizationSlugResolver, logger *audit.Logger, budget OperationBudget) *PluginsService {
-	if s == nil {
-		return nil
-	}
 	s.mutationFlags = flags
 	s.organizations = organizations
 	s.audit = logger
@@ -96,21 +93,7 @@ func (s *PluginsService) WithAssignmentMutations(flags feature.Provider, organiz
 	return s
 }
 
-func (s *PluginsService) WithDistributionAdmission(guard *admission.Guard) *PluginsService {
-	if s != nil {
-		s.distributionAdmission = guard
-	}
-	return s
-}
-
-func (s *PluginsService) mutationValid() bool {
-	return s.valid() && s.mutationFlags != nil && s.organizations != nil && s.audit != nil && s.mutationBudget.valid() && s.mutationReceipts != nil && s.distributionAdmission != nil
-}
-
 func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Principal, input SetPluginAssignmentsInput) (SetPluginAssignmentsOutput, error) {
-	if !s.mutationValid() {
-		return SetPluginAssignmentsOutput{}, pluginAssignmentMutationUnavailable(nil)
-	}
 	if err := requirePluginAssignmentConfirmation(input.Confirmed); err != nil {
 		return SetPluginAssignmentsOutput{}, err
 	}

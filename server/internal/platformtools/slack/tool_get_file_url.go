@@ -67,10 +67,6 @@ func NewGetFileURLTool(httpClient *guardian.HTTPClient, enc *encryption.Client, 
 }
 
 func callGetFileURL(ctx context.Context, client *apiClient, enc *encryption.Client, serverURL *url.URL, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if enc == nil || serverURL == nil {
-		return fmt.Errorf("slack file url minting is not configured")
-	}
-
 	var input getFileURLInput
 	if err := decodePayload(payload, &input); err != nil {
 		return err

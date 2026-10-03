@@ -167,9 +167,6 @@ func NewService(
 	trialNotifier trialemails.Notifier,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
-	if trialNotifier == nil {
-		trialNotifier = trialemails.NoopNotifier{}
-	}
 
 	supportHandoffs := supporthandoff.NewStore(nonceStore)
 
@@ -1370,9 +1367,6 @@ func (s *Service) persistProvisionedOrganization(
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("provision organization access: %w", err)
 	}
 
-	if s.organizationSeeder == nil {
-		return orgRepo.OrganizationMetadatum{}, errors.New("organization feature seeder is not configured")
-	}
 	if err := s.organizationSeeder(ctx, tx, org.ID); err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("seed organization default entitlements: %w", err)
 	}

@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -42,9 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-var (
-	infra *testenv.Environment
-)
+var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
@@ -70,6 +69,7 @@ type testInstance struct {
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 	publisher      *capturePublishSignaler
+	guard          *admission.Guard
 }
 
 // capturePublishSignaler records the republish enqueues a plugin mutation makes
@@ -135,14 +135,17 @@ func newTestPluginsServiceWithLockTimeout(t *testing.T, lockTimeout time.Duratio
 	)
 
 	auditLogger := audit.NewLogger()
+	features := &feature.InMemory{}
+	guard := admission.NewGuard(features, admission.NewReportMetrics(testenv.NewMeterProvider(t), logger))
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", nil, nil)
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", features, nil, guard)
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
 		publisher:      nil,
+		guard:          guard,
 	}
 }
 
@@ -168,7 +171,7 @@ func createTestRolePrincipal(t *testing.T, ctx context.Context, ti *testInstance
 
 func newTestPluginsServiceWithGitHub(t *testing.T, ghClient plugins.GitHubPublisher) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestPluginsServiceWithGitHubAndFeatures(t, ghClient, nil)
+	return newTestPluginsServiceWithGitHubAndFeatures(t, ghClient, &feature.InMemory{})
 }
 
 // newTestPluginsServiceWithGitHubAndFeatures builds a dashboard-style Service
@@ -213,6 +216,7 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 	auditLogger := audit.NewLogger()
 
 	publisher := &capturePublishSignaler{mu: sync.Mutex{}, signals: nil}
+	guard := admission.NewGuard(features, admission.NewReportMetrics(testenv.NewMeterProvider(t), logger))
 
 	svc := plugins.NewService(
 		logger,
@@ -227,6 +231,7 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 		"https://app.getgram.ai",
 		features,
 		publisher,
+		guard,
 	)
 
 	return ctx, &testInstance{
@@ -234,6 +239,7 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 		conn:           conn,
 		sessionManager: sessionManager,
 		publisher:      publisher,
+		guard:          guard,
 	}
 }
 
@@ -250,14 +256,21 @@ func newTestPluginPublisher(t *testing.T, ti *testInstance, ghClient plugins.Git
 		InstallationID: 12345,
 	}
 
+	logger := testenv.NewLogger(t)
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+
 	return plugins.NewPublisher(
-		testenv.NewLogger(t),
+		logger,
 		ti.conn,
+		cache.NewRedisCacheAdapter(redisClient),
+		authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		audit.NewLogger(),
 		ghConfig,
 		"local",
 		"https://app.getgram.ai",
 		features,
+		admission.NewGuard(features, admission.NewReportMetrics(testenv.NewMeterProvider(t), logger)),
 	)
 }
 

@@ -35,15 +35,11 @@ func (d tunnelDoer) Do(req *http.Request) (*http.Response, error) {
 }
 
 // upstreamHTTPDoer picks the transport from the issuer's persisted binding.
-func upstreamHTTPDoer(direct httpDoer, tunnels *tunnelrouting.HTTPClient, tunneledMcpServerID uuid.NullUUID) (httpDoer, error) {
-	tunnel, err := issuerTunnelTransport(tunnels, tunneledMcpServerID)
-	if err != nil {
-		return nil, err
+func upstreamHTTPDoer(direct httpDoer, tunnels *tunnelrouting.HTTPClient, tunneledMcpServerID uuid.NullUUID) httpDoer {
+	if tunnel := issuerTunnelTransport(tunnels, tunneledMcpServerID); tunnel != nil {
+		return tunnel
 	}
-	if tunnel == nil {
-		return direct, nil
-	}
-	return tunnel, nil
+	return direct
 }
 
 // issuerTunnelTransport returns the tunnel transport for a bound issuer, and a
@@ -51,12 +47,9 @@ func upstreamHTTPDoer(direct httpDoer, tunnels *tunnelrouting.HTTPClient, tunnel
 // their own call — a key set fetch, say — use this instead of
 // upstreamHTTPDoer, so the tunnel replaces that client only when there is one
 // and the direct path keeps its own rules.
-func issuerTunnelTransport(tunnels *tunnelrouting.HTTPClient, tunneledMcpServerID uuid.NullUUID) (httpDoer, error) {
+func issuerTunnelTransport(tunnels *tunnelrouting.HTTPClient, tunneledMcpServerID uuid.NullUUID) httpDoer {
 	if !tunneledMcpServerID.Valid {
-		return nil, nil
+		return nil
 	}
-	if tunnels == nil {
-		return nil, fmt.Errorf("tunnel transport is not configured")
-	}
-	return tunnelDoer{client: tunnels, tunnelID: tunneledMcpServerID.UUID.String()}, nil
+	return tunnelDoer{client: tunnels, tunnelID: tunneledMcpServerID.UUID.String()}
 }

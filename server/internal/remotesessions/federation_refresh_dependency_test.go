@@ -13,8 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
@@ -47,8 +49,11 @@ func TestFederatedRefreshVerificationDependencies(t *testing.T) {
 			before, err := store.load(t.Context(), b)
 			require.NoError(t, err)
 			logger := testenv.NewLogger(t)
-			keys, err := jwks.NewKeyResolver(jwks.NewResolver(federatedPublicPolicy(t), testenv.NewMeterProvider(t), logger), jwks.NewMemoryCache(), ratelimit.New(nil, "federated-refresh-dependency-test", ratelimit.PerMinute(10)), nil, logger)
-			require.NoError(t, err)
+			mr := miniredis.RunT(t)
+			redisClient := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+			t.Cleanup(func() { require.NoError(t, redisClient.Close()) })
+			limitStore := ratelimit.NewRedisStore(redisClient)
+			keys := jwks.NewKeyResolver(jwks.NewResolver(federatedPublicPolicy(t), testenv.NewMeterProvider(t), logger), jwks.NewMemoryCache(), ratelimit.New(limitStore, "federated-refresh-dependency-test", ratelimit.PerMinute(10)), ratelimit.New(limitStore, "federated-refresh-dependency-test-fetch", ratelimit.PerMinute(10)), logger)
 			manager := &ChallengeManager{idTokens: NewIDTokenVerifier(keys)}
 			kid := "example-key"
 			if tc.unknownKey {

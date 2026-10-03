@@ -74,20 +74,14 @@ type NotifyCustomDomainUnhealthyArgs struct {
 }
 
 func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure CustomDomainInfrastructureChecker, expectedTarget string, expectedARecords []netip.Addr, emails *email.Service, siteURL *url.URL, guardianPolicy *guardian.Policy) *CustomDomainHealth {
-	probe := func(ctx context.Context, domain string) error {
-		return errors.New("custom domain https probe is not configured")
-	}
-	if guardianPolicy != nil {
-		probe = func(ctx context.Context, domain string) error {
-			return probeCustomDomainHTTPS(ctx, guardianPolicy.Client(), domain)
-		}
-	}
 	return &CustomDomainHealth{
-		db:               db,
-		logger:           logger,
-		infrastructure:   infrastructure,
-		resolver:         dns.NewNetResolver(),
-		probe:            probe,
+		db:             db,
+		logger:         logger,
+		infrastructure: infrastructure,
+		resolver:       dns.NewNetResolver(),
+		probe: func(ctx context.Context, domain string) error {
+			return probeCustomDomainHTTPS(ctx, guardianPolicy.Client(), domain)
+		},
 		expectedTarget:   expectedTarget,
 		expectedARecords: expectedARecords,
 		emails:           emails,

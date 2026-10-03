@@ -84,7 +84,7 @@ func trustedGramHostedMCPHostMatches(u *url.URL, trustedHost string) bool {
 // provenance is unknown.
 func (c *Client) TrustedMCPHostsForOrg(ctx context.Context, orgID string) ([]string, error) {
 	hosts := make([]string, 0, 2)
-	if c.serverURL != nil && c.serverURL.Host != "" {
+	if c.serverURL.Host != "" {
 		hosts = append(hosts, c.serverURL.Host)
 	}
 	if orgID == "" {
@@ -142,7 +142,7 @@ func (c *Client) IsGramHostedMCPURLForOrg(ctx context.Context, rawURL, orgID str
 }
 
 func (c *Client) serverHost() []string {
-	if c.serverURL == nil || c.serverURL.Host == "" {
+	if c.serverURL.Host == "" {
 		return nil
 	}
 	return []string{c.serverURL.Host}

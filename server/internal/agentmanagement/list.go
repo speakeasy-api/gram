@@ -25,10 +25,7 @@ func (s *Service) List(ctx context.Context, _ *gen.ListPayload) ([]*gen.ManagedA
 	ownerIDs := make([]string, 0, len(rows))
 	seenOwners := make(map[string]bool)
 	for _, agent := range rows {
-		permissions, err := s.authorizer.Permissions(ctx, human, agent)
-		if err != nil {
-			return nil, s.serviceError(ctx, err, "evaluate agent permissions")
-		}
+		permissions := s.authorizer.Permissions(human, agent)
 		if !permissions.Read {
 			continue
 		}

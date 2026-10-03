@@ -55,23 +55,13 @@ type AccessRoleAssignmentService struct {
 	receipts *AccessRoleAssignmentReceiptStore
 }
 
-func NewAccessRoleAssignmentService(roles *AccessRoleMutationService) (*AccessRoleAssignmentService, error) {
-	if roles == nil || !roles.valid() {
-		return nil, ErrAccessRoleMutationUnavailable
-	}
-	return &AccessRoleAssignmentService{roles: roles, receipts: NewAccessRoleAssignmentReceiptStore(roles.reads.db)}, nil
-}
-
-func (s *AccessRoleAssignmentService) valid() bool {
-	return s != nil && s.roles != nil && s.roles.valid() && s.receipts != nil
+func NewAccessRoleAssignmentService(roles *AccessRoleMutationService) *AccessRoleAssignmentService {
+	return &AccessRoleAssignmentService{roles: roles, receipts: NewAccessRoleAssignmentReceiptStore(roles.reads.db)}
 }
 
 func (s *AccessRoleAssignmentService) Assign(ctx context.Context, principal Principal, input AssignMCPAccessRoleInput) (AssignMCPAccessRoleOutput, error) {
 	if !input.Confirmed {
 		return AssignMCPAccessRoleOutput{}, accessRoleMutationConfirmationRequired()
-	}
-	if !s.valid() {
-		return AssignMCPAccessRoleOutput{}, accessRoleMutationUnavailable(nil)
 	}
 	input.ProjectID = strings.TrimSpace(input.ProjectID)
 	input.MemberReference = strings.TrimSpace(input.MemberReference)

@@ -52,7 +52,7 @@ func TestCompleteReminderTool_RequiresReminderID(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewCompleteReminderTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callCompleteReminder,
 	}
 

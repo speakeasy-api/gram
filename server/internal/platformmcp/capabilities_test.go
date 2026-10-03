@@ -16,7 +16,7 @@ import (
 func TestAdvertisedCapabilitiesWithholdListChanged(t *testing.T) {
 	t.Parallel()
 
-	server, _ := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	server, _ := newTestServer(t)
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(t.Context(), serverTransport, nil)

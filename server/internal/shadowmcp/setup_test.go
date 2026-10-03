@@ -3,6 +3,7 @@ package shadowmcp_test
 import (
 	"context"
 	"log"
+	"net/url"
 	"os"
 	"testing"
 
@@ -61,7 +62,7 @@ func newFixture(t *testing.T) *fixture {
 
 	logger := testenv.NewLogger(t)
 	cacheImpl := cache.NewRedisCacheAdapter(redisClient)
-	client := shadowmcp.NewClient(logger, conn, cacheImpl, nil)
+	client := shadowmcp.NewClient(logger, conn, cacheImpl, &url.URL{Scheme: "https", Host: "app.getgram.ai"})
 
 	orgID := "test-org-" + uuid.NewString()[:8]
 	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{

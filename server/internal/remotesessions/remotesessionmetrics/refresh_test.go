@@ -42,15 +42,3 @@ func TestRefreshRecord_PinsInstrumentAndDimensions(t *testing.T) {
 	require.Len(t, sum.DataPoints, 1)
 	require.Equal(t, int64(1), sum.DataPoints[0].Value)
 }
-
-// A nil receiver and a nil instrument both degrade to no-ops rather than
-// panicking, per the package convention.
-func TestRefreshRecord_NilSafe(t *testing.T) {
-	t.Parallel()
-
-	var m *Refresh
-	m.Record(t.Context(), "https://idp.example.com", RefreshTriggerRequest, RefreshOutcomeRefreshed)
-
-	empty := &Refresh{attempts: nil}
-	empty.Record(t.Context(), "https://idp.example.com", RefreshTriggerRequest, RefreshOutcomeRefreshed)
-}

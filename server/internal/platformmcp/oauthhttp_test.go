@@ -17,9 +17,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -66,9 +68,11 @@ func (c *memoryCache) Set(_ context.Context, key string, value any, _ time.Durat
 func (c *memoryCache) Add(_ context.Context, key string, _ time.Duration) (bool, error) {
 	return true, nil
 }
+
 func (c *memoryCache) Update(_ context.Context, key string, value any) error {
 	return c.Set(context.Background(), key, value, 0)
 }
+
 func (c *memoryCache) Delete(_ context.Context, key string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -90,9 +94,11 @@ func (testIdentity) BuildAuthorizationURL(_ context.Context, params identity.Aut
 	}
 	return parsed, nil
 }
+
 func (testIdentity) ExchangeCodeForTokens(_ context.Context, _ string) (*identity.IDPUserInfo, error) {
 	return &identity.IDPUserInfo{}, nil
 }
+
 func (testIdentity) CompleteIDPLogin(_ context.Context, _ *identity.IDPUserInfo, _ identity.IDPLoginOptions) (identity.IDPLoginResult, error) {
 	return identity.IDPLoginResult{UserID: "user-1", Reactivated: false, UserInfo: nil}, nil
 }
@@ -113,6 +119,7 @@ type allowAuthorizer struct{}
 func (allowAuthorizer) PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error) {
 	return contextWithPrincipal(ctx, principal), nil
 }
+
 func (allowAuthorizer) AuthorizeExternalCall(context.Context, Principal, ExternalAuthorization) error {
 	return nil
 }
@@ -126,9 +133,11 @@ type oauthTestAuthorizer struct {
 func (a oauthTestAuthorizer) PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error) {
 	return contextWithPrincipal(ctx, principal), a.err
 }
+
 func (a oauthTestAuthorizer) AuthorizeExternalCall(context.Context, Principal, ExternalAuthorization) error {
 	return a.err
 }
+
 func (a oauthTestAuthorizer) RequireLiveMembership(context.Context, Principal) error {
 	return a.err
 }
@@ -528,19 +537,29 @@ func newTestOAuthHTTP(t *testing.T) *OAuthHTTP {
 	t.Helper()
 	base, err := url.Parse("https://gram.example")
 	require.NoError(t, err)
-	service, err := NewOAuthHTTP(OAuthHTTPConfig{
-		BaseURL:       base,
-		Cache:         &memoryCache{values: map[string]any{}},
-		Store:         platformoauth.NewInMemoryStore(),
-		Identity:      testIdentity{},
-		Gate:          allowGate{},
-		Authorizer:    allowAuthorizer{},
-		Organizations: testOrganizationSelector{organizations: []OrganizationOption{{ID: "org-1", Name: "Organization one"}}},
-		Signer:        sessiontokens.NewSigner("test-key"),
-		Encryption:    testEncryption(t),
+	service := NewOAuthHTTP(OAuthHTTPConfig{
+		BaseURL:        base,
+		Cache:          &memoryCache{values: map[string]any{}},
+		Store:          platformoauth.NewInMemoryStore(),
+		Identity:       testIdentity{},
+		Gate:           allowGate{},
+		Authorizer:     allowAuthorizer{},
+		Organizations:  testOrganizationSelector{organizations: []OrganizationOption{{ID: "org-1", Name: "Organization one"}}},
+		Signer:         sessiontokens.NewSigner("test-key"),
+		Encryption:     testEncryption(t),
+		Telemetry:      NewOAuthTelemetry(testenv.NewLogger(t), testenv.NewMeterProvider(t)),
+		Logger:         testenv.NewLogger(t),
+		GuardianPolicy: oauthTestGuardianPolicy(t),
+		MeterProvider:  testenv.NewMeterProvider(t),
 	})
-	require.NoError(t, err)
 	return service
+}
+
+func oauthTestGuardianPolicy(t *testing.T) *guardian.Policy {
+	t.Helper()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	return policy
 }
 
 func testEncryption(t *testing.T) *encryption.Client {
@@ -581,7 +600,7 @@ func TestOAuthHTTPPinsIDPCallbackToOutboundOrigin(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			var callbacks []string
-			service, err := NewOAuthHTTP(OAuthHTTPConfig{
+			service := NewOAuthHTTP(OAuthHTTPConfig{
 				BaseURL:            base,
 				IDPCallbackBaseURL: tc.pinned,
 				Cache:              &memoryCache{values: map[string]any{}},
@@ -592,8 +611,11 @@ func TestOAuthHTTPPinsIDPCallbackToOutboundOrigin(t *testing.T) {
 				Organizations:      testOrganizationSelector{organizations: []OrganizationOption{{ID: "org-1", Name: "Organization one"}}},
 				Signer:             sessiontokens.NewSigner("test-key"),
 				Encryption:         testEncryption(t),
+				Telemetry:          NewOAuthTelemetry(testenv.NewLogger(t), testenv.NewMeterProvider(t)),
+				Logger:             testenv.NewLogger(t),
+				GuardianPolicy:     oauthTestGuardianPolicy(t),
+				MeterProvider:      testenv.NewMeterProvider(t),
 			})
-			require.NoError(t, err)
 			require.NoError(t, testStore(t, service).RegisterClient(context.Background(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 
 			authorize := httptest.NewRecorder()

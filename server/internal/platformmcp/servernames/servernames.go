@@ -125,9 +125,6 @@ func NewResolver(servers []ConfiguredServer) *Resolver {
 // reports false for a name no configured server is known by and for a name
 // more than one server shares, so a caller never attributes traffic by guess.
 func (r *Resolver) Resolve(reported string) (string, bool) {
-	if r == nil {
-		return "", false
-	}
 	id, ok := r.byKey[normalize(reported)]
 	return id, ok && id != ""
 }
@@ -135,9 +132,6 @@ func (r *Resolver) Resolve(reported string) (string, bool) {
 // Name returns how results name a configured server: its configured name,
 // else its slug, else its id. An unknown id returns itself.
 func (r *Resolver) Name(id string) string {
-	if r == nil {
-		return id
-	}
 	if name, ok := r.names[id]; ok {
 		return name
 	}
@@ -151,9 +145,6 @@ func (r *Resolver) Name(id string) string {
 // listing every variant. A spelling another server shares is omitted so one
 // call is never attributed to both.
 func (r *Resolver) ReportedNames(id string) []string {
-	if r == nil {
-		return nil
-	}
 	names := r.reported[id]
 	if len(names) == 0 {
 		return nil

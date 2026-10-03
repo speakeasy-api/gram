@@ -35,7 +35,7 @@ type ListOrganizationActivityOutput struct {
 	NextCursor     *string                `json:"next_cursor,omitempty"`
 }
 
-func registerActivityTools(server *mcp.Server, organizations OrganizationReader, activity ActivityReader) {
+func registerActivityTools(server *mcp.Server, reader Reader) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_organization_activity",
 		Title:       "List Organization Activity",
@@ -46,18 +46,15 @@ func registerActivityTools(server *mcp.Server, organizations OrganizationReader,
 		if len(input.Cursor) > 128 {
 			return nil, output, errors.New("provide a cursor up to 128 characters")
 		}
-		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
+		org, err := readExactOrganization(ctx, reader, input.OrganizationID)
 		if err != nil {
 			return nil, output, err
-		}
-		if activity == nil {
-			return nil, output, errActivityUnavailable
 		}
 		payload := &gen.ListOrganizationActivityPayload{OrganizationID: org.ID}
 		if input.Cursor != "" {
 			payload.Cursor = &input.Cursor
 		}
-		result, err := activity.ListOrganizationActivity(ctx, payload)
+		result, err := reader.ListOrganizationActivity(ctx, payload)
 		if err != nil || result == nil || len(result.Logs) > maxOrganizationActivityPage || (result.NextCursor != nil && len(*result.NextCursor) > 128) {
 			return nil, output, errActivityUnavailable
 		}

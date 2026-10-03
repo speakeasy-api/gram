@@ -206,13 +206,3 @@ func TestResolver_NamesServersByNameThenSlugThenID(t *testing.T) {
 	require.Equal(t, "id-bare", resolver.Name("id-bare"))
 	require.Equal(t, "unknown", resolver.Name("unknown"))
 }
-
-func TestResolver_NilResolvesNothing(t *testing.T) {
-	t.Parallel()
-
-	var resolver *servernames.Resolver
-	_, ok := resolver.Resolve("billing")
-	require.False(t, ok)
-	require.Equal(t, "x", resolver.Name("x"))
-	require.Nil(t, resolver.ReportedNames("x"))
-}

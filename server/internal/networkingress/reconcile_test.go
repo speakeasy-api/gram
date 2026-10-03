@@ -23,9 +23,11 @@ type lifecycleProvider struct {
 func (p lifecycleProvider) Apply(ctx context.Context, d k8s.NetworkIngressDesired) (k8s.NetworkIngressObservation, error) {
 	return p.apply(ctx, d)
 }
+
 func (p lifecycleProvider) Observe(ctx context.Context, r k8s.NetworkIngressResourceNames) (k8s.NetworkIngressObservation, error) {
 	return p.observe(ctx, r)
 }
+
 func (p lifecycleProvider) Delete(ctx context.Context, r k8s.NetworkIngressResourceNames) error {
 	return p.delete(ctx, r)
 }
@@ -49,8 +51,7 @@ func TestNetworkIngressExecutorRejectsWrongOrganization(t *testing.T) {
 			return nil
 		},
 	}
-	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), nil)
-	require.NoError(t, err)
+	registry := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), k8s.NewNetworkIngressMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)))
 	executor := networkingress.NewExecutor(ti.conn, testenv.NewEncryptionClient(t), registry, networkingress.ExecutorOptions{})
 	result, err := executor.Reconcile(ctx, "org_wrong", id)
 	require.NoError(t, err)
@@ -72,10 +73,9 @@ func TestNetworkIngressExecutorDisabledGatePreservesObserveFailure(t *testing.T)
 		},
 		delete: func(context.Context, k8s.NetworkIngressResourceNames) error { return nil },
 	}
-	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), nil)
-	require.NoError(t, err)
+	registry := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), k8s.NewNetworkIngressMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)))
 	executor := networkingress.NewExecutor(ti.conn, testenv.NewEncryptionClient(t), registry, networkingress.ExecutorOptions{Queue: "test", Image: "image", BackendService: "backend", BackendPort: 443, CanApply: func(context.Context) error { return fmt.Errorf("off") }})
-	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	_, err := executor.Reconcile(ctx, ti.orgID, id)
 	require.ErrorContains(t, err, "kubernetes_api")
 	require.Equal(t, "kubernetes_api", loadRow(t, ctx, ti).LastError.String)
 }
@@ -100,8 +100,7 @@ func TestNetworkIngressExecutorDisabledGateObservesOnly(t *testing.T) {
 			return nil
 		},
 	}
-	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), nil)
-	require.NoError(t, err)
+	registry := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), k8s.NewNetworkIngressMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)))
 	executor := networkingress.NewExecutor(ti.conn, testenv.NewEncryptionClient(t), registry, networkingress.ExecutorOptions{Queue: "test", Image: "image", BackendService: "backend", BackendPort: 443, CanApply: func(context.Context) error { return fmt.Errorf("off") }})
 	result, err := executor.Reconcile(ctx, ti.orgID, id)
 	require.NoError(t, err)
@@ -125,14 +124,13 @@ func TestNetworkIngressExecutorPublicationInvalidatesDNSTransitions(t *testing.T
 		},
 		delete: nil,
 	}
-	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), nil)
-	require.NoError(t, err)
+	registry := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), k8s.NewNetworkIngressMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)))
 	executor := networkingress.NewExecutor(ti.conn, testenv.NewEncryptionClient(t), registry, networkingress.ExecutorOptions{
 		Queue: "test", Image: "image", BackendService: "backend", BackendPort: 443,
 		CanApply:             func(context.Context) error { return fmt.Errorf("off") },
 		PublicationRequester: publication,
 	})
-	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	_, err := executor.Reconcile(ctx, ti.orgID, id)
 	require.NoError(t, err)
 	require.Equal(t, 1, publication.calls)
 	_, err = executor.Reconcile(ctx, ti.orgID, id)
@@ -159,10 +157,9 @@ func TestNetworkIngressExecutorRetainsCleanupUntilAbsent(t *testing.T) {
 		}
 		return nil
 	}}
-	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), nil)
-	require.NoError(t, err)
-	executor := networkingress.NewExecutor(ti.conn, nil, registry, networkingress.ExecutorOptions{Queue: "", Image: "", BackendService: "", BackendPort: 0, CanApply: nil})
-	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	registry := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), k8s.NewNetworkIngressMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)))
+	executor := networkingress.NewExecutor(ti.conn, testenv.NewEncryptionClient(t), registry, networkingress.ExecutorOptions{Queue: "", Image: "", BackendService: "", BackendPort: 0, CanApply: func(context.Context) error { return nil }})
+	_, err := executor.Reconcile(ctx, ti.orgID, id)
 	require.ErrorContains(t, err, "deletion_pending")
 	row, err := repo.New(ti.conn).GetNetworkIngressForReconcile(ctx, repo.GetNetworkIngressForReconcileParams{ID: id, OrganizationID: ti.orgID})
 	require.NoError(t, err)
@@ -190,11 +187,10 @@ func TestNetworkIngressExecutorSurfacesRejectedCredentialsDuringCleanup(t *testi
 	provider := lifecycleProvider{apply: nil, observe: nil, delete: func(context.Context, k8s.NetworkIngressResourceNames) error {
 		return deleteErr
 	}}
-	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), nil)
-	require.NoError(t, err)
-	executor := networkingress.NewExecutor(ti.conn, nil, registry, networkingress.ExecutorOptions{})
+	registry := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), k8s.NewNetworkIngressMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)))
+	executor := networkingress.NewExecutor(ti.conn, testenv.NewEncryptionClient(t), registry, networkingress.ExecutorOptions{})
 
-	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	_, err := executor.Reconcile(ctx, ti.orgID, id)
 	var failure *networkingress.ReconcileError
 	require.ErrorAs(t, err, &failure)
 	require.Equal(t, "provider_credentials_rejected", failure.Code)
@@ -242,8 +238,7 @@ func TestNetworkIngressExecutorGateClosesBeforeApply(t *testing.T) {
 			return k8s.NetworkIngressObservation{Status: "pending", DNSName: "", ErrorCode: "", ConnectedAt: nil}, nil
 		}, delete: nil,
 	}
-	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), nil)
-	require.NoError(t, err)
+	registry := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), k8s.NewNetworkIngressMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)))
 	executor := networkingress.NewExecutor(ti.conn, testenv.NewEncryptionClient(t), registry, networkingress.ExecutorOptions{Queue: "test", Image: "image", BackendService: "backend", BackendPort: 443, CanApply: func(context.Context) error {
 		checks++
 		if checks > 1 {
@@ -251,7 +246,7 @@ func TestNetworkIngressExecutorGateClosesBeforeApply(t *testing.T) {
 		}
 		return nil
 	}})
-	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	_, err := executor.Reconcile(ctx, ti.orgID, id)
 	require.NoError(t, err)
 	require.Equal(t, 2, checks)
 	require.Equal(t, 1, observations)
@@ -275,8 +270,7 @@ func TestNetworkIngressExecutorRotationSuppressesStaleObservation(t *testing.T) 
 			return k8s.NetworkIngressObservation{Status: "online", DNSName: "private.example.ts.net", ErrorCode: "", ConnectedAt: nil}, nil
 		}, observe: nil, delete: nil,
 	}
-	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), nil)
-	require.NoError(t, err)
+	registry := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), k8s.NewNetworkIngressMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)))
 	executor := networkingress.NewExecutor(ti.conn, testenv.NewEncryptionClient(t), registry, networkingress.ExecutorOptions{Queue: "test", Image: "image", BackendService: "backend", BackendPort: 443, CanApply: func(context.Context) error { return nil }})
 	result, err := executor.Reconcile(ctx, ti.orgID, id)
 	require.NoError(t, err)
@@ -302,10 +296,9 @@ func TestNetworkIngressExecutorDeleteWinsDuringPartialApply(t *testing.T) {
 		observe: nil,
 		delete:  func(context.Context, k8s.NetworkIngressResourceNames) error { deleted = true; return nil },
 	}
-	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), nil)
-	require.NoError(t, err)
+	registry := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), k8s.NewNetworkIngressMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t)))
 	executor := networkingress.NewExecutor(ti.conn, testenv.NewEncryptionClient(t), registry, networkingress.ExecutorOptions{Queue: "test", Image: "image", BackendService: "backend", BackendPort: 443, CanApply: func(context.Context) error { return nil }})
-	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	_, err := executor.Reconcile(ctx, ti.orgID, id)
 	require.NoError(t, err)
 	require.True(t, deleted)
 	row, err := repo.New(ti.conn).GetNetworkIngressForReconcile(ctx, repo.GetNetworkIngressForReconcileParams{ID: id, OrganizationID: ti.orgID})

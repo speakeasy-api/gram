@@ -100,14 +100,14 @@ type ChatMessageWriter struct {
 	assetStorage assets.BlobStore
 	stokenCodec  *stokens.Codec
 	observers    []MessageObserver
-	// turnStream, when set, receives a frame per persisted row so dashboard
-	// subscribers can render a turn without polling. Nil disables publishing.
+	// turnStream receives a frame per persisted row so dashboard subscribers
+	// can render a turn without polling.
 	turnStream  *TurnStream
 	shutdownCtx context.Context //nolint:containedctx // must outlive any single request
 	cancel      context.CancelFunc
 }
 
-func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore) (w *ChatMessageWriter, shutdown func(context.Context) error) {
+func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore, turnStream *TurnStream) (w *ChatMessageWriter, shutdown func(context.Context) error) {
 	ctx, cancel := context.WithCancel(context.Background()) //nolint:contextcheck // shutdown context must outlive any single request
 	w = &ChatMessageWriter{
 		db:           db,
@@ -117,19 +117,13 @@ func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage as
 		observers:    nil,
 		shutdownCtx:  ctx,
 		cancel:       cancel,
-		turnStream:   nil,
+		turnStream:   turnStream,
 	}
 	shutdown = func(_ context.Context) error {
 		cancel()
 		return nil
 	}
 	return w, shutdown
-}
-
-// WithTurnStream enables per-row turn frame publishing.
-func (w *ChatMessageWriter) WithTurnStream(stream *TurnStream) *ChatMessageWriter {
-	w.turnStream = stream
-	return w
 }
 
 func (w *ChatMessageWriter) AddObserver(obs MessageObserver) {
@@ -148,10 +142,6 @@ func (w *ChatMessageWriter) WriteContentPartAssets(ctx context.Context, projectI
 	if len(contents) == 0 {
 		return nil, nil
 	}
-	if w == nil || w.assetStorage == nil {
-		return nil, fmt.Errorf("content part asset storage unavailable")
-	}
-
 	paths := make([]string, len(contents))
 	leaders := make(map[string]int, len(contents))
 	for i, content := range contents {
@@ -877,7 +867,7 @@ func (w *ChatMessageWriter) WriteWithAssets(ctx context.Context, projectID uuid.
 
 // notifyMessagesStored fires all registered observers asynchronously.
 func (w *ChatMessageWriter) notifyMessagesStored(ctx context.Context, projectID uuid.UUID) {
-	if w == nil || len(w.observers) == 0 {
+	if len(w.observers) == 0 {
 		return
 	}
 	go func() {

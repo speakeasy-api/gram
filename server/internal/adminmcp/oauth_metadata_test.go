@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -19,16 +18,18 @@ func TestStaffOAuthUsesCanonicalAdminOrigin(t *testing.T) {
 	t.Parallel()
 	base, err := url.Parse("https://admin.example.test/?ignored=true")
 	require.NoError(t, err)
+	db, err := staffMCPInfra.CloneTestDatabase(t, "staffoauthorigin")
+	require.NoError(t, err)
 	cipher, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
-	oauth, err := NewStaffOAuth(base, &pgxpool.Pool{}, testenv.NewMemoryCache(), &fakeAdminVerifier{}, cipher, sessiontokens.NewSigner("staff-test-signing-key"), WriteConfig{}, testenv.NewLogger(t))
-	require.NoError(t, err)
+	oauth := NewStaffOAuth(base, db, testenv.NewMemoryCache(), &fakeAdminVerifier{}, cipher, sessiontokens.NewSigner("staff-test-signing-key"), WriteConfig{}, testenv.NewLogger(t))
 	require.Equal(t, "https://admin.example.test/admin-mcp", oauth.Resource())
 	require.Equal(t, "https://admin.example.test/admin-mcp/oauth", oauth.Issuer())
 	require.Equal(t, "https://admin.example.test/.well-known/oauth-protected-resource/admin-mcp", oauth.ProtectedResourceURL())
 	base.Path = "/unexpected-prefix"
-	_, err = NewStaffOAuth(base, &pgxpool.Pool{}, testenv.NewMemoryCache(), &fakeAdminVerifier{}, cipher, sessiontokens.NewSigner("staff-test-signing-key"), WriteConfig{}, testenv.NewLogger(t))
-	require.Error(t, err)
+	require.Panics(t, func() {
+		NewStaffOAuth(base, db, testenv.NewMemoryCache(), &fakeAdminVerifier{}, cipher, sessiontokens.NewSigner("staff-test-signing-key"), WriteConfig{}, testenv.NewLogger(t))
+	})
 }
 
 func TestStaffOAuthMetadataURLs(t *testing.T) {

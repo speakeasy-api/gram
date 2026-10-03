@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 )
 
 const (
@@ -81,20 +82,16 @@ func (c FlyRuntimeConfig) Validate() error {
 // kubernetes client is injected, local when running in the local environment —
 // so several can run side by side (e.g. target GKE while still tearing down
 // Fly-backed rows). The target backend must be among those constructed.
-func NewRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider, httpPolicy *guardian.Policy, config RuntimeBackendConfig) (RuntimeBackend, error) {
+func NewRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider, httpPolicy *guardian.Policy, config RuntimeBackendConfig) RuntimeBackend {
 	backends := map[string]RuntimeBackend{}
 
 	if config.Fly.FlyTokens != nil {
-		if err := config.Fly.Validate(); err != nil {
-			return nil, fmt.Errorf("invalid fly assistant runtime config: %w", err)
-		}
+		inv.Require("fly assistant runtime", "config is valid", config.Fly.Validate())
 		backends[runtimeBackendFlyIO] = NewFlyRuntimeBackend(logger, tracerProvider, httpPolicy, config.Fly)
 	}
 
 	if config.GKE.Dynamic != nil {
-		if err := config.GKE.Validate(); err != nil {
-			return nil, fmt.Errorf("invalid gke assistant runtime config: %w", err)
-		}
+		inv.Require("gke assistant runtime", "config is valid", config.GKE.Validate())
 		// Reach the in-pod runner through the guardian egress policy, matching
 		// the Fly backend, but allowlist the runner pod CIDR: the server dials
 		// runners by their RFC1918 pod IP (resolved from the Kubernetes API),
@@ -107,9 +104,7 @@ func NewRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider,
 	}
 
 	if config.Local.Enabled {
-		if err := config.Local.Validate(); err != nil {
-			return nil, fmt.Errorf("invalid local assistant runtime config: %w", err)
-		}
+		inv.Require("local assistant runtime", "config is valid", config.Local.Validate())
 		// Containers publish the runner guest port on a loopback ephemeral
 		// port, which the default egress policy blocks. Allowlist loopback for
 		// this one client only — the policy's global enforcement is unchanged.
@@ -120,9 +115,5 @@ func NewRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider,
 		backends[runtimeBackendLocal] = NewLocalRuntimeBackend(logger, tracerProvider, localClient, newDockerCLIEngine(config.Local.GuestPort), config.Local)
 	}
 
-	router, err := newRuntimeRouter(config.Provider, backends)
-	if err != nil {
-		return nil, fmt.Errorf("assemble assistant runtime backends: %w", err)
-	}
-	return router, nil
+	return newRuntimeRouter(config.Provider, backends)
 }

@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"fmt"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -31,37 +30,17 @@ func newIDJAGValidator(
 	policy *guardian.Policy,
 	meterProvider metric.MeterProvider,
 	logger *slog.Logger,
-) (*idjag.Validator, error) {
-	cache, err := idjag.NewIssuerKeyCache(db)
-	if err != nil {
-		return nil, fmt.Errorf("create issuer key cache: %w", err)
-	}
+) *idjag.Validator {
+	cache := idjag.NewIssuerKeyCache(db)
 	store := ratelimit.NewRedisStore(redisClient)
-	keyResolver, err := jwks.NewKeyResolver(
+	keyResolver := jwks.NewKeyResolver(
 		jwks.NewResolver(policy, meterProvider, logger),
 		cache,
 		ratelimit.New(store, "idjag_jwks_refresh", idJAGKeyRefreshRate),
 		ratelimit.New(store, "idjag_jwks_fetch", idJAGKeyFetchRate),
 		logger,
 	)
-	if err != nil {
-		return nil, fmt.Errorf("create issuer key resolver: %w", err)
-	}
-	keys, err := idjag.NewIssuerVerificationKeys(keyResolver, cache)
-	if err != nil {
-		return nil, fmt.Errorf("create issuer verification keys: %w", err)
-	}
-	guard, err := replay.NewRedisGuard(redisClient, "idjag_jti", assertioncore.ReplayHoldFor(idjag.MaxLifetime))
-	if err != nil {
-		return nil, fmt.Errorf("create replay guard: %w", err)
-	}
-	postgresStore, err := idjag.NewPostgresStore(db)
-	if err != nil {
-		return nil, fmt.Errorf("create ID-JAG store: %w", err)
-	}
-	validator, err := idjag.NewValidator(keys, guard, postgresStore)
-	if err != nil {
-		return nil, fmt.Errorf("create validator: %w", err)
-	}
-	return validator, nil
+	keys := idjag.NewIssuerVerificationKeys(keyResolver, cache)
+	guard := replay.NewRedisGuard(redisClient, "idjag_jti", assertioncore.ReplayHoldFor(idjag.MaxLifetime))
+	return idjag.NewValidator(keys, guard, idjag.NewPostgresStore(db))
 }

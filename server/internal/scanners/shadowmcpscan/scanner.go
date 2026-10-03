@@ -148,31 +148,16 @@ type Scanner struct {
 	bypass     BypassChecker
 }
 
-// Option configures optional Scanner behavior.
-type Option func(*Scanner)
-
-// WithShadowMCPBypass enables risk-policy bypass evaluation.
-func WithShadowMCPBypass(bypass BypassChecker) Option {
-	return func(scanner *Scanner) {
-		scanner.bypass = bypass
-	}
-}
-
-// NewScanner returns a Scanner. logger, validator, hosted, and provenance must
-// all be non-nil; coverage may be nil to disable resolution metrics.
-func NewScanner(logger *slog.Logger, validator Validator, hosted HostedChecker, provenance ProvenanceLookup, coverage CoverageRecorder, opts ...Option) *Scanner {
-	scanner := &Scanner{
+// NewScanner returns a Scanner.
+func NewScanner(logger *slog.Logger, validator Validator, hosted HostedChecker, provenance ProvenanceLookup, coverage CoverageRecorder, bypass BypassChecker) *Scanner {
+	return &Scanner{
 		logger:     logger,
 		validator:  validator,
 		hosted:     hosted,
 		provenance: provenance,
 		coverage:   coverage,
-		bypass:     nil,
+		bypass:     bypass,
 	}
-	for _, opt := range opts {
-		opt(scanner)
-	}
-	return scanner
 }
 
 // Scan returns a Finding for each MCP tool call that did not reach a
@@ -223,7 +208,7 @@ func (s *Scanner) Scan(ctx context.Context, orgID string, projectID uuid.UUID, p
 	}
 
 	var bypassed map[BypassRequest]bool
-	if s.bypass != nil && len(requests) > 0 {
+	if len(requests) > 0 {
 		bypassed = s.bypass.CanBypassShadowMCP(ctx, orgID, policyID, requests)
 	}
 	for i, messageCandidates := range candidates {
@@ -384,9 +369,6 @@ func (s *Scanner) finding(call ToolCall, match string) scanners.Finding {
 }
 
 func (s *Scanner) recordResolution(ctx context.Context, orgID, hookSource, resolution string) {
-	if s.coverage == nil {
-		return
-	}
 	s.coverage.RecordShadowMCPResolution(ctx, orgID, hookSource, resolution)
 }
 

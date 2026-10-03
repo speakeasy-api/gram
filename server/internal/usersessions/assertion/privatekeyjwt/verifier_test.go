@@ -417,11 +417,9 @@ func TestNewVerifier_RejectsShortReplayHold(t *testing.T) {
 	client, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	short, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "short")), privatekeyjwt.DefaultMaxReplayHold-time.Second)
-	require.NoError(t, err)
+	short := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "short")), privatekeyjwt.DefaultMaxReplayHold-time.Second)
 
-	_, err = privatekeyjwt.NewVerifier(newKeyResolver(t, client), short)
-	require.Error(t, err)
+	require.Panics(t, func() { privatekeyjwt.NewVerifier(newKeyResolver(t, client), short) })
 }
 
 // The hold must cover the whole window in which an accepted assertion still
@@ -460,13 +458,6 @@ func TestVerify_OversizedAssertionRejected(t *testing.T) {
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor(oversized), expectationFor(t, s))
 	requireRejected(t, err, privatekeyjwt.ReasonMalformed)
 	require.ErrorContains(t, err, "exceeds")
-}
-
-func TestNewVerifier_RequiresDependencies(t *testing.T) {
-	t.Parallel()
-
-	_, err := privatekeyjwt.NewVerifier(nil, nil)
-	require.Error(t, err, "a verifier with no key resolver cannot check a signature")
 }
 
 // The allowlist is not ES256-only: an RSA client signing RS256 and PS256
@@ -524,10 +515,8 @@ func TestVerify_ReplayStoreOutageRefuses(t *testing.T) {
 	// A client pointed at nothing: every command fails at dial time.
 	dead := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1", DialTimeout: 100 * time.Millisecond, MaxRetries: -1})
 	t.Cleanup(func() { _ = dead.Close() })
-	guard, err := replay.NewRedisGuard(dead, string(testenv.NewCacheSuffix(t, "outage")), privatekeyjwt.DefaultMaxReplayHold)
-	require.NoError(t, err)
-	verifier, err := privatekeyjwt.NewVerifier(newKeyResolver(t, live), guard)
-	require.NoError(t, err)
+	guard := replay.NewRedisGuard(dead, string(testenv.NewCacheSuffix(t, "outage")), privatekeyjwt.DefaultMaxReplayHold)
+	verifier := privatekeyjwt.NewVerifier(newKeyResolver(t, live), guard)
 
 	_, err = verifier.Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expectationFor(t, s))
 	requireRejected(t, err, privatekeyjwt.ReasonReplayStoreUnavailable)

@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -61,15 +62,10 @@ type AuthorizedService struct {
 	authorizer     organizationAuthorizer
 }
 
-func NewAuthorizedService(generic GenericService, authorizer organizationAuthorizer) (*AuthorizedService, error) {
-	if isNilInterface(generic) || isNilInterface(authorizer) {
-		return nil, ErrInvalidArgument
-	}
+func NewAuthorizedService(generic GenericService, authorizer organizationAuthorizer) *AuthorizedService {
 	reader, ok := generic.(customerReadService)
-	if !ok || isNilInterface(reader) {
-		return nil, ErrInvalidArgument
-	}
-	return &AuthorizedService{generic: generic, customerReader: reader, authorizer: authorizer}, nil
+	inv.Require("authorized kill-switch service", "generic service supports customer reads", ok)
+	return &AuthorizedService{generic: generic, customerReader: reader, authorizer: authorizer}
 }
 
 func (s *AuthorizedService) ListDefinitions(ctx context.Context) ([]Definition, error) {

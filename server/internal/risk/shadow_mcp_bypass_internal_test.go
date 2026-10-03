@@ -1,4 +1,4 @@
-package background
+package risk
 
 import (
 	"context"
@@ -8,18 +8,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 type capturePolicyBypassBatchEvaluator struct {
-	evaluations []risk.PolicyBypassEvaluation
+	evaluations []PolicyBypassEvaluation
 }
 
-func (e *capturePolicyBypassBatchEvaluator) CanBypassBatch(_ context.Context, inputs []risk.PolicyBypassEvaluation) map[risk.PolicyBypassEvaluation]bool {
+func (e *capturePolicyBypassBatchEvaluator) CanBypassBatch(_ context.Context, inputs []PolicyBypassEvaluation) map[PolicyBypassEvaluation]bool {
 	e.evaluations = append(e.evaluations, inputs...)
-	results := make(map[risk.PolicyBypassEvaluation]bool, len(inputs))
+	results := make(map[PolicyBypassEvaluation]bool, len(inputs))
 	for _, input := range inputs {
 		results[input] = true
 	}
@@ -54,7 +53,7 @@ func TestShadowMCPPolicyBypassChecker_UsesCanonicalURLAndWholePolicyFallback(t *
 		Resolved: false,
 	}
 	evaluator := &capturePolicyBypassBatchEvaluator{evaluations: nil}
-	checker := &shadowMCPPolicyBypassChecker{evaluator: evaluator}
+	checker := &ShadowMCPBypassChecker{evaluator: evaluator}
 
 	decisions := checker.CanBypassShadowMCP(
 		t.Context(),

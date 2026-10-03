@@ -24,20 +24,20 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/externalmcptest"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/functionstest"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
-var (
-	infra *testenv.Environment
-)
+var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, Temporal: true, ClickHouse: true})
@@ -94,16 +94,26 @@ func newTestFunctionsService(t *testing.T) (context.Context, *testInstance) {
 	temporalEnv, _ := infra.NewTemporalEnv(t)
 	auditLogger := audit.NewLogger()
 
-	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient, auditLogger))
-	t.Cleanup(func() {
-		worker.Stop()
-	})
-	require.NoError(t, worker.Start(), "start temporal worker")
-
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
+
+	worker, err := background.NewDeploymentProcessingWorker(temporalEnv, logger, tracerProvider, meterProvider, background.DeploymentProcessingDeps{
+		GuardianPolicy:    guardianPolicy,
+		DB:                conn,
+		FeatureProvider:   f,
+		AssetStorage:      assetStorage,
+		EncryptionClient:  enc,
+		FunctionsDeployer: funcs,
+		MCPRegistryClient: mcpRegistryClient,
+		BillingRepository: billingClient,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		worker.Stop()
+	})
+	require.NoError(t, worker.Start(), "start temporal worker")
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
@@ -115,7 +125,10 @@ func newTestFunctionsService(t *testing.T) (context.Context, *testInstance) {
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := functions.NewService(logger, tracerProvider, conn, enc, tigrisStore)
-	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, ph, testenv.DefaultSiteURL(t), mcpRegistryClient, authzEngine, auditLogger)
+	catalogValidator, err := mcpregistry.LoadValidator()
+	require.NoError(t, err)
+	catalog := externalmcp.NewCatalogService(conn, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(conn, catalogValidator)), f)
+	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, ph, testenv.DefaultSiteURL(t), authzEngine, auditLogger, catalog)
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
 
 	return ctx, &testInstance{

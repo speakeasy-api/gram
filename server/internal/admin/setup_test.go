@@ -19,9 +19,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/speakeasy-api/gram/server/internal/trialemails"
+	"github.com/speakeasy-api/gram/server/internal/trialemails/trialemailstest"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
@@ -70,13 +71,16 @@ func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool
 	tracerProvider := testenv.NewTracerProvider(t)
 	validator, err := mcpregistry.LoadValidator()
 	require.NoError(t, err)
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
+	require.NoError(t, err)
 	svc := &Service{
+		remoteSessions:  remotesessions.NewGlobalIssuers(logger, testenv.NewMeterProvider(t), conn, policy),
 		registry:        mcpregistry.New(conn, validator),
 		tracer:          tracerProvider.Tracer("admin_test"),
 		logger:          logger,
 		db:              conn,
 		audit:           audit.NewLogger(),
-		trial:           trialemails.NoopNotifier{},
+		trial:           trialemailstest.NoopNotifier{},
 		sessions:        sessions,
 		loginStates:     cache.NewTypedObjectCache[LoginState](logger, adminCache, cache.SuffixNone),
 		productFeatures: productfeatures.NewClient(logger, tracerProvider, conn, redisClient),

@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/control"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -48,16 +49,12 @@ type mcpServerRuntimeDependencies struct {
 	Metadata   *mcpmetadata.Service
 }
 
-func buildMCPServerRuntime(deps mcpServerRuntimeDependencies) (*mcpServerRuntime, error) {
-	if deps.Logger == nil || deps.DB == nil || deps.Encryption == nil || deps.MCP == nil || deps.Metadata == nil {
-		return nil, errors.New("MCP server runtime dependencies are incomplete")
-	}
-
+func buildMCPServerRuntime(deps mcpServerRuntimeDependencies) *mcpServerRuntime {
 	return &mcpServerRuntime{
 		MCP:      deps.MCP,
 		XMCP:     xmcp.NewService(deps.Logger, deps.DB, deps.Encryption, deps.MCP),
 		Metadata: deps.Metadata,
-	}, nil
+	}
 }
 
 func newNetworkIngressServerCommand() *cli.Command {
@@ -67,15 +64,13 @@ func newNetworkIngressServerCommand() *cli.Command {
 		Usage: "Start the dedicated private network ingress server",
 		Flags: flags,
 		Action: func(c *cli.Context) error {
-			if err := validatePrivateServerConfig(
+			requirePrivateServerConfig(
 				c.Bool("network-ingress-enabled"),
 				c.String("netingress-address"),
 				c.String("netingress-tls-cert-file"),
 				c.String("netingress-tls-key-file"),
 				c.Bool("dev-single-process"),
-			); err != nil {
-				return err
-			}
+			)
 
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
@@ -104,10 +99,7 @@ func newNetworkIngressServerCommand() *cli.Command {
 				deps.Close(ctx)
 			}()
 			controlServer := control.Server{Address: c.String("control-address"), Logger: logger, DisableProfiling: true}
-			temporalHealth := []*o11y.NamedResource[client.Client]{}
-			if deps.Temporal != nil {
-				temporalHealth = append(temporalHealth, &o11y.NamedResource[client.Client]{Name: "default", Resource: deps.Temporal.Client()})
-			}
+			temporalHealth := []*o11y.NamedResource[client.Client]{{Name: "default", Resource: deps.Temporal.Client()}}
 			healthHandler := o11y.NewHealthCheckHandler(nil,
 				[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: deps.DB}},
 				[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: deps.Redis}}, temporalHealth)
@@ -130,7 +122,7 @@ func newNetworkIngressServerCommand() *cli.Command {
 }
 
 func privateIngressServerFlags() []cli.Flag {
-	flags := mcpRuntimeFlags()
+	flags := mcpRuntimeFlags(true)
 	return append(flags,
 		&cli.StringFlag{
 			Name:    "netingress-address",
@@ -150,20 +142,14 @@ func privateIngressServerFlags() []cli.Flag {
 	)
 }
 
-func validatePrivateServerConfig(enabled bool, address, certFile, keyFile string, devSingleProcess bool) error {
-	if !enabled {
-		return errors.New("private network ingress runtime is disabled")
-	}
-	if address == "" {
-		return errors.New("private network ingress address is required")
-	}
-	if certFile == "" || keyFile == "" {
-		return errors.New("private network ingress TLS certificate and key are required")
-	}
-	if devSingleProcess {
-		return errors.New("private network ingress server cannot run the general worker")
-	}
-	return nil
+func requirePrivateServerConfig(enabled bool, address, certFile, keyFile string, devSingleProcess bool) {
+	inv.Require("private network ingress server",
+		"runtime is enabled", enabled,
+		"address is set", address != "",
+		"TLS certificate is set", certFile != "",
+		"TLS key is set", keyFile != "",
+		"does not run the general worker", !devSingleProcess,
+	)
 }
 
 type privateIngressServerDependencies struct {
@@ -181,12 +167,6 @@ func servePrivateIngress(
 	certFile string,
 	keyFile string,
 ) error {
-	if deps.Kubernetes == nil || deps.Kubernetes.Clientset == nil {
-		return errors.New("private network ingress listener requires an in-cluster Kubernetes client")
-	}
-	if deps.Runtime == nil {
-		return errors.New("private network ingress listener requires an MCP server runtime")
-	}
 	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
 		return fmt.Errorf("load private network ingress TLS certificate: %w", err)

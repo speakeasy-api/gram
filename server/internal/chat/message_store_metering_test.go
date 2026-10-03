@@ -1,7 +1,6 @@
 package chat_test
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -11,8 +10,8 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
-	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattest"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
@@ -52,8 +51,7 @@ func TestChatMessageWriterMetersStoredTextAndToolCalls(t *testing.T) {
 	ti := newTestChatService(t)
 	ctx := initSessionCtx(t, ti)
 	chatID := seedChat(t, ctx, ti, "u", "", "metered native message")
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	writer := chattest.NewMessageWriter(t, infra, ti.conn)
 
 	toolCalls := []byte(`[{"function":{"name":"lookup","arguments":"{\"city\":\"Paris\"}"}}]`)
 	messageUserID := uuid.NewString()
@@ -135,8 +133,7 @@ func TestChatMessageWriterMetersExternalMessageOnceAtStorageTime(t *testing.T) {
 	ti := newTestChatService(t)
 	ctx := initSessionCtx(t, ti)
 	chatID := seedChat(t, ctx, ti, "u", "", "metered external message")
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	writer := chattest.NewMessageWriter(t, infra, ti.conn)
 
 	historical := time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC)
 	billingUserID := uuid.NewString()
@@ -220,8 +217,7 @@ func TestChatMessageWriterRejectsExternalMessageForAnotherProject(t *testing.T) 
 	ti := newTestChatService(t)
 	ctx := initSessionCtx(t, ti)
 	chatID := seedChat(t, ctx, ti, "u", "", "external project mismatch")
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	writer := chattest.NewMessageWriter(t, infra, ti.conn)
 
 	param := repo.CreateExternalChatMessageParams{}
 	param.ChatID = chatID
@@ -243,8 +239,7 @@ func TestChatMessageWriterRejectsChatOwnedByAnotherProject(t *testing.T) {
 	ctx := initSessionCtx(t, ti)
 	otherProject := createProjectInSameOrg(t, ti)
 	foreignChat := seedChatInProject(t, ti, otherProject, "foreign chat")
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	writer := chattest.NewMessageWriter(t, infra, ti.conn)
 
 	written, err := writer.Write(ctx, ti.projectID, []chat.MessageWrite{{
 		Params:    minimalChatMessageParams(foreignChat, ti.projectID),
@@ -262,8 +257,7 @@ func TestChatMessageWriterRejectsCorrelatedChatOwnedByAnotherProject(t *testing.
 	ctx := initSessionCtx(t, ti)
 	otherProject := createProjectInSameOrg(t, ti)
 	foreignChat := seedChatInProject(t, ti, otherProject, "foreign correlated chat")
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	writer := chattest.NewMessageWriter(t, infra, ti.conn)
 
 	written, err := writer.WriteCorrelated(
 		ctx,
@@ -283,8 +277,7 @@ func TestChatMessageWriterRejectsCorrelatedPromotionForAnotherProject(t *testing
 	ctx := initSessionCtx(t, ti)
 	otherProject := createProjectInSameOrg(t, ti)
 	foreignChat := seedChatInProject(t, ti, otherProject, "foreign correlated promotion")
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	writer := chattest.NewMessageWriter(t, infra, ti.conn)
 
 	param := minimalChatMessageParams(foreignChat, otherProject)
 	param.Source = conv.ToPGText("litellm")
@@ -317,8 +310,7 @@ func TestChatMessageWriterRejectsExternalChatOwnedByAnotherProject(t *testing.T)
 	ctx := initSessionCtx(t, ti)
 	otherProject := createProjectInSameOrg(t, ti)
 	foreignChat := seedChatInProject(t, ti, otherProject, "foreign external chat")
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	writer := chattest.NewMessageWriter(t, infra, ti.conn)
 
 	param := repo.CreateExternalChatMessageParams{}
 	param.ChatID = foreignChat
@@ -338,8 +330,7 @@ func TestChatMessageWriterPreservesInitialReadingOnCorrelatedPromotion(t *testin
 	ti := newTestChatService(t)
 	ctx := initSessionCtx(t, ti)
 	chatID := seedChat(t, ctx, ti, "u", "", "metered correlated message")
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	writer := chattest.NewMessageWriter(t, infra, ti.conn)
 	proxyBillingUserID := uuid.NewString()
 	nativeBillingUserID := uuid.NewString()
 
@@ -425,8 +416,7 @@ func TestChatMessageWriterPreservesNativeReadingOnLaterLiteLLMObservation(t *tes
 	ti := newTestChatService(t)
 	ctx := initSessionCtx(t, ti)
 	chatID := seedChat(t, ctx, ti, "u", "", "native-first correlated message")
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	writer := chattest.NewMessageWriter(t, infra, ti.conn)
 
 	native := minimalChatMessageParams(chatID, ti.projectID)
 	native.Content = "Native prompt"
@@ -464,8 +454,7 @@ func TestChatMessageWriterWriteInTxRollsBackMessageAndReading(t *testing.T) {
 	ti := newTestChatService(t)
 	ctx := initSessionCtx(t, ti)
 	chatID := seedChat(t, ctx, ti, "u", "", "metering rollback")
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	writer := chattest.NewMessageWriter(t, infra, ti.conn)
 
 	writes := []chat.MessageWrite{{
 		Params: repo.CreateChatMessageParams{

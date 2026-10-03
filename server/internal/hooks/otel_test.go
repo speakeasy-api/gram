@@ -353,7 +353,7 @@ func enableHookTelemetryLogger(t *testing.T, ctx context.Context, ti *testInstan
 	t.Helper()
 
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
-	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.chConn, enabled, enabled, nil, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
+	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.chConn, enabled, enabled, telemetry.NewUserInfoResolver(testenv.NewLogger(t), ti.conn, testenv.NewMemoryCache()), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 	return telemetryrepo.New(ti.chConn)
 }
 

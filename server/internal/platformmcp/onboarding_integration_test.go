@@ -221,13 +221,14 @@ func TestOnboardingMixedClientEvidenceIsNotClaudeAuthentication(t *testing.T) {
 		ConnectionID:         uuid.NullUUID{UUID: connectionIDFromPrincipal(t, other), Valid: true},
 		ConnectionGeneration: uuid.NullUUID{UUID: connectionIDFromPrincipalGeneration(t, other), Valid: true},
 	}))
+	management := newTestManagementService(t, conn)
 	assertOtherClientEvidence := func(t *testing.T) {
 		t.Helper()
 		projection, err := service.Get(ctx, other.OrganizationID, other.UserID)
 		require.NoError(t, err)
 		require.Len(t, projection.Connections, 1)
 		require.Equal(t, connectionIDFromPrincipal(t, other), projection.Connections[0].ID)
-		state := (&ManagementService{}).state(ctx, nil, projection, true, nil, false)
+		state := management.state(ctx, nil, projection, true, nil, false)
 		require.Equal(t, "claude_code", state.ClientFamily)
 		require.True(t, state.ConnectionAuthorized)
 		require.True(t, state.ConnectionReady)

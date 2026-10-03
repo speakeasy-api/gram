@@ -2,10 +2,11 @@ package remotesessions
 
 import (
 	"encoding/json"
-	orgclientshttp "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_clients/server"
-	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
 	"testing"
 	"time"
+
+	orgclientshttp "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_clients/server"
+	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"

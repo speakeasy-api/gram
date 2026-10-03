@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/dns"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -123,7 +124,7 @@ func TestFederatedMetadataClassifiesDependencyFailures(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			p := federatedFixture(t)
-			m := &ChallengeManager{policy: federatedPublicPolicy(t)}
+			m := &ChallengeManager{policy: federatedPublicPolicy(t), locks: cache.NoopCache}
 			_, err := m.loadFederatedMetadata(t.Context(), p.organizationID, p.issuer, federatedHTTPDoerFunc(func(*http.Request) (*http.Response, error) {
 				if tc.cause != nil {
 					return nil, tc.cause
@@ -154,7 +155,7 @@ func TestFederatedMetadataDNSDeadlineIsTemporary(t *testing.T) {
 	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t), guardian.WithResolver(dns.NewMockResolver(dns.MockResolverConfig{
 		LookupIPFunc: func(context.Context, string, string) ([]net.IP, error) { return nil, context.DeadlineExceeded },
 	})))
-	m := &ChallengeManager{policy: policy}
+	m := &ChallengeManager{policy: policy, locks: cache.NoopCache}
 	err := m.validateFederatedHost(t.Context(), "https://idp.example.test", false)
 	require.ErrorIs(t, err, ErrFederatedUnavailable)
 	require.ErrorIs(t, err, context.DeadlineExceeded)

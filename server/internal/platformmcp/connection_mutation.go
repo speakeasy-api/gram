@@ -62,11 +62,8 @@ type MCPConnectionMutationService struct {
 	now         func() time.Time
 }
 
-func NewMCPConnectionMutationService(db *pgxpool.Pool, settings *MCPConnectionSettingsService, endpoints MCPConnectionEndpointWriter, auditLogger *audit.Logger, authorizer *authz.Engine, eligibility networkaccess.EligibilityChecker, publication plugins.PublicationRequests, publisher plugins.PluginPublishSignaler) (*MCPConnectionMutationService, error) {
-	if db == nil || settings == nil || endpoints == nil || auditLogger == nil || authorizer == nil || eligibility == nil {
-		return nil, ErrMCPConnectionMutationInvalid
-	}
-	return &MCPConnectionMutationService{db: db, settings: settings, endpoints: endpoints, audit: auditLogger, authorizer: authorizer, eligibility: eligibility, publication: publication, publisher: publisher, now: time.Now}, nil
+func NewMCPConnectionMutationService(db *pgxpool.Pool, settings *MCPConnectionSettingsService, endpoints MCPConnectionEndpointWriter, auditLogger *audit.Logger, authorizer *authz.Engine, eligibility networkaccess.EligibilityChecker, publication plugins.PublicationRequests, publisher plugins.PluginPublishSignaler) *MCPConnectionMutationService {
+	return &MCPConnectionMutationService{db: db, settings: settings, endpoints: endpoints, audit: auditLogger, authorizer: authorizer, eligibility: eligibility, publication: publication, publisher: publisher, now: time.Now}
 }
 
 type SetMCPAddressInput struct {
@@ -115,9 +112,6 @@ type connectionMutationReceipt struct {
 }
 
 func (s *MCPConnectionMutationService) SetAddress(ctx context.Context, principal Principal, input SetMCPAddressInput) (MCPConnectionMutationOutput, error) {
-	if s == nil {
-		return MCPConnectionMutationOutput{}, connectionMutationInvalid("The connection mutation service is unavailable.")
-	}
 	input.ProjectID, input.TargetID = strings.TrimSpace(input.ProjectID), strings.TrimSpace(input.TargetID)
 	input.EndpointID, input.Slug = strings.TrimSpace(input.EndpointID), strings.TrimSpace(input.Slug)
 	input.CustomDomainID, input.ExpectedVersion = strings.TrimSpace(input.CustomDomainID), strings.TrimSpace(input.ExpectedVersion)
@@ -207,9 +201,6 @@ func (s *MCPConnectionMutationService) SetAddress(ctx context.Context, principal
 }
 
 func (s *MCPConnectionMutationService) SetNetworkAccess(ctx context.Context, principal Principal, input SetMCPNetworkAccessInput) (MCPConnectionMutationOutput, error) {
-	if s == nil {
-		return MCPConnectionMutationOutput{}, connectionMutationInvalid("The connection mutation service is unavailable.")
-	}
 	input.ProjectID, input.TargetID = strings.TrimSpace(input.ProjectID), strings.TrimSpace(input.TargetID)
 	input.Mode, input.ExpectedVersion = strings.TrimSpace(input.Mode), strings.TrimSpace(input.ExpectedVersion)
 	input.IdempotencyKey = strings.TrimSpace(input.IdempotencyKey)
@@ -269,7 +260,7 @@ func (s *MCPConnectionMutationService) SetNetworkAccess(ctx context.Context, pri
 }
 
 func (s *MCPConnectionMutationService) validateInput(ctx context.Context, principal Principal, projectID string, kind MCPConnectionSettingsTargetKind, targetID, expectedVersion, idempotencyKey string) (MCPConnectionSettingsTargetKind, uuid.UUID, ResolvedProject, error) {
-	if s == nil || s.db == nil || s.settings == nil || s.endpoints == nil || s.audit == nil || s.authorizer == nil || s.eligibility == nil || s.now == nil || principal.OrganizationID == "" || principal.UserID == "" || len(idempotencyKey) == 0 || len(idempotencyKey) > 128 || len(expectedVersion) != sha256.Size*2 {
+	if principal.OrganizationID == "" || principal.UserID == "" || len(idempotencyKey) == 0 || len(idempotencyKey) > 128 || len(expectedVersion) != sha256.Size*2 {
 		return "", uuid.Nil, ResolvedProject{}, connectionMutationInvalid("The connection mutation request is incomplete or invalid.")
 	}
 	projectID = strings.TrimSpace(projectID)

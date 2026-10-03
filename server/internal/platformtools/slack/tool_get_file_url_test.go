@@ -89,13 +89,3 @@ func TestGetFileURLTool_MintsSignedDownloadURL(t *testing.T) {
 	require.NotEmpty(t, sealed.Token)
 	require.Greater(t, sealed.ExpiresAt, time.Now().Unix())
 }
-
-func TestGetFileURLTool_UnconfiguredMintingErrors(t *testing.T) {
-	t.Parallel()
-
-	tool := mintingTool(t, "https://slack.example", nil, nil, nil)
-
-	var out bytes.Buffer
-	err := tool.Call(t.Context(), testSlackEnv(), bytes.NewBufferString(`{"file_id":"F123"}`), &out)
-	require.ErrorContains(t, err, "not configured")
-}

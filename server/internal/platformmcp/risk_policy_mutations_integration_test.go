@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -61,13 +62,9 @@ func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPRiskMutations, principal.OrganizationID, true)
 	flags.SetFlag(feature.FlagPromptPolicies, principal.OrganizationID, true)
-	controls, err := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "risk-policy-test-key")
-	require.NoError(t, err)
-	policies := risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil)
-	handlers, err := NewRiskPolicyMutationHandlers(conn, controls, policies)
-	require.NoError(t, err)
-	require.Nil(t, handlers.CreateExclusion)
-	require.Nil(t, handlers.UpdateExclusion)
+	controls := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "risk-policy-test-key")
+	policies := newTestRiskPolicyCore(t, conn, flags)
+	handlers := NewRiskMutationHandlers(conn, controls, policies, risk.NewExclusionMutationCore(testenv.NewLogger(t), conn, audit.NewLogger(), &recordingRiskExclusionReconciler{}, "risk-exclusion-test-key"), risk.NewFalsePositiveCore(audit.NewLogger()), testRiskPolicyCatalog(t))
 
 	createInput := map[string]any{
 		"project_slug":    project.Slug,
@@ -97,8 +94,7 @@ func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 	require.Equal(t, policyID.String(), createAudit.SubjectID)
 	require.Equal(t, principal.UserID, createAudit.ActorID)
 
-	reads, err := newRiskReadService(conn, "risk-policy-test-key")
-	require.NoError(t, err)
+	reads := newRiskReadService(conn, "risk-policy-test-key", testRiskPolicyCatalog(t))
 	read, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: policyID.String()})
 	require.NoError(t, err)
 	require.Equal(t, created.Version, read.Policy.Version)
@@ -265,11 +261,6 @@ func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"shadow_mcp"}, legacyStored.Sources)
 	require.Equal(t, "block", legacyStored.Action)
-
-	_, _, err = unavailableRiskMutationTool[CreateRiskExclusionToolOutput]()(ctx, nil, map[string]any{})
-	requireRiskMutationRefusal(t, err, unavailableCode)
-	_, _, err = unavailableRiskMutationTool[UpdateRiskExclusionToolOutput]()(ctx, nil, map[string]any{})
-	requireRiskMutationRefusal(t, err, unavailableCode)
 }
 
 func cloneRiskMutationInput(input map[string]any) map[string]any {
@@ -302,10 +293,8 @@ func TestRiskPolicyUpdateRejectsSessionSourceOnMCPScopedPolicy(t *testing.T) {
 
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPRiskMutations, principal.OrganizationID, true)
-	controls, err := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "risk-policy-test-key")
-	require.NoError(t, err)
-	handlers, err := NewRiskPolicyMutationHandlers(conn, controls, risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil))
-	require.NoError(t, err)
+	controls := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "risk-policy-test-key")
+	handlers := NewRiskMutationHandlers(conn, controls, newTestRiskPolicyCore(t, conn, flags), risk.NewExclusionMutationCore(testenv.NewLogger(t), conn, audit.NewLogger(), &recordingRiskExclusionReconciler{}, "risk-exclusion-test-key"), risk.NewFalsePositiveCore(audit.NewLogger()), testRiskPolicyCatalog(t))
 
 	_, created, err := handlers.CreatePolicy(ctx, nil, map[string]any{
 		"project_slug":    project.Slug,
@@ -330,8 +319,7 @@ func TestRiskPolicyUpdateRejectsSessionSourceOnMCPScopedPolicy(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	reads, err := newRiskReadService(conn, "risk-policy-test-key")
-	require.NoError(t, err)
+	reads := newRiskReadService(conn, "risk-policy-test-key", testRiskPolicyCatalog(t))
 	read, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: policyID.String()})
 	require.NoError(t, err)
 
@@ -372,10 +360,8 @@ func TestRiskPolicyAudienceReplacement(t *testing.T) {
 	ctx = ContextWithPrincipal(ctx, principal)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPRiskMutations, principal.OrganizationID, true)
-	controls, err := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "audience-test-key")
-	require.NoError(t, err)
-	handlers, err := NewRiskPolicyMutationHandlers(conn, controls, risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil))
-	require.NoError(t, err)
+	controls := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "audience-test-key")
+	handlers := NewRiskMutationHandlers(conn, controls, newTestRiskPolicyCore(t, conn, flags), risk.NewExclusionMutationCore(testenv.NewLogger(t), conn, audit.NewLogger(), &recordingRiskExclusionReconciler{}, "risk-exclusion-test-key"), risk.NewFalsePositiveCore(audit.NewLogger()), testRiskPolicyCatalog(t))
 	_, created, err := handlers.CreatePolicy(ctx, nil, map[string]any{
 		"project_slug": project.Slug, "policy_type": "standard", "name": "Audience policy", "enabled": true,
 		"sources": []string{"gitleaks"}, "idempotency_key": "create-audience",
@@ -389,8 +375,7 @@ func TestRiskPolicyAudienceReplacement(t *testing.T) {
 	_, updated, err := handlers.UpdatePolicy(ctx, nil, input)
 	require.NoError(t, err)
 	require.NotEqual(t, created.Version, updated.Version)
-	reads, err := newRiskReadService(conn, "audience-test-key")
-	require.NoError(t, err)
+	reads := newRiskReadService(conn, "audience-test-key", testRiskPolicyCatalog(t))
 	read, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: created.Policy.ID})
 	require.NoError(t, err)
 	require.Equal(t, "targeted", read.Policy.Audience.Type)

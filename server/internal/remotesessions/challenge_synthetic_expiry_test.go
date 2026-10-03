@@ -241,10 +241,11 @@ type syntheticLoginOptions struct {
 	issuerMetadataRefresh bool
 	// issuerMetadataFetchedAt stamps the issuer row as fetched then, so the on-use cadence stays silent.
 	issuerMetadataFetchedAt time.Time
-	// tunnels, when set, is the back-channel transport every component this
-	// fixture builds carries — the manager, both refreshers, the enricher, and
-	// the metadata refresher — so a tunnel-bound issuer cannot be reported
-	// working by a component that quietly stayed on direct egress.
+	// tunnels is the back-channel transport every component this fixture
+	// builds carries — the manager, both refreshers, the enricher, and the
+	// metadata refresher — so a tunnel-bound issuer cannot be reported working
+	// by a component that quietly stayed on direct egress. Unset, it is the
+	// test service's own.
 	tunnels *tunnelrouting.HTTPClient
 	// maxDBConns constrains the fixture pool for connection-ownership tests.
 	maxDBConns int32
@@ -385,6 +386,9 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	}
 
 	ctx, ti := newTestServiceWithConfig(t, testServiceConfig{maxDBConns: options.maxDBConns})
+	if options.tunnels == nil {
+		options.tunnels = ti.tunnels
+	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -432,13 +436,12 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	}
 	if options.idTokenIssuer != nil {
 		store := ratelimit.NewRedisStore(redisClient)
-		keys, err := remotesessions.NewIDTokenKeyResolver(logger, policy, testenv.NewMeterProvider(t), store)
+		keys := remotesessions.NewIDTokenKeyResolver(logger, policy, testenv.NewMeterProvider(t), store)
 		if options.keyCache != nil {
-			keys, err = jwks.NewKeyResolver(jwks.NewResolver(policy, testenv.NewMeterProvider(t), logger), options.keyCache,
+			keys = jwks.NewKeyResolver(jwks.NewResolver(policy, testenv.NewMeterProvider(t), logger), options.keyCache,
 				ratelimit.New(store, "test_id_token_jwks_refresh", remotesessions.IDTokenKeyRefreshRate),
 				ratelimit.New(store, "test_id_token_jwks_fetch", remotesessions.IDTokenKeyFetchRate), logger)
 		}
-		require.NoError(t, err)
 		verifier := remotesessions.NewIDTokenVerifier(keys)
 		if options.wrapVerifier != nil {
 			verifier = options.wrapVerifier(verifier)

@@ -63,9 +63,6 @@ type CatalogIdentityProviderAttachmentService struct {
 }
 
 func NewCatalogIdentityProviderAttachmentService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, identity *remotesessions.IdentityCommitter, policy *guardian.Policy, serverURL *url.URL) *CatalogIdentityProviderAttachmentService {
-	if serverURL == nil {
-		return &CatalogIdentityProviderAttachmentService{}
-	}
 	serverURLCopy := *serverURL
 	return &CatalogIdentityProviderAttachmentService{db: db, identity: identity, policy: policy, serverURL: &serverURLCopy, registrationTelemetry: oauthregistration.NewMetrics(logger, meterProvider)}
 }
@@ -75,7 +72,7 @@ func NewCatalogIdentityProviderAttachmentService(logger *slog.Logger, meterProvi
 // and binds it to the registration's existing user-session issuer. It is safe
 // to retry after a successful call: the existing matching binding is reused.
 func (s *CatalogIdentityProviderAttachmentService) Attach(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogIdentityProviderAttachmentResult, error) {
-	if s == nil || s.db == nil || s.identity == nil || s.policy == nil || s.serverURL == nil || principal.UserID == "" || principal.OrganizationID == "" || project.ID == uuid.Nil || registrationID == uuid.Nil {
+	if principal.UserID == "" || principal.OrganizationID == "" || project.ID == uuid.Nil || registrationID == uuid.Nil {
 		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentUnavailable
 	}
 

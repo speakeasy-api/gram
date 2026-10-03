@@ -178,9 +178,6 @@ type proposalStore struct {
 }
 
 func newProposalStore(db *pgxpool.Pool, logger *slog.Logger) *proposalStore {
-	if logger == nil {
-		logger = slog.New(slog.DiscardHandler)
-	}
 	return &proposalStore{db: db, logger: logger}
 }
 
@@ -644,14 +641,8 @@ func (s *proposalStore) Approve(ctx context.Context, id uuid.UUID, approverSubje
 		}
 		return Proposal{}, err
 	}
-	if verifyBrowser == nil {
-		return Proposal{}, ErrWriteIdentity
-	}
 	if err := verifyBrowser(ctx, tx, p); err != nil {
 		return Proposal{}, err
-	}
-	if revalidate == nil {
-		return Proposal{}, ErrWriteDisabled
 	}
 	if err := revalidate(ctx, tx, p); err != nil {
 		if errors.Is(err, ErrStaleState) {

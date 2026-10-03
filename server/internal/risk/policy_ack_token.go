@@ -115,9 +115,6 @@ func newPolicyAckID() (string, error) {
 // that redeems it (token in the fragment, never the query — same rationale as
 // GeneratePolicyBypassRequestURL) plus the link expiry.
 func GeneratePolicyAckURL(ctx context.Context, c cache.Cache, siteURL *url.URL, input PolicyAckTokenInput, ttl time.Duration) (string, time.Time, error) {
-	if siteURL == nil {
-		return "", time.Time{}, fmt.Errorf("site url is required")
-	}
 	token, expiry, err := GeneratePolicyAckToken(ctx, c, input, ttl)
 	if err != nil {
 		return "", time.Time{}, err
@@ -155,9 +152,6 @@ func GeneratePolicyAckToken(ctx context.Context, c cache.Cache, input PolicyAckT
 	if err := validatePolicyAckFields(record.OrganizationID, record.ProjectID, record.UserID, record.RiskPolicyID); err != nil {
 		return "", time.Time{}, err
 	}
-	if c == nil {
-		return "", time.Time{}, fmt.Errorf("risk policy ack cache is not configured")
-	}
 	id, err := newPolicyAckID()
 	if err != nil {
 		return "", time.Time{}, err
@@ -172,9 +166,6 @@ func GeneratePolicyAckToken(ctx context.Context, c cache.Cache, input PolicyAckT
 // miss is a client error (expired/invalid); any other error wraps
 // errPolicyAckStoreUnavailable so callers can return a server error.
 func lookupPolicyAckRecord(ctx context.Context, c cache.Cache, tokenString string) (*policyAckRecord, error) {
-	if c == nil {
-		return nil, fmt.Errorf("%w: cache is not configured", errPolicyAckStoreUnavailable)
-	}
 	if !strings.HasPrefix(tokenString, policyAckTokenPrefix) {
 		return nil, fmt.Errorf("invalid risk policy ack token format")
 	}
@@ -201,7 +192,7 @@ func lookupPolicyAckRecord(ctx context.Context, c cache.Cache, tokenString strin
 // invalidatePolicyAckToken best-effort deletes a redeemed token so the one-shot
 // link cannot be replayed. Errors are non-fatal (TTL still bounds it).
 func invalidatePolicyAckToken(ctx context.Context, c cache.Cache, tokenString string) {
-	if c == nil || !strings.HasPrefix(tokenString, policyAckTokenPrefix) {
+	if !strings.HasPrefix(tokenString, policyAckTokenPrefix) {
 		return
 	}
 	id := strings.TrimPrefix(tokenString, policyAckTokenPrefix)
