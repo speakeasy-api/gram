@@ -303,3 +303,47 @@ WHERE organization_id = @organization_id AND project_id = @project_id AND id = @
 -- name: FixtureWithdrawAssignment :exec
 UPDATE workload_agent_assignments SET deleted_at = clock_timestamp()
 WHERE organization_id = @organization_id AND workload_issuer_id = @issuer_id AND subject = @subject AND match_kind = 'exact' AND NOT deleted;
+
+-- name: GetSlackExecutionMapping :one
+-- Return known history even when no mapping is eligible. Absence alone permits
+-- workload selection; revoked or ineligible history must never become absence.
+SELECT m.id AS membership_id, m.mapping_revision, c.generation AS connection_generation,
+  im.id AS mapping_id, im.user_id,
+  coalesce(c.disconnected_at IS NULL AND c.last_full_sync_generation = c.generation
+    AND m.last_seen_at = c.last_full_sync_succeeded_at
+    AND m.status = 'active' AND m.member_type = 'person' AND m.mapping_conflict_reason IS NULL
+    AND NOT EXISTS (SELECT 1 FROM slack_identity_mappings conflict WHERE conflict.organization_id = im.organization_id AND conflict.slack_team_id = im.slack_team_id AND conflict.user_id = im.user_id AND conflict.slack_user_id <> im.slack_user_id AND conflict.revoked_at IS NULL)
+    AND im.revoked_at IS NULL AND u.id IS NOT NULL AND u.deleted_at IS NULL AND u.workos_deleted_at IS NULL
+    AND our.user_id IS NOT NULL AND NOT our.deleted AND our.deleted_at IS NULL, false)::boolean AS eligible
+FROM slack_directory_memberships m
+JOIN slack_directory_connections c ON c.organization_id = m.organization_id AND c.slack_team_id = m.slack_team_id
+JOIN LATERAL (
+ SELECT h.* FROM slack_identity_mappings h
+ WHERE h.organization_id = m.organization_id AND h.slack_team_id = m.slack_team_id AND h.slack_user_id = m.slack_user_id
+ ORDER BY h.created_at DESC, h.id DESC LIMIT 1
+) im ON true
+LEFT JOIN users u ON u.id = im.user_id
+LEFT JOIN organization_user_relationships our ON our.organization_id = m.organization_id AND our.user_id = im.user_id
+WHERE m.organization_id = @organization_id AND m.slack_team_id = @slack_team_id AND m.slack_user_id = @slack_user_id;
+
+-- name: FixtureSlackExecutionMapping :exec
+WITH connection AS (
+ INSERT INTO slack_directory_connections (organization_id, slack_team_id, generation, last_full_sync_generation, last_full_sync_succeeded_at)
+ VALUES (@organization_id, @slack_team_id, @generation, @generation, statement_timestamp())
+ ON CONFLICT (organization_id, slack_team_id) DO UPDATE SET organization_id = EXCLUDED.organization_id
+ RETURNING organization_id, slack_team_id, last_full_sync_succeeded_at
+), membership AS (
+ INSERT INTO slack_directory_memberships (organization_id, slack_team_id, slack_user_id, status, member_type, mapping_revision, last_seen_at)
+ SELECT organization_id, slack_team_id, @slack_user_id, 'active', 'person', 1, last_full_sync_succeeded_at FROM connection RETURNING organization_id, slack_team_id, slack_user_id
+)
+INSERT INTO slack_identity_mappings (organization_id, slack_team_id, slack_user_id, user_id)
+SELECT organization_id, slack_team_id, slack_user_id, @user_id FROM membership;
+
+-- name: FixtureInvalidateSlackExecutionMembership :exec
+UPDATE slack_directory_memberships SET status = @status, member_type = @member_type,
+ mapping_revision = @mapping_revision, mapping_conflict_reason = sqlc.narg(conflict_reason)
+WHERE organization_id = @organization_id AND slack_team_id = @slack_team_id AND slack_user_id = @slack_user_id;
+
+-- name: SlackExecutionWorkspaceDisconnected :one
+SELECT (disconnected_at IS NOT NULL)::boolean AS disconnected
+FROM slack_directory_connections WHERE organization_id = @organization_id AND slack_team_id = @slack_team_id;

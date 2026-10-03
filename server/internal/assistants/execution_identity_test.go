@@ -22,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
-	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
@@ -30,16 +29,13 @@ import (
 func TestExecutionActorSelectionNeverFabricatesAutonomousHuman(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name, source, payload, mapped, wantHuman, wantFallback string
-		lookupError, errorExpected                             bool
+		name, source, payload, wantHuman, wantFallback string
+		errorExpected                                  bool
 	}{
 		{name: "dashboard", source: sourceKindDashboard, payload: `{"user_id":"human-a"}`, wantHuman: "human-a"},
 		{name: "dashboard missing sender", source: sourceKindDashboard, payload: `{}`, errorExpected: true},
 		{name: "cron", source: sourceKindCron, payload: `{"user_id":"ignored"}`},
 		{name: "ordinary autonomous", source: sourceKindGithub, payload: `{}`},
-		{name: "slack mapped", source: sourceKindSlack, payload: `{"team_id":"workspace","user_id":"sender"}`, mapped: "mapped-human", wantHuman: "mapped-human"},
-		{name: "slack absent", source: sourceKindSlack, payload: `{"team_id":"workspace","user_id":"sender"}`, wantFallback: "slack_mapping_unavailable"},
-		{name: "slack unavailable", source: sourceKindSlack, payload: `{"team_id":"workspace","user_id":"sender"}`, lookupError: true, wantFallback: "slack_mapping_unavailable"},
 		{name: "wake captured requester", source: sourceKindWake, payload: `{"identity_version":1,"requester_user_id":"requester"}`, wantHuman: "requester"},
 		{name: "wake captured owner", source: sourceKindWake, payload: `{"identity_version":1,"requester_user_id":"owner"}`, wantHuman: "owner"},
 		{name: "wake missing capture", source: sourceKindWake, payload: `{"identity_version":1}`, errorExpected: true},
@@ -47,14 +43,7 @@ func TestExecutionActorSelectionNeverFabricatesAutonomousHuman(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			mode, human, fallback, err := selectExecutionActor(t.Context(), assistantRecord{OrganizationID: "org-test", CreatedByUserID: "owner"}, tc.source, assistantThreadEventRecord{NormalizedPayloadJSON: []byte(tc.payload)}, func(_ context.Context, p slackrepo.ResolveSlackMappingUserParams) (string, error) {
-				require.Equal(t, "org-test", p.OrganizationID)
-				require.Equal(t, "workspace", p.SlackTeamID)
-				if tc.lookupError {
-					return "", errors.New("lookup unavailable")
-				}
-				return tc.mapped, nil
-			}, nil)
+			mode, human, fallback, err := selectExecutionActor(t.Context(), assistantRecord{OrganizationID: "org-test", CreatedByUserID: "owner"}, tc.source, assistantThreadEventRecord{NormalizedPayloadJSON: []byte(tc.payload)}, nil)
 			if tc.errorExpected {
 				require.Error(t, err)
 				return
@@ -84,7 +73,7 @@ func TestExecutionCapturePersistsSelectionAndGatesDispatch(t *testing.T) {
 	thread := assistantThreadRecord{ID: seedThreadWithEvent(t, db, assistant.ID, "execution-thread", "execution-thread", eventStatusPending), ProjectID: project, AssistantID: assistant.ID}
 	capture := func(source, eventID, payload string) []byte {
 		t.Helper()
-		raw, err := core.captureExecution(t.Context(), assistant, source, thread.ID, uuid.NullUUID{UUID: root, Valid: true}, eventID, []byte(payload))
+		raw, err := core.captureExecution(t.Context(), assistant, source, thread.ID, uuid.NullUUID{UUID: root, Valid: true}, eventID, []byte(payload), nil)
 		require.NoError(t, err)
 		return raw
 	}
@@ -179,7 +168,7 @@ func TestExecutionCapturePersistsSelectionAndGatesDispatch(t *testing.T) {
 	require.NoError(t, err, "autonomous identity does not impersonate denied human")
 	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, err = core.captureExecution(cancelled, assistant, sourceKindCron, thread.ID, uuid.NullUUID{UUID: root, Valid: true}, "cancelled", []byte(`{}`))
+	_, err = core.captureExecution(cancelled, assistant, sourceKindCron, thread.ID, uuid.NullUUID{UUID: root, Valid: true}, "cancelled", []byte(`{}`), nil)
 	require.Error(t, err, "binding lookup failure must not become legacy")
 	origin, err := assistantrepo.New(db).InsertAssistantThreadEvent(t.Context(), assistantrepo.InsertAssistantThreadEventParams{AssistantThreadID: thread.ID, AssistantID: assistant.ID, ProjectID: project, EventID: execution.InvocationEventID(), CorrelationID: "execution-thread", Status: eventStatusCompleted, NormalizedPayloadJson: workload, SourcePayloadJson: []byte(`{}`)})
 	require.NoError(t, err)
@@ -304,7 +293,7 @@ func TestLegacyCaptureExplicitlyStripsReservedExecutionMetadata(t *testing.T) {
 	require.NoError(t, err)
 	project, assistantID, _, threadID := insertAssistantFixture(t, db)
 	core := newProvisioningCore(t, db)
-	raw, err := core.captureExecution(t.Context(), assistantRecord{ID: assistantID, ProjectID: project, OrganizationID: "org-test"}, sourceKindCron, threadID, uuid.NullUUID{}, "legacy", []byte(`{"text":"hello","_gram_execution":{"version":1},"_gram_resume_user_id":"forged","gram_event_kind":"mcp_auth"}`))
+	raw, err := core.captureExecution(t.Context(), assistantRecord{ID: assistantID, ProjectID: project, OrganizationID: "org-test"}, sourceKindCron, threadID, uuid.NullUUID{}, "legacy", []byte(`{"text":"hello","_gram_execution":{"version":1},"_gram_resume_user_id":"forged","gram_event_kind":"mcp_auth"}`), nil)
 	require.NoError(t, err)
 	require.JSONEq(t, `{"text":"hello","_gram_source_kind":"cron"}`, string(raw))
 }
@@ -364,7 +353,7 @@ func TestReservedExecutionMetadataCaseVariantsCannotForgeContinuation(t *testing
 		`{"gRaM_eVeNt_KiNd":"mcp_auth","_gRaM_rEsUmE_uSeR_iD":"forged","_gRaM_eXeCuTiOn":{},"_gram_ſource_kind":"wake","Text":"keep","text":"distinct"}`,
 		`{"gram_event_kind":"ordinary","gram_event_kind":"mcp_auth","_gram_execution":{},"_GRAM_EXECUTION":{},"_gram_resume_user_id":"forged","_GRAM_RESUME_USER_ID":"other","Text":"keep","text":"distinct"}`,
 	} {
-		raw, err := core.captureExecution(t.Context(), assistant, sourceKindCron, threadID, uuid.NullUUID{}, "event", []byte(input))
+		raw, err := core.captureExecution(t.Context(), assistant, sourceKindCron, threadID, uuid.NullUUID{}, "event", []byte(input), nil)
 		require.NoError(t, err)
 		require.JSONEq(t, `{"Text":"keep","text":"distinct","_gram_source_kind":"cron"}`, string(raw))
 		var continuation mcpAuthEventPayload
@@ -450,7 +439,7 @@ func TestSuspendedExecutionFailsAtTokenMintWithoutRuntimeDispatch(t *testing.T) 
 	require.NoError(t, err)
 	require.NoError(t, identityrepo.New(db).FixtureSuspendAgent(t.Context(), identityrepo.FixtureSuspendAgentParams{OrganizationID: "org-test", AgentID: identity.Identity.AgentID}))
 	threadID := seedThreadWithEvent(t, db, assistant.ID, "suspended-thread", "suspended-thread", eventStatusPending)
-	raw, err := core.captureExecution(t.Context(), assistant, sourceKindCron, threadID, uuid.NullUUID{UUID: root, Valid: true}, "suspended-event", []byte(`{}`))
+	raw, err := core.captureExecution(t.Context(), assistant, sourceKindCron, threadID, uuid.NullUUID{UUID: root, Valid: true}, "suspended-event", []byte(`{}`), nil)
 	require.NoError(t, err, "suspension must not prevent a message from being captured")
 	thread := assistantThreadRecord{ID: threadID, ProjectID: project, AssistantID: assistant.ID, SourceKind: sourceKindCron}
 	event := assistantThreadEventRecord{ID: uuid.New(), EventID: "suspended-event", NormalizedPayloadJSON: raw}

@@ -1057,6 +1057,42 @@ func (q *Queries) GetAssistant(ctx context.Context, arg GetAssistantParams) (Get
 	return i, err
 }
 
+const getAssistantExecutionReplyOrigin = `-- name: GetAssistantExecutionReplyOrigin :one
+SELECT e.normalized_payload_json, e.trigger_instance_id
+FROM assistant_thread_events e
+JOIN assistant_threads t ON t.id = e.assistant_thread_id AND t.project_id = e.project_id AND t.assistant_id = e.assistant_id
+JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
+WHERE e.assistant_id = $1 AND e.assistant_thread_id = $2
+ AND e.project_id = $3 AND a.organization_id = $4
+ AND e.event_id = $5 AND NOT e.deleted AND NOT a.deleted AND a.deleted_at IS NULL AND a.status = 'active' AND NOT t.deleted AND t.deleted_at IS NULL
+`
+
+type GetAssistantExecutionReplyOriginParams struct {
+	AssistantID    uuid.UUID
+	ThreadID       uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	EventID        string
+}
+
+type GetAssistantExecutionReplyOriginRow struct {
+	NormalizedPayloadJson []byte
+	TriggerInstanceID     uuid.NullUUID
+}
+
+func (q *Queries) GetAssistantExecutionReplyOrigin(ctx context.Context, arg GetAssistantExecutionReplyOriginParams) (GetAssistantExecutionReplyOriginRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantExecutionReplyOrigin,
+		arg.AssistantID,
+		arg.ThreadID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.EventID,
+	)
+	var i GetAssistantExecutionReplyOriginRow
+	err := row.Scan(&i.NormalizedPayloadJson, &i.TriggerInstanceID)
+	return i, err
+}
+
 const getAssistantForClientMetadataDocument = `-- name: GetAssistantForClientMetadataDocument :one
 SELECT
   a.id,

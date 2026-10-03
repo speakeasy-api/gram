@@ -12,7 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
-	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 )
 
 const executionMetadataKey = "_gram_execution"
@@ -40,7 +40,7 @@ func classifyExecutionDispatchError(err error) error {
 // captureExecution runs only after ingress normalization. Never copy a caller's
 // reserved metadata, including on legacy paths. An insertion retry cannot replace
 // the original event because InsertAssistantThreadEvent is DO NOTHING.
-func (s *ServiceCore) captureExecution(ctx context.Context, assistant assistantRecord, source string, threadID uuid.UUID, trigger uuid.NullUUID, eventID string, raw []byte) ([]byte, error) {
+func (s *ServiceCore) captureExecution(ctx context.Context, assistant assistantRecord, source string, threadID uuid.UUID, trigger uuid.NullUUID, eventID string, raw []byte, selection *bgtriggers.SlackExecutionSelection) ([]byte, error) {
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &payload); err != nil || payload == nil {
 		return nil, fmt.Errorf("trigger event payload must be a JSON object")
@@ -93,9 +93,31 @@ func (s *ServiceCore) captureExecution(ctx context.Context, assistant assistantR
 	var event assistantThreadEventRecord
 	event.NormalizedPayloadJSON = clean
 	event.TriggerInstanceID = trigger
-	mode, human, fallback, err := selectExecutionActor(ctx, assistant, source, event, slackrepo.New(s.db).ResolveSlackMappingUser, assistantrepo.New(s.db).FindLegacyWakeRequester)
-	if err != nil {
-		return nil, fmt.Errorf("assistant execution: %w", err)
+	mode, human, fallback := assistantidentity.ExecutionWorkload, "", ""
+	if source != sourceKindSlack {
+		mode, human, fallback, err = selectExecutionActor(ctx, assistant, source, event, assistantrepo.New(s.db).FindLegacyWakeRequester)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var delegation *assistantidentity.SlackDelegation
+	if source == sourceKindSlack {
+		if selection == nil {
+			return nil, fmt.Errorf("slack execution selection missing: %w", assistantidentity.ErrInvalidIdentity)
+		}
+		if selection.Denied {
+			return nil, assistantidentity.ErrActorIneligible
+		}
+		human, fallback = selection.HumanUserID, selection.FallbackReason
+		if d := selection.Delegation; d != nil {
+			if human == "" || fallback != "" {
+				return nil, assistantidentity.ErrInvalidIdentity
+			}
+			delegation = &assistantidentity.SlackDelegation{TeamID: d.TeamID, UserID: d.UserID, MembershipID: d.MembershipID, MappingID: d.MappingID, MappingRevision: d.MappingRevision, ConnectionGeneration: d.ConnectionGeneration}
+			mode = assistantidentity.ExecutionWorkloadHuman
+		} else if human != "" || fallback == "" {
+			return nil, assistantidentity.ErrInvalidIdentity
+		}
 	}
 	// Capture identity now; independently recheck selected-user eligibility at
 	// token issuance and dispatch. Never reselect an owner after a denial.
@@ -103,7 +125,7 @@ func (s *ServiceCore) captureExecution(ctx context.Context, assistant assistantR
 	if err != nil {
 		return nil, fmt.Errorf("assistant execution: %w", err)
 	}
-	execution := assistantidentity.Execution{ContinuationEventID: "", Version: assistantidentity.ExecutionVersion, Identity: *resolved.Identity, Issuer: s.identities.Issuer(), ThreadID: threadID, EventID: eventID, Mode: mode, HumanUserID: human, FallbackReason: fallback, Ceiling: ceiling}
+	execution := assistantidentity.Execution{Slack: delegation, ContinuationEventID: "", Version: assistantidentity.ExecutionVersion, Identity: *resolved.Identity, Issuer: s.identities.Issuer(), ThreadID: threadID, EventID: eventID, Mode: mode, HumanUserID: human, FallbackReason: fallback, Ceiling: ceiling}
 	if err := execution.Check(); err != nil {
 		return nil, fmt.Errorf("assistant execution: %w", err)
 	}
@@ -114,7 +136,7 @@ func (s *ServiceCore) captureExecution(ctx context.Context, assistant assistantR
 	return marshalExecutionPayload(payload)
 }
 
-func selectExecutionActor(ctx context.Context, assistant assistantRecord, source string, event assistantThreadEventRecord, lookup slackUserLookup, legacy legacyWakeLookup) (assistantidentity.ExecutionMode, string, string, error) {
+func selectExecutionActor(ctx context.Context, assistant assistantRecord, source string, event assistantThreadEventRecord, legacy legacyWakeLookup) (assistantidentity.ExecutionMode, string, string, error) {
 	switch source {
 	case sourceKindDashboard, sourceKindWake:
 		if source == sourceKindDashboard {
@@ -126,32 +148,11 @@ func selectExecutionActor(ctx context.Context, assistant assistantRecord, source
 				return "", "", "", fmt.Errorf("dashboard execution has no authenticated sender")
 			}
 		}
-		human, err := selectTurnUser(ctx, assistant, source, event, lookup, legacy)
+		human, err := selectTurnUser(ctx, assistant, source, event, nil, legacy)
 		if err != nil {
 			return "", "", "", fmt.Errorf("select execution actor: %w", err)
 		}
 		return assistantidentity.ExecutionWorkloadHuman, human, "", nil
-	case sourceKindSlack:
-		mapped := false
-		wrapped := func(ctx context.Context, p slackrepo.ResolveSlackMappingUserParams) (string, error) {
-			if lookup == nil {
-				return "", nil
-			}
-			user, err := lookup(ctx, p)
-			mapped = err == nil && user != ""
-			if err != nil {
-				return "", fmt.Errorf("resolve Slack execution actor: %w", err)
-			}
-			return user, nil
-		}
-		human, err := selectTurnUser(ctx, assistant, source, event, wrapped, legacy)
-		if err != nil {
-			return "", "", "", fmt.Errorf("assistant execution: %w", err)
-		}
-		if mapped {
-			return assistantidentity.ExecutionWorkloadHuman, human, "", nil
-		}
-		return assistantidentity.ExecutionWorkload, "", "slack_mapping_unavailable", nil
 	default:
 		return assistantidentity.ExecutionWorkload, "", "", nil
 	}

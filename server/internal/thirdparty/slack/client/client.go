@@ -186,3 +186,19 @@ func (s *SlackClient) BotIdentity(ctx context.Context, accessToken string) (Slac
 	}
 	return identity, nil
 }
+
+// NotifyExecutionDenied never accepts model-generated content. The private
+// recipient and channel come from the persisted, validated invocation origin.
+func (s *SlackClient) NotifyExecutionDenied(ctx context.Context, token, channel, thread, user string) error {
+	if channel == "" || user == "" {
+		return fmt.Errorf("slack denial reply requires a channel and recipient")
+	}
+	payload := map[string]any{"channel": channel, "user": user, "text": "I couldn't access the business tools for this request. Please check your permissions and connected accounts."}
+	if thread != "" {
+		payload["thread_ts"] = thread
+	}
+	if _, err := s.api.CallWithToken(ctx, "chat.postEphemeral", payload, token); err != nil {
+		return fmt.Errorf("post Slack denial reply: %w", err)
+	}
+	return nil
+}

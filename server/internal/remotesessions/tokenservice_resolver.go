@@ -45,6 +45,50 @@ func remoteSessionCallerPrincipal(ctx context.Context, subject urn.SessionSubjec
 // attachment never falls back to the agent's, owner's, or authorizer's grant.
 func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, caller urn.SessionSubject, resource string) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
+	if e, ok := contextvalues.AssistantBusinessInvocationFromContext(ctx); ok && e.UserID != "" {
+		if e.ProjectID != projectID || e.OrganizationID != organizationID || caller.Kind != urn.SessionSubjectKindUser || caller.ID != e.UserID {
+			return zero, ErrInvalidAuthorizationRequest
+		}
+		if e.Resource == "" || (resource != "" && resource != e.Resource) {
+			return zero, nil
+		}
+		resource = e.Resource
+		if err := e.Revalidate(ctx); err != nil {
+			return zero, fmt.Errorf("revalidate invocation authority: %w", err)
+		}
+		q := remotesessions_repo.New(m.db)
+		params := remotesessions_repo.GetDelegatedRemoteSessionParams{SubjectUrn: caller, RemoteSessionClientID: clientID, ProjectID: projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID}
+		selected, err := q.GetDelegatedRemoteSession(ctx, params)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return zero, nil
+		}
+		if err != nil {
+			return zero, fmt.Errorf("select invocation credential: %w", err)
+		}
+		// Legacy unbound grants cannot establish the credential's target resource.
+		if !selected.Resource.Valid || selected.Resource.String != resource {
+			return zero, nil
+		}
+		resolved, err := m.resolveCredentialToken(ctx, selected, resource)
+		if err != nil || resolved.Token == "" {
+			return resolved, err
+		}
+		current, err := q.GetDelegatedRemoteSession(ctx, params)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return zero, nil
+		}
+		if err != nil {
+			return zero, fmt.Errorf("revalidate invocation credential: %w", err)
+		}
+		if current.ID != selected.ID || current.GrantGeneration != selected.GrantGeneration {
+			return zero, nil
+		}
+		if err := e.Revalidate(ctx); err != nil {
+			return zero, fmt.Errorf("revalidate invocation authority: %w", err)
+		}
+		m.touchResolvedCredential(ctx, selected)
+		return resolved, nil
+	}
 	principalID, attached, err := remoteSessionCallerPrincipal(ctx, caller)
 	if err != nil {
 		return zero, err

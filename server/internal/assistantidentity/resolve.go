@@ -43,10 +43,6 @@ func (s *Service) resolveSnapshot(ctx context.Context, db DB, org string, projec
 	return result, nil
 }
 
-func (s *Service) resolve(ctx context.Context, tx pgx.Tx, org string, project, assistant, trigger uuid.UUID) (Resolution, error) {
-	return s.resolveForCapture(ctx, tx, org, project, assistant, trigger, false)
-}
-
 func (s *Service) resolveForCapture(ctx context.Context, tx pgx.Tx, org string, project, assistant, trigger uuid.UUID, captureSuspended bool) (Resolution, error) {
 	if s == nil || org == "" || project == uuid.Nil || assistant == uuid.Nil || trigger == uuid.Nil {
 		return Resolution{}, ErrInvalidIdentity

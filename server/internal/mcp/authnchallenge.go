@@ -918,6 +918,10 @@ func (s *Service) authenticateIssuerGate(
 			return ctx, nil, nil, rejectExecution(oops.C(oops.CodeUnauthorized))
 		}
 		selected := urn.NewWorkloadSubject(workloadIssuer, workloadSubject)
+		if execution, ok := assistanttokens.BusinessExecution(executionCtx); ok && execution.HumanUserID != "" {
+			selected = urn.NewUserSubject(execution.HumanUserID)
+		}
+		executionCtx = contextvalues.WithAssistantBusinessResource(executionCtx, endpoint.UpstreamResource)
 		newCtx, subject = s.identityValidator.StampAssistant(executionCtx), &selected
 	}
 	if subject == nil {
@@ -1103,6 +1107,10 @@ func (s *Service) ApplyIssuerGate(
 	tokens, err := s.resolveIssuerGateAccessTokens(newCtx, w, authentication)
 	if err != nil {
 		return ctx, nil, nil, err
+	}
+	newCtx, err = assistanttokens.RefreshBusinessExecution(newCtx)
+	if err != nil {
+		return ctx, nil, nil, fmt.Errorf("refresh assistant execution policy: %w", err)
 	}
 	return newCtx, tokens, toolSelection, nil
 }

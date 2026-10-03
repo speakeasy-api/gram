@@ -65,9 +65,6 @@ func (m *Manager) AuthorizeRuntime(ctx context.Context, raw string) (context.Con
 	if err != nil {
 		return ctx, nil, fmt.Errorf("authorize assistant execution: %w", err)
 	}
-	if err := m.executionIdentities.AdmitModel(ctx, m.executionDB, *e); err != nil {
-		return ctx, nil, oops.E(oops.CodeForbidden, err, "assistant model execution denied")
-	}
 	return m.executionContext(ctx, *e)
 }
 
@@ -81,6 +78,8 @@ func (m *Manager) executionContext(ctx context.Context, e assistantidentity.Exec
 		return ctx, nil, oops.C(oops.CodeUnauthorized)
 	}
 	ctx = context.WithValue(ctx, executionChatKey{}, thread.ChatID)
+	ctx = context.WithValue(ctx, executionEnvelopeKey{}, e)
+	ctx = contextvalues.WithAssistantInvocationEvent(ctx, e.EventID)
 	org, err := m.orgs.GetOrganizationMetadata(ctx, e.Identity.OrganizationID)
 	if err != nil {
 		return ctx, nil, fmt.Errorf("authorize assistant execution: %w", err)
@@ -119,6 +118,12 @@ func (m *Manager) AuthorizeBusiness(ctx context.Context, raw string, resource uu
 	if err != nil {
 		return ctx, fmt.Errorf("resolve execution resource ownership: %w", err)
 	}
+	// Delegation belongs to workload admission, not a source-specific resolver.
+	credential, _ := contextvalues.PrincipalCredentialAuthorization(ctx)
+	credential.AuthorizerUserID = e.HumanUserID
+	ac, _ := contextvalues.GetAuthContext(ctx)
+	actor, _ := contextvalues.AuthenticatedActor(ctx)
+	ctx = contextvalues.WithPrincipalCredentialAuthorization(ctx, ac, actor, credential)
 	ctx, err = m.authz.PrepareContext(ctx)
 	if err != nil {
 		return ctx, fmt.Errorf("authorize assistant business execution: %w", err)
@@ -135,6 +140,9 @@ func (m *Manager) AuthorizeBusiness(ctx context.Context, raw string, resource uu
 	if err := m.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, resource.String(), e.Identity.ProjectID.String())); err != nil {
 		return ctx, fmt.Errorf("authorize assistant business execution: %w", err)
 	}
+	ctx = contextvalues.WithAssistantBusinessInvocation(ctx, e.Identity.OrganizationID, e.Identity.ProjectID, e.HumanUserID, func(current context.Context) (context.Context, error) {
+		return m.AuthorizeBusiness(current, raw, resource, restriction)
+	})
 	return ctx, nil
 }
 
@@ -187,4 +195,41 @@ func executionRuntimeClaims(e assistantidentity.Execution, userID string) *Claim
 	claims.ThreadID = e.ThreadID.String()
 	claims.UserID = userID
 	return &claims
+}
+
+// BusinessExecution is server-validated invocation metadata. Credential selection
+// reads it only after AuthorizeBusiness; callers cannot supply this context key.
+type executionEnvelopeKey struct{}
+
+func BusinessExecution(ctx context.Context) (assistantidentity.Execution, bool) {
+	e, ok := ctx.Value(executionEnvelopeKey{}).(assistantidentity.Execution)
+	return e, ok
+}
+
+// RevalidateBusinessExecution checks the originally admitted resource again
+// after an upstream refresh, without reselecting a caller or credential.
+// Dispatch must use RefreshBusinessExecution to retain the resulting live policy.
+func RevalidateBusinessExecution(ctx context.Context) error {
+	invocation, ok := contextvalues.AssistantBusinessInvocationFromContext(ctx)
+	if !ok {
+		return assistantidentity.ErrInvalidIdentity
+	}
+	if err := invocation.Revalidate(ctx); err != nil {
+		return fmt.Errorf("revalidate execution business context: %w", err)
+	}
+	return nil
+}
+
+// RefreshBusinessExecution carries live business policy into dispatch after
+// blocking credential work. Non-execution and platform contexts are unchanged.
+func RefreshBusinessExecution(ctx context.Context) (context.Context, error) {
+	invocation, ok := contextvalues.AssistantBusinessInvocationFromContext(ctx)
+	if !ok {
+		return ctx, nil
+	}
+	fresh, err := invocation.RevalidatedContext(ctx)
+	if err != nil {
+		return ctx, fmt.Errorf("refresh execution business context: %w", err)
+	}
+	return fresh, nil
 }

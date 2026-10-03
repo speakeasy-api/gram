@@ -2093,7 +2093,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return EnqueueResult{}, fmt.Errorf("find concurrent assistant enqueue: %w", err)
 	}
-	normalizedPayloadJSON, err = s.captureExecution(ctx, assistant, sourceKind, threadID, triggerInstanceID, task.EventID, normalizedPayloadJSON)
+	normalizedPayloadJSON, err = s.captureExecution(ctx, assistant, sourceKind, threadID, triggerInstanceID, task.EventID, normalizedPayloadJSON, task.SlackExecution)
 	if err != nil {
 		return EnqueueResult{}, err
 	}
@@ -3262,6 +3262,10 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	instructions, err := composeInstructions(assistant.Instructions, thread, baselineSkills.Skills)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions").LogError(ctx, s.logger, logAttrs...)
+	}
+
+	if thread.SourceKind == sourceKindSlack {
+		instructions += "\nIf business access is denied, use platform_assistant_execution_denied to send the fixed refusal to the invoking Slack user. Never retry using another person’s credentials or disclose raw credentials. Conversation history and synthesized replies are shared with channel participants."
 	}
 
 	history, err := s.loadChatHistory(ctx, thread.ChatID, thread.ProjectID)
