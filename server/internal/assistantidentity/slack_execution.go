@@ -8,8 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
-	"github.com/speakeasy-api/gram/server/internal/authz"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
 
 // SlackDelegation pins the trusted directory observation, not an email or a
@@ -67,39 +65,4 @@ func ValidateSlackDelegation(ctx context.Context, db repo.DBTX, e Execution) err
 		return ErrActorIneligible
 	}
 	return nil
-}
-
-// HumanBusinessPolicy loads an independent restriction. It never appends human
-// grants to the workload's grants or substitutes a human authenticated actor.
-func HumanBusinessPolicy(ctx context.Context, db DB, e Execution) ([]authz.Grant, error) {
-	if e.Mode != ExecutionWorkloadHuman {
-		return nil, ErrInvalidIdentity
-	}
-	tx, err := readSnapshot(ctx, db)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if err := ValidateSlackDelegation(ctx, tx, e); err != nil {
-		return nil, err
-	}
-	active, err := orgrepo.New(tx).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{OrganizationID: e.Identity.OrganizationID, UserID: e.HumanUserID})
-	if err != nil {
-		return nil, fmt.Errorf("load execution human membership: %w", err)
-	}
-	if !active {
-		return nil, ErrActorIneligible
-	}
-	principals, err := authz.ResolveUserPrincipals(ctx, tx, e.Identity.OrganizationID, e.HumanUserID)
-	if err != nil {
-		return nil, fmt.Errorf("resolve execution human policy: %w", err)
-	}
-	grants, err := authz.LoadGrants(ctx, tx, e.Identity.OrganizationID, principals)
-	if err != nil {
-		return nil, fmt.Errorf("load execution human policy: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit execution human policy: %w", err)
-	}
-	return grants, nil
 }

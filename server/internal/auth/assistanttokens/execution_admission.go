@@ -122,16 +122,15 @@ func (m *Manager) AuthorizeBusiness(ctx context.Context, raw string, resource uu
 	if err != nil {
 		return ctx, fmt.Errorf("resolve execution resource ownership: %w", err)
 	}
+	// Delegation belongs to workload admission, not a source-specific resolver.
+	credential, _ := contextvalues.PrincipalCredentialAuthorization(ctx)
+	credential.AuthorizerUserID = e.HumanUserID
+	ac, _ := contextvalues.GetAuthContext(ctx)
+	actor, _ := contextvalues.AuthenticatedActor(ctx)
+	ctx = contextvalues.WithPrincipalCredentialAuthorization(ctx, ac, actor, credential)
 	ctx, err = m.authz.PrepareContext(ctx)
 	if err != nil {
 		return ctx, fmt.Errorf("authorize assistant business execution: %w", err)
-	}
-	if e.Mode == assistantidentity.ExecutionWorkloadHuman {
-		grants, err := assistantidentity.HumanBusinessPolicy(ctx, m.executionDB, *e)
-		if err != nil {
-			return ctx, fmt.Errorf("authorize invoker business policy: %w", err)
-		}
-		ctx = authz.RestrictContext(ctx, grants)
 	}
 	// A trusted server hook may only intersect an additional policy. It cannot
 	// choose another principal, credential, resource or platform route.
