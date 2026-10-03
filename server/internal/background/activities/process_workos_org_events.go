@@ -282,7 +282,7 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 // ShouldProcessEvent guard against duplicate apply. The returned effects are
 // run by the caller after the transaction commits. workosOrgID is the
 // organization whose event stream is being processed.
-func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, workosOrgID string, event events.Event) (postCommitEffects, error) {
+func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, workosOrgID string, event events.Event) (postCommitEffects, error) {
 	var none postCommitEffects
 
 	switch event.Event {

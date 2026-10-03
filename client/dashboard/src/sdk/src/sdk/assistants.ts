@@ -11,6 +11,7 @@ import { assistantsInterruptTurn } from "../funcs/assistantsInterruptTurn.js";
 import { assistantsList } from "../funcs/assistantsList.js";
 import { assistantsSendMessage } from "../funcs/assistantsSendMessage.js";
 import { assistantsUpdate } from "../funcs/assistantsUpdate.js";
+import { assistantsUpgradeIdentity } from "../funcs/assistantsUpgradeIdentity.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { Assistant } from "../models/components/assistant.js";
 import { InterruptTurnResult } from "../models/components/interruptturnresult.js";
@@ -52,6 +53,10 @@ import {
   UpdateAssistantRequest,
   UpdateAssistantSecurity,
 } from "../models/operations/updateassistant.js";
+import {
+  UpgradeAssistantIdentityRequest,
+  UpgradeAssistantIdentitySecurity,
+} from "../models/operations/upgradeassistantidentity.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Assistants extends ClientSDK {
@@ -219,6 +224,25 @@ export class Assistants extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Assistant> {
     return unwrapAsync(assistantsUpdate(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * upgradeAssistantIdentity assistants
+   *
+   * @remarks
+   * Explicitly upgrade a legacy assistant to a dedicated agent and stable trigger workload identities. Existing assistants are never upgraded implicitly.
+   */
+  async upgradeIdentity(
+    request: UpgradeAssistantIdentityRequest,
+    security?: UpgradeAssistantIdentitySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<Assistant> {
+    return unwrapAsync(assistantsUpgradeIdentity(
       this,
       request,
       security,

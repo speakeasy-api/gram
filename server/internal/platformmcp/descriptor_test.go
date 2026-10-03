@@ -411,6 +411,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	// get_xaa_readiness reads an org-wide snapshot under live member org-admin
 	// authority, which managed assistants do not have; it stays external-only.
 	for _, name := range []string{
+		upgradeAssistantIdentityToolName,
 		"get_network_ingress",
 		"get_xaa_readiness",
 		"distribute_mcp_to_plugin",

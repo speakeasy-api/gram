@@ -352,6 +352,7 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
+	assistantIdentity         *assistantIdentityService
 	xaaReadiness              *xaaReadinessService
 	logger                    *slog.Logger
 	db                        *pgxpool.Pool
@@ -380,8 +381,9 @@ type PostgresReader struct {
 	toolExposure              *MCPToolExposureService
 }
 
-func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
-	return &PostgresReader{
+func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool, management AssistantIdentityManagement) *PostgresReader {
+	r := &PostgresReader{
+		assistantIdentity:         nil,
 		logger:                    logger.With(attr.SlogComponent("platformmcp")),
 		db:                        db,
 		reader:                    readmodel.New(db),
@@ -409,6 +411,10 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
 		toolExposure:              nil,
 	}
+	if management != nil {
+		r.assistantIdentity = &assistantIdentityService{management: management, resolveProject: r.resolveInventoryProject}
+	}
+	return r
 }
 
 func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader {

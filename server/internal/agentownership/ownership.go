@@ -3,6 +3,7 @@ package agentownership
 import (
 	"context"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/agents/lifecycle"
@@ -26,7 +27,7 @@ const (
 var SystemActor = urn.Principal{Type: urn.PrincipalTypeUser, ID: "system"}
 
 // LatchOwnerLossByUser blocks every current ownership of a deleted user.
-func LatchOwnerLossByUser(ctx context.Context, dbtx repo.DBTX, ownerUserID string, reason OwnerReassignmentReason, actor urn.Principal, actorDisplayName *string) error {
+func LatchOwnerLossByUser(ctx context.Context, dbtx pgx.Tx, ownerUserID string, reason OwnerReassignmentReason, actor urn.Principal, actorDisplayName *string) error {
 	if !reason.valid() {
 		return fmt.Errorf("invalid owner reassignment reason %q", reason)
 	}
@@ -42,7 +43,7 @@ func LatchOwnerLossByUser(ctx context.Context, dbtx repo.DBTX, ownerUserID strin
 
 // LatchOwnerLossByMembership blocks current ownership in one organization when
 // that owner loses or deactivates their membership.
-func LatchOwnerLossByMembership(ctx context.Context, dbtx repo.DBTX, organizationID, ownerUserID string, reason OwnerReassignmentReason, actor urn.Principal, actorDisplayName *string) error {
+func LatchOwnerLossByMembership(ctx context.Context, dbtx pgx.Tx, organizationID, ownerUserID string, reason OwnerReassignmentReason, actor urn.Principal, actorDisplayName *string) error {
 	if !reason.valid() {
 		return fmt.Errorf("invalid owner reassignment reason %q", reason)
 	}
@@ -60,7 +61,7 @@ func LatchOwnerLossByMembership(ctx context.Context, dbtx repo.DBTX, organizatio
 	return logOwnerLoss(ctx, dbtx, rows, actor, actorDisplayName)
 }
 
-func logOwnerLoss(ctx context.Context, dbtx repo.DBTX, rows []repo.Agent, actor urn.Principal, actorDisplayName *string) error {
+func logOwnerLoss(ctx context.Context, dbtx pgx.Tx, rows []repo.Agent, actor urn.Principal, actorDisplayName *string) error {
 	logger := audit.NewLogger()
 	for _, after := range rows {
 		before := agentAuditSnapshot(after)

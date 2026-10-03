@@ -82,6 +82,25 @@ var _ = Service("assistants", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "create")
 	})
 
+	Method("upgradeAssistantIdentity", func() {
+		Description("Explicitly upgrade a legacy assistant to a dedicated agent and stable trigger workload identities. Existing assistants are never upgraded implicitly.")
+		Payload(func() {
+			Attribute("id", String, "The assistant ID.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+		Result(shared.Assistant)
+		HTTP(func() {
+			POST("/rpc/assistants.upgradeIdentity")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "upgradeAssistantIdentity")
+		Meta("openapi:extension:x-speakeasy-name-override", "upgradeIdentity")
+	})
+
 	Method("updateAssistant", func() {
 		Description("Update an assistant.")
 

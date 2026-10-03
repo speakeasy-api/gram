@@ -137,9 +137,11 @@ func WakeConfigFields(configJSON []byte) (string, string) {
 }
 
 type wakeTriggerConfig struct {
-	FireAt        time.Time `json:"fire_at"`
-	Note          *string   `json:"note,omitempty"`
-	CorrelationID string    `json:"correlation_id"`
+	IdentityVersion int       `json:"identity_version,omitempty"`
+	RequesterUserID string    `json:"requester_user_id,omitempty"`
+	FireAt          time.Time `json:"fire_at"`
+	Note            *string   `json:"note,omitempty"`
+	CorrelationID   string    `json:"correlation_id"`
 }
 
 func (c wakeTriggerConfig) Filter(_ any) (bool, error) { return true, nil }
@@ -165,6 +167,8 @@ type cronTriggerEvent struct {
 }
 
 type wakeTriggerEvent struct {
+	IdentityVersion   int    `json:"identity_version,omitempty" cel:"identity_version"`
+	RequesterUserID   string `json:"requester_user_id,omitempty" cel:"requester_user_id"`
 	FiredAt           string `json:"fired_at" cel:"fired_at"`
 	ScheduledAt       string `json:"scheduled_at" cel:"scheduled_at"`
 	TriggerInstanceID string `json:"trigger_instance_id" cel:"trigger_instance_id"`
@@ -329,6 +333,8 @@ func newWakeDefinition() Definition {
 				note = *cfg.Note
 			}
 			event := wakeTriggerEvent{
+				IdentityVersion:   cfg.IdentityVersion,
+				RequesterUserID:   cfg.RequesterUserID,
 				FiredAt:           firedAt.UTC().Format(time.RFC3339Nano),
 				ScheduledAt:       cfg.FireAt.UTC().Format(time.RFC3339Nano),
 				TriggerInstanceID: instance.ID.String(),

@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
@@ -82,8 +83,8 @@ func managedAssistantName(projectName string) string {
 // mapping now exists, so the re-read returns it) or a non-managed assistant
 // already holding the name (no mapping, so we surface ErrManagedAssistantNameTaken).
 //
-// createdByUserID may be empty for system-initiated enablement; it is recorded
-// as NULL in that case.
+// Creating an assistant requires an eligible consenting actor. System callers
+// may read an existing managed assistant, but cannot fabricate creation consent.
 func (s *ServiceCore) EnableManagedAssistant(
 	ctx context.Context,
 	organizationID string,
@@ -144,6 +145,9 @@ func (s *ServiceCore) GetManagedAssistant(ctx context.Context, projectID uuid.UU
 	if err := s.hydrateAssistantSkills(ctx, projectID, &record); err != nil {
 		return assistantRecord{}, err
 	}
+	if err := s.hydrateAssistantIdentityState(ctx, projectID, &record); err != nil {
+		return assistantRecord{}, err
+	}
 	return record, nil
 }
 
@@ -166,6 +170,18 @@ func (s *ServiceCore) DisableManagedAssistant(ctx context.Context, projectID uui
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	queries := assistantrepo.New(tx)
+	// This anchor is the assistant row itself, not an optional identity binding.
+	// Legacy assistants still proceed through the complete cleanup below.
+	anchor, err := queries.LockAssistantIdentityAnchor(ctx, assistantrepo.LockAssistantIdentityAnchorParams{ProjectID: projectID, AssistantID: row.ID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("lock managed assistant for disable: %w", err)
+	}
+	if err := assistantidentity.TombstoneAssistant(ctx, tx, anchor.OrganizationID, projectID, row.ID); err != nil {
+		return fmt.Errorf("assistant identity TombstoneAssistant: %w", err)
+	}
 	if err := queries.DeleteProjectManagedAssistant(ctx, projectID); err != nil {
 		return fmt.Errorf("delete managed assistant mapping: %w", err)
 	}
@@ -222,24 +238,68 @@ func dashboardTriggerTarget(projectID, assistantID uuid.UUID) triggerrepo.ListAc
 // when absent. Idempotent so the enable fast path can heal a managed assistant
 // that predates dashboard ingress without depending on a fresh create.
 func (s *ServiceCore) ensureDashboardTrigger(ctx context.Context, db triggerrepo.DBTX, organizationID string, projectID, assistantID uuid.UUID, name string) error {
-	_, err := triggerrepo.New(db).CreateDashboardTriggerInstance(ctx, triggerrepo.CreateDashboardTriggerInstanceParams{
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
-		DefinitionSlug: sourceKindDashboard,
-		Name:           name,
-		EnvironmentID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		TargetKind:     bgtriggers.TargetKindAssistant,
-		TargetRef:      assistantID.String(),
-		TargetDisplay:  name,
-		ConfigJson:     []byte("{}"),
-		Status:         StatusActive,
-	})
-	// ON CONFLICT DO NOTHING returns no rows when an active trigger already
-	// exists for this project and target — the idempotent success path.
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("create dashboard trigger instance: %w", err)
+	if tx, ok := db.(pgx.Tx); ok {
+		_, err := s.ensureDashboardRootTx(ctx, tx, organizationID, projectID, assistantID, name)
+		return err
+	}
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin dashboard trigger transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = s.ensureDashboardRootTx(ctx, tx, organizationID, projectID, assistantID, name); err != nil {
+		return err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit dashboard trigger transaction: %w", err)
 	}
 	return nil
+}
+
+// ensureDashboardRootTx reuses the real durable dashboard ingress trigger.
+// The assistant anchor serializes creation, healing, upgrade, and deletion.
+func (s *ServiceCore) ensureDashboardRootTx(ctx context.Context, tx pgx.Tx, organizationID string, projectID, assistantID uuid.UUID, name string) (uuid.UUID, error) {
+	if err := assistantidentity.LockLiveProject(ctx, tx, organizationID, projectID); err != nil {
+		return uuid.Nil, fmt.Errorf("lock dashboard root project: %w", err)
+	}
+	anchor, err := assistantrepo.New(tx).LockAssistantIdentityAnchor(ctx, assistantrepo.LockAssistantIdentityAnchorParams{ProjectID: projectID, AssistantID: assistantID})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("lock assistant for dashboard ingress: %w", err)
+	}
+	if anchor.OrganizationID != organizationID {
+		return uuid.Nil, pgx.ErrNoRows
+	}
+	queries := triggerrepo.New(tx)
+	target := triggerrepo.ListDashboardTriggerInstancesParams{ProjectID: projectID, TargetRef: assistantID.String()}
+	roots, err := queries.ListDashboardTriggerInstances(ctx, target)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("read canonical dashboard trigger: %w", err)
+	}
+	if len(roots) == 0 {
+		_, err = queries.CreateDashboardTriggerInstance(ctx, triggerrepo.CreateDashboardTriggerInstanceParams{
+			OrganizationID: organizationID, ProjectID: projectID, DefinitionSlug: sourceKindDashboard,
+			Name: name, EnvironmentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, TargetKind: bgtriggers.TargetKindAssistant,
+			TargetRef: assistantID.String(), TargetDisplay: name, ConfigJson: []byte("{}"), Status: StatusActive,
+		})
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, fmt.Errorf("create dashboard trigger instance: %w", err)
+		}
+		roots, err = queries.ListDashboardTriggerInstances(ctx, target)
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("read canonical dashboard trigger: %w", err)
+		}
+	}
+	if len(roots) != 1 {
+		return uuid.Nil, fmt.Errorf("expected one canonical dashboard trigger, got %d", len(roots))
+	}
+	// A paused ingress exists: preserve its status and binding without healing it.
+	if roots[0].Status != StatusActive {
+		return roots[0].ID, nil
+	}
+	if err = s.identities.BindRootTrigger(ctx, tx, organizationID, projectID, roots[0].ID); err != nil {
+		return uuid.Nil, fmt.Errorf("assistant identity BindRootTrigger: %w", err)
+	}
+	return roots[0].ID, nil
 }
 
 // createManagedAssistant inserts the assistant and records the managed mapping in
@@ -256,6 +316,10 @@ func (s *ServiceCore) createManagedAssistant(
 	var createdBy pgtype.Text
 	if createdByUserID != "" {
 		createdBy = conv.ToPGText(createdByUserID)
+	}
+
+	if createdByUserID == "" {
+		return assistantRecord{}, assistantidentity.ErrActorIneligible
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -288,6 +352,9 @@ func (s *ServiceCore) createManagedAssistant(
 		return assistantRecord{}, fmt.Errorf("insert managed assistant mapping: %w", err)
 	}
 
+	if _, err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID}); err != nil {
+		return assistantRecord{}, fmt.Errorf("assistant identity Provision: %w", err)
+	}
 	if err := s.ensureDashboardTrigger(ctx, tx, organizationID, projectID, record.ID, name); err != nil {
 		return assistantRecord{}, err
 	}
@@ -296,27 +363,33 @@ func (s *ServiceCore) createManagedAssistant(
 		return assistantRecord{}, fmt.Errorf("commit managed assistant tx: %w", err)
 	}
 
+	if err := s.hydrateAssistantIdentityState(ctx, projectID, &record); err != nil {
+		return assistantRecord{}, err
+	}
 	return record, nil
 }
 
 func assistantRecordFromManagedRow(row assistantrepo.GetManagedAssistantByProjectRow) assistantRecord {
 	return assistantRecord{
-		ID:              row.ID,
-		ProjectID:       row.ProjectID,
-		OrganizationID:  row.OrganizationID,
-		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
-		Name:            row.Name,
-		Model:           row.Model,
-		Instructions:    row.Instructions,
-		Toolsets:        nil,
-		MCPServers:      nil,
-		Skills:          nil,
-		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
-		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
-		Status:          row.Status,
-		CreatedAt:       row.CreatedAt.Time,
-		UpdatedAt:       row.UpdatedAt.Time,
-		DeletedAt:       row.DeletedAt,
+		IdentityState:      "",
+		AgentID:            nil,
+		IdentityGeneration: nil,
+		ID:                 row.ID,
+		ProjectID:          row.ProjectID,
+		OrganizationID:     row.OrganizationID,
+		CreatedByUserID:    conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:               row.Name,
+		Model:              row.Model,
+		Instructions:       row.Instructions,
+		Toolsets:           nil,
+		MCPServers:         nil,
+		Skills:             nil,
+		WarmTTLSeconds:     conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:     conv.SafeInt(row.MaxConcurrency),
+		Status:             row.Status,
+		CreatedAt:          row.CreatedAt.Time,
+		UpdatedAt:          row.UpdatedAt.Time,
+		DeletedAt:          row.DeletedAt,
 	}
 }
 
@@ -497,22 +570,32 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 // trigger instance, provisioning one first to heal assistants that predate
 // dashboard ingress.
 func (s *ServiceCore) resolveDashboardTriggerInstance(ctx context.Context, organizationID string, projectID, assistantID uuid.UUID, name string) (uuid.UUID, error) {
-	queries := triggerrepo.New(s.db)
-	instances, err := queries.ListActiveTriggerInstancesByTarget(ctx, dashboardTriggerTarget(projectID, assistantID))
+	// Existing ingress is a read path: binding creation belongs to management,
+	// not to each message. Missing canonical triggers are healed atomically.
+	roots, err := triggerrepo.New(s.db).ListDashboardTriggerInstances(ctx, triggerrepo.ListDashboardTriggerInstancesParams{ProjectID: projectID, TargetRef: assistantID.String()})
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("list dashboard trigger instances: %w", err)
+		return uuid.Nil, fmt.Errorf("read dashboard ingress: %w", err)
 	}
-	if len(instances) == 0 {
-		if err := s.ensureDashboardTrigger(ctx, s.db, organizationID, projectID, assistantID, name); err != nil {
-			return uuid.Nil, err
+	if len(roots) == 1 {
+		if roots[0].Status != StatusActive {
+			return uuid.Nil, fmt.Errorf("dashboard ingress is not active")
 		}
-		instances, err = queries.ListActiveTriggerInstancesByTarget(ctx, dashboardTriggerTarget(projectID, assistantID))
-		if err != nil {
-			return uuid.Nil, fmt.Errorf("list dashboard trigger instances: %w", err)
-		}
+		return roots[0].ID, nil
 	}
-	if len(instances) == 0 {
-		return uuid.Nil, fmt.Errorf("dashboard trigger instance not provisioned for assistant %s", assistantID)
+	if len(roots) > 1 {
+		return uuid.Nil, fmt.Errorf("expected one canonical dashboard trigger, got %d", len(roots))
 	}
-	return instances[0].ID, nil
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("begin dashboard ingress transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	id, err := s.ensureDashboardRootTx(ctx, tx, organizationID, projectID, assistantID, name)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return uuid.Nil, fmt.Errorf("commit dashboard ingress transaction: %w", err)
+	}
+	return id, nil
 }

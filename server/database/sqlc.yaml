@@ -155,6 +155,15 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/assistantidentity/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/assistantidentity/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+  - schema: schema.sql
     queries: ../internal/assistants/queries.sql
     engine: postgresql
     gen:

@@ -32,7 +32,7 @@ func TestEveryAdvertisedOutputSchemaAcceptsAPopulatedResult(t *testing.T) {
 	// "not switched on" stubs for the tools that need one, and a reader with no
 	// pool registers the live handlers, whose result types are the ones under
 	// test. Neither handler is ever called.
-	for _, reader := range []Reader{nil, NewPostgresReader(testenv.NewLogger(t), nil)} {
+	for _, reader := range []Reader{nil, NewPostgresReader(testenv.NewLogger(t), nil, nil)} {
 		server, registrar := newServer(reader, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 		bindExternalTestPrincipal(server)
 		registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})

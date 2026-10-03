@@ -488,6 +488,8 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 	conn, err := assistantsInfra.CloneTestDatabase(t, dbName)
 	require.NoError(t, err)
 
+	seedIdentityCreationMembers(t, conn)
+
 	proj, err := projectsRepo.New(conn).CreateProject(t.Context(), projectsRepo.CreateProjectParams{
 		Name:           "Project",
 		Slug:           "project-rbac-test",
@@ -504,12 +506,12 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 		logger:   logger,
 		auth:     nil,
 		authz:    authzEngine,
-		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger()),
+		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService),
 		signaler: &stubWorkflowSignaler{signalledThreads: nil},
 	}
 
 	sessionID := "session-test"
-	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+	ctx := contextvalues.WithValidatedGramSession(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID:  "org-test",
 		UserID:                "user-test",
 		ExternalUserID:        "",
@@ -524,7 +526,7 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 		ProjectSlug:           &projectSlug,
 		APIKeyScopes:          nil,
 		IsAdmin:               false,
-	})
+	}, false)
 
 	return service, ctx, projectID, conn
 }

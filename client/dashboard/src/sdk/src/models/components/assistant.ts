@@ -22,6 +22,19 @@ import {
 } from "./assistanttoolsetref.js";
 
 /**
+ * Whether this assistant has never configured, active, or tombstoned workload identity bindings. This is configuration state, not permission to execute.
+ */
+export const IdentityState = {
+  NeverConfigured: "NEVER_CONFIGURED",
+  Active: "ACTIVE",
+  Tombstoned: "TOMBSTONED",
+} as const;
+/**
+ * Whether this assistant has never configured, active, or tombstoned workload identity bindings. This is configuration state, not permission to execute.
+ */
+export type IdentityState = ClosedEnum<typeof IdentityState>;
+
+/**
  * The assistant status.
  */
 export const AssistantStatus = {
@@ -35,6 +48,10 @@ export type AssistantStatus = ClosedEnum<typeof AssistantStatus>;
 
 export type Assistant = {
   /**
+   * The dedicated agent ID for an active identity binding.
+   */
+  agentId?: string | undefined;
+  /**
    * Creation timestamp.
    */
   createdAt: Date;
@@ -46,6 +63,14 @@ export type Assistant = {
    * The assistant ID.
    */
   id: string;
+  /**
+   * The current or last retained assistant identity binding generation.
+   */
+  identityGeneration?: number | undefined;
+  /**
+   * Whether this assistant has never configured, active, or tombstoned workload identity bindings. This is configuration state, not permission to execute.
+   */
+  identityState?: IdentityState | undefined;
   /**
    * The system instructions for the assistant.
    */
@@ -93,6 +118,10 @@ export type Assistant = {
 };
 
 /** @internal */
+export const IdentityState$inboundSchema: z.ZodMiniEnum<typeof IdentityState> =
+  z.enum(IdentityState);
+
+/** @internal */
 export const AssistantStatus$inboundSchema: z.ZodMiniEnum<
   typeof AssistantStatus
 > = z.enum(AssistantStatus);
@@ -101,12 +130,15 @@ export const AssistantStatus$inboundSchema: z.ZodMiniEnum<
 export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
   .pipe(
     z.object({
+      agent_id: z.optional(z.string()),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
       created_by_user_id: z.optional(z.string()),
       id: z.string(),
+      identity_generation: z.optional(z.int()),
+      identity_state: z.optional(IdentityState$inboundSchema),
       instructions: z.string(),
       max_concurrency: z.int(),
       mcp_servers: z.array(AssistantMCPServerRef$inboundSchema),
@@ -124,8 +156,11 @@ export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "agent_id": "agentId",
         "created_at": "createdAt",
         "created_by_user_id": "createdByUserId",
+        "identity_generation": "identityGeneration",
+        "identity_state": "identityState",
         "max_concurrency": "maxConcurrency",
         "mcp_servers": "mcpServers",
         "project_id": "projectId",

@@ -773,7 +773,7 @@ func TestToolExposureUnavailableRegistrationMatchesLiveManifest(t *testing.T) {
 	_, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_tool_exposure_manifest")
 	require.True(t, fixture.service.valid(), "the live side must be a composed service")
 
-	reader := NewPostgresReader(testenv.NewLogger(t), fixture.conn)
+	reader := NewPostgresReader(testenv.NewLogger(t), fixture.conn, nil)
 	describe := func(service *MCPToolExposureService) map[string]Descriptor {
 		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "tool-exposure-manifest", Version: "0.0.1"}, nil))
 		registerToolExposureTools(registrar, service, reader)
