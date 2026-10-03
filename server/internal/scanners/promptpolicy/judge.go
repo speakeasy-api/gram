@@ -20,6 +20,9 @@ const Rule = "llm_judge"
 
 var ErrRateLimited = errors.New("llm judge rate limited")
 
+// ErrNoVerdict reports a Jev evaluation failure without asserting a policy violation.
+var ErrNoVerdict = errors.New("prompt policy Jev judge returned no verdict")
+
 // Evaluator evaluates one message against a natural-language guardrail prompt.
 // It returns (nil, nil) when there is nothing to judge, a verdict on a
 // successful judge call, or an error when the judge degraded.

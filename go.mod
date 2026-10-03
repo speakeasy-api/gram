@@ -18,7 +18,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/Masterminds/squirrel v1.5.4
 	github.com/Microsoft/go-winio v0.6.2
-	github.com/OpenRouterTeam/go-sdk v0.3.0
+	github.com/OpenRouterTeam/go-sdk v0.8.32
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/aws/aws-sdk-go-v2 v1.47.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.4
@@ -76,7 +76,7 @@ require (
 	github.com/speakeasy-api/mcp-setup-docs/go v0.3.0
 	github.com/speakeasy-api/openapi v1.24.0
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20250711233419-a173a6c0125c
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.1
 	github.com/stripe/stripe-go/v85 v85.0.1
 	github.com/superfly/fly-go v0.3.1
 	github.com/svix/svix-webhooks v1.99.1
@@ -330,7 +330,7 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
-	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
 	golang.org/x/exp v0.0.0-20251125195548-87e1e737ad39 // indirect
 	golang.org/x/tools v0.47.0 // indirect
