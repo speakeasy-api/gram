@@ -115,9 +115,3 @@ func RiskPolicyBypassCheck(policyID string, dims RiskPolicyDimensions) Check {
 	}
 	return Check{Scope: ScopeRiskPolicyBypass, ResourceKind: "", ResourceID: policyID, Dimensions: dimensions, selectorMatch: selectorMatchStrict}
 }
-
-// AssistantExecuteCheck admits model work for one assistant in one project.
-// It implies no assistant-management or business-tool permission.
-func AssistantExecuteCheck(assistantID, projectID string) Check {
-	return Check{Scope: ScopeAssistantExecute, ResourceKind: "", ResourceID: assistantID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal}
-}

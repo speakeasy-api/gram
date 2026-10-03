@@ -43,7 +43,6 @@ const (
 	ScopeRiskPolicyEvaluate      Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass        Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
 	ScopeRiskPolicyBlock         Scope = "risk_policy:block"
-	ScopeAssistantExecute        Scope = "assistant:execute"
 	ScopeChatRead                Scope = "chat:read"
 	ScopeChatWrite               Scope = "chat:write"
 	ScopeAgentRead               Scope = "agent:read"
@@ -150,7 +149,6 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeRiskPolicyEvaluate:      scopeVisibilityUserVisible,
 	ScopeRiskPolicyBypass:        scopeVisibilityUserVisible,
 	ScopeRiskPolicyBlock:         scopeVisibilityUserVisible,
-	ScopeAssistantExecute:        scopeVisibilityUserVisible,
 	ScopeChatRead:                scopeVisibilityUserVisible,
 	ScopeChatWrite:               scopeVisibilityUserVisible,
 	ScopeAgentRead:               scopeVisibilityUserVisible,
@@ -267,7 +265,6 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeRiskPolicyEvaluate:      nil,
 	ScopeRiskPolicyBypass:        nil,
 	ScopeRiskPolicyBlock:         nil,
-	ScopeAssistantExecute:        nil,
 	ScopeChatRead:                {ScopeChatWrite},
 	ScopeChatWrite:               nil,
 	ScopeAgentRead:               nil,
@@ -314,7 +311,6 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeRiskPolicyEvaluate:      ScopeRiskPolicyBypass,
 	ScopeRiskPolicyBypass:        "",
 	ScopeRiskPolicyBlock:         "",
-	ScopeAssistantExecute:        "",
 	ScopeChatRead:                "",
 	ScopeChatWrite:               "",
 	ScopeAgentRead:               "",

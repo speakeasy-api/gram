@@ -71,7 +71,7 @@ func (s *ServiceCore) UpgradeAssistantIdentity(ctx context.Context, organization
 	if row.OrganizationID != organizationID {
 		return assistantRecord{}, pgx.ErrNoRows
 	}
-	if _, err = s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{GrantExecution: true, OrganizationID: organizationID, ProjectID: projectID, AssistantID: assistantID, ActorUserID: actorUserID}); err != nil {
+	if _, err = s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: assistantID, ActorUserID: actorUserID}); err != nil {
 		return assistantRecord{}, fmt.Errorf("assistant identity Upgrade: %w", err)
 	}
 	if _, err = s.ensureDashboardRootTx(ctx, tx, organizationID, projectID, assistantID, row.Name); err != nil {

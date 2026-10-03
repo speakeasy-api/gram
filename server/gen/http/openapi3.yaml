@@ -96652,7 +96652,6 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
-                        - assistant:execute
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -96702,7 +96701,6 @@ components:
                             - risk_policy:block
                             - chat:read
                             - chat:write
-                            - assistant:execute
                             - agent:read
                             - agent:write
                             - agent:authorize
@@ -105077,7 +105075,6 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
-                        - assistant:execute
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -105393,7 +105390,6 @@ components:
                         - skill
                         - risk_policy
                         - chat
-                        - assistant
                         - agent
                         - workload
                 slug:
@@ -105429,7 +105425,6 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
-                        - assistant:execute
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -105910,10 +105905,10 @@ components:
                         - open_world
                 project_id:
                     type: string
-                    description: Project filter for MCP scopes; with resource_id='*', grants access to all servers in the project. assistant:execute requires this field to be the exact project ID; wildcards are not allowed.
+                    description: Project filter (MCP scopes only). When set with resource_id='*', grants access to all servers in the project.
                 resource_id:
                     type: string
-                    description: The resource identifier, or '*' for all resources of this kind. assistant:execute requires an exact assistant ID; wildcards are not allowed.
+                    description: The resource identifier, or '*' for all resources of this kind.
                 resource_kind:
                     type: string
                     description: The kind of resource this selector targets.
@@ -105925,7 +105920,6 @@ components:
                         - skill
                         - risk_policy
                         - chat
-                        - assistant
                         - agent
                         - workload
                         - '*'

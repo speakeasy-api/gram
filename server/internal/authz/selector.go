@@ -78,8 +78,6 @@ func ResourceKindForScope(scope Scope) string {
 		return ResourceKindSkill
 	case "risk_policy":
 		return ResourceKindRiskPolicy
-	case "assistant":
-		return ResourceKindAssistant
 	case "chat":
 		return ResourceKindChat
 	case "agent":
@@ -111,7 +109,6 @@ var validDispositions = map[string]bool{
 // resource_id) are valid for each scope family. Scope families not listed here
 // allow no extra keys.
 var allowedSelectorKeys = map[string]map[string]bool{
-	ResourceKindAssistant: {SelectorKeyProjectID: true},
 	ResourceKindMCP: {
 		SelectorKeyTool:        true,
 		SelectorKeyDisposition: true,
@@ -139,13 +136,6 @@ func ValidateSelector(scope Scope, sel Selector) error {
 		return fmt.Errorf("selector must include both resource_kind and resource_id")
 	}
 
-	if scope == ScopeAssistantExecute {
-		for _, key := range []string{SelectorKeyResourceID, SelectorKeyProjectID} {
-			if sel[key] == "" || sel[key] == WildcardResource {
-				return fmt.Errorf("assistant execution requires an exact %s", key)
-			}
-		}
-	}
 	expectedKind := ResourceKindForScope(scope)
 	if scope == ScopeRoot {
 		if kind != ResourceKindWildcard {

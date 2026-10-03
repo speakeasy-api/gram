@@ -748,33 +748,6 @@ export function CreateRoleDialog({
                 Permissions
               </Text>
             </div>
-            {grants["assistant:execute"] && (
-              <div className="rounded-md border p-3">
-                <Text variant="body">Assistant execution</Text>
-                <Text muted small>
-                  Exact assistant/project grants. Remove this permission to
-                  revoke it; new execution authority requires an authorized
-                  assistant upgrade.
-                </Text>
-                {grants["assistant:execute"].rules.map((rule) => (
-                  <div key={rule.id} className="text-sm">
-                    {(rule.selectors ?? []).map((selector) => (
-                      <p key={`${selector.resourceId}:${selector.projectId}`}>
-                        Assistant: {selector.resourceId}; project:{" "}
-                        {selector.projectId ?? "not specified"}
-                      </p>
-                    ))}
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => toggleScope("assistant:execute")}
-                >
-                  Remove assistant execution
-                </Button>
-              </div>
-            )}
             <RolePermissionsSection
               groups={scopeGroups}
               selectedScopes={new Set(Object.keys(grants))}

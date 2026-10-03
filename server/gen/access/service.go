@@ -963,15 +963,13 @@ type Selector struct {
 	// The kind of resource this selector targets.
 	ResourceKind string
 	// The resource identifier, or '*' for all resources of this kind.
-	// assistant:execute requires an exact assistant ID; wildcards are not allowed.
 	ResourceID string
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).
 	Tool *string
-	// Project filter for MCP scopes; with resource_id='*', grants access to all
-	// servers in the project. assistant:execute requires this field to be the
-	// exact project ID; wildcards are not allowed.
+	// Project filter (MCP scopes only). When set with resource_id='*', grants
+	// access to all servers in the project.
 	ProjectID *string
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.

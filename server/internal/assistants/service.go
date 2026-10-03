@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -1340,7 +1341,7 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, err
 	}
 
-	if _, err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{GrantExecution: false, OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID}); err != nil {
+	if _, err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID}); err != nil {
 		return assistantRecord{}, fmt.Errorf("assistant identity Provision: %w", err)
 	}
 	if _, err := s.ensureDashboardRootTx(ctx, tx, organizationID, projectID, record.ID, name); err != nil {
@@ -3004,6 +3005,7 @@ func (s *ServiceCore) processEventTurn(
 	var turnToken string
 	if execution != nil {
 		turnToken, err = s.assistantTokens.GenerateExecution(ctx, *execution)
+		err = classifyExecutionDispatchError(err)
 	} else {
 		turnToken, err = s.MintThreadScopedRuntimeToken(assistant, thread.ID, actorUserID)
 	}
@@ -3297,7 +3299,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 // enough that a leaked token ages out well before the thread retires. Fresh
 // tokens are pushed on /configure and on every /turn, so this is the upper
 // bound between refreshes for an idle runtime.
-const assistantRuntimeTokenTTL = 60 * time.Minute
+const assistantRuntimeTokenTTL = mcpauthz.AssistantRuntimeTokenTTL
 
 // mcpAuthAddendum is source-agnostic framing for MCP auth: who may see an
 // AuthURL, when auth events appear, and what each event carries. Per-source

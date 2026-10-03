@@ -14,8 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
-	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -130,16 +128,8 @@ func TestExecutionAuthorizationLivePolicyAndPlatformIsolation(t *testing.T) {
 			_, _, err = manager.AuthorizePlatform(t.Context(), token)
 			require.NoError(t, err)
 			putExecutionTestGrant(t, db, principal, businessGrant)
-			deleteExecutionTestScope(t, db, principal, authz.ScopeAssistantExecute)
 			_, _, err = manager.AuthorizeRuntime(t.Context(), token)
-			require.Error(t, err, "model rechecks live policy")
-			_, err = manager.AuthorizeBusiness(t.Context(), token, server, nil)
-			require.Error(t, err, "execution revocation also stops business tools")
-			_, _, err = manager.AuthorizePlatform(t.Context(), token)
-			require.NoError(t, err, "assistant-owned reply remains independent")
-			putExecutionTestGrant(t, db, principal, assistantidentity.ExecutionGrant(assistant.ID, project))
-			_, _, err = manager.AuthorizeRuntime(t.Context(), token)
-			require.NoError(t, err)
+			require.NoError(t, err, "running requires no additional capability")
 			stale := *execution
 			stale.Identity.AssistantGeneration++
 			_, err = manager.GenerateExecution(t.Context(), stale)
@@ -163,7 +153,7 @@ func TestExecutionAuthorizationLivePolicyAndPlatformIsolation(t *testing.T) {
 	}
 }
 
-func TestExecutionExistingBindingNeedsExplicitUpgrade(t *testing.T) {
+func TestExecutionExistingBindingRunsWithoutGrantOrUpgrade(t *testing.T) {
 	t.Parallel()
 	db, err := assistantsInfra.CloneTestDatabase(t, "execution_upgrade")
 	require.NoError(t, err)
@@ -175,36 +165,12 @@ func TestExecutionExistingBindingNeedsExplicitUpgrade(t *testing.T) {
 	require.NoError(t, err)
 	identity, err := testIdentityService.Resolve(t.Context(), db, "org-test", project, assistant.ID, root)
 	require.NoError(t, err)
-	principal := urn.NewPrincipal(urn.PrincipalTypeAgent, identity.Identity.AgentID.String())
-	deleteExecutionTestScope(t, db, principal, authz.ScopeAssistantExecute)
 	thread := seedThreadWithEvent(t, db, assistant.ID, "execution-upgrade", "execution-upgrade", eventStatusPending)
 	raw, err := core.captureExecution(t.Context(), assistant, sourceKindCron, thread, uuid.NullUUID{UUID: root, Valid: true}, "old-event", []byte(`{}`))
 	require.NoError(t, err)
 	old, err := decodeExecution(raw)
 	require.NoError(t, err)
-	require.Error(t, testIdentityService.AdmitModel(t.Context(), db, *old))
-	tx := testenv.BeginTx(t, t.Context(), db)
-	_, err = testIdentityService.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: project, AssistantID: assistant.ID, ActorUserID: "user-1"})
-	require.NoError(t, err)
-	require.NoError(t, tx.Commit(t.Context()))
-	require.Error(t, testIdentityService.AdmitModel(t.Context(), db, *old), "routine retries must not regrant")
-	deleteExecutionTestScope(t, db, urn.NewPrincipal(urn.PrincipalTypeUser, "user-2"), authz.ScopeProjectWrite)
-	_, err = core.UpgradeAssistantIdentity(t.Context(), "org-test", project, assistant.ID, "user-2")
-	require.Error(t, err)
-	_, err = core.UpgradeAssistantIdentity(t.Context(), "org-test", project, assistant.ID, "user-1")
-	require.NoError(t, err)
-	require.ErrorIs(t, testIdentityService.AdmitModel(t.Context(), db, *old), assistantidentity.ErrExecutionAdmissionRequired, "upgrade cannot widen previously captured ceiling")
-	_, err = core.UpgradeAssistantIdentity(t.Context(), "org-test", project, assistant.ID, "user-1")
-	require.NoError(t, err)
-	count, err := audittest.AuditLogCountByAction(t.Context(), db, audit.Action("assistant:execution_upgrade"))
-	require.NoError(t, err)
-	require.EqualValues(t, 1, count, "no-op retry must not claim another authority change")
-	event, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.Action("assistant:execution_upgrade"))
-	require.NoError(t, err)
-	var metadata map[string]any
-	require.NoError(t, json.Unmarshal(event.Metadata, &metadata))
-	require.Equal(t, "assistant:execute", metadata["capability"])
-
+	require.NoError(t, testIdentityService.AdmitModel(t.Context(), db, *old), "existing bindings need no new grant or upgrade")
 	raw, err = core.captureExecution(t.Context(), assistant, sourceKindCron, thread, uuid.NullUUID{UUID: root, Valid: true}, "new-event", []byte(`{}`))
 	require.NoError(t, err)
 	fresh, err := decodeExecution(raw)
@@ -212,11 +178,54 @@ func TestExecutionExistingBindingNeedsExplicitUpgrade(t *testing.T) {
 	require.NoError(t, testIdentityService.AdmitModel(t.Context(), db, *fresh))
 	require.NoError(t, identityrepo.New(db).FixtureSuspendAgent(t.Context(), identityrepo.FixtureSuspendAgentParams{OrganizationID: "org-test", AgentID: identity.Identity.AgentID}))
 	require.ErrorIs(t, testIdentityService.AdmitModel(t.Context(), db, *fresh), assistantidentity.ErrInvalidIdentity)
+	// Suspension is captured as the same workload, not legacy identity. Token
+	// minting rejects it without changing the assistant entity's active state.
+	raw, err = core.captureExecution(t.Context(), assistant, sourceKindCron, thread, uuid.NullUUID{UUID: root, Valid: true}, "suspended-event", []byte(`{}`))
+	require.NoError(t, err)
+	suspended, err := decodeExecution(raw)
+	require.NoError(t, err)
+	require.NotNil(t, suspended)
+	manager := assistanttokens.New("legacy-test-secret", db, nil)
+	manager.ConfigureExecutionIdentity(executionTestIssuer(t), testIdentityService)
+	token, err := manager.GenerateExecution(t.Context(), *suspended)
+	require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity)
+	require.Empty(t, token)
+	unchanged, err := core.getAssistantForDispatch(t.Context(), assistant.ID)
+	require.NoError(t, err)
+	require.Equal(t, StatusActive, unchanged.Status)
+
 	_, err = agentrepo.New(db).ResumeAgent(t.Context(), agentrepo.ResumeAgentParams{OrganizationID: "org-test", ID: identity.Identity.AgentID})
 	require.NoError(t, err)
 	require.NoError(t, testIdentityService.AdmitModel(t.Context(), db, *fresh), "temporary suspension is not permanent invalidation")
+	token, err = manager.GenerateExecution(t.Context(), *suspended)
+	require.NoError(t, err)
+	require.True(t, assistanttokens.IsExecutionToken(token))
+
 	paused := StatusPaused
 	_, err = core.UpdateAssistant(t.Context(), project, assistant.ID, nil, nil, nil, nil, nil, nil, nil, &paused)
 	require.NoError(t, err)
 	require.ErrorIs(t, testIdentityService.AdmitModel(t.Context(), db, *fresh), assistantidentity.ErrInvalidIdentity, "paused assistant cannot dispatch with stale active metadata")
+}
+
+func TestUnboundAssistantDispatchRetainsOriginalToken(t *testing.T) {
+	t.Parallel()
+	db, err := assistantsInfra.CloneTestDatabase(t, "execution_legacy_token")
+	require.NoError(t, err)
+	project, id, _, _ := insertAssistantFixture(t, db)
+	thread := seedThreadWithEvent(t, db, id, "legacy-token", "legacy-token", eventStatusPending)
+	core := newProvisioningCore(t, db)
+	assistant, err := core.getAssistantForDispatch(t.Context(), id)
+	require.NoError(t, err)
+	manager := assistanttokens.New("legacy-test-secret", db, nil)
+	core.assistantTokens = manager // No workload signer needed for an unbound assistant.
+	var dispatched atomic.Pointer[string]
+	core.runtime = testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnToken: &dispatched}
+	_, err = core.processEventTurn(t.Context(), assistantThreadRecord{ID: thread, ProjectID: project, AssistantID: id, SourceKind: sourceKindCron}, assistant, assistantRuntimeRecord{}, assistantThreadEventRecord{ID: uuid.New(), EventID: "legacy-token", NormalizedPayloadJSON: []byte(`{}`)})
+	require.NoError(t, err)
+	require.NotNil(t, dispatched.Load())
+	require.False(t, assistanttokens.IsExecutionToken(*dispatched.Load()))
+	claims, err := manager.Validate(*dispatched.Load())
+	require.NoError(t, err)
+	require.Equal(t, assistant.CreatedByUserID, claims.UserID)
+	require.Equal(t, assistantRuntimeTokenTTL, claims.ExpiresAt.Sub(claims.IssuedAt.Time))
 }

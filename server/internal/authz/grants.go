@@ -403,9 +403,6 @@ func evaluateGrantCheck(grants []Grant, check Check) (grantCheckEvaluation, erro
 func matchingGrant(grants []Grant, checks []Check) (*Grant, *Check) {
 	for i := range grants {
 		grant := &grants[i]
-		if grant.Scope == ScopeAssistantExecute && ValidateSelector(grant.Scope, grant.Selector) != nil {
-			continue
-		}
 		for j := range checks {
 			check := &checks[j]
 			if grant.Scope != check.Scope {
@@ -428,7 +425,7 @@ func matchingGrant(grants []Grant, checks []Check) (*Grant, *Check) {
 func allScopeGrants() []Grant {
 	grants := make([]Grant, 0, len(scopeVisibilityByScope))
 	for s, visibility := range scopeVisibilityByScope {
-		if visibility != scopeVisibilityUserVisible || s == ScopeAssistantExecute {
+		if visibility != scopeVisibilityUserVisible {
 			continue
 		}
 		grants = append(grants, NewGrant(s, WildcardResource))

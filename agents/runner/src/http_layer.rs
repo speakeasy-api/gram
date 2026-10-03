@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use agentkit_http::Http;
@@ -35,22 +35,34 @@ enum MiddlewareError {
     InvalidTokenHeader(#[from] http::header::InvalidHeaderValue),
 }
 
-/// Immutable bearer owned by exactly one invocation. Clients, reconnects and
-/// delayed responses retain this snapshot even after another turn is admitted.
+/// Thread bearer. Only the serialized loop may rotate it, between completed turns.
 #[derive(Clone, Debug)]
 pub struct TokenRegistry {
-    inner: Arc<String>,
+    inner: Arc<RwLock<String>>,
 }
 
 impl TokenRegistry {
     pub fn new(initial: impl Into<String>) -> Self {
         Self {
-            inner: Arc::new(initial.into()),
+            inner: Arc::new(RwLock::new(initial.into())),
         }
     }
 
+    pub fn rotate(&self, next: impl Into<String>) -> Result<(), RunnerError> {
+        let mut slot = self
+            .inner
+            .write()
+            .map_err(|_| RunnerError::Loop("token registry write lock poisoned".into()))?;
+        *slot = next.into();
+        Ok(())
+    }
+
     pub fn current(&self) -> Result<String, RunnerError> {
-        Ok(self.inner.as_ref().clone())
+        Ok(self
+            .inner
+            .read()
+            .map_err(|_| RunnerError::Loop("token registry read lock poisoned".into()))?
+            .clone())
     }
 }
 

@@ -18,13 +18,11 @@ import (
 )
 
 type provisioningMetadata struct {
-	Capability              authz.Scope    `json:"capability"`
-	Selector                authz.Selector `json:"selector"`
-	CreatorUserID           *string        `json:"creator_user_id"`
-	ConsentUserID           string         `json:"consent_user_id"`
-	ProvisioningActorUserID string         `json:"provisioning_actor_user_id"`
-	AgentID                 uuid.UUID      `json:"agent_id"`
-	Generation              int64          `json:"generation"`
+	CreatorUserID           *string   `json:"creator_user_id"`
+	ConsentUserID           string    `json:"consent_user_id"`
+	ProvisioningActorUserID string    `json:"provisioning_actor_user_id"`
+	AgentID                 uuid.UUID `json:"agent_id"`
+	Generation              int64     `json:"generation"`
 }
 
 // Provision creates one dedicated identity, or returns the existing eligible
@@ -65,26 +63,10 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (
 			return Binding{}, fmt.Errorf("lock provisioning membership: %w", err)
 		}
 	}
-	old, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, AssistantID: p.AssistantID})
+	old, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{CaptureSuspended: false, OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, AssistantID: p.AssistantID})
 	if err == nil {
 		if !old.Eligible {
 			return Binding{}, ErrTombstoned
-		}
-		if p.GrantExecution {
-			changed, err := grantExecution(ctx, tx, p, old.OriginalAgentID, &old)
-			if err != nil {
-				return Binding{}, err
-			}
-			if changed {
-				metadata, err := json.Marshal(provisioningMetadata{Capability: authz.ScopeAssistantExecute, Selector: ExecutionGrant(p.AssistantID, p.ProjectID).Selector, CreatorUserID: nullableString(assistant.CreatedByUserID.String, assistant.CreatedByUserID.Valid), ConsentUserID: p.ActorUserID, ProvisioningActorUserID: p.ActorUserID, AgentID: old.OriginalAgentID, Generation: old.Generation})
-				if err != nil {
-					return Binding{}, fmt.Errorf("encode execution upgrade provenance: %w", err)
-				}
-				if err := q.RecordExecutionUpgrade(ctx, repo.RecordExecutionUpgradeParams{OrganizationID: p.OrganizationID, ProjectID: uuid.NullUUID{UUID: p.ProjectID, Valid: true}, ActorUserID: p.ActorUserID, AssistantID: p.AssistantID.String(), Metadata: metadata}); err != nil {
-					return Binding{}, fmt.Errorf("record execution upgrade: %w", err)
-				}
-			}
-
 		}
 		if err := s.bindExistingRoots(ctx, tx, p); err != nil {
 			return Binding{}, err
@@ -117,9 +99,6 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (
 	if err != nil {
 		return Binding{}, fmt.Errorf("create dedicated assistant agent: %w", err)
 	}
-	if _, err := grantExecution(ctx, tx, p, agent.ID, nil); err != nil {
-		return Binding{}, err
-	}
 	principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
 	for _, grant := range grants {
 		selector, err := json.Marshal(grant.Selector)
@@ -137,7 +116,7 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (
 	}); err != nil {
 		return Binding{}, fmt.Errorf("create assistant binding: %w", err)
 	}
-	metadata, err := json.Marshal(provisioningMetadata{Capability: authz.ScopeAssistantExecute, Selector: ExecutionGrant(p.AssistantID, p.ProjectID).Selector, CreatorUserID: nullableString(assistant.CreatedByUserID.String, assistant.CreatedByUserID.Valid), ConsentUserID: p.ActorUserID, ProvisioningActorUserID: p.ActorUserID, AgentID: agent.ID, Generation: 1})
+	metadata, err := json.Marshal(provisioningMetadata{CreatorUserID: nullableString(assistant.CreatedByUserID.String, assistant.CreatedByUserID.Valid), ConsentUserID: p.ActorUserID, ProvisioningActorUserID: p.ActorUserID, AgentID: agent.ID, Generation: 1})
 	if err != nil {
 		return Binding{}, fmt.Errorf("encode provisioning provenance: %w", err)
 	}
@@ -153,8 +132,8 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (
 	return Binding{OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, AssistantID: p.AssistantID, AgentID: agent.ID, Generation: 1}, nil
 }
 
-// ConfiguredCapabilities combines the exact execution capability with concrete
-// configuration-derived runtime grants. Empty configuration adds no business grants.
+// ConfiguredCapabilities derives only concrete runtime capabilities from the
+// persisted configuration. Empty configuration produces an empty policy.
 func ConfiguredCapabilities(ctx context.Context, tx pgx.Tx, org string, project, assistant uuid.UUID) ([]authz.Grant, error) {
 	q := repo.New(tx)
 	a, err := q.GetAssistant(ctx, repo.GetAssistantParams{OrganizationID: org, ProjectID: project, AssistantID: assistant})
@@ -172,7 +151,7 @@ func ConfiguredCapabilities(ctx context.Context, tx pgx.Tx, org string, project,
 	if err != nil {
 		return nil, fmt.Errorf("load configured skills: %w", err)
 	}
-	grants := []authz.Grant{ExecutionGrant(assistant, project)}
+	grants := make([]authz.Grant, 0, len(servers)*2+len(skills))
 	for _, id := range servers {
 		grants = append(grants, authz.NewGrant(authz.ScopeMCPConnect, id.String()), authz.NewGrant(authz.ScopeMCPRead, id.String()))
 	}

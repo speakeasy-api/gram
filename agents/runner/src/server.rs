@@ -9,7 +9,6 @@ use tokio::net::TcpListener;
 use tokio::sync::Notify;
 use tracing::Instrument;
 
-use crate::mcp_actor::McpCmd;
 use crate::runtime::{
     AppState, DEFAULT_THREAD_IDLE_TTL, build_host, ensure_thread, lookup_thread, snapshot_threads,
 };
@@ -248,66 +247,27 @@ async fn admit_authenticated_turn(
         return Ok(Json(ThreadTurnResponse::deduped()));
     }
 
-    // Independent idempotency keys must not race to claim a freshly bootstrapped
-    // invocation. Hold this through reconcile and enqueue; never rotate the
-    // credentials of an earlier accepted event.
+    // Serialize bootstrap and enqueue for independent event keys. Queued tuples
+    // cannot reconcile tools or rotate the active turn's credentials.
     let admission = crate::runtime::admission_lock(&host, &thread_id);
     let _turn_admission = admission.lock().await;
 
+    let turn = crate::runtime::QueuedTurn {
+        input: RunnerContent::from_turn(request.input, request.input_parts),
+        bearer: tokens
+            .current()
+            .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?,
+        mcp_servers: request
+            .mcp_servers
+            .unwrap_or_else(|| bootstrap.mcp_servers.clone()),
+    };
     let thread = ensure_thread(&host, &thread_id, bootstrap, tokens)
         .await
-        .map_err(|e| {
-            let status = if matches!(e, crate::errors::RunnerError::InvocationBusy) {
-                StatusCode::TOO_MANY_REQUESTS
-            } else {
-                StatusCode::SERVICE_UNAVAILABLE
-            };
-            (status, e.to_string())
-        })?;
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
 
-    let mut unclaimed = crate::runtime::UnclaimedInvocation::new(host.clone(), thread.clone());
-
-    // Reconciliation belongs to this invocation and completes before its first
-    // model step. Its notice travels with input even when no tool is called.
-    let notice = if let Some(desired) = request.mcp_servers {
-        let (reply, response) = tokio::sync::oneshot::channel();
-        let reconcile = async {
-            thread
-                .mcp_cmd_tx
-                .send(McpCmd::Reconcile { desired, reply })
-                .await
-                .map_err(|_| "mcp reconcile actor unavailable")?;
-            response
-                .await
-                .map_err(|_| "mcp reconcile response unavailable")
-        };
-        let result = tokio::time::timeout(std::time::Duration::from_secs(30), reconcile)
-            .await
-            .unwrap_or(Err("mcp reconciliation timed out"));
-        match result {
-            Ok(notice) => notice,
-            Err(reason) => {
-                tracing::warn!(thread_id = %thread_id, failure = reason, "mcp reconciliation failed before enqueue");
-                crate::runtime::discard_unclaimed(&host, &thread).await;
-                return Err((
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    "mcp reconciliation unavailable".into(),
-                ));
-            }
-        }
-    } else {
-        None
-    };
-
-    if let Err(err) = thread.enqueue(
-        RunnerContent::from_turn(request.input, request.input_parts),
-        notice,
-    ) {
-        crate::runtime::discard_unclaimed(&host, &thread).await;
-        return Err((StatusCode::SERVICE_UNAVAILABLE, err.to_string()));
-    }
-
-    unclaimed.accept();
+    thread
+        .enqueue(turn)
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
 
     if let Some(ref mut guard) = admission_guard {
         **guard = true;

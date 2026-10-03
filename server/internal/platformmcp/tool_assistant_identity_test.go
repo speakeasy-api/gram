@@ -13,7 +13,6 @@ import (
 
 	genassistants "github.com/speakeasy-api/gram/server/gen/assistants"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
@@ -57,8 +56,6 @@ func TestAssistantIdentityToolContract(t *testing.T) {
 	}
 	require.Contains(t, a.Description, "project:write")
 	require.Contains(t, a.Description, "ACTIVE does not prove")
-	require.Contains(t, a.Description, "grant its exact assistant/project execution capability after provisioning-actor authorization")
-	require.Contains(t, a.Description, "Existing saved execution ceilings do not widen.")
 	ctx := contextWithPrincipal(t.Context(), Principal{OrganizationID: "test-org", UserID: "test-user"})
 	_, err := b.Invoke(ctx, []byte(`{"project_id":"`+uuid.NewString()+`","assistant_id":"`+uuid.NewString()+`","confirmed":true}`))
 	var refusal *ToolRefusalError
@@ -229,10 +226,6 @@ func TestAssistantIdentityTrustedOAuthUpgradeMatchesAPI(t *testing.T) {
 	clientID, ok := contextvalues.GetOAuthClientID(ctx)
 	require.True(t, ok)
 	require.Equal(t, principal.ClientID, clientID)
-	selector, err := json.Marshal(authz.NewSelector(authz.ScopeProjectWrite, project.ID.String()))
-	require.NoError(t, err)
-	_, err = accessrepo.New(db).InsertPrincipalGrantIfAbsent(t.Context(), accessrepo.InsertPrincipalGrantIfAbsentParams{OrganizationID: principal.OrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), Scope: string(authz.ScopeProjectWrite), Selectors: selector})
-	require.NoError(t, err)
 	output, err := reader.assistantIdentity.upgrade(ctx, principal, UpgradeAssistantIdentityInput{ProjectID: project.ID.String(), AssistantID: legacy.ID.String(), Confirmed: true})
 	require.NoError(t, err, "trusted Platform MCP OAuth attribution must not reject the ordinary user")
 	require.Equal(t, "ACTIVE", *output.IdentityState)
@@ -257,8 +250,6 @@ func TestAssistantIdentityTrustedOAuthUpgradeMatchesAPI(t *testing.T) {
 	var metadata map[string]any
 	require.NoError(t, json.Unmarshal(event.Metadata, &metadata))
 	require.Equal(t, *output.AgentID, metadata["agent_id"])
-	require.Equal(t, "assistant:execute", metadata["capability"])
-	require.Equal(t, map[string]any{"resource_kind": "assistant", "resource_id": legacy.ID.String(), "project_id": project.ID.String()}, metadata["selector"])
 	require.EqualValues(t, *output.IdentityGeneration, metadata["generation"])
 
 	clientID, ok = contextvalues.GetOAuthClientID(ctx)

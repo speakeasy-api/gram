@@ -37,6 +37,10 @@ func (m *Manager) ConfigureExecutionIdentity(issuer *mcpauthz.Issuer, identities
 // captureExecution strips caller metadata and snapshots policy before enqueue.
 // Comparing against a new snapshot here would widen old events after upgrades.
 func (m *Manager) GenerateExecution(ctx context.Context, e assistantidentity.Execution) (string, error) {
+	if m.executionIssuer == nil {
+		return "", fmt.Errorf("assistant execution signer unavailable")
+	}
+
 	if err := m.validateExecutionAuthority(ctx, e); err != nil {
 		return "", fmt.Errorf("assistant execution: %w", err)
 	}

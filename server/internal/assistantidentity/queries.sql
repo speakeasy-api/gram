@@ -58,7 +58,7 @@ SELECT b.id, b.original_assistant_id, b.original_agent_id, b.generation, b.delet
   COALESCE(NOT b.deleted AND b.project_ref_id IS NOT NULL AND b.assistant_id IS NOT NULL
     AND b.agent_id = b.original_agent_id AND b.assistant_id = b.original_assistant_id
     AND b.project_ref_id = b.project_id AND NOT p.deleted AND NOT a.deleted
-    AND NOT g.deleted AND g.suspended_at IS NULL AND g.revoked_at IS NULL
+    AND NOT g.deleted AND (g.suspended_at IS NULL OR @capture_suspended::boolean) AND g.revoked_at IS NULL
     AND g.owner_reassignment_required_at IS NULL
     AND (a.created_by_user_id IS NULL OR g.owner_user_id = a.created_by_user_id) AND u.deleted_at IS NULL
     AND u.workos_deleted_at IS NULL AND NOT m.deleted AND m.user_id IS NOT NULL, false)::boolean AS eligible
@@ -205,10 +205,6 @@ ORDER BY s.id;
 -- name: RecordProvisioning :exec
 INSERT INTO audit_logs (organization_id, project_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
 VALUES (@organization_id, @project_id, @actor_user_id, 'user', 'assistant:identity_provision', @assistant_id, 'assistant', @metadata);
-
--- name: RecordExecutionUpgrade :exec
-INSERT INTO audit_logs (organization_id, project_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
-VALUES (@organization_id, @project_id, @actor_user_id, 'user', 'assistant:execution_upgrade', @assistant_id, 'assistant', @metadata);
 
 -- The following package-local fixtures exercise corrupted/hard-deleted states
 -- that public management APIs intentionally cannot produce.

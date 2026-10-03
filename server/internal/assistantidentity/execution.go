@@ -97,7 +97,7 @@ func (s *Service) ValidateExecution(ctx context.Context, db DB, e Execution) err
 func (s *Service) Issuer() string { return s.issuer }
 
 // AdmitExecution cannot authorize from an envelope alone. Runtime callers use
-// Service.AdmitModel, which requires live lifecycle and agent policy. This
+// Service.AdmitModel, which checks live workload and delegator eligibility. This
 // identity-only helper remains fail-closed for callers holding only a snapshot.
 func AdmitExecution(e Execution) error {
 	if err := e.Check(); err != nil {

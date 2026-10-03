@@ -17,9 +17,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
+	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
@@ -138,6 +138,12 @@ func TestExecutionCapturePersistsSelectionAndGatesDispatch(t *testing.T) {
 	manager := assistanttokens.New("legacy-test-secret", db, nil)
 	manager.ConfigureExecutionIdentity(executionTestIssuer(t), testIdentityService)
 	core.assistantTokens = manager
+
+	unavailable := assistanttokens.New("legacy-test-secret", db, nil)
+	missingToken, mintErr := unavailable.GenerateExecution(t.Context(), *execution)
+	require.Empty(t, missingToken)
+	require.Error(t, mintErr)
+	require.NotErrorIs(t, classifyExecutionDispatchError(mintErr), errExecutionDenied, "signer failure is retryable, never legacy fallback")
 	token, err := manager.GenerateExecution(t.Context(), *execution)
 	require.NoError(t, err)
 	target := assistanttokens.ExecutionTarget{EventID: execution.InvocationEventID(), OrganizationID: "org-test", ProjectID: project, AssistantID: assistant.ID, ThreadID: thread.ID}
@@ -242,7 +248,7 @@ func TestExecutionCapturePersistsSelectionAndGatesDispatch(t *testing.T) {
 	require.NoError(t, core.checkExecutionDispatch(t.Context(), assistant, thread, event), "temporary pause must not invalidate identity incarnation")
 	require.NoError(t, core.DeleteAssistant(t.Context(), project, assistant.ID, urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"), nil))
 	require.ErrorIs(t, manager.ValidateExecutionMCPAuthFlow(t.Context(), claims), assistantidentity.ErrInvalidIdentity, "retired authority cannot resume old flow")
-	require.ErrorIs(t, core.checkExecutionDispatch(t.Context(), assistant, thread, event), assistantidentity.ErrInvalidIdentity)
+	require.NoError(t, core.checkExecutionDispatch(t.Context(), assistant, thread, event), "routing remains valid; live authority is rejected by token issuance")
 	_, err = manager.ValidateExecution(t.Context(), token, target)
 	require.Error(t, err, "revocation must bypass legacy positive cache")
 }
@@ -424,52 +430,37 @@ func TestExecutionDenialRecordedOnceWithoutAdmissionRetry(t *testing.T) {
 	require.False(t, claimable, "terminal event must not be claimable again")
 }
 
-func TestExecutionAdmissionGateIsTerminal(t *testing.T) {
+func TestSuspendedExecutionFailsAtTokenMintWithoutRuntimeDispatch(t *testing.T) {
 	t.Parallel()
-	db, err := assistantsInfra.CloneTestDatabase(t, "execution_gate_terminal")
+	db, err := assistantsInfra.CloneTestDatabase(t, "execution_suspended_mint")
 	require.NoError(t, err)
-	project := newProvisioningProject(t, db, "execution-gate-terminal")
+	project := newProvisioningProject(t, db, "execution-suspended-mint")
 	core := newProvisioningCore(t, db)
-	var ensures atomic.Int64
-	core.runtime = testRuntimeBackend{backend: runtimeBackendFlyIO, ensureCalls: &ensures}
-	assistant, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Execution gate", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive)
+	manager := assistanttokens.New("legacy-test-secret", db, nil)
+	manager.ConfigureExecutionIdentity(executionTestIssuer(t), testIdentityService)
+	core.assistantTokens = manager
+	var dispatched atomic.Pointer[string]
+	core.runtime = testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnToken: &dispatched}
+	assistant, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Suspended workload", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive)
 	require.NoError(t, err)
 	root, err := core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, assistant.ID, assistant.Name)
 	require.NoError(t, err)
-	threadID := seedThreadWithEvent(t, db, assistant.ID, "gate-thread", "gate-thread", eventStatusPending)
-	params := assistantrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: threadID, ProjectID: project}
-	row, err := assistantrepo.New(db).GetLatestAssistantThreadEventByThreadID(t.Context(), params)
-	require.NoError(t, err)
 	identity, err := testIdentityService.Resolve(t.Context(), db, "org-test", project, assistant.ID, root)
 	require.NoError(t, err)
-	deleteExecutionTestScope(t, db, urn.NewPrincipal(urn.PrincipalTypeAgent, identity.Identity.AgentID.String()), authz.ScopeAssistantExecute)
-
-	raw, err := core.captureExecution(t.Context(), assistant, sourceKindCron, threadID, uuid.NullUUID{UUID: root, Valid: true}, "denied-event", []byte(`{}`))
+	require.NoError(t, identityrepo.New(db).FixtureSuspendAgent(t.Context(), identityrepo.FixtureSuspendAgentParams{OrganizationID: "org-test", AgentID: identity.Identity.AgentID}))
+	threadID := seedThreadWithEvent(t, db, assistant.ID, "suspended-thread", "suspended-thread", eventStatusPending)
+	raw, err := core.captureExecution(t.Context(), assistant, sourceKindCron, threadID, uuid.NullUUID{UUID: root, Valid: true}, "suspended-event", []byte(`{}`))
+	require.NoError(t, err, "suspension must not prevent a message from being captured")
+	thread := assistantThreadRecord{ID: threadID, ProjectID: project, AssistantID: assistant.ID, SourceKind: sourceKindCron}
+	event := assistantThreadEventRecord{ID: uuid.New(), EventID: "suspended-event", NormalizedPayloadJSON: raw}
+	require.NoError(t, core.checkExecutionDispatch(t.Context(), assistant, thread, event))
+	_, err = core.processEventTurn(t.Context(), thread, assistant, assistantRuntimeRecord{}, event)
+	require.ErrorIs(t, err, errExecutionDenied)
+	require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity)
+	require.Nil(t, dispatched.Load(), "no legacy token may be sent on denial")
+	current, err := core.getAssistantForDispatch(t.Context(), assistant.ID)
 	require.NoError(t, err)
-	require.NoError(t, assistantrepo.New(db).SetAssistantThreadEventStatus(t.Context(), assistantrepo.SetAssistantThreadEventStatusParams{ID: row.ID, ProjectID: project, Status: eventStatusCompleted, UpdatedAt: row.UpdatedAt}))
-	_, err = assistantrepo.New(db).InsertAssistantThreadEvent(t.Context(), assistantrepo.InsertAssistantThreadEventParams{AssistantThreadID: threadID, AssistantID: assistant.ID, ProjectID: project, EventID: "denied-event", CorrelationID: "denied-event", Status: eventStatusPending, NormalizedPayloadJson: raw, SourcePayloadJson: []byte(`{}`)})
-	require.NoError(t, err)
-	_, err = core.AdmitPendingThreads(t.Context(), assistant.ID)
-	require.NoError(t, err)
-	sibling := seedThreadWithEvent(t, db, assistant.ID, "gate-sibling", "gate-sibling", eventStatusPending)
-	for range 1 {
-		result, err := core.ProcessThreadEvents(t.Context(), project, threadID)
-		require.NoError(t, err)
-		require.True(t, result.RetryAdmission, "release cold reservation and wake pending siblings")
-		row, err = assistantrepo.New(db).GetLatestAssistantThreadEventByThreadID(t.Context(), params)
-		require.NoError(t, err)
-		require.Equal(t, eventStatusFailed, row.Status)
-		require.Zero(t, row.Attempts)
-		require.Contains(t, row.LastError.String, assistantidentity.ErrExecutionAdmissionRequired.Error())
-	}
-	require.Zero(t, ensures.Load(), "cold denial must not provision a runtime")
-	_, claimable, err := core.claimNextPendingEvent(t.Context(), project, threadID)
-	require.NoError(t, err)
-	require.False(t, claimable, "terminal event must not be claimable again")
-	admitted, err := core.AdmitPendingThreads(t.Context(), assistant.ID)
-	require.NoError(t, err)
-	require.Contains(t, admitted.ThreadIDs, sibling, "coordinator kick must admit sibling after denied starter releases reservation")
-
+	require.Equal(t, StatusActive, current.Status)
 }
 
 func TestColdAdmissionSkipsDeniedEventAndContinuesEligibleEvent(t *testing.T) {

@@ -20,9 +20,7 @@ const (
 	DelegatedPolicyVersion1 DelegatedPolicyVersion = 1
 	DelegatedPolicyVersion2 DelegatedPolicyVersion = 2
 
-	DelegatedPolicyVersion3 DelegatedPolicyVersion = 3
-
-	CurrentDelegatedPolicyVersion = DelegatedPolicyVersion3
+	CurrentDelegatedPolicyVersion = DelegatedPolicyVersion2
 )
 
 // ErrInvalidDelegatedPolicy marks a policy that must fail closed.

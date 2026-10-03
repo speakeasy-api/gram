@@ -18,12 +18,22 @@ import (
 // Resolve reads tenant-pinned history and every live authority dependency from
 // one repeatable-read snapshot. Storage failures are never legacy fallbacks.
 func (s *Service) Resolve(ctx context.Context, db DB, org string, project, assistant, trigger uuid.UUID) (Resolution, error) {
+	return s.resolveSnapshot(ctx, db, org, project, assistant, trigger, false)
+}
+
+// ResolveForCapture records a temporarily suspended workload without admitting
+// it. Minting and every use still call the strict Resolve/Validate path.
+func (s *Service) ResolveForCapture(ctx context.Context, db DB, org string, project, assistant, trigger uuid.UUID) (Resolution, error) {
+	return s.resolveSnapshot(ctx, db, org, project, assistant, trigger, true)
+}
+
+func (s *Service) resolveSnapshot(ctx context.Context, db DB, org string, project, assistant, trigger uuid.UUID, captureSuspended bool) (Resolution, error) {
 	tx, err := readSnapshot(ctx, db)
 	if err != nil {
 		return Resolution{}, err
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	result, err := s.resolve(ctx, tx, org, project, assistant, trigger)
+	result, err := s.resolveForCapture(ctx, tx, org, project, assistant, trigger, captureSuspended)
 	if err != nil {
 		return Resolution{}, err
 	}
@@ -34,11 +44,15 @@ func (s *Service) Resolve(ctx context.Context, db DB, org string, project, assis
 }
 
 func (s *Service) resolve(ctx context.Context, tx pgx.Tx, org string, project, assistant, trigger uuid.UUID) (Resolution, error) {
+	return s.resolveForCapture(ctx, tx, org, project, assistant, trigger, false)
+}
+
+func (s *Service) resolveForCapture(ctx context.Context, tx pgx.Tx, org string, project, assistant, trigger uuid.UUID, captureSuspended bool) (Resolution, error) {
 	if s == nil || org == "" || project == uuid.Nil || assistant == uuid.Nil || trigger == uuid.Nil {
 		return Resolution{}, ErrInvalidIdentity
 	}
 	q := repo.New(tx)
-	ab, aerr := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{OrganizationID: org, ProjectID: project, AssistantID: assistant})
+	ab, aerr := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{CaptureSuspended: captureSuspended, OrganizationID: org, ProjectID: project, AssistantID: assistant})
 	if aerr != nil && !errors.Is(aerr, pgx.ErrNoRows) {
 		return Resolution{}, fmt.Errorf("resolve assistant history: %w", aerr)
 	}
@@ -124,12 +138,22 @@ func matchExpected(resolved Resolution, expected Identity) error {
 // SnapshotCeiling validates and derives the bounded policy within the same
 // snapshot. Subsequent grant expansion cannot mutate these canonical bytes.
 func (s *Service) SnapshotCeiling(ctx context.Context, db DB, expected Identity) (CeilingSnapshot, error) {
+	return s.snapshotCeiling(ctx, db, expected, false)
+}
+
+// SnapshotCeilingForCapture may record a suspended agent's current policy, but
+// never authorizes work. Suspension is enforced when the token is minted.
+func (s *Service) SnapshotCeilingForCapture(ctx context.Context, db DB, expected Identity) (CeilingSnapshot, error) {
+	return s.snapshotCeiling(ctx, db, expected, true)
+}
+
+func (s *Service) snapshotCeiling(ctx context.Context, db DB, expected Identity, captureSuspended bool) (CeilingSnapshot, error) {
 	tx, err := readSnapshot(ctx, db)
 	if err != nil {
 		return CeilingSnapshot{}, err
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	resolved, err := s.resolve(ctx, tx, expected.OrganizationID, expected.ProjectID, expected.AssistantID, expected.TriggerID)
+	resolved, err := s.resolveForCapture(ctx, tx, expected.OrganizationID, expected.ProjectID, expected.AssistantID, expected.TriggerID, captureSuspended)
 	if err != nil {
 		return CeilingSnapshot{}, err
 	}

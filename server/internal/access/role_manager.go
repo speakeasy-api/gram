@@ -440,23 +440,8 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 	if err := authz.ValidateGrantSurface(authz.GrantSurfaceAccess, addGrants); err != nil {
 		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
 	}
-	// Existing execution grants may be revoked here, never added or widened.
-	// Dedicated authorized provisioning owns additions, including exact grants.
-	for _, grant := range removeGrants {
-		if grant != nil && grant.Scope == string(authz.ScopeAssistantExecute) {
-			if grant.Selectors == nil {
-				return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, nil, "assistant execution removals require exact selectors").LogError(ctx, r.logger)
-			}
-			for _, selector := range grant.Selectors {
-				if err := authz.ValidateSelector(authz.ScopeAssistantExecute, selector); err != nil {
-					return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid assistant execution role grant: %s", err).LogError(ctx, r.logger)
-				}
-			}
-			continue
-		}
-		if err := authz.ValidateGrantSurface(authz.GrantSurfaceAccess, []*authz.RoleGrant{grant}); err != nil {
-			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
-		}
+	if err := authz.ValidateGrantSurface(authz.GrantSurfaceAccess, removeGrants); err != nil {
+		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
 	}
 
 	// Lockout guardrail: removing org:admin from the Admin role would lock the

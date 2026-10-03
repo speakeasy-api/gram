@@ -29,35 +29,3 @@ func TestAdditionalRestrictionCannotAuthorizeAndSurvivesAdmission(t *testing.T) 
 	require.NoError(t, err)
 	require.Nil(t, result.Grant, "readmission cannot discard human restrictions")
 }
-
-func TestExecutionSelectorRequiresExactAssistantAndProject(t *testing.T) {
-	t.Parallel()
-	selector := NewSelector(ScopeAssistantExecute, "assistant")
-	require.Error(t, ValidateSelector(ScopeAssistantExecute, selector))
-	selector[SelectorKeyProjectID] = WildcardResource
-	require.Error(t, ValidateSelector(ScopeAssistantExecute, selector))
-	selector[SelectorKeyProjectID] = "project"
-	require.NoError(t, ValidateSelector(ScopeAssistantExecute, selector))
-	selector[SelectorKeyResourceID] = WildcardResource
-	require.Error(t, ValidateSelector(ScopeAssistantExecute, selector))
-}
-
-func TestRootCannotReplaceExactExecutionCapability(t *testing.T) {
-	t.Parallel()
-	allowed, err := GrantsAuthorize([]Grant{NewGrant(ScopeRoot, WildcardResource)}, AssistantExecuteCheck("assistant", "project"))
-	require.NoError(t, err)
-	require.False(t, allowed)
-}
-
-func TestLoadedWildcardCannotReplaceExactExecutionCapability(t *testing.T) {
-	t.Parallel()
-	for _, selector := range []Selector{
-		{SelectorKeyResourceKind: WildcardResource, SelectorKeyResourceID: WildcardResource},
-		NewSelector(ScopeAssistantExecute, WildcardResource),
-		NewSelector(ScopeAssistantExecute, "assistant"),
-	} {
-		allowed, err := GrantsAuthorize([]Grant{{Scope: ScopeAssistantExecute, Selector: selector}}, AssistantExecuteCheck("assistant", "project"))
-		require.NoError(t, err)
-		require.False(t, allowed)
-	}
-}
