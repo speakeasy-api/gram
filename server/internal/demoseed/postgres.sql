@@ -506,9 +506,6 @@ BEGIN
   DELETE FROM workload_agent_assignments WHERE organization_id = demo_org;
   DELETE FROM workload_identity_admissions WHERE organization_id = demo_org;
   DELETE FROM workload_issuers WHERE organization_id = demo_org;
-  -- Participant project IDs cannot be nulled when their projects are deleted.
-  DELETE FROM chat_message_participants WHERE project_id IN
-    (SELECT id FROM projects WHERE organization_id = demo_org);
   DELETE FROM projects WHERE organization_id = demo_org;
 
   -- Single project: the demo org intentionally has exactly one project so
