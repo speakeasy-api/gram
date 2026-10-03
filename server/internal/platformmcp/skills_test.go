@@ -486,6 +486,33 @@ func TestSkillInsightReadsProjectPrivacySafeServiceResults(t *testing.T) {
 	require.Equal(t, "feedback", evidenceOutput.Feedback[0].ID)
 }
 
+func TestListSkillSuggestionsOmitsDiffsOnlyWhenAsked(t *testing.T) {
+	t.Parallel()
+
+	change := &types.SkillEditSuggestionChange{ID: "change", SuggestionID: "suggestion", ProposedDiff: "--- a/SKILL.md\n+++ b/SKILL.md\n", Rationale: "clarify", AppliesCleanly: true, FeedbackCount: 3, FeedbackSessionCount: 2, CreatedAt: "2026-08-20T00:00:00Z"}
+	suggestion := &types.SkillEditSuggestion{ID: "suggestion", SkillID: testSkillID, SkillName: "add-mcp", SkillDisplayName: "Add MCP", BaseVersionID: testSkillVersionID, Changes: []*types.SkillEditSuggestionChange{change}, ProposedContent: "content", AppliesCleanly: true, Rationale: "clarify", Status: "open", FeedbackCount: 3, FeedbackSessionCount: 2, ScoredSessionCount: 4, ApprovedByUserID: nil, ApprovedAt: nil, CreatedAt: "2026-08-20T00:00:00Z", UpdatedAt: "2026-08-20T00:00:00Z"}
+	service := testSkillsService(t, &recordingSkillsManagement{
+		listSuggestionsOut: &genskills.ListSkillSuggestionsResult{Suggestions: []*types.SkillEditSuggestion{suggestion}, TotalOpenCount: 1, NextCursor: nil},
+	})
+
+	withDiffs, err := service.ListSkillSuggestions(t.Context(), testPrincipal(), ListSkillSuggestionsInput{ProjectSlug: testSkillProjectSlug})
+	require.NoError(t, err)
+	require.Equal(t, change.ProposedDiff, withDiffs.Suggestions[0].Changes[0].ProposedDiff, "diffs stay in the default response")
+
+	triage, err := service.ListSkillSuggestions(t.Context(), testPrincipal(), ListSkillSuggestionsInput{ProjectSlug: testSkillProjectSlug, OmitDiffs: true})
+	require.NoError(t, err)
+	triaged := triage.Suggestions[0].Changes[0]
+	require.Empty(t, triaged.ProposedDiff)
+	require.Equal(t, "change", triaged.ID, "a triaged change can still be approved or dismissed by ID")
+	require.Equal(t, "clarify", triaged.Rationale)
+	require.True(t, triaged.AppliesCleanly)
+	require.EqualValues(t, 3, triaged.FeedbackCount)
+	require.EqualValues(t, 2, triaged.FeedbackSessionCount)
+	encoded, err := json.Marshal(triage)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "proposed_diff")
+}
+
 func TestDistributeSkillResolvesAnExactTargetAndEchoesIt(t *testing.T) {
 	t.Parallel()
 

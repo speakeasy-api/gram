@@ -42,6 +42,7 @@ type ListSkillSuggestionsToolInput struct {
 	ProjectSlug            string `json:"project_slug" jsonschema:"explicit project slug whose open suggestions to review"`
 	SkillID                string `json:"skill_id,omitempty" jsonschema:"optional skill ID returned by list_skills; omit to review suggestions across the project"`
 	IncludeProposedContent bool   `json:"include_proposed_content,omitempty" jsonschema:"include each complete proposed SKILL.md; off by default because a manifest is up to 64 KiB"`
+	OmitDiffs              bool   `json:"omit_diffs,omitempty" jsonschema:"leave each change's proposed diff out; every other field, including its ID, rationale, whether it applies cleanly, and its feedback counts, is still returned. Use to triage a large queue, then read one skill's suggestions with diffs"`
 	Cursor                 string `json:"cursor,omitempty" jsonschema:"pagination cursor returned by a previous list_skill_suggestions call"`
 	Limit                  int    `json:"limit,omitempty" jsonschema:"maximum suggestions to return; defaults to 20 and is capped at 50"`
 }
@@ -244,7 +245,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_skill_suggestions",
 		Title:       "List Skill Suggestions",
-		Description: "Review open proposed improvements for skills in a named project. Each suggestion includes the base version, separate reviewable changes, rationale, and whether it still applies cleanly. Complete proposed SKILL.md content is opt-in because each manifest can be 64 KiB. This tool never applies a suggestion. On the Platform MCP, take one with approve_skill_suggestion or discard it with dismiss_skill_suggestion; where those tools are not offered, the user reviews it in the AI Control Plane dashboard.",
+		Description: "Review open proposed improvements for skills in a named project. Each suggestion includes the base version, separate reviewable changes, rationale, and whether it still applies cleanly. Complete proposed SKILL.md content is opt-in because each manifest can be 64 KiB. Each change's diff is included by default; set omit_diffs to triage a large queue first, then read one skill's suggestions with skill_id. This tool never applies a suggestion. On the Platform MCP, take one with approve_skill_suggestion or discard it with dismiss_skill_suggestion; where those tools are not offered, the user reviews it in the AI Control Plane dashboard.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListSkillSuggestionsToolInput) (*mcp.CallToolResult, ListSkillSuggestionsOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (ListSkillSuggestionsOutput, error) {
