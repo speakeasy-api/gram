@@ -2410,6 +2410,7 @@ type testRuntimeBackend struct {
 	runTurnErr        error
 	runTurnMCPServers *atomic.Pointer[[]runtimeMCPServer]
 	runTurnPrompt     *atomic.Pointer[string]
+	runTurnToken      *atomic.Pointer[string]
 	interruptErr      error
 	interruptResult   bool
 	interruptThreadID *atomic.Pointer[uuid.UUID]
@@ -2471,6 +2472,10 @@ func (t testRuntimeBackend) RecycleImage(ctx context.Context, record assistantRu
 }
 
 func (t testRuntimeBackend) RunTurn(_ context.Context, _ assistantRuntimeRecord, turn runTurnRequest) error {
+	if t.runTurnToken != nil {
+		token := turn.AuthToken
+		t.runTurnToken.Store(&token)
+	}
 	if t.runTurnMCPServers != nil {
 		captured := append([]runtimeMCPServer(nil), turn.MCPServers...)
 		t.runTurnMCPServers.Store(&captured)

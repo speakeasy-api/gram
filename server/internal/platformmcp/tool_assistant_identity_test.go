@@ -255,6 +255,8 @@ func TestAssistantIdentityTrustedOAuthUpgradeMatchesAPI(t *testing.T) {
 	var metadata map[string]any
 	require.NoError(t, json.Unmarshal(event.Metadata, &metadata))
 	require.Equal(t, *output.AgentID, metadata["agent_id"])
+	require.Equal(t, "assistant:execute", metadata["capability"])
+	require.Equal(t, map[string]any{"resource_kind": "assistant", "resource_id": legacy.ID.String(), "project_id": project.ID.String()}, metadata["selector"])
 	require.EqualValues(t, *output.IdentityGeneration, metadata["generation"])
 
 	clientID, ok = contextvalues.GetOAuthClientID(ctx)

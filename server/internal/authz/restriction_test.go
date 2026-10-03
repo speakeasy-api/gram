@@ -48,3 +48,16 @@ func TestRootCannotReplaceExactExecutionCapability(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, allowed)
 }
+
+func TestLoadedWildcardCannotReplaceExactExecutionCapability(t *testing.T) {
+	t.Parallel()
+	for _, selector := range []Selector{
+		{SelectorKeyResourceKind: WildcardResource, SelectorKeyResourceID: WildcardResource},
+		NewSelector(ScopeAssistantExecute, WildcardResource),
+		NewSelector(ScopeAssistantExecute, "assistant"),
+	} {
+		allowed, err := GrantsAuthorize([]Grant{{Scope: ScopeAssistantExecute, Selector: selector}}, AssistantExecuteCheck("assistant", "project"))
+		require.NoError(t, err)
+		require.False(t, allowed)
+	}
+}

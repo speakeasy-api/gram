@@ -359,3 +359,21 @@ func TestUnconfiguredExecutionAdmissionFailsClosed(t *testing.T) {
 	_, err = manager.AuthorizeBusiness(t.Context(), raw, uuid.New(), nil)
 	require.Error(t, err)
 }
+
+func TestMalformedTypeNeverEntersLegacyAuthorization(t *testing.T) {
+	t.Parallel()
+	manager := New("secret", nil, nil)
+	for _, typ := range []any{nil, 123, []string{"JWT"}, map[string]string{"typ": "JWT"}} {
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"iss": issuer})
+		token.Header["typ"] = typ
+		raw, err := token.SignedString([]byte("secret"))
+		require.NoError(t, err)
+		require.True(t, IsExecutionToken(raw))
+		_, err = manager.Validate(raw)
+		require.Error(t, err)
+		_, _, err = manager.AuthorizeRuntime(t.Context(), raw)
+		require.Error(t, err)
+		_, _, err = manager.AuthorizePlatform(t.Context(), raw)
+		require.Error(t, err)
+	}
+}

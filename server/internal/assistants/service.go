@@ -2932,6 +2932,11 @@ func (s *ServiceCore) processEventTurn(
 	if err := s.checkExecutionDispatch(ctx, assistant, thread, event); err != nil {
 		return nil, classifyExecutionDispatchError(err)
 	}
+	// Only the persisted server-captured envelope may select workload authority.
+	execution, err := decodeExecution(event.NormalizedPayloadJSON)
+	if err != nil {
+		return nil, err
+	}
 	skills, err := s.loadAssistantSkills(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
 	if err != nil {
 		return nil, err
@@ -2977,9 +2982,11 @@ func (s *ServiceCore) processEventTurn(
 		if err != nil {
 			return nil, fmt.Errorf("decode assistant turn: %w", err)
 		}
-		actorUserID, err = s.turnUserID(ctx, assistant, thread, event)
-		if err != nil {
-			return nil, err
+		if execution == nil {
+			actorUserID, err = s.turnUserID(ctx, assistant, thread, event)
+			if err != nil {
+				return nil, err
+			}
 		}
 		// Best-effort: files attached to the triggering message ride along as
 		// vision/text content. Failures degrade to the metadata-only turn.
@@ -2994,7 +3001,12 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return nil, err
 	}
-	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, actorUserID)
+	var turnToken string
+	if execution != nil {
+		turnToken, err = s.assistantTokens.GenerateExecution(ctx, *execution)
+	} else {
+		turnToken, err = s.MintThreadScopedRuntimeToken(assistant, thread.ID, actorUserID)
+	}
 	if err != nil {
 		return nil, err
 	}

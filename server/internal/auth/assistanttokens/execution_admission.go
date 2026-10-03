@@ -5,14 +5,18 @@ import (
 	"fmt"
 	"strings"
 
+	"errors"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -20,7 +24,12 @@ import (
 // invalid or denied credential cannot retry through legacy owner admission.
 func IsExecutionToken(raw string) bool {
 	token, _, err := jwt.NewParser().ParseUnverified(executionBearer(raw), new(mcpauthz.AssistantExecutionClaims))
-	return err == nil && token.Header["typ"] == mcpauthz.AssistantExecutionType
+	if err != nil {
+		return false
+	}
+	typ, present := token.Header["typ"]
+	_, isString := typ.(string)
+	return (present && !isString) || typ == mcpauthz.AssistantExecutionType
 }
 
 func executionBearer(raw string) string {
@@ -97,6 +106,18 @@ func (m *Manager) AuthorizeBusiness(ctx context.Context, raw string, resource uu
 	ctx, _, err = m.executionContext(ctx, *e)
 	if err != nil {
 		return ctx, fmt.Errorf("authorize assistant business execution: %w", err)
+	}
+	// Resolve ownership from storage even when a route supplies only an ID.
+	// Global resource IDs cannot lend cross-project authority to a token.
+	_, err = mcpserversrepo.New(m.executionDB).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: resource, ProjectID: e.Identity.ProjectID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		_, err = toolsetsrepo.New(m.executionDB).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: resource, ProjectID: e.Identity.ProjectID})
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ctx, oops.C(oops.CodeForbidden)
+	}
+	if err != nil {
+		return ctx, fmt.Errorf("resolve execution resource ownership: %w", err)
 	}
 	ctx, err = m.authz.PrepareContext(ctx)
 	if err != nil {

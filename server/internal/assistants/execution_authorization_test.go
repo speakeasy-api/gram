@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -71,6 +72,9 @@ func TestExecutionAuthorizationLivePolicyAndPlatformIsolation(t *testing.T) {
 	engine := authz.NewEngine(testenv.NewLogger(t), db, authztest.ChallengeLoggingAlwaysDisabled, nil, authz.EngineOpts{AdmitWorkloadSession: runtimepolicy.AdmitWorkloadSession})
 	manager := assistanttokens.New("test-secret", db, engine)
 	manager.ConfigureExecutionIdentity(executionTestIssuer(t), testIdentityService)
+	core.assistantTokens = manager
+	var dispatched atomic.Pointer[string]
+	core.runtime = testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnToken: &dispatched}
 	for _, mode := range []string{sourceKindCron, sourceKindDashboard} {
 		t.Run(mode, func(t *testing.T) {
 			payload := []byte(`{}`)
@@ -81,8 +85,11 @@ func TestExecutionAuthorizationLivePolicyAndPlatformIsolation(t *testing.T) {
 			require.NoError(t, err)
 			execution, err := decodeExecution(raw)
 			require.NoError(t, err)
-			token, err := manager.GenerateExecution(t.Context(), *execution)
+			_, err = core.processEventTurn(t.Context(), assistantThreadRecord{ID: thread, ProjectID: project, AssistantID: assistant.ID, SourceKind: mode}, assistant, assistantRuntimeRecord{}, assistantThreadEventRecord{ID: uuid.New(), EventID: "event-" + mode, NormalizedPayloadJSON: raw})
 			require.NoError(t, err)
+			require.NotNil(t, dispatched.Load())
+			token := *dispatched.Load()
+			require.True(t, assistanttokens.IsExecutionToken(token), "bound production turn must never mint an owner token")
 			ctx, claims, err := manager.AuthorizeRuntime(t.Context(), "Bearer "+token)
 			require.NoError(t, err)
 			require.Empty(t, claims.UserID)

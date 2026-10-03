@@ -18,11 +18,13 @@ import (
 )
 
 type provisioningMetadata struct {
-	CreatorUserID           *string   `json:"creator_user_id"`
-	ConsentUserID           string    `json:"consent_user_id"`
-	ProvisioningActorUserID string    `json:"provisioning_actor_user_id"`
-	AgentID                 uuid.UUID `json:"agent_id"`
-	Generation              int64     `json:"generation"`
+	Capability              authz.Scope    `json:"capability"`
+	Selector                authz.Selector `json:"selector"`
+	CreatorUserID           *string        `json:"creator_user_id"`
+	ConsentUserID           string         `json:"consent_user_id"`
+	ProvisioningActorUserID string         `json:"provisioning_actor_user_id"`
+	AgentID                 uuid.UUID      `json:"agent_id"`
+	Generation              int64          `json:"generation"`
 }
 
 // Provision creates one dedicated identity, or returns the existing eligible
@@ -74,11 +76,7 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (
 				return Binding{}, err
 			}
 			if changed {
-				metadata, err := json.Marshal(struct {
-					provisioningMetadata
-					Capability authz.Scope    `json:"capability"`
-					Selector   authz.Selector `json:"selector"`
-				}{provisioningMetadata: provisioningMetadata{CreatorUserID: nullableString(assistant.CreatedByUserID.String, assistant.CreatedByUserID.Valid), ConsentUserID: p.ActorUserID, ProvisioningActorUserID: p.ActorUserID, AgentID: old.OriginalAgentID, Generation: old.Generation}, Capability: authz.ScopeAssistantExecute, Selector: ExecutionGrant(p.AssistantID, p.ProjectID).Selector})
+				metadata, err := json.Marshal(provisioningMetadata{Capability: authz.ScopeAssistantExecute, Selector: ExecutionGrant(p.AssistantID, p.ProjectID).Selector, CreatorUserID: nullableString(assistant.CreatedByUserID.String, assistant.CreatedByUserID.Valid), ConsentUserID: p.ActorUserID, ProvisioningActorUserID: p.ActorUserID, AgentID: old.OriginalAgentID, Generation: old.Generation})
 				if err != nil {
 					return Binding{}, fmt.Errorf("encode execution upgrade provenance: %w", err)
 				}
@@ -139,7 +137,7 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (
 	}); err != nil {
 		return Binding{}, fmt.Errorf("create assistant binding: %w", err)
 	}
-	metadata, err := json.Marshal(provisioningMetadata{CreatorUserID: nullableString(assistant.CreatedByUserID.String, assistant.CreatedByUserID.Valid), ConsentUserID: p.ActorUserID, ProvisioningActorUserID: p.ActorUserID, AgentID: agent.ID, Generation: 1})
+	metadata, err := json.Marshal(provisioningMetadata{Capability: authz.ScopeAssistantExecute, Selector: ExecutionGrant(p.AssistantID, p.ProjectID).Selector, CreatorUserID: nullableString(assistant.CreatedByUserID.String, assistant.CreatedByUserID.Valid), ConsentUserID: p.ActorUserID, ProvisioningActorUserID: p.ActorUserID, AgentID: agent.ID, Generation: 1})
 	if err != nil {
 		return Binding{}, fmt.Errorf("encode provisioning provenance: %w", err)
 	}

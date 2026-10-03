@@ -257,6 +257,11 @@ func (m *Manager) ValidateMCPAuthFlow(tokenString string) (*MCPAuthFlowClaims, e
 			ID:        "",
 		},
 	}, func(token *jwt.Token) (any, error) {
+		if typ, present := token.Header["typ"]; present {
+			if _, ok := typ.(string); !ok {
+				return nil, fmt.Errorf("invalid assistant token type")
+			}
+		}
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
@@ -301,6 +306,12 @@ func (m *Manager) Validate(tokenString string) (*Claims, error) {
 			ID:        "",
 		},
 	}, func(token *jwt.Token) (any, error) {
+		if typ, present := token.Header["typ"]; present {
+			if _, ok := typ.(string); !ok {
+				return nil, fmt.Errorf("invalid assistant token type")
+			}
+		}
+
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}

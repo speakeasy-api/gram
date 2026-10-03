@@ -403,6 +403,9 @@ func evaluateGrantCheck(grants []Grant, check Check) (grantCheckEvaluation, erro
 func matchingGrant(grants []Grant, checks []Check) (*Grant, *Check) {
 	for i := range grants {
 		grant := &grants[i]
+		if grant.Scope == ScopeAssistantExecute && ValidateSelector(grant.Scope, grant.Selector) != nil {
+			continue
+		}
 		for j := range checks {
 			check := &checks[j]
 			if grant.Scope != check.Scope {
