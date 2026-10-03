@@ -2191,20 +2191,21 @@ func EncodeEnsureManagedAssistantError(encoder func(context.Context, http.Respon
 // *AssistantResponseBody from a value of type *types.Assistant.
 func marshalTypesAssistantToAssistantResponseBody(v *types.Assistant) *AssistantResponseBody {
 	res := &AssistantResponseBody{
-		ID:                 v.ID,
-		ProjectID:          v.ProjectID,
-		CreatedByUserID:    v.CreatedByUserID,
-		IdentityState:      v.IdentityState,
-		AgentID:            v.AgentID,
-		IdentityGeneration: v.IdentityGeneration,
-		Name:               v.Name,
-		Model:              v.Model,
-		Instructions:       v.Instructions,
-		WarmTTLSeconds:     v.WarmTTLSeconds,
-		MaxConcurrency:     v.MaxConcurrency,
-		Status:             v.Status,
-		CreatedAt:          v.CreatedAt,
-		UpdatedAt:          v.UpdatedAt,
+		ID:                     v.ID,
+		ProjectID:              v.ProjectID,
+		CreatedByUserID:        v.CreatedByUserID,
+		IdentityState:          v.IdentityState,
+		AgentID:                v.AgentID,
+		IdentityUpgradeOutcome: v.IdentityUpgradeOutcome,
+		IdentityGeneration:     v.IdentityGeneration,
+		Name:                   v.Name,
+		Model:                  v.Model,
+		Instructions:           v.Instructions,
+		WarmTTLSeconds:         v.WarmTTLSeconds,
+		MaxConcurrency:         v.MaxConcurrency,
+		Status:                 v.Status,
+		CreatedAt:              v.CreatedAt,
+		UpdatedAt:              v.UpdatedAt,
 	}
 	if v.IdentityDiagnostics != nil {
 		res.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(v.IdentityDiagnostics)

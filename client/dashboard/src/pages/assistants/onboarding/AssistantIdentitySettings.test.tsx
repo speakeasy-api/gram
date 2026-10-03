@@ -4,7 +4,15 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Assistant } from "@gram/client/models/components/assistant.js";
 import { AssistantIdentitySettings } from "./AssistantIdentitySettings";
-const mocks = vi.hoisted(() => ({ mutate: vi.fn(), canWrite: true }));
+const mocks = vi.hoisted(() => ({
+  mutate: vi.fn(),
+  canWrite: true,
+  success: vi.fn(),
+  onSuccess: undefined as undefined | ((result: Assistant) => void),
+}));
+vi.mock("sonner", () => ({
+  toast: { success: mocks.success, error: vi.fn() },
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasScope: (scope: string) => scope === "project:write" && mocks.canWrite,
@@ -18,10 +26,12 @@ vi.mock("@/routes", () => ({
   }),
 }));
 vi.mock("@gram/client/react-query/assistantsUpgradeIdentity.js", () => ({
-  useAssistantsUpgradeIdentityMutation: () => ({
-    mutate: mocks.mutate,
-    isPending: false,
-  }),
+  useAssistantsUpgradeIdentityMutation: (options: {
+    onSuccess: (result: Assistant) => void;
+  }) => {
+    mocks.onSuccess = options.onSuccess;
+    return { mutate: mocks.mutate, isPending: false };
+  },
 }));
 const assistant: Assistant = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -62,6 +72,15 @@ beforeEach(() => {
   mocks.canWrite = true;
 });
 describe("Assistant identity management", () => {
+  it.each([
+    ["upgraded", "Assistant identity upgraded"],
+    ["repaired", "Missing identity bindings repaired"],
+    ["unchanged", "Assistant identity already configured; no changes made"],
+  ] as const)("reports the server's %s outcome", (outcome, message) => {
+    setup();
+    mocks.onSuccess?.({ ...assistant, identityUpgradeOutcome: outcome });
+    expect(mocks.success).toHaveBeenCalledWith(message);
+  });
   it("requires exact-target confirmation and preserves shared context guidance", () => {
     setup();
     expect(

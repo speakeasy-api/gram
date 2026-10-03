@@ -118,6 +118,10 @@ type GetAssistantResponseBody struct {
 	// Detail-only identity health and rollout information. Configuration is not
 	// permission or consent.
 	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
+	// Present only on an explicit identity upgrade response: upgraded creates the
+	// first binding, repaired provisions missing live roots, unchanged preserves
+	// existing bindings. Not a permission grant or OAuth consent.
+	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -161,6 +165,10 @@ type CreateAssistantResponseBody struct {
 	// Detail-only identity health and rollout information. Configuration is not
 	// permission or consent.
 	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
+	// Present only on an explicit identity upgrade response: upgraded creates the
+	// first binding, repaired provisions missing live roots, unchanged preserves
+	// existing bindings. Not a permission grant or OAuth consent.
+	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -204,6 +212,10 @@ type UpgradeAssistantIdentityResponseBody struct {
 	// Detail-only identity health and rollout information. Configuration is not
 	// permission or consent.
 	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
+	// Present only on an explicit identity upgrade response: upgraded creates the
+	// first binding, repaired provisions missing live roots, unchanged preserves
+	// existing bindings. Not a permission grant or OAuth consent.
+	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -247,6 +259,10 @@ type UpdateAssistantResponseBody struct {
 	// Detail-only identity health and rollout information. Configuration is not
 	// permission or consent.
 	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
+	// Present only on an explicit identity upgrade response: upgraded creates the
+	// first binding, repaired provisions missing live roots, unchanged preserves
+	// existing bindings. Not a permission grant or OAuth consent.
+	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -315,6 +331,10 @@ type GetManagedAssistantResponseBody struct {
 	// Detail-only identity health and rollout information. Configuration is not
 	// permission or consent.
 	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
+	// Present only on an explicit identity upgrade response: upgraded creates the
+	// first binding, repaired provisions missing live roots, unchanged preserves
+	// existing bindings. Not a permission grant or OAuth consent.
+	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -358,6 +378,10 @@ type EnsureManagedAssistantResponseBody struct {
 	// Detail-only identity health and rollout information. Configuration is not
 	// permission or consent.
 	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
+	// Present only on an explicit identity upgrade response: upgraded creates the
+	// first binding, repaired provisions missing live roots, unchanged preserves
+	// existing bindings. Not a permission grant or OAuth consent.
+	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -2260,6 +2284,10 @@ type AssistantResponseBody struct {
 	// Detail-only identity health and rollout information. Configuration is not
 	// permission or consent.
 	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
+	// Present only on an explicit identity upgrade response: upgraded creates the
+	// first binding, repaired provisions missing live roots, unchanged preserves
+	// existing bindings. Not a permission grant or OAuth consent.
+	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
@@ -2420,20 +2448,21 @@ func NewListAssistantsResponseBody(res *assistants.ListAssistantsResult) *ListAs
 // the "getAssistant" endpoint of the "assistants" service.
 func NewGetAssistantResponseBody(res *types.Assistant) *GetAssistantResponseBody {
 	body := &GetAssistantResponseBody{
-		ID:                 res.ID,
-		ProjectID:          res.ProjectID,
-		CreatedByUserID:    res.CreatedByUserID,
-		IdentityState:      res.IdentityState,
-		AgentID:            res.AgentID,
-		IdentityGeneration: res.IdentityGeneration,
-		Name:               res.Name,
-		Model:              res.Model,
-		Instructions:       res.Instructions,
-		WarmTTLSeconds:     res.WarmTTLSeconds,
-		MaxConcurrency:     res.MaxConcurrency,
-		Status:             res.Status,
-		CreatedAt:          res.CreatedAt,
-		UpdatedAt:          res.UpdatedAt,
+		ID:                     res.ID,
+		ProjectID:              res.ProjectID,
+		CreatedByUserID:        res.CreatedByUserID,
+		IdentityState:          res.IdentityState,
+		AgentID:                res.AgentID,
+		IdentityUpgradeOutcome: res.IdentityUpgradeOutcome,
+		IdentityGeneration:     res.IdentityGeneration,
+		Name:                   res.Name,
+		Model:                  res.Model,
+		Instructions:           res.Instructions,
+		WarmTTLSeconds:         res.WarmTTLSeconds,
+		MaxConcurrency:         res.MaxConcurrency,
+		Status:                 res.Status,
+		CreatedAt:              res.CreatedAt,
+		UpdatedAt:              res.UpdatedAt,
 	}
 	if res.IdentityDiagnostics != nil {
 		body.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(res.IdentityDiagnostics)
@@ -2481,20 +2510,21 @@ func NewGetAssistantResponseBody(res *types.Assistant) *GetAssistantResponseBody
 // of the "createAssistant" endpoint of the "assistants" service.
 func NewCreateAssistantResponseBody(res *types.Assistant) *CreateAssistantResponseBody {
 	body := &CreateAssistantResponseBody{
-		ID:                 res.ID,
-		ProjectID:          res.ProjectID,
-		CreatedByUserID:    res.CreatedByUserID,
-		IdentityState:      res.IdentityState,
-		AgentID:            res.AgentID,
-		IdentityGeneration: res.IdentityGeneration,
-		Name:               res.Name,
-		Model:              res.Model,
-		Instructions:       res.Instructions,
-		WarmTTLSeconds:     res.WarmTTLSeconds,
-		MaxConcurrency:     res.MaxConcurrency,
-		Status:             res.Status,
-		CreatedAt:          res.CreatedAt,
-		UpdatedAt:          res.UpdatedAt,
+		ID:                     res.ID,
+		ProjectID:              res.ProjectID,
+		CreatedByUserID:        res.CreatedByUserID,
+		IdentityState:          res.IdentityState,
+		AgentID:                res.AgentID,
+		IdentityUpgradeOutcome: res.IdentityUpgradeOutcome,
+		IdentityGeneration:     res.IdentityGeneration,
+		Name:                   res.Name,
+		Model:                  res.Model,
+		Instructions:           res.Instructions,
+		WarmTTLSeconds:         res.WarmTTLSeconds,
+		MaxConcurrency:         res.MaxConcurrency,
+		Status:                 res.Status,
+		CreatedAt:              res.CreatedAt,
+		UpdatedAt:              res.UpdatedAt,
 	}
 	if res.IdentityDiagnostics != nil {
 		body.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(res.IdentityDiagnostics)
@@ -2543,20 +2573,21 @@ func NewCreateAssistantResponseBody(res *types.Assistant) *CreateAssistantRespon
 // service.
 func NewUpgradeAssistantIdentityResponseBody(res *types.Assistant) *UpgradeAssistantIdentityResponseBody {
 	body := &UpgradeAssistantIdentityResponseBody{
-		ID:                 res.ID,
-		ProjectID:          res.ProjectID,
-		CreatedByUserID:    res.CreatedByUserID,
-		IdentityState:      res.IdentityState,
-		AgentID:            res.AgentID,
-		IdentityGeneration: res.IdentityGeneration,
-		Name:               res.Name,
-		Model:              res.Model,
-		Instructions:       res.Instructions,
-		WarmTTLSeconds:     res.WarmTTLSeconds,
-		MaxConcurrency:     res.MaxConcurrency,
-		Status:             res.Status,
-		CreatedAt:          res.CreatedAt,
-		UpdatedAt:          res.UpdatedAt,
+		ID:                     res.ID,
+		ProjectID:              res.ProjectID,
+		CreatedByUserID:        res.CreatedByUserID,
+		IdentityState:          res.IdentityState,
+		AgentID:                res.AgentID,
+		IdentityUpgradeOutcome: res.IdentityUpgradeOutcome,
+		IdentityGeneration:     res.IdentityGeneration,
+		Name:                   res.Name,
+		Model:                  res.Model,
+		Instructions:           res.Instructions,
+		WarmTTLSeconds:         res.WarmTTLSeconds,
+		MaxConcurrency:         res.MaxConcurrency,
+		Status:                 res.Status,
+		CreatedAt:              res.CreatedAt,
+		UpdatedAt:              res.UpdatedAt,
 	}
 	if res.IdentityDiagnostics != nil {
 		body.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(res.IdentityDiagnostics)
@@ -2604,20 +2635,21 @@ func NewUpgradeAssistantIdentityResponseBody(res *types.Assistant) *UpgradeAssis
 // of the "updateAssistant" endpoint of the "assistants" service.
 func NewUpdateAssistantResponseBody(res *types.Assistant) *UpdateAssistantResponseBody {
 	body := &UpdateAssistantResponseBody{
-		ID:                 res.ID,
-		ProjectID:          res.ProjectID,
-		CreatedByUserID:    res.CreatedByUserID,
-		IdentityState:      res.IdentityState,
-		AgentID:            res.AgentID,
-		IdentityGeneration: res.IdentityGeneration,
-		Name:               res.Name,
-		Model:              res.Model,
-		Instructions:       res.Instructions,
-		WarmTTLSeconds:     res.WarmTTLSeconds,
-		MaxConcurrency:     res.MaxConcurrency,
-		Status:             res.Status,
-		CreatedAt:          res.CreatedAt,
-		UpdatedAt:          res.UpdatedAt,
+		ID:                     res.ID,
+		ProjectID:              res.ProjectID,
+		CreatedByUserID:        res.CreatedByUserID,
+		IdentityState:          res.IdentityState,
+		AgentID:                res.AgentID,
+		IdentityUpgradeOutcome: res.IdentityUpgradeOutcome,
+		IdentityGeneration:     res.IdentityGeneration,
+		Name:                   res.Name,
+		Model:                  res.Model,
+		Instructions:           res.Instructions,
+		WarmTTLSeconds:         res.WarmTTLSeconds,
+		MaxConcurrency:         res.MaxConcurrency,
+		Status:                 res.Status,
+		CreatedAt:              res.CreatedAt,
+		UpdatedAt:              res.UpdatedAt,
 	}
 	if res.IdentityDiagnostics != nil {
 		body.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(res.IdentityDiagnostics)
@@ -2687,20 +2719,21 @@ func NewInterruptTurnResponseBody(res *assistants.InterruptTurnResult) *Interrup
 // result of the "getManagedAssistant" endpoint of the "assistants" service.
 func NewGetManagedAssistantResponseBody(res *types.Assistant) *GetManagedAssistantResponseBody {
 	body := &GetManagedAssistantResponseBody{
-		ID:                 res.ID,
-		ProjectID:          res.ProjectID,
-		CreatedByUserID:    res.CreatedByUserID,
-		IdentityState:      res.IdentityState,
-		AgentID:            res.AgentID,
-		IdentityGeneration: res.IdentityGeneration,
-		Name:               res.Name,
-		Model:              res.Model,
-		Instructions:       res.Instructions,
-		WarmTTLSeconds:     res.WarmTTLSeconds,
-		MaxConcurrency:     res.MaxConcurrency,
-		Status:             res.Status,
-		CreatedAt:          res.CreatedAt,
-		UpdatedAt:          res.UpdatedAt,
+		ID:                     res.ID,
+		ProjectID:              res.ProjectID,
+		CreatedByUserID:        res.CreatedByUserID,
+		IdentityState:          res.IdentityState,
+		AgentID:                res.AgentID,
+		IdentityUpgradeOutcome: res.IdentityUpgradeOutcome,
+		IdentityGeneration:     res.IdentityGeneration,
+		Name:                   res.Name,
+		Model:                  res.Model,
+		Instructions:           res.Instructions,
+		WarmTTLSeconds:         res.WarmTTLSeconds,
+		MaxConcurrency:         res.MaxConcurrency,
+		Status:                 res.Status,
+		CreatedAt:              res.CreatedAt,
+		UpdatedAt:              res.UpdatedAt,
 	}
 	if res.IdentityDiagnostics != nil {
 		body.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(res.IdentityDiagnostics)
@@ -2748,20 +2781,21 @@ func NewGetManagedAssistantResponseBody(res *types.Assistant) *GetManagedAssista
 // result of the "ensureManagedAssistant" endpoint of the "assistants" service.
 func NewEnsureManagedAssistantResponseBody(res *types.Assistant) *EnsureManagedAssistantResponseBody {
 	body := &EnsureManagedAssistantResponseBody{
-		ID:                 res.ID,
-		ProjectID:          res.ProjectID,
-		CreatedByUserID:    res.CreatedByUserID,
-		IdentityState:      res.IdentityState,
-		AgentID:            res.AgentID,
-		IdentityGeneration: res.IdentityGeneration,
-		Name:               res.Name,
-		Model:              res.Model,
-		Instructions:       res.Instructions,
-		WarmTTLSeconds:     res.WarmTTLSeconds,
-		MaxConcurrency:     res.MaxConcurrency,
-		Status:             res.Status,
-		CreatedAt:          res.CreatedAt,
-		UpdatedAt:          res.UpdatedAt,
+		ID:                     res.ID,
+		ProjectID:              res.ProjectID,
+		CreatedByUserID:        res.CreatedByUserID,
+		IdentityState:          res.IdentityState,
+		AgentID:                res.AgentID,
+		IdentityUpgradeOutcome: res.IdentityUpgradeOutcome,
+		IdentityGeneration:     res.IdentityGeneration,
+		Name:                   res.Name,
+		Model:                  res.Model,
+		Instructions:           res.Instructions,
+		WarmTTLSeconds:         res.WarmTTLSeconds,
+		MaxConcurrency:         res.MaxConcurrency,
+		Status:                 res.Status,
+		CreatedAt:              res.CreatedAt,
+		UpdatedAt:              res.UpdatedAt,
 	}
 	if res.IdentityDiagnostics != nil {
 		body.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(res.IdentityDiagnostics)

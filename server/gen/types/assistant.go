@@ -23,6 +23,10 @@ type Assistant struct {
 	// Detail-only identity health and rollout information. Configuration is not
 	// permission or consent.
 	IdentityDiagnostics *AssistantIdentityDiagnostics
+	// Present only on an explicit identity upgrade response: upgraded creates the
+	// first binding, repaired provisions missing live roots, unchanged preserves
+	// existing bindings. Not a permission grant or OAuth consent.
+	IdentityUpgradeOutcome *string
 	// The current or last retained assistant identity binding generation.
 	IdentityGeneration *int64
 	// The assistant name.

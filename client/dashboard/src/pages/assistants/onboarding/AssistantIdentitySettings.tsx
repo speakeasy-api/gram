@@ -32,11 +32,20 @@ export function AssistantIdentitySettings({
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
   const upgrade = useAssistantsUpgradeIdentityMutation({
-    onSuccess: () => {
+    onSuccess: (result) => {
       setConfirming(false);
       void invalidateAllAssistantsList(queryClient);
       onUpdated?.();
-      toast.success("Assistant identity updated");
+      const messages = {
+        upgraded: "Assistant identity upgraded",
+        repaired: "Missing identity bindings repaired",
+        unchanged: "Assistant identity already configured; no changes made",
+      };
+      toast.success(
+        result.identityUpgradeOutcome
+          ? messages[result.identityUpgradeOutcome]
+          : "Assistant identity updated",
+      );
     },
     onError: () => {
       toast.error(

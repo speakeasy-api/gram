@@ -1208,6 +1208,41 @@ func (q *Queries) GetAssistantIdentityHealth(ctx context.Context, arg GetAssista
 	return health, err
 }
 
+const getAssistantIdentityUpgradeOutcome = `-- name: GetAssistantIdentityUpgradeOutcome :one
+SELECT CASE
+ WHEN NOT EXISTS (SELECT 1 FROM assistant_agent_bindings b
+   WHERE b.organization_id = $1 AND b.project_id = $2
+     AND b.original_assistant_id = $3::uuid) THEN 'upgraded'
+ WHEN EXISTS (SELECT 1 FROM trigger_instances t
+   WHERE t.organization_id = $1 AND t.project_id = $2
+     AND t.target_kind = 'assistant' AND t.target_ref = $3::text
+     AND NOT t.deleted AND t.status = 'active' AND t.definition_slug <> 'wake'
+     AND NOT EXISTS (SELECT 1 FROM trigger_workload_bindings b
+       WHERE b.organization_id = t.organization_id AND b.project_id = t.project_id
+         AND b.original_trigger_id = t.id))
+   OR NOT EXISTS (SELECT 1 FROM trigger_instances t
+     WHERE t.organization_id = $1 AND t.project_id = $2
+       AND t.target_kind = 'assistant' AND t.target_ref = $3::text
+       AND NOT t.deleted AND t.definition_slug = 'dashboard') THEN 'repaired'
+ ELSE 'unchanged'
+END::text AS outcome
+`
+
+type GetAssistantIdentityUpgradeOutcomeParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	AssistantID    uuid.UUID
+}
+
+// Called only after locking the assistant. Retained binding history is never
+// treated as missing authority; Provision still validates it before commit.
+func (q *Queries) GetAssistantIdentityUpgradeOutcome(ctx context.Context, arg GetAssistantIdentityUpgradeOutcomeParams) (string, error) {
+	row := q.db.QueryRow(ctx, getAssistantIdentityUpgradeOutcome, arg.OrganizationID, arg.ProjectID, arg.AssistantID)
+	var outcome string
+	err := row.Scan(&outcome)
+	return outcome, err
+}
+
 const getAssistantIgnoringDeleted = `-- name: GetAssistantIgnoringDeleted :one
 SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
 FROM assistants

@@ -585,6 +585,7 @@ func (s *Service) UpgradeAssistantIdentity(ctx context.Context, payload *gen.Upg
 	if err != nil {
 		return nil, err
 	}
+	view.IdentityUpgradeOutcome = record.IdentityUpgradeOutcome
 	view.IdentityDiagnostics, err = s.core.identityDiagnostics(ctx, record)
 	if err != nil {
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "inspect upgraded assistant identity")

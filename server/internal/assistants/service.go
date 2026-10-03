@@ -139,25 +139,26 @@ func assistantValidationError(format string, args ...any) error {
 }
 
 type assistantRecord struct {
-	IdentityState      string
-	AgentID            *string
-	IdentityGeneration *int64
-	ID                 uuid.UUID
-	ProjectID          uuid.UUID
-	OrganizationID     string
-	CreatedByUserID    string
-	Name               string
-	Model              string
-	Instructions       string
-	Toolsets           []assistantToolsetRow
-	MCPServers         []assistantMCPServerRow
-	Skills             []assistantSkillRow
-	WarmTTLSeconds     int
-	MaxConcurrency     int
-	Status             string
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-	DeletedAt          pgtype.Timestamptz
+	IdentityUpgradeOutcome *string
+	IdentityState          string
+	AgentID                *string
+	IdentityGeneration     *int64
+	ID                     uuid.UUID
+	ProjectID              uuid.UUID
+	OrganizationID         string
+	CreatedByUserID        string
+	Name                   string
+	Model                  string
+	Instructions           string
+	Toolsets               []assistantToolsetRow
+	MCPServers             []assistantMCPServerRow
+	Skills                 []assistantSkillRow
+	WarmTTLSeconds         int
+	MaxConcurrency         int
+	Status                 string
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
+	DeletedAt              pgtype.Timestamptz
 }
 
 type assistantThreadRecord struct {
@@ -240,121 +241,126 @@ type assistantSkillRow struct {
 
 func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistantRecord {
 	return assistantRecord{
-		IdentityState:      "",
-		AgentID:            nil,
-		IdentityGeneration: nil,
-		ID:                 row.ID,
-		ProjectID:          row.ProjectID,
-		OrganizationID:     row.OrganizationID,
-		CreatedByUserID:    conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
-		Name:               row.Name,
-		Model:              row.Model,
-		Instructions:       row.Instructions,
-		Toolsets:           nil,
-		MCPServers:         nil,
-		Skills:             nil,
-		WarmTTLSeconds:     conv.SafeInt(row.WarmTtlSeconds),
-		MaxConcurrency:     conv.SafeInt(row.MaxConcurrency),
-		Status:             row.Status,
-		CreatedAt:          row.CreatedAt.Time,
-		UpdatedAt:          row.UpdatedAt.Time,
-		DeletedAt:          row.DeletedAt,
+		IdentityUpgradeOutcome: nil,
+		IdentityState:          "",
+		AgentID:                nil,
+		IdentityGeneration:     nil,
+		ID:                     row.ID,
+		ProjectID:              row.ProjectID,
+		OrganizationID:         row.OrganizationID,
+		CreatedByUserID:        conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:                   row.Name,
+		Model:                  row.Model,
+		Instructions:           row.Instructions,
+		Toolsets:               nil,
+		MCPServers:             nil,
+		Skills:                 nil,
+		WarmTTLSeconds:         conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:         conv.SafeInt(row.MaxConcurrency),
+		Status:                 row.Status,
+		CreatedAt:              row.CreatedAt.Time,
+		UpdatedAt:              row.UpdatedAt.Time,
+		DeletedAt:              row.DeletedAt,
 	}
 }
 
 func assistantRecordFromListRow(row assistantrepo.ListAssistantsRow) assistantRecord {
 	return assistantRecord{
-		IdentityState:      "",
-		AgentID:            nil,
-		IdentityGeneration: nil,
-		ID:                 row.ID,
-		ProjectID:          row.ProjectID,
-		OrganizationID:     row.OrganizationID,
-		CreatedByUserID:    conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
-		Name:               row.Name,
-		Model:              row.Model,
-		Instructions:       row.Instructions,
-		Toolsets:           nil,
-		MCPServers:         nil,
-		Skills:             nil,
-		WarmTTLSeconds:     conv.SafeInt(row.WarmTtlSeconds),
-		MaxConcurrency:     conv.SafeInt(row.MaxConcurrency),
-		Status:             row.Status,
-		CreatedAt:          row.CreatedAt.Time,
-		UpdatedAt:          row.UpdatedAt.Time,
-		DeletedAt:          row.DeletedAt,
+		IdentityUpgradeOutcome: nil,
+		IdentityState:          "",
+		AgentID:                nil,
+		IdentityGeneration:     nil,
+		ID:                     row.ID,
+		ProjectID:              row.ProjectID,
+		OrganizationID:         row.OrganizationID,
+		CreatedByUserID:        conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:                   row.Name,
+		Model:                  row.Model,
+		Instructions:           row.Instructions,
+		Toolsets:               nil,
+		MCPServers:             nil,
+		Skills:                 nil,
+		WarmTTLSeconds:         conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:         conv.SafeInt(row.MaxConcurrency),
+		Status:                 row.Status,
+		CreatedAt:              row.CreatedAt.Time,
+		UpdatedAt:              row.UpdatedAt.Time,
+		DeletedAt:              row.DeletedAt,
 	}
 }
 
 func assistantRecordFromGetRow(row assistantrepo.GetAssistantRow) assistantRecord {
 	return assistantRecord{
-		IdentityState:      "",
-		AgentID:            nil,
-		IdentityGeneration: nil,
-		ID:                 row.ID,
-		ProjectID:          row.ProjectID,
-		OrganizationID:     row.OrganizationID,
-		CreatedByUserID:    conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
-		Name:               row.Name,
-		Model:              row.Model,
-		Instructions:       row.Instructions,
-		Toolsets:           nil,
-		MCPServers:         nil,
-		Skills:             nil,
-		WarmTTLSeconds:     conv.SafeInt(row.WarmTtlSeconds),
-		MaxConcurrency:     conv.SafeInt(row.MaxConcurrency),
-		Status:             row.Status,
-		CreatedAt:          row.CreatedAt.Time,
-		UpdatedAt:          row.UpdatedAt.Time,
-		DeletedAt:          row.DeletedAt,
+		IdentityUpgradeOutcome: nil,
+		IdentityState:          "",
+		AgentID:                nil,
+		IdentityGeneration:     nil,
+		ID:                     row.ID,
+		ProjectID:              row.ProjectID,
+		OrganizationID:         row.OrganizationID,
+		CreatedByUserID:        conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:                   row.Name,
+		Model:                  row.Model,
+		Instructions:           row.Instructions,
+		Toolsets:               nil,
+		MCPServers:             nil,
+		Skills:                 nil,
+		WarmTTLSeconds:         conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:         conv.SafeInt(row.MaxConcurrency),
+		Status:                 row.Status,
+		CreatedAt:              row.CreatedAt.Time,
+		UpdatedAt:              row.UpdatedAt.Time,
+		DeletedAt:              row.DeletedAt,
 	}
 }
 
 func assistantRecordFromDispatchRow(row assistantrepo.GetAssistantForDispatchRow) assistantRecord {
 	return assistantRecord{
-		IdentityState:      "",
-		AgentID:            nil,
-		IdentityGeneration: nil,
-		ID:                 row.ID,
-		ProjectID:          row.ProjectID,
-		OrganizationID:     row.OrganizationID,
-		CreatedByUserID:    conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
-		Name:               row.Name,
-		Model:              row.Model,
-		Instructions:       row.Instructions,
-		Toolsets:           nil,
-		MCPServers:         nil,
-		Skills:             nil,
-		WarmTTLSeconds:     conv.SafeInt(row.WarmTtlSeconds),
-		MaxConcurrency:     conv.SafeInt(row.MaxConcurrency),
-		Status:             row.Status,
-		CreatedAt:          row.CreatedAt.Time,
-		UpdatedAt:          row.UpdatedAt.Time,
-		DeletedAt:          row.DeletedAt,
+		IdentityUpgradeOutcome: nil,
+		IdentityState:          "",
+		AgentID:                nil,
+		IdentityGeneration:     nil,
+		ID:                     row.ID,
+		ProjectID:              row.ProjectID,
+		OrganizationID:         row.OrganizationID,
+		CreatedByUserID:        conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:                   row.Name,
+		Model:                  row.Model,
+		Instructions:           row.Instructions,
+		Toolsets:               nil,
+		MCPServers:             nil,
+		Skills:                 nil,
+		WarmTTLSeconds:         conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:         conv.SafeInt(row.MaxConcurrency),
+		Status:                 row.Status,
+		CreatedAt:              row.CreatedAt.Time,
+		UpdatedAt:              row.UpdatedAt.Time,
+		DeletedAt:              row.DeletedAt,
 	}
 }
 
 func assistantRecordFromUpdateRow(row assistantrepo.UpdateAssistantRow) assistantRecord {
 	return assistantRecord{
-		IdentityState:      "",
-		AgentID:            nil,
-		IdentityGeneration: nil,
-		ID:                 row.ID,
-		ProjectID:          row.ProjectID,
-		OrganizationID:     row.OrganizationID,
-		CreatedByUserID:    conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
-		Name:               row.Name,
-		Model:              row.Model,
-		Instructions:       row.Instructions,
-		Toolsets:           nil,
-		MCPServers:         nil,
-		Skills:             nil,
-		WarmTTLSeconds:     conv.SafeInt(row.WarmTtlSeconds),
-		MaxConcurrency:     conv.SafeInt(row.MaxConcurrency),
-		Status:             row.Status,
-		CreatedAt:          row.CreatedAt.Time,
-		UpdatedAt:          row.UpdatedAt.Time,
-		DeletedAt:          row.DeletedAt,
+		IdentityUpgradeOutcome: nil,
+		IdentityState:          "",
+		AgentID:                nil,
+		IdentityGeneration:     nil,
+		ID:                     row.ID,
+		ProjectID:              row.ProjectID,
+		OrganizationID:         row.OrganizationID,
+		CreatedByUserID:        conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:                   row.Name,
+		Model:                  row.Model,
+		Instructions:           row.Instructions,
+		Toolsets:               nil,
+		MCPServers:             nil,
+		Skills:                 nil,
+		WarmTTLSeconds:         conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:         conv.SafeInt(row.MaxConcurrency),
+		Status:                 row.Status,
+		CreatedAt:              row.CreatedAt.Time,
+		UpdatedAt:              row.UpdatedAt.Time,
+		DeletedAt:              row.DeletedAt,
 	}
 }
 
@@ -1272,10 +1278,11 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 		})
 	}
 	return &types.Assistant{
-		IdentityDiagnostics: nil,
-		IdentityState:       conv.PtrEmpty(record.IdentityState),
-		AgentID:             record.AgentID,
-		IdentityGeneration:  record.IdentityGeneration, ID: record.ID.String(),
+		IdentityUpgradeOutcome: nil,
+		IdentityDiagnostics:    nil,
+		IdentityState:          conv.PtrEmpty(record.IdentityState),
+		AgentID:                record.AgentID,
+		IdentityGeneration:     record.IdentityGeneration, ID: record.ID.String(),
 		ProjectID:       record.ProjectID.String(),
 		CreatedByUserID: conv.PtrEmpty(record.CreatedByUserID),
 		Name:            record.Name,
@@ -3208,25 +3215,26 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		LastEventAt:   time.Time{},
 	}
 	assistant := assistantRecord{
-		IdentityState:      "",
-		AgentID:            nil,
-		IdentityGeneration: nil,
-		ID:                 row.AssistantID,
-		ProjectID:          row.ProjectID,
-		OrganizationID:     row.OrganizationID,
-		CreatedByUserID:    conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
-		Name:               row.Name,
-		Model:              row.Model,
-		Instructions:       row.Instructions,
-		Toolsets:           nil,
-		MCPServers:         nil,
-		Skills:             nil,
-		WarmTTLSeconds:     conv.SafeInt(row.WarmTtlSeconds),
-		MaxConcurrency:     conv.SafeInt(row.MaxConcurrency),
-		Status:             row.Status,
-		CreatedAt:          row.CreatedAt.Time,
-		UpdatedAt:          row.UpdatedAt.Time,
-		DeletedAt:          row.DeletedAt,
+		IdentityUpgradeOutcome: nil,
+		IdentityState:          "",
+		AgentID:                nil,
+		IdentityGeneration:     nil,
+		ID:                     row.AssistantID,
+		ProjectID:              row.ProjectID,
+		OrganizationID:         row.OrganizationID,
+		CreatedByUserID:        conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:                   row.Name,
+		Model:                  row.Model,
+		Instructions:           row.Instructions,
+		Toolsets:               nil,
+		MCPServers:             nil,
+		Skills:                 nil,
+		WarmTTLSeconds:         conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:         conv.SafeInt(row.MaxConcurrency),
+		Status:                 row.Status,
+		CreatedAt:              row.CreatedAt.Time,
+		UpdatedAt:              row.UpdatedAt.Time,
+		DeletedAt:              row.DeletedAt,
 	}
 	if err := s.hydrateAssistantToolSources(ctx, assistant.ProjectID, &assistant); err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant tool sources").LogError(ctx, s.logger, logAttrs...)
@@ -3586,25 +3594,26 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 		LastEventAt:   row.LastEventAt.Time,
 	}
 	assistant := assistantRecord{
-		IdentityState:      "",
-		AgentID:            nil,
-		IdentityGeneration: nil,
-		ID:                 row.AssistantRecordID,
-		ProjectID:          row.AssistantRecordProjectID,
-		OrganizationID:     row.OrganizationID,
-		CreatedByUserID:    conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
-		Name:               row.Name,
-		Model:              row.Model,
-		Instructions:       row.Instructions,
-		Toolsets:           nil,
-		MCPServers:         nil,
-		Skills:             nil,
-		WarmTTLSeconds:     conv.SafeInt(row.WarmTtlSeconds),
-		MaxConcurrency:     conv.SafeInt(row.MaxConcurrency),
-		Status:             row.Status,
-		CreatedAt:          row.CreatedAt.Time,
-		UpdatedAt:          row.UpdatedAt.Time,
-		DeletedAt:          row.DeletedAt,
+		IdentityUpgradeOutcome: nil,
+		IdentityState:          "",
+		AgentID:                nil,
+		IdentityGeneration:     nil,
+		ID:                     row.AssistantRecordID,
+		ProjectID:              row.AssistantRecordProjectID,
+		OrganizationID:         row.OrganizationID,
+		CreatedByUserID:        conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:                   row.Name,
+		Model:                  row.Model,
+		Instructions:           row.Instructions,
+		Toolsets:               nil,
+		MCPServers:             nil,
+		Skills:                 nil,
+		WarmTTLSeconds:         conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:         conv.SafeInt(row.MaxConcurrency),
+		Status:                 row.Status,
+		CreatedAt:              row.CreatedAt.Time,
+		UpdatedAt:              row.UpdatedAt.Time,
+		DeletedAt:              row.DeletedAt,
 	}
 	runtime := assistantRuntimeRecord{
 		ID:                  row.RuntimeID,

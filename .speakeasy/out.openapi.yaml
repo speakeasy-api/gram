@@ -77124,6 +77124,13 @@ components:
             - NEVER_CONFIGURED
             - ACTIVE
             - TOMBSTONED
+        identity_upgrade_outcome:
+          type: string
+          description: 'Present only on an explicit identity upgrade response: upgraded creates the first binding, repaired provisions missing live roots, unchanged preserves existing bindings. Not a permission grant or OAuth consent.'
+          enum:
+            - upgraded
+            - repaired
+            - unchanged
         instructions:
           type: string
           description: The system instructions for the assistant.

@@ -61,7 +61,7 @@ func (s *assistantIdentityService) inspect(ctx context.Context, principal Princi
 	if err != nil {
 		return zero, fmt.Errorf("inspect assistant identity: %w", err)
 	}
-	return UpgradeAssistantIdentityOutput{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, IdentityState: assistant.IdentityState, AgentID: assistant.AgentID, IdentityGeneration: assistant.IdentityGeneration, Diagnostics: assistant.IdentityDiagnostics}, nil
+	return UpgradeAssistantIdentityOutput{Outcome: nil, ProjectID: assistant.ProjectID, AssistantID: assistant.ID, IdentityState: assistant.IdentityState, AgentID: assistant.AgentID, IdentityGeneration: assistant.IdentityGeneration, Diagnostics: assistant.IdentityDiagnostics}, nil
 }
 
 func registerAssistantIdentityInspectionTool(reg *Registrar, service *assistantIdentityService) {
@@ -83,9 +83,7 @@ func assistantIdentityInspectionToolResult(err error) (*mcp.CallToolResult, bool
 		switch shareable.Code {
 		case oops.CodeBadRequest, oops.CodeInvalid:
 			result.Code, result.Message = "invalid_request", "Provide exact project and assistant UUIDs to inspect."
-		case oops.CodeForbidden, oops.CodeUnauthorized:
-			result.Code, result.Message = "permission_denied", "This inspection requires project:read and an authorized ordinary actor."
-		case oops.CodeNotFound:
+		case oops.CodeForbidden, oops.CodeUnauthorized, oops.CodeNotFound:
 			result.Code, result.Message = "not_found", "That assistant or project is not available to you."
 		case oops.CodeConflict:
 			result.Code, result.Message = "conflict", "The assistant identity cannot be inspected in its current state. Refresh the assistant before retrying."

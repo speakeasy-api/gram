@@ -46,6 +46,9 @@ var Assistant = Type("Assistant", func() {
 	})
 	Attribute("agent_id", String, "The dedicated agent ID for an active identity binding.", func() { Format(FormatUUID) })
 	Attribute("identity_diagnostics", AssistantIdentityDiagnostics, "Detail-only identity health and rollout information. Configuration is not permission or consent.")
+	Attribute("identity_upgrade_outcome", String, "Present only on an explicit identity upgrade response: upgraded creates the first binding, repaired provisions missing live roots, unchanged preserves existing bindings. Not a permission grant or OAuth consent.", func() {
+		Enum("upgraded", "repaired", "unchanged")
+	})
 	Attribute("identity_generation", Int64, "The current or last retained assistant identity binding generation.")
 	Attribute("name", String, "The assistant name.")
 	Attribute("model", String, "The model identifier used by the assistant.")

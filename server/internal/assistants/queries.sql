@@ -1727,3 +1727,24 @@ JOIN assistants a ON a.id = e.assistant_id AND a.project_id = e.project_id
 WHERE a.organization_id = @organization_id AND e.project_id = @project_id AND e.assistant_id = @assistant_id
  AND NOT e.deleted AND NOT a.deleted
 ORDER BY e.created_at DESC, e.id DESC LIMIT 1;
+
+-- name: GetAssistantIdentityUpgradeOutcome :one
+-- Called only after locking the assistant. Retained binding history is never
+-- treated as missing authority; Provision still validates it before commit.
+SELECT CASE
+ WHEN NOT EXISTS (SELECT 1 FROM assistant_agent_bindings b
+   WHERE b.organization_id = @organization_id AND b.project_id = @project_id
+     AND b.original_assistant_id = @assistant_id::uuid) THEN 'upgraded'
+ WHEN EXISTS (SELECT 1 FROM trigger_instances t
+   WHERE t.organization_id = @organization_id AND t.project_id = @project_id
+     AND t.target_kind = 'assistant' AND t.target_ref = @assistant_id::text
+     AND NOT t.deleted AND t.status = 'active' AND t.definition_slug <> 'wake'
+     AND NOT EXISTS (SELECT 1 FROM trigger_workload_bindings b
+       WHERE b.organization_id = t.organization_id AND b.project_id = t.project_id
+         AND b.original_trigger_id = t.id))
+   OR NOT EXISTS (SELECT 1 FROM trigger_instances t
+     WHERE t.organization_id = @organization_id AND t.project_id = @project_id
+       AND t.target_kind = 'assistant' AND t.target_ref = @assistant_id::text
+       AND NOT t.deleted AND t.definition_slug = 'dashboard') THEN 'repaired'
+ ELSE 'unchanged'
+END::text AS outcome;

@@ -32,6 +32,7 @@ func TestIdentityDiagnosticsAndProvisioningRollback(t *testing.T) {
 	core.identities = normal
 	bound, err := core.UpgradeAssistantIdentity(t.Context(), "org-test", project, legacy.ID, "user-1")
 	require.NoError(t, err)
+	require.Equal(t, "upgraded", *bound.IdentityUpgradeOutcome)
 	view, err = core.identityDiagnostics(t.Context(), bound)
 	require.NoError(t, err)
 	require.Equal(t, "ready", view.Health)
@@ -48,6 +49,7 @@ func TestIdentityDiagnosticsAndProvisioningRollback(t *testing.T) {
 	require.Equal(t, "missing", states[root.String()])
 	again, err := core.UpgradeAssistantIdentity(t.Context(), "org-test", project, legacy.ID, "user-1")
 	require.NoError(t, err)
+	require.Equal(t, "repaired", *again.IdentityUpgradeOutcome)
 	require.Equal(t, bound.AgentID, again.AgentID)
 	repaired, err := core.identityDiagnostics(t.Context(), again)
 	require.NoError(t, err)

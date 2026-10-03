@@ -129,6 +129,8 @@ func TestIdentityCreationAPIUpgradeRequiresAuthorizationAndIsIdempotent(t *testi
 	second, err := svc.UpgradeAssistantIdentity(granted, payload)
 	require.NoError(t, err)
 	require.Equal(t, first.ID, second.ID)
+	require.Equal(t, "upgraded", *first.IdentityUpgradeOutcome)
+	require.Equal(t, "unchanged", *second.IdentityUpgradeOutcome)
 	binding, err := identityrepo.New(db).GetAssistantBinding(ctx, identityrepo.GetAssistantBindingParams{CaptureSuspended: false, OrganizationID: "org-test", ProjectID: project, AssistantID: legacy.ID})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, binding.Generation)
@@ -314,4 +316,41 @@ func TestDashboardRootPauseSendResumePreservesBinding(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, before.Identity, after.Identity)
 	require.NoError(t, testIdentityService.Validate(t.Context(), db, *before.Identity))
+}
+
+func TestIdentityUpgradeConcurrentOutcomes(t *testing.T) {
+	t.Parallel()
+	svc, ctx, project, db := newRBACServiceWithConn(t, "identity_upgrade_outcomes")
+	legacy, err := assistantrepo.New(db).CreateAssistant(ctx, assistantrepo.CreateAssistantParams{ProjectID: project, OrganizationID: "org-test", CreatedByUserID: pgtype.Text{String: "user-1", Valid: true}, Name: "Legacy assistant", Model: "openai/gpt-4o-mini", Instructions: "", WarmTtlSeconds: 300, MaxConcurrency: 1, Status: StatusActive})
+	require.NoError(t, err)
+	outcomes := make([]string, 4)
+	var group errgroup.Group
+	for i := range outcomes {
+		group.Go(func() error {
+			record, err := svc.core.UpgradeAssistantIdentity(ctx, "org-test", project, legacy.ID, "user-1")
+			if err == nil {
+				outcomes[i] = *record.IdentityUpgradeOutcome
+			}
+			return err
+		})
+	}
+	require.NoError(t, group.Wait())
+	require.ElementsMatch(t, []string{"upgraded", "unchanged", "unchanged", "unchanged"}, outcomes)
+	root := uuid.New()
+	require.NoError(t, identityrepo.New(db).FixtureCreateRoot(ctx, identityrepo.FixtureCreateRootParams{ID: root, OrganizationID: "org-test", ProjectID: project, DefinitionSlug: "slack", TargetRef: legacy.ID.String()}))
+	var repairs errgroup.Group
+	for i := range outcomes {
+		repairs.Go(func() error {
+			record, err := svc.core.UpgradeAssistantIdentity(ctx, "org-test", project, legacy.ID, "user-1")
+			if err == nil {
+				outcomes[i] = *record.IdentityUpgradeOutcome
+			}
+			return err
+		})
+	}
+	require.NoError(t, repairs.Wait())
+	require.ElementsMatch(t, []string{"repaired", "unchanged", "unchanged", "unchanged"}, outcomes)
+	fresh, err := svc.core.GetAssistant(ctx, project, legacy.ID)
+	require.NoError(t, err)
+	require.Nil(t, fresh.IdentityUpgradeOutcome, "outcome is response-only, not durable state")
 }

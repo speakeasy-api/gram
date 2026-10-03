@@ -11,6 +11,7 @@ import (
 
 	genassistants "github.com/speakeasy-api/gram/server/gen/assistants"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -30,6 +31,7 @@ type UpgradeAssistantIdentityInput struct {
 }
 
 type UpgradeAssistantIdentityOutput struct {
+	Outcome            *string                             `json:"outcome,omitempty" jsonschema:"Committed action outcome: upgraded, repaired, or unchanged; absent on inspection"`
 	ProjectID          string                              `json:"project_id"`
 	AssistantID        string                              `json:"assistant_id"`
 	IdentityState      *string                             `json:"identity_state,omitempty"`
@@ -83,7 +85,7 @@ func (s *assistantIdentityService) upgrade(ctx context.Context, principal Princi
 	if assistant == nil || assistant.ID != assistantID.String() || assistant.ProjectID != projectID.String() {
 		return zero, ErrUnavailable
 	}
-	return UpgradeAssistantIdentityOutput{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, IdentityState: assistant.IdentityState, AgentID: assistant.AgentID, IdentityGeneration: assistant.IdentityGeneration, Diagnostics: assistant.IdentityDiagnostics}, nil
+	return UpgradeAssistantIdentityOutput{Outcome: assistant.IdentityUpgradeOutcome, ProjectID: assistant.ProjectID, AssistantID: assistant.ID, IdentityState: assistant.IdentityState, AgentID: assistant.AgentID, IdentityGeneration: assistant.IdentityGeneration, Diagnostics: assistant.IdentityDiagnostics}, nil
 }
 
 func registerAssistantIdentityTool(reg *Registrar, service *assistantIdentityService) {
@@ -108,6 +110,8 @@ func assistantIdentityToolResult(err error) (*mcp.CallToolResult, bool) {
 	result := featureUnavailableResult{Code: unavailableCode, Feature: "assistant_workload_identity", Message: "Assistant workload identity upgrades are temporarily unavailable."}
 	var shareable *oops.ShareableError
 	switch {
+	case errors.Is(err, assistantidentity.ErrProvisioningDisabled), errors.Is(err, assistantidentity.ErrRolloutDisabled):
+		result.Code, result.Message = "rollout_disabled", "Assistant identity changes are disabled by rollout. Retry only after provisioning is enabled."
 	case errors.Is(err, ErrForbidden):
 		result.Code, result.Message = "not_found", "That assistant or project is not available to you."
 	case errors.As(err, &shareable):
