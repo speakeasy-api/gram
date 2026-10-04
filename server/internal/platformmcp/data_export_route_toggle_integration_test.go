@@ -1,10 +1,12 @@
 package platformmcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -339,6 +341,10 @@ func TestDataExportToggleUnavailableManifestMatchesLive(t *testing.T) {
 		})
 		require.Contains(t, refusal, `"feature":"data_export_pause"`)
 	}
+	resume := unavailable[resumeDataExportToolName].Description
+	for _, refusal := range []string{"no destination", "destination was deleted", "stored configuration", "repaired in the dashboard"} {
+		require.Contains(t, resume, refusal, "resume must name every reason it refuses")
+	}
 }
 
 func TestPauseDataExportReplayIsNotChargedAgainstAnExhaustedBudget(t *testing.T) {
@@ -440,7 +446,10 @@ func TestDataExportToggleNeverReturnsDatabaseErrorText(t *testing.T) {
 	created := f.createRoute(t, ctx, "product_telemetry", true, uuid.NullUUID{UUID: f.destination, Valid: true})
 	broken, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_data_export_toggle_db_failure_closed")
 	require.NoError(t, err)
-	service, err := NewDataExportRouteToggleService(testenv.NewLogger(t), broken, dataexports.NewRouteEnabledCore(audit.NewLogger(), testenv.NewEncryptionClient(t)), stubAuthorizer{err: nil}, allowingBudget())
+	// Captured rather than testenv.NewLogger: the test asserts what the
+	// operator sees in the log.
+	var logs bytes.Buffer
+	service, err := NewDataExportRouteToggleService(slog.New(slog.NewJSONHandler(&logs, nil)), broken, dataexports.NewRouteEnabledCore(audit.NewLogger(), testenv.NewEncryptionClient(t)), stubAuthorizer{err: nil}, allowingBudget())
 	require.NoError(t, err)
 	// Every query on a closed pool fails with a driver error, which is what a
 	// database outage looks like from here.
@@ -451,6 +460,8 @@ func TestDataExportToggleNeverReturnsDatabaseErrorText(t *testing.T) {
 	for _, leaked := range []string{"pool", "closed", "resolve", "sql", "pgx", "postgres"} {
 		require.NotContains(t, strings.ToLower(text), leaked, "the refusal must not carry database error text")
 	}
+	// The operator, unlike the caller, gets the real cause.
+	require.Contains(t, logs.String(), "resolve data export route project: closed pool", "the log must record the underlying database error")
 }
 
 func TestResumeDataExportRefusesAnEnabledRouteWhoseDestinationIsGone(t *testing.T) {

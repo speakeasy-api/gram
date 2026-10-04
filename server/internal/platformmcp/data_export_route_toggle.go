@@ -154,13 +154,21 @@ func (s *DataExportRouteToggleService) boundaryError(ctx context.Context, operat
 	if refusal, ok := errors.AsType[*DataExportToggleError](err); ok && refusal.Code != unavailableCode {
 		return err
 	}
+	// The refusal's own message is the generic text written for the caller,
+	// so the log records the cause it wraps — the driver or SQL error an
+	// operator needs — and only the refusal goes back to the caller.
+	refusal, ok := errors.AsType[*DataExportToggleError](err)
+	if !ok {
+		refusal = newDataExportToggleUnavailable(err)
+	}
+	cause := refusal.Cause
+	if cause == nil {
+		cause = err
+	}
 	if s != nil && s.logger != nil {
-		s.logger.ErrorContext(ctx, "platform mcp data export "+operation+" failed", attr.SlogError(err))
+		s.logger.ErrorContext(ctx, "platform mcp data export "+operation+" failed", attr.SlogError(cause))
 	}
-	if refusal, ok := errors.AsType[*DataExportToggleError](err); ok {
-		return refusal
-	}
-	return dataExportToggleUnavailable(err)
+	return refusal
 }
 
 type dataExportToggleReceipt struct {
@@ -421,7 +429,13 @@ func dataExportToggleMissing() error {
 	}
 }
 
+// dataExportToggleUnavailable has the func(error) error shape the receipt
+// executor takes.
 func dataExportToggleUnavailable(cause error) error {
+	return newDataExportToggleUnavailable(cause)
+}
+
+func newDataExportToggleUnavailable(cause error) *DataExportToggleError {
 	return &DataExportToggleError{
 		Code:    unavailableCode,
 		Message: "Pausing or resuming data exports is temporarily unavailable.",

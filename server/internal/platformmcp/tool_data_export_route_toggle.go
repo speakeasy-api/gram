@@ -57,7 +57,7 @@ func registerDataExportRouteToggleTools(reg *Registrar, service *DataExportRoute
 		Title: "Resume a Data Export",
 		Description: "Start a paused data export route sending data to its destination again. " +
 			dataExportToggleInputNote + dataExportToggleScopeNote + dataExportToggleDataNote + " " +
-			"A route with no destination, or whose destination was deleted, cannot be resumed and nothing is changed; the refusal names which, and the destination has to be fixed in the dashboard.",
+			"A route cannot be resumed, and nothing is changed, when it has no destination, when its destination was deleted, or when its destination's stored configuration (endpoint, sensitive-data setting, or headers) can no longer be used; this applies even if the route is already on. The refusal names which, and the destination has to be repaired in the dashboard.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)},
 	}, meta, resume)
 }
