@@ -45,6 +45,8 @@ const (
 	ToolExposureReadOrganizationLimitName         = "platform-mcp-tool-exposure-read-organization"
 	ToolExposureMutationConnectionLimitName       = "platform-mcp-tool-exposure-mutation-connection"
 	ToolExposureMutationOrganizationLimitName     = "platform-mcp-tool-exposure-mutation-organization"
+	PluginRepublishConnectionLimitName            = "platform-mcp-plugin-republish-connection"
+	PluginRepublishOrganizationLimitName          = "platform-mcp-plugin-republish-organization"
 )
 
 const (
@@ -128,6 +130,12 @@ const (
 	// carrying the server.
 	ToolExposureMutationsPerConnectionPerMinute   = 5
 	ToolExposureMutationsPerOrganizationPerMinute = 50
+
+	// PluginRepublishesPer* bound republish_plugin on its own allowance. Each
+	// allowed call can regenerate every package in a project, so it is metered
+	// like the other package-affecting writes rather than like a read.
+	PluginRepublishesPerConnectionPerMinute   = 5
+	PluginRepublishesPerOrganizationPerMinute = 50
 
 	// DrilldownRowsPerConnectionPerWindow and
 	// DrilldownMetricQueriesPerConnectionPerWindow are the second cap the

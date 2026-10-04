@@ -348,6 +348,26 @@ type publicationEvidenceReader interface {
 	ResolvePublicationEvidence(context.Context, string, uuid.UUID, []string) ([]plugindelivery.PublicationEvidence, error)
 }
 
+// readPublicationEvidence projects one plugin's publication evidence. Callers
+// must have checked that a reader is composed.
+func (s *PluginsService) readPublicationEvidence(ctx context.Context, principal Principal, projectID uuid.UUID, pluginSlug string) *PluginPublicationEvidence {
+	evidence, err := s.publicationEvidence.ResolvePublicationEvidence(ctx, principal.OrganizationID, projectID, []string{pluginSlug})
+	if err != nil || len(evidence) != 1 || evidence[0].PluginSlug != pluginSlug {
+		// Package resolution can fail when a private address is incomplete.
+		// Preserve the admin inventory without claiming a package is current.
+		return &PluginPublicationEvidence{Unavailable: true, Packages: []PluginPublicationPackage{}}
+	}
+	packages := make([]PluginPublicationPackage, 0, len(evidence[0].Packages))
+	for _, pkg := range evidence[0].Packages {
+		packages = append(packages, PluginPublicationPackage{ServerName: pkg.ServerName, MCPURL: pkg.MCPURL})
+	}
+	return &PluginPublicationEvidence{
+		NotConfigured: evidence[0].NotConfigured,
+		Fresh:         evidence[0].Fresh,
+		Packages:      packages,
+	}
+}
+
 // PluginsService answers what plugins a project has and what is inside one,
 // and resolves the exact plugin a distribution names.
 type PluginsService struct {
@@ -370,6 +390,10 @@ type PluginsService struct {
 	mutationReceipts          *PluginAssignmentMutationReceiptStore
 	distributionAdmission     *admission.Guard
 	distributionAdmissionRead distributionAdmissionReader
+
+	publication     plugindelivery.PublicationRequests
+	publisher       plugindelivery.PluginPublishSignaler
+	republishBudget OperationBudget
 }
 
 func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMaterial string) *PluginsService {
@@ -403,6 +427,9 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		mutationBudget:        OperationBudget{},
 		mutationReceipts:      nil,
 		distributionAdmission: admission.NewGuard(nil, nil),
+		publication:           plugindelivery.PublicationRequests{Enabled: false},
+		publisher:             nil,
+		republishBudget:       OperationBudget{},
 	}
 }
 
@@ -848,22 +875,7 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 		}
 	}
 	if s.publicationEvidence != nil {
-		evidence, evidenceErr := s.publicationEvidence.ResolvePublicationEvidence(ctx, principal.OrganizationID, project.ID, []string{target.Slug})
-		if evidenceErr != nil || len(evidence) != 1 || evidence[0].PluginSlug != target.Slug {
-			// Package resolution can fail when a private address is incomplete.
-			// Preserve the admin inventory without claiming a package is current.
-			output.PublicationEvidence = &PluginPublicationEvidence{Unavailable: true, Packages: []PluginPublicationPackage{}}
-		} else {
-			packages := make([]PluginPublicationPackage, 0, len(evidence[0].Packages))
-			for _, pkg := range evidence[0].Packages {
-				packages = append(packages, PluginPublicationPackage{ServerName: pkg.ServerName, MCPURL: pkg.MCPURL})
-			}
-			output.PublicationEvidence = &PluginPublicationEvidence{
-				NotConfigured: evidence[0].NotConfigured,
-				Fresh:         evidence[0].Fresh,
-				Packages:      packages,
-			}
-		}
+		output.PublicationEvidence = s.readPublicationEvidence(ctx, principal, project.ID, target.Slug)
 	}
 	if s.distributionAdmissionRead != nil {
 		distributionAdmission := s.distributionAdmissionRead.ForPlugin(ctx, principal.OrganizationID, project.ID, target.ID)
