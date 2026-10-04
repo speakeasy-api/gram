@@ -238,7 +238,11 @@ type UpdateAssistantPayload struct {
 // service upgradeAssistantIdentity method.
 type UpgradeAssistantIdentityPayload struct {
 	// The assistant ID.
-	ID               string
+	ID string
+	// Existing agent identity to use instead of creating one.
+	AgentID *string
+	// Name for a new agent identity. Mutually exclusive with agent_id.
+	AgentName        *string
 	SessionToken     *string
 	ProjectSlugInput *string
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -25,11 +26,23 @@ type provisioningMetadata struct {
 	Generation              int64     `json:"generation"`
 }
 
-// Provision creates one dedicated identity, or returns the existing eligible
+// Provision creates an agent identity, or returns the existing eligible
 // binding. The caller owns the transaction, including assistant configuration.
 // A failed call must roll back the transaction, never commit its partial writes.
+type AgentSelection struct {
+	AgentID uuid.UUID
+	Name    string
+}
+
 func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (Binding, error) {
+	return s.ProvisionWithAgent(ctx, tx, p, AgentSelection{AgentID: uuid.Nil, Name: ""})
+}
+
+func (s *Service) ProvisionWithAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams, selection AgentSelection) (Binding, error) {
 	if s == nil {
+		return Binding{}, ErrInvalidIdentity
+	}
+	if selection.AgentID != uuid.Nil && selection.Name != "" {
 		return Binding{}, ErrInvalidIdentity
 	}
 	q := repo.New(tx)
@@ -65,6 +78,9 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (
 	}
 	old, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{CaptureSuspended: false, OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, AssistantID: p.AssistantID})
 	if err == nil {
+		if selection.AgentID != uuid.Nil && selection.AgentID != old.OriginalAgentID {
+			return Binding{}, ErrInvalidIdentity
+		}
 		if !old.Eligible {
 			return Binding{}, ErrTombstoned
 		}
@@ -92,23 +108,42 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (
 	if err != nil {
 		return Binding{}, fmt.Errorf("bound assistant grants: %w", err)
 	}
-	agent, err := agentrepo.New(tx).CreateAgent(ctx, agentrepo.CreateAgentParams{
-		OrganizationID: p.OrganizationID, ProjectID: uuid.NullUUID{UUID: p.ProjectID, Valid: true},
-		OwnerUserID: owner, Name: "Assistant " + p.AssistantID.String(),
-	})
-	if err != nil {
-		return Binding{}, fmt.Errorf("create dedicated assistant agent: %w", err)
-	}
-	principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
-	for _, grant := range grants {
-		selector, err := json.Marshal(grant.Selector)
+
+	var agent agentrepo.Agent
+	if selection.AgentID != uuid.Nil {
+		agent, err = agentrepo.New(tx).GetAgentByIDForUpdate(ctx, agentrepo.GetAgentByIDForUpdateParams{OrganizationID: p.OrganizationID, ID: selection.AgentID})
 		if err != nil {
-			return Binding{}, fmt.Errorf("encode assistant grant: %w", err)
+			return Binding{}, resourceError("load selected agent", err)
 		}
-		if _, err := accessrepo.New(tx).InsertPrincipalGrantIfAbsent(ctx, accessrepo.InsertPrincipalGrantIfAbsentParams{
-			OrganizationID: p.OrganizationID, PrincipalUrn: principal, Scope: string(grant.Scope), Selectors: selector,
-		}); err != nil {
-			return Binding{}, fmt.Errorf("write assistant grant: %w", err)
+		if agent.OwnerUserID != p.ActorUserID && !authz.GrantsSatisfy(actorPolicy, authz.Check{Scope: authz.ScopeAgentAuthorize, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil}) {
+			return Binding{}, ErrActorIneligible
+		}
+		if !agent.ProjectID.Valid || agent.ProjectID.UUID != p.ProjectID || agent.RevokedAt.Valid || agent.SuspendedAt.Valid || agent.OwnerReassignmentRequiredAt.Valid {
+			return Binding{}, ErrInvalidIdentity
+		}
+	} else {
+		name := strings.TrimSpace(selection.Name)
+		if name == "" {
+			name = "Assistant " + p.AssistantID.String()
+		}
+		agent, err = agentrepo.New(tx).CreateAgent(ctx, agentrepo.CreateAgentParams{
+			OrganizationID: p.OrganizationID, ProjectID: uuid.NullUUID{UUID: p.ProjectID, Valid: true},
+			OwnerUserID: owner, Name: name,
+		})
+		if err != nil {
+			return Binding{}, fmt.Errorf("create assistant agent: %w", err)
+		}
+		principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
+		for _, grant := range grants {
+			selector, err := json.Marshal(grant.Selector)
+			if err != nil {
+				return Binding{}, fmt.Errorf("encode assistant grant: %w", err)
+			}
+			if _, err := accessrepo.New(tx).InsertPrincipalGrantIfAbsent(ctx, accessrepo.InsertPrincipalGrantIfAbsentParams{
+				OrganizationID: p.OrganizationID, PrincipalUrn: principal, Scope: string(grant.Scope), Selectors: selector,
+			}); err != nil {
+				return Binding{}, fmt.Errorf("write assistant grant: %w", err)
+			}
 		}
 	}
 	if _, err := q.CreateAssistantBinding(ctx, repo.CreateAssistantBindingParams{

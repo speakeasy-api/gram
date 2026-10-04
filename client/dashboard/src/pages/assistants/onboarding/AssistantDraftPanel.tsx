@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
 import { useAssistantsDeleteMutation } from "@gram/client/react-query/assistantsDelete.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
@@ -28,7 +30,7 @@ import { AssistantTriggersList } from "./AssistantTriggersList";
 import { Section } from "./PanelSection";
 import { useAssistantDraft } from "./useAssistantDraft";
 
-const DETAIL_TABS = ["overview", "sessions", "triggers"] as const;
+const DETAIL_TABS = ["overview", "identity", "sessions", "triggers"] as const;
 type DetailTab = (typeof DETAIL_TABS)[number];
 
 function toDetailTab(value: string): DetailTab {
@@ -39,6 +41,7 @@ function toDetailTab(value: string): DetailTab {
 
 export function AssistantDraftPanel(): JSX.Element {
   const draft = useAssistantDraft();
+  const identityFlag = useFeatureFlag(FEATURE_FLAGS.agentCredentials);
   const routes = useRoutes();
   const project = useProject();
   const queryClient = useQueryClient();
@@ -132,6 +135,9 @@ export function AssistantDraftPanel(): JSX.Element {
           <div className="border-border border-b px-4">
             <PageTabsList className="h-auto gap-6 bg-transparent p-0">
               <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
+              {identityFlag.status === "enabled" && (
+                <PageTabsTrigger value="identity">Identity</PageTabsTrigger>
+              )}
               <PageTabsTrigger value="sessions">Sessions</PageTabsTrigger>
               <PageTabsTrigger value="triggers">Triggers</PageTabsTrigger>
             </PageTabsList>
@@ -143,11 +149,6 @@ export function AssistantDraftPanel(): JSX.Element {
           >
             <Stack gap={5}>
               <AssistantOverviewSettings
-                assistant={a}
-                onUpdated={() => void draft.refetchAssistant()}
-              />
-
-              <AssistantIdentitySettings
                 assistant={a}
                 onUpdated={() => void draft.refetchAssistant()}
               />
@@ -196,6 +197,16 @@ export function AssistantDraftPanel(): JSX.Element {
                 onUpdated={() => void draft.refetchAssistant()}
               />
             </Stack>
+          </TabsContent>
+
+          <TabsContent
+            value="identity"
+            className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+          >
+            <AssistantIdentitySettings
+              assistant={a}
+              onUpdated={() => void draft.refetchAssistant()}
+            />
           </TabsContent>
 
           <TabsContent

@@ -5,10 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  RiskIDRequestBody,
-  RiskIDRequestBody$Outbound,
-  RiskIDRequestBody$outboundSchema,
-} from "../components/riskidrequestbody.js";
+  UpgradeAssistantIdentityRequestBody,
+  UpgradeAssistantIdentityRequestBody$Outbound,
+  UpgradeAssistantIdentityRequestBody$outboundSchema,
+} from "../components/upgradeassistantidentityrequestbody.js";
 
 export type UpgradeAssistantIdentitySecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -24,7 +24,7 @@ export type UpgradeAssistantIdentityRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  riskIDRequestBody: RiskIDRequestBody;
+  upgradeAssistantIdentityRequestBody: UpgradeAssistantIdentityRequestBody;
 };
 
 /** @internal */
@@ -64,7 +64,8 @@ export function upgradeAssistantIdentitySecurityToJSON(
 export type UpgradeAssistantIdentityRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  RiskIDRequestBody: RiskIDRequestBody$Outbound;
+  UpgradeAssistantIdentityRequestBody:
+    UpgradeAssistantIdentityRequestBody$Outbound;
 };
 
 /** @internal */
@@ -75,13 +76,15 @@ export const UpgradeAssistantIdentityRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    riskIDRequestBody: RiskIDRequestBody$outboundSchema,
+    upgradeAssistantIdentityRequestBody:
+      UpgradeAssistantIdentityRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
-      riskIDRequestBody: "RiskIDRequestBody",
+      upgradeAssistantIdentityRequestBody:
+        "UpgradeAssistantIdentityRequestBody",
     });
   }),
 );

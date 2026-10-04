@@ -4,7 +4,7 @@ import { Text } from "@/components/ui/Text";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import type { Assistant } from "@gram/client/models/components/assistant.js";
 import { useAssistantsUpgradeIdentityMutation } from "@gram/client/react-query/assistantsUpgradeIdentity.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
@@ -12,14 +12,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
-import { Row, Section } from "./PanelSection";
-
-const healthLabels: Record<string, string> = {
-  legacy: "Legacy credentials",
-  ready: "Configured",
-  suspended: "Agent suspended",
-  unavailable: "Identity unavailable",
-};
+import { useAgents } from "@gram/client/react-query/agents.js";
+import { useAgent } from "@gram/client/react-query/agent.js";
+import { useSlackDirectoryMembers } from "@gram/client/react-query/slackDirectoryMembers.js";
+import { Bot } from "lucide-react";
+import { SESSION_SECURITY } from "@/pages/org/identity-provider/identityProviderQueries";
 
 export function AssistantIdentitySettings({
   assistant,
@@ -31,24 +28,34 @@ export function AssistantIdentitySettings({
   const identityFlag = useFeatureFlag(FEATURE_FLAGS.agentCredentials);
   const diagnostics = assistant.identityDiagnostics;
   const { hasScope } = useRBAC();
-  const routes = useRoutes();
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
+  const [selectedIdentity, setSelectedIdentity] = useState("new");
+  const [agentName, setAgentName] = useState(assistant.name);
+  const agentsQuery = useAgents({}, undefined, {
+    enabled: confirming,
+    throwOnError: false,
+  });
+  const agents = agentsQuery.data ?? [];
+  const creating = selectedIdentity === "new";
+  const nameTaken = agents.some(
+    (agent) =>
+      agent.name.toLocaleLowerCase() === agentName.trim().toLocaleLowerCase(),
+  );
+  const attributionName = creating
+    ? agentName.trim()
+    : agents.find((agent) => agent.id === selectedIdentity)?.name;
+  const validSelection =
+    !agentsQuery.isPending &&
+    !agentsQuery.isError &&
+    (creating ? !!agentName.trim() && !nameTaken : !!attributionName);
+
   const upgrade = useAssistantsUpgradeIdentityMutation({
-    onSuccess: (result) => {
+    onSuccess: () => {
       setConfirming(false);
       void invalidateAllAssistantsList(queryClient);
       onUpdated?.();
-      const messages = {
-        upgraded: "Assistant identity upgraded",
-        repaired: "Missing identity bindings repaired",
-        unchanged: "Assistant identity already configured; no changes made",
-      };
-      toast.success(
-        result.identityUpgradeOutcome
-          ? messages[result.identityUpgradeOutcome]
-          : "Assistant identity updated",
-      );
+      toast.success("Workloads set up");
     },
     onError: () => {
       toast.error(
@@ -57,153 +64,105 @@ export function AssistantIdentitySettings({
     },
   });
   const legacy = assistant.identityState === "NEVER_CONFIGURED";
-  const missingRoots = diagnostics?.bindings.some(
-    (binding) =>
-      binding.state === "missing" && binding.triggerStatus === "active",
-  );
-  // A bounded diagnostic page cannot prove that all active roots exist.
-  // The repair endpoint safely skips existing bindings.
-  const repairable =
-    diagnostics?.health === "ready" &&
-    (missingRoots || diagnostics.bindingsTruncated);
   const canUpgrade =
     hasScope("project:write", assistant.projectId) &&
     identityFlag.status === "enabled" &&
     diagnostics !== undefined &&
-    (legacy || repairable);
-  const action = legacy ? "Upgrade identity" : "Repair missing bindings";
+    legacy;
 
   if (identityFlag.status !== "enabled") return null;
 
+  if (!legacy) return <ConfiguredIdentity assistant={assistant} />;
+
   return (
-    <Section
-      title="Workload identity"
-      action={
-        canUpgrade ? (
-          <Button
-            variant="tertiary"
-            size="sm"
-            onClick={() => setConfirming(true)}
-          >
-            {action}
-          </Button>
-        ) : undefined
-      }
-    >
-      {!diagnostics ? (
-        <Text small muted>
-          Identity diagnostics are unavailable. Refresh to try again.
-        </Text>
-      ) : (
-        <>
-          <Row label="Health">
-            <Text small>{healthLabels[diagnostics.health] ?? "Unknown"}</Text>
-          </Row>
-          {assistant.agentId && (
-            <Row label="Acting agent">
-              <Link
-                className="text-xs underline"
-                to={routes.identities.detail.overview.href(
-                  encodeURIComponent(`agent:${assistant.agentId}`),
-                )}
-              >
-                View agent and access
-              </Link>
-            </Row>
-          )}
-          <Row label="Binding generation">
-            <Text small>
-              {assistant.identityGeneration ?? "Not configured"}
-            </Text>
-          </Row>
-          <div className="mt-2 space-y-1">
-            {diagnostics.bindings.map((binding) => (
-              <div
-                key={binding.triggerId}
-                className="rounded border border-border px-2 py-1 text-xs"
-              >
-                <div className="flex justify-between gap-2">
-                  <span>
-                    {binding.triggerKind} · {binding.triggerStatus}
-                  </span>
-                  <span>
-                    {binding.state} · generation {binding.generation}
-                  </span>
-                </div>
-                <div className="break-all text-muted-foreground">
-                  {binding.triggerId}
-                </div>
-              </div>
-            ))}
-            {diagnostics.bindingsTruncated && (
-              <Text small muted>
-                Showing the first 100 trigger roots.
-              </Text>
-            )}
-          </div>
-          {diagnostics.lastExecutionMode && (
-            <div className="mt-3">
-              <Row label="Last execution">
-                <Text small>{diagnostics.lastExecutionMode}</Text>
-              </Row>
-              <Row label="Event status">
-                <Text small>{diagnostics.lastEventStatus}</Text>
-              </Row>
-              {diagnostics.lastFallbackReason && (
-                <Row label="Selection reason">
-                  <Text small>{diagnostics.lastFallbackReason}</Text>
-                </Row>
-              )}
-              {diagnostics.lastInitiatingUserId && (
-                <Row label="Delegating user">
-                  <Text small>{diagnostics.lastInitiatingUserId}</Text>
-                </Row>
-              )}
-            </div>
-          )}
-          <Text small muted className="mt-3">
-            The agent acts for each message. A resolved user narrows business
-            access; otherwise execution is autonomous. Thread history and
-            replies are shared.
-          </Text>
-          <Text small muted className="mt-2">
-            Configured identity and user mapping do not grant business
-            permissions or OAuth consent. Existing consent is required;
-            execution-aware external OAuth is not enabled.
-          </Text>
-          {diagnostics.health === "suspended" && (
-            <Text small muted className="mt-2">
-              Token issuance is denied while the agent is suspended. The
-              assistant is not paused and never falls back to legacy
-              credentials.
-            </Text>
-          )}
-          {diagnostics.health === "unavailable" && (
-            <Text small muted className="mt-2">
-              Use existing agent and workload controls to inspect withdrawn
-              authority. Repair does not restore revoked identities.
-            </Text>
-          )}
-        </>
+    <div className="space-y-4">
+      <Text small muted>
+        This assistant uses legacy authentication bindings. Actions are
+        attributed to the owner.
+      </Text>
+      {canUpgrade && (
+        <Button size="sm" onClick={() => setConfirming(true)}>
+          Set up workloads
+        </Button>
       )}
       <Dialog open={confirming} onOpenChange={setConfirming}>
         <Dialog.Content>
           <Dialog.Header>
-            <Dialog.Title>{action}</Dialog.Title>
+            <Dialog.Title>Set up workloads</Dialog.Title>
             <Dialog.Description>
-              Confirm this exact assistant and project. This is an explicit
-              identity change, not a permission grant or OAuth consent.
+              Choose the agent identity for {assistant.name}.
             </Dialog.Description>
           </Dialog.Header>
-          <div className="space-y-2 break-all text-sm">
-            <p>{assistant.name}</p>
-            <p>Assistant: {assistant.id}</p>
-            <p>Project: {assistant.projectId}</p>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <label
+                htmlFor="assistant-agent-selection"
+                className="text-sm font-medium"
+              >
+                Agent identity
+              </label>
+              <select
+                id="assistant-agent-selection"
+                value={selectedIdentity}
+                onChange={(event) => setSelectedIdentity(event.target.value)}
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                disabled={upgrade.isPending}
+              >
+                <option value="new">Create new</option>
+                {agents.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {creating && (
+              <div className="space-y-2">
+                <label
+                  htmlFor="assistant-agent-name"
+                  className="text-sm font-medium"
+                >
+                  Identity name
+                </label>
+                <input
+                  id="assistant-agent-name"
+                  value={agentName}
+                  onChange={(event) => setAgentName(event.target.value)}
+                  maxLength={255}
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  disabled={upgrade.isPending}
+                  aria-invalid={nameTaken}
+                  aria-describedby={
+                    nameTaken ? "assistant-agent-name-error" : undefined
+                  }
+                />
+                {nameTaken && (
+                  <p
+                    id="assistant-agent-name-error"
+                    className="text-sm text-destructive"
+                  >
+                    An identity already uses this name. Choose a different name
+                    or select the existing identity.
+                  </p>
+                )}
+              </div>
+            )}
+            {agentsQuery.isError && (
+              <Text small muted>
+                Could not load agent identities. Close this dialog and try
+                again.
+              </Text>
+            )}
+            {attributionName && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/50 px-3 py-3 text-sm text-muted-foreground">
+                <span>Actions will be attributed to</span>
+                <span className="inline-flex items-center gap-1.5 rounded-md border bg-background px-2 py-1 font-medium text-foreground">
+                  <Bot aria-hidden="true" className="size-4" />
+                  {attributionName}
+                </span>
+              </div>
+            )}
           </div>
-          <Text small muted>
-            Existing bindings and revocation history are preserved. Missing live
-            roots can be provisioned, but revoked authority cannot be restored.
-          </Text>
           <Dialog.Footer>
             <Button
               variant="tertiary"
@@ -213,18 +172,71 @@ export function AssistantIdentitySettings({
               Cancel
             </Button>
             <Button
-              disabled={upgrade.isPending || !canUpgrade}
+              disabled={upgrade.isPending || !canUpgrade || !validSelection}
               onClick={() =>
                 upgrade.mutate({
-                  request: { riskIDRequestBody: { id: assistant.id } },
+                  request: {
+                    upgradeAssistantIdentityRequestBody: {
+                      id: assistant.id,
+                      ...(creating
+                        ? { agentName: agentName.trim() }
+                        : { agentId: selectedIdentity }),
+                    },
+                  },
                 })
               }
             >
-              {upgrade.isPending ? "Updating…" : "Confirm identity change"}
+              {upgrade.isPending ? "Setting up…" : "Confirm setup"}
             </Button>
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
-    </Section>
+    </div>
+  );
+}
+
+function ConfiguredIdentity({ assistant }: { assistant: Assistant }) {
+  const routes = useRoutes();
+  const orgRoutes = useOrgRoutes();
+  const { hasScope } = useRBAC();
+  const canManageMappings = hasScope("org:admin");
+  const agent = useAgent({ id: assistant.agentId ?? "" }, SESSION_SECURITY, {
+    enabled: !!assistant.agentId,
+    retry: false,
+    throwOnError: false,
+  });
+  const mappings = useSlackDirectoryMembers(
+    { mappingStatus: "mapped", limit: 1 },
+    SESSION_SECURITY,
+    { enabled: canManageMappings, retry: false, throwOnError: false },
+  );
+
+  return (
+    <div className="space-y-6">
+      {agent.data && assistant.agentId && (
+        <Link
+          className="inline-flex items-center gap-2 text-sm font-medium underline underline-offset-4"
+          to={routes.identities.detail.overview.href(
+            encodeURIComponent(`agent:${assistant.agentId}`),
+          )}
+        >
+          <Bot className="size-4 text-muted-foreground" aria-hidden="true" />
+          {agent.data.name}
+        </Link>
+      )}
+      {canManageMappings && mappings.data?.members.length === 0 && (
+        <div className="space-y-2">
+          <Text small muted>
+            Link assistant permissions to the user prompting it:
+          </Text>
+          <Link
+            className="text-sm font-medium underline underline-offset-4"
+            to={`${orgRoutes.identity.href()}?tab=slack-workspaces&slack_view=members`}
+          >
+            Set up Slack mapping
+          </Link>
+        </div>
+      )}
+    </div>
   );
 }

@@ -58,6 +58,10 @@ func (s *ServiceCore) hydrateAssistantIdentityState(ctx context.Context, project
 // UpgradeAssistantIdentity is opt-in for a legacy assistant. Its creator is
 // retained; the authenticated actor only authorizes provisioning now.
 func (s *ServiceCore) UpgradeAssistantIdentity(ctx context.Context, organizationID string, projectID, assistantID uuid.UUID, actorUserID string) (assistantRecord, error) {
+	return s.UpgradeAssistantIdentityWithAgent(ctx, organizationID, projectID, assistantID, actorUserID, assistantidentity.AgentSelection{AgentID: uuid.Nil, Name: ""})
+}
+
+func (s *ServiceCore) UpgradeAssistantIdentityWithAgent(ctx context.Context, organizationID string, projectID, assistantID uuid.UUID, actorUserID string, selection assistantidentity.AgentSelection) (assistantRecord, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("begin assistant identity upgrade: %w", err)
@@ -77,7 +81,7 @@ func (s *ServiceCore) UpgradeAssistantIdentity(ctx context.Context, organization
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("classify assistant identity upgrade: %w", err)
 	}
-	if _, err = s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: assistantID, ActorUserID: actorUserID}); err != nil {
+	if _, err = s.identities.ProvisionWithAgent(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: assistantID, ActorUserID: actorUserID}, selection); err != nil {
 		return assistantRecord{}, fmt.Errorf("assistant identity Upgrade: %w", err)
 	}
 	if _, err = s.ensureDashboardRootTx(ctx, tx, organizationID, projectID, assistantID, row.Name); err != nil {

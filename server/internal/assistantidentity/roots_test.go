@@ -9,9 +9,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	workloadrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
 func TestUpgradeNeverMintsContinuationWorkloads(t *testing.T) {
@@ -158,4 +160,52 @@ func TestRootBindingRejectsNoncanonicalAssistantTarget(t *testing.T) {
 			require.Equal(t, assistantidentity.Active, result.State)
 		})
 	}
+}
+
+func TestAssistantDeletionPreservesAgentAndUnrelatedWorkloads(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	id := f.provision(t)
+	q := repo.New(f.db)
+	const subject = "unrelated-workload"
+	require.NoError(t, q.CreateAdmission(t.Context(), repo.CreateAdmissionParams{OrganizationID: f.org, ProjectID: uuid.NullUUID{UUID: f.project, Valid: true}, IssuerID: id.IssuerID, Subject: subject}))
+	require.NoError(t, q.CreateAssignment(t.Context(), repo.CreateAssignmentParams{OrganizationID: f.org, IssuerID: id.IssuerID, Subject: subject, AgentID: id.AgentID}))
+	require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
+		return assistantidentity.TombstoneAssistant(t.Context(), tx, f.org, f.project, f.assistant)
+	}))
+	require.ErrorIs(t, testIdentityService.Validate(t.Context(), f.db, id), assistantidentity.ErrInvalidIdentity)
+	agent, err := agentrepo.New(f.db).GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: f.org, ID: id.AgentID})
+	require.NoError(t, err)
+	require.False(t, agent.RevokedAt.Valid)
+	require.False(t, agent.SuspendedAt.Valid)
+	admissions, err := workloadrepo.New(f.db).ListWorkloadAdmissions(t.Context(), workloadrepo.ListWorkloadAdmissionsParams{OrganizationID: f.org, ProjectID: uuid.NullUUID{UUID: f.project, Valid: true}})
+	require.NoError(t, err)
+	require.Len(t, admissions, 1)
+	require.Equal(t, subject, admissions[0].Subject)
+	live, err := q.FixtureLiveAssignmentCount(t.Context(), repo.FixtureLiveAssignmentCountParams{OrganizationID: f.org, AgentID: id.AgentID})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), live)
+}
+
+func TestProvisionSelectsExistingAgentWithoutChangingPolicy(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	agent, err := agentrepo.New(f.db).CreateAgent(t.Context(), agentrepo.CreateAgentParams{OrganizationID: f.org, ProjectID: uuid.NullUUID{UUID: f.project, Valid: true}, OwnerUserID: f.actor, Name: "Shared agent"})
+	require.NoError(t, err)
+	before, err := repo.New(f.db).FixtureAuthorityCounts(t.Context(), f.org)
+	require.NoError(t, err)
+	var binding assistantidentity.Binding
+	require.NoError(t, inTx(t, f.db, func(tx pgx.Tx) error {
+		var err error
+		binding, err = testIdentityService.ProvisionWithAgent(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: f.org, ProjectID: f.project, AssistantID: f.assistant, ActorUserID: f.actor}, assistantidentity.AgentSelection{AgentID: agent.ID, Name: ""})
+		if err != nil {
+			return fmt.Errorf("select existing agent: %w", err)
+		}
+		return nil
+	}))
+	require.Equal(t, agent.ID, binding.AgentID)
+	after, err := repo.New(f.db).FixtureAuthorityCounts(t.Context(), f.org)
+	require.NoError(t, err)
+	require.Equal(t, before.Agents, after.Agents)
+	require.Equal(t, before.Grants, after.Grants)
 }

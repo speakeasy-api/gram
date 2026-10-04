@@ -41,6 +41,10 @@ type CreateAssistantRequestBody struct {
 type UpgradeAssistantIdentityRequestBody struct {
 	// The assistant ID.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Existing agent identity to use instead of creating one.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Name for a new agent identity. Mutually exclusive with agent_id.
+	AgentName *string `form:"agent_name,omitempty" json:"agent_name,omitempty" xml:"agent_name,omitempty"`
 }
 
 // UpdateAssistantRequestBody is the type of the "assistants" service
@@ -2459,7 +2463,9 @@ func NewCreateAssistantRequestBody(p *assistants.CreateAssistantPayload) *Create
 // service.
 func NewUpgradeAssistantIdentityRequestBody(p *assistants.UpgradeAssistantIdentityPayload) *UpgradeAssistantIdentityRequestBody {
 	body := &UpgradeAssistantIdentityRequestBody{
-		ID: p.ID,
+		ID:        p.ID,
+		AgentID:   p.AgentID,
+		AgentName: p.AgentName,
 	}
 	return body
 }

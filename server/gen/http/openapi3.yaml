@@ -19397,7 +19397,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/RiskIDRequestBody'
+                            $ref: '#/components/schemas/UpgradeAssistantIdentityRequestBody'
                 required: true
             responses:
                 "200":
@@ -114306,6 +114306,24 @@ components:
                         type: string
                     description: Replaces the admission's tags; an empty list clears them. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
             description: Form for editing an admitted workload subject. Every field but id is optional; an omitted field is left unchanged.
+            required:
+                - id
+        UpgradeAssistantIdentityRequestBody:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: Existing agent identity to use instead of creating one.
+                    format: uuid
+                agent_name:
+                    type: string
+                    description: Name for a new agent identity. Mutually exclusive with agent_id.
+                    minLength: 1
+                    maxLength: 255
+                id:
+                    type: string
+                    description: The assistant ID.
+                    format: uuid
             required:
                 - id
         UploadChatAttachmentForm:

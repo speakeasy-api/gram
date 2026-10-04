@@ -24,9 +24,11 @@ type AssistantIdentityManagement interface {
 }
 
 type UpgradeAssistantIdentityInput struct {
-	ProjectID   string `json:"project_id" jsonschema:"exact project UUID owning the assistant; never inferred"`
-	AssistantID string `json:"assistant_id" jsonschema:"exact assistant UUID for an explicitly requested legacy upgrade or missing-active-root repair"`
-	Confirmed   bool   `json:"confirmed" jsonschema:"true only after the user explicitly confirms upgrading or repairing missing active trigger roots for this exact assistant in this exact project"`
+	AgentID     *string `json:"agent_id,omitempty" jsonschema:"Existing agent identity to assign; mutually exclusive with agent_name"`
+	AgentName   *string `json:"agent_name,omitempty" jsonschema:"Name for a new agent identity; mutually exclusive with agent_id"`
+	ProjectID   string  `json:"project_id" jsonschema:"exact project UUID owning the assistant; never inferred"`
+	AssistantID string  `json:"assistant_id" jsonschema:"exact assistant UUID for an explicitly requested legacy upgrade or missing-active-root repair"`
+	Confirmed   bool    `json:"confirmed" jsonschema:"true only after the user explicitly confirms upgrading or repairing missing active trigger roots for this exact assistant in this exact project"`
 }
 
 type UpgradeAssistantIdentityOutput struct {
@@ -77,7 +79,7 @@ func (s *assistantIdentityService) upgrade(ctx context.Context, principal Princi
 	// The shared endpoint enforces project:write and the ordinary actor policy.
 	// Its transaction locks and reads the exact assistant, performs the one-way
 	// idempotent upgrade, audits it atomically, then returns committed state.
-	assistant, err := s.management.UpgradeAssistantIdentity(ctx, &genassistants.UpgradeAssistantIdentityPayload{ID: assistantID.String(), SessionToken: nil, ProjectSlugInput: nil})
+	assistant, err := s.management.UpgradeAssistantIdentity(ctx, &genassistants.UpgradeAssistantIdentityPayload{AgentID: input.AgentID, AgentName: input.AgentName, ID: assistantID.String(), SessionToken: nil, ProjectSlugInput: nil})
 	if err != nil {
 		return zero, fmt.Errorf("upgrade assistant workload identity: %w", err)
 	}

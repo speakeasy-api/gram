@@ -7,6 +7,9 @@ import { AssistantIdentitySettings } from "./AssistantIdentitySettings";
 const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
   canWrite: true,
+  canManageMappings: true,
+  members: [] as unknown[],
+  agents: [] as { id: string; name: string }[],
   flagStatus: "enabled",
   success: vi.fn(),
   onSuccess: undefined as undefined | ((result: Assistant) => void),
@@ -23,13 +26,16 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasScope: (scope: string, resource?: string) => {
+      if (scope === "org:admin") return mocks.canManageMappings;
       expect(resource).toBe("22222222-2222-4222-8222-222222222222");
       return scope === "project:write" && mocks.canWrite;
     },
   }),
 }));
 vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
   useRoutes: () => ({
+    identity: { href: () => "/org/identity" },
     identities: {
       detail: { overview: { href: (id: string) => `/identities/${id}` } },
     },
@@ -42,6 +48,15 @@ vi.mock("@gram/client/react-query/assistantsUpgradeIdentity.js", () => ({
     mocks.onSuccess = options.onSuccess;
     return { mutate: mocks.mutate, isPending: false };
   },
+}));
+vi.mock("@gram/client/react-query/agents.js", () => ({
+  useAgents: () => ({ data: mocks.agents, isPending: false, isError: false }),
+}));
+vi.mock("@gram/client/react-query/agent.js", () => ({
+  useAgent: () => ({ data: { name: "Example agent" } }),
+}));
+vi.mock("@gram/client/react-query/slackDirectoryMembers.js", () => ({
+  useSlackDirectoryMembers: () => ({ data: { members: mocks.members } }),
 }));
 const assistant: Assistant = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -77,169 +92,125 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.canWrite = true;
+  mocks.canManageMappings = true;
+  mocks.members = [];
+  mocks.agents = [];
   mocks.flagStatus = "enabled";
 });
 describe("Assistant identity management", () => {
-  it.each([
-    ["upgraded", "Assistant identity upgraded"],
-    ["repaired", "Missing identity bindings repaired"],
-    ["unchanged", "Assistant identity already configured; no changes made"],
-  ] as const)("reports the server's %s outcome", (outcome, message) => {
+  it("requires a different new name when the assistant name is already used", () => {
+    mocks.agents = [
+      { id: "existing-agent", name: assistant.name.toUpperCase() },
+    ];
     setup();
-    mocks.onSuccess?.({ ...assistant, identityUpgradeOutcome: outcome });
-    expect(mocks.success).toHaveBeenCalledWith(message);
-  });
-  it("requires exact-target confirmation and preserves shared context guidance", () => {
-    setup();
+    fireEvent.click(screen.getByRole("button", { name: "Set up workloads" }));
     expect(
-      screen.getByText(/Thread history and replies are shared/),
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Upgrade identity" }));
-    expect(mocks.mutate).not.toHaveBeenCalled();
-    expect(screen.getByText(`Assistant: ${assistant.id}`)).toBeTruthy();
-    expect(screen.getByText(`Project: ${assistant.projectId}`)).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Confirm identity change" }),
-    );
+      (
+        screen.getByRole("button", {
+          name: "Confirm setup",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    fireEvent.change(screen.getByLabelText("Identity name"), {
+      target: { value: "New identity" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm setup" }));
     expect(mocks.mutate).toHaveBeenCalledWith({
-      request: { riskIDRequestBody: { id: assistant.id } },
+      request: {
+        upgradeAssistantIdentityRequestBody: {
+          id: assistant.id,
+          agentName: "New identity",
+        },
+      },
     });
   });
-  it("hides mutation without project write", () => {
+  it("submits the selected existing identity without creating another", () => {
+    mocks.agents = [{ id: "existing-agent", name: "Shared identity" }];
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: "Set up workloads" }));
+    fireEvent.change(screen.getByLabelText("Agent identity"), {
+      target: { value: "existing-agent" },
+    });
+    expect(screen.queryByLabelText("Identity name")).toBeNull();
+    expect(screen.getByText("Actions will be attributed to")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm setup" }));
+    expect(mocks.mutate).toHaveBeenCalledWith({
+      request: {
+        upgradeAssistantIdentityRequestBody: {
+          id: assistant.id,
+          agentId: "existing-agent",
+        },
+      },
+    });
+  });
+
+  it("shows only legacy attribution and setup before confirmation", () => {
+    setup();
+    expect(
+      screen.getByText(
+        "This assistant uses legacy authentication bindings. Actions are attributed to the owner.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Health|generation|Thread history/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Set up workloads" }));
+    expect(mocks.mutate).not.toHaveBeenCalled();
+    expect(screen.queryByText(assistant.id)).toBeNull();
+    expect(screen.queryByText(assistant.projectId)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm setup" }));
+    expect(mocks.mutate).toHaveBeenCalledWith({
+      request: {
+        upgradeAssistantIdentityRequestBody: {
+          id: assistant.id,
+          agentName: assistant.name,
+        },
+      },
+    });
+  });
+  it("hides setup without project write", () => {
     mocks.canWrite = false;
     setup();
-    expect(screen.getByText("Workload identity")).toBeTruthy();
     expect(
-      screen.queryByRole("button", { name: "Upgrade identity" }),
+      screen.queryByRole("button", { name: "Set up workloads" }),
     ).toBeNull();
   });
-  it.each(["loading", "disabled", "missing", "error"])(
-    "hides identity management when the existing feature gate is %s",
-    (status) => {
-      mocks.flagStatus = status;
-      setup();
-      expect(screen.queryByText("Workload identity")).toBeNull();
-      expect(
-        screen.queryByRole("button", { name: "Upgrade identity" }),
-      ).toBeNull();
-    },
-  );
-  it("does not offer an upgrade without diagnostics", () => {
-    setup({ ...assistant, identityDiagnostics: undefined });
+  it("respects the existing organization feature gate", () => {
+    mocks.flagStatus = "disabled";
+    setup();
+    expect(screen.queryByText(/legacy authentication/)).toBeNull();
+  });
+  it("links the assigned identity by name without diagnostics", () => {
+    setup({ ...assistant, identityState: "ACTIVE", agentId: "example-agent" });
     expect(
-      screen.queryByRole("button", { name: "Upgrade identity" }),
+      screen.getByRole("link", { name: "Example agent" }).getAttribute("href"),
+    ).toBe("/identities/agent%3Aexample-agent");
+    expect(screen.queryByText("example-agent")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Set up workloads" }),
     ).toBeNull();
   });
-  it("does not offer to repair suspended or withdrawn authority", () => {
-    for (const health of ["suspended", "unavailable"] as const) {
-      cleanup();
-      setup({
-        ...assistant,
-        identityState: "ACTIVE",
-        identityDiagnostics: {
-          ...assistant.identityDiagnostics!,
-          health,
-          bindings: [
-            {
-              triggerId: "root",
-              triggerKind: "slack",
-              triggerStatus: "active",
-              generation: 1,
-              state: "missing",
-            },
-          ],
-        },
-      });
-      expect(
-        screen.queryByRole("button", { name: "Repair missing bindings" }),
-      ).toBeNull();
-    }
-  });
-  it("offers a confirmed idempotent repair when diagnostics are truncated", () => {
-    setup({
-      ...assistant,
-      identityState: "ACTIVE",
-      identityDiagnostics: {
-        ...assistant.identityDiagnostics!,
-        health: "ready",
-        bindingsTruncated: true,
-        bindings: [
-          {
-            triggerId: "visible-root",
-            triggerKind: "slack",
-            triggerStatus: "active",
-            generation: 1,
-            state: "ready",
-          },
-        ],
-      },
-    });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Repair missing bindings" }),
-    );
-    expect(mocks.mutate).not.toHaveBeenCalled();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Confirm identity change" }),
-    );
-    expect(mocks.mutate).toHaveBeenCalledWith({
-      request: { riskIDRequestBody: { id: assistant.id } },
-    });
-  });
-  it.each([
-    { canWrite: false, health: "ready" },
-    { canWrite: true, health: "suspended" },
-    { canWrite: true, health: "unavailable" },
-  ] as const)(
-    "preserves repair gates for truncated diagnostics: %o",
-    ({ canWrite, health }) => {
-      mocks.canWrite = canWrite;
-      setup({
-        ...assistant,
-        identityState: "ACTIVE",
-        identityDiagnostics: {
-          ...assistant.identityDiagnostics!,
-          health,
-          bindingsTruncated: true,
-        },
-      });
-      expect(
-        screen.queryByRole("button", { name: "Repair missing bindings" }),
-      ).toBeNull();
-    },
-  );
-  it("does not offer repair for complete diagnostics without missing roots", () => {
-    setup({
-      ...assistant,
-      identityState: "ACTIVE",
-      identityDiagnostics: {
-        ...assistant.identityDiagnostics!,
-        health: "ready",
-      },
-    });
+  it("links to Slack mapping setup when no mappings exist", () => {
+    setup({ ...assistant, identityState: "ACTIVE", agentId: "example-agent" });
     expect(
-      screen.queryByRole("button", { name: "Repair missing bindings" }),
-    ).toBeNull();
-  });
-  it("offers repair only for missing roots on a configured identity", () => {
-    setup({
-      ...assistant,
-      identityState: "ACTIVE",
-      identityDiagnostics: {
-        ...assistant.identityDiagnostics!,
-        health: "ready",
-        bindings: [
-          {
-            triggerId: "root",
-            triggerKind: "slack",
-            triggerStatus: "active",
-            generation: 0,
-            state: "missing",
-          },
-        ],
-      },
-    });
-    expect(
-      screen.getByRole("button", { name: "Repair missing bindings" }),
+      screen.getByText("Link assistant permissions to the user prompting it:"),
     ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Set up Slack mapping" })
+        .getAttribute("href"),
+    ).toBe("/org/identity?tab=slack-workspaces&slack_view=members");
+  });
+  it("does not offer setup when a Slack mapping exists", () => {
+    mocks.members = [{}];
+    setup({ ...assistant, identityState: "ACTIVE", agentId: "example-agent" });
+    expect(
+      screen.queryByRole("link", { name: "Set up Slack mapping" }),
+    ).toBeNull();
+  });
+  it("does not offer admin-only mapping setup to members", () => {
+    mocks.canManageMappings = false;
+    setup({ ...assistant, identityState: "ACTIVE", agentId: "example-agent" });
+    expect(
+      screen.queryByRole("link", { name: "Set up Slack mapping" }),
+    ).toBeNull();
   });
 });

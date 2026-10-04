@@ -266,13 +266,17 @@ func (s *Service) changeOwner(ctx context.Context, rawID, ownerUserID string, ex
 
 		var after repo.Agent
 		if explicitReassignment {
-			after, err = repo.New(tx).ReassignAgent(ctx, repo.ReassignAgentParams{
+			var changed repo.ReassignAgentRow
+			changed, err = repo.New(tx).ReassignAgent(ctx, repo.ReassignAgentParams{
 				OwnerUserID: ownerUserID, OrganizationID: human.Auth.ActiveOrganizationID, ID: before.ID,
 			})
+			after = repo.Agent(changed)
 		} else {
-			after, err = repo.New(tx).TransferAgent(ctx, repo.TransferAgentParams{
+			var changed repo.TransferAgentRow
+			changed, err = repo.New(tx).TransferAgent(ctx, repo.TransferAgentParams{
 				OwnerUserID: ownerUserID, OrganizationID: human.Auth.ActiveOrganizationID, ID: before.ID,
 			})
+			after = repo.Agent(changed)
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeConflict, nil, "agent ownership transition is not allowed")

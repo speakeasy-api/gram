@@ -718,13 +718,13 @@ func (q *Queries) GetAssistant(ctx context.Context, arg GetAssistantParams) (Get
 
 const getAssistantBinding = `-- name: GetAssistantBinding :one
 SELECT b.id, b.original_assistant_id, b.original_agent_id, b.generation, b.deleted,
-  (b.deleted OR b.project_ref_id IS NULL OR b.assistant_id IS NULL OR b.agent_id IS NULL OR g.deleted OR g.revoked_at IS NOT NULL OR g.owner_reassignment_required_at IS NOT NULL OR (a.created_by_user_id IS NOT NULL AND g.owner_user_id IS DISTINCT FROM a.created_by_user_id))::boolean AS tombstoned,
+  (b.deleted OR b.project_ref_id IS NULL OR b.assistant_id IS NULL OR b.agent_id IS NULL OR g.deleted OR g.revoked_at IS NOT NULL OR g.owner_reassignment_required_at IS NOT NULL)::boolean AS tombstoned,
   COALESCE(NOT b.deleted AND b.project_ref_id IS NOT NULL AND b.assistant_id IS NOT NULL
     AND b.agent_id = b.original_agent_id AND b.assistant_id = b.original_assistant_id
     AND b.project_ref_id = b.project_id AND NOT p.deleted AND NOT a.deleted
     AND NOT g.deleted AND (g.suspended_at IS NULL OR $1::boolean) AND g.revoked_at IS NULL
     AND g.owner_reassignment_required_at IS NULL
-    AND (a.created_by_user_id IS NULL OR g.owner_user_id = a.created_by_user_id) AND u.deleted_at IS NULL
+    AND u.deleted_at IS NULL
     AND u.workos_deleted_at IS NULL AND NOT m.deleted AND m.user_id IS NOT NULL, false)::boolean AS eligible
 FROM assistant_agent_bindings b
 LEFT JOIN projects p ON p.organization_id = b.organization_id AND p.id = b.project_ref_id

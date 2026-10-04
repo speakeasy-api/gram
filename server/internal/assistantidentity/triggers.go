@@ -211,14 +211,14 @@ func tombstoneTrigger(ctx context.Context, tx pgx.Tx, org string, project, trigg
 	return nil
 }
 
-// TombstoneAssistant withdraws all current root and agent wake authority,
-// including assignments not reachable through a now-deleted root reference.
+// TombstoneAssistant withdraws only this assistant's root authority.
+// The agent and its unrelated workload assignments have independent lifetimes.
 func TombstoneAssistant(ctx context.Context, tx pgx.Tx, org string, project, assistant uuid.UUID) error {
 	q := repo.New(tx)
 	if err := lockAssistant(ctx, q, org, project, assistant); err != nil {
 		return err
 	}
-	b, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{CaptureSuspended: false, OrganizationID: org, ProjectID: project, AssistantID: assistant})
+	_, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{CaptureSuspended: false, OrganizationID: org, ProjectID: project, AssistantID: assistant})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -226,9 +226,6 @@ func TombstoneAssistant(ctx context.Context, tx pgx.Tx, org string, project, ass
 		return fmt.Errorf("read assistant authority for withdrawal: %w", err)
 	}
 
-	if err := q.RevokeDedicatedAgent(ctx, repo.RevokeDedicatedAgentParams{OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}, AgentID: b.OriginalAgentID}); err != nil {
-		return fmt.Errorf("revoke dedicated agent: %w", err)
-	}
 	roots, err := q.ListAssistantTriggerHistory(ctx, repo.ListAssistantTriggerHistoryParams{OrganizationID: org, ProjectID: project, AssistantID: assistant})
 	if err != nil {
 		return fmt.Errorf("list assistant authority history: %w", err)
@@ -237,12 +234,6 @@ func TombstoneAssistant(ctx context.Context, tx pgx.Tx, org string, project, ass
 		if err := tombstoneTrigger(ctx, tx, org, project, trigger); err != nil {
 			return err
 		}
-	}
-	if err := q.RevokeDedicatedAdmissions(ctx, repo.RevokeDedicatedAdmissionsParams{OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}, AgentID: b.OriginalAgentID}); err != nil {
-		return fmt.Errorf("revoke dedicated admissions: %w", err)
-	}
-	if err := q.RevokeDedicatedAssignments(ctx, repo.RevokeDedicatedAssignmentsParams{OrganizationID: org, AgentID: b.OriginalAgentID}); err != nil {
-		return fmt.Errorf("revoke dedicated assignments: %w", err)
 	}
 	if err := q.TombstoneAssistantBinding(ctx, repo.TombstoneAssistantBindingParams{OrganizationID: org, ProjectID: project, AssistantID: assistant}); err != nil {
 		return fmt.Errorf("tombstone assistant binding: %w", err)

@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -521,6 +524,16 @@ func (s *Service) startRuntimeWarmup(ctx context.Context, record assistantRecord
 }
 
 func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error, message string) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+		if pgErr.ConstraintName == "agents_organization_name_key" {
+			return oops.E(oops.CodeConflict, err, "an agent identity already uses this name").LogError(ctx, logger)
+		}
+		if pgErr.ConstraintName == "assistant_agent_bindings_live_agent_key" {
+			return oops.E(oops.CodeConflict, err, "this identity is already assigned to another assistant").LogError(ctx, logger)
+		}
+	}
+
 	switch {
 	case errors.Is(err, pgx.ErrNoRows), errors.Is(err, assistantidentity.ErrNotFound):
 		return oops.E(oops.CodeNotFound, err, "%s", message).LogError(ctx, logger)
@@ -589,7 +602,20 @@ func (s *Service) UpgradeAssistantIdentity(ctx context.Context, payload *gen.Upg
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id")
 	}
-	record, err := s.core.UpgradeAssistantIdentity(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, id, authCtx.UserID)
+	selection := assistantidentity.AgentSelection{AgentID: uuid.Nil, Name: ""}
+	if payload.AgentID != nil {
+		selection.AgentID, err = uuid.Parse(*payload.AgentID)
+		if err != nil || selection.AgentID == uuid.Nil {
+			return nil, oops.C(oops.CodeBadRequest)
+		}
+	}
+	if payload.AgentName != nil {
+		selection.Name = strings.TrimSpace(*payload.AgentName)
+		if selection.Name == "" || payload.AgentID != nil {
+			return nil, oops.C(oops.CodeBadRequest)
+		}
+	}
+	record, err := s.core.UpgradeAssistantIdentityWithAgent(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, id, authCtx.UserID, selection)
 	if err != nil {
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "upgrade assistant identity")
 	}

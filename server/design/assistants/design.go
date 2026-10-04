@@ -86,6 +86,8 @@ var _ = Service("assistants", func() {
 		Description("Explicitly upgrade one legacy assistant or repair missing live trigger bindings for its existing identity. Requires authorized project write access and enabled provisioning. Idempotent; never widens existing policy or restores revoked identities. Existing assistants are never upgraded implicitly.")
 		Payload(func() {
 			Attribute("id", String, "The assistant ID.", func() { Format(FormatUUID) })
+			Attribute("agent_id", String, "Existing agent identity to use instead of creating one.", func() { Format(FormatUUID) })
+			Attribute("agent_name", String, "Name for a new agent identity. Mutually exclusive with agent_id.", func() { MinLength(1); MaxLength(255) })
 			Required("id")
 			security.SessionPayload()
 			security.ProjectPayload()
