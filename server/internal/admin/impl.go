@@ -82,6 +82,10 @@ type Service struct {
 	// workosEnvironmentID scopes WorkOS dashboard links. Empty leaves them out.
 	workosEnvironmentID string
 
+	// stripeDashboardBase roots Stripe dashboard links in the API key's mode.
+	// Empty leaves them out.
+	stripeDashboardBase string
+
 	// workos creates organizations in the identity provider. Deployments with
 	// no WorkOS configuration get orgprovision.Unavailable, whose failure
 	// CreateOrganization reports rather than working around.
@@ -226,7 +230,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", registry: registry,
+	return &Service{remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:         logger,
 		db:             db,
@@ -1934,45 +1938,49 @@ func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizat
 
 func (s *Service) adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrganization {
 	return &gen.AdminOrganization{
-		ID:                   row.ID,
-		Name:                 row.Name,
-		Slug:                 row.Slug,
-		AccountType:          row.AccountType,
-		WorkosID:             conv.FromPGText[string](row.WorkosID),
-		WorkosDashboardURL:   s.workosDashboardURL(row.WorkosID),
-		StripeCustomerID:     conv.FromPGText[string](row.StripeCustomerID),
-		StripeSubscriptionID: conv.FromPGText[string](row.StripeSubscriptionID),
-		Whitelisted:          row.Whitelisted,
-		DisabledAt:           pgTimestampPtr(row.DisabledAt),
-		TrialState:           &row.TrialState,
-		TrialTier:            conv.FromPGText[string](row.TrialTier),
-		TrialEndsAt:          pgTimestampPtr(row.TrialEndsAt),
-		TrialConvertedAt:     pgTimestampPtr(row.TrialConvertedAt),
-		TrialDemotedAt:       pgTimestampPtr(row.TrialDemotedAt),
-		CreationSource:       conv.FromPGText[string](row.CreationSource),
-		MemberCount:          int(row.MemberCount),
-		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                             row.ID,
+		Name:                           row.Name,
+		Slug:                           row.Slug,
+		AccountType:                    row.AccountType,
+		WorkosID:                       conv.FromPGText[string](row.WorkosID),
+		WorkosDashboardURL:             s.workosDashboardURL(row.WorkosID),
+		StripeCustomerID:               conv.FromPGText[string](row.StripeCustomerID),
+		StripeSubscriptionID:           conv.FromPGText[string](row.StripeSubscriptionID),
+		StripeCustomerDashboardURL:     s.stripeCustomerDashboardURL(row.StripeCustomerID),
+		StripeSubscriptionDashboardURL: s.stripeSubscriptionDashboardURL(row.StripeSubscriptionID),
+		Whitelisted:                    row.Whitelisted,
+		DisabledAt:                     pgTimestampPtr(row.DisabledAt),
+		TrialState:                     &row.TrialState,
+		TrialTier:                      conv.FromPGText[string](row.TrialTier),
+		TrialEndsAt:                    pgTimestampPtr(row.TrialEndsAt),
+		TrialConvertedAt:               pgTimestampPtr(row.TrialConvertedAt),
+		TrialDemotedAt:                 pgTimestampPtr(row.TrialDemotedAt),
+		CreationSource:                 conv.FromPGText[string](row.CreationSource),
+		MemberCount:                    int(row.MemberCount),
+		CreatedAt:                      row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                      row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 
 func (s *Service) adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *gen.AdminOrganization {
 	return &gen.AdminOrganization{
-		ID:                   row.ID,
-		Name:                 row.Name,
-		Slug:                 row.Slug,
-		AccountType:          row.AccountType,
-		WorkosID:             conv.FromPGText[string](row.WorkosID),
-		WorkosDashboardURL:   s.workosDashboardURL(row.WorkosID),
-		StripeCustomerID:     conv.FromPGText[string](row.StripeCustomerID),
-		StripeSubscriptionID: conv.FromPGText[string](row.StripeSubscriptionID),
-		Whitelisted:          row.Whitelisted,
-		DisabledAt:           pgTimestampPtr(row.DisabledAt),
-		TrialState:           &row.TrialState,
-		TrialTier:            nil,
-		TrialEndsAt:          pgTimestampPtr(row.TrialEndsAt),
-		TrialConvertedAt:     nil,
-		TrialDemotedAt:       nil,
+		ID:                             row.ID,
+		Name:                           row.Name,
+		Slug:                           row.Slug,
+		AccountType:                    row.AccountType,
+		WorkosID:                       conv.FromPGText[string](row.WorkosID),
+		WorkosDashboardURL:             s.workosDashboardURL(row.WorkosID),
+		StripeCustomerID:               conv.FromPGText[string](row.StripeCustomerID),
+		StripeSubscriptionID:           conv.FromPGText[string](row.StripeSubscriptionID),
+		StripeCustomerDashboardURL:     s.stripeCustomerDashboardURL(row.StripeCustomerID),
+		StripeSubscriptionDashboardURL: s.stripeSubscriptionDashboardURL(row.StripeSubscriptionID),
+		Whitelisted:                    row.Whitelisted,
+		DisabledAt:                     pgTimestampPtr(row.DisabledAt),
+		TrialState:                     &row.TrialState,
+		TrialTier:                      nil,
+		TrialEndsAt:                    pgTimestampPtr(row.TrialEndsAt),
+		TrialConvertedAt:               nil,
+		TrialDemotedAt:                 nil,
 		// The list does not select it. The record view asks for one organization
 		// and reads it there, like trial_tier above.
 		CreationSource: nil,

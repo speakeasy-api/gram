@@ -62,9 +62,17 @@ export type AdminOrganization = {
    */
   slug: string;
   /**
+   * Link to the Stripe customer in the Stripe dashboard. Absent when the organization has no Stripe customer or the deployment has no Stripe API key configured.
+   */
+  stripeCustomerDashboardUrl?: string | undefined;
+  /**
    * Stripe customer ID, if billing metadata has a customer.
    */
   stripeCustomerId?: string | undefined;
+  /**
+   * Link to the Stripe subscription in the Stripe dashboard. Absent when the organization has no Stripe subscription or the deployment has no Stripe API key configured.
+   */
+  stripeSubscriptionDashboardUrl?: string | undefined;
   /**
    * Current Stripe subscription ID, if subscribed.
    */
@@ -130,7 +138,9 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
     member_count: z.int(),
     name: z.string(),
     slug: z.string(),
+    stripe_customer_dashboard_url: z.optional(z.string()),
     stripe_customer_id: z.optional(z.string()),
+    stripe_subscription_dashboard_url: z.optional(z.string()),
     stripe_subscription_id: z.optional(z.string()),
     trial_converted_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -158,7 +168,9 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
       "creation_source": "creationSource",
       "disabled_at": "disabledAt",
       "member_count": "memberCount",
+      "stripe_customer_dashboard_url": "stripeCustomerDashboardUrl",
       "stripe_customer_id": "stripeCustomerId",
+      "stripe_subscription_dashboard_url": "stripeSubscriptionDashboardUrl",
       "stripe_subscription_id": "stripeSubscriptionId",
       "trial_converted_at": "trialConvertedAt",
       "trial_demoted_at": "trialDemotedAt",
