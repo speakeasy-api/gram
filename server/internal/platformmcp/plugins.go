@@ -1200,9 +1200,16 @@ func pluginFromInventoryRow(row platformrepo.ListPlatformMCPPluginInventoryRow) 
 func (s *PluginsService) lastPublish(ctx context.Context, projectID uuid.UUID) *PluginLastPublish {
 	result := &PluginLastPublish{Unavailable: true}
 	// The connection row is written only in the transaction that records a
-	// publish after its push, so updated_at is the last recorded publish.
-	if conn, err := pluginsrepo.New(s.db).GetGitHubConnection(ctx, projectID); err == nil && conn.UpdatedAt.Valid {
+	// publish after its push, so updated_at is the last recorded publish. No
+	// row means no publish has ever been recorded: republish_plugin refuses
+	// such a project as not_configured, so failure advice must not offer it.
+	firstPublish := false
+	conn, err := pluginsrepo.New(s.db).GetGitHubConnection(ctx, projectID)
+	switch {
+	case err == nil && conn.UpdatedAt.Valid:
 		result.LastRecordedPublishAt = conn.UpdatedAt.Time.UTC().Format(time.RFC3339)
+	case errors.Is(err, pgx.ErrNoRows):
+		firstPublish = true
 	}
 	if s.publishStatus == nil {
 		return result
@@ -1223,7 +1230,7 @@ func (s *PluginsService) lastPublish(ctx context.Context, projectID uuid.UUID) *
 	}
 	result.Attempt = status.Attempt
 	result.FailureCategory = status.FailureCategory
-	result.FailureMessage = publishFailureMessage(status.FailureCategory)
+	result.FailureMessage = publishFailureMessage(status.FailureCategory, firstPublish)
 	return result
 }
 
@@ -1232,19 +1239,30 @@ func (s *PluginsService) lastPublish(ctx context.Context, projectID uuid.UUID) *
 // dashboard is named alongside it.
 const publishRetryAdvice = "An administrator can republish it with republish_plugin on an external Platform MCP connection, or from the AICP dashboard; contact Speakeasy support if it keeps failing."
 
+// firstPublishRetryAdvice replaces publishRetryAdvice when no publish has
+// ever been recorded for the project. republish_plugin refuses such a
+// project as not_configured, so offering it would only cost the administrator
+// a confirmation before the same dead end.
+const firstPublishRetryAdvice = "This project's first marketplace publish has not completed, so republish_plugin cannot retry it. An administrator can publish from the AICP dashboard; contact Speakeasy support if it keeps failing."
+
 // publishFailureMessage is the fixed explanation shown for a failure category.
 // It is the only failure text an agent sees, so it names the next step and
-// nothing from the underlying error.
-func publishFailureMessage(category publishstatus.FailureCategory) string {
+// nothing from the underlying error. firstPublish selects advice that does
+// not offer republish_plugin, which refuses a project with no recorded publish.
+func publishFailureMessage(category publishstatus.FailureCategory, firstPublish bool) string {
+	advice := publishRetryAdvice
+	if firstPublish {
+		advice = firstPublishRetryAdvice
+	}
 	switch category {
 	case publishstatus.FailureRepositoryConflict:
 		return "The marketplace repository name for this project is already claimed by another project. Republishing cannot fix this; contact Speakeasy support."
 	case publishstatus.FailureTimedOut:
-		return "The publish did not finish in time. " + publishRetryAdvice
+		return "The publish did not finish in time. " + advice
 	case publishstatus.FailureCanceled:
-		return "The publish was stopped before it finished. " + publishRetryAdvice
+		return "The publish was stopped before it finished. " + advice
 	case publishstatus.FailurePublishFailed:
-		return "The publish failed. " + publishRetryAdvice
+		return "The publish failed. " + advice
 	case publishstatus.FailureNone:
 		return ""
 	default:
