@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -18,6 +19,13 @@ type PublicationEvidence struct {
 	NotConfigured bool
 	Fresh         *bool
 	Packages      []PublicationPackageAddress
+
+	// LastSuccessfulPushAt is the last successful push of a package to the
+	// project's marketplace repository: the connection row's updated_at, which
+	// is written only after a push succeeds. Failed attempts and publishes that
+	// find nothing to change never move it. Nil when the project has never
+	// published.
+	LastSuccessfulPushAt *time.Time
 }
 
 // PublicationPackageAddress is the resolved address used by a plugin package.
@@ -87,13 +95,20 @@ func (s *Service) ResolvePublicationEvidence(ctx context.Context, organizationID
 	if err != nil {
 		return nil, fmt.Errorf("compute publication fingerprints: %w", err)
 	}
+	// The connection row is written only by the upsert that follows a
+	// successful push, so its updated_at is the last successful push.
+	var lastSuccessfulPushAt *time.Time
+	if conn.UpdatedAt.Valid {
+		lastSuccessfulPushAt = &conn.UpdatedAt.Time
+	}
 	result := make([]PublicationEvidence, 0, len(selectedInfos))
 	for _, info := range selectedInfos {
 		result = append(result, PublicationEvidence{
-			PluginSlug:    info.Slug,
-			NotConfigured: false,
-			Fresh:         publicationFreshness(conn.PublishedMcpFingerprints, fingerprints, info.Slug),
-			Packages:      publicationAddresses(info),
+			PluginSlug:           info.Slug,
+			NotConfigured:        false,
+			Fresh:                publicationFreshness(conn.PublishedMcpFingerprints, fingerprints, info.Slug),
+			Packages:             publicationAddresses(info),
+			LastSuccessfulPushAt: lastSuccessfulPushAt,
 		})
 	}
 	return result, nil
@@ -118,10 +133,11 @@ func evidenceWithAddresses(infos []PluginInfo, fresh *bool, notConfigured bool) 
 	result := make([]PublicationEvidence, 0, len(infos))
 	for _, info := range infos {
 		result = append(result, PublicationEvidence{
-			PluginSlug:    info.Slug,
-			NotConfigured: notConfigured,
-			Fresh:         fresh,
-			Packages:      publicationAddresses(info),
+			PluginSlug:           info.Slug,
+			NotConfigured:        notConfigured,
+			Fresh:                fresh,
+			Packages:             publicationAddresses(info),
+			LastSuccessfulPushAt: nil,
 		})
 	}
 	return result

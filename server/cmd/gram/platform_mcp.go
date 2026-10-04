@@ -410,6 +410,11 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		Connection:   ratelimit.New(limitStore, platformmcp.PluginRepublishConnectionLimitName, ratelimit.PerMinute(platformmcp.PluginRepublishesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		Organization: ratelimit.New(limitStore, platformmcp.PluginRepublishOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginRepublishesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 	})
+	// Without Temporal there is no publish workflow to describe, so the latest
+	// attempt is reported as unavailable rather than as a call that always fails.
+	if config.TemporalEnv != nil {
+		pluginInventory.WithPublishStatus(&background.TemporalPluginPublisher{TemporalEnv: config.TemporalEnv})
+	}
 	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
 	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger))
 	if accessRoleMutationErr != nil {
@@ -934,6 +939,11 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		Connection:   ratelimit.New(limitStore, platformmcp.PluginRepublishConnectionLimitName, ratelimit.PerMinute(platformmcp.PluginRepublishesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		Organization: ratelimit.New(limitStore, platformmcp.PluginRepublishOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginRepublishesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 	})
+	// Without Temporal there is no publish workflow to describe, so the latest
+	// attempt is reported as unavailable rather than as a call that always fails.
+	if config.TemporalEnv != nil {
+		pluginInventory.WithPublishStatus(&background.TemporalPluginPublisher{TemporalEnv: config.TemporalEnv})
+	}
 	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
 	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger))
 	if accessRoleMutationErr != nil {

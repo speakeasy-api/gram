@@ -28,6 +28,7 @@ import (
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
+	"github.com/speakeasy-api/gram/server/internal/plugins/publishstatus"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
@@ -170,10 +171,12 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
 	prepared, err := NewLiveOrgAdminAuthorizer(conn, engine).PrepareExternalContext(ctx, principal)
 	require.NoError(t, err)
+	memberPublishStatus := &stubPluginPublishStatus{status: publishstatus.Status{State: publishstatus.StateFailed, FailureCategory: publishstatus.FailurePublishFailed}}
 	service := testPluginTargets(conn).WithAuthorization(engine).
 		WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{
 			PluginSlug: "direct-user", Packages: []plugindelivery.PublicationPackageAddress{{ServerName: "Assigned MCP", MCPURL: "https://private.example/mcp/member"}},
-		}}})
+		}}}).
+		WithPublishStatus(memberPublishStatus)
 
 	resolved, err := authz.ResolveUserPrincipals(prepared, conn, principal.OrganizationID, principal.UserID)
 	require.NoError(t, err)
@@ -276,9 +279,10 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 	require.Len(t, detail.Servers, 1)
 	encoded, err := json.Marshal(detail)
 	require.NoError(t, err)
-	for _, forbidden := range []string{"secret-marketplace-token", "private-owner", "private-repository", `"assignments"`, "assignment_version", "principal_urn", "membership_id", "target_id", "publication_evidence", "private.example"} {
+	for _, forbidden := range []string{"secret-marketplace-token", "private-owner", "private-repository", `"assignments"`, "assignment_version", "principal_urn", "membership_id", "target_id", "publication_evidence", "last_publish", "failure_category", "private.example"} {
 		require.NotContains(t, string(encoded), forbidden)
 	}
+	require.Zero(t, memberPublishStatus.calls, "member reads never reach Temporal")
 	_, err = service.GetAssignedPlugin(prepared, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: unpublished.ID.String()})
 	require.ErrorIs(t, err, ErrPluginNotFound)
 

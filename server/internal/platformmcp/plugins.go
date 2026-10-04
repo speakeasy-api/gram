@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/publishstatus"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -36,6 +37,12 @@ const (
 	PluginsConnectionLimitName   = "platform-mcp-plugins-connection"
 	PluginsOrganizationLimitName = "platform-mcp-plugins-organization"
 )
+
+// pluginPublishStatusTimeout bounds the read of a project's latest publish
+// attempt. It is one or two Temporal RPCs that normally return in tens of
+// milliseconds; past this the admin inventory is returned with the attempt
+// marked unavailable rather than holding the tool call open through an outage.
+const pluginPublishStatusTimeout = 3 * time.Second
 
 const (
 	// PluginQueriesPerConnectionPerMinute supports paging and inspecting dozens
@@ -337,6 +344,51 @@ type PluginPublicationEvidence struct {
 	Unavailable   bool                       `json:"unavailable"`
 	Fresh         *bool                      `json:"fresh"`
 	Packages      []PluginPublicationPackage `json:"packages"`
+
+	// LastPublish describes the project marketplace's latest publish attempt
+	// and last successful push, which explain why a package is not fresh.
+	LastPublish *PluginLastPublish `json:"last_publish,omitempty"`
+}
+
+// PluginLastPublish describes the latest change-driven publish of the
+// project's marketplace. Publishing is per project, so every plugin in the
+// project reports the same attempt. It never carries raw failure text,
+// repository details, or credentials.
+type PluginLastPublish struct {
+	// LastSuccessfulPushAt is the last successful push of a package to the
+	// marketplace, as RFC 3339. It is recorded only after a push succeeds, so
+	// failed attempts never move it, and neither does a publish that finds
+	// nothing to change. Omitted when the project has never published.
+	LastSuccessfulPushAt string `json:"last_successful_push_at,omitempty"`
+
+	// Unavailable is true when the latest attempt could not be read. The
+	// attempt fields below are then omitted; LastSuccessfulPushAt is still
+	// reported.
+	Unavailable bool `json:"unavailable"`
+
+	// State is none, queued, running, retrying, succeeded, or failed. Omitted
+	// when Unavailable is true.
+	State publishstatus.State `json:"state,omitempty"`
+
+	// RequestedAt is when the latest publish was requested, as RFC 3339.
+	RequestedAt string `json:"requested_at,omitempty"`
+
+	// FinishedAt is when the latest publish closed, as RFC 3339. Set only for
+	// succeeded and failed.
+	FinishedAt string `json:"finished_at,omitempty"`
+
+	// Attempt is the attempt number of an in-flight publish, starting at 1.
+	Attempt int32 `json:"attempt,omitempty"`
+
+	// FailureCategory is repository_conflict, timed_out, canceled, or
+	// publish_failed. Set for failed, and for retrying to describe the
+	// previous attempt.
+	FailureCategory publishstatus.FailureCategory `json:"failure_category,omitempty"`
+
+	// FailureMessage is a fixed, non-secret explanation of FailureCategory and
+	// the next step: republish_plugin, or Speakeasy support when republishing
+	// cannot help or keeps failing.
+	FailureMessage string `json:"failure_message,omitempty"`
 }
 
 type PluginPublicationPackage struct {
@@ -350,12 +402,12 @@ type publicationEvidenceReader interface {
 
 // readPublicationEvidence projects one plugin's publication evidence. Callers
 // must have checked that a reader is composed.
-func (s *PluginsService) readPublicationEvidence(ctx context.Context, principal Principal, projectID uuid.UUID, pluginSlug string) *PluginPublicationEvidence {
+func (s *PluginsService) readPublicationEvidence(ctx context.Context, principal Principal, projectID uuid.UUID, pluginSlug string) (*PluginPublicationEvidence, *time.Time) {
 	evidence, err := s.publicationEvidence.ResolvePublicationEvidence(ctx, principal.OrganizationID, projectID, []string{pluginSlug})
 	if err != nil || len(evidence) != 1 || evidence[0].PluginSlug != pluginSlug {
 		// Package resolution can fail when a private address is incomplete.
 		// Preserve the admin inventory without claiming a package is current.
-		return &PluginPublicationEvidence{Unavailable: true, Packages: []PluginPublicationPackage{}}
+		return &PluginPublicationEvidence{Unavailable: true, Packages: []PluginPublicationPackage{}}, nil
 	}
 	packages := make([]PluginPublicationPackage, 0, len(evidence[0].Packages))
 	for _, pkg := range evidence[0].Packages {
@@ -365,13 +417,14 @@ func (s *PluginsService) readPublicationEvidence(ctx context.Context, principal 
 		NotConfigured: evidence[0].NotConfigured,
 		Fresh:         evidence[0].Fresh,
 		Packages:      packages,
-	}
+	}, evidence[0].LastSuccessfulPushAt
 }
 
 // PluginsService answers what plugins a project has and what is inside one,
 // and resolves the exact plugin a distribution names.
 type PluginsService struct {
 	publicationEvidence  publicationEvidenceReader
+	publishStatus        publishstatus.Describer
 	db                   *pgxpool.Pool
 	authorization        *authz.Engine
 	dashboardURL         *url.URL
@@ -436,6 +489,16 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 func (s *PluginsService) WithPublicationEvidence(reader publicationEvidenceReader) *PluginsService {
 	if s != nil {
 		s.publicationEvidence = reader
+	}
+	return s
+}
+
+// WithPublishStatus supplies the reader for a project's latest publish attempt.
+// Without it, administrators still see freshness and the last push time, with
+// the attempt reported as unavailable.
+func (s *PluginsService) WithPublishStatus(describer publishstatus.Describer) *PluginsService {
+	if s != nil {
+		s.publishStatus = describer
 	}
 	return s
 }
@@ -875,7 +938,12 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 		}
 	}
 	if s.publicationEvidence != nil {
-		output.PublicationEvidence = s.readPublicationEvidence(ctx, principal, project.ID, target.Slug)
+		var lastSuccessfulPushAt *time.Time
+		output.PublicationEvidence, lastSuccessfulPushAt = s.readPublicationEvidence(ctx, principal, project.ID, target.Slug)
+		// Read even when evidence is unavailable or not configured: a failed
+		// first publish leaves no marketplace yet, and its failure is the
+		// explanation an administrator needs.
+		output.PublicationEvidence.LastPublish = s.lastPublish(ctx, principal, project.ID, lastSuccessfulPushAt)
 	}
 	if s.distributionAdmissionRead != nil {
 		distributionAdmission := s.distributionAdmissionRead.ForPlugin(ctx, principal.OrganizationID, project.ID, target.ID)
@@ -1112,5 +1180,61 @@ func pluginFromInventoryRow(row platformrepo.ListPlatformMCPPluginInventoryRow) 
 		},
 		Publication:           publication,
 		DistributionAdmission: nil,
+	}
+}
+
+// lastPublish reports the project's latest publish attempt beside its last
+// successful push. Any failure to read the attempt degrades to Unavailable so
+// the admin inventory is still returned. The attempt is read, never started or
+// signaled, and only for organization administrators, the same audience that
+// sees publication evidence: member reads never reach Temporal.
+func (s *PluginsService) lastPublish(ctx context.Context, principal Principal, projectID uuid.UUID, lastSuccessfulPushAt *time.Time) *PluginLastPublish {
+	result := &PluginLastPublish{Unavailable: true}
+	if lastSuccessfulPushAt != nil {
+		result.LastSuccessfulPushAt = lastSuccessfulPushAt.UTC().Format(time.RFC3339)
+	}
+	if s.publishStatus == nil {
+		return result
+	}
+	if admin, err := s.IsOrganizationAdmin(ctx, principal); err != nil || !admin {
+		return result
+	}
+	ctx, cancel := context.WithTimeout(ctx, pluginPublishStatusTimeout)
+	defer cancel()
+	status, err := s.publishStatus.Describe(ctx, projectID)
+	if err != nil {
+		return result
+	}
+	result.Unavailable = false
+	result.State = status.State
+	if status.RequestedAt != nil {
+		result.RequestedAt = status.RequestedAt.UTC().Format(time.RFC3339)
+	}
+	if status.FinishedAt != nil {
+		result.FinishedAt = status.FinishedAt.UTC().Format(time.RFC3339)
+	}
+	result.Attempt = status.Attempt
+	result.FailureCategory = status.FailureCategory
+	result.FailureMessage = publishFailureMessage(status.FailureCategory)
+	return result
+}
+
+// publishFailureMessage is the fixed explanation shown for a failure category.
+// It is the only failure text an agent sees, so it names the next step and
+// nothing from the underlying error.
+func publishFailureMessage(category publishstatus.FailureCategory) string {
+	switch category {
+	case publishstatus.FailureRepositoryConflict:
+		return "The marketplace repository name for this project is already claimed by another project. Republishing cannot fix this; contact Speakeasy support."
+	case publishstatus.FailureTimedOut:
+		return "The publish did not finish in time. Republish the plugin with republish_plugin; contact Speakeasy support if it keeps failing."
+	case publishstatus.FailureCanceled:
+		return "The publish was stopped before it finished. Republish the plugin with republish_plugin; contact Speakeasy support if it keeps failing."
+	case publishstatus.FailurePublishFailed:
+		return "The publish failed. Republish the plugin with republish_plugin; contact Speakeasy support if it keeps failing."
+	case publishstatus.FailureNone:
+		return ""
+	default:
+		return ""
 	}
 }

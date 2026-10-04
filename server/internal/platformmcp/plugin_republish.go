@@ -198,7 +198,7 @@ func (s *PluginsService) RepublishPlugin(ctx context.Context, principal Principa
 			// Read inside the receipt transaction so a retry of a request that
 			// already committed replays its stored outcome instead of
 			// re-deciding from evidence that the publish itself has since moved.
-			evidence := s.readPublicationEvidence(ctx, principal, project.ID, target.Slug)
+			evidence, _ := s.readPublicationEvidence(ctx, principal, project.ID, target.Slug)
 			if evidence.NotConfigured {
 				return pluginRepublishReceipt{}, s.pluginRepublishNotConfigured(ctx, principal, project)
 			}
@@ -240,11 +240,12 @@ func (s *PluginsService) RepublishPlugin(ctx context.Context, principal Principa
 	if stored.Outcome == PluginRepublishAlreadyCurrent {
 		note = pluginAlreadyCurrentNote
 	}
+	evidence, _ := s.readPublicationEvidence(ctx, principal, project.ID, stored.Plugin.Slug)
 	return RepublishPluginOutput{
 		ProjectID:           project.ID.String(),
 		Plugin:              stored.Plugin,
 		Outcome:             stored.Outcome,
-		PublicationEvidence: s.readPublicationEvidence(ctx, principal, project.ID, stored.Plugin.Slug),
+		PublicationEvidence: evidence,
 		Note:                note,
 		Receipt:             riskMutationToolReceipt(receipt),
 	}, nil
