@@ -168,15 +168,6 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 		return ToggleDataExportRouteOutput{}, fmt.Errorf("resolve data export route project: %w", err)
 	}
 	project := ResolvedProject{ID: row.ID, Name: row.Name, Slug: row.Slug}
-	// Charged after validation and authorization and before the route row is
-	// locked, matching the other Platform MCP mutations: a refused call does
-	// not spend the allowance, and nothing is written until it is paid for.
-	if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
-		if errors.Is(err, ErrOperationRateLimited) {
-			return ToggleDataExportRouteOutput{}, &DataExportToggleError{Code: "rate_limited", Message: "Pausing or resuming data exports was asked for too often just now. Try again shortly.", Cause: err}
-		}
-		return ToggleDataExportRouteOutput{}, dataExportToggleUnavailable(err)
-	}
 
 	payload, err := json.Marshal(dataExportToggleRequest{Operation: operation, ProjectID: project.ID.String(), RouteID: routeID.String()})
 	if err != nil {
@@ -207,6 +198,19 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 			return encoded, nil
 		},
 		Mutate: func(ctx context.Context, tx pgx.Tx) (dataExportToggleReceipt, error) {
+			// Charged here, as the first step of the write, rather than before
+			// the receipt lookup. The executor only runs this callback when no
+			// stored receipt matches, so a retry of a change that already
+			// committed replays its stored result without spending the
+			// allowance — a caller whose bucket is empty still gets its answer.
+			// A rejected charge returns an error, which rolls back the pending
+			// receipt, so nothing is written until the change is paid for.
+			if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
+				if errors.Is(err, ErrOperationRateLimited) {
+					return dataExportToggleReceipt{}, &DataExportToggleError{Code: "rate_limited", Message: "Pausing or resuming data exports was asked for too often just now. Try again shortly.", Cause: err}
+				}
+				return dataExportToggleReceipt{}, dataExportToggleUnavailable(err)
+			}
 			changed, err := s.core.SetEnabled(ctx, tx, dataexports.SetRouteEnabledParams{
 				OrganizationID:   principal.OrganizationID,
 				ProjectID:        project.ID,

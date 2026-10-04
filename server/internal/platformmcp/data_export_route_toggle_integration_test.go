@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -336,4 +337,41 @@ func TestDataExportToggleUnavailableManifestMatchesLive(t *testing.T) {
 		})
 		require.Contains(t, refusal, `"feature":"data_export_pause"`)
 	}
+}
+
+func TestPauseDataExportReplayIsNotChargedAgainstAnExhaustedBudget(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	f := newDataExportToggleFixture(t, ctx, "platform_mcp_data_export_toggle_budget_replay")
+	connection := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	organization := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	service, err := NewDataExportRouteToggleService(f.conn, dataexports.NewRouteEnabledCore(audit.NewLogger(), testenv.NewEncryptionClient(t)), stubAuthorizer{err: nil}, OperationBudget{Connection: connection, Organization: organization})
+	require.NoError(t, err)
+	created := f.createRoute(t, ctx, "product_telemetry", true, uuid.NullUUID{UUID: f.destination, Valid: true})
+
+	first, err := service.Pause(ctx, f.principal, f.input(created.ID, "pause-before-exhaustion"))
+	require.NoError(t, err)
+	require.Equal(t, dataExportOutcomePaused, first.Outcome)
+	require.Len(t, connection.keys, 1, "the first write is charged once")
+
+	// Exhaust the allowance. A new change is refused and writes nothing.
+	connection.result = ratelimit.Result{Allowed: false}
+	organization.result = ratelimit.Result{Allowed: false}
+	other := f.createRoute(t, ctx, "risk_findings", true, uuid.NullUUID{UUID: f.destination, Valid: true})
+	_, err = service.Pause(ctx, f.principal, f.input(other.ID, "pause-after-exhaustion"))
+	requireDataExportToggleCode(t, err, "rate_limited")
+	require.True(t, f.route(t, ctx, other.ID).Enabled)
+	require.False(t, f.receiptStored(t, ctx, operationPauseDataExport, "pause-after-exhaustion"), "a refused charge rolls back the pending receipt")
+	chargesBeforeReplay := len(connection.keys)
+
+	// A retry of the change that already committed still returns its stored
+	// result, and is not charged.
+	replayed, err := service.Pause(ctx, f.principal, f.input(created.ID, "pause-before-exhaustion"))
+	require.NoError(t, err)
+	require.True(t, replayed.Receipt.Replayed)
+	require.Equal(t, first.Receipt.ID, replayed.Receipt.ID)
+	require.Equal(t, dataExportOutcomePaused, replayed.Outcome)
+	require.Len(t, connection.keys, chargesBeforeReplay, "a replay must not be charged")
+	require.EqualValues(t, 1, auditCount(t, ctx, f.conn, audit.ActionDataExportRoutePause))
 }
