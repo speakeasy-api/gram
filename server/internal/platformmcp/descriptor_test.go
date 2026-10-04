@@ -416,6 +416,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
 		operationSetPluginAssignments,
+		operationRepublishPlugin,
 		"list_my_sessions",
 		"continue_session",
 		"list_data_exports",

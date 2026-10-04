@@ -400,6 +400,10 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	if config.PluginPublisher != nil {
 		pluginInventory.WithPublicationEvidence(config.PluginPublisher)
 	}
+	pluginInventory.WithRepublish(config.PublicationRequests, config.PluginPublishSignaler, platformmcp.OperationBudget{
+		Connection:   ratelimit.New(limitStore, platformmcp.PluginRepublishConnectionLimitName, ratelimit.PerMinute(platformmcp.PluginRepublishesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		Organization: ratelimit.New(limitStore, platformmcp.PluginRepublishOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginRepublishesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+	})
 	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
 	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger))
 	if accessRoleMutationErr != nil {
@@ -914,6 +918,10 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	if config.PluginPublisher != nil {
 		pluginInventory.WithPublicationEvidence(config.PluginPublisher)
 	}
+	pluginInventory.WithRepublish(config.PublicationRequests, config.PluginPublishSignaler, platformmcp.OperationBudget{
+		Connection:   ratelimit.New(limitStore, platformmcp.PluginRepublishConnectionLimitName, ratelimit.PerMinute(platformmcp.PluginRepublishesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		Organization: ratelimit.New(limitStore, platformmcp.PluginRepublishOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginRepublishesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+	})
 	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
 	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger))
 	if accessRoleMutationErr != nil {

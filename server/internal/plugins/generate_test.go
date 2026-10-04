@@ -3140,7 +3140,7 @@ func TestGeneratePlatformMCPPackageEmitsPrivateAccessWorkflow(t *testing.T) {
 	require.NotEmpty(t, content)
 	require.Equal(t, content, files["agent-plugins/speakeasy/"+skill])
 	workflow := string(content)
-	for _, name := range []string{"list_projects", "list_plugins", "get_plugin", "get_mcp_connection_settings", "set_mcp_address", "set_mcp_network_access"} {
+	for _, name := range []string{"list_projects", "list_plugins", "get_plugin", "get_mcp_connection_settings", "set_mcp_address", "set_mcp_network_access", "republish_plugin"} {
 		require.Contains(t, workflow, name)
 	}
 	require.Contains(t, workflow, "explicit confirmation")
