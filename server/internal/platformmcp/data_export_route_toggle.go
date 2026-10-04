@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -14,7 +15,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -103,6 +106,7 @@ const (
 // writes through dataexports.RouteEnabledCore, which changes the enabled flag
 // and nothing else.
 type DataExportRouteToggleService struct {
+	logger  *slog.Logger
 	db      *pgxpool.Pool
 	queries *platformrepo.Queries
 	core    *dataexports.RouteEnabledCore
@@ -113,23 +117,50 @@ type DataExportRouteToggleService struct {
 	now     func() time.Time
 }
 
-func NewDataExportRouteToggleService(db *pgxpool.Pool, core *dataexports.RouteEnabledCore, admin Authorizer, changes OperationBudget) (*DataExportRouteToggleService, error) {
-	if db == nil || core == nil || admin == nil || !changes.valid() {
+func NewDataExportRouteToggleService(logger *slog.Logger, db *pgxpool.Pool, core *dataexports.RouteEnabledCore, admin Authorizer, changes OperationBudget) (*DataExportRouteToggleService, error) {
+	if logger == nil || db == nil || core == nil || admin == nil || !changes.valid() {
 		return nil, ErrDataExportToggleInvalid
 	}
-	return &DataExportRouteToggleService{db: db, queries: platformrepo.New(db), core: core, admin: admin, changes: changes, now: time.Now}, nil
+	return &DataExportRouteToggleService{logger: logger, db: db, queries: platformrepo.New(db), core: core, admin: admin, changes: changes, now: time.Now}, nil
 }
 
 func (s *DataExportRouteToggleService) valid() bool {
-	return s != nil && s.db != nil && s.queries != nil && s.core != nil && s.admin != nil && s.changes.valid() && s.now != nil
+	return s != nil && s.logger != nil && s.db != nil && s.queries != nil && s.core != nil && s.admin != nil && s.changes.valid() && s.now != nil
 }
 
 func (s *DataExportRouteToggleService) Pause(ctx context.Context, principal Principal, input ToggleDataExportRouteInput) (ToggleDataExportRouteOutput, error) {
-	return s.toggle(ctx, principal, operationPauseDataExport, false, input)
+	output, err := s.toggle(ctx, principal, operationPauseDataExport, false, input)
+	return output, s.boundaryError(ctx, operationPauseDataExport, err)
 }
 
 func (s *DataExportRouteToggleService) Resume(ctx context.Context, principal Principal, input ToggleDataExportRouteInput) (ToggleDataExportRouteOutput, error) {
-	return s.toggle(ctx, principal, operationResumeDataExport, true, input)
+	output, err := s.toggle(ctx, principal, operationResumeDataExport, true, input)
+	return output, s.boundaryError(ctx, operationResumeDataExport, err)
+}
+
+// boundaryError is the last step before an error leaves for the MCP caller.
+// Refusals and authorization denials carry messages written for that caller
+// and pass through. Anything else — a database or driver failure from the
+// project lookup, the receipt executor, or the route write — is logged here
+// with its cause and replaced by the generic unavailable refusal, so no SQL,
+// driver, or internal wrapping text reaches the caller.
+func (s *DataExportRouteToggleService) boundaryError(ctx context.Context, operation string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := errors.AsType[*ExternalAuthorizationError](err); ok {
+		return err
+	}
+	if refusal, ok := errors.AsType[*DataExportToggleError](err); ok && refusal.Code != unavailableCode {
+		return err
+	}
+	if s != nil && s.logger != nil {
+		s.logger.ErrorContext(ctx, "platform mcp data export "+operation+" failed", attr.SlogError(err))
+	}
+	if refusal, ok := errors.AsType[*DataExportToggleError](err); ok {
+		return refusal
+	}
+	return dataExportToggleUnavailable(err)
 }
 
 type dataExportToggleReceipt struct {
@@ -165,7 +196,7 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 		return ToggleDataExportRouteOutput{}, dataExportToggleMissing()
 	}
 	if err != nil {
-		return ToggleDataExportRouteOutput{}, fmt.Errorf("resolve data export route project: %w", err)
+		return ToggleDataExportRouteOutput{}, dataExportToggleUnavailable(fmt.Errorf("resolve data export route project: %w", err))
 	}
 	project := ResolvedProject{ID: row.ID, Name: row.Name, Slug: row.Slug}
 
@@ -174,22 +205,37 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 		return ToggleDataExportRouteOutput{}, dataExportToggleInvalid("The request could not be normalized.")
 	}
 	digest := sha256.Sum256(append([]byte("platform-mcp-data-export-toggle-v1\x00"), payload...))
+	inputHash := hex.EncodeToString(digest[:])
+
+	// A retry of a change that already committed is answered from its stored
+	// receipt here, before the budget is charged, so a caller whose allowance
+	// is spent still gets the result it is owed. This read takes no lock and
+	// opens no transaction; the executor's locked re-check below still
+	// replays a duplicate that commits concurrently with this one.
+	if stored, ok := s.completedReceipt(ctx, principal, project, operation, key, inputHash); ok {
+		return s.finish(ctx, principal, project, routeID, stored)
+	}
+	// Charged outside any transaction. The limiter is a network round-trip to
+	// Redis, and doing it inside the receipt transaction would hold a
+	// PostgreSQL connection and the receipt's advisory lock for as long as
+	// Redis takes to answer. Two racing duplicates may both be charged, which
+	// errs on the side of the budget.
+	if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
+		if errors.Is(err, ErrOperationRateLimited) {
+			return ToggleDataExportRouteOutput{}, &DataExportToggleError{Code: "rate_limited", Message: "Pausing or resuming data exports was asked for too often just now. Try again shortly.", Cause: err}
+		}
+		return ToggleDataExportRouteOutput{}, dataExportToggleUnavailable(err)
+	}
 
 	receipt, err := executeMutationReceipt(ctx, mutationReceiptExecution[dataExportToggleReceipt]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operation,
-		IdempotencyKey: key, InputHash: hex.EncodeToString(digest[:]), Label: "data export " + operation,
+		IdempotencyKey: key, InputHash: inputHash, Label: "data export " + operation,
 		Invalid: func(error) error { return dataExportToggleInvalid("The request is invalid.") },
 		Conflict: func(message string) error {
 			return &DataExportToggleError{Code: "conflict", Message: message, Cause: ErrDataExportToggleConflict}
 		},
-		Unavailable: dataExportToggleUnavailable,
-		ValidateReplay: func(stored []byte) bool {
-			var result dataExportToggleReceipt
-			if json.Unmarshal(stored, &result) != nil {
-				return false
-			}
-			return result.Outcome == dataExportOutcomeUnchanged || result.Outcome == dataExportOutcomePaused || result.Outcome == dataExportOutcomeResumed
-		},
+		Unavailable:    dataExportToggleUnavailable,
+		ValidateReplay: validDataExportToggleReceipt,
 		EncodeResult: func(result dataExportToggleReceipt) ([]byte, error) {
 			encoded, err := json.Marshal(result)
 			if err != nil {
@@ -198,19 +244,6 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 			return encoded, nil
 		},
 		Mutate: func(ctx context.Context, tx pgx.Tx) (dataExportToggleReceipt, error) {
-			// Charged here, as the first step of the write, rather than before
-			// the receipt lookup. The executor only runs this callback when no
-			// stored receipt matches, so a retry of a change that already
-			// committed replays its stored result without spending the
-			// allowance — a caller whose bucket is empty still gets its answer.
-			// A rejected charge returns an error, which rolls back the pending
-			// receipt, so nothing is written until the change is paid for.
-			if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
-				if errors.Is(err, ErrOperationRateLimited) {
-					return dataExportToggleReceipt{}, &DataExportToggleError{Code: "rate_limited", Message: "Pausing or resuming data exports was asked for too often just now. Try again shortly.", Cause: err}
-				}
-				return dataExportToggleReceipt{}, dataExportToggleUnavailable(err)
-			}
 			changed, err := s.core.SetEnabled(ctx, tx, dataexports.SetRouteEnabledParams{
 				OrganizationID:   principal.OrganizationID,
 				ProjectID:        project.ID,
@@ -235,6 +268,40 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 	if err != nil {
 		return ToggleDataExportRouteOutput{}, err
 	}
+	return s.finish(ctx, principal, project, routeID, receipt)
+}
+
+func validDataExportToggleReceipt(stored []byte) bool {
+	var result dataExportToggleReceipt
+	if json.Unmarshal(stored, &result) != nil {
+		return false
+	}
+	return result.Outcome == dataExportOutcomeUnchanged || result.Outcome == dataExportOutcomePaused || result.Outcome == dataExportOutcomeResumed
+}
+
+// completedReceipt is the unlocked replay check that runs before the budget is
+// charged. Only a completed, unexpired receipt for exactly this request
+// counts; anything else — no receipt, a pending one, a different input under
+// the same key, or a failed read — falls through to the executor, which
+// decides under its lock and refuses a mismatched input as a conflict.
+func (s *DataExportRouteToggleService) completedReceipt(ctx context.Context, principal Principal, project ResolvedProject, operation, key, inputHash string) (OperationReceipt, bool) {
+	var miss OperationReceipt
+	row, err := s.queries.GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
+		OrganizationID: principal.OrganizationID, UserID: conv.ToPGText(principal.UserID), SubjectUrn: userSubjectURN(principal.UserID),
+		ProjectID: project.ID, Operation: operation, IdempotencyKey: key,
+	})
+	if err != nil {
+		return miss, false
+	}
+	if row.InputHash != inputHash || row.Status != receiptStatusSucceeded || len(row.ResultPayload) == 0 || !row.ExpiresAt.Valid || !row.ExpiresAt.Time.After(s.now()) || !validDataExportToggleReceipt(row.ResultPayload) {
+		return miss, false
+	}
+	return operationReceiptFromRow(row, true), true
+}
+
+// finish turns a stored or freshly written receipt into the tool result, with
+// a verification read of the route as it stands now.
+func (s *DataExportRouteToggleService) finish(ctx context.Context, principal Principal, project ResolvedProject, routeID uuid.UUID, receipt OperationReceipt) (ToggleDataExportRouteOutput, error) {
 	var stored dataExportToggleReceipt
 	if err := json.Unmarshal(receipt.ResultPayload, &stored); err != nil {
 		return ToggleDataExportRouteOutput{}, dataExportToggleUnavailable(err)
@@ -309,17 +376,26 @@ func classifyDataExportToggleError(err error) error {
 	case errors.Is(err, dataexports.ErrRouteDestinationRequired):
 		return &DataExportToggleError{
 			Code:    "no_destination",
-			Message: "This route has no destination, so resuming it would have nowhere to send data. Nothing was changed. Choose a destination for the route in the dashboard first.",
+			Message: "This route has no destination, so it has nowhere to send data and cannot be resumed. Nothing was changed. Choose a destination for the route in the dashboard first.",
 			Cause:   errors.Join(ErrDataExportToggleRefused, err),
 		}
 	case errors.Is(err, dataexports.ErrRouteDestinationInactive):
 		return &DataExportToggleError{
 			Code:    "destination_deleted",
-			Message: "This route's destination has been deleted, so resuming it would have nowhere to send data. Nothing was changed. Point the route at an active destination in the dashboard first.",
+			Message: "This route's destination has been deleted, so it has nowhere to send data and cannot be resumed. Nothing was changed. Point the route at an active destination in the dashboard first.",
+			Cause:   errors.Join(ErrDataExportToggleRefused, err),
+		}
+	case errors.Is(err, dataexports.ErrRouteDestinationInvalid):
+		// The cause names the failing field but is never put in the message:
+		// the stored endpoint and headers are the administrator's
+		// configuration, and headers are secrets.
+		return &DataExportToggleError{
+			Code:    "destination_invalid",
+			Message: "This route's destination has a stored configuration that can no longer be used, so the route cannot be resumed. Nothing was changed. Open the destination in the dashboard and save its endpoint, sensitive-data setting, and headers again.",
 			Cause:   errors.Join(ErrDataExportToggleRefused, err),
 		}
 	default:
-		return fmt.Errorf("set data export route enabled: %w", err)
+		return dataExportToggleUnavailable(fmt.Errorf("set data export route enabled: %w", err))
 	}
 }
 

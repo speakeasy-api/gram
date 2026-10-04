@@ -64,6 +64,9 @@ func (l *Logger) LogDataExportRouteCreate(ctx context.Context, dbtx repo.DBTX, e
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.DataExportRouteV1})
 }
 
+// LogDataExportRouteUpdateEvent describes a change to an existing route with
+// its before and after state. Pause and resume record the same shape under
+// their own actions, so one event type serves all three.
 type LogDataExportRouteUpdateEvent struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
@@ -79,7 +82,22 @@ type LogDataExportRouteUpdateEvent struct {
 }
 
 func (l *Logger) LogDataExportRouteUpdate(ctx context.Context, dbtx repo.DBTX, event LogDataExportRouteUpdateEvent) error {
-	action := ActionDataExportRouteUpdate
+	return l.logDataExportRouteChange(ctx, dbtx, ActionDataExportRouteUpdate, event)
+}
+
+// LogDataExportRoutePause records a route's export being stopped. Its
+// snapshots show that only the enabled flag moved.
+func (l *Logger) LogDataExportRoutePause(ctx context.Context, dbtx repo.DBTX, event LogDataExportRouteUpdateEvent) error {
+	return l.logDataExportRouteChange(ctx, dbtx, ActionDataExportRoutePause, event)
+}
+
+// LogDataExportRouteResume records a paused route exporting again. Its
+// snapshots show that only the enabled flag moved.
+func (l *Logger) LogDataExportRouteResume(ctx context.Context, dbtx repo.DBTX, event LogDataExportRouteUpdateEvent) error {
+	return l.logDataExportRouteChange(ctx, dbtx, ActionDataExportRouteResume, event)
+}
+
+func (l *Logger) logDataExportRouteChange(ctx context.Context, dbtx repo.DBTX, action Action, event LogDataExportRouteUpdateEvent) error {
 	beforeSnapshot, err := marshalAuditPayload(event.RouteSnapshotBefore)
 	if err != nil {
 		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
@@ -145,85 +163,6 @@ func (l *Logger) LogDataExportRouteDelete(ctx context.Context, dbtx repo.DBTX, e
 
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
-		Metadata:       nil,
-	}
-
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.DataExportRouteV1})
-}
-
-// LogDataExportRoutePauseEvent records a route's export being stopped without
-// any other change to the route. The snapshots show that only the enabled flag
-// moved.
-type LogDataExportRoutePauseEvent struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-
-	Actor            urn.Principal
-	ActorDisplayName *string
-	ActorSlug        *string
-
-	RouteURN            urn.DataExportRoute
-	DataSource          string
-	RouteSnapshotBefore *DataExportRouteSnapshot
-	RouteSnapshotAfter  *DataExportRouteSnapshot
-}
-
-func (l *Logger) LogDataExportRoutePause(ctx context.Context, dbtx repo.DBTX, event LogDataExportRoutePauseEvent) error {
-	return l.logDataExportRouteToggle(ctx, dbtx, ActionDataExportRoutePause, dataExportRouteToggle(event))
-}
-
-// LogDataExportRouteResumeEvent records a paused route starting to export
-// again. The snapshots show that only the enabled flag moved.
-type LogDataExportRouteResumeEvent struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-
-	Actor            urn.Principal
-	ActorDisplayName *string
-	ActorSlug        *string
-
-	RouteURN            urn.DataExportRoute
-	DataSource          string
-	RouteSnapshotBefore *DataExportRouteSnapshot
-	RouteSnapshotAfter  *DataExportRouteSnapshot
-}
-
-func (l *Logger) LogDataExportRouteResume(ctx context.Context, dbtx repo.DBTX, event LogDataExportRouteResumeEvent) error {
-	return l.logDataExportRouteToggle(ctx, dbtx, ActionDataExportRouteResume, dataExportRouteToggle(event))
-}
-
-// dataExportRouteToggle is the field set pause and resume share. Both event
-// types convert to it, so the two actions cannot record different shapes.
-type dataExportRouteToggle LogDataExportRoutePauseEvent
-
-func (l *Logger) logDataExportRouteToggle(ctx context.Context, dbtx repo.DBTX, action Action, event dataExportRouteToggle) error {
-	beforeSnapshot, err := marshalAuditPayload(event.RouteSnapshotBefore)
-	if err != nil {
-		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
-	}
-	afterSnapshot, err := marshalAuditPayload(event.RouteSnapshotAfter)
-	if err != nil {
-		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
-	}
-
-	entry := repo.InsertAuditLogParams{
-		OrganizationID: event.OrganizationID,
-		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
-
-		ActorID:          event.Actor.ID,
-		ActorType:        string(event.Actor.Type),
-		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
-		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
-
-		Action: string(action),
-
-		SubjectID:          event.RouteURN.ID.String(),
-		SubjectType:        string(subjectTypeDataExportRoute),
-		SubjectDisplayName: conv.ToPGTextEmpty(event.DataSource),
-		SubjectSlug:        conv.ToPGTextEmpty(""),
-
-		BeforeSnapshot: beforeSnapshot,
-		AfterSnapshot:  afterSnapshot,
 		Metadata:       nil,
 	}
 

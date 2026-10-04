@@ -26,6 +26,11 @@ var (
 	// ErrRouteDestinationInactive means the route names a destination that is
 	// deleted or belongs to another project.
 	ErrRouteDestinationInactive = errors.New("the data export route's destination is not an active destination in this project")
+
+	// ErrRouteDestinationInvalid means the destination row is live but its
+	// stored configuration cannot be used: an endpoint URL, sensitive-data
+	// policy, or header blob that no longer validates or decrypts.
+	ErrRouteDestinationInvalid = errors.New("the data export route's destination has an unusable stored configuration")
 )
 
 // RouteEnabledCore pauses and resumes one route. It changes the route's
@@ -89,13 +94,16 @@ func (c *RouteEnabledCore) SetEnabled(ctx context.Context, tx pgx.Tx, params Set
 	if err != nil {
 		return SetRouteEnabledResult{}, fmt.Errorf("lock data export route: %w", err)
 	}
-	if before.Enabled == params.Enabled {
-		return SetRouteEnabledResult{Before: before, After: before, Changed: false}, nil
-	}
+	// Checked before the no-op return, not only when the flag flips: an enabled
+	// route whose destination has since been deleted or corrupted is exporting
+	// nothing, and reporting "already resumed" would hide that.
 	if params.Enabled {
 		if err := checkRouteDestination(ctx, queries, c.encryption, params.OrganizationID, params.ProjectID, before.OtelDestinationID, true); err != nil {
 			return SetRouteEnabledResult{}, err
 		}
+	}
+	if before.Enabled == params.Enabled {
+		return SetRouteEnabledResult{Before: before, After: before, Changed: false}, nil
 	}
 	after, err := queries.SetDataExportRouteEnabled(ctx, repo.SetDataExportRouteEnabledParams{
 		Enabled:        params.Enabled,
@@ -107,30 +115,21 @@ func (c *RouteEnabledCore) SetEnabled(ctx context.Context, tx pgx.Tx, params Set
 		return SetRouteEnabledResult{}, fmt.Errorf("set data export route enabled: %w", err)
 	}
 
+	event := audit.LogDataExportRouteUpdateEvent{
+		OrganizationID:      params.OrganizationID,
+		ProjectID:           params.ProjectID,
+		Actor:               params.Actor,
+		ActorDisplayName:    params.ActorDisplayName,
+		ActorSlug:           nil,
+		RouteURN:            urn.NewDataExportRoute(after.ID),
+		DataSource:          after.DataSource,
+		RouteSnapshotBefore: routeSnapshot(before),
+		RouteSnapshotAfter:  routeSnapshot(after),
+	}
 	if params.Enabled {
-		err = c.audit.LogDataExportRouteResume(ctx, tx, audit.LogDataExportRouteResumeEvent{
-			OrganizationID:      params.OrganizationID,
-			ProjectID:           params.ProjectID,
-			Actor:               params.Actor,
-			ActorDisplayName:    params.ActorDisplayName,
-			ActorSlug:           nil,
-			RouteURN:            urn.NewDataExportRoute(after.ID),
-			DataSource:          after.DataSource,
-			RouteSnapshotBefore: routeSnapshot(before),
-			RouteSnapshotAfter:  routeSnapshot(after),
-		})
+		err = c.audit.LogDataExportRouteResume(ctx, tx, event)
 	} else {
-		err = c.audit.LogDataExportRoutePause(ctx, tx, audit.LogDataExportRoutePauseEvent{
-			OrganizationID:      params.OrganizationID,
-			ProjectID:           params.ProjectID,
-			Actor:               params.Actor,
-			ActorDisplayName:    params.ActorDisplayName,
-			ActorSlug:           nil,
-			RouteURN:            urn.NewDataExportRoute(after.ID),
-			DataSource:          after.DataSource,
-			RouteSnapshotBefore: routeSnapshot(before),
-			RouteSnapshotAfter:  routeSnapshot(after),
-		})
+		err = c.audit.LogDataExportRoutePause(ctx, tx, event)
 	}
 	if err != nil {
 		return SetRouteEnabledResult{}, fmt.Errorf("audit data export route enabled change: %w", err)
@@ -171,13 +170,28 @@ func checkRouteDestination(
 		return fmt.Errorf("load route destination: %w", err)
 	}
 	if _, err := validateDestinationURL(destination.EndpointUrl); err != nil {
-		return fmt.Errorf("stored OTEL destination has invalid endpoint URL: %w", err)
+		return &routeDestinationInvalidError{reason: "stored OTEL destination has invalid endpoint URL", cause: err}
 	}
 	if _, err := sensitiveDataFromRow(destination.SensitiveData); err != nil {
-		return fmt.Errorf("stored OTEL destination has invalid sensitive-data policy: %w", err)
+		return &routeDestinationInvalidError{reason: "stored OTEL destination has invalid sensitive-data policy", cause: err}
 	}
 	if _, err := decryptHeaders(encryptionClient, destination.HeadersEncrypted); err != nil {
-		return fmt.Errorf("decode stored OTEL destination headers: %w", err)
+		return &routeDestinationInvalidError{reason: "decode stored OTEL destination headers", cause: err}
 	}
 	return nil
+}
+
+// routeDestinationInvalidError matches ErrRouteDestinationInvalid and keeps
+// which stored field failed, so the dashboard can keep reporting that reason
+// while callers that only need the class match the sentinel. The reason never
+// includes the stored value itself.
+type routeDestinationInvalidError struct {
+	reason string
+	cause  error
+}
+
+func (e *routeDestinationInvalidError) Error() string { return e.reason + ": " + e.cause.Error() }
+func (e *routeDestinationInvalidError) Unwrap() error { return e.cause }
+func (e *routeDestinationInvalidError) Is(target error) bool {
+	return target == ErrRouteDestinationInvalid
 }

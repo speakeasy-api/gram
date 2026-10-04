@@ -660,7 +660,7 @@ func newPlatformMCPDistributionService(config platformMCPConfig, pluginTargets p
 // refusals rather than removing them from the catalogue.
 func newPlatformMCPDataExportRouteToggle(config platformMCPConfig, authorizer platformmcp.Authorizer, limitStore ratelimit.Store) *platformmcp.DataExportRouteToggleService {
 	service, err := platformmcp.NewDataExportRouteToggleService(
-		config.DB, dataexports.NewRouteEnabledCore(config.AuditLogger, config.Encryption), authorizer,
+		config.Logger, config.DB, dataexports.NewRouteEnabledCore(config.AuditLogger, config.Encryption), authorizer,
 		platformmcp.OperationBudget{
 			Connection:   ratelimit.New(limitStore, platformmcp.DataExportToggleConnectionLimitName, ratelimit.PerMinute(platformmcp.DataExportTogglesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.DataExportToggleOrganizationLimitName, ratelimit.PerMinute(platformmcp.DataExportTogglesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),

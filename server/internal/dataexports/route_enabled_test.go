@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/data_exports"
@@ -208,4 +209,44 @@ func TestRouteEnabledCoreCannotReachAnotherProjectsRoute(t *testing.T) {
 	require.ErrorIs(t, err, dataexports.ErrRouteNotFound)
 	_, err = setRouteEnabled(t, ctx, ti, "org_"+uuid.NewString(), *authCtx.ProjectID, routeID, true)
 	require.ErrorIs(t, err, dataexports.ErrRouteNotFound)
+}
+
+func TestRouteEnabledCoreRefusesResumeOfEnabledRouteWithUnusableDestination(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	queries := repo.New(ti.conn)
+
+	deleted := createDestination(t, ctx, ti, "https://deleted.example.test", "exclude")
+	orphaned, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		DataSource: "product_telemetry", Enabled: true, OtelDestinationID: &deleted.ID})
+	require.NoError(t, err)
+	_, err = queries.SoftDeleteOtelDestination(ctx, repo.SoftDeleteOtelDestinationParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, ID: uuid.MustParse(deleted.ID),
+	})
+	require.NoError(t, err)
+	_, err = setRouteEnabled(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, uuid.MustParse(orphaned.ID), true)
+	require.ErrorIs(t, err, dataexports.ErrRouteDestinationInactive, "an enabled route with a deleted destination is not 'already resumed'")
+
+	corrupt := createDestination(t, ctx, ti, "https://corrupt.example.test", "exclude")
+	corrupted, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		DataSource: "risk_findings", Enabled: true, OtelDestinationID: &corrupt.ID})
+	require.NoError(t, err)
+	_, err = queries.UpdateOtelDestination(ctx, repo.UpdateOtelDestinationParams{
+		Name: "Test destination", EndpointUrl: "not-a-url", HeadersEncrypted: pgtype.Text{}, SensitiveData: pgtype.Text{String: "exclude", Valid: true},
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, ID: uuid.MustParse(corrupt.ID),
+	})
+	require.NoError(t, err)
+	_, err = setRouteEnabled(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, uuid.MustParse(corrupted.ID), true)
+	require.ErrorIs(t, err, dataexports.ErrRouteDestinationInvalid)
+	require.Zero(t, auditCountFor(t, ctx, ti, audit.ActionDataExportRouteResume))
+}
+
+func auditCountFor(t *testing.T, ctx context.Context, ti *testInstance, action audit.Action) int64 {
+	t.Helper()
+	count, err := audittest.AuditLogCountByAction(ctx, ti.conn, action)
+	require.NoError(t, err)
+	return count
 }

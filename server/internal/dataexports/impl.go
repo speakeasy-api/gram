@@ -719,7 +719,13 @@ func (s *Service) validateRouteDestination(
 			attr.SlogOrganizationID(organizationID),
 			attr.SlogProjectID(projectID.String()),
 		)
-		return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "validate route destination").LogError(ctx, logger)
+		// A stored destination that no longer validates is a server-side
+		// fault, reported with the reason naming the field that failed.
+		message := "load route destination"
+		if invalid, ok := errors.AsType[*routeDestinationInvalidError](err); ok {
+			message = invalid.reason
+		}
+		return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "%s", message).LogError(ctx, logger)
 	}
 	return ref, nil
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -38,7 +40,7 @@ func newDataExportToggleFixture(t *testing.T, ctx context.Context, database stri
 	conn, err := platformMCPInfra.CloneTestDatabase(t, database)
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	service, err := NewDataExportRouteToggleService(conn, dataexports.NewRouteEnabledCore(audit.NewLogger(), testenv.NewEncryptionClient(t)), stubAuthorizer{err: nil}, allowingBudget())
+	service, err := NewDataExportRouteToggleService(testenv.NewLogger(t), conn, dataexports.NewRouteEnabledCore(audit.NewLogger(), testenv.NewEncryptionClient(t)), stubAuthorizer{err: nil}, allowingBudget())
 	require.NoError(t, err)
 	destination, err := dataexportsrepo.New(conn).CreateOtelDestination(ctx, dataexportsrepo.CreateOtelDestinationParams{
 		OrganizationID:   principal.OrganizationID,
@@ -264,7 +266,7 @@ func TestPauseDataExportRefusesANonAdminIdenticallyForRealAndInventedRoutes(t *t
 	memberID := "member_" + uuid.NewString()
 	seedPlatformMCPAuthorizationMember(t, ctx, f.conn, f.principal.OrganizationID, memberID, authz.SystemRoleMember)
 	engine := authz.NewEngine(testenv.NewLogger(t), f.conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
-	service, err := NewDataExportRouteToggleService(f.conn, dataexports.NewRouteEnabledCore(audit.NewLogger(), testenv.NewEncryptionClient(t)), NewLiveOrgAdminAuthorizer(f.conn, engine), allowingBudget())
+	service, err := NewDataExportRouteToggleService(testenv.NewLogger(t), f.conn, dataexports.NewRouteEnabledCore(audit.NewLogger(), testenv.NewEncryptionClient(t)), NewLiveOrgAdminAuthorizer(f.conn, engine), allowingBudget())
 	require.NoError(t, err)
 	member := Principal{UserID: memberID, OrganizationID: f.principal.OrganizationID, ConnectionID: uuid.NewString(), Generation: uuid.NewString(), ClientID: "client-test", Surface: SurfacePlatformMCP}
 
@@ -346,7 +348,7 @@ func TestPauseDataExportReplayIsNotChargedAgainstAnExhaustedBudget(t *testing.T)
 	f := newDataExportToggleFixture(t, ctx, "platform_mcp_data_export_toggle_budget_replay")
 	connection := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
 	organization := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
-	service, err := NewDataExportRouteToggleService(f.conn, dataexports.NewRouteEnabledCore(audit.NewLogger(), testenv.NewEncryptionClient(t)), stubAuthorizer{err: nil}, OperationBudget{Connection: connection, Organization: organization})
+	service, err := NewDataExportRouteToggleService(testenv.NewLogger(t), f.conn, dataexports.NewRouteEnabledCore(audit.NewLogger(), testenv.NewEncryptionClient(t)), stubAuthorizer{err: nil}, OperationBudget{Connection: connection, Organization: organization})
 	require.NoError(t, err)
 	created := f.createRoute(t, ctx, "product_telemetry", true, uuid.NullUUID{UUID: f.destination, Valid: true})
 
@@ -374,4 +376,119 @@ func TestPauseDataExportReplayIsNotChargedAgainstAnExhaustedBudget(t *testing.T)
 	require.Equal(t, dataExportOutcomePaused, replayed.Outcome)
 	require.Len(t, connection.keys, chargesBeforeReplay, "a replay must not be charged")
 	require.EqualValues(t, 1, auditCount(t, ctx, f.conn, audit.ActionDataExportRoutePause))
+}
+
+// blockingLimiter holds every charge until released, so a test can inspect
+// what the caller is holding while the budget round-trip is in flight.
+type blockingLimiter struct {
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (l *blockingLimiter) Allow(ctx context.Context, _ string) (ratelimit.Result, error) {
+	select {
+	case l.entered <- struct{}{}:
+	default:
+	}
+	select {
+	case <-l.release:
+	case <-ctx.Done():
+		return ratelimit.Result{}, fmt.Errorf("wait for blocked charge: %w", ctx.Err())
+	}
+	return ratelimit.Result{Allowed: true}, nil
+}
+
+func (l *blockingLimiter) AllowN(ctx context.Context, key string, _ int) (ratelimit.Result, error) {
+	return l.Allow(ctx, key)
+}
+
+func TestPauseDataExportChargesTheBudgetWithNoConnectionHeld(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	f := newDataExportToggleFixture(t, ctx, "platform_mcp_data_export_toggle_budget_no_tx")
+	limiter := &blockingLimiter{entered: make(chan struct{}, 1), release: make(chan struct{})}
+	service, err := NewDataExportRouteToggleService(testenv.NewLogger(t), f.conn, dataexports.NewRouteEnabledCore(audit.NewLogger(), testenv.NewEncryptionClient(t)), stubAuthorizer{err: nil}, OperationBudget{Connection: limiter, Organization: limiter})
+	require.NoError(t, err)
+	created := f.createRoute(t, ctx, "product_telemetry", true, uuid.NullUUID{UUID: f.destination, Valid: true})
+
+	done := make(chan error, 1)
+	go func() {
+		_, pauseErr := service.Pause(ctx, f.principal, f.input(created.ID, "pause-while-charging"))
+		done <- pauseErr
+	}()
+	select {
+	case <-limiter.entered:
+	case err := <-done:
+		require.FailNow(t, "pause finished without charging the budget", "%v", err)
+	}
+	// The charge is a network round-trip to Redis. While it is in flight the
+	// call must hold no PostgreSQL connection — and so no transaction, row
+	// lock, or receipt advisory lock — or a slow Redis would pin connections.
+	require.Zero(t, f.conn.Stat().AcquiredConns(), "the budget must be charged outside any transaction")
+	require.True(t, f.route(t, ctx, created.ID).Enabled, "nothing is written before the charge is granted")
+	close(limiter.release)
+	require.NoError(t, <-done)
+	require.False(t, f.route(t, ctx, created.ID).Enabled)
+}
+
+func TestDataExportToggleNeverReturnsDatabaseErrorText(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	f := newDataExportToggleFixture(t, ctx, "platform_mcp_data_export_toggle_db_failure")
+	created := f.createRoute(t, ctx, "product_telemetry", true, uuid.NullUUID{UUID: f.destination, Valid: true})
+	broken, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_data_export_toggle_db_failure_closed")
+	require.NoError(t, err)
+	service, err := NewDataExportRouteToggleService(testenv.NewLogger(t), broken, dataexports.NewRouteEnabledCore(audit.NewLogger(), testenv.NewEncryptionClient(t)), stubAuthorizer{err: nil}, allowingBudget())
+	require.NoError(t, err)
+	// Every query on a closed pool fails with a driver error, which is what a
+	// database outage looks like from here.
+	broken.Close()
+
+	_, err = service.Pause(ctx, f.principal, f.input(created.ID, "pause-db-down"))
+	text := requireDataExportToggleCode(t, err, unavailableCode)
+	for _, leaked := range []string{"pool", "closed", "resolve", "sql", "pgx", "postgres"} {
+		require.NotContains(t, strings.ToLower(text), leaked, "the refusal must not carry database error text")
+	}
+}
+
+func TestResumeDataExportRefusesAnEnabledRouteWhoseDestinationIsGone(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	f := newDataExportToggleFixture(t, ctx, "platform_mcp_data_export_toggle_enabled_orphan")
+	created := f.createRoute(t, ctx, "product_telemetry", true, uuid.NullUUID{UUID: f.destination, Valid: true})
+	_, err := dataexportsrepo.New(f.conn).SoftDeleteOtelDestination(ctx, dataexportsrepo.SoftDeleteOtelDestinationParams{
+		OrganizationID: f.principal.OrganizationID, ProjectID: f.project.ID, ID: f.destination,
+	})
+	require.NoError(t, err)
+	before := f.route(t, ctx, created.ID)
+
+	// Already enabled, but exporting nothing: "unchanged" would hide that.
+	_, err = f.service.Resume(ctx, f.principal, f.input(created.ID, "resume-enabled-orphan"))
+	requireDataExportToggleCode(t, err, "destination_deleted")
+	require.Equal(t, before, f.route(t, ctx, created.ID))
+	require.False(t, f.receiptStored(t, ctx, operationResumeDataExport, "resume-enabled-orphan"))
+}
+
+func TestResumeDataExportRefusesACorruptDestinationWithoutEchoingIt(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	f := newDataExportToggleFixture(t, ctx, "platform_mcp_data_export_toggle_corrupt")
+	created := f.createRoute(t, ctx, "product_telemetry", false, uuid.NullUUID{UUID: f.destination, Valid: true})
+	const corruptEndpoint = "not-a-url-corrupt-endpoint"
+	_, err := dataexportsrepo.New(f.conn).UpdateOtelDestination(ctx, dataexportsrepo.UpdateOtelDestinationParams{
+		Name: "Collector", EndpointUrl: corruptEndpoint, HeadersEncrypted: pgtype.Text{}, SensitiveData: pgtype.Text{String: "exclude", Valid: true},
+		OrganizationID: f.principal.OrganizationID, ProjectID: f.project.ID, ID: f.destination,
+	})
+	require.NoError(t, err)
+	before := f.route(t, ctx, created.ID)
+
+	_, err = f.service.Resume(ctx, f.principal, f.input(created.ID, "resume-corrupt"))
+	text := requireDataExportToggleCode(t, err, "destination_invalid")
+	require.NotContains(t, text, corruptEndpoint, "the refusal must not echo the stored endpoint")
+	require.Equal(t, before, f.route(t, ctx, created.ID))
+	require.False(t, f.receiptStored(t, ctx, operationResumeDataExport, "resume-corrupt"))
 }
