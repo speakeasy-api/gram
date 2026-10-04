@@ -1,8 +1,10 @@
 package platformmcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -50,7 +52,7 @@ func seedPluginMetadataFixture(t *testing.T, name string) (context.Context, plug
 	budget := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
 	service := testPluginTargets(conn).
 		WithAuthorization(engine).
-		WithMetadataMutations(plugindelivery.NewPluginMetadataCore(audit.NewLogger(), plugindelivery.PublicationRequests{Enabled: false}), nil, OperationBudget{Connection: budget, Organization: allowOperationLimiter{}})
+		WithMetadataMutations(testenv.NewLogger(t), plugindelivery.NewPluginMetadataCore(audit.NewLogger(), plugindelivery.PublicationRequests{Enabled: false}), nil, OperationBudget{Connection: budget, Organization: allowOperationLimiter{}})
 	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)})
@@ -233,6 +235,34 @@ func TestCreatePluginPreviewReportsTheSlugItCreates(t *testing.T) {
 	require.Len(t, fixture.budget.keys, 4, "only the four confirmed creates are charged, never a preview")
 }
 
+// The unconfirmed preview and the confirmed create are one logical operation
+// and share one idempotency key. The preview stores no receipt under it, so
+// the confirmed call with the same key creates the plugin rather than
+// replaying or conflicting.
+func TestCreatePluginPreviewAndConfirmShareOneIdempotencyKey(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_create_plugin_preview_same_key")
+	const key = "one-create"
+	input := CreatePluginInput{ProjectID: fixture.project.ID.String(), Name: "Shared key", IdempotencyKey: key, Confirmed: false}
+
+	_, err := fixture.service.CreatePlugin(ctx, fixture.principal, input)
+	var preview *PluginMetadataMutationError
+	require.ErrorAs(t, err, &preview)
+	require.Equal(t, "confirmation_required", preview.Code)
+	_, err = platformrepo.New(fixture.conn).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
+		OrganizationID: fixture.principal.OrganizationID, ProjectID: fixture.project.ID, Operation: operationCreatePlugin,
+		IdempotencyKey: key, UserID: conv.ToPGText(fixture.principal.UserID), SubjectUrn: userSubjectURN(fixture.principal.UserID),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "the preview stores no receipt under the key")
+
+	input.Confirmed = true
+	created, err := fixture.service.CreatePlugin(ctx, fixture.principal, input)
+	require.NoError(t, err, "the confirmed call reuses the preview's key")
+	require.False(t, created.Receipt.Replayed, "the confirmed call creates rather than replays")
+	require.Equal(t, preview.Slug, created.Plugin.Slug)
+	require.Equal(t, 1, fixture.pluginCount(t, ctx, fixture.project.ID))
+}
+
 // A caller without plugin write gets the authorization refusal, and gets the
 // same one for a project that does not exist, so the tool cannot be used to
 // tell real project ids from invented ones.
@@ -411,7 +441,7 @@ func TestPluginMetadataChargesOutsideAnyTransaction(t *testing.T) {
 	t.Parallel()
 	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_plugin_metadata_charge_outside_tx")
 	charge := &connectionObservingLimiter{conn: fixture.conn}
-	fixture.service.WithMetadataMutations(fixture.service.metadataCore, nil, OperationBudget{Connection: charge, Organization: allowOperationLimiter{}})
+	fixture.service.WithMetadataMutations(fixture.service.metadataLogger, fixture.service.metadataCore, nil, OperationBudget{Connection: charge, Organization: allowOperationLimiter{}})
 
 	_, err := fixture.service.CreatePlugin(ctx, fixture.principal, CreatePluginInput{
 		ProjectID: fixture.project.ID.String(), Name: "Charged outside", IdempotencyKey: "charged-outside", Confirmed: true,
@@ -434,6 +464,54 @@ func (l *connectionObservingLimiter) Allow(context.Context, string) (ratelimit.R
 
 func (l *connectionObservingLimiter) AllowN(ctx context.Context, key string, _ int) (ratelimit.Result, error) {
 	return l.Allow(ctx, key)
+}
+
+// The tool layer hands any error a tool does not classify straight to the MCP
+// client, so a database failure must surface as the unavailable refusal and
+// never as driver text. The underlying cause still reaches the server log.
+func TestPluginMetadataNeverReturnsDatabaseErrorText(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_plugin_metadata_no_db_text")
+	plugin := seedPlugin(t, ctx, fixture.conn, fixture.principal.OrganizationID, fixture.project.ID, "Existing", "existing")
+	var logs bytes.Buffer
+	fixture.service.WithMetadataMutations(slog.New(slog.NewTextHandler(&logs, nil)), fixture.service.metadataCore, nil, testOperationBudget())
+	createTool := fixture.descriptor(t, operationCreatePlugin)
+	renameTool := fixture.descriptor(t, operationRenamePlugin)
+	fixture.conn.Close()
+	caller := ContextWithPrincipal(ctx, fixture.principal)
+
+	invoke := func(descriptor Descriptor, arguments map[string]any) string {
+		t.Helper()
+		encoded, err := json.Marshal(arguments)
+		require.NoError(t, err)
+		_, err = descriptor.Invoke(caller, encoded)
+		require.Error(t, err)
+		return err.Error()
+	}
+	results := map[string]string{
+		"create": invoke(createTool, map[string]any{
+			"project_id": fixture.project.ID.String(), "name": "After close", "slug": "after-close",
+			"description": "", "idempotency_key": uuid.NewString(), "confirmed": true,
+		}),
+		"rename": invoke(renameTool, map[string]any{
+			"project_id": fixture.project.ID.String(), "plugin": plugin.ID.String(), "name": "Renamed after close",
+			"idempotency_key": uuid.NewString(), "confirmed": true,
+		}),
+		"preview": invoke(createTool, map[string]any{
+			"project_id": fixture.project.ID.String(), "name": "Preview after close", "slug": "",
+			"description": "", "idempotency_key": uuid.NewString(), "confirmed": false,
+		}),
+	}
+	for name, text := range results {
+		lowered := strings.ToLower(text)
+		for _, leak := range []string{"pool", "closed", "sql", "pgx", "postgres", "relation", "constraint"} {
+			require.NotContains(t, lowered, leak, "%s leaked database text: %s", name, text)
+		}
+	}
+	require.Contains(t, results["create"], unavailableCode)
+	require.Contains(t, results["rename"], unavailableCode)
+	require.Contains(t, results["preview"], "confirmation_required", "a preview needs no database")
+	require.Contains(t, logs.String(), "closed pool", "the server log records the underlying cause, not the sanitized message")
 }
 
 func TestPluginMetadataUnavailableRegistrationMatchesLiveManifest(t *testing.T) {

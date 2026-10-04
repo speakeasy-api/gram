@@ -395,7 +395,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithRemoteSessions(config.RemoteChallengeManager).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
-		WithMetadataMutations(plugins.NewPluginMetadataCore(config.AuditLogger, config.PublicationRequests), config.PluginPublishSignaler, platformMCPPluginMetadataBudget(config, limitStore)).
+		WithMetadataMutations(config.Logger, plugins.NewPluginMetadataCore(config.AuditLogger, config.PublicationRequests), config.PluginPublishSignaler, platformMCPPluginMetadataBudget(config, limitStore)).
 		WithDistributionAdmission(config.DistributionAdmission).
 		WithDistributionAdmissionReads(distributionAdmissionReads)
 	if config.PluginPublisher != nil {
@@ -919,7 +919,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithRemoteSessions(config.RemoteChallengeManager).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
-		WithMetadataMutations(plugins.NewPluginMetadataCore(config.AuditLogger, config.PublicationRequests), config.PluginPublishSignaler, platformMCPPluginMetadataBudget(config, limitStore)).
+		WithMetadataMutations(config.Logger, plugins.NewPluginMetadataCore(config.AuditLogger, config.PublicationRequests), config.PluginPublishSignaler, platformMCPPluginMetadataBudget(config, limitStore)).
 		WithDistributionAdmission(config.DistributionAdmission).
 		WithDistributionAdmissionReads(distributionAdmissionReads)
 	if config.PluginPublisher != nil {

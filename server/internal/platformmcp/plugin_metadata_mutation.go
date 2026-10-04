@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -150,8 +152,9 @@ type normalizedPluginMetadataMutation struct {
 // refuse the same inputs the same way. There is deliberately no creation cap:
 // the dashboard has none, and the operation budget already bounds a runaway
 // create loop.
-func (s *PluginsService) WithMetadataMutations(core *plugindelivery.PluginMetadataCore, publisher plugindelivery.PluginPublishSignaler, budget OperationBudget) *PluginsService {
+func (s *PluginsService) WithMetadataMutations(logger *slog.Logger, core *plugindelivery.PluginMetadataCore, publisher plugindelivery.PluginPublishSignaler, budget OperationBudget) *PluginsService {
 	if s != nil {
+		s.metadataLogger = logger
 		s.metadataCore = core
 		s.metadataPublisher = publisher
 		s.metadataBudget = budget
@@ -160,10 +163,60 @@ func (s *PluginsService) WithMetadataMutations(core *plugindelivery.PluginMetada
 }
 
 func (s *PluginsService) metadataMutationValid() bool {
-	return s.valid() && s.authorization != nil && s.metadataCore != nil && s.metadataBudget.valid()
+	return s.valid() && s.authorization != nil && s.metadataLogger != nil && s.metadataCore != nil && s.metadataBudget.valid()
 }
 
+// CreatePlugin creates one empty plugin. Every error it returns is a
+// classified refusal; anything unexpected is logged with its cause and
+// reported as temporarily unavailable.
 func (s *PluginsService) CreatePlugin(ctx context.Context, principal Principal, input CreatePluginInput) (PluginMetadataMutationOutput, error) {
+	output, err := s.createPlugin(ctx, principal, input)
+	return output, s.pluginMetadataRefusal(ctx, operationCreatePlugin, err)
+}
+
+// RenamePlugin changes one plugin's display name. Every error it returns is a
+// classified refusal; anything unexpected is logged with its cause and
+// reported as temporarily unavailable.
+func (s *PluginsService) RenamePlugin(ctx context.Context, principal Principal, input RenamePluginInput) (PluginMetadataMutationOutput, error) {
+	output, err := s.renamePlugin(ctx, principal, input)
+	return output, s.pluginMetadataRefusal(ctx, operationRenamePlugin, err)
+}
+
+// pluginMetadataRefusal is the boundary between these writes and the MCP
+// caller. Nothing behind it, such as the receipt executor, the shared core, or
+// a repository read, is trusted to return caller-safe text, and the tool layer
+// passes any error it cannot classify straight to the client. So an error that
+// is not one of this surface's own refusals becomes the unavailable refusal,
+// and every unavailable refusal logs the underlying cause rather than the
+// sanitized message the caller sees.
+func (s *PluginsService) pluginMetadataRefusal(ctx context.Context, operation string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if refusal, ok := errors.AsType[*PluginMetadataMutationError](err); ok {
+		if refusal.Code == unavailableCode {
+			s.logPluginMetadataFailure(ctx, operation, refusal.Cause)
+		}
+		return err
+	}
+	if _, ok := errors.AsType[*ExternalAuthorizationError](err); ok {
+		return err
+	}
+	if errors.Is(err, ErrPluginProjectNotFound) || errors.Is(err, ErrPluginNotFound) || errors.Is(err, ErrPluginAmbiguous) {
+		return err
+	}
+	s.logPluginMetadataFailure(ctx, operation, err)
+	return pluginMetadataMutationUnavailable(err)
+}
+
+func (s *PluginsService) logPluginMetadataFailure(ctx context.Context, operation string, cause error) {
+	if s.metadataLogger == nil {
+		return
+	}
+	s.metadataLogger.ErrorContext(ctx, "platform mcp plugin metadata mutation failed", attr.SlogToolName(operation), attr.SlogError(cause))
+}
+
+func (s *PluginsService) createPlugin(ctx context.Context, principal Principal, input CreatePluginInput) (PluginMetadataMutationOutput, error) {
 	if !s.metadataMutationValid() {
 		return PluginMetadataMutationOutput{}, pluginMetadataMutationUnavailable(nil)
 	}
@@ -213,7 +266,7 @@ func (s *PluginsService) CreatePlugin(ctx context.Context, principal Principal, 
 	})
 }
 
-func (s *PluginsService) RenamePlugin(ctx context.Context, principal Principal, input RenamePluginInput) (PluginMetadataMutationOutput, error) {
+func (s *PluginsService) renamePlugin(ctx context.Context, principal Principal, input RenamePluginInput) (PluginMetadataMutationOutput, error) {
 	if !s.metadataMutationValid() {
 		return PluginMetadataMutationOutput{}, pluginMetadataMutationUnavailable(nil)
 	}

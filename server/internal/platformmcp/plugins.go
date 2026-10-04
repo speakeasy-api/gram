@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"slices"
 	"strings"
@@ -371,6 +372,7 @@ type PluginsService struct {
 	distributionAdmission     *admission.Guard
 	distributionAdmissionRead distributionAdmissionReader
 
+	metadataLogger    *slog.Logger
 	metadataCore      *plugindelivery.PluginMetadataCore
 	metadataPublisher plugindelivery.PluginPublishSignaler
 	metadataBudget    OperationBudget
@@ -407,6 +409,7 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		mutationBudget:        OperationBudget{},
 		mutationReceipts:      nil,
 		distributionAdmission: admission.NewGuard(nil, nil),
+		metadataLogger:        nil,
 		metadataCore:          nil,
 		metadataPublisher:     nil,
 		metadataBudget:        OperationBudget{},
