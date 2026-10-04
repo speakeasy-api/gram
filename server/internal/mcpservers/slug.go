@@ -27,9 +27,16 @@ func computeServerSlug(name string, id uuid.UUID) (string, error) {
 	}
 	suffix := idStr[len(idStr)-slugSuffixLen:]
 
-	base := conv.ToSlug(name)
+	base := ServerSlugPrefix(name)
 	if base == "" {
 		return suffix, nil
 	}
 	return base + "-" + suffix, nil
+}
+
+// ServerSlugPrefix is the part of a server's slug that its name determines;
+// the server's own ID completes it. Exported so a caller can show the exact
+// prefix before creating the server rather than describing the derivation.
+func ServerSlugPrefix(name string) string {
+	return conv.ToSlug(name)
 }

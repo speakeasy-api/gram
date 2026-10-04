@@ -3,6 +3,7 @@ package toolsets_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,8 +18,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -215,6 +218,43 @@ func TestToolsetsService_CreateToolset_DuplicateSlug(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
+}
+
+// A name or description the toolsets columns cannot hold is refused as a bad
+// request before anything is written, rather than reaching the column CHECK
+// and surfacing as an unexpected error.
+func TestToolsetsService_CreateToolset_RefusesInputTheColumnsCannotHold(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+
+	for _, payload := range []*gen.CreateToolsetPayload{
+		{Name: strings.Repeat("n", toolsets.MaxToolsetNameLength+1)},
+		{Name: "!!!"},
+		{Name: "Fine Name", Description: new(strings.Repeat("d", toolsets.MaxToolsetDescriptionLength+1))},
+	} {
+		_, err := ti.service.CreateToolset(ctx, payload)
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr, payload.Name)
+		require.Equal(t, oops.CodeBadRequest, oopsErr.Code, payload.Name)
+	}
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount, "a refused create records nothing")
+}
+
+func TestToolsetSlugFromNameCutsToTheColumnLimit(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "order-desk", toolsets.ToolsetSlugFromName("Order Desk"))
+	// A cut that lands on a separator does not leave a trailing hyphen.
+	long := strings.Repeat("a", toolsets.MaxToolsetSlugLength-1) + " bcd"
+	got := toolsets.ToolsetSlugFromName(long)
+	require.Equal(t, strings.Repeat("a", toolsets.MaxToolsetSlugLength-1), got)
+	require.LessOrEqual(t, len(toolsets.ToolsetSlugFromName(strings.Repeat("ab ", 40))), toolsets.MaxToolsetSlugLength)
 }
 
 func TestToolsetsService_CreateToolset_InvalidEnvironment(t *testing.T) {

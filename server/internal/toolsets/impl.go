@@ -46,7 +46,6 @@ import (
 	oauthRepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -145,112 +144,37 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 
 	logger := s.logger
 
-	slugSuffix, err := conv.GenerateRandomSlug(5)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate random slug").LogError(ctx, logger)
-	}
-
-	mcpSlug := authCtx.OrganizationSlug + "-" + slugSuffix
-
-	enabledServerCount, err := s.usageRepo.GetEnabledServerCount(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		// don't block the user from creating a toolset
-		logger.ErrorContext(ctx, "error getting enabled server count", attr.SlogError(err), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
-	}
-
-	createToolParams := repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   payload.Name,
-		Slug:                   conv.ToSlug(payload.Name),
-		Description:            conv.PtrToPGText(payload.Description),
-		DefaultEnvironmentSlug: conv.PtrToPGText(nil),
-		McpSlug:                conv.ToPGText(mcpSlug),
-		McpEnabled:             enabledServerCount == 0, // we automatically enable the first available toolset in an organization as an MCP server
-	}
-
-	if payload.DefaultEnvironmentSlug != nil {
-		_, err := s.environmentRepo.GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
-			Slug:      conv.ToLower(*payload.DefaultEnvironmentSlug),
-			ProjectID: *authCtx.ProjectID,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error finding environment")
-		}
-		createToolParams.DefaultEnvironmentSlug = conv.ToPGText(conv.ToLower(*payload.DefaultEnvironmentSlug))
-	} else {
-		environments, err := s.environmentRepo.ListEnvironments(ctx, *authCtx.ProjectID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error listing environments")
-		}
-		for _, environment := range environments {
-			if environment.Slug == "default" { // We will autofill the default environment if one is available
-				createToolParams.DefaultEnvironmentSlug = conv.ToPGText(environment.Slug)
-				break
-			}
-		}
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing toolsets").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	tr := s.repo.WithTx(dbtx)
-
-	if mcpSlug, err = s.ensureGeneratedMcpSlug(ctx, dbtx, logger, authCtx.OrganizationSlug, authCtx.ActiveOrganizationID, mcpSlug); err != nil {
-		return nil, err
+	var defaultEnvironmentSlug *string
+	if payload.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug = new(string(*payload.DefaultEnvironmentSlug))
 	}
-	createToolParams.McpSlug = conv.ToPGText(mcpSlug)
-
-	createdToolset, err := tr.CreateToolset(ctx, createToolParams)
-	var pgErr *pgconn.PgError
-	if err != nil {
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, oops.E(oops.CodeConflict, nil, "toolset slug already exists")
-		}
-
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create toolset").LogError(ctx, logger)
-	}
-
+	var originRegistrySpecifier *string
 	if payload.Origin != nil {
-		_, err = tr.CreateToolsetOrigin(ctx, repo.CreateToolsetOriginParams{
-			OrganizationID:    authCtx.ActiveOrganizationID,
-			ToolsetID:         createdToolset.ID,
-			RegistrySpecifier: payload.Origin.RegistrySpecifier,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to create toolset origin").LogError(ctx, logger)
-		}
+		originRegistrySpecifier = new(payload.Origin.RegistrySpecifier)
 	}
-
-	// Create initial toolset version with tool URNs
-	err = s.createToolsetVersion(ctx, payload.ToolUrns, payload.ResourceUrns, createdToolset.ID, tr)
+	created, err := CreateToolsetInTransaction(ctx, dbtx, logger, s.audit, ToolsetCreateInput{
+		OrganizationID:          authCtx.ActiveOrganizationID,
+		OrganizationSlug:        authCtx.OrganizationSlug,
+		ProjectID:               *authCtx.ProjectID,
+		ActorUserID:             authCtx.UserID,
+		ActorEmail:              authCtx.Email,
+		Name:                    payload.Name,
+		Description:             payload.Description,
+		DefaultEnvironmentSlug:  defaultEnvironmentSlug,
+		OriginRegistrySpecifier: originRegistrySpecifier,
+		ToolURNs:                payload.ToolUrns,
+		ResourceURNs:            payload.ResourceUrns,
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	if err := s.audit.LogToolsetCreate(ctx, dbtx, audit.LogToolsetCreateEvent{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ProjectID:        *authCtx.ProjectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		ToolsetURN:       urn.NewToolset(createdToolset.ID),
-		ToolsetName:      createdToolset.Name,
-		ToolsetSlug:      createdToolset.Slug,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset creation").LogError(ctx, logger)
-	}
-
-	var pluginCreated bool
-	if createToolParams.McpEnabled {
-		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, createdToolset.ID, createdToolset.Name)
-		if err != nil {
-			return nil, err
-		}
-	}
+	createdToolset := created.Toolset
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving toolset").LogError(ctx, logger)
@@ -258,7 +182,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 
 	// Only an MCP-enabled toolset reaches the Default plugin, so a plain
 	// toolset must not enqueue a publish.
-	s.triggerPluginPublish(ctx, authCtx, createToolParams.McpEnabled, pluginCreated)
+	s.triggerPluginPublish(ctx, authCtx, created.McpEnabled, created.PluginCreated)
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(createdToolset.Slug), &s.toolsetCache, nil)
 	if err != nil {
@@ -269,58 +193,8 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	return toolsetDetails, nil
 }
 
-// attachToDefaultPlugin adds a newly MCP-enabled toolset to the project's
-// Default plugin so it's included in the auto-published marketplace without
-// a human visiting the Plugins page. No-op if the toolset is already
-// attached. Returns pluginCreated=true if this call lazily created the
-// Default plugin (project predates this feature) — callers should enqueue
-// an initial publish for it, but only after their own transaction commits,
-// since this runs pre-commit and the DB writes could still roll back.
-// ensureGeneratedMcpSlug guards a generated platform mcp_slug against the
-// unified namespace, regenerating on the rare collision with a live endpoint.
-func (s *Service) ensureGeneratedMcpSlug(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, orgSlug, orgID, slug string) (string, error) {
-	for attempt := 0; ; attempt++ {
-		if err := mcpendpoints.LockSlugScope(ctx, dbtx, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, slug); err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "lock mcp slug scope").LogError(ctx, logger)
-		}
-		available, err := mcpendpoints.CheckSlugAvailable(ctx, dbtx, mcpendpoints.SlugAvailabilityCheck{
-			Slug:                     slug,
-			CustomDomainID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			OrganizationID:           orgID,
-			ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			ExcludeMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			SkipDomainOwnershipCheck: false,
-		})
-		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "check mcp slug availability").LogError(ctx, logger)
-		}
-		if available {
-			return slug, nil
-		}
-		if attempt == 2 {
-			return "", oops.E(oops.CodeConflict, nil, "could not generate a unique mcp slug").LogError(ctx, logger)
-		}
-		suffix, err := conv.GenerateRandomSlug(5)
-		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "failed to generate random slug").LogError(ctx, logger)
-		}
-		slug = orgSlug + "-" + suffix
-	}
-}
-
 func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (bool, error) {
-	pluginCreated, err := plugins.AttachToDefaultPluginAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
-		McpServerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		DisplayName:    displayName,
-	})
-	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "attach toolset to default plugin").LogError(ctx, s.logger)
-	}
-
-	return pluginCreated, nil
+	return attachToDefaultPluginInTransaction(ctx, dbtx, s.logger, s.audit, authCtx, toolsetID, displayName)
 }
 
 // triggerPluginPublish enqueues the marketplace publish for the project whose
@@ -1009,7 +883,7 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 	newName := originalToolset.Name + "_copy"
 	newSlug := conv.ToSlug(newName)
 	mcpSlug := authCtx.OrganizationSlug + "-" + slugSuffix
-	if mcpSlug, err = s.ensureGeneratedMcpSlug(ctx, dbtx, logger, authCtx.OrganizationSlug, authCtx.ActiveOrganizationID, mcpSlug); err != nil {
+	if mcpSlug, err = ensureGeneratedMcpSlug(ctx, dbtx, logger, authCtx.OrganizationSlug, authCtx.ActiveOrganizationID, mcpSlug); err != nil {
 		return nil, err
 	}
 
@@ -1555,99 +1429,7 @@ func (s *Service) createToolsetVersion(ctx context.Context, toolUrnStrings []str
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetID(toolsetID.String()))
-
-	// Only create a version if URNs are provided (indicating a change). Check nil (not len==0) so that toolsets can be made empty.
-	if toolUrnStrings == nil && resourceUrnStrings == nil {
-		return nil
-	}
-
-	// Parse tool URNs from payload
-	allToolUrns := []urn.Tool{}
-	for _, urnStr := range toolUrnStrings {
-		var toolUrn urn.Tool
-		if err := toolUrn.UnmarshalText([]byte(urnStr)); err != nil {
-			logger.WarnContext(ctx, "invalid tool URN", attr.SlogError(err), attr.SlogToolURN(urnStr))
-			continue
-		}
-		allToolUrns = append(allToolUrns, toolUrn)
-	}
-
-	// Parse resource URNs from payload
-	allResourceUrns := []urn.Resource{}
-	for _, urnStr := range resourceUrnStrings {
-		var resourceUrn urn.Resource
-		if err := resourceUrn.UnmarshalText([]byte(urnStr)); err != nil {
-			logger.WarnContext(ctx, "invalid resource URN", attr.SlogError(err), attr.SlogResourceURN(urnStr))
-			continue
-		}
-		allResourceUrns = append(allResourceUrns, resourceUrn)
-	}
-
-	// Get the latest version to set as predecessor
-	latestVersion, err := tr.GetLatestToolsetVersion(ctx, toolsetID)
-	latestVersionNumber := int64(0)
-	var predecessorID uuid.NullUUID
-	if err == nil {
-		predecessorID = uuid.NullUUID{UUID: latestVersion.ID, Valid: true}
-		latestVersionNumber = latestVersion.Version
-	}
-
-	if toolUrnStrings == nil && len(latestVersion.ToolUrns) > 0 {
-		allToolUrns = append(allToolUrns, latestVersion.ToolUrns...)
-	}
-
-	if resourceUrnStrings == nil && len(latestVersion.ResourceUrns) > 0 {
-		allResourceUrns = append(allResourceUrns, latestVersion.ResourceUrns...)
-	}
-
-	// Check if URNs are different from latest version
-	if err == nil {
-		toolsUnchanged := len(latestVersion.ToolUrns) == len(allToolUrns)
-		if toolsUnchanged {
-			existingToolUrnSet := make(map[string]bool)
-			for _, existingUrn := range latestVersion.ToolUrns {
-				existingToolUrnSet[existingUrn.String()] = true
-			}
-			for _, newUrn := range allToolUrns {
-				if !existingToolUrnSet[newUrn.String()] {
-					toolsUnchanged = false
-					break
-				}
-			}
-		}
-
-		resourcesUnchanged := len(latestVersion.ResourceUrns) == len(allResourceUrns)
-		if resourcesUnchanged {
-			existingResourceUrnSet := make(map[string]bool)
-			for _, existingUrn := range latestVersion.ResourceUrns {
-				existingResourceUrnSet[existingUrn.String()] = true
-			}
-			for _, newUrn := range allResourceUrns {
-				if !existingResourceUrnSet[newUrn.String()] {
-					resourcesUnchanged = false
-					break
-				}
-			}
-		}
-
-		if toolsUnchanged && resourcesUnchanged {
-			return nil // No change needed
-		}
-	}
-
-	_, err = tr.CreateToolsetVersion(ctx, repo.CreateToolsetVersionParams{
-		ToolsetID:     toolsetID,
-		Version:       latestVersionNumber + 1,
-		ToolUrns:      allToolUrns,
-		ResourceUrns:  allResourceUrns,
-		PredecessorID: predecessorID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to create toolset version").LogError(ctx, logger)
-	}
-
-	return nil
+	return createToolsetVersionInTransaction(ctx, s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String())), tr, toolsetID, toolUrnStrings, resourceUrnStrings)
 }
 
 // updatePromptTemplates updates the prompt templates for a toolset. NOTE: promptTemplates are NOT tools! These correspond to actual "prompts" in MCP

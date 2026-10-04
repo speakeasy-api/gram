@@ -3706,6 +3706,16 @@ func TestGeneratePlatformMCPPackageEmitsToolExposureWorkflow(t *testing.T) {
 		"Use `send_platform_mcp_feedback` only after asking for consent",
 		"nothing was changed at all, not that part of the request landed",
 		"not that plugins or the people holding them have converged",
+		// Creating a server is offered only when none fits, only from function
+		// tools, and the result is private until a plugin carries it.
+		"`create_mcp_from_functions`",
+		"never create a server the user did not ask for",
+		"`source_kind` `function`",
+		"reaches nobody until it is put into a plugin",
+		// The slug a user confirms comes from the tool's own preview, never
+		// from prose that can drift from the code that derives it.
+		"`confirmation_required`",
+		"Never work out or describe a slug yourself",
 	} {
 		require.Contains(t, workflow, guardrail)
 	}

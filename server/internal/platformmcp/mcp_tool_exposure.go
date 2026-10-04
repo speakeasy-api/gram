@@ -64,7 +64,10 @@ type MCPToolExposureError struct {
 	Code         string
 	Message      string
 	UnknownTools []string
-	Cause        error
+	// Preview is set only on create_mcp_from_functions' confirmation_required
+	// refusal, so the caller confirms the slugs the code will actually create.
+	Preview *MCPFromFunctionsPreview
+	Cause   error
 }
 
 func (e *MCPToolExposureError) Error() string { return e.Message }
