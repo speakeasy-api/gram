@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   members: [] as unknown[],
   agents: [] as { id: string; name: string }[],
   flagStatus: "enabled",
+  agentData: { name: "Example agent" } as { name: string } | undefined,
   success: vi.fn(),
   onSuccess: undefined as undefined | ((result: Assistant) => void),
 }));
@@ -53,7 +54,7 @@ vi.mock("@gram/client/react-query/agents.js", () => ({
   useAgents: () => ({ data: mocks.agents, isPending: false, isError: false }),
 }));
 vi.mock("@gram/client/react-query/agent.js", () => ({
-  useAgent: () => ({ data: { name: "Example agent" } }),
+  useAgent: () => ({ data: mocks.agentData }),
 }));
 vi.mock("@gram/client/react-query/slackDirectoryMembers.js", () => ({
   useSlackDirectoryMembers: () => ({ data: { members: mocks.members } }),
@@ -96,6 +97,7 @@ beforeEach(() => {
   mocks.members = [];
   mocks.agents = [];
   mocks.flagStatus = "enabled";
+  mocks.agentData = { name: "Example agent" };
 });
 describe("Assistant identity management", () => {
   it("requires a different new name when the assistant name is already used", () => {
@@ -151,7 +153,11 @@ describe("Assistant identity management", () => {
         "This assistant uses legacy authentication bindings. Actions are attributed to the owner.",
       ),
     ).toBeTruthy();
-    expect(screen.queryByText(/Health|generation|Thread history/)).toBeNull();
+    expect(
+      screen.queryByText(
+        /health|generation|thread history|workload bindings|trigger (?:id|status|details)/i,
+      ),
+    ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Set up workloads" }));
     expect(mocks.mutate).not.toHaveBeenCalled();
     expect(screen.queryByText(assistant.id)).toBeNull();
@@ -213,4 +219,12 @@ describe("Assistant identity management", () => {
       screen.queryByRole("link", { name: "Set up Slack mapping" }),
     ).toBeNull();
   });
+});
+
+it("keeps the assigned identity link when its name is unavailable", () => {
+  mocks.agentData = undefined;
+  setup({ ...assistant, identityState: "ACTIVE", agentId: "assigned-agent" });
+  expect(
+    screen.getByRole("link", { name: "Agent identity" }).getAttribute("href"),
+  ).toContain("assigned-agent");
 });

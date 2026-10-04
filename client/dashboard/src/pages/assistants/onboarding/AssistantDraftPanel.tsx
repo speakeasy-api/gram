@@ -128,7 +128,11 @@ export function AssistantDraftPanel(): JSX.Element {
         </Stack>
       ) : (
         <Tabs
-          value={activeTab}
+          value={
+            activeTab === "identity" && identityFlag.status !== "enabled"
+              ? "overview"
+              : activeTab
+          }
           onValueChange={(value) => void setActiveTab(toDetailTab(value))}
           className="flex min-h-0 flex-1 flex-col"
         >

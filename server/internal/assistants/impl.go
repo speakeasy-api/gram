@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -611,7 +612,7 @@ func (s *Service) UpgradeAssistantIdentity(ctx context.Context, payload *gen.Upg
 	}
 	if payload.AgentName != nil {
 		selection.Name = strings.TrimSpace(*payload.AgentName)
-		if selection.Name == "" || payload.AgentID != nil {
+		if selection.Name == "" || utf8.RuneCountInString(*payload.AgentName) > 255 || payload.AgentID != nil {
 			return nil, oops.C(oops.CodeBadRequest)
 		}
 	}

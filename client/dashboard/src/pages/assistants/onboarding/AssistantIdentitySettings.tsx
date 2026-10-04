@@ -213,7 +213,7 @@ function ConfiguredIdentity({ assistant }: { assistant: Assistant }) {
 
   return (
     <div className="space-y-6">
-      {agent.data && assistant.agentId && (
+      {assistant.agentId && (
         <Link
           className="inline-flex items-center gap-2 text-sm font-medium underline underline-offset-4"
           to={routes.identities.detail.overview.href(
@@ -221,7 +221,7 @@ function ConfiguredIdentity({ assistant }: { assistant: Assistant }) {
           )}
         >
           <Bot className="size-4 text-muted-foreground" aria-hidden="true" />
-          {agent.data.name}
+          {agent.data?.name ?? "Agent identity"}
         </Link>
       )}
       {canManageMappings && mappings.data?.members.length === 0 && (

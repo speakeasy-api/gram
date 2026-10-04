@@ -1,6 +1,7 @@
 package assistantidentity_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -9,10 +10,13 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	workloadrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
@@ -192,6 +196,13 @@ func TestProvisionSelectsExistingAgentWithoutChangingPolicy(t *testing.T) {
 	f := newFixture(t)
 	agent, err := agentrepo.New(f.db).CreateAgent(t.Context(), agentrepo.CreateAgentParams{OrganizationID: f.org, ProjectID: uuid.NullUUID{UUID: f.project, Valid: true}, OwnerUserID: f.actor, Name: "Shared agent"})
 	require.NoError(t, err)
+	selector, err := json.Marshal(authz.NewSelector(authz.ScopeProjectRead, f.project.String()))
+	require.NoError(t, err)
+	_, err = accessrepo.New(f.db).InsertPrincipalGrantIfAbsent(t.Context(), accessrepo.InsertPrincipalGrantIfAbsentParams{OrganizationID: f.org, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), Scope: "project:read", Selectors: selector})
+	require.NoError(t, err)
+	beforePolicy, err := agentrepo.New(f.db).ListAgentPolicyGrants(t.Context(), agentrepo.ListAgentPolicyGrantsParams{OrganizationID: f.org, AgentID: agent.ID})
+	require.NoError(t, err)
+	require.Len(t, beforePolicy, 1)
 	before, err := repo.New(f.db).FixtureAuthorityCounts(t.Context(), f.org)
 	require.NoError(t, err)
 	var binding assistantidentity.Binding
@@ -208,4 +219,7 @@ func TestProvisionSelectsExistingAgentWithoutChangingPolicy(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, before.Agents, after.Agents)
 	require.Equal(t, before.Grants, after.Grants)
+	afterPolicy, err := agentrepo.New(f.db).ListAgentPolicyGrants(t.Context(), agentrepo.ListAgentPolicyGrantsParams{OrganizationID: f.org, AgentID: agent.ID})
+	require.NoError(t, err)
+	require.Equal(t, beforePolicy, afterPolicy)
 }
