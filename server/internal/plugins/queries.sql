@@ -398,8 +398,8 @@ SELECT EXISTS (
 )::bool;
 
 -- name: HasPluginMembershipForToolset :one
--- A toolset reaches a package directly or through an enabled MCP server it
--- backs, mirroring the package-generation queries. The toolset must belong to
+-- A toolset reaches a package directly while it is MCP-enabled, or through an
+-- enabled MCP server it backs, mirroring the package-generation queries. The toolset must belong to
 -- the project, but its own deleted flag is ignored so a deletion can still be
 -- traced to the plugins that carried it.
 SELECT EXISTS (
@@ -409,7 +409,7 @@ SELECT EXISTS (
   LEFT JOIN mcp_servers s ON s.id = ps.mcp_server_id AND s.project_id = p.project_id
     AND s.deleted IS FALSE AND s.visibility <> 'disabled'
   WHERE ps.deleted IS FALSE
-    AND (ps.toolset_id = t.id OR s.toolset_id = t.id)
+    AND ((ps.toolset_id = t.id AND t.mcp_enabled IS TRUE) OR s.toolset_id = t.id)
 )::bool;
 
 

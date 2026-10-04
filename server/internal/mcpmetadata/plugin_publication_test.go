@@ -107,12 +107,27 @@ func (f publishingMetadataFixture) requireRepublished(t *testing.T, ctx context.
 	require.Equal(t, want, f.publisher.count(), msg)
 }
 
-// createPublicToolset creates a toolset whose package entry lists its
-// user-supplied headers.
-func createPublicToolset(t *testing.T, ctx context.Context, ti *testInstance, slug string) toolsets_repo.Toolset {
+// createMCPToolset creates an MCP-enabled toolset, the only kind a package
+// lists directly.
+func createMCPToolset(t *testing.T, ctx context.Context, ti *testInstance, slug string) toolsets_repo.Toolset {
 	t.Helper()
 
 	toolset := createTestToolset(t, ctx, ti, slug)
+	require.NoError(t, toolsets_repo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, toolsets_repo.SetToolsetMCPEnabledByIDParams{
+		McpEnabled: true,
+		ID:         toolset.ID,
+		ProjectID:  toolset.ProjectID,
+	}))
+	toolset.McpEnabled = true
+	return toolset
+}
+
+// createPublicToolset creates an MCP-enabled toolset whose package entry lists
+// its user-supplied headers.
+func createPublicToolset(t *testing.T, ctx context.Context, ti *testInstance, slug string) toolsets_repo.Toolset {
+	t.Helper()
+
+	toolset := createMCPToolset(t, ctx, ti, slug)
 	require.NoError(t, toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
@@ -185,7 +200,7 @@ func TestSetMcpMetadataPrivateToolsetRepublishesOnlyWhenHeadersAppearOrVanish(t 
 	t.Parallel()
 
 	ctx, f := newPublishingMetadataService(t)
-	toolset := createTestToolset(t, ctx, f.ti, "metadata-private")
+	toolset := createMCPToolset(t, ctx, f.ti, "metadata-private")
 	f.carry(t, ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true}, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	slug := types.Slug(toolset.Slug)
 
@@ -224,6 +239,22 @@ func TestSetMcpMetadataSkipsServerOutsidePackages(t *testing.T) {
 	})
 	require.NoError(t, err)
 	f.requireRepublished(t, ctx, 0, "a server no plugin carries is in no package")
+}
+
+func TestSetMcpMetadataSkipsAttachedToolsetWithoutMCP(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newPublishingMetadataService(t)
+	toolset := createTestToolset(t, ctx, f.ti, "metadata-not-mcp")
+	f.carry(t, ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true}, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	slug := types.Slug(toolset.Slug)
+
+	_, err := f.ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:        &slug,
+		EnvironmentConfigs: []*types.McpEnvironmentConfigInput{userHeader("API_TOKEN", "X-Api-Token")},
+	})
+	require.NoError(t, err)
+	f.requireRepublished(t, ctx, 0, "package generation leaves out an attached toolset that is not an MCP server")
 }
 
 func TestSetMcpMetadataRepublishesCarriedMCPServer(t *testing.T) {
