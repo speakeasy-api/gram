@@ -1,0 +1,27 @@
+.changeset/platform-mcp-workflow-rate-limits.md
+  h_9630b74bdac540 1-5
+server/internal/platformmcp/skill_insights.go
+  h_9630b74bdac540 215-217
+server/internal/platformmcp/operation_budget_test.go
+  h_9630b74bdac540 7,14-38
+  h_9630b74bdac540 39
+server/internal/platformmcp/operation_budget.go
+  h_9630b74bdac540 51-53,55-73,95-118,120-122
+  h_9630b74bdac540 54,119
+server/cmd/gram/platform_mcp.go
+  h_9630b74bdac540 289-296,809-815
+  h_9630b74bdac540 816
+server/internal/platformmcp/plugins.go
+  h_9630b74bdac540 41-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "530a6667a31ecc893140aa7089f2c6f738b95a57",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
