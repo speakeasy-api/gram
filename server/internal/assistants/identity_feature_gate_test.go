@@ -74,7 +74,7 @@ func TestGetAssistantIdentityDiagnosticsFeatureGate(t *testing.T) {
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
 		Scope:    authz.ScopeProjectRead,
 		Selector: authz.NewSelector(authz.ScopeProjectRead, project.String()),
-	})
+	}, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, project.String())})
 	flags := new(feature.InMemory)
 	flags.SetFlag(feature.FlagAgentIdentityCredentials, "org-test", false)
 	svc.core.SetFeatureProvider(flags)
@@ -91,6 +91,11 @@ func TestGetAssistantIdentityDiagnosticsFeatureGate(t *testing.T) {
 			require.Nil(t, view.IdentityDiagnostics)
 		}
 	}
+	flags.SetFlag(feature.FlagAgentIdentityCredentials, "org-test", true)
+	reader := authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, project.String())})
+	redacted, err := svc.GetAssistant(reader, &gen.GetAssistantPayload{ID: assistant.ID.String()})
+	require.NoError(t, err)
+	require.Nil(t, redacted.IdentityDiagnostics)
 	svc.core.SetFeatureProvider(nil)
 	view, err := svc.GetAssistant(ctx, &gen.GetAssistantPayload{ID: assistant.ID.String()})
 	require.NoError(t, err)

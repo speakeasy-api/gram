@@ -118,6 +118,12 @@ func (s *Service) ProvisionWithAgent(ctx context.Context, tx pgx.Tx, p Provision
 		if agent.OwnerUserID != p.ActorUserID && !authz.GrantsSatisfy(actorPolicy, authz.Check{Scope: authz.ScopeAgentAuthorize, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil}) {
 			return Binding{}, ErrActorIneligible
 		}
+		if _, err := q.LockActor(ctx, repo.LockActorParams{OrganizationID: p.OrganizationID, UserID: agent.OwnerUserID}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return Binding{}, ErrActorIneligible
+			}
+			return Binding{}, fmt.Errorf("validate selected agent owner: %w", err)
+		}
 		if !agent.ProjectID.Valid || agent.ProjectID.UUID != p.ProjectID || agent.RevokedAt.Valid || agent.SuspendedAt.Valid || agent.OwnerReassignmentRequiredAt.Valid {
 			return Binding{}, ErrInvalidIdentity
 		}

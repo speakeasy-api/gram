@@ -13,10 +13,13 @@ const mocks = vi.hoisted(() => ({
   flagStatus: "enabled",
   agentData: { name: "Example agent" } as { name: string } | undefined,
   success: vi.fn(),
+  error: vi.fn(),
+  refetchAgents: vi.fn(),
+  onError: undefined as undefined | ((error: Error) => void),
   onSuccess: undefined as undefined | ((result: Assistant) => void),
 }));
 vi.mock("sonner", () => ({
-  toast: { success: mocks.success, error: vi.fn() },
+  toast: { success: mocks.success, error: mocks.error },
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: (flag: string) => {
@@ -45,13 +48,20 @@ vi.mock("@/routes", () => ({
 vi.mock("@gram/client/react-query/assistantsUpgradeIdentity.js", () => ({
   useAssistantsUpgradeIdentityMutation: (options: {
     onSuccess: (result: Assistant) => void;
+    onError: (error: Error) => void;
   }) => {
     mocks.onSuccess = options.onSuccess;
+    mocks.onError = options.onError;
     return { mutate: mocks.mutate, isPending: false };
   },
 }));
 vi.mock("@gram/client/react-query/agents.js", () => ({
-  useAgents: () => ({ data: mocks.agents, isPending: false, isError: false }),
+  useAgents: () => ({
+    data: mocks.agents,
+    refetch: mocks.refetchAgents,
+    isPending: false,
+    isError: false,
+  }),
 }));
 vi.mock("@gram/client/react-query/agent.js", () => ({
   useAgent: () => ({ data: mocks.agentData }),
@@ -227,4 +237,18 @@ it("keeps the assigned identity link when its name is unavailable", () => {
   expect(
     screen.getByRole("link", { name: "Agent identity" }).getAttribute("href"),
   ).toContain("assigned-agent");
+});
+
+it("allows legacy setup without optional diagnostics", () => {
+  setup({ ...assistant, identityDiagnostics: undefined });
+  expect(screen.getByRole("button", { name: "Set up workloads" })).toBeTruthy();
+});
+
+it("reports a server-side name collision without permission guidance", () => {
+  setup();
+  mocks.onError?.(new Error("an agent identity already uses this name"));
+  expect(mocks.error).toHaveBeenCalledWith(
+    "This identity name is already taken. Choose a different name.",
+  );
+  expect(mocks.refetchAgents).toHaveBeenCalled();
 });

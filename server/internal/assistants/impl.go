@@ -153,7 +153,7 @@ func (s *Service) GetAssistant(ctx context.Context, payload *gen.GetAssistantPay
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to evaluate agent identity credentials flag", attr.SlogError(err))
 	}
-	if evaluation == feature.EvaluationEnabled {
+	if evaluation == feature.EvaluationEnabled && s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}) == nil {
 		view.IdentityDiagnostics, err = s.core.identityDiagnostics(ctx, record)
 		if err != nil {
 			return nil, mapAssistantStoreError(ctx, s.logger, err, "inspect assistant identity")
@@ -607,13 +607,13 @@ func (s *Service) UpgradeAssistantIdentity(ctx context.Context, payload *gen.Upg
 	if payload.AgentID != nil {
 		selection.AgentID, err = uuid.Parse(*payload.AgentID)
 		if err != nil || selection.AgentID == uuid.Nil {
-			return nil, oops.C(oops.CodeBadRequest)
+			return nil, oops.E(oops.CodeBadRequest, nil, "agent_id must be a non-empty UUID")
 		}
 	}
 	if payload.AgentName != nil {
 		selection.Name = strings.TrimSpace(*payload.AgentName)
-		if selection.Name == "" || utf8.RuneCountInString(*payload.AgentName) > 255 || payload.AgentID != nil {
-			return nil, oops.C(oops.CodeBadRequest)
+		if selection.Name == "" || utf8.RuneCountInString(selection.Name) > 120 || payload.AgentID != nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "agent_name must contain 1 to 120 characters and cannot be combined with agent_id")
 		}
 	}
 	record, err := s.core.UpgradeAssistantIdentityWithAgent(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, id, authCtx.UserID, selection)

@@ -26,7 +26,6 @@ export function AssistantIdentitySettings({
   onUpdated?: () => void;
 }): JSX.Element | null {
   const identityFlag = useFeatureFlag(FEATURE_FLAGS.agentCredentials);
-  const diagnostics = assistant.identityDiagnostics;
   const { hasScope } = useRBAC();
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
@@ -57,7 +56,14 @@ export function AssistantIdentitySettings({
       onUpdated?.();
       toast.success("Workloads set up");
     },
-    onError: () => {
+    onError: (error) => {
+      if (error.message.includes("already uses this name")) {
+        toast.error(
+          "This identity name is already taken. Choose a different name.",
+        );
+        void agentsQuery.refetch();
+        return;
+      }
       toast.error(
         "Could not update identity. Refresh and check your permissions and identity health.",
       );
@@ -67,7 +73,6 @@ export function AssistantIdentitySettings({
   const canUpgrade =
     hasScope("project:write", assistant.projectId) &&
     identityFlag.status === "enabled" &&
-    diagnostics !== undefined &&
     legacy;
 
   if (identityFlag.status !== "enabled") return null;
@@ -128,7 +133,7 @@ export function AssistantIdentitySettings({
                   id="assistant-agent-name"
                   value={agentName}
                   onChange={(event) => setAgentName(event.target.value)}
-                  maxLength={255}
+                  maxLength={120}
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                   disabled={upgrade.isPending}
                   aria-invalid={nameTaken}

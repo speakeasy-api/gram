@@ -87,7 +87,7 @@ var _ = Service("assistants", func() {
 		Payload(func() {
 			Attribute("id", String, "The assistant ID.", func() { Format(FormatUUID) })
 			Attribute("agent_id", String, "Existing agent identity to use instead of creating one.", func() { Format(FormatUUID) })
-			Attribute("agent_name", String, "Name for a new agent identity. Mutually exclusive with agent_id.", func() { MinLength(1); MaxLength(255) })
+			Attribute("agent_name", String, "Name for a new agent identity. Mutually exclusive with agent_id.", func() { MinLength(1); MaxLength(120) })
 			Required("id")
 			security.SessionPayload()
 			security.ProjectPayload()
@@ -164,7 +164,7 @@ var _ = Service("assistants", func() {
 				Format(FormatUUID)
 			})
 			Attribute("idempotency_key", String, "Stable key the client mints once per message so retries dedupe instead of enqueuing twice. A new key is generated server-side when omitted.", func() {
-				MaxLength(255)
+				MaxLength(120)
 			})
 			Attribute("skill_ids", ArrayOf(String, func() {
 				Format(FormatUUID)
@@ -308,7 +308,7 @@ var SendMessageAttachment = Type("SendMessageAttachment", func() {
 		Format(FormatUUID)
 	})
 	Attribute("name", String, "The file name to show the assistant. Falls back to the stored asset name.", func() {
-		MaxLength(255)
+		MaxLength(120)
 	})
 })
 

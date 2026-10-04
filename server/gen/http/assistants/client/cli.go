@@ -161,8 +161,8 @@ func BuildUpgradeAssistantIdentityPayload(assistantsUpgradeAssistantIdentityBody
 			}
 		}
 		if body.AgentName != nil {
-			if utf8.RuneCountInString(*body.AgentName) > 255 {
-				err = goa.MergeErrors(err, goa.InvalidLengthError("body.agent_name", *body.AgentName, utf8.RuneCountInString(*body.AgentName), 255, false))
+			if utf8.RuneCountInString(*body.AgentName) > 120 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.agent_name", *body.AgentName, utf8.RuneCountInString(*body.AgentName), 120, false))
 			}
 		}
 		if err != nil {
@@ -309,8 +309,8 @@ func BuildSendMessagePayload(assistantsSendMessageBody string, assistantsSendMes
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", *body.ChatID, goa.FormatUUID))
 		}
 		if body.IdempotencyKey != nil {
-			if utf8.RuneCountInString(*body.IdempotencyKey) > 255 {
-				err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotency_key", *body.IdempotencyKey, utf8.RuneCountInString(*body.IdempotencyKey), 255, false))
+			if utf8.RuneCountInString(*body.IdempotencyKey) > 120 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotency_key", *body.IdempotencyKey, utf8.RuneCountInString(*body.IdempotencyKey), 120, false))
 			}
 		}
 		if len(body.SkillIds) > 10 {
