@@ -73,6 +73,19 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 		}
 	}
 
+	// The prior link is read under the row lock so a concurrent change cannot
+	// hide an OAuth transition this write makes.
+	locked, err := s.repo.WithTx(dbtx).GetToolsetForUpdate(ctx, repo.GetToolsetForUpdateParams{
+		Slug:      string(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock toolset").LogError(ctx, s.logger)
+	}
+
 	updatedToolset, err := s.repo.WithTx(dbtx).UpdateToolsetUserSessionIssuer(ctx, repo.UpdateToolsetUserSessionIssuerParams{
 		UserSessionIssuerID: usiID,
 		Slug:                string(payload.Slug),
@@ -89,7 +102,7 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 	}
 	// A package renders an OAuth server differently from a key-authenticated
 	// one, so only linking an issuer where none was, or unlinking it, changes it.
-	oauthChanged := updatedToolset.McpEnabled && (beforeView.UserSessionIssuerID != nil) != usiID.Valid
+	oauthChanged := updatedToolset.McpEnabled && locked.UserSessionIssuerID.Valid != usiID.Valid
 	if oauthChanged {
 		if err := s.requestPluginPublicationForToolset(ctx, dbtx, authCtx, updatedToolset.ID); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "enqueue toolset plugin publication").LogError(ctx, s.logger)
