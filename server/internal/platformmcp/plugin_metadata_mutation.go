@@ -210,7 +210,7 @@ func (s *PluginsService) pluginMetadataRefusal(ctx context.Context, operation st
 }
 
 func (s *PluginsService) logPluginMetadataFailure(ctx context.Context, operation string, cause error) {
-	if s.metadataLogger == nil {
+	if s == nil || s.metadataLogger == nil {
 		return
 	}
 	s.metadataLogger.ErrorContext(ctx, "platform mcp plugin metadata mutation failed", attr.SlogToolName(operation), attr.SlogError(cause))
