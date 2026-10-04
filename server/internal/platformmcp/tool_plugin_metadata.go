@@ -39,8 +39,8 @@ func registerPluginMetadataTools(reg *Registrar, plugins *PluginsService) {
 		Name:  operationCreatePlugin,
 		Title: "Create a Plugin",
 		Description: "Create one empty plugin — a bundle of MCP servers and skills shared with people — in an explicit project, so an MCP server or skill can then be put into it. " +
-			"Name it, optionally give it a slug and description, pass a stable idempotency key, and set confirmed: true only after the user confirms the project, name, and slug. " +
-			"The slug is the plugin's permanent install name, so show it to the user before confirming: when omitted it is derived from the name and cut to 60 characters; when supplied it must already be at most 60 lowercase letters, digits, and hyphens. A slug another plugin in the project holds is refused as slug_taken; reusing an idempotency key with different input is refused as idempotency_key_reused. " +
+			"Name it, optionally give it a slug and description, and pass a stable idempotency key. " +
+			"The slug is the plugin's permanent install name. When omitted it is derived from the name; when supplied it must already be at most 60 lowercase letters, digits, and hyphens. Call first without confirmed: true: nothing is created, and the confirmation_required refusal returns the exact slug in its slug field. Show the user that slug, never one you worked out yourself, then call again with confirmed: true and a fresh idempotency key once they confirm. A slug another plugin in the project holds is refused as slug_taken; reusing an idempotency key with different input is refused as idempotency_key_reused. " +
 			"The new plugin carries nothing. In the organization's default project it is delivered to every member, as the dashboard does there; in any other project it reaches no one until people are assigned to it. " +
 			"Retrying with the same idempotency key returns the plugin already created rather than a second one.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)},
@@ -65,12 +65,20 @@ func unavailablePluginMetadataHandler[In any]() mcp.ToolHandlerFor[In, PluginMet
 	}
 }
 
+// pluginMetadataRefusal is a create or rename refusal. Slug is present only on
+// an unconfirmed create, where it is the exact slug the plugin would get.
+type pluginMetadataRefusal struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Slug    string `json:"slug,omitempty"`
+}
+
 func pluginMetadataToolResult(err error) (*mcp.CallToolResult, bool) {
 	if refusal, ok := externalAuthorizationToolResult(err); ok {
 		return refusal, true
 	}
 	if mutation, ok := errors.AsType[*PluginMetadataMutationError](err); ok {
-		content, marshalErr := json.Marshal(pluginRefusalResult{Code: mutation.Code, Message: mutation.Message})
+		content, marshalErr := json.Marshal(pluginMetadataRefusal{Code: mutation.Code, Message: mutation.Message, Slug: mutation.Slug})
 		if marshalErr != nil {
 			return nil, false
 		}

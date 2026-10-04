@@ -190,10 +190,47 @@ func TestCreatePluginRefusesAnUnconfirmedRequest(t *testing.T) {
 		"project_id": fixture.project.ID.String(), "name": "Unconfirmed", "slug": "unconfirmed",
 		"description": "", "idempotency_key": uuid.NewString(), "confirmed": false,
 	}, ContextWithPrincipal(ctx, fixture.principal))
-	var refusal pluginRefusalResult
+	var refusal pluginMetadataRefusal
 	require.NoError(t, json.Unmarshal([]byte(payload), &refusal))
 	require.Equal(t, "confirmation_required", refusal.Code)
+	require.Equal(t, "unconfirmed", refusal.Slug)
 	require.Zero(t, fixture.pluginCount(t, ctx, fixture.project.ID))
+	require.Empty(t, fixture.budget.keys, "a preview is not charged")
+}
+
+// The slug an unconfirmed create reports is the one the confirmed create then
+// gives the plugin, for inputs a hand-written slug rule gets wrong: accented
+// letters, runs of punctuation and spaces, and a cut that lands on a hyphen.
+// The preview itself charges nothing and creates nothing.
+func TestCreatePluginPreviewReportsTheSlugItCreates(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_create_plugin_slug_preview")
+	descriptor := fixture.descriptor(t, operationCreatePlugin)
+	caller := ContextWithPrincipal(ctx, fixture.principal)
+
+	for _, input := range []struct{ name, slug string }{
+		{name: "Café Team"},
+		{name: "  Support -- Tools!! & More  "},
+		{name: strings.Repeat("a", plugindelivery.MaxPluginSlugLength-1) + " beyond the cut"},
+		{name: "Chosen slug", slug: "chosen-slug"},
+	} {
+		payload := invokePluginMetadataRefusal(t, descriptor, map[string]any{
+			"project_id": fixture.project.ID.String(), "name": input.name, "slug": input.slug,
+			"description": "", "idempotency_key": uuid.NewString(), "confirmed": false,
+		}, caller)
+		var preview pluginMetadataRefusal
+		require.NoError(t, json.Unmarshal([]byte(payload), &preview))
+		require.Equal(t, "confirmation_required", preview.Code, input.name)
+		require.NotEmpty(t, preview.Slug, input.name)
+
+		created, err := fixture.service.CreatePlugin(ctx, fixture.principal, CreatePluginInput{
+			ProjectID: fixture.project.ID.String(), Name: input.name, Slug: input.slug,
+			IdempotencyKey: uuid.NewString(), Confirmed: true,
+		})
+		require.NoError(t, err, input.name)
+		require.Equal(t, preview.Slug, created.Plugin.Slug, "the previewed slug is the created slug for %q", input.name)
+	}
+	require.Len(t, fixture.budget.keys, 4, "only the four confirmed creates are charged, never a preview")
 }
 
 // A caller without plugin write gets the authorization refusal, and gets the
@@ -365,6 +402,38 @@ func TestPluginMetadataReplayIsNotChargedOrRateLimited(t *testing.T) {
 		IdempotencyKey: "over-budget", UserID: conv.ToPGText(fixture.principal.UserID), SubjectUrn: userSubjectURN(fixture.principal.UserID),
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "a refused charge leaves no pending receipt behind")
+}
+
+// The allowance is a network round trip, so it is charged with no database
+// connection checked out: not inside the receipt transaction and not while its
+// lock is held.
+func TestPluginMetadataChargesOutsideAnyTransaction(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_plugin_metadata_charge_outside_tx")
+	charge := &connectionObservingLimiter{conn: fixture.conn}
+	fixture.service.WithMetadataMutations(fixture.service.metadataCore, nil, OperationBudget{Connection: charge, Organization: allowOperationLimiter{}})
+
+	_, err := fixture.service.CreatePlugin(ctx, fixture.principal, CreatePluginInput{
+		ProjectID: fixture.project.ID.String(), Name: "Charged outside", IdempotencyKey: "charged-outside", Confirmed: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []int32{0}, charge.acquired, "the charge ran once, with no connection held")
+}
+
+// connectionObservingLimiter records how many pool connections were checked
+// out at each charge.
+type connectionObservingLimiter struct {
+	conn     *pgxpool.Pool
+	acquired []int32
+}
+
+func (l *connectionObservingLimiter) Allow(context.Context, string) (ratelimit.Result, error) {
+	l.acquired = append(l.acquired, l.conn.Stat().AcquiredConns())
+	return ratelimit.Result{Allowed: true}, nil
+}
+
+func (l *connectionObservingLimiter) AllowN(ctx context.Context, key string, _ int) (ratelimit.Result, error) {
+	return l.Allow(ctx, key)
 }
 
 func TestPluginMetadataUnavailableRegistrationMatchesLiveManifest(t *testing.T) {

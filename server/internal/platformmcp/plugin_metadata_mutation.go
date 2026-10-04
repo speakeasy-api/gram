@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
 )
@@ -61,7 +62,13 @@ var (
 type PluginMetadataMutationError struct {
 	Code    string
 	Message string
-	Cause   error
+
+	// Slug is the exact slug an unconfirmed create would give the plugin,
+	// computed by the same resolver the create uses. It is set only on the
+	// confirmation_required refusal, so an agent shows the user the real
+	// install name instead of deriving one itself.
+	Slug  string
+	Cause error
 }
 
 func (e *PluginMetadataMutationError) Error() string { return e.Message }
@@ -160,17 +167,26 @@ func (s *PluginsService) CreatePlugin(ctx context.Context, principal Principal, 
 	if !s.metadataMutationValid() {
 		return PluginMetadataMutationOutput{}, pluginMetadataMutationUnavailable(nil)
 	}
-	if !input.Confirmed {
-		return PluginMetadataMutationOutput{}, pluginMetadataMutationInvalid("confirmation_required", "Ask the user to confirm the project, name, and slug of the plugin to create, then retry with confirmed: true.")
-	}
 	key := strings.TrimSpace(input.IdempotencyKey)
 	if err := validatePluginMetadataRequest(principal, key, input.Name, input.Description); err != nil {
 		return PluginMetadataMutationOutput{}, err
 	}
-	// The core applies this same rule again inside the transaction. Checking
-	// it here as well keeps a malformed slug from spending the allowance.
-	if _, err := plugindelivery.ResolveCreatePluginSlug(input.Name, optionalString(input.Slug)); err != nil {
+	// The core applies this same rule again inside the transaction. Resolving
+	// it here as well keeps a malformed slug from spending the allowance, and
+	// gives an unconfirmed call the exact slug to show the user.
+	slug, err := plugindelivery.ResolveCreatePluginSlug(input.Name, optionalString(input.Slug))
+	if err != nil {
 		return PluginMetadataMutationOutput{}, pluginMetadataCoreError(err)
+	}
+	if !input.Confirmed {
+		// Nothing is authorized, charged, or written for a preview: the slug
+		// depends only on the input, and the confirmed call checks everything.
+		return PluginMetadataMutationOutput{}, &PluginMetadataMutationError{
+			Code:    "confirmation_required",
+			Message: "Nothing was created. Show the user the project, the name, and this slug, which becomes the plugin's permanent install name, then call again with confirmed: true once they confirm.",
+			Slug:    slug,
+			Cause:   ErrPluginMetadataMutationInvalid,
+		}
 	}
 	project, err := s.authorizePluginMetadataProject(ctx, principal, input.ProjectID)
 	if err != nil {
@@ -301,15 +317,13 @@ func (s *PluginsService) authorizePluginMetadataProject(ctx context.Context, pri
 }
 
 // chargePluginMetadataMutation spends the create-and-rename allowance. It runs
-// inside the receipt transaction's mutate step, which executeMutationReceipt
-// reaches only after its replay lookup missed, so a retry of a committed
-// change returns its stored result even when the allowance is spent, and a
-// refused or replayed call never pays. A denial rolls back the pending receipt
-// with everything else.
+// after validation, authorization, and the replay lookup, and outside any
+// transaction, so a refused or replayed call never pays and a slow limiter
+// never holds a database connection.
 func (s *PluginsService) chargePluginMetadataMutation(ctx context.Context, principal Principal) error {
 	if err := s.metadataBudget.AllowConnectionOrOrganization(ctx, principal); err != nil {
 		if errors.Is(err, ErrOperationRateLimited) {
-			return &PluginMetadataMutationError{Code: "rate_limited", Message: "Plugins were created or renamed too often just now. Try again shortly.", Cause: err}
+			return &PluginMetadataMutationError{Code: "rate_limited", Message: "Plugins were created or renamed too often just now. Try again shortly.", Slug: "", Cause: err}
 		}
 		return pluginMetadataMutationUnavailable(err)
 	}
@@ -322,9 +336,22 @@ func (s *PluginsService) executePluginMetadataMutation(ctx context.Context, prin
 		return PluginMetadataMutationOutput{}, pluginMetadataMutationInvalid("invalid_request", "The plugin request could not be normalized.")
 	}
 	digest := sha256.Sum256(append([]byte("platform-mcp-plugin-metadata-v1\x00"+operation+"\x00"), payload...))
+	inputHash := hex.EncodeToString(digest[:])
+	// A retry of a change that already committed is answered from its receipt
+	// without spending the allowance. The lookup and the charge both run
+	// outside any transaction, because the limiter is a network round trip
+	// and must not hold a database connection or the receipt lock while it
+	// waits. Two concurrent first attempts can both miss here and both pay;
+	// the executor's locked re-check still replays the second one.
+	if receipt := s.completedPluginMetadataReceipt(ctx, principal, project, operation, key, inputHash); receipt != nil {
+		return s.finishPluginMetadataMutation(ctx, principal, project, *receipt)
+	}
+	if err := s.chargePluginMetadataMutation(ctx, principal); err != nil {
+		return PluginMetadataMutationOutput{}, err
+	}
 	receipt, err := executeMutationReceipt(ctx, mutationReceiptExecution[PluginMetadataReceiptResult]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operation,
-		IdempotencyKey: key, InputHash: hex.EncodeToString(digest[:]), Label: "plugin metadata",
+		IdempotencyKey: key, InputHash: inputHash, Label: "plugin metadata",
 		Invalid: func(error) error {
 			return pluginMetadataMutationInvalid("invalid_request", "The plugin request caller identity is invalid.")
 		},
@@ -336,22 +363,42 @@ func (s *PluginsService) executePluginMetadataMutation(ctx context.Context, prin
 			return &PluginMetadataMutationError{
 				Code:    pluginMetadataCodeIdempotencyKeyReused,
 				Message: "This idempotency key was already used for a different plugin request. To retry the original request, repeat it exactly with its original key; for a new request, use a new key.",
+				Slug:    "",
 				Cause:   ErrPluginMetadataMutationConflict,
 			}
 		},
 		Unavailable:    pluginMetadataMutationUnavailable,
 		ValidateReplay: validPluginMetadataReceiptPayload,
 		EncodeResult:   encodePluginMetadataReceiptResult,
-		Mutate: func(ctx context.Context, tx pgx.Tx) (PluginMetadataReceiptResult, error) {
-			if err := s.chargePluginMetadataMutation(ctx, principal); err != nil {
-				return PluginMetadataReceiptResult{}, err
-			}
-			return mutate(ctx, tx)
-		},
+		Mutate:         mutate,
 	})
 	if err != nil {
 		return PluginMetadataMutationOutput{}, err
 	}
+	return s.finishPluginMetadataMutation(ctx, principal, project, receipt)
+}
+
+// completedPluginMetadataReceipt reads, without a transaction or lock, a
+// completed and unexpired receipt for exactly this request, or nil. Anything
+// else — no receipt, a different input, an incomplete or expired one, or a
+// failed read — is left to executeMutationReceipt, which decides it under its
+// lock.
+func (s *PluginsService) completedPluginMetadataReceipt(ctx context.Context, principal Principal, project ResolvedProject, operation, key, inputHash string) *OperationReceipt {
+	stored, err := platformrepo.New(s.db).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
+		OrganizationID: principal.OrganizationID, UserID: conv.ToPGText(principal.UserID), SubjectUrn: userSubjectURN(principal.UserID),
+		ProjectID: project.ID, Operation: operation, IdempotencyKey: key,
+	})
+	if err != nil || stored.InputHash != inputHash || stored.Status != receiptStatusSucceeded || !validPluginMetadataReceiptPayload(stored.ResultPayload) {
+		return nil
+	}
+	if !stored.ExpiresAt.Valid || !stored.ExpiresAt.Time.After(s.now()) {
+		return nil
+	}
+	receipt := operationReceiptFromRow(stored, true)
+	return &receipt
+}
+
+func (s *PluginsService) finishPluginMetadataMutation(ctx context.Context, principal Principal, project ResolvedProject, receipt OperationReceipt) (PluginMetadataMutationOutput, error) {
 	var result PluginMetadataReceiptResult
 	if err := json.Unmarshal(receipt.ResultPayload, &result); err != nil {
 		return PluginMetadataMutationOutput{}, pluginMetadataMutationUnavailable(err)
@@ -441,7 +488,7 @@ func pluginMetadataCoreError(err error) error {
 	case errors.Is(err, plugindelivery.ErrPluginSlugInvalid), errors.Is(err, plugindelivery.ErrPluginSlugTooLong), errors.Is(err, plugindelivery.ErrPluginNameWithoutSlug), errors.Is(err, plugindelivery.ErrPluginNameEmpty):
 		return pluginMetadataMutationInvalid("invalid_request", err.Error()+".")
 	case errors.Is(err, plugindelivery.ErrPluginSlugConflict):
-		return &PluginMetadataMutationError{Code: pluginMetadataCodeSlugTaken, Message: "A plugin with this slug already exists in this project. List the project's plugins again, then either use that plugin or choose a different slug.", Cause: fmt.Errorf("%w: %w", ErrPluginMetadataMutationConflict, err)}
+		return &PluginMetadataMutationError{Code: pluginMetadataCodeSlugTaken, Message: "A plugin with this slug already exists in this project. List the project's plugins again, then either use that plugin or choose a different slug.", Slug: "", Cause: fmt.Errorf("%w: %w", ErrPluginMetadataMutationConflict, err)}
 	case errors.Is(err, plugindelivery.ErrPluginMetadataTargetNotFound):
 		return ErrPluginNotFound
 	default:
@@ -450,12 +497,12 @@ func pluginMetadataCoreError(err error) error {
 }
 
 func pluginMetadataMutationInvalid(code, message string) error {
-	return &PluginMetadataMutationError{Code: code, Message: message, Cause: ErrPluginMetadataMutationInvalid}
+	return &PluginMetadataMutationError{Code: code, Message: message, Slug: "", Cause: ErrPluginMetadataMutationInvalid}
 }
 
 func pluginMetadataMutationUnavailable(cause error) error {
 	if cause == nil {
-		return &PluginMetadataMutationError{Code: unavailableCode, Message: "Creating and renaming plugins is not available on this server.", Cause: ErrPluginMetadataMutationUnavailable}
+		return &PluginMetadataMutationError{Code: unavailableCode, Message: "Creating and renaming plugins is not available on this server.", Slug: "", Cause: ErrPluginMetadataMutationUnavailable}
 	}
-	return &PluginMetadataMutationError{Code: unavailableCode, Message: "Creating and renaming plugins is temporarily unavailable.", Cause: fmt.Errorf("%w: %w", ErrPluginMetadataMutationUnavailable, cause)}
+	return &PluginMetadataMutationError{Code: unavailableCode, Message: "Creating and renaming plugins is temporarily unavailable.", Slug: "", Cause: fmt.Errorf("%w: %w", ErrPluginMetadataMutationUnavailable, cause)}
 }
