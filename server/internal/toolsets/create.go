@@ -50,9 +50,13 @@ type ToolsetCreateInput struct {
 // on after commit: an MCP-enabled toolset joined the Default plugin, so a
 // publish is owed, and pluginCreated means that plugin did not exist before.
 type ToolsetCreateResult struct {
-	Toolset       repo.Toolset
-	McpEnabled    bool
-	PluginCreated bool
+	Toolset    repo.Toolset
+	McpEnabled bool
+	// AddedToDefaultPlugin is what the attach actually did, not what the
+	// auto-enable implies: true only when the toolset joined the project's
+	// Default plugin in this transaction.
+	AddedToDefaultPlugin bool
+	PluginCreated        bool
 }
 
 // ErrToolsetSlugTaken is the toolset's derived slug colliding with a live
@@ -102,6 +106,11 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 	if input.Name == "" || utf8.RuneCountInString(input.Name) > MaxToolsetNameLength {
 		return ToolsetCreateResult{}, oops.E(oops.CodeBadRequest, ErrToolsetInputInvalid, "toolset name must be between 1 and %d characters", MaxToolsetNameLength)
 	}
+	// An empty or whitespace-only description is no description: the column
+	// refuses an empty string, and the caller did not give one.
+	if input.Description != nil && strings.TrimSpace(*input.Description) == "" {
+		input.Description = nil
+	}
 	if input.Description != nil && utf8.RuneCountInString(*input.Description) > MaxToolsetDescriptionLength {
 		return ToolsetCreateResult{}, oops.E(oops.CodeBadRequest, ErrToolsetInputInvalid, "toolset description must be at most %d characters", MaxToolsetDescriptionLength)
 	}
@@ -124,10 +133,17 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 		Description:            conv.PtrToPGText(input.Description),
 		DefaultEnvironmentSlug: conv.PtrToPGText(nil),
 		McpSlug:                conv.ToPGText(mcpSlug),
-		// The first toolset in an organization is enabled as an MCP server
-		// automatically.
-		McpEnabled: enabledServerCount(ctx, tx, logger, input.OrganizationID) == 0,
+		McpEnabled:             false,
 	}
+	// The first toolset in an organization is enabled as an MCP server and
+	// joins the Default plugin, which publishes it to everyone holding that
+	// plugin. That is the widest reach a creation can have, so a failure to
+	// read the count fails the creation rather than defaulting to "first".
+	enabled, err := usageRepo.New(tx).GetEnabledServerCount(ctx, input.OrganizationID)
+	if err != nil {
+		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "error getting enabled server count").LogError(ctx, logger)
+	}
+	params.McpEnabled = enabled == 0
 
 	environments := environmentsRepo.New(tx)
 	if input.DefaultEnvironmentSlug != nil {
@@ -193,40 +209,17 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "failed to log toolset creation").LogError(ctx, logger)
 	}
 
-	result := ToolsetCreateResult{Toolset: created, McpEnabled: params.McpEnabled, PluginCreated: false}
+	result := ToolsetCreateResult{Toolset: created, McpEnabled: params.McpEnabled, AddedToDefaultPlugin: false, PluginCreated: false}
 	if params.McpEnabled {
 		projectID := input.ProjectID
 		actor := &contextvalues.AuthContext{ActiveOrganizationID: input.OrganizationID, UserID: input.ActorUserID, Email: input.ActorEmail, ProjectID: &projectID}
-		result.PluginCreated, err = attachToDefaultPluginInTransaction(ctx, tx, logger, auditLogger, actor, created.ID, created.Name)
+		outcome, err := attachToDefaultPluginWithOutcome(ctx, tx, logger, auditLogger, actor, created.ID, created.Name)
 		if err != nil {
 			return ToolsetCreateResult{}, err
 		}
+		result.AddedToDefaultPlugin, result.PluginCreated = outcome.Attached, outcome.PluginCreated
 	}
 	return result, nil
-}
-
-// enabledServerCount decides only whether this is the organization's first
-// server. A failure to read it must not block creation, and it reads as zero,
-// which is how the management API has always treated it. The read runs under a
-// savepoint so a failed statement does not abort the caller's transaction
-// along with it.
-func enabledServerCount(ctx context.Context, tx pgx.Tx, logger *slog.Logger, organizationID string) int64 {
-	savepoint, err := tx.Begin(ctx)
-	if err != nil {
-		logger.ErrorContext(ctx, "error getting enabled server count", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-		return 0
-	}
-	count, err := usageRepo.New(savepoint).GetEnabledServerCount(ctx, organizationID)
-	if err != nil {
-		_ = savepoint.Rollback(ctx)
-		logger.ErrorContext(ctx, "error getting enabled server count", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-		return 0
-	}
-	if err := savepoint.Commit(ctx); err != nil {
-		logger.ErrorContext(ctx, "error releasing enabled server count savepoint", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-		return 0
-	}
-	return count
 }
 
 // ensureGeneratedMcpSlug guards a generated platform mcp_slug against the
@@ -269,7 +262,12 @@ func ensureGeneratedMcpSlug(ctx context.Context, dbtx pgx.Tx, logger *slog.Logge
 // publish for it, but only after their own transaction commits, since this
 // runs pre-commit and the DB writes could still roll back.
 func attachToDefaultPluginInTransaction(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (bool, error) {
-	pluginCreated, err := plugins.AttachToDefaultPluginAudited(ctx, dbtx, auditLogger, authCtx, plugins.AttachToDefaultPluginParams{
+	outcome, err := attachToDefaultPluginWithOutcome(ctx, dbtx, logger, auditLogger, authCtx, toolsetID, displayName)
+	return outcome.PluginCreated, err
+}
+
+func attachToDefaultPluginWithOutcome(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (plugins.DefaultPluginAttachOutcome, error) {
+	outcome, err := plugins.AttachToDefaultPluginAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
@@ -277,9 +275,9 @@ func attachToDefaultPluginInTransaction(ctx context.Context, dbtx pgx.Tx, logger
 		DisplayName:    displayName,
 	})
 	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "attach toolset to default plugin").LogError(ctx, logger)
+		return plugins.DefaultPluginAttachOutcome{}, oops.E(oops.CodeUnexpected, err, "attach toolset to default plugin").LogError(ctx, logger)
 	}
-	return pluginCreated, nil
+	return outcome, nil
 }
 
 // createToolsetVersionInTransaction records a new version when the given URNs

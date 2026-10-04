@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -25,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
 const (
@@ -53,17 +55,26 @@ type CreateMCPFromFunctionsOutput struct {
 	MCPID   string `json:"mcp_id"`
 	MCPName string `json:"mcp_name"`
 	MCPSlug string `json:"mcp_slug"`
-	// Visibility is private: like a server made in the dashboard, it reaches
-	// nobody until it is put into a plugin and published.
+	// Visibility is the server record's own visibility, which is private.
 	Visibility string `json:"visibility"`
+	// AddedToDefaultPlugin reports what the creation actually did, read from
+	// the attach itself: true when the new tool list joined the project's
+	// Default plugin, which happens to an organization's first server exactly
+	// as it does from the dashboard. Everyone holding the Default plugin then
+	// receives it. False means the server reaches nobody until it is put into
+	// a plugin.
+	AddedToDefaultPlugin bool `json:"added_to_default_plugin"`
+	// PublicationRequested is true when a refresh of the plugins people hold
+	// was actually requested — durably or best effort — for that membership
+	// change. It says a refresh was asked for, not that people have it yet.
+	PublicationRequested bool `json:"publication_requested"`
 	// Exposure is a fresh read taken after the commit, so a caller reports the
 	// committed tool list rather than the one it asked for.
 	Exposure      *MCPToolExposure `json:"exposure,omitempty"`
 	SnapshotScope string           `json:"snapshot_scope"`
-	// PublicationRequest and PublishSignal are only ever anything but
-	// not_requested for an organization's first server, which joins the
-	// project's Default plugin on creation exactly as it does from the
-	// dashboard.
+	// PublicationRequest and PublishSignal detail how that refresh was asked
+	// for; both stay at their not-requested values when nothing joined a
+	// plugin.
 	PublicationRequest string `json:"publication_request"`
 	PublishSignal      string `json:"publish_signal"`
 	// IndexSignal has the meaning it has on add_tools_to_mcp: whether the
@@ -79,6 +90,9 @@ type mcpFromFunctionsReceipt struct {
 	Visibility string   `json:"visibility"`
 	ToolsetID  string   `json:"toolset_id"`
 	ToolURNs   []string `json:"tool_urns"`
+	// AddedToDefaultPlugin is the attach's own outcome, recorded so a replay
+	// reports who receives the server exactly as the original did.
+	AddedToDefaultPlugin bool `json:"added_to_default_plugin"`
 	// Publication is recorded in the transaction that requested it, so a
 	// replay reports the same outcome rather than re-deciding it.
 	Publication string `json:"publication_request"`
@@ -96,6 +110,36 @@ type mcpFromFunctionsRequest struct {
 // the new tool list needs. A retry with the same idempotency key returns the
 // stored result and never creates a second server.
 func (s *MCPToolExposureService) CreateMCPFromFunctions(ctx context.Context, principal Principal, input CreateMCPFromFunctionsInput) (CreateMCPFromFunctionsOutput, error) {
+	output, err := s.createMCPFromFunctions(ctx, principal, input)
+	if err != nil {
+		return CreateMCPFromFunctionsOutput{}, s.sanitizeMCPFromFunctionsError(ctx, err)
+	}
+	return output, nil
+}
+
+// sanitizeMCPFromFunctionsError is the boundary every error crosses on its way
+// to the MCP caller. Nothing downstream of the tool rewrites an error it does
+// not recognise — the SDK returns it to the client as text — so a database or
+// driver failure from any path, including the shared toolset and server cores,
+// would otherwise reach the caller verbatim. Only a hand-written refusal or an
+// authorization challenge passes through; anything else becomes the generic
+// unavailable refusal, and the underlying cause is logged here, server-side,
+// rather than the sanitized message.
+func (s *MCPToolExposureService) sanitizeMCPFromFunctionsError(ctx context.Context, err error) error {
+	if _, ok := errors.AsType[*ExternalAuthorizationError](err); ok {
+		return err
+	}
+	refusal, ok := errors.AsType[*MCPToolExposureError](err)
+	if !ok {
+		refusal, _ = errors.AsType[*MCPToolExposureError](mcpFromFunctionsUnavailable(err))
+	}
+	if refusal.Code == unavailableCode && s != nil && s.logger != nil {
+		s.logger.ErrorContext(ctx, "create MCP server from functions failed", attr.SlogError(err))
+	}
+	return refusal
+}
+
+func (s *MCPToolExposureService) createMCPFromFunctions(ctx context.Context, principal Principal, input CreateMCPFromFunctionsInput) (CreateMCPFromFunctionsOutput, error) {
 	if !s.valid() {
 		return CreateMCPFromFunctionsOutput{}, mcpFromFunctionsUnavailable(errors.New("tool exposure service is not composed"))
 	}
@@ -112,7 +156,12 @@ func (s *MCPToolExposureService) CreateMCPFromFunctions(ctx context.Context, pri
 	// and writes nothing. The slugs are never described in prose anywhere, so
 	// what the user confirms is what gets created.
 	if !input.Confirmed {
-		return CreateMCPFromFunctionsOutput{}, mcpFromFunctionsConfirmationRequired(name)
+		// The same count the toolset core uses to decide the auto-enable.
+		enabled, err := usagerepo.New(s.db).GetEnabledServerCount(ctx, principal.OrganizationID)
+		if err != nil {
+			return CreateMCPFromFunctionsOutput{}, mcpFromFunctionsUnavailable(err)
+		}
+		return CreateMCPFromFunctionsOutput{}, mcpFromFunctionsConfirmationRequired(name, enabled == 0)
 	}
 	organizationSlug := projectOrganizationSlug(ctx, s.db, principal.OrganizationID)
 	if organizationSlug == "" {
@@ -232,11 +281,13 @@ func (s *MCPToolExposureService) createMCPFromFunctionsInTransaction(ctx context
 		MCPID: server.ID.String(), MCPName: conv.PtrValOr(conv.FromPGText[string](server.Name), created.Toolset.Name),
 		MCPSlug: conv.PtrValOr(conv.FromPGText[string](server.Slug), ""), Visibility: server.Visibility,
 		ToolsetID: created.Toolset.ID.String(), ToolURNs: values,
-		Publication: string(plugins.ProjectPublicationNotConfigured),
+		AddedToDefaultPlugin: created.AddedToDefaultPlugin,
+		Publication:          "not_requested",
 	}
 	// Only an organization's first server joins the Default plugin, and only
-	// that membership change owes a publish — the management API's rule.
-	if created.McpEnabled {
+	// that membership change owes a publish — the management API's rule. It is
+	// decided from what the attach did, not from the auto-enable that led to it.
+	if created.AddedToDefaultPlugin {
 		outcome, err := s.publication.ProjectWithOutcome(ctx, tx, principal.OrganizationID, project.ID, principal.UserID)
 		if err != nil {
 			return mcpFromFunctionsReceipt{}, fmt.Errorf("request MCP server from functions publication: %w", err)
@@ -249,10 +300,11 @@ func (s *MCPToolExposureService) createMCPFromFunctionsInTransaction(ctx context
 func (s *MCPToolExposureService) finishMCPFromFunctions(ctx context.Context, principal Principal, project ResolvedProject, stored mcpFromFunctionsReceipt, receipt OperationReceipt) CreateMCPFromFunctionsOutput {
 	output := CreateMCPFromFunctionsOutput{
 		Outcome: "created", MCPID: stored.MCPID, MCPName: stored.MCPName, MCPSlug: stored.MCPSlug, Visibility: stored.Visibility,
-		PublicationRequest: stored.Publication, PublishSignal: "not_requested", IndexSignal: "not_required",
+		AddedToDefaultPlugin: stored.AddedToDefaultPlugin,
+		PublicationRequest:   stored.Publication, PublishSignal: "not_requested", IndexSignal: "not_required",
 		Receipt: riskMutationToolReceipt(receipt),
 	}
-	if stored.Publication != string(plugins.ProjectPublicationNotConfigured) && stored.Publication != string(plugins.ProjectPublicationEnqueued) {
+	if stored.AddedToDefaultPlugin && stored.Publication != string(plugins.ProjectPublicationNotConfigured) && stored.Publication != string(plugins.ProjectPublicationEnqueued) {
 		if s.publisher == nil {
 			output.PublishSignal = "unavailable"
 		} else if err := plugins.SignalPluginPublishAfterRequest(ctx, s.publisher, plugins.ProjectPublicationRequestOutcome(stored.Publication), project.ID, principal.UserID); err != nil {
@@ -261,6 +313,8 @@ func (s *MCPToolExposureService) finishMCPFromFunctions(ctx context.Context, pri
 			output.PublishSignal = "best_effort_requested"
 		}
 	}
+	output.PublicationRequested = stored.AddedToDefaultPlugin &&
+		(stored.Publication == string(plugins.ProjectPublicationEnqueued) || output.PublishSignal == "best_effort_requested")
 	// Creating the toolset's first version left it without a search index, and
 	// a dynamic-mode server refuses tools/list outright until one exists. The
 	// target is the toolset recorded in the receipt, so a replay schedules the
@@ -311,23 +365,31 @@ type MCPFromFunctionsPreview struct {
 	// ToolsetSlug is the exact slug of the tool list behind the new server.
 	// It is unique in the project, so a name whose slug is taken is refused.
 	ToolsetSlug string `json:"toolset_slug"`
-	// MCPSlugPrefix is the exact start of the new server's slug; the server's
-	// own identifier completes it, so the full slug is reported on creation.
+	// MCPSlugPrefix is the exact start of the new server's slug. A short
+	// suffix from the server's own identifier is added at creation, so it
+	// cannot be shown here; the result reports the full slug.
 	MCPSlugPrefix string `json:"mcp_slug_prefix"`
+	// WouldJoinDefaultPlugin is true when the organization has no MCP server
+	// enabled yet, so this one would be its first: it then joins the project's
+	// Default plugin on creation and everyone holding that plugin receives it.
+	// It is read now and can change before the confirmed call; the result's
+	// added_to_default_plugin is what actually happened.
+	WouldJoinDefaultPlugin bool `json:"would_join_default_plugin"`
 }
 
-func mcpFromFunctionsPreview(name string) *MCPFromFunctionsPreview {
+func mcpFromFunctionsPreview(name string, wouldJoinDefaultPlugin bool) *MCPFromFunctionsPreview {
 	return &MCPFromFunctionsPreview{
 		Name: name, ToolsetSlug: toolsets.ToolsetSlugFromName(name), MCPSlugPrefix: mcpservers.ServerSlugPrefix(name),
+		WouldJoinDefaultPlugin: wouldJoinDefaultPlugin,
 	}
 }
 
-func mcpFromFunctionsConfirmationRequired(name string) error {
+func mcpFromFunctionsConfirmationRequired(name string, wouldJoinDefaultPlugin bool) error {
 	return &MCPToolExposureError{
 		Code:    "confirmation_required",
-		Message: "Nothing was created. Show the user the project, the server name, the slugs below, and the exact tools, and once they confirm call again with the same request, the same idempotency key, and confirmed: true.",
+		Message: "Nothing was created. Show the user the project, the server name, the preview below, who will receive the server, and the exact tools, and once they confirm call again with the same request, the same idempotency key, and confirmed: true.",
 		Cause:   ErrMCPToolExposureInvalid,
-		Preview: mcpFromFunctionsPreview(name),
+		Preview: mcpFromFunctionsPreview(name, wouldJoinDefaultPlugin),
 	}
 }
 

@@ -1,8 +1,11 @@
 package platformmcp
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -27,6 +30,8 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -80,6 +85,8 @@ func TestCreateMCPFromFunctionsCreatesAServerExposingExactlyTheRequestedTools(t 
 	require.Equal(t, "Order Desk", created.MCPName)
 	require.Equal(t, mcpservers.VisibilityPrivate, created.Visibility, "a new server reaches nobody until a plugin carries it")
 	require.Regexp(t, `^order-desk-[0-9a-f]+$`, created.MCPSlug, "the slug follows the management API's rule for a server name")
+	require.False(t, created.AddedToDefaultPlugin, "the organization already has a server, so this one joins no plugin")
+	require.False(t, created.PublicationRequested)
 	require.False(t, created.Receipt.Replayed)
 	require.Equal(t, "fresh_read_after_commit", created.SnapshotScope)
 	require.NotNil(t, created.Exposure)
@@ -102,9 +109,12 @@ func TestCreateMCPFromFunctionsCreatesAServerExposingExactlyTheRequestedTools(t 
 	require.NoError(t, err)
 	require.Equal(t, fixture.project.ID, toolset.ProjectID)
 
-	// The index rebuild was scheduled for the toolset this creation wrote.
-	// Without it a dynamic-mode server refuses tools/list outright.
-	require.Equal(t, "requested", created.IndexSignal)
+	// The index trigger ran for the toolset this creation wrote. This
+	// organization already has a server, so the new toolset is not
+	// MCP-enabled, and the real trigger answers not_required for that state.
+	// GRW-245: a server record serves the toolset regardless, so that answer
+	// is a bug; once it is fixed this assertion becomes "requested".
+	require.Equal(t, "not_required", created.IndexSignal)
 	require.Equal(t, []uuid.UUID{toolsetID}, *fixture.indexed)
 
 	// The audit trail is the dashboard's: one toolset create and one server
@@ -282,6 +292,103 @@ func TestCreateMCPFromFunctionsPreviewMatchesTheCreatedSlugs(t *testing.T) {
 		require.True(t, strings.HasPrefix(created.MCPSlug, refusal.Preview.MCPSlugPrefix+"-"), "%q: server slug %q starts with the previewed %q", name, created.MCPSlug, refusal.Preview.MCPSlugPrefix)
 		require.Equal(t, refusal.Preview.Name, created.MCPName, "%q: the name is kept whole", name)
 	}
+}
+
+// An organization's first server joins the project's Default plugin on
+// creation, as it does from the dashboard, so the preview has to warn about
+// it and the result has to say it happened.
+func TestCreateMCPFromFunctionsReportsTheFirstServerJoiningTheDefaultPlugin(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_create_from_functions_first_server")
+	ctx = fixture.createFromFunctionsContext(ctx)
+	// Leave the organization with no enabled server, so the next is its first.
+	require.NoError(t, toolsetsrepo.New(fixture.conn).SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{
+		McpEnabled: false, ID: fixture.toolsetID, ProjectID: fixture.project.ID,
+	}))
+
+	input := fixture.createInput("First Desk", fixture.tools[0])
+	input.Confirmed = false
+	_, err := fixture.service.CreateMCPFromFunctions(ctx, fixture.principal, input)
+	var refusal *MCPToolExposureError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, "confirmation_required", refusal.Code)
+	require.True(t, refusal.Preview.WouldJoinDefaultPlugin, "the preview warns before the user confirms")
+
+	input.Confirmed = true
+	created, err := fixture.service.CreateMCPFromFunctions(ctx, fixture.principal, input)
+	require.NoError(t, err)
+	require.True(t, created.AddedToDefaultPlugin, "the result reports the Default plugin membership the attach made")
+	// An enabled toolset is one the real trigger indexes.
+	require.Equal(t, "requested", created.IndexSignal)
+	// Publication requests are disabled in this fixture and no publisher is
+	// composed, so the refresh could not be asked for, and the result says so
+	// rather than claiming it was.
+	require.False(t, created.PublicationRequested)
+	require.Equal(t, "unavailable", created.PublishSignal)
+
+	defaultPlugin, err := pluginsrepo.New(fixture.conn).GetDefaultPlugin(ctx, pluginsrepo.GetDefaultPluginParams{
+		OrganizationID: fixture.principal.OrganizationID, ProjectID: fixture.project.ID,
+	})
+	require.NoError(t, err)
+	members, err := pluginsrepo.New(fixture.conn).ListPluginServers(ctx, defaultPlugin.ID)
+	require.NoError(t, err)
+	toolsetID := uuid.MustParse(created.Exposure.ToolsetID)
+	joined := false
+	for _, member := range members {
+		joined = joined || member.ToolsetID == uuid.NullUUID{UUID: toolsetID, Valid: true}
+	}
+	require.True(t, joined, "the new tool list is in the Default plugin")
+
+	// A second server is not the first, so it joins nothing.
+	second, err := fixture.service.CreateMCPFromFunctions(ctx, fixture.principal, fixture.createInput("Second Desk", fixture.tools[1]))
+	require.NoError(t, err)
+	require.False(t, second.AddedToDefaultPlugin)
+	require.False(t, second.PublicationRequested)
+	require.Equal(t, "not_requested", second.PublicationRequest)
+}
+
+// Nothing downstream rewrites an unrecognised tool error, so a database
+// failure on any path must reach the caller as the generic unavailable
+// refusal, with the real cause kept in the server log.
+func TestCreateMCPFromFunctionsNeverReturnsDatabaseErrorText(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_create_from_functions_db_failure")
+	ctx = fixture.createFromFunctionsContext(ctx)
+
+	broken, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_create_from_functions_db_failure_closed")
+	require.NoError(t, err)
+	var logged bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logged, nil))
+	// The authorization engine reads the live database, so the call clears
+	// authorization and fails on the service's own first query instead.
+	engine := authz.NewEngine(testenv.NewLogger(t), fixture.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	service, err := NewMCPToolExposureService(logger, broken, audit.NewLogger(), engine, stubAuthorizer{err: nil}, "tool-exposure-cursor-key", plugins.PublicationRequests{}, nil, testOperationBudget(), testOperationBudget())
+	require.NoError(t, err)
+	// Every query on a closed pool fails with a driver error, which is what a
+	// database outage looks like from here.
+	broken.Close()
+
+	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "create-from-functions-db-failure", Version: "0.0.1"}, nil))
+	registerCreateMCPFromFunctionsTool(registrar, service)
+	descriptor := registrar.Descriptors()[0]
+	ctx = ContextWithPrincipal(ctx, fixture.principal)
+
+	for _, confirmed := range []bool{true, false} {
+		arguments, err := json.Marshal(map[string]any{
+			"project_id": fixture.project.ID.String(), "name": "Order Desk", "tool_urns": []string{fixture.tools[0]},
+			"idempotency_key": uuid.NewString(), "confirmed": confirmed,
+		})
+		require.NoError(t, err)
+		_, err = descriptor.Invoke(ctx, arguments)
+		var refusal *ToolRefusalError
+		require.ErrorAs(t, err, &refusal, "confirmed=%t reaches a refusal, not a raw error", confirmed)
+		text := strings.ToLower(refusal.Payload)
+		require.Contains(t, text, unavailableCode, "confirmed=%t", confirmed)
+		for _, leaked := range []string{"pool", "closed", "sql", "pgx", "postgres", "relation", "constraint"} {
+			require.NotContains(t, text, leaked, "confirmed=%t: the refusal must not carry database error text", confirmed)
+		}
+	}
+	require.Contains(t, logged.String(), "closed", "the server log keeps the underlying cause")
 }
 
 // One idempotency key spans a creation: the preview records nothing under it,

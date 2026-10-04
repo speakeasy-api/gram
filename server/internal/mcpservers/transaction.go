@@ -49,6 +49,11 @@ var ErrServerReferenceOutsideProject = errors.New("mcp server reference is not i
 // neither caller can produce a server in one project fronting a toolset in
 // another.
 func CreateProjectMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, input MCPServerTransactionInput) (repo.McpServer, error) {
+	// Checked before the ownership queries, which would otherwise dereference
+	// a nil transaction before the delegate's own guard runs.
+	if tx == nil || auditLogger == nil || input.ProjectID == uuid.Nil || input.Name == "" || input.Visibility == "" {
+		return repo.McpServer{}, fmt.Errorf("invalid MCP server transaction input")
+	}
 	ids := serverIDs{
 		EnvironmentID:         input.EnvironmentID,
 		UserSessionIssuerID:   input.UserSessionIssuerID,

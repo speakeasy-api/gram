@@ -3712,6 +3712,12 @@ func TestGeneratePlatformMCPPackageEmitsToolExposureWorkflow(t *testing.T) {
 		"never create a server the user did not ask for",
 		"`source_kind` `function`",
 		"reaches nobody until it is put into a plugin",
+		// An organization's first server goes out to everyone holding the
+		// Default plugin, and the skill must say so from the result.
+		"`added_to_default_plugin`",
+		"`preview.would_join_default_plugin`",
+		"Show the user the `preview` values as returned before asking for confirmation",
+		"a short suffix is added at creation",
 		// The slug a user confirms comes from the tool's own preview, never
 		// from prose that can drift from the code that derives it.
 		"`confirmation_required`",
