@@ -3716,6 +3716,13 @@ func TestGeneratePlatformMCPPackageEmitsToolExposureWorkflow(t *testing.T) {
 		// Default plugin, and the skill must say so from the result.
 		"`added_to_default_plugin`",
 		"`preview.would_join_default_plugin`",
+		// The warning itself, not just the field names: a first server reaches
+		// everyone holding the Default plugin, said before confirming from the
+		// preview and after from the result.
+		"say plainly that it joins the project's Default plugin on creation, so everyone holding that plugin receives it",
+		"tell the user it joined the project's Default plugin and everyone holding that plugin receives it",
+		// A requested publication is not a delivered one.
+		"`publication_requested` means a refresh of their plugin was requested, not confirmed delivered: never tell the user people already have the server",
 		"Show the user the `preview` values as returned before asking for confirmation",
 		"a short suffix is added at creation",
 		// The slug a user confirms comes from the tool's own preview, never

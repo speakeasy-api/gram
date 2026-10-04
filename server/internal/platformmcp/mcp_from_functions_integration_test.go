@@ -565,6 +565,8 @@ func TestCreateMCPFromFunctionsUnavailableRegistrationMatchesLiveManifest(t *tes
 	require.Equal(t, ExternalAuthorizationOrgAdmin, unavailable.Meta.Authorization)
 	require.Equal(t, ProjectScopeExplicit, unavailable.Meta.ProjectScope)
 	require.Contains(t, unavailable.Description, "confirmed: true")
+	require.Contains(t, unavailable.Description, "everyone holding that plugin receives it", "the first-server exception is named")
+	require.Contains(t, unavailable.Description, "requested, not confirmed delivered")
 
 	refusal := invokeUnavailable(t, unavailable, map[string]any{
 		"project_id": fixture.project.ID.String(), "name": "Order Desk", "tool_urns": []string{fixture.tools[0]},
