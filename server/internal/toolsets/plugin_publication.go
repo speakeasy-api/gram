@@ -12,18 +12,22 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
-// requestPluginPublicationForToolset records a durable package refresh in the
-// mutation's transaction when a plugin carries the toolset, directly or through
-// an MCP server it backs.
-func (s *Service) requestPluginPublicationForToolset(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID) error {
-	if !s.publicationRequests.Enabled {
-		return nil
-	}
+// toolsetCarriedByPlugin reports, inside the mutation's transaction, whether a
+// plugin carries the toolset directly or through an enabled MCP server it
+// backs. Callers probe before any write in the same transaction that could
+// detach the toolset from a plugin, such as deleting its hosted wrapper.
+func toolsetCarriedByPlugin(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID) (bool, error) {
 	attached, err := pluginsrepo.New(tx).HasPluginMembershipForToolset(ctx, pluginsrepo.HasPluginMembershipForToolsetParams{ProjectID: *authCtx.ProjectID, ToolsetID: toolsetID})
 	if err != nil {
-		return fmt.Errorf("check toolset plugin membership: %w", err)
+		return false, fmt.Errorf("check toolset plugin membership: %w", err)
 	}
-	if !attached {
+	return attached, nil
+}
+
+// requestPluginPublication records a durable package refresh in the
+// mutation's transaction for a toolset change a plugin carries.
+func (s *Service) requestPluginPublication(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext) error {
+	if !s.publicationRequests.Enabled {
 		return nil
 	}
 	if err := s.publicationRequests.Project(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
@@ -32,28 +36,18 @@ func (s *Service) requestPluginPublicationForToolset(ctx context.Context, tx pgx
 	return nil
 }
 
-// publishPluginsForToolset queues the existing project publisher after a
-// committed toolset mutation that changes what a package carrying it renders.
-// Projects without a marketplace and toolsets no plugin carries enqueue
-// nothing. A failed probe stays best-effort: the periodic publisher sweep
-// remains the safety net.
-func (s *Service) publishPluginsForToolset(ctx context.Context, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID) {
+// publishPluginsAfterToolsetChange queues the existing project publisher after
+// a committed toolset change a plugin carries. Projects without a marketplace
+// enqueue nothing. A failed probe stays best-effort: the periodic publisher
+// sweep remains the safety net.
+func (s *Service) publishPluginsAfterToolsetChange(ctx context.Context, authCtx *contextvalues.AuthContext) {
 	if !s.pluginsGitHubEnabled {
 		return
 	}
-	queries := pluginsrepo.New(s.db)
-	connected, err := queries.HasPluginGithubConnectionForProject(ctx, *authCtx.ProjectID)
+	connected, err := pluginsrepo.New(s.db).HasPluginGithubConnectionForProject(context.WithoutCancel(ctx), *authCtx.ProjectID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "check marketplace connection after toolset mutation", attr.SlogError(err))
 		return
 	}
-	if !connected {
-		return
-	}
-	attached, err := queries.HasPluginMembershipForToolset(ctx, pluginsrepo.HasPluginMembershipForToolsetParams{ProjectID: *authCtx.ProjectID, ToolsetID: toolsetID})
-	if err != nil {
-		s.logger.WarnContext(ctx, "check plugin membership after toolset mutation", attr.SlogError(err))
-		return
-	}
-	s.triggerPluginPublish(ctx, authCtx, attached, false)
+	s.triggerPluginPublish(ctx, authCtx, connected, false)
 }

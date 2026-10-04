@@ -11,6 +11,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -75,6 +76,40 @@ func TestDeleteToolsetRequestsPublicationForCarriedToolset(t *testing.T) {
 	require.NoError(t, ti.service.DeleteToolset(ctx, &gen.DeleteToolsetPayload{Slug: carried.Slug}))
 
 	require.Equal(t, int64(1), publicationRequests(t, ctx, ti))
+}
+
+func TestDeleteToolsetRequestsPublicationForWrapperBackedToolset(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, carried := newPublishingToolsetsService(t, true)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolsetID := uuid.MustParse(carried.ID)
+	plugins := pluginsrepo.New(ti.conn)
+	defaultPlugin, err := plugins.GetDefaultPlugin(ctx, pluginsrepo.GetDefaultPluginParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	// Replace the direct attachment with one through the toolset's hosted
+	// wrapper, which deleting the toolset removes in the same transaction.
+	require.NoError(t, plugins.SoftDeletePluginServers(ctx, defaultPlugin.ID))
+	servers := mcpserversrepo.New(ti.conn)
+	if _, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolsetID, ProjectID: *authCtx.ProjectID}); err != nil {
+		_, err = servers.CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+			ID: toolsetID, ProjectID: *authCtx.ProjectID, Name: pgtype.Text{String: carried.Name, Valid: true}, Slug: pgtype.Text{String: string(*carried.McpSlug), Valid: true},
+			EnvironmentID: uuid.NullUUID{}, UserSessionIssuerID: uuid.NullUUID{}, RemoteMcpServerID: uuid.NullUUID{}, TunneledMcpServerID: uuid.NullUUID{},
+			ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, UnproxiedMcpServerID: uuid.NullUUID{}, ToolVariationsGroupID: uuid.NullUUID{},
+			Visibility: "private", NetworkAccessMode: pgtype.Text{},
+		})
+		require.NoError(t, err)
+	}
+	_, err = plugins.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+		PluginID: defaultPlugin.ID, ToolsetID: uuid.NullUUID{}, McpServerID: uuid.NullUUID{UUID: toolsetID, Valid: true},
+		DisplayName: "Wrapped toolset", Policy: "required", SortOrder: 0,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, ti.service.DeleteToolset(ctx, &gen.DeleteToolsetPayload{Slug: carried.Slug}))
+
+	require.Equal(t, int64(1), publicationRequests(t, ctx, ti), "deleting the wrapper must not hide the plugin it reached")
 }
 
 func TestDeleteToolsetSkipsToolsetOutsidePackages(t *testing.T) {

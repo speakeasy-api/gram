@@ -868,6 +868,17 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		return oops.E(oops.CodeConflict, nil, "toolset changed concurrently; retry the request")
 	}
 
+	// Only an MCP-enabled toolset is in a generated package, so only its
+	// deletion can change one. Membership is probed before the hosted wrapper
+	// is deleted below, since that deletion detaches wrapper-backed plugins.
+	carried := false
+	if toDelete.McpEnabled {
+		carried, err = toolsetCarriedByPlugin(ctx, dbtx, authCtx, toDelete.ID)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "check toolset plugin membership").LogError(ctx, logger)
+		}
+	}
+
 	deleted, err := tr.DeleteToolset(ctx, repo.DeleteToolsetParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
@@ -888,10 +899,8 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	if err := s.deleteHostedNetworkAccess(ctx, dbtx, authCtx, toDelete); err != nil {
 		return err
 	}
-	// Only an MCP-enabled toolset is in a generated package, so only its
-	// deletion can change one.
-	if toDelete.McpEnabled {
-		if err := s.requestPluginPublicationForToolset(ctx, dbtx, authCtx, deleted.ID); err != nil {
+	if carried {
+		if err := s.requestPluginPublication(ctx, dbtx, authCtx); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "enqueue toolset plugin publication").LogError(ctx, logger)
 		}
 	}
@@ -913,8 +922,8 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		return oops.E(oops.CodeUnexpected, err, "error saving toolset deletion").LogError(ctx, logger)
 	}
 
-	if toDelete.McpEnabled {
-		s.publishPluginsForToolset(ctx, authCtx, deleted.ID)
+	if carried {
+		s.publishPluginsAfterToolsetChange(ctx, authCtx)
 	}
 
 	return nil
