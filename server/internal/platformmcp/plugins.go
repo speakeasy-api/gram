@@ -38,13 +38,13 @@ const (
 )
 
 const (
-	// PluginQueriesPerConnectionPerMinute and
-	// PluginQueriesPerOrganizationPerMinute bound plugin inventory reads. An
-	// administrator answering "which plugins exist and what is in them" walks a
-	// page and then opens the plugins that looked interesting, so the allowance
-	// matches the diagnostics reads rather than a mutation's.
-	PluginQueriesPerConnectionPerMinute   = 30
-	PluginQueriesPerOrganizationPerMinute = 300
+	// PluginQueriesPerConnectionPerMinute supports paging and inspecting dozens
+	// of plugins without spending the separate assignment mutation allowance.
+	PluginQueriesPerConnectionPerMinute = 120
+
+	// PluginQueriesPerOrganizationPerMinute leaves room for concurrent inventory
+	// inspection while bounding the aggregate rate of PostgreSQL reads.
+	PluginQueriesPerOrganizationPerMinute = 1200
 )
 
 // maxPluginPageSize bounds one page of plugin inventory.

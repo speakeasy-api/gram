@@ -286,8 +286,14 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 			Connection:   ratelimit.New(limitStore, platformmcp.DocsConnectionLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.DocsOrganizationLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
-		Skills:            newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
-		LifecycleMetadata: newBudget(platformmcp.LifecycleConnectionLimitName, platformmcp.LifecycleOrganizationLimitName),
+		Skills: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.SkillsConnectionLimitName, ratelimit.PerMinute(platformmcp.SkillsOperationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.SkillsOrganizationLimitName, ratelimit.PerMinute(platformmcp.SkillsOperationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
+		LifecycleMetadata: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.LifecycleConnectionLimitName, ratelimit.PerMinute(platformmcp.LifecycleOperationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.LifecycleOrganizationLimitName, ratelimit.PerMinute(platformmcp.LifecycleOperationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 		RiskFindings: platformmcp.OperationBudget{
 			Connection:   ratelimit.New(limitStore, platformmcp.RiskFindingsConnectionLimitName, ratelimit.PerMinute(platformmcp.RiskFindingsQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.RiskFindingsOrganizationLimitName, ratelimit.PerMinute(platformmcp.RiskFindingsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
@@ -800,8 +806,14 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 			Connection:   ratelimit.New(limitStore, platformmcp.DocsConnectionLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.DocsOrganizationLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
-		Skills:            newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
-		LifecycleMetadata: newBudget(platformmcp.LifecycleConnectionLimitName, platformmcp.LifecycleOrganizationLimitName),
+		Skills: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.SkillsConnectionLimitName, ratelimit.PerMinute(platformmcp.SkillsOperationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.SkillsOrganizationLimitName, ratelimit.PerMinute(platformmcp.SkillsOperationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
+		LifecycleMetadata: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.LifecycleConnectionLimitName, ratelimit.PerMinute(platformmcp.LifecycleOperationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.LifecycleOrganizationLimitName, ratelimit.PerMinute(platformmcp.LifecycleOperationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 		RiskFindings: platformmcp.OperationBudget{
 			Connection:   ratelimit.New(limitStore, platformmcp.RiskFindingsConnectionLimitName, ratelimit.PerMinute(platformmcp.RiskFindingsQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.RiskFindingsOrganizationLimitName, ratelimit.PerMinute(platformmcp.RiskFindingsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
