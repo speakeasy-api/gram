@@ -355,7 +355,7 @@ func (s *ServiceCore) createManagedAssistant(
 
 	evaluation, err := feature.EvaluateFlag(ctx, s.featureFlags, feature.FlagAgentIdentityCredentials, organizationID, feature.OrgProjectGroups(assistantOrgSlug(ctx), ""))
 	if err != nil {
-		s.logger.WarnContext(ctx, "failed to evaluate agent identity credentials flag", attr.SlogError(err))
+		return assistantRecord{}, fmt.Errorf("evaluate agent identity credentials flag: %w", err)
 	}
 	if evaluation == feature.EvaluationEnabled {
 		if _, err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID}); err != nil {

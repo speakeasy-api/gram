@@ -145,9 +145,15 @@ func (s *Service) GetAssistant(ctx context.Context, payload *gen.GetAssistantPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").LogError(ctx, s.logger)
 	}
-	view.IdentityDiagnostics, err = s.core.identityDiagnostics(ctx, record)
+	evaluation, err := feature.EvaluateFlag(ctx, s.core.featureFlags, feature.FlagAgentIdentityCredentials, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
 	if err != nil {
-		return nil, mapAssistantStoreError(ctx, s.logger, err, "inspect assistant identity")
+		s.logger.WarnContext(ctx, "failed to evaluate agent identity credentials flag", attr.SlogError(err))
+	}
+	if evaluation == feature.EvaluationEnabled {
+		view.IdentityDiagnostics, err = s.core.identityDiagnostics(ctx, record)
+		if err != nil {
+			return nil, mapAssistantStoreError(ctx, s.logger, err, "inspect assistant identity")
+		}
 	}
 	return view, nil
 }
