@@ -135,10 +135,12 @@ type ProjectLifecycleService struct {
 	logger  *slog.Logger
 	core    *projects.Core
 	// engine checks the resource-scoped project:write grant a rename needs,
-	// exactly as the dashboard's own project update does.
+	// exactly as the dashboard's own project update does; a rename needs
+	// nothing more.
 	engine *authz.Engine
-	// admin re-checks org:admin live, so a denial keeps the challenge and
-	// audit behavior every other admin-gated Platform MCP path records.
+	// admin re-checks org:admin live for a create, as the dashboard's project
+	// creation requires, so a denial keeps the challenge and audit behavior
+	// every other admin-gated Platform MCP path records.
 	admin Authorizer
 	// changes meters create and rename together, so alternating between
 	// the two cannot multiply the write rate.
@@ -384,12 +386,14 @@ func (s *ProjectLifecycleService) RenameProject(ctx context.Context, principal P
 	if err != nil {
 		return ProjectMutationOutput{}, projectNameRefusal(err)
 	}
-	if err := s.requireAdmin(ctx, principal); err != nil {
-		return ProjectMutationOutput{}, err
+	if principal.OrganizationID == "" || principal.UserID == "" {
+		return ProjectMutationOutput{}, projectLifecycleInvalid("The project request is missing its caller identity.")
 	}
-	// Checked against the id the caller named before anything confirms it
-	// exists, so a real and an invented project get the same answer and this
-	// tool cannot be used to probe for project ids.
+	// Authorized exactly as the dashboard's project update is: project:write
+	// on this project, with no organization-admin requirement. Checked
+	// against the id the caller named before anything confirms it exists, so
+	// a real and an invented project get the same answer and this tool cannot
+	// be used to probe for project ids.
 	if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
 		mapped := toolExposureAuthorizationError(err, authz.ScopeProjectWrite)
 		if _, ok := errors.AsType[*ExternalAuthorizationError](mapped); !ok {

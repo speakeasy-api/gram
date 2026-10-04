@@ -23,9 +23,8 @@ const (
 //
 // Both stay off the managed assistant. An assistant is bound to the one
 // project it serves, so creating another project is outside its reach by
-// construction, and renaming the project it lives in is an organization
-// administrator's decision rather than something a project assistant should
-// be able to do on its own.
+// construction, and renaming the project it lives in is a person's decision
+// rather than something a project assistant should do on its own.
 func registerProjectLifecycleTools(reg *Registrar, service *ProjectLifecycleService) {
 	create := unavailableProjectLifecycleHandler[CreateProjectInput]()
 	rename := unavailableProjectLifecycleHandler[RenameProjectInput]()
@@ -60,11 +59,15 @@ func registerProjectLifecycleTools(reg *Registrar, service *ProjectLifecycleServ
 		Title: "Rename a Project",
 		Description: "Change the display name of one exact project. Nothing else changes: the project's slug stays the same, so dashboard links and anything addressing the project by slug keep working, and its MCP servers, skills, plugins, and their audiences are untouched. " +
 			"Supply the project ID from list_projects, an idempotency key, and confirmed: true only after the user confirms the exact project and new name. " +
-			"Organization administrator access is not enough on its own: the caller also needs write access to that exact project, as in the dashboard, and is refused with the missing permission otherwise.",
+			"Needs write access to that exact project, as in the dashboard; without it the call is refused with the missing permission, and the refusal is the same whether or not the project exists.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)},
 	}, ToolMeta{
-		Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly,
-		ProjectScope: ProjectScopeExplicit,
+		// Authorized as the dashboard's project update is: project:write on
+		// the exact project, which the handler checks. Member authorization
+		// plus a project:write discovery scope offers the tool to anyone who
+		// holds that grant on some project, not only organization admins.
+		Authorization: ExternalAuthorizationMember, Audiences: externalOnly,
+		ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectWrite,
 	}, rename)
 }
 

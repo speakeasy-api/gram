@@ -466,15 +466,64 @@ func TestProjectLifecycleRefusesANonAdministrator(t *testing.T) {
 	seedPlatformMCPAuthorizationMember(t, ctx, fixture.conn, member.OrganizationID, member.UserID, authz.SystemRoleMember)
 	before := len(fixture.organizationProjects(t, ctx))
 
+	// Creating a project stays an organization administrator's action, as in
+	// the dashboard, even for a member holding project write grants.
 	_, err := fixture.service.CreateProject(ctx, member, CreateProjectInput{Name: "Support Team", IdempotencyKey: uuid.NewString(), Confirmed: true})
 	var denied *ExternalAuthorizationError
 	require.ErrorAs(t, err, &denied)
 	require.Equal(t, string(authz.ScopeOrgAdmin), denied.RequiredScope)
 	require.Len(t, fixture.organizationProjects(t, ctx), before)
 
-	_, err = fixture.service.RenameProject(ctx, member, RenameProjectInput{ProjectID: fixture.project.ID.String(), Name: "Renamed", IdempotencyKey: uuid.NewString(), Confirmed: true})
-	require.ErrorAs(t, err, &denied)
-	require.Equal(t, string(authz.ScopeOrgAdmin), denied.RequiredScope)
+}
+
+// memberContext is a context for a live member who is not an organization
+// administrator, holding exactly the given grants.
+func (f projectLifecycleFixture) memberContext(t *testing.T, ctx context.Context, grants ...authz.Grant) (context.Context, Principal) {
+	t.Helper()
+	member := f.principal
+	member.UserID = "user_" + uuid.NewString()
+	seedPlatformMCPAuthorizationMember(t, ctx, f.conn, member.OrganizationID, member.UserID, authz.SystemRoleMember)
+	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: member.OrganizationID, UserID: member.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, member.UserID))
+	return authz.GrantsToContext(ctx, grants), member
+}
+
+// Rename authorizes exactly as the dashboard's project update does: write
+// access to that project is enough, with no organization-admin requirement.
+func TestRenameProjectNeedsOnlyProjectWrite(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedProjectLifecycleFixture(t, t.Context(), "platform_mcp_rename_project_member")
+	memberCtx, member := fixture.memberContext(t, ctx, authz.NewGrant(authz.ScopeProjectWrite, fixture.project.ID.String()))
+
+	output, err := fixture.service.RenameProject(memberCtx, member, RenameProjectInput{ProjectID: fixture.project.ID.String(), Name: "Renamed By Member", IdempotencyKey: uuid.NewString(), Confirmed: true})
+	require.NoError(t, err)
+	require.Equal(t, "renamed", output.Outcome)
+	row, err := projectsrepo.New(fixture.conn).GetProjectByID(ctx, fixture.project.ID)
+	require.NoError(t, err)
+	require.Equal(t, "Renamed By Member", row.Name)
+	entry, err := audittest.LatestAuditLogByAction(ctx, fixture.conn, audit.ActionProjectUpdate)
+	require.NoError(t, err)
+	require.Equal(t, member.UserID, entry.ActorID)
+}
+
+// Without write access the refusal is identical for a real project and an
+// invented one, so the tool cannot be used to probe which project ids exist.
+func TestRenameProjectWithoutProjectWriteIsNoOracle(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedProjectLifecycleFixture(t, t.Context(), "platform_mcp_rename_project_no_write")
+	memberCtx, member := fixture.memberContext(t, ctx, authz.NewGrant(authz.ScopeProjectRead, fixture.project.ID.String()))
+
+	refuse := func(projectID string) *ExternalAuthorizationError {
+		t.Helper()
+		_, err := fixture.service.RenameProject(memberCtx, member, RenameProjectInput{ProjectID: projectID, Name: "Renamed", IdempotencyKey: uuid.NewString(), Confirmed: true})
+		var denied *ExternalAuthorizationError
+		require.ErrorAs(t, err, &denied, projectID)
+		return denied
+	}
+	existing, invented := refuse(fixture.project.ID.String()), refuse(uuid.NewString())
+	require.Equal(t, string(authz.ScopeProjectWrite), existing.RequiredScope)
+	require.Equal(t, existing.RequiredScope, invented.RequiredScope)
+	require.Equal(t, existing.Error(), invented.Error())
+
 	row, err := projectsrepo.New(fixture.conn).GetProjectByID(ctx, fixture.project.ID)
 	require.NoError(t, err)
 	require.Equal(t, fixture.project.Name, row.Name)
@@ -584,9 +633,22 @@ func TestProjectLifecycleUnavailableRegistrationMatchesLiveManifest(t *testing.T
 		require.Equal(t, other.Annotations, descriptor.Annotations)
 		require.Equal(t, other.InputSchema, descriptor.InputSchema)
 		require.Equal(t, externalOnly, descriptor.Meta.Audiences, "%s", name)
-		require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization, "%s", name)
 		require.Contains(t, descriptor.Description, "confirmed: true", "%s", name)
 	}
+	// Each tool is offered to exactly the people the dashboard lets do it:
+	// creating a project needs organization admin, renaming one needs only
+	// write access to it, which the handler checks on the exact project.
+	require.Equal(t, ExternalAuthorizationOrgAdmin, unavailable[createProjectToolName].Meta.Authorization)
+	require.Equal(t, ExternalAuthorizationMember, unavailable[renameProjectToolName].Meta.Authorization)
+	require.Equal(t, []authz.Scope{authz.ScopeProjectWrite}, unavailable[renameProjectToolName].Meta.DiscoveryScopes)
+	projectWriter := []authz.Grant{authz.NewGrant(authz.ScopeProjectWrite, uuid.NewString())}
+	projectReader := []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, uuid.NewString())}
+	require.True(t, externalToolDiscoverable(projectWriter, true, fixture.principal, unavailable[renameProjectToolName].Meta),
+		"a member with write access to a project is offered rename_project")
+	require.False(t, externalToolDiscoverable(projectReader, true, fixture.principal, unavailable[renameProjectToolName].Meta),
+		"read access alone does not offer rename_project")
+	require.False(t, externalToolDiscoverable(projectWriter, true, fixture.principal, unavailable[createProjectToolName].Meta),
+		"project write access does not offer create_project, which needs organization admin")
 	require.Equal(t, ProjectScopeNone, unavailable[createProjectToolName].Meta.ProjectScope, "there is no project until create_project makes one")
 	require.Equal(t, ProjectScopeExplicit, unavailable[renameProjectToolName].Meta.ProjectScope)
 	require.Contains(t, unavailable[createProjectToolName].Description, "Call first without confirmed: true",
@@ -594,8 +656,10 @@ func TestProjectLifecycleUnavailableRegistrationMatchesLiveManifest(t *testing.T
 	require.Contains(t, unavailable[createProjectToolName].Description, "Do not work the slug out yourself")
 	require.NotContains(t, unavailable[createProjectToolName].Description, "punctuation dropped",
 		"a prose derivation drifts from the code; the preview is the only source of the slug")
-	require.Contains(t, unavailable[renameProjectToolName].Description, "write access to that exact project",
-		"org admin alone does not authorize a rename, so the description must say so")
+	require.Contains(t, unavailable[renameProjectToolName].Description, "Needs write access to that exact project",
+		"the description must state the permission a rename needs")
+	require.NotContains(t, unavailable[renameProjectToolName].Description, "administrator",
+		"a rename needs no organization-admin access, as in the dashboard")
 
 	refusal := invokeUnavailable(t, unavailable[createProjectToolName], map[string]any{
 		"name": "Support Team", "idempotency_key": uuid.NewString(), "confirmed": true,
