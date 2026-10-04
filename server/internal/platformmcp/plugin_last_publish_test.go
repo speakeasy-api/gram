@@ -87,7 +87,7 @@ func TestGetPluginReportsLastPublishAttempt(t *testing.T) {
 			status: publishstatus.Status{State: publishstatus.StateRetrying, RequestedAt: &requestedAt, Attempt: 2, FailureCategory: publishstatus.FailurePublishFailed},
 			want: PluginLastPublish{
 				LastRecordedPublishAt: recordedAt, State: publishstatus.StateRetrying, RequestedAt: "2026-10-01T12:00:00Z", Attempt: 2,
-				FailureCategory: publishstatus.FailurePublishFailed, FailureMessage: publishFailureMessage(publishstatus.FailurePublishFailed, false),
+				FailureCategory: publishstatus.FailurePublishFailed, FailureMessage: publishFailureMessage(publishstatus.FailurePublishFailed, publishHistoryRecorded),
 			},
 		},
 		{
@@ -95,7 +95,7 @@ func TestGetPluginReportsLastPublishAttempt(t *testing.T) {
 			status: publishstatus.Status{State: publishstatus.StateFailed, RequestedAt: &requestedAt, FinishedAt: &finishedAt, FailureCategory: publishstatus.FailureRepositoryConflict},
 			want: PluginLastPublish{
 				LastRecordedPublishAt: recordedAt, State: publishstatus.StateFailed, RequestedAt: "2026-10-01T12:00:00Z", FinishedAt: "2026-10-01T12:16:00Z",
-				FailureCategory: publishstatus.FailureRepositoryConflict, FailureMessage: publishFailureMessage(publishstatus.FailureRepositoryConflict, false),
+				FailureCategory: publishstatus.FailureRepositoryConflict, FailureMessage: publishFailureMessage(publishstatus.FailureRepositoryConflict, publishHistoryRecorded),
 			},
 		},
 		{
@@ -103,7 +103,7 @@ func TestGetPluginReportsLastPublishAttempt(t *testing.T) {
 			status: publishstatus.Status{State: publishstatus.StateFailed, RequestedAt: &requestedAt, FinishedAt: &finishedAt, FailureCategory: publishstatus.FailurePublishFailed},
 			want: PluginLastPublish{
 				LastRecordedPublishAt: recordedAt, State: publishstatus.StateFailed, RequestedAt: "2026-10-01T12:00:00Z", FinishedAt: "2026-10-01T12:16:00Z",
-				FailureCategory: publishstatus.FailurePublishFailed, FailureMessage: publishFailureMessage(publishstatus.FailurePublishFailed, false),
+				FailureCategory: publishstatus.FailurePublishFailed, FailureMessage: publishFailureMessage(publishstatus.FailurePublishFailed, publishHistoryRecorded),
 			},
 		},
 		{
@@ -227,17 +227,47 @@ func TestGetPluginFirstPublishFailureDoesNotOfferRepublish(t *testing.T) {
 		require.NoError(t, err, category)
 		require.True(t, got.PublicationEvidence.NotConfigured, category)
 		lastPublish := got.PublicationEvidence.LastPublish
-		require.Equal(t, publishFailureMessage(category, true), lastPublish.FailureMessage, category)
+		require.Equal(t, publishFailureMessage(category, publishHistoryNone), lastPublish.FailureMessage, category)
 		require.NotContains(t, lastPublish.FailureMessage, "republish it with", category)
 		require.Contains(t, lastPublish.FailureMessage, "AICP dashboard", category)
 		require.Contains(t, lastPublish.FailureMessage, "Speakeasy support", category)
 	}
 
-	// Once a publish is recorded, republish_plugin is the offered remedy again.
+	// Once a publish is recorded, the project is configured and
+	// republish_plugin is the offered remedy again.
 	seedRecordedPublish(t, ctx, conn, project.ID)
+	service.WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{
+		PluginSlug: "release-tools", NotConfigured: false, Packages: []plugindelivery.PublicationPackageAddress{},
+	}}})
 	service.WithPublishStatus(&stubPluginPublishStatus{status: publishstatus.Status{State: publishstatus.StateFailed, FailureCategory: publishstatus.FailurePublishFailed}})
 	got, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: "release-tools"})
 	require.NoError(t, err)
-	require.Equal(t, publishFailureMessage(publishstatus.FailurePublishFailed, false), got.PublicationEvidence.LastPublish.FailureMessage)
+	require.Equal(t, publishFailureMessage(publishstatus.FailurePublishFailed, publishHistoryRecorded), got.PublicationEvidence.LastPublish.FailureMessage)
 	require.Contains(t, got.PublicationEvidence.LastPublish.FailureMessage, "republish_plugin")
+}
+
+func TestGetPluginUnreadablePublishHistoryDoesNotOfferRepublish(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_plugin_last_publish_unknown_history")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Release Tools", "release-tools")
+	ctx = withOrganizationGrant(ctx, authz.ScopeOrgAdmin, principal.OrganizationID)
+	seedRecordedPublish(t, ctx, conn, project.ID)
+	service := testPluginTargets(conn).
+		WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{PluginSlug: "release-tools", Packages: []plugindelivery.PublicationPackageAddress{}}}}).
+		WithPublishStatus(&stubPluginPublishStatus{status: publishstatus.Status{State: publishstatus.StateFailed, FailureCategory: publishstatus.FailurePublishFailed}})
+	service.recordedPublish = func(context.Context, uuid.UUID) (pluginsrepo.PluginGithubConnection, error) {
+		return pluginsrepo.PluginGithubConnection{}, errors.New("connection reset")
+	}
+
+	got, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: "release-tools"})
+	require.NoError(t, err)
+	lastPublish := got.PublicationEvidence.LastPublish
+	require.Empty(t, lastPublish.LastRecordedPublishAt, "an unreadable history is not a recorded publish")
+	require.Equal(t, publishFailureMessage(publishstatus.FailurePublishFailed, publishHistoryUnknown), lastPublish.FailureMessage)
+	require.NotContains(t, lastPublish.FailureMessage, "republish_plugin")
+	require.Contains(t, lastPublish.FailureMessage, "AICP dashboard")
+	require.Contains(t, lastPublish.FailureMessage, "Speakeasy support")
 }

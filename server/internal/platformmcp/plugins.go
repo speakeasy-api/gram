@@ -439,6 +439,10 @@ type PluginsService struct {
 	assignmentVersionKey []byte
 	remoteSessions       MemberMCPConnectionReader
 	now                  func() time.Time
+	// recordedPublish reads the project's marketplace connection row, whose
+	// updated_at is the last recorded publish. A field so tests can fail the
+	// read without breaking the database.
+	recordedPublish func(context.Context, uuid.UUID) (pluginsrepo.PluginGithubConnection, error)
 
 	mutationFlags             feature.Provider
 	organizations             OrganizationSlugResolver
@@ -478,6 +482,7 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		assignmentVersionKey:  versionKey,
 		remoteSessions:        nil,
 		now:                   time.Now,
+		recordedPublish:       pluginsrepo.New(db).GetGitHubConnection,
 		mutationFlags:         nil,
 		organizations:         nil,
 		audit:                 nil,
@@ -1203,13 +1208,16 @@ func (s *PluginsService) lastPublish(ctx context.Context, projectID uuid.UUID) *
 	// publish after its push, so updated_at is the last recorded publish. No
 	// row means no publish has ever been recorded: republish_plugin refuses
 	// such a project as not_configured, so failure advice must not offer it.
-	firstPublish := false
-	conn, err := pluginsrepo.New(s.db).GetGitHubConnection(ctx, projectID)
+	history := publishHistoryUnknown
+	conn, err := s.recordedPublish(ctx, projectID)
 	switch {
-	case err == nil && conn.UpdatedAt.Valid:
-		result.LastRecordedPublishAt = conn.UpdatedAt.Time.UTC().Format(time.RFC3339)
+	case err == nil:
+		history = publishHistoryRecorded
+		if conn.UpdatedAt.Valid {
+			result.LastRecordedPublishAt = conn.UpdatedAt.Time.UTC().Format(time.RFC3339)
+		}
 	case errors.Is(err, pgx.ErrNoRows):
-		firstPublish = true
+		history = publishHistoryNone
 	}
 	if s.publishStatus == nil {
 		return result
@@ -1230,7 +1238,7 @@ func (s *PluginsService) lastPublish(ctx context.Context, projectID uuid.UUID) *
 	}
 	result.Attempt = status.Attempt
 	result.FailureCategory = status.FailureCategory
-	result.FailureMessage = publishFailureMessage(status.FailureCategory, firstPublish)
+	result.FailureMessage = publishFailureMessage(status.FailureCategory, history)
 	return result
 }
 
@@ -1238,6 +1246,29 @@ func (s *PluginsService) lastPublish(ctx context.Context, projectID uuid.UUID) *
 // the managed assistant too, where republish_plugin is not offered, so the
 // dashboard is named alongside it.
 const publishRetryAdvice = "An administrator can republish it with republish_plugin on an external Platform MCP connection, or from the AICP dashboard; contact Speakeasy support if it keeps failing."
+
+// publishHistory is what is known about the project's recorded publishes,
+// which decides whether republish_plugin can be offered as a remedy.
+type publishHistory string
+
+const (
+	// publishHistoryRecorded means at least one publish was recorded, so
+	// republish_plugin accepts the project.
+	publishHistoryRecorded publishHistory = "recorded"
+
+	// publishHistoryNone means no publish was ever recorded, so
+	// republish_plugin refuses the project as not_configured.
+	publishHistoryNone publishHistory = "none"
+
+	// publishHistoryUnknown means the recorded publishes could not be read, so
+	// whether republish_plugin would accept the project is unknown.
+	publishHistoryUnknown publishHistory = "unknown"
+)
+
+// unknownHistoryRetryAdvice replaces publishRetryAdvice when the project's
+// recorded publishes could not be read: republish_plugin may refuse the
+// project, so only remedies that work either way are named.
+const unknownHistoryRetryAdvice = "An administrator can republish from the AICP dashboard; contact Speakeasy support if it keeps failing."
 
 // firstPublishRetryAdvice replaces publishRetryAdvice when no publish has
 // ever been recorded for the project. republish_plugin refuses such a
@@ -1247,12 +1278,16 @@ const firstPublishRetryAdvice = "This project's first marketplace publish has no
 
 // publishFailureMessage is the fixed explanation shown for a failure category.
 // It is the only failure text an agent sees, so it names the next step and
-// nothing from the underlying error. firstPublish selects advice that does
-// not offer republish_plugin, which refuses a project with no recorded publish.
-func publishFailureMessage(category publishstatus.FailureCategory, firstPublish bool) string {
-	advice := publishRetryAdvice
-	if firstPublish {
+// nothing from the underlying error. republish_plugin is offered only when a
+// recorded publish proves it will accept the project.
+func publishFailureMessage(category publishstatus.FailureCategory, history publishHistory) string {
+	advice := unknownHistoryRetryAdvice
+	switch history {
+	case publishHistoryRecorded:
+		advice = publishRetryAdvice
+	case publishHistoryNone:
 		advice = firstPublishRetryAdvice
+	case publishHistoryUnknown:
 	}
 	switch category {
 	case publishstatus.FailureRepositoryConflict:

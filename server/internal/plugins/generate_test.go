@@ -3147,7 +3147,7 @@ func TestGeneratePlatformMCPPackageEmitsPrivateAccessWorkflow(t *testing.T) {
 	require.Contains(t, workflow, "An enqueued request is not a published package")
 	require.Contains(t, workflow, "`last_publish`")
 	require.Contains(t, workflow, "`failure_category: repository_conflict` cannot be fixed by republishing")
-	require.Contains(t, workflow, "treat it as pending until `last_publish.requested_at` is later than the republish")
+	require.Contains(t, workflow, "treat it as pending until `last_publish.requested_at` is later than the republish or the publication evidence reports `fresh: true`")
 	require.Contains(t, workflow, "`not_configured: true`, no publish has ever been recorded")
 	require.NotContains(t, workflow, "speakeasy-skill-feedback")
 }
