@@ -70,7 +70,6 @@ func requireRepublishPluginDeclaration(t *testing.T, registrar *Registrar) {
 	require.True(t, descriptor.Annotations.IdempotentHint)
 	require.NotNil(t, descriptor.Annotations.DestructiveHint)
 	require.False(t, *descriptor.Annotations.DestructiveHint)
-	require.Contains(t, descriptor.Description, "every plugin in the project")
 	for _, assistant := range registrar.For(AudienceAssistant) {
 		require.NotEqual(t, operationRepublishPlugin, assistant.Name, "republishing stays off the assistant surface")
 	}
@@ -81,6 +80,7 @@ func TestUnavailableRepublishPluginToolKeepsTheLiveContract(t *testing.T) {
 
 	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	requireRepublishPluginDeclaration(t, registrar)
+	require.Equal(t, unavailableRepublishPluginDescription, descriptorByName(t, registrar, operationRepublishPlugin).Description)
 }
 
 func TestRepublishPluginToolResultCarriesTheDashboardLink(t *testing.T) {

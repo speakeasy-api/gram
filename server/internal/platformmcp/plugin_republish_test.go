@@ -131,6 +131,7 @@ func TestRepublishPluginReportsAlreadyCurrentWithoutRequestingAPublish(t *testin
 	require.Equal(t, RepublishedPlugin{ID: plugin.ID.String(), Name: "Support Tools", Slug: "support-tools", IsDefault: false}, got.Plugin)
 	require.NotNil(t, got.PublicationEvidence)
 	require.Equal(t, new(true), got.PublicationEvidence.Fresh)
+	require.Equal(t, pluginAlreadyCurrentNote, got.Note)
 	require.Empty(t, signaler.recorded())
 	count, err := testrepo.New(conn).CountPublishOutboxRows(ctx)
 	require.NoError(t, err)
@@ -262,6 +263,7 @@ func TestComposedRepublishPluginToolDeclaresAnExternalAdminIdempotentWrite(t *te
 
 	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, plugins, nil, CatalogDescriptor{})
 	requireRepublishPluginDeclaration(t, registrar)
+	require.Equal(t, republishPluginDescription, descriptorByName(t, registrar, operationRepublishPlugin).Description)
 }
 
 // Plugin reads composed without a publish path keep republish_plugin listed

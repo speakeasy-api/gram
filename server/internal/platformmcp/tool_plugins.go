@@ -70,7 +70,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_plugin",
 		Title:       "Get One Plugin",
-		Description: "Get one exact plugin in an explicit project. Organization administrators see its administrative inventory, exact typed MCP membership IDs and targets, assignment controls, and publication evidence when configured. Admin membership results are cursor-paginated and complete beyond 100 entries, and a changed membership set requires restarting pagination. Publication evidence shows the addresses a package would contain now and compares its stored MCP fingerprints: fresh=true means matching stored inputs, fresh=false means different inputs, null means unknown. If unavailable=true, package inputs could not be resolved; do not treat an empty packages list as a package with no MCPs. This does not verify installed clients or live marketplace contents; publication=published alone does not mean addresses are current. When fresh=false, an administrator can request a publish now with republish_plugin instead of waiting for the periodic refresh. Other members can read only a published plugin assigned to them, with its MCP servers and skills but no recipient identities, counts, assignment references, membership IDs, backend target IDs, package location, repository details, or credentials.",
+		Description: "Get one exact plugin in an explicit project. Organization administrators see its administrative inventory, exact typed MCP membership IDs and targets, assignment controls, and publication evidence when configured. Admin membership results are cursor-paginated and complete beyond 100 entries, and a changed membership set requires restarting pagination. Publication evidence shows the addresses a package would contain now and compares its stored MCP fingerprints: fresh=true means matching stored inputs, fresh=false means different inputs, null means unknown. If unavailable=true, package inputs could not be resolved; do not treat an empty packages list as a package with no MCPs. This does not verify installed clients or live marketplace contents; publication=published alone does not mean addresses are current. When fresh=false, an administrator on the external Platform MCP can request a publish now with republish_plugin; otherwise use the AI Control Plane dashboard instead of waiting for the periodic refresh. Other members can read only a published plugin assigned to them, with its MCP servers and skills but no recipient identities, counts, assignment references, membership IDs, backend target IDs, package location, repository details, or credentials.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryOrgRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetPluginInput) (*mcp.CallToolResult, GetPluginOutput, error) {
 		return principalToolCall(ctx, pluginToolResult, func(principal Principal) (GetPluginOutput, error) {
@@ -171,6 +171,8 @@ const republishPluginDescription = "Request a publish of an explicit project's p
 	"If the plugin's package already matches its current inputs, nothing is requested and the outcome is already_current. If the project has no package repository connected, this returns not_configured with a dashboard link. " +
 	"outcome=enqueued means a publish was requested, not that it has landed: it runs in the background, so call get_plugin later and report fresh=true only once it says so. A retry with the same idempotency key is safe."
 
+const unavailableRepublishPluginDescription = "Request a publish of a project's plugin packages now. This is not switched on for your organization yet; publish from the project's Plugins page in the AI Control Plane dashboard instead."
+
 // republishPluginAnnotations are shared by the live and unavailable
 // registrations. Republishing unchanged inputs is a no-op, so the tool is
 // idempotent, and it never removes anything.
@@ -191,6 +193,7 @@ func registerRepublishPluginTool(reg *Registrar, plugins *PluginsService) {
 	}
 	meta := ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}
 	if !plugins.republishValid() {
+		manifest.Description = unavailableRepublishPluginDescription
 		addTool(reg, manifest, meta, func(context.Context, *mcp.CallToolRequest, RepublishPluginInput) (*mcp.CallToolResult, RepublishPluginOutput, error) {
 			refusal, _ := republishPluginToolResult(pluginRepublishUnavailable(nil))
 			return refusal, RepublishPluginOutput{}, nil

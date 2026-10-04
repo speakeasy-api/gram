@@ -28,9 +28,12 @@ const (
 	PluginRepublishAlreadyCurrent = "already_current"
 )
 
-// pluginRepublishNote is returned with every successful result so an agent
-// reports the asynchronous publish honestly.
+// pluginRepublishNote is returned with an enqueued result so an agent reports
+// the asynchronous publish honestly.
 const pluginRepublishNote = "Publishing runs in the background, so a requested publish is not yet a published package. Call get_plugin again later: publication_evidence.fresh=true confirms the package caught up. Installed clients are not inspected."
+
+// pluginAlreadyCurrentNote is returned when nothing was requested.
+const pluginAlreadyCurrentNote = "The plugin's published package already matches its current inputs, so no publish was requested. Installed clients are not inspected."
 
 var (
 	ErrPluginRepublishInvalid       = errors.New("invalid platform mcp plugin republish")
@@ -93,7 +96,7 @@ type RepublishPluginOutput struct {
 	// enqueue it normally still reports fresh=false.
 	PublicationEvidence *PluginPublicationEvidence `json:"publication_evidence"`
 
-	// Note states that the publish is asynchronous.
+	// Note states whether a publish was requested and that it is asynchronous.
 	Note string `json:"note"`
 
 	// Receipt identifies the idempotent request.
@@ -233,12 +236,16 @@ func (s *PluginsService) RepublishPlugin(ctx context.Context, principal Principa
 			return RepublishPluginOutput{}, pluginRepublishUnavailable(err)
 		}
 	}
+	note := pluginRepublishNote
+	if stored.Outcome == PluginRepublishAlreadyCurrent {
+		note = pluginAlreadyCurrentNote
+	}
 	return RepublishPluginOutput{
 		ProjectID:           project.ID.String(),
 		Plugin:              stored.Plugin,
 		Outcome:             stored.Outcome,
 		PublicationEvidence: s.readPublicationEvidence(ctx, principal, project.ID, stored.Plugin.Slug),
-		Note:                pluginRepublishNote,
+		Note:                note,
 		Receipt:             riskMutationToolReceipt(receipt),
 	}, nil
 }
