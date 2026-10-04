@@ -123,6 +123,7 @@ describe("Assistant identity management", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(false);
+    expect(screen.getByText(/An identity already uses this name/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Identity name"), {
       target: { value: "New identity" },
     });

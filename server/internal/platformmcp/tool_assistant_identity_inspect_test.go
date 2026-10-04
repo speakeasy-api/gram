@@ -39,6 +39,8 @@ func TestAssistantIdentityInspectionContract(t *testing.T) {
 	require.Equal(t, ProjectScopeExplicit, a.Meta.ProjectScope)
 	require.Equal(t, discoveryProjectRead, a.Meta.DiscoveryScopes)
 	require.Contains(t, a.Description, "project:read")
+	require.Contains(t, a.Description, "project:write management authorization")
+	require.Contains(t, a.Description, "otherwise diagnostics are omitted")
 	require.Contains(t, a.Description, "OAuth consent")
 	require.NotContains(t, string(a.InputSchema), "token")
 	ctx := contextWithPrincipal(t.Context(), Principal{OrganizationID: "test-org", UserID: "test-user"})
