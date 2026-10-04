@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 // capturePublishSignaler records the post-commit marketplace republishes in
@@ -106,6 +107,21 @@ func (f publishingMetadataFixture) requireRepublished(t *testing.T, ctx context.
 	require.Equal(t, want, f.publisher.count(), msg)
 }
 
+// createPublicToolset creates a toolset whose package entry lists its
+// user-supplied headers.
+func createPublicToolset(t *testing.T, ctx context.Context, ti *testInstance, slug string) toolsets_repo.Toolset {
+	t.Helper()
+
+	toolset := createTestToolset(t, ctx, ti, slug)
+	require.NoError(t, toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	}))
+	toolset.McpIsPublic = true
+	return toolset
+}
+
 func userHeader(name, displayName string) *types.McpEnvironmentConfigInput {
 	return &types.McpEnvironmentConfigInput{VariableName: name, HeaderDisplayName: &displayName, ProvidedBy: "user"}
 }
@@ -114,7 +130,7 @@ func TestSetMcpMetadataRepublishesWhenUserHeadersChange(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newPublishingMetadataService(t)
-	toolset := createTestToolset(t, ctx, f.ti, "metadata-carried")
+	toolset := createPublicToolset(t, ctx, f.ti, "metadata-carried")
 	f.carry(t, ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true}, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	slug := types.Slug(toolset.Slug)
 
@@ -149,6 +165,50 @@ func TestSetMcpMetadataRepublishesWhenUserHeadersChange(t *testing.T) {
 	})
 	require.NoError(t, err)
 	f.requireRepublished(t, ctx, 2, "a renamed header changes the package")
+
+	_, err = f.ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:        &slug,
+		EnvironmentConfigs: []*types.McpEnvironmentConfigInput{{VariableName: "API_TOKEN", HeaderDisplayName: nil, ProvidedBy: "user"}},
+	})
+	require.NoError(t, err)
+	f.requireRepublished(t, ctx, 3, "an unset display name leaves the header unresolved")
+
+	_, err = f.ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:        &slug,
+		EnvironmentConfigs: []*types.McpEnvironmentConfigInput{userHeader("API_TOKEN", "")},
+	})
+	require.NoError(t, err)
+	f.requireRepublished(t, ctx, 4, "an empty display name resolves the header")
+}
+
+func TestSetMcpMetadataPrivateToolsetRepublishesOnlyWhenHeadersAppearOrVanish(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newPublishingMetadataService(t)
+	toolset := createTestToolset(t, ctx, f.ti, "metadata-private")
+	f.carry(t, ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true}, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	slug := types.Slug(toolset.Slug)
+
+	_, err := f.ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:        &slug,
+		EnvironmentConfigs: []*types.McpEnvironmentConfigInput{userHeader("API_TOKEN", "X-Api-Token")},
+	})
+	require.NoError(t, err)
+	f.requireRepublished(t, ctx, 1, "a required header removes the plugin from the shared Agent Plugins package")
+
+	_, err = f.ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:        &slug,
+		EnvironmentConfigs: []*types.McpEnvironmentConfigInput{userHeader("API_TOKEN", "X-Renamed-Token")},
+	})
+	require.NoError(t, err)
+	f.requireRepublished(t, ctx, 1, "a private server's package never lists its headers")
+
+	_, err = f.ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		ToolsetSlug:        &slug,
+		EnvironmentConfigs: []*types.McpEnvironmentConfigInput{},
+	})
+	require.NoError(t, err)
+	f.requireRepublished(t, ctx, 2, "dropping the last header returns the plugin to the shared package")
 }
 
 func TestSetMcpMetadataSkipsServerOutsidePackages(t *testing.T) {

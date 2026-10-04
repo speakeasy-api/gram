@@ -512,7 +512,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		return nil, err
 	}
 
-	packageChanged := payload.EnvironmentConfigs != nil && userHeadersChanged(existing, metadata)
+	packageChanged := payload.EnvironmentConfigs != nil && renderedHeadersChanged(backend, existing, metadata)
 	if packageChanged {
 		if err := s.requestPluginPublicationForBackend(ctx, dbtx, authCtx, backend); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "enqueue MCP metadata plugin publication").LogError(ctx, logger)

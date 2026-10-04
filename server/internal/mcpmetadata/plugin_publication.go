@@ -14,19 +14,32 @@ import (
 )
 
 // providedByUser marks an environment variable each person supplies as a
-// header. Plugin packages list these for public servers and refuse to render a
-// server that needs one into the shared Agent Plugins package, so they are the
-// only metadata a package reflects.
+// header. These are the only metadata a plugin package reflects.
 const providedByUser = "user"
 
-// userHeadersChanged reports whether a metadata write changed the user-supplied
-// header variables, keyed by variable name with their display names.
-func userHeadersChanged(before, after *types.McpMetadata) bool {
-	return !maps.Equal(userHeaders(before), userHeaders(after))
+// userHeader is one user-supplied header as a package sees it. An unset
+// display name leaves the header unresolved, which renders differently from an
+// empty one.
+type userHeader struct {
+	displayName    string
+	hasDisplayName bool
 }
 
-func userHeaders(metadata *types.McpMetadata) map[string]string {
-	headers := map[string]string{}
+// renderedHeadersChanged reports whether a metadata write changed what a
+// package renders from user-supplied headers. Any such header keeps the plugin
+// out of the shared Agent Plugins package whatever backs the server, so their
+// presence always matters; only a public toolset-backed server lists the
+// headers themselves.
+func renderedHeadersChanged(backend *resolvedMetadataBackend, before, after *types.McpMetadata) bool {
+	beforeHeaders, afterHeaders := userHeaders(before), userHeaders(after)
+	if (len(beforeHeaders) > 0) != (len(afterHeaders) > 0) {
+		return true
+	}
+	return backend.toolset != nil && backend.toolset.McpIsPublic && !maps.Equal(beforeHeaders, afterHeaders)
+}
+
+func userHeaders(metadata *types.McpMetadata) map[string]userHeader {
+	headers := map[string]userHeader{}
 	if metadata == nil {
 		return headers
 	}
@@ -34,11 +47,11 @@ func userHeaders(metadata *types.McpMetadata) map[string]string {
 		if config == nil || config.ProvidedBy != providedByUser {
 			continue
 		}
-		displayName := ""
-		if config.HeaderDisplayName != nil {
-			displayName = *config.HeaderDisplayName
+		header := userHeader{displayName: "", hasDisplayName: config.HeaderDisplayName != nil}
+		if header.hasDisplayName {
+			header.displayName = *config.HeaderDisplayName
 		}
-		headers[config.VariableName] = displayName
+		headers[config.VariableName] = header
 	}
 	return headers
 }

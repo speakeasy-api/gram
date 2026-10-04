@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
@@ -438,7 +439,8 @@ func (s *Service) signalPluginPublishForSkills(ctx context.Context, authCtx *con
 	if s.publisher == nil || len(skillIDs) == 0 {
 		return
 	}
-	published, err := repo.New(s.db).HasPublishedPluginDistributionForSkills(ctx, repo.HasPublishedPluginDistributionForSkillsParams{
+	// The write has committed, so a client disconnect must not skip the check.
+	published, err := repo.New(s.db).HasPublishedPluginDistributionForSkills(context.WithoutCancel(ctx), repo.HasPublishedPluginDistributionForSkillsParams{
 		ProjectID:  *authCtx.ProjectID,
 		SkillIds:   skillIDs,
 		LatestOnly: latestOnly,
@@ -449,6 +451,25 @@ func (s *Service) signalPluginPublishForSkills(ctx context.Context, authCtx *con
 		return
 	}
 	if published {
+		s.publishPluginPackages(ctx, authCtx)
+	}
+}
+
+// publishPluginPackagesIfConnected republishes the project's marketplace
+// packages when the project has a marketplace connection, for a committed write
+// that already knows a plugin carried the change. Best-effort: a failed check is
+// logged and skipped, since the rollout sweep still picks the project up.
+func (s *Service) publishPluginPackagesIfConnected(ctx context.Context, authCtx *contextvalues.AuthContext) {
+	if s.publisher == nil {
+		return
+	}
+	connected, err := pluginsrepo.New(s.db).HasPluginGithubConnectionForProject(context.WithoutCancel(ctx), *authCtx.ProjectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "check marketplace connection after skill change",
+			attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogError(err))
+		return
+	}
+	if connected {
 		s.publishPluginPackages(ctx, authCtx)
 	}
 }
@@ -2169,17 +2190,6 @@ func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) erro
 	}
 	beforeSnapshot := buildSkillAuditSnapshot(skill, state.LatestVersionID, state.VersionCount)
 
-	// Archiving revokes every distribution below, so whether a published package
-	// carried the skill is only observable before that.
-	published, err := queries.HasPublishedPluginDistributionForSkills(ctx, repo.HasPublishedPluginDistributionForSkillsParams{
-		ProjectID:  *authCtx.ProjectID,
-		SkillIds:   []uuid.UUID{skill.ID},
-		LatestOnly: false,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "check plugin distribution before archive").LogError(ctx, logger)
-	}
-
 	revokedDistributions, err := queries.RevokeAllSkillDistributionsBySkill(ctx, repo.RevokeAllSkillDistributionsBySkillParams{
 		ProjectID: *authCtx.ProjectID,
 		SkillID:   skill.ID,
@@ -2187,7 +2197,11 @@ func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) erro
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "revoke skill distributions during archive").LogError(ctx, logger)
 	}
+	revokedPluginDistribution := false
 	for _, revoked := range revokedDistributions {
+		if revoked.SkillDistribution.Channel == "plugin" {
+			revokedPluginDistribution = true
+		}
 		beforeDistribution := buildSkillDistributionAuditSnapshot(revoked.SkillDistribution, revoked.ResolvedVersionID)
 		beforeDistribution.RevokedAt = nil
 		beforeDistribution.UpdatedAt = conv.FromPGTimestamptz(revoked.PreviousUpdatedAt)
@@ -2257,8 +2271,8 @@ func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) erro
 		return oops.E(oops.CodeUnexpected, err, "commit archive skill transaction").LogError(ctx, logger)
 	}
 
-	if published {
-		s.publishPluginPackages(ctx, authCtx)
+	if revokedPluginDistribution {
+		s.publishPluginPackagesIfConnected(ctx, authCtx)
 	}
 
 	return nil
