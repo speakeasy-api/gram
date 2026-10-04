@@ -38,8 +38,7 @@ export function AssistantIdentitySettings({
   const agents = agentsQuery.data ?? [];
   const creating = selectedIdentity === "new";
   const nameTaken = agents.some(
-    (agent) =>
-      agent.name.toLocaleLowerCase() === agentName.trim().toLocaleLowerCase(),
+    (agent) => agent.name.toLowerCase() === agentName.trim().toLowerCase(),
   );
   const attributionName = creating
     ? agentName.trim()
@@ -47,7 +46,7 @@ export function AssistantIdentitySettings({
   const validSelection =
     !agentsQuery.isPending &&
     !agentsQuery.isError &&
-    (creating ? !!agentName.trim() && !nameTaken : !!attributionName);
+    (creating ? !!agentName.trim() : !!attributionName);
 
   const upgrade = useAssistantsUpgradeIdentityMutation({
     onSuccess: () => {

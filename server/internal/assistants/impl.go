@@ -153,10 +153,16 @@ func (s *Service) GetAssistant(ctx context.Context, payload *gen.GetAssistantPay
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to evaluate agent identity credentials flag", attr.SlogError(err))
 	}
-	if evaluation == feature.EvaluationEnabled && s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}) == nil {
-		view.IdentityDiagnostics, err = s.core.identityDiagnostics(ctx, record)
-		if err != nil {
-			return nil, mapAssistantStoreError(ctx, s.logger, err, "inspect assistant identity")
+	if evaluation == feature.EvaluationEnabled {
+		matched, matchErr := s.authz.FindMatched(ctx, []authz.Check{{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}})
+		if matchErr != nil {
+			return nil, mapAssistantStoreError(ctx, s.logger, matchErr, "check assistant identity visibility")
+		}
+		if len(matched) == 1 && matched[0] {
+			view.IdentityDiagnostics, err = s.core.identityDiagnostics(ctx, record)
+			if err != nil {
+				return nil, mapAssistantStoreError(ctx, s.logger, err, "inspect assistant identity")
+			}
 		}
 	}
 	return view, nil
@@ -612,8 +618,8 @@ func (s *Service) UpgradeAssistantIdentity(ctx context.Context, payload *gen.Upg
 	}
 	if payload.AgentName != nil {
 		selection.Name = strings.TrimSpace(*payload.AgentName)
-		if selection.Name == "" || utf8.RuneCountInString(selection.Name) > 120 || payload.AgentID != nil {
-			return nil, oops.E(oops.CodeBadRequest, nil, "agent_name must contain 1 to 120 characters and cannot be combined with agent_id")
+		if selection.Name == "" || utf8.RuneCountInString(selection.Name) > 120 || strings.ContainsRune(selection.Name, 0) || payload.AgentID != nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "agent_name must contain 1 to 120 characters without NUL and cannot be combined with agent_id")
 		}
 	}
 	record, err := s.core.UpgradeAssistantIdentityWithAgent(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, id, authCtx.UserID, selection)

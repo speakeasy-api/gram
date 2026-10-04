@@ -110,7 +110,7 @@ beforeEach(() => {
   mocks.agentData = { name: "Example agent" };
 });
 describe("Assistant identity management", () => {
-  it("requires a different new name when the assistant name is already used", () => {
+  it("warns about a matching name without overriding server uniqueness checks", () => {
     mocks.agents = [
       { id: "existing-agent", name: assistant.name.toUpperCase() },
     ];
@@ -122,7 +122,7 @@ describe("Assistant identity management", () => {
           name: "Confirm setup",
         }) as HTMLButtonElement
       ).disabled,
-    ).toBe(true);
+    ).toBe(false);
     fireEvent.change(screen.getByLabelText("Identity name"), {
       target: { value: "New identity" },
     });
