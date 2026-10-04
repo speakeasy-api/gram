@@ -1818,6 +1818,7 @@ func newStartCommand() *cli.Command {
 				NetworkAccessAdmission:   networkIngressAdmission,
 				PublicationRequests:      plugins.PublicationRequests{Enabled: publicationEmit},
 				TemporalEnv:              temporalEnv,
+				ProjectCore:              projects.NewCore(logger.With(attr.SlogComponent("projects")), auditLogger, temporalEnv, pluginsGitHub != nil),
 				Skills:                   skillsService,
 				SkillInsights:            telemetryrepo.New(chDB),
 				RiskPolicyApprovals:      mcpApprovalService,

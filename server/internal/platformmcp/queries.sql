@@ -647,6 +647,24 @@ WHERE receipt.organization_id = @organization_id
 ORDER BY receipt.created_at DESC, receipt.id DESC
 LIMIT 1;
 
+-- name: GetPlatformMCPProjectCreationReceipt :one
+-- An operation that creates its own project has no project to key a receipt
+-- on before it runs, so its replay lookup spans the organization: the receipt
+-- is written against the project the operation created, and a retry finds it
+-- by user, operation and key alone. Callers hold the advisory lock taken by
+-- LockPlatformMCPOperationReceipt with an empty project id. Expired receipts
+-- are ignored rather than reclaimed: each is pinned to the project it made,
+-- so a fresh run under the same key can never collide with it.
+SELECT *
+FROM platform_mcp_operation_receipts
+WHERE organization_id = @organization_id
+  AND user_id = @user_id
+  AND operation = @operation
+  AND idempotency_key = @idempotency_key
+  AND expires_at > clock_timestamp()
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
+
 -- name: DeleteExpiredPlatformMCPOperationReceipt :execrows
 -- Matches GetPlatformMCPOperationReceipt exactly. A receipt this cannot reach
 -- never expires, and its idempotency key stays unusable for that user.

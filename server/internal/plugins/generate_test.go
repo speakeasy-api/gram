@@ -3172,6 +3172,37 @@ func TestGeneratePlatformMCPPackageGatesRemoteURLProviderAttachment(t *testing.T
 	require.NotContains(t, workflow, "when inspection reported `authentication_required`, ask for explicit confirmation")
 }
 
+// A first-run conversation has no project to choose from, so the onboarding
+// workflows must offer to create one through the Platform MCP instead of
+// stopping, and must keep that creation behind an explicit confirmation.
+func TestGeneratePlatformMCPOnboardingWorkflowsOfferProjectCreation(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	for _, path := range []string{
+		"skills/add-mcp-from-catalog/SKILL.md",
+		"skills/add-mcp-from-remote-url/SKILL.md",
+	} {
+		content := files["speakeasy/"+path]
+		require.NotEmpty(t, content, path)
+		require.Equal(t, content, files["agent-plugins/speakeasy/"+path], path)
+		workflow := string(content)
+		for _, required := range []string{
+			"If no listed project fits, or none exists yet, offer to create one",
+			"`create_project`",
+			"`confirmed: true`",
+			"a fresh idempotency key",
+			"organization administrator access",
+			"not available to a managed project assistant",
+			"say so rather than choosing another project",
+		} {
+			require.Contains(t, workflow, required, path)
+		}
+		require.Less(t, strings.Index(workflow, "`list_projects`"), strings.Index(workflow, "`create_project`"),
+			"%s must list the existing projects before offering to create one", path)
+	}
+}
+
 func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 	t.Parallel()
 	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")

@@ -378,6 +378,7 @@ type PostgresReader struct {
 	reviewRequests            MCPReviewRequestService
 	reviewRequestBudget       OperationBudget
 	toolExposure              *MCPToolExposureService
+	projectLifecycle          *ProjectLifecycleService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -408,6 +409,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		reviewRequests:            nil,
 		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
 		toolExposure:              nil,
+		projectLifecycle:          nil,
 	}
 }
 
@@ -424,6 +426,15 @@ func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader
 func (r *PostgresReader) WithToolExposure(service *MCPToolExposureService) *PostgresReader {
 	if r != nil {
 		r.toolExposure = service
+	}
+	return r
+}
+
+// WithProjectLifecycle composes project creation and renaming. Without it the
+// tools stay in the catalogue as stable refusals rather than disappearing.
+func (r *PostgresReader) WithProjectLifecycle(service *ProjectLifecycleService) *PostgresReader {
+	if r != nil {
+		r.projectLifecycle = service
 	}
 	return r
 }

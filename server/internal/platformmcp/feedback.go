@@ -412,6 +412,8 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	listProjectToolsToolName:                {},
 	addToolsToMCPToolName:                   {},
 	removeToolsFromMCPToolName:              {},
+	createProjectToolName:                   {},
+	renameProjectToolName:                   {},
 	"update_mcp_metadata":                   {},
 	"disable_mcp":                           {},
 	"enable_mcp":                            {},

@@ -425,6 +425,11 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		// administrator drives directly, like the other distribution writes.
 		addToolsToMCPToolName,
 		removeToolsFromMCPToolName,
+		// An assistant is bound to its own project: creating another is
+		// outside its reach, and renaming its own is an organization
+		// administrator's decision.
+		createProjectToolName,
+		renameProjectToolName,
 	} {
 		require.False(t, admitted[name], "tool %q must not be admitted to the assistant", name)
 	}

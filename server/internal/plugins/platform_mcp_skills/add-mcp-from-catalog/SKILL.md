@@ -21,7 +21,7 @@ If the user instead supplies a remote MCP URL outside the reviewed catalogue, us
 ## Workflow
 
 1. Call `list_projects` to verify that the Platform MCP is authenticated and obtain the eligible projects. If authenticated discovery is unavailable, stop and ask the user to complete or repair AICP OAuth; do not claim that installation succeeded.
-2. Call `search_mcp_catalog`. Present the eligible projects and reviewed candidates, then ask the user to choose one exact project and one exact candidate.
+2. Call `search_mcp_catalog`. Present the eligible projects and reviewed candidates, then ask the user to choose one exact project and one exact candidate. If no listed project fits, or none exists yet, offer to create one: ask for its exact name, confirm it, and call `create_project` with that name, `confirmed: true`, and a fresh idempotency key. Use the project it returns; it starts empty. Creating a project needs organization administrator access and is not available to a managed project assistant, which always works in its own project; if it is refused, say so rather than choosing another project.
 3. Call `inspect_mcp_candidate` for the selected candidate. Explain the bounded change and collect only the non-secret configuration fields declared by that result.
 4. After explicit confirmation, call `register_catalog_mcp` with the exact selected project, reviewed candidate, declared non-secret configuration, and a fresh idempotency key. Do not distribute it.
 5. Call `get_mcp_readiness` with the returned project and registration ID to inspect persisted readiness.
