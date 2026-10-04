@@ -3174,32 +3174,50 @@ func TestGeneratePlatformMCPPackageGatesRemoteURLProviderAttachment(t *testing.T
 
 // A first-run conversation has no project to choose from, so the onboarding
 // workflows must offer to create one through the Platform MCP instead of
-// stopping, and must keep that creation behind an explicit confirmation.
+// stopping. The offer is gated on the tool being present, because a managed
+// project assistant does not have it, and the creation happens only after
+// inspection, so a rejected candidate leaves no empty project behind.
 func TestGeneratePlatformMCPOnboardingWorkflowsOfferProjectCreation(t *testing.T) {
 	t.Parallel()
 	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
 	require.NoError(t, err)
-	for _, path := range []string{
-		"skills/add-mcp-from-catalog/SKILL.md",
-		"skills/add-mcp-from-remote-url/SKILL.md",
+	for path, extra := range map[string][]string{
+		"skills/add-mcp-from-catalog/SKILL.md": {
+			"do not create it yet",
+			"still wants this candidate after inspection",
+		},
+		"skills/add-mcp-from-remote-url/SKILL.md": {
+			"Confirming the new project's name is not consent to register",
+			"confirm this exact URL in that exact new project",
+		},
 	} {
 		content := files["speakeasy/"+path]
 		require.NotEmpty(t, content, path)
 		require.Equal(t, content, files["agent-plugins/speakeasy/"+path], path)
 		workflow := string(content)
-		for _, required := range []string{
-			"If no listed project fits, or none exists yet, offer to create one",
-			"`create_project`",
-			"`confirmed: true`",
-			"a fresh idempotency key",
+		for _, required := range append([]string{
+			"Only when `create_project` is in your tool list",
+			"A managed project assistant has no `create_project` tool and always registers in its own project, so never offer it there",
+			"call `create_project` with that name, `confirmed: true`, and a fresh idempotency key",
+			// The slug is derived, never chosen, and permanent, so the user
+			// sees it before confirming rather than discovering it after.
+			"show the slug it will get",
+			"cut to 40 characters",
+			"After the user confirms the name and slug",
+			"A `conflict` refusal means a project already holds that slug and nothing was created",
 			"organization administrator access",
-			"not available to a managed project assistant",
 			"say so rather than choosing another project",
-		} {
+		}, extra...) {
 			require.Contains(t, workflow, required, path)
 		}
-		require.Less(t, strings.Index(workflow, "`list_projects`"), strings.Index(workflow, "`create_project`"),
-			"%s must list the existing projects before offering to create one", path)
+		listAt := strings.Index(workflow, "`list_projects`")
+		inspectAt := strings.Index(workflow, "Call `inspect_mcp_candidate`")
+		createAt := strings.Index(workflow, "call `create_project`")
+		require.GreaterOrEqual(t, listAt, 0, "%s must list the existing projects", path)
+		require.GreaterOrEqual(t, inspectAt, 0, "%s must inspect the candidate", path)
+		require.Less(t, listAt, createAt, "%s must list the existing projects before creating one", path)
+		require.Less(t, inspectAt, createAt, "%s must inspect before creating a project", path)
+		require.Less(t, strings.Index(workflow, "show the slug it will get"), createAt, "%s must show the slug before creating the project", path)
 	}
 }
 

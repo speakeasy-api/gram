@@ -28,6 +28,13 @@ import (
 // accepts is one the database will store.
 const projectNameMaxLength = 40
 
+// ProjectSlugMaxLength mirrors the projects table's CHECK on slug. conv.ToSlug
+// only drops or merges characters, so a name within projectNameMaxLength
+// cannot derive a longer slug today; deriveProjectSlug still cuts it to fit,
+// so raising the name limit alone can never turn into a constraint violation
+// and a 500.
+const ProjectSlugMaxLength = 40
+
 var (
 	// ErrProjectNameInvalid reports a name that is blank, longer than
 	// projectNameMaxLength characters, or contains a NUL byte.
@@ -130,11 +137,25 @@ func ProjectSlug(name string) (string, error) {
 	if strings.TrimSpace(name) == "" || strings.ContainsRune(name, '\x00') || utf8.RuneCountInString(name) > projectNameMaxLength {
 		return "", ErrProjectNameInvalid
 	}
-	slug := conv.ToSlug(name)
+	slug := deriveProjectSlug(name)
 	if slug == "" {
 		return "", ErrProjectSlugEmpty
 	}
 	return slug, nil
+}
+
+// deriveProjectSlug applies conv.ToSlug and cuts the result to
+// ProjectSlugMaxLength, trimming any hyphen the cut leaves at the end. The
+// caller never chooses a project slug, so a long name is not refused for the
+// address derived from it; the name itself is kept whole. Two names sharing a
+// cut prefix collide as an ordinary slug conflict. The slug is ASCII, so
+// cutting by byte cuts by character.
+func deriveProjectSlug(name string) string {
+	slug := conv.ToSlug(name)
+	if len(slug) > ProjectSlugMaxLength {
+		slug = strings.TrimRight(slug[:ProjectSlugMaxLength], "-")
+	}
+	return slug
 }
 
 // ProjectRenameName trims a proposed display name and refuses one a rename

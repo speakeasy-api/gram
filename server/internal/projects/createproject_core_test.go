@@ -1,7 +1,9 @@
 package projects_test
 
 import (
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -90,6 +92,59 @@ func TestCreateProjectRefusesNameWithoutLettersOrDigits(t *testing.T) {
 	after, err := projectsrepo.New(ti.conn).ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 	require.Len(t, after, len(before))
+}
+
+// The projects table caps name and slug at 40 characters. A direct call skips
+// the HTTP layer's MaxLength, so the core is what keeps an over-long name from
+// reaching the CHECK constraint and surfacing as a server error; a name at the
+// limit derives a slug at the limit.
+func TestCreateProjectEnforcesTheLengthLimit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProjectsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = withAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	atLimit := strings.Repeat("a", projects.ProjectSlugMaxLength)
+	result, err := ti.service.CreateProject(ctx, &gen.CreateProjectPayload{
+		ApikeyToken: nil, SessionToken: nil, OrganizationID: authCtx.ActiveOrganizationID, Name: atLimit,
+	})
+	require.NoError(t, err)
+	require.Equal(t, atLimit, string(result.Project.Slug))
+
+	_, err = ti.service.CreateProject(ctx, &gen.CreateProjectPayload{
+		ApikeyToken: nil, SessionToken: nil, OrganizationID: authCtx.ActiveOrganizationID, Name: strings.Repeat("b", projects.ProjectSlugMaxLength+1),
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), "40")
+}
+
+// conv.ToSlug only drops or merges characters, so no name within the name
+// limit can derive a slug past the slug limit. Pinned against the inputs most
+// likely to break that: multi-byte letters, whitespace runs and dashes.
+func TestProjectSlugNeverExceedsTheSlugLimit(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{
+		strings.Repeat("a", 40),
+		strings.Repeat("a ", 20),
+		strings.Repeat("a\t", 20),
+		strings.Repeat("-a", 20),
+		strings.Repeat("É", 40),
+		strings.Repeat("ß", 40),
+		strings.Repeat("İ", 40),
+		strings.Repeat("K", 40), // Kelvin sign, which lowercases to ASCII k
+	} {
+		slug, err := projects.ProjectSlug(name)
+		if err != nil {
+			require.ErrorIs(t, err, projects.ErrProjectSlugEmpty, "%q", name)
+			continue
+		}
+		require.LessOrEqual(t, utf8.RuneCountInString(slug), projects.ProjectSlugMaxLength, "%q", name)
+	}
 }
 
 func TestProjectSlugMatchesTheDashboardDerivation(t *testing.T) {

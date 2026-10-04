@@ -163,12 +163,6 @@ func (s *ProjectLifecycleService) CreateProject(ctx context.Context, principal P
 	if err := s.requireAdmin(ctx, principal); err != nil {
 		return ProjectMutationOutput{}, err
 	}
-	// Charged after validation and authorization and before anything is
-	// written, matching the other Platform MCP mutations: a refused call must
-	// not consume the allowance.
-	if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
-		return ProjectMutationOutput{}, projectBudgetError(err)
-	}
 	inputHash, err := projectInputHash(operationCreateProject, struct {
 		Name string `json:"name"`
 	}{Name: input.Name})
@@ -233,6 +227,13 @@ func (s *ProjectLifecycleService) createInReceiptTransaction(ctx context.Context
 		return stored, createdReceipt{projectID: existing.ProjectID, operation: operationReceiptFromRow(existing, true)}, false, nil
 	case !errors.Is(err, pgx.ErrNoRows):
 		return projectReceipt{}, createdReceipt{}, false, s.unexpected(ctx, fmt.Errorf("load project creation receipt: %w", err))
+	}
+
+	// Charged only once the call is known to be a new creation: a replay
+	// writes nothing, so retrying a lost response must not spend the
+	// allowance or be throttled away from the result it is owed.
+	if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
+		return projectReceipt{}, createdReceipt{}, false, projectBudgetError(err)
 	}
 
 	project, err := s.core.CreateInTransaction(ctx, tx, projects.CreateProjectMutation{
@@ -317,9 +318,6 @@ func (s *ProjectLifecycleService) RenameProject(ctx context.Context, principal P
 		return ProjectMutationOutput{}, s.unexpected(ctx, fmt.Errorf("resolve project to rename: %w", err))
 	}
 	project := ResolvedProject{ID: resolved.ID, Name: resolved.Name, Slug: resolved.Slug}
-	if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
-		return ProjectMutationOutput{}, projectBudgetError(err)
-	}
 	inputHash, err := projectInputHash(operationRenameProject, struct {
 		ProjectID string `json:"project_id"`
 		Name      string `json:"name"`
@@ -342,6 +340,13 @@ func (s *ProjectLifecycleService) RenameProject(ctx context.Context, principal P
 		},
 		EncodeResult: encodeProjectReceipt,
 		Mutate: func(ctx context.Context, tx pgx.Tx) (projectReceipt, error) {
+			// The executor reaches Mutate only when no stored receipt matched,
+			// so charging here makes a replay free: retrying a lost response
+			// must not spend the allowance or be throttled away from its
+			// result. A refusal rolls back the pending receipt with it.
+			if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
+				return projectReceipt{}, projectBudgetError(err)
+			}
 			renamed, err := s.core.RenameInTransaction(ctx, tx, projects.RenameProjectMutation{
 				OrganizationID: principal.OrganizationID,
 				ProjectID:      project.ID,

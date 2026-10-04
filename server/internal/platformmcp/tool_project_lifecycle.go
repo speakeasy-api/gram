@@ -46,8 +46,8 @@ func registerProjectLifecycleTools(reg *Registrar, service *ProjectLifecycleServ
 		Name:  createProjectToolName,
 		Title: "Create a Project",
 		Description: "Create an empty project in this organization. A project is where MCP servers and skills are kept before anyone receives them; creating one grants nothing and reaches nobody until something is added to it and shared through a plugin. " +
-			"Supply only a display name: the project's slug, which addresses it in dashboard links, is derived from the name exactly as the dashboard derives it and cannot be chosen. " +
-			"Supply an idempotency key and confirmed: true only after the user confirms the exact name. A retry with the same key and name returns the project the first call created instead of making a second one. " +
+			"Supply only a display name: the project's slug, which addresses it in dashboard links and never changes, is derived from the name exactly as the dashboard derives it and cannot be chosen. It is the name in lowercase with spaces as hyphens and other punctuation dropped, cut to 40 characters; show it to the user before confirming, and the result returns the slug the project got. " +
+			"Supply an idempotency key and confirmed: true only after the user confirms the exact name and slug. A retry with the same key and name returns the project the first call created instead of making a second one. " +
 			"A name with no letters or digits is refused, and a name whose slug matches an existing project is refused as a conflict; nothing is created in either case. The new project comes with the Default environment and Default plugin every project gets.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)},
 	}, ToolMeta{
@@ -59,7 +59,8 @@ func registerProjectLifecycleTools(reg *Registrar, service *ProjectLifecycleServ
 		Name:  renameProjectToolName,
 		Title: "Rename a Project",
 		Description: "Change the display name of one exact project. Nothing else changes: the project's slug stays the same, so dashboard links and anything addressing the project by slug keep working, and its MCP servers, skills, plugins, and their audiences are untouched. " +
-			"Supply the project ID from list_projects, an idempotency key, and confirmed: true only after the user confirms the exact project and new name.",
+			"Supply the project ID from list_projects, an idempotency key, and confirmed: true only after the user confirms the exact project and new name. " +
+			"Organization administrator access is not enough on its own: the caller also needs write access to that exact project, as in the dashboard, and is refused with the missing permission otherwise.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)},
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly,

@@ -2,7 +2,9 @@ package platformmcp
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -157,6 +159,81 @@ func TestCreateProjectReplaysARetryInsteadOfCreatingASecondProject(t *testing.T)
 	_, err = fixture.create(ctx, "Another Team", key)
 	refusal := requireProjectLifecycleRefusal(t, err, "conflict")
 	require.Contains(t, refusal, "different name")
+	require.Len(t, fixture.organizationProjects(t, ctx), before)
+}
+
+// A create receipt expires, after which the same key no longer replays. That
+// must not become a second project: the slug is derived from the name and is
+// unique among the organization's live projects, so a late retry of the same
+// name is refused as a conflict — and still is after the first project was
+// renamed, because a rename keeps the slug.
+func TestCreateProjectRetryAfterReceiptExpiryCannotDuplicate(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedProjectLifecycleFixture(t, t.Context(), "platform_mcp_create_project_expired_receipt")
+	// Written already expired, as if the receipt lifetime had passed.
+	fixture.service.now = func() time.Time { return time.Now().Add(-2 * receiptLifetime) }
+	key := uuid.NewString()
+
+	first, err := fixture.create(ctx, "Support Team", key)
+	require.NoError(t, err)
+	before := len(fixture.organizationProjects(t, ctx))
+
+	_, err = fixture.create(ctx, "Support Team", key)
+	require.Contains(t, requireProjectLifecycleRefusal(t, err, "conflict"), `"support-team"`)
+	require.Len(t, fixture.organizationProjects(t, ctx), before)
+
+	grants, _ := authz.GrantsFromContext(ctx)
+	ctx = authz.GrantsToContext(ctx, append(grants, authz.NewGrant(authz.ScopeProjectWrite, first.Project.ID)))
+	_, err = fixture.service.RenameProject(ctx, fixture.principal, RenameProjectInput{ProjectID: first.Project.ID, Name: "Customer Support", IdempotencyKey: uuid.NewString(), Confirmed: true})
+	require.NoError(t, err)
+	_, err = fixture.create(ctx, "Support Team", key)
+	require.Contains(t, requireProjectLifecycleRefusal(t, err, "conflict"), `"support-team"`)
+	require.Len(t, fixture.organizationProjects(t, ctx), before, "the renamed project still holds its slug")
+}
+
+// A replay writes nothing, so it must not spend the write allowance: an agent
+// retrying a lost response after the allowance ran out still gets the result
+// it is owed, while a genuinely new write is throttled.
+func TestProjectLifecycleReplaysAreNotCharged(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedProjectLifecycleFixture(t, t.Context(), "platform_mcp_project_lifecycle_replay_budget")
+	createKey, renameKey := uuid.NewString(), uuid.NewString()
+	rename := RenameProjectInput{ProjectID: fixture.project.ID.String(), Name: "Customer Support", IdempotencyKey: renameKey, Confirmed: true}
+
+	_, err := fixture.create(ctx, "Support Team", createKey)
+	require.NoError(t, err)
+	_, err = fixture.service.RenameProject(ctx, fixture.principal, rename)
+	require.NoError(t, err)
+
+	fixture.service.changes = OperationBudget{Connection: denyOperationLimiter{}, Organization: denyOperationLimiter{}}
+	replayed, err := fixture.create(ctx, "Support Team", createKey)
+	require.NoError(t, err)
+	require.True(t, replayed.Receipt.Replayed)
+	renamed, err := fixture.service.RenameProject(ctx, fixture.principal, rename)
+	require.NoError(t, err)
+	require.True(t, renamed.Receipt.Replayed)
+
+	_, err = fixture.create(ctx, "Another Team", uuid.NewString())
+	requireProjectLifecycleRefusal(t, err, "rate_limited")
+	_, err = fixture.service.RenameProject(ctx, fixture.principal, RenameProjectInput{ProjectID: fixture.project.ID.String(), Name: "Renamed Again", IdempotencyKey: uuid.NewString(), Confirmed: true})
+	requireProjectLifecycleRefusal(t, err, "rate_limited")
+}
+
+// The projects table caps the slug at 40 characters. A name at the limit
+// creates; one past it is a readable refusal naming the limit, never a
+// constraint violation surfacing as an unavailable error.
+func TestCreateProjectEnforcesTheLengthLimitReadably(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedProjectLifecycleFixture(t, t.Context(), "platform_mcp_create_project_length")
+
+	atLimit := strings.Repeat("a", projects.ProjectSlugMaxLength)
+	output, err := fixture.create(ctx, atLimit, uuid.NewString())
+	require.NoError(t, err)
+	require.Equal(t, atLimit, output.Project.Slug)
+	before := len(fixture.organizationProjects(t, ctx))
+
+	_, err = fixture.create(ctx, strings.Repeat("b", projects.ProjectSlugMaxLength+1), uuid.NewString())
+	require.Contains(t, requireProjectLifecycleRefusal(t, err, "invalid_request"), "40")
 	require.Len(t, fixture.organizationProjects(t, ctx), before)
 }
 
@@ -330,6 +407,10 @@ func TestProjectLifecycleUnavailableRegistrationMatchesLiveManifest(t *testing.T
 	}
 	require.Equal(t, ProjectScopeNone, unavailable[createProjectToolName].Meta.ProjectScope, "there is no project until create_project makes one")
 	require.Equal(t, ProjectScopeExplicit, unavailable[renameProjectToolName].Meta.ProjectScope)
+	require.Contains(t, unavailable[createProjectToolName].Description, "show it to the user before confirming",
+		"the slug is derived and permanent, so the user must see it before confirming")
+	require.Contains(t, unavailable[renameProjectToolName].Description, "write access to that exact project",
+		"org admin alone does not authorize a rename, so the description must say so")
 
 	refusal := invokeUnavailable(t, unavailable[createProjectToolName], map[string]any{
 		"name": "Support Team", "idempotency_key": uuid.NewString(), "confirmed": true,
