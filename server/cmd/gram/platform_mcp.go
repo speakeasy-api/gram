@@ -395,6 +395,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithRemoteSessions(config.RemoteChallengeManager).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
+		WithMetadataMutations(plugins.NewPluginMetadataCore(config.AuditLogger, config.PublicationRequests), config.PluginPublishSignaler, platformMCPPluginMetadataBudget(config, limitStore)).
 		WithDistributionAdmission(config.DistributionAdmission).
 		WithDistributionAdmissionReads(distributionAdmissionReads)
 	if config.PluginPublisher != nil {
@@ -657,6 +658,15 @@ func newPlatformMCPDistributionService(config platformMCPConfig, pluginTargets p
 // decide which tools a hosted MCP server exposes. A composition failure leaves
 // the tools registered as stable refusals rather than removing them from the
 // catalogue.
+// platformMCPPluginMetadataBudget meters creating and renaming plugins on one
+// shared allowance, so alternating between the two cannot multiply the rate.
+func platformMCPPluginMetadataBudget(config platformMCPConfig, limitStore ratelimit.Store) platformmcp.OperationBudget {
+	return platformmcp.OperationBudget{
+		Connection:   ratelimit.New(limitStore, platformmcp.PluginMetadataMutationConnectionLimitName, ratelimit.PerMinute(platformmcp.PluginMetadataMutationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		Organization: ratelimit.New(limitStore, platformmcp.PluginMetadataMutationOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginMetadataMutationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+	}
+}
+
 func newPlatformMCPToolExposure(config platformMCPConfig, authorizer platformmcp.Authorizer, limitStore ratelimit.Store) *platformmcp.MCPToolExposureService {
 	service, err := platformmcp.NewMCPToolExposureService(
 		config.Logger, config.DB, config.AuditLogger, config.Authz, authorizer, config.JWTSigningKey,
@@ -909,6 +919,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithRemoteSessions(config.RemoteChallengeManager).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
+		WithMetadataMutations(plugins.NewPluginMetadataCore(config.AuditLogger, config.PublicationRequests), config.PluginPublishSignaler, platformMCPPluginMetadataBudget(config, limitStore)).
 		WithDistributionAdmission(config.DistributionAdmission).
 		WithDistributionAdmissionReads(distributionAdmissionReads)
 	if config.PluginPublisher != nil {

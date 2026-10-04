@@ -370,6 +370,10 @@ type PluginsService struct {
 	mutationReceipts          *PluginAssignmentMutationReceiptStore
 	distributionAdmission     *admission.Guard
 	distributionAdmissionRead distributionAdmissionReader
+
+	metadataCore      *plugindelivery.PluginMetadataCore
+	metadataPublisher plugindelivery.PluginPublishSignaler
+	metadataBudget    OperationBudget
 }
 
 func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMaterial string) *PluginsService {
@@ -403,6 +407,9 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		mutationBudget:        OperationBudget{},
 		mutationReceipts:      nil,
 		distributionAdmission: admission.NewGuard(nil, nil),
+		metadataCore:          nil,
+		metadataPublisher:     nil,
+		metadataBudget:        OperationBudget{},
 	}
 }
 

@@ -203,6 +203,24 @@ func TestPluginsService_CreatePlugin_DuplicateSlugReturnsConflict(t *testing.T) 
 	require.Equal(t, oops.CodeConflict, oopsErr.Code)
 }
 
+// The management API and the Platform MCP share one metadata core, so a slug
+// that is not already normalized is refused here with the same sentinel the
+// Platform MCP maps into its own refusal.
+func TestPluginsService_CreatePlugin_UnnormalizedSlugReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	_, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{
+		Name: "Unnormalized",
+		Slug: new("Not A Slug"),
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Equal(t, plugins.ErrPluginSlugInvalid.Error(), oopsErr.Error())
+}
+
 func TestPluginsService_CreatePlugin_ForbiddenWithoutOrgAdmin(t *testing.T) {
 	t.Parallel()
 
