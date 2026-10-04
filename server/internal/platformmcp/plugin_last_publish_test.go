@@ -8,11 +8,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/publishstatus"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
 type stubPluginPublishStatus struct {
@@ -28,6 +32,19 @@ func (s *stubPluginPublishStatus) Describe(_ context.Context, projectID uuid.UUI
 	return s.status, s.err
 }
 
+// seedRecordedPublish records a publish for the project the way a successful
+// push does, and returns the recorded time as get_plugin reports it.
+func seedRecordedPublish(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) string {
+	t.Helper()
+	recorded, err := pluginsrepo.New(conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
+		ProjectID: projectID, InstallationID: 1, RepoOwner: "private-owner", RepoName: "private-repository",
+		MarketplaceToken: conv.ToPGText("secret-marketplace-token"), PublishedMcpFingerprints: []byte(`{}`),
+		PublishedHooksVersion: pgtype.Text{}, PublishedHooksConfig: nil,
+	})
+	require.NoError(t, err)
+	return recorded.UpdatedAt.Time.UTC().Format(time.RFC3339)
+}
+
 func withOrganizationGrant(ctx context.Context, scope authz.Scope, organizationID string) context.Context {
 	return authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(scope, organizationID)})
 }
@@ -40,13 +57,13 @@ func TestGetPluginReportsLastPublishAttempt(t *testing.T) {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Release Tools", "release-tools")
 	ctx = withOrganizationGrant(ctx, authz.ScopeOrgAdmin, principal.OrganizationID)
+	recordedAt := seedRecordedPublish(t, ctx, conn, project.ID)
 
-	pushedAt := time.Date(2026, 9, 30, 8, 0, 0, 0, time.UTC)
 	requestedAt := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 	finishedAt := requestedAt.Add(16 * time.Minute)
 	fresh := false
 	service := testPluginTargets(conn).WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{
-		PluginSlug: "release-tools", Fresh: &fresh, LastSuccessfulPushAt: &pushedAt,
+		PluginSlug: "release-tools", Fresh: &fresh,
 		Packages: []plugindelivery.PublicationPackageAddress{{ServerName: "MCP", MCPURL: "https://private.example/mcp/first"}},
 	}}})
 
@@ -58,18 +75,18 @@ func TestGetPluginReportsLastPublishAttempt(t *testing.T) {
 		{
 			name:   "no attempt on record",
 			status: publishstatus.Status{State: publishstatus.StateNone},
-			want:   PluginLastPublish{LastSuccessfulPushAt: "2026-09-30T08:00:00Z", State: publishstatus.StateNone},
+			want:   PluginLastPublish{LastRecordedPublishAt: recordedAt, State: publishstatus.StateNone},
 		},
 		{
 			name:   "queued",
 			status: publishstatus.Status{State: publishstatus.StateQueued, RequestedAt: &requestedAt},
-			want:   PluginLastPublish{LastSuccessfulPushAt: "2026-09-30T08:00:00Z", State: publishstatus.StateQueued, RequestedAt: "2026-10-01T12:00:00Z"},
+			want:   PluginLastPublish{LastRecordedPublishAt: recordedAt, State: publishstatus.StateQueued, RequestedAt: "2026-10-01T12:00:00Z"},
 		},
 		{
 			name:   "retrying",
 			status: publishstatus.Status{State: publishstatus.StateRetrying, RequestedAt: &requestedAt, Attempt: 2, FailureCategory: publishstatus.FailurePublishFailed},
 			want: PluginLastPublish{
-				LastSuccessfulPushAt: "2026-09-30T08:00:00Z", State: publishstatus.StateRetrying, RequestedAt: "2026-10-01T12:00:00Z", Attempt: 2,
+				LastRecordedPublishAt: recordedAt, State: publishstatus.StateRetrying, RequestedAt: "2026-10-01T12:00:00Z", Attempt: 2,
 				FailureCategory: publishstatus.FailurePublishFailed, FailureMessage: publishFailureMessage(publishstatus.FailurePublishFailed),
 			},
 		},
@@ -77,7 +94,7 @@ func TestGetPluginReportsLastPublishAttempt(t *testing.T) {
 			name:   "failed on a repository conflict",
 			status: publishstatus.Status{State: publishstatus.StateFailed, RequestedAt: &requestedAt, FinishedAt: &finishedAt, FailureCategory: publishstatus.FailureRepositoryConflict},
 			want: PluginLastPublish{
-				LastSuccessfulPushAt: "2026-09-30T08:00:00Z", State: publishstatus.StateFailed, RequestedAt: "2026-10-01T12:00:00Z", FinishedAt: "2026-10-01T12:16:00Z",
+				LastRecordedPublishAt: recordedAt, State: publishstatus.StateFailed, RequestedAt: "2026-10-01T12:00:00Z", FinishedAt: "2026-10-01T12:16:00Z",
 				FailureCategory: publishstatus.FailureRepositoryConflict, FailureMessage: publishFailureMessage(publishstatus.FailureRepositoryConflict),
 			},
 		},
@@ -85,14 +102,14 @@ func TestGetPluginReportsLastPublishAttempt(t *testing.T) {
 			name:   "failed after retries were exhausted",
 			status: publishstatus.Status{State: publishstatus.StateFailed, RequestedAt: &requestedAt, FinishedAt: &finishedAt, FailureCategory: publishstatus.FailurePublishFailed},
 			want: PluginLastPublish{
-				LastSuccessfulPushAt: "2026-09-30T08:00:00Z", State: publishstatus.StateFailed, RequestedAt: "2026-10-01T12:00:00Z", FinishedAt: "2026-10-01T12:16:00Z",
+				LastRecordedPublishAt: recordedAt, State: publishstatus.StateFailed, RequestedAt: "2026-10-01T12:00:00Z", FinishedAt: "2026-10-01T12:16:00Z",
 				FailureCategory: publishstatus.FailurePublishFailed, FailureMessage: publishFailureMessage(publishstatus.FailurePublishFailed),
 			},
 		},
 		{
 			name:   "succeeded",
 			status: publishstatus.Status{State: publishstatus.StateSucceeded, RequestedAt: &requestedAt, FinishedAt: &finishedAt},
-			want:   PluginLastPublish{LastSuccessfulPushAt: "2026-09-30T08:00:00Z", State: publishstatus.StateSucceeded, RequestedAt: "2026-10-01T12:00:00Z", FinishedAt: "2026-10-01T12:16:00Z"},
+			want:   PluginLastPublish{LastRecordedPublishAt: recordedAt, State: publishstatus.StateSucceeded, RequestedAt: "2026-10-01T12:00:00Z", FinishedAt: "2026-10-01T12:16:00Z"},
 		},
 	}
 	// Sequential: every case swaps the describer on one shared service.
@@ -116,22 +133,22 @@ func TestGetPluginReportsLastPublishUnavailable(t *testing.T) {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Release Tools", "release-tools")
 	ctx = withOrganizationGrant(ctx, authz.ScopeOrgAdmin, principal.OrganizationID)
-	pushedAt := time.Date(2026, 9, 30, 8, 0, 0, 0, time.UTC)
+	recordedAt := seedRecordedPublish(t, ctx, conn, project.ID)
 	service := testPluginTargets(conn).WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{
-		PluginSlug: "release-tools", LastSuccessfulPushAt: &pushedAt, Packages: []plugindelivery.PublicationPackageAddress{},
+		PluginSlug: "release-tools", Packages: []plugindelivery.PublicationPackageAddress{},
 	}}})
 
 	got, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: "release-tools"})
 	require.NoError(t, err)
-	require.Equal(t, &PluginLastPublish{LastSuccessfulPushAt: "2026-09-30T08:00:00Z", Unavailable: true}, got.PublicationEvidence.LastPublish, "no describer configured")
+	require.Equal(t, &PluginLastPublish{LastRecordedPublishAt: recordedAt, Unavailable: true}, got.PublicationEvidence.LastPublish, "no describer configured")
 
 	service.WithPublishStatus(&stubPluginPublishStatus{err: errors.New("describe plugin publish: rpc error: https://private-owner.example/secret-token")})
 	got, err = service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: "release-tools"})
 	require.NoError(t, err, "an unreadable attempt keeps the admin inventory")
-	require.Equal(t, &PluginLastPublish{LastSuccessfulPushAt: "2026-09-30T08:00:00Z", Unavailable: true}, got.PublicationEvidence.LastPublish)
+	require.Equal(t, &PluginLastPublish{LastRecordedPublishAt: recordedAt, Unavailable: true}, got.PublicationEvidence.LastPublish)
 	encoded, err := json.Marshal(got)
 	require.NoError(t, err)
-	for _, secret := range []string{"private-owner", "secret-token", "rpc error"} {
+	for _, secret := range []string{"private-owner", "private-repository", "secret-token", "secret-marketplace-token", "rpc error"} {
 		require.NotContains(t, string(encoded), secret)
 	}
 }
@@ -153,7 +170,14 @@ func TestGetPluginReportsLastPublishWhenEvidenceIsUnavailable(t *testing.T) {
 	require.True(t, got.PublicationEvidence.Unavailable)
 	require.NotNil(t, got.PublicationEvidence.LastPublish, "a failed first publish is still explained")
 	require.Equal(t, publishstatus.StateFailed, got.PublicationEvidence.LastPublish.State)
-	require.Empty(t, got.PublicationEvidence.LastPublish.LastSuccessfulPushAt)
+	require.Empty(t, got.PublicationEvidence.LastPublish.LastRecordedPublishAt, "no publish recorded yet")
+
+	// A recorded publish survives package resolution failing.
+	recordedAt := seedRecordedPublish(t, ctx, conn, project.ID)
+	got, err = service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: "release-tools"})
+	require.NoError(t, err)
+	require.True(t, got.PublicationEvidence.Unavailable)
+	require.Equal(t, recordedAt, got.PublicationEvidence.LastPublish.LastRecordedPublishAt)
 }
 
 func TestGetPluginNeverDescribesPublishForNonAdmins(t *testing.T) {
@@ -168,10 +192,15 @@ func TestGetPluginNeverDescribesPublishForNonAdmins(t *testing.T) {
 		WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{PluginSlug: "release-tools", Packages: []plugindelivery.PublicationPackageAddress{}}}}).
 		WithPublishStatus(describer)
 
-	// GetPlugin is the admin read; this proves the Temporal read is gated on
-	// its own even if a non-admin caller ever reached it.
+	// The tool routes members to GetAssignedPlugin; this proves GetPlugin
+	// gates evidence and the Temporal read on its own if a non-admin ever
+	// reached it.
 	got, err := service.GetPlugin(withOrganizationGrant(ctx, authz.ScopeOrgRead, principal.OrganizationID), principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: "release-tools"})
 	require.NoError(t, err)
 	require.Zero(t, describer.calls, "a non-admin read must not reach Temporal")
-	require.Equal(t, &PluginLastPublish{Unavailable: true}, got.PublicationEvidence.LastPublish)
+	require.Nil(t, got.PublicationEvidence, "publication evidence is admin-only")
+	encoded, err := json.Marshal(got)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "publication_evidence")
+	require.NotContains(t, string(encoded), "last_publish")
 }

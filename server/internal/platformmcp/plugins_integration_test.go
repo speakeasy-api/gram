@@ -537,6 +537,7 @@ func TestGetPluginResolvesAnExactTargetAndReportsMembership(t *testing.T) {
 			Packages: []plugindelivery.PublicationPackageAddress{{ServerName: "MCP", MCPURL: "https://private.example/mcp/first"}},
 		}}})
 	marketing := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Marketing Tools", "marketing")
+	ctx = withOrganizationGrant(ctx, authz.ScopeOrgAdmin, principal.OrganizationID)
 
 	// Named by slug, by exact name, and by id: one plugin, three ways to say it.
 	for _, target := range []string{"marketing", "Marketing Tools", "MARKETING TOOLS", marketing.ID.String()} {
@@ -560,6 +561,7 @@ func TestGetPluginRetainsInventoryWhenPublicationEvidenceIsUnavailable(t *testin
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Existing MCPs", "existing-mcps")
+	ctx = withOrganizationGrant(ctx, authz.ScopeOrgAdmin, principal.OrganizationID)
 	service := testPluginTargets(conn)
 	for _, evidence := range []stubPluginPublicationEvidence{
 		{items: nil},

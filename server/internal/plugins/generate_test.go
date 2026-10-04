@@ -3145,6 +3145,8 @@ func TestGeneratePlatformMCPPackageEmitsPrivateAccessWorkflow(t *testing.T) {
 	}
 	require.Contains(t, workflow, "explicit confirmation")
 	require.Contains(t, workflow, "An enqueued request is not a published package")
+	require.Contains(t, workflow, "`last_publish`")
+	require.Contains(t, workflow, "`failure_category: repository_conflict` cannot be fixed by republishing")
 	require.NotContains(t, workflow, "speakeasy-skill-feedback")
 }
 

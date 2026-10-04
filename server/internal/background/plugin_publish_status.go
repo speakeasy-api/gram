@@ -10,6 +10,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/client"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/plugins/publishstatus"
@@ -28,7 +29,8 @@ var _ publishstatus.Describer = (*TemporalPluginPublisher)(nil)
 // Temporal for the most recent run, which is what "last publish" means for a
 // ContinueAsNew chain. NotFound maps to StateNone rather than an error. A failed
 // run costs one more bounded read: the close event, which carries the failure
-// that gets classified. The hourly rollout sweep and the initial publish run
+// that gets classified; a failed run whose failure cannot be read is an error,
+// so callers report the attempt as unavailable rather than as failed. The hourly rollout sweep and the initial publish run
 // under other workflow ids and are not described here.
 func (p *TemporalPluginPublisher) Describe(ctx context.Context, projectID uuid.UUID) (publishstatus.Status, error) {
 	if p.TemporalEnv == nil {
@@ -46,16 +48,31 @@ func (p *TemporalPluginPublisher) Describe(ctx context.Context, projectID uuid.U
 	var closeFailure *failurepb.Failure
 	info := resp.GetWorkflowExecutionInfo()
 	if info.GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_FAILED {
-		iter := p.TemporalEnv.Client().GetWorkflowHistory(ctx, id, info.GetExecution().GetRunId(), false, enums.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT)
-		if iter.HasNext() {
-			event, err := iter.Next()
-			if err != nil {
-				return publishstatus.Status{}, fmt.Errorf("read plugin publish close event %s: %w", id, err)
-			}
-			closeFailure = event.GetWorkflowExecutionFailedEventAttributes().GetFailure()
+		closeFailure, err = publishCloseFailure(p.TemporalEnv.Client().GetWorkflowHistory(ctx, id, info.GetExecution().GetRunId(), false, enums.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT))
+		if err != nil {
+			return publishstatus.Status{}, fmt.Errorf("read plugin publish close event %s: %w", id, err)
 		}
 	}
 	return pluginPublishStatusFromDescribe(resp, closeFailure), nil
+}
+
+// publishCloseFailure reads the failure from a failed run's close event. A
+// failure is only reported when it was read: a missing close event, or one
+// without a failure, is an error so the attempt is reported as unavailable
+// rather than as failed.
+func publishCloseFailure(iter client.HistoryEventIterator) (*failurepb.Failure, error) {
+	if !iter.HasNext() {
+		return nil, errors.New("no close event")
+	}
+	event, err := iter.Next()
+	if err != nil {
+		return nil, fmt.Errorf("next history event: %w", err)
+	}
+	failure := event.GetWorkflowExecutionFailedEventAttributes().GetFailure()
+	if failure == nil {
+		return nil, errors.New("close event records no failure")
+	}
+	return failure, nil
 }
 
 // pluginPublishStatusFromDescribe maps a describe result, plus the close

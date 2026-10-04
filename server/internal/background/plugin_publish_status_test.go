@@ -1,6 +1,7 @@
 package background
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enums "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -117,11 +119,6 @@ func TestPluginPublishStatusFromDescribe(t *testing.T) {
 			want:         publishstatus.Status{State: publishstatus.StateFailed, RequestedAt: &started, FinishedAt: &closed, FailureCategory: publishstatus.FailureTimedOut},
 		},
 		{
-			name: "failed with an unreadable close event",
-			resp: publishDescribe(enums.WORKFLOW_EXECUTION_STATUS_FAILED),
-			want: publishstatus.Status{State: publishstatus.StateFailed, RequestedAt: &started, FinishedAt: &closed, FailureCategory: publishstatus.FailurePublishFailed},
-		},
-		{
 			name: "workflow run timed out",
 			resp: publishDescribe(enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT),
 			want: publishstatus.Status{State: publishstatus.StateFailed, RequestedAt: &started, FinishedAt: &closed, FailureCategory: publishstatus.FailureTimedOut},
@@ -144,4 +141,42 @@ func TestPluginPublishStatusFromDescribe(t *testing.T) {
 			}
 		})
 	}
+}
+
+type fakeHistoryIterator struct {
+	events []*historypb.HistoryEvent
+	err    error
+}
+
+func (f *fakeHistoryIterator) HasNext() bool { return len(f.events) > 0 || f.err != nil }
+
+func (f *fakeHistoryIterator) Next() (*historypb.HistoryEvent, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	event := f.events[0]
+	f.events = f.events[1:]
+	return event, nil
+}
+
+func TestPublishCloseFailureRefusesUnreadFailures(t *testing.T) {
+	t.Parallel()
+
+	failure := wrappedFailure(applicationFailure(activities.ErrTypeGitHubRepoConflict))
+	got, err := publishCloseFailure(&fakeHistoryIterator{events: []*historypb.HistoryEvent{{
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
+			WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{Failure: failure},
+		},
+	}}})
+	require.NoError(t, err)
+	require.Same(t, failure, got)
+
+	_, err = publishCloseFailure(&fakeHistoryIterator{})
+	require.Error(t, err, "a missing close event must not read as a failure")
+
+	_, err = publishCloseFailure(&fakeHistoryIterator{events: []*historypb.HistoryEvent{{}}})
+	require.Error(t, err, "a close event without a failure must not read as a failure")
+
+	_, err = publishCloseFailure(&fakeHistoryIterator{err: errors.New("history unavailable")})
+	require.Error(t, err)
 }
