@@ -106058,7 +106058,7 @@ components:
                 name:
                     type: string
                     description: The file name to show the assistant. Falls back to the stored asset name.
-                    maxLength: 120
+                    maxLength: 255
             required:
                 - asset_id
         SendMessageRequestBody:
@@ -106081,7 +106081,7 @@ components:
                 idempotency_key:
                     type: string
                     description: Stable key the client mints once per message so retries dedupe instead of enqueuing twice. A new key is generated server-side when omitted.
-                    maxLength: 120
+                    maxLength: 255
                 message:
                     type: string
                     description: The user's message text. May be empty when the turn carries attachments.

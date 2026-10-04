@@ -164,7 +164,7 @@ var _ = Service("assistants", func() {
 				Format(FormatUUID)
 			})
 			Attribute("idempotency_key", String, "Stable key the client mints once per message so retries dedupe instead of enqueuing twice. A new key is generated server-side when omitted.", func() {
-				MaxLength(120)
+				MaxLength(255)
 			})
 			Attribute("skill_ids", ArrayOf(String, func() {
 				Format(FormatUUID)
@@ -308,7 +308,7 @@ var SendMessageAttachment = Type("SendMessageAttachment", func() {
 		Format(FormatUUID)
 	})
 	Attribute("name", String, "The file name to show the assistant. Falls back to the stored asset name.", func() {
-		MaxLength(120)
+		MaxLength(255)
 	})
 })
 

@@ -67,6 +67,15 @@ func (s *Service) ProvisionWithAgent(ctx context.Context, tx pgx.Tx, p Provision
 		owner = assistant.CreatedByUserID.String
 	}
 	members := []string{p.ActorUserID, owner}
+	selectedOwner := ""
+	if selection.AgentID != uuid.Nil {
+		candidate, err := agentrepo.New(tx).GetAgentByID(ctx, agentrepo.GetAgentByIDParams{OrganizationID: p.OrganizationID, ID: selection.AgentID})
+		if err != nil {
+			return Binding{}, resourceError("read selected agent owner", err)
+		}
+		selectedOwner = candidate.OwnerUserID
+		members = append(members, selectedOwner)
+	}
 	slices.Sort(members)
 	for _, member := range slices.Compact(members) {
 		if _, err := q.LockActor(ctx, repo.LockActorParams{OrganizationID: p.OrganizationID, UserID: member}); err != nil {
@@ -118,11 +127,9 @@ func (s *Service) ProvisionWithAgent(ctx context.Context, tx pgx.Tx, p Provision
 		if agent.OwnerUserID != p.ActorUserID && !authz.GrantsSatisfy(actorPolicy, authz.Check{Scope: authz.ScopeAgentAuthorize, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil}) {
 			return Binding{}, ErrActorIneligible
 		}
-		if _, err := q.LockActor(ctx, repo.LockActorParams{OrganizationID: p.OrganizationID, UserID: agent.OwnerUserID}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return Binding{}, ErrActorIneligible
-			}
-			return Binding{}, fmt.Errorf("validate selected agent owner: %w", err)
+		// Membership locks precede the agent lock; reject an intervening transfer.
+		if agent.OwnerUserID != selectedOwner {
+			return Binding{}, ErrActorIneligible
 		}
 		if !agent.ProjectID.Valid || agent.ProjectID.UUID != p.ProjectID || agent.RevokedAt.Valid || agent.SuspendedAt.Valid || agent.OwnerReassignmentRequiredAt.Valid {
 			return Binding{}, ErrInvalidIdentity

@@ -7648,8 +7648,8 @@ func ValidateAssistantSkillRefResponseBody(body *AssistantSkillRefResponseBody) 
 func ValidateSendMessageAttachmentRequestBody(body *SendMessageAttachmentRequestBody) (err error) {
 	err = goa.MergeErrors(err, goa.ValidateFormat("body.asset_id", body.AssetID, goa.FormatUUID))
 	if body.Name != nil {
-		if utf8.RuneCountInString(*body.Name) > 120 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 120, false))
+		if utf8.RuneCountInString(*body.Name) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 255, false))
 		}
 	}
 	return
