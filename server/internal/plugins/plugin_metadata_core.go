@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -17,14 +18,26 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// MaxPluginSlugLength is the longest slug the plugins table accepts; it mirrors
+// the CHAR_LENGTH(slug) <= 60 check on plugins.slug.
+const MaxPluginSlugLength = 60
+
 var (
 	// ErrPluginSlugInvalid is a supplied slug that does not survive slug
 	// normalization unchanged.
 	ErrPluginSlugInvalid = errors.New("invalid slug: must be non-empty and contain only lowercase alphanumeric characters and hyphens")
 
+	// ErrPluginSlugTooLong is a supplied slug longer than the plugins table
+	// accepts.
+	ErrPluginSlugTooLong = fmt.Errorf("invalid slug: must be at most %d characters", MaxPluginSlugLength)
+
 	// ErrPluginNameWithoutSlug is a plugin name that normalizes to an empty
 	// slug when no slug was supplied.
 	ErrPluginNameWithoutSlug = errors.New("plugin name must produce a valid slug")
+
+	// ErrPluginNameEmpty is an empty plugin name, which the plugins table
+	// rejects.
+	ErrPluginNameEmpty = errors.New("plugin name must not be empty")
 
 	// ErrPluginSlugConflict is a slug another plugin in the project already
 	// holds.
@@ -132,26 +145,40 @@ type PluginMetadataResult struct {
 }
 
 // ResolveCreatePluginSlug returns the slug a new plugin gets: the requested
-// one when it is already a normalized slug, otherwise one derived from name.
+// one when it is already a normalized slug of at most MaxPluginSlugLength
+// characters, otherwise one derived from name. A derived slug is cut to
+// MaxPluginSlugLength rather than refused, because a long display name is
+// legitimate and the caller did not choose the slug; a supplied slug that is
+// too long is refused, because silently changing a slug the caller chose would
+// publish the plugin under an install name they never saw.
 func ResolveCreatePluginSlug(name string, requested *string) (string, error) {
+	if name == "" {
+		return "", ErrPluginNameEmpty
+	}
 	if requested != nil && *requested != "" {
-		slug := conv.ToSlug(*requested)
-		if slug != *requested {
-			return "", ErrPluginSlugInvalid
+		if err := validateSuppliedPluginSlug(*requested); err != nil {
+			return "", err
 		}
-		return slug, nil
+		return *requested, nil
 	}
 	slug := conv.ToSlug(name)
+	if len(slug) > MaxPluginSlugLength {
+		// ToSlug yields ASCII only, so cutting by byte cannot split a rune.
+		slug = strings.TrimRight(slug[:MaxPluginSlugLength], "-")
+	}
 	if slug == "" {
 		return "", ErrPluginNameWithoutSlug
 	}
 	return slug, nil
 }
 
-func validateUpdatePluginSlug(requested string) error {
+func validateSuppliedPluginSlug(requested string) error {
 	slug := conv.ToSlug(requested)
 	if slug == "" || slug != requested {
 		return ErrPluginSlugInvalid
+	}
+	if len(slug) > MaxPluginSlugLength {
+		return ErrPluginSlugTooLong
 	}
 	return nil
 }
@@ -230,8 +257,11 @@ func (c *PluginMetadataCore) CreateInTransaction(ctx context.Context, tx pgx.Tx,
 // the publication request it writes regenerates packages from the new
 // metadata.
 func (c *PluginMetadataCore) UpdateInTransaction(ctx context.Context, tx pgx.Tx, mutation UpdatePluginMutation) (PluginMetadataResult, error) {
+	if mutation.Name == "" {
+		return PluginMetadataResult{}, ErrPluginNameEmpty
+	}
 	if mutation.Slug != nil {
-		if err := validateUpdatePluginSlug(*mutation.Slug); err != nil {
+		if err := validateSuppliedPluginSlug(*mutation.Slug); err != nil {
 			return PluginMetadataResult{}, err
 		}
 	}

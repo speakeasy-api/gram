@@ -221,6 +221,31 @@ func TestPluginsService_CreatePlugin_UnnormalizedSlugReturnsBadRequest(t *testin
 	require.Equal(t, plugins.ErrPluginSlugInvalid.Error(), oopsErr.Error())
 }
 
+// plugins.slug holds at most 60 characters. A supplied slug over that is a bad
+// request, and a long name has its derived slug cut to fit, rather than either
+// failing as a database constraint violation.
+func TestPluginsService_CreatePlugin_KeepsSlugWithinTableLimit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	_, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{
+		Name: "Long slug",
+		Slug: new(strings.Repeat("a", plugins.MaxPluginSlugLength+1)),
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Equal(t, plugins.ErrPluginSlugTooLong.Error(), oopsErr.Error())
+
+	longName := strings.Repeat("support tools ", 10)
+	created, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: longName})
+	require.NoError(t, err)
+	require.Equal(t, longName, created.Name)
+	require.LessOrEqual(t, len(created.Slug), plugins.MaxPluginSlugLength)
+	require.False(t, strings.HasSuffix(created.Slug, "-"))
+}
+
 func TestPluginsService_CreatePlugin_ForbiddenWithoutOrgAdmin(t *testing.T) {
 	t.Parallel()
 

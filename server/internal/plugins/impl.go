@@ -537,7 +537,7 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 // errors the management API returns for them.
 func (s *Service) pluginMetadataError(ctx context.Context, err error, operation string) error {
 	switch {
-	case errors.Is(err, ErrPluginSlugInvalid), errors.Is(err, ErrPluginNameWithoutSlug):
+	case errors.Is(err, ErrPluginSlugInvalid), errors.Is(err, ErrPluginSlugTooLong), errors.Is(err, ErrPluginNameWithoutSlug), errors.Is(err, ErrPluginNameEmpty):
 		return oops.E(oops.CodeBadRequest, nil, "%s", err.Error())
 	case errors.Is(err, ErrPluginSlugConflict):
 		return oops.E(oops.CodeConflict, nil, "%s", err.Error())

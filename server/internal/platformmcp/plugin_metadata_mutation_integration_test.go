@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -21,6 +22,7 @@ import (
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -30,6 +32,9 @@ type pluginMetadataFixture struct {
 	principal Principal
 	project   ResolvedProject
 	service   *PluginsService
+	// budget is the create-and-rename allowance, recorded so a test can see
+	// which calls were charged and can exhaust it.
+	budget *recordingOperationLimiter
 }
 
 // seedPluginMetadataFixture composes the plugin service with the same metadata
@@ -42,13 +47,14 @@ func seedPluginMetadataFixture(t *testing.T, name string) (context.Context, plug
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
+	budget := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
 	service := testPluginTargets(conn).
 		WithAuthorization(engine).
-		WithMetadataMutations(plugindelivery.NewPluginMetadataCore(audit.NewLogger(), plugindelivery.PublicationRequests{Enabled: false}), nil, testOperationBudget())
+		WithMetadataMutations(plugindelivery.NewPluginMetadataCore(audit.NewLogger(), plugindelivery.PublicationRequests{Enabled: false}), nil, OperationBudget{Connection: budget, Organization: allowOperationLimiter{}})
 	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)})
-	return ctx, pluginMetadataFixture{conn: conn, principal: principal, project: project, service: service}
+	return ctx, pluginMetadataFixture{conn: conn, principal: principal, project: project, service: service, budget: budget}
 }
 
 func (f pluginMetadataFixture) pluginCount(t *testing.T, ctx context.Context, projectID uuid.UUID) int {
@@ -138,7 +144,7 @@ func TestCreatePluginReplaysOneIdempotencyKeyWithoutASecondPlugin(t *testing.T) 
 	_, err = fixture.service.CreatePlugin(ctx, fixture.principal, changed)
 	var refusal *PluginMetadataMutationError
 	require.ErrorAs(t, err, &refusal)
-	require.Equal(t, "conflict", refusal.Code)
+	require.Equal(t, pluginMetadataCodeIdempotencyKeyReused, refusal.Code, "a reused key is told apart from a taken slug")
 	require.Equal(t, 1, fixture.pluginCount(t, ctx, fixture.project.ID))
 }
 
@@ -155,7 +161,7 @@ func TestCreatePluginRefusesASlugAnotherPluginHolds(t *testing.T) {
 	})
 	var refusal *PluginMetadataMutationError
 	require.ErrorAs(t, err, &refusal)
-	require.Equal(t, "conflict", refusal.Code)
+	require.Equal(t, pluginMetadataCodeSlugTaken, refusal.Code, "a taken slug is told apart from a reused idempotency key")
 	require.ErrorIs(t, err, plugindelivery.ErrPluginSlugConflict)
 	require.Equal(t, 1, fixture.pluginCount(t, ctx, fixture.project.ID))
 
@@ -258,6 +264,107 @@ func TestRenamePluginChangesTheNameAndNothingElse(t *testing.T) {
 	replayAudit, err := audittest.AuditLogCountByAction(ctx, fixture.conn, audit.ActionPluginUpdate)
 	require.NoError(t, err)
 	require.Equal(t, afterAudit, replayAudit)
+}
+
+// plugins.slug holds at most 60 characters. A supplied slug over that is
+// refused as invalid input, and a long name has its derived slug cut to fit,
+// rather than either reaching the database as a constraint violation.
+func TestCreatePluginKeepsSlugsWithinTheTableLimit(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_create_plugin_slug_limit")
+
+	_, err := fixture.service.CreatePlugin(ctx, fixture.principal, CreatePluginInput{
+		ProjectID: fixture.project.ID.String(), Name: "Long slug", Slug: strings.Repeat("a", plugindelivery.MaxPluginSlugLength+1),
+		IdempotencyKey: "long-slug", Confirmed: true,
+	})
+	var refusal *PluginMetadataMutationError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, "invalid_request", refusal.Code)
+	require.Contains(t, refusal.Message, "at most 60 characters")
+	require.Empty(t, fixture.budget.keys, "an invalid slug is refused before the allowance is charged")
+
+	longName := strings.Repeat("support tools ", 10)
+	created, err := fixture.service.CreatePlugin(ctx, fixture.principal, CreatePluginInput{
+		ProjectID: fixture.project.ID.String(), Name: longName, IdempotencyKey: "long-name", Confirmed: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, longName, created.Plugin.Name, "the name itself is kept whole")
+	require.LessOrEqual(t, len(created.Plugin.Slug), plugindelivery.MaxPluginSlugLength)
+	require.False(t, strings.HasSuffix(created.Plugin.Slug, "-"))
+	require.True(t, strings.HasPrefix(strings.ReplaceAll(longName, " ", "-"), created.Plugin.Slug))
+}
+
+// An over-long name or description is an input limit, refused before anything
+// is charged or written, not an oversized receipt discovered after the write.
+func TestPluginMetadataRefusesOverLongInputUpFront(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_plugin_metadata_input_limits")
+	plugin := seedPlugin(t, ctx, fixture.conn, fixture.principal.OrganizationID, fixture.project.ID, "Existing", "existing")
+
+	attempts := map[string]func() error{
+		"create name": func() error {
+			_, err := fixture.service.CreatePlugin(ctx, fixture.principal, CreatePluginInput{
+				ProjectID: fixture.project.ID.String(), Name: strings.Repeat("n", maxPluginMetadataNameBytes+1), Slug: "long-name",
+				IdempotencyKey: uuid.NewString(), Confirmed: true,
+			})
+			return err
+		},
+		"create description": func() error {
+			_, err := fixture.service.CreatePlugin(ctx, fixture.principal, CreatePluginInput{
+				ProjectID: fixture.project.ID.String(), Name: "Long description", Description: strings.Repeat("d", maxPluginMetadataDescriptionBytes+1),
+				IdempotencyKey: uuid.NewString(), Confirmed: true,
+			})
+			return err
+		},
+		"rename name": func() error {
+			_, err := fixture.service.RenamePlugin(ctx, fixture.principal, RenamePluginInput{
+				ProjectID: fixture.project.ID.String(), Plugin: plugin.ID.String(), Name: strings.Repeat("n", maxPluginMetadataNameBytes+1),
+				IdempotencyKey: uuid.NewString(), Confirmed: true,
+			})
+			return err
+		},
+	}
+	for name, attempt := range attempts {
+		var refusal *PluginMetadataMutationError
+		require.ErrorAs(t, attempt(), &refusal, name)
+		require.Equal(t, "invalid_request", refusal.Code, name)
+		require.Contains(t, refusal.Message, "at most", name)
+	}
+	require.Empty(t, fixture.budget.keys, "an over-long request is refused before the allowance is charged")
+	require.Equal(t, 1, fixture.pluginCount(t, ctx, fixture.project.ID))
+}
+
+// A retry of a committed change is answered from its receipt, so it must not
+// be refused because the allowance ran out after the original succeeded.
+func TestPluginMetadataReplayIsNotChargedOrRateLimited(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_plugin_metadata_replay_free")
+	input := CreatePluginInput{ProjectID: fixture.project.ID.String(), Name: "Charged once", IdempotencyKey: "charged-once", Confirmed: true}
+
+	first, err := fixture.service.CreatePlugin(ctx, fixture.principal, input)
+	require.NoError(t, err)
+	require.Len(t, fixture.budget.keys, 1)
+
+	fixture.budget.result = ratelimit.Result{Allowed: false}
+	retry, err := fixture.service.CreatePlugin(ctx, fixture.principal, input)
+	require.NoError(t, err, "a replay is answered from its receipt even with the allowance spent")
+	require.True(t, retry.Receipt.Replayed)
+	require.Equal(t, first.Plugin, retry.Plugin)
+	require.Len(t, fixture.budget.keys, 1, "a replay is not charged")
+
+	// A genuinely new request still pays, and is refused when it cannot.
+	_, err = fixture.service.CreatePlugin(ctx, fixture.principal, CreatePluginInput{
+		ProjectID: fixture.project.ID.String(), Name: "Over budget", IdempotencyKey: "over-budget", Confirmed: true,
+	})
+	var refusal *PluginMetadataMutationError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, "rate_limited", refusal.Code)
+	require.Equal(t, 1, fixture.pluginCount(t, ctx, fixture.project.ID))
+	_, err = platformrepo.New(fixture.conn).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
+		OrganizationID: fixture.principal.OrganizationID, ProjectID: fixture.project.ID, Operation: operationCreatePlugin,
+		IdempotencyKey: "over-budget", UserID: conv.ToPGText(fixture.principal.UserID), SubjectUrn: userSubjectURN(fixture.principal.UserID),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "a refused charge leaves no pending receipt behind")
 }
 
 func TestPluginMetadataUnavailableRegistrationMatchesLiveManifest(t *testing.T) {

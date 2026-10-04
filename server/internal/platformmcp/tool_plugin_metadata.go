@@ -40,7 +40,7 @@ func registerPluginMetadataTools(reg *Registrar, plugins *PluginsService) {
 		Title: "Create a Plugin",
 		Description: "Create one empty plugin — a bundle of MCP servers and skills shared with people — in an explicit project, so an MCP server or skill can then be put into it. " +
 			"Name it, optionally give it a slug and description, pass a stable idempotency key, and set confirmed: true only after the user confirms the project, name, and slug. " +
-			"The slug is the plugin's install name: it is derived from the name when omitted, must already be lowercase letters, digits, and hyphens when supplied, and must not be used by another plugin in the project. " +
+			"The slug is the plugin's permanent install name, so show it to the user before confirming: when omitted it is derived from the name and cut to 60 characters; when supplied it must already be at most 60 lowercase letters, digits, and hyphens. A slug another plugin in the project holds is refused as slug_taken; reusing an idempotency key with different input is refused as idempotency_key_reused. " +
 			"The new plugin carries nothing. In the organization's default project it is delivered to every member, as the dashboard does there; in any other project it reaches no one until people are assigned to it. " +
 			"Retrying with the same idempotency key returns the plugin already created rather than a second one.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)},

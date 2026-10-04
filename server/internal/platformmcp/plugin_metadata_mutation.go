@@ -23,11 +23,32 @@ const (
 
 	pluginMetadataFeature = "plugin_metadata"
 
+	// maxPluginMetadataNameBytes bounds a plugin name accepted here, matching
+	// the display-name bound update_mcp_metadata applies to an MCP server.
+	maxPluginMetadataNameBytes = 256
+
+	// maxPluginMetadataDescriptionBytes bounds a plugin description accepted
+	// here. A description is a sentence or two of package metadata; 1 KiB is
+	// generous for that.
+	maxPluginMetadataDescriptionBytes = 1024
+
 	// maxPluginMetadataReceiptPayloadBytes bounds a stored create or rename
-	// result. The result carries one plugin's identity and counts, which is a
-	// few hundred bytes; 16 KiB leaves room for a long name and description
-	// without letting a receipt grow unbounded.
+	// result. The input bounds above keep a valid result well inside it even
+	// when every character is JSON-escaped to six bytes (two names and a
+	// description come to about 9 KiB), so exceeding it means the result is
+	// malformed rather than that the input was long.
 	maxPluginMetadataReceiptPayloadBytes = 16 << 10 // 16 KiB
+
+	// pluginMetadataCodeSlugTaken refuses a create whose slug another plugin in
+	// the project already holds. It is distinct from
+	// pluginMetadataCodeIdempotencyKeyReused because the two call for opposite
+	// recoveries: a taken slug needs a new slug or the existing plugin, while a
+	// reused key needs the original request repeated with its original key.
+	pluginMetadataCodeSlugTaken = "slug_taken"
+
+	// pluginMetadataCodeIdempotencyKeyReused refuses a request whose
+	// idempotency key was already used for different input.
+	pluginMetadataCodeIdempotencyKeyReused = "idempotency_key_reused"
 )
 
 var (
@@ -48,9 +69,9 @@ func (e *PluginMetadataMutationError) Unwrap() error { return e.Cause }
 
 type CreatePluginInput struct {
 	ProjectID      string `json:"project_id" jsonschema:"explicit project ID the plugin is created in"`
-	Name           string `json:"name" jsonschema:"administrator-facing plugin name"`
-	Slug           string `json:"slug,omitempty" jsonschema:"optional slug of lowercase letters, digits, and hyphens; derived from name when omitted. It becomes the plugin's install name and does not change when the plugin is renamed"`
-	Description    string `json:"description,omitempty" jsonschema:"optional plugin description"`
+	Name           string `json:"name" jsonschema:"administrator-facing plugin name; at most 256 bytes"`
+	Slug           string `json:"slug,omitempty" jsonschema:"optional slug of at most 60 lowercase letters, digits, and hyphens; derived from name when omitted. It becomes the plugin's permanent install name and does not change when the plugin is renamed"`
+	Description    string `json:"description,omitempty" jsonschema:"optional plugin description; at most 1024 bytes"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"stable unique key for safely retrying this exact creation"`
 	Confirmed      bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms the project, name, and slug of the plugin to create"`
 }
@@ -58,7 +79,7 @@ type CreatePluginInput struct {
 type RenamePluginInput struct {
 	ProjectID      string `json:"project_id" jsonschema:"explicit project ID that owns the plugin"`
 	Plugin         string `json:"plugin" jsonschema:"exact plugin ID, slug, or name returned by list_plugins"`
-	Name           string `json:"name" jsonschema:"new administrator-facing plugin name"`
+	Name           string `json:"name" jsonschema:"new administrator-facing plugin name; at most 256 bytes"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"stable unique key for safely retrying this exact rename"`
 	Confirmed      bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms the exact plugin and its new name"`
 }
@@ -143,7 +164,7 @@ func (s *PluginsService) CreatePlugin(ctx context.Context, principal Principal, 
 		return PluginMetadataMutationOutput{}, pluginMetadataMutationInvalid("confirmation_required", "Ask the user to confirm the project, name, and slug of the plugin to create, then retry with confirmed: true.")
 	}
 	key := strings.TrimSpace(input.IdempotencyKey)
-	if err := validatePluginMetadataRequest(principal, key, input.Name); err != nil {
+	if err := validatePluginMetadataRequest(principal, key, input.Name, input.Description); err != nil {
 		return PluginMetadataMutationOutput{}, err
 	}
 	// The core applies this same rule again inside the transaction. Checking
@@ -184,7 +205,7 @@ func (s *PluginsService) RenamePlugin(ctx context.Context, principal Principal, 
 		return PluginMetadataMutationOutput{}, pluginMetadataMutationInvalid("confirmation_required", "Ask the user to confirm the exact plugin and its new name, then retry with confirmed: true.")
 	}
 	key := strings.TrimSpace(input.IdempotencyKey)
-	if err := validatePluginMetadataRequest(principal, key, input.Name); err != nil {
+	if err := validatePluginMetadataRequest(principal, key, input.Name, ""); err != nil {
 		return PluginMetadataMutationOutput{}, err
 	}
 	target := strings.TrimSpace(input.Plugin)
@@ -234,7 +255,10 @@ func (s *PluginsService) RenamePlugin(ctx context.Context, principal Principal, 
 	})
 }
 
-func validatePluginMetadataRequest(principal Principal, key, name string) error {
+// validatePluginMetadataRequest refuses out-of-bounds input before anything is
+// read, charged, or written, so an over-long name is reported as an input
+// limit rather than discovered as an oversized receipt after the write.
+func validatePluginMetadataRequest(principal Principal, key, name, description string) error {
 	if principal.OrganizationID == "" || principal.UserID == "" {
 		return pluginMetadataMutationInvalid("invalid_request", "The plugin request is missing its caller identity.")
 	}
@@ -243,6 +267,12 @@ func validatePluginMetadataRequest(principal Principal, key, name string) error 
 	}
 	if strings.TrimSpace(name) == "" {
 		return pluginMetadataMutationInvalid("invalid_request", "Provide a plugin name.")
+	}
+	if len(name) > maxPluginMetadataNameBytes {
+		return pluginMetadataMutationInvalid("invalid_request", fmt.Sprintf("A plugin name can be at most %d bytes. Ask the user for a shorter name.", maxPluginMetadataNameBytes))
+	}
+	if len(description) > maxPluginMetadataDescriptionBytes {
+		return pluginMetadataMutationInvalid("invalid_request", fmt.Sprintf("A plugin description can be at most %d bytes. Ask the user for a shorter description.", maxPluginMetadataDescriptionBytes))
 	}
 	return nil
 }
@@ -267,16 +297,23 @@ func (s *PluginsService) authorizePluginMetadataProject(ctx context.Context, pri
 	if err != nil {
 		return ResolvedProject{}, err
 	}
-	// Charged after validation and authorization and before anything is
-	// written, matching the other Platform MCP writes: a refused call does not
-	// spend the allowance.
+	return project, nil
+}
+
+// chargePluginMetadataMutation spends the create-and-rename allowance. It runs
+// inside the receipt transaction's mutate step, which executeMutationReceipt
+// reaches only after its replay lookup missed, so a retry of a committed
+// change returns its stored result even when the allowance is spent, and a
+// refused or replayed call never pays. A denial rolls back the pending receipt
+// with everything else.
+func (s *PluginsService) chargePluginMetadataMutation(ctx context.Context, principal Principal) error {
 	if err := s.metadataBudget.AllowConnectionOrOrganization(ctx, principal); err != nil {
 		if errors.Is(err, ErrOperationRateLimited) {
-			return ResolvedProject{}, &PluginMetadataMutationError{Code: "rate_limited", Message: "Plugins were created or renamed too often just now. Try again shortly.", Cause: err}
+			return &PluginMetadataMutationError{Code: "rate_limited", Message: "Plugins were created or renamed too often just now. Try again shortly.", Cause: err}
 		}
-		return ResolvedProject{}, pluginMetadataMutationUnavailable(err)
+		return pluginMetadataMutationUnavailable(err)
 	}
-	return project, nil
+	return nil
 }
 
 func (s *PluginsService) executePluginMetadataMutation(ctx context.Context, principal Principal, project ResolvedProject, operation, key string, normalized normalizedPluginMetadataMutation, mutate func(context.Context, pgx.Tx) (PluginMetadataReceiptResult, error)) (PluginMetadataMutationOutput, error) {
@@ -291,13 +328,26 @@ func (s *PluginsService) executePluginMetadataMutation(ctx context.Context, prin
 		Invalid: func(error) error {
 			return pluginMetadataMutationInvalid("invalid_request", "The plugin request caller identity is invalid.")
 		},
-		Conflict: func(message string) error {
-			return &PluginMetadataMutationError{Code: "conflict", Message: message, Cause: ErrPluginMetadataMutationConflict}
+		// The executor reports a conflict only for the idempotency key itself:
+		// reused with different input, or matching a change that never
+		// completed. A taken slug is reported by the core instead, under its
+		// own code.
+		Conflict: func(string) error {
+			return &PluginMetadataMutationError{
+				Code:    pluginMetadataCodeIdempotencyKeyReused,
+				Message: "This idempotency key was already used for a different plugin request. To retry the original request, repeat it exactly with its original key; for a new request, use a new key.",
+				Cause:   ErrPluginMetadataMutationConflict,
+			}
 		},
 		Unavailable:    pluginMetadataMutationUnavailable,
 		ValidateReplay: validPluginMetadataReceiptPayload,
 		EncodeResult:   encodePluginMetadataReceiptResult,
-		Mutate:         mutate,
+		Mutate: func(ctx context.Context, tx pgx.Tx) (PluginMetadataReceiptResult, error) {
+			if err := s.chargePluginMetadataMutation(ctx, principal); err != nil {
+				return PluginMetadataReceiptResult{}, err
+			}
+			return mutate(ctx, tx)
+		},
 	})
 	if err != nil {
 		return PluginMetadataMutationOutput{}, err
@@ -388,10 +438,10 @@ func validPluginMetadataReceiptResult(result PluginMetadataReceiptResult) bool {
 // for the same input.
 func pluginMetadataCoreError(err error) error {
 	switch {
-	case errors.Is(err, plugindelivery.ErrPluginSlugInvalid), errors.Is(err, plugindelivery.ErrPluginNameWithoutSlug):
+	case errors.Is(err, plugindelivery.ErrPluginSlugInvalid), errors.Is(err, plugindelivery.ErrPluginSlugTooLong), errors.Is(err, plugindelivery.ErrPluginNameWithoutSlug), errors.Is(err, plugindelivery.ErrPluginNameEmpty):
 		return pluginMetadataMutationInvalid("invalid_request", err.Error()+".")
 	case errors.Is(err, plugindelivery.ErrPluginSlugConflict):
-		return &PluginMetadataMutationError{Code: "conflict", Message: "A plugin with this slug already exists in this project. Choose a different slug, or use the existing plugin.", Cause: fmt.Errorf("%w: %w", ErrPluginMetadataMutationConflict, err)}
+		return &PluginMetadataMutationError{Code: pluginMetadataCodeSlugTaken, Message: "A plugin with this slug already exists in this project. List the project's plugins again, then either use that plugin or choose a different slug.", Cause: fmt.Errorf("%w: %w", ErrPluginMetadataMutationConflict, err)}
 	case errors.Is(err, plugindelivery.ErrPluginMetadataTargetNotFound):
 		return ErrPluginNotFound
 	default:
