@@ -48,6 +48,7 @@ func recordAssistantToolCallAudit(
 	var identity *audit.AssistantExecutionAttribution
 	if execution, ok := assistanttokens.BusinessExecution(ctx); ok {
 		if execution.Identity.OrganizationID != in.organizationID || execution.Identity.ProjectID != in.projectID || execution.Identity.AssistantID != in.principal.AssistantID || execution.ThreadID != in.principal.ThreadID {
+			logger.WarnContext(ctx, "skipping assistant tool call audit log: execution identity mismatch", attr.SlogToolName(in.toolName))
 			return
 		}
 		actor = urn.NewPrincipal(urn.PrincipalTypeAgent, execution.Identity.AgentID.String())

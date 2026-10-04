@@ -67,7 +67,7 @@ export function AssistantIdentitySettings({
     diagnostics?.health === "ready" &&
     (missingRoots || diagnostics.bindingsTruncated);
   const canUpgrade =
-    hasScope("project:write") &&
+    hasScope("project:write", assistant.projectId) &&
     identityFlag.status === "enabled" &&
     diagnostics !== undefined &&
     (legacy || repairable);

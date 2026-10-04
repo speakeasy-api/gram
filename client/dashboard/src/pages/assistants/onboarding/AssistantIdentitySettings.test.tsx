@@ -22,7 +22,10 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasScope: (scope: string) => scope === "project:write" && mocks.canWrite,
+    hasScope: (scope: string, resource?: string) => {
+      expect(resource).toBe("22222222-2222-4222-8222-222222222222");
+      return scope === "project:write" && mocks.canWrite;
+    },
   }),
 }));
 vi.mock("@/routes", () => ({
