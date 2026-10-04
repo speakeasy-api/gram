@@ -74,6 +74,7 @@ type Service struct {
 	temporalEnv              *tenv.Environment
 	pluginsGitHubEnabled     bool
 	networkAccessEligibility networkaccess.EligibilityChecker
+	publicationRequests      plugins.PublicationRequests
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -111,11 +112,17 @@ func NewService(
 		temporalEnv:              temporalEnv,
 		pluginsGitHubEnabled:     pluginsGitHubEnabled,
 		networkAccessEligibility: networkaccess.DenyAllChecker{},
+		publicationRequests:      plugins.PublicationRequests{Enabled: false},
 	}
 }
 
 func (s *Service) WithNetworkAccessEligibility(checker networkaccess.EligibilityChecker) *Service {
 	s.networkAccessEligibility = checker
+	return s
+}
+
+func (s *Service) WithPublicationRequests(enabled bool) *Service {
+	s.publicationRequests.Enabled = enabled
 	return s
 }
 
@@ -881,6 +888,13 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	if err := s.deleteHostedNetworkAccess(ctx, dbtx, authCtx, toDelete); err != nil {
 		return err
 	}
+	// Only an MCP-enabled toolset is in a generated package, so only its
+	// deletion can change one.
+	if toDelete.McpEnabled {
+		if err := s.requestPluginPublicationForToolset(ctx, dbtx, authCtx, deleted.ID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "enqueue toolset plugin publication").LogError(ctx, logger)
+		}
+	}
 
 	if err := s.audit.LogToolsetDelete(ctx, dbtx, audit.LogToolsetDeleteEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
@@ -897,6 +911,10 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error saving toolset deletion").LogError(ctx, logger)
+	}
+
+	if toDelete.McpEnabled {
+		s.publishPluginsForToolset(ctx, authCtx, deleted.ID)
 	}
 
 	return nil

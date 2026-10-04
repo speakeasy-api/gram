@@ -1014,6 +1014,31 @@ func (q *Queries) HasPluginMembershipForMCPServer(ctx context.Context, arg HasPl
 	return column_1, err
 }
 
+const hasPluginMembershipForToolset = `-- name: HasPluginMembershipForToolset :one
+SELECT EXISTS (
+  SELECT 1 FROM plugin_servers ps
+  JOIN plugins p ON p.id = ps.plugin_id AND p.project_id = $1 AND p.deleted IS FALSE
+  LEFT JOIN mcp_servers s ON s.id = ps.mcp_server_id AND s.project_id = p.project_id AND s.deleted IS FALSE
+  WHERE ps.deleted IS FALSE
+    AND (ps.toolset_id = $2::uuid OR s.toolset_id = $2::uuid)
+)::bool
+`
+
+type HasPluginMembershipForToolsetParams struct {
+	ProjectID uuid.UUID
+	ToolsetID uuid.UUID
+}
+
+// A toolset reaches a package directly or through an MCP server it backs. The
+// toolset's own deleted flag is ignored so a deletion can still be traced to the
+// plugins that carried it.
+func (q *Queries) HasPluginMembershipForToolset(ctx context.Context, arg HasPluginMembershipForToolsetParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPluginMembershipForToolset, arg.ProjectID, arg.ToolsetID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const isDefaultProject = `-- name: IsDefaultProject :one
 SELECT (
   SELECT p.id

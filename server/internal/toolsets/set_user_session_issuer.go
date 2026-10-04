@@ -87,6 +87,14 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 	if err := s.reconcileHostedNetworkAccess(ctx, dbtx, authCtx, updatedToolset, nil); err != nil {
 		return nil, err
 	}
+	// A package renders an OAuth server differently from a key-authenticated
+	// one, so only linking an issuer where none was, or unlinking it, changes it.
+	oauthChanged := updatedToolset.McpEnabled && (beforeView.UserSessionIssuerID != nil) != usiID.Valid
+	if oauthChanged {
+		if err := s.requestPluginPublicationForToolset(ctx, dbtx, authCtx, updatedToolset.ID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "enqueue toolset plugin publication").LogError(ctx, s.logger)
+		}
+	}
 
 	afterView, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
 	if err != nil {
@@ -116,6 +124,10 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
+	}
+
+	if oauthChanged {
+		s.publishPluginsForToolset(ctx, authCtx, updatedToolset.ID)
 	}
 
 	return afterView, nil
