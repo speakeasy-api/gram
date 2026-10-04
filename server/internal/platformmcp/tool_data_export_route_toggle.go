@@ -1,0 +1,101 @@
+//nolint:exhaustruct // MCP SDK manifests intentionally rely on documented zero-value optional fields.
+package platformmcp
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
+
+const (
+	pauseDataExportToolName  = operationPauseDataExport
+	resumeDataExportToolName = operationResumeDataExport
+
+	dataExportToggleInputNote = "Supply the project ID and the exact route ID from list_data_exports, an idempotency key, and confirmed: true only after the user confirms the exact project and route. "
+	dataExportToggleScopeNote = "Only the route's on/off state changes: its data source and destination stay exactly as they are, and destinations, headers, and routes cannot be edited or deleted from here. A route already in the requested state is reported as unchanged rather than refused. The result reports the route's committed state; Gram does not record when a route last delivered, so the result says that rather than giving a time. "
+	dataExportToggleDataNote  = "While a route is paused, the data it would have exported is dropped, not buffered: resuming does not send anything produced in between. Changes reach the export relays within about a minute."
+)
+
+// registerDataExportRouteToggleTools keeps the live and unavailable manifests
+// identical — same names, schemas, annotations, audiences, and authorization —
+// so the tools never appear on and disappear from the catalogue as a
+// deployment composes or fails to compose the service behind them.
+func registerDataExportRouteToggleTools(reg *Registrar, service *DataExportRouteToggleService) {
+	pause := unavailableDataExportToggleHandler()
+	resume := unavailableDataExportToggleHandler()
+	if service.valid() {
+		pause = func(ctx context.Context, _ *mcp.CallToolRequest, input ToggleDataExportRouteInput) (*mcp.CallToolResult, ToggleDataExportRouteOutput, error) {
+			return principalToolCall(ctx, dataExportToggleToolResult, func(principal Principal) (ToggleDataExportRouteOutput, error) {
+				return service.Pause(ctx, principal, input)
+			})
+		}
+		resume = func(ctx context.Context, _ *mcp.CallToolRequest, input ToggleDataExportRouteInput) (*mcp.CallToolResult, ToggleDataExportRouteOutput, error) {
+			return principalToolCall(ctx, dataExportToggleToolResult, func(principal Principal) (ToggleDataExportRouteOutput, error) {
+				return service.Resume(ctx, principal, input)
+			})
+		}
+	}
+
+	// Organization admin is what the dashboard's route update requires, and
+	// it is this package's convention for external writes. External only, like
+	// the other data export tools: export is egress of project data.
+	meta := ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}
+	addTool(reg, &mcp.Tool{
+		Name:  pauseDataExportToolName,
+		Title: "Pause a Data Export",
+		Description: "Stop one data export route from sending data to its destination, leaving the route and its destination configured so it can be resumed later. " +
+			dataExportToggleInputNote + dataExportToggleScopeNote + dataExportToggleDataNote,
+		// Pausing discards the data produced while the route is paused, which
+		// cannot be recovered by resuming, so the hint says destructive.
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true)},
+	}, meta, pause)
+	addTool(reg, &mcp.Tool{
+		Name:  resumeDataExportToolName,
+		Title: "Resume a Data Export",
+		Description: "Start a paused data export route sending data to its destination again. " +
+			dataExportToggleInputNote + dataExportToggleScopeNote + dataExportToggleDataNote + " " +
+			"A route with no destination, or whose destination was deleted, cannot be resumed and nothing is changed; the refusal names which, and the destination has to be fixed in the dashboard.",
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)},
+	}, meta, resume)
+}
+
+func unavailableDataExportToggleHandler() mcp.ToolHandlerFor[ToggleDataExportRouteInput, ToggleDataExportRouteOutput] {
+	return func(_ context.Context, _ *mcp.CallToolRequest, _ ToggleDataExportRouteInput) (*mcp.CallToolResult, ToggleDataExportRouteOutput, error) {
+		payload, err := json.Marshal(featureUnavailableResult{Code: unavailableCode, Feature: dataExportToggleFeature, Message: "Pausing or resuming data exports is not available on this server."})
+		if err != nil {
+			return nil, ToggleDataExportRouteOutput{}, fmt.Errorf("encode unavailable data export toggle result: %w", err)
+		}
+		return nil, ToggleDataExportRouteOutput{}, &ToolRefusalError{Code: unavailableCode, Payload: string(payload)}
+	}
+}
+
+type dataExportToggleRefusal struct {
+	Code    string `json:"code"`
+	Feature string `json:"feature"`
+	Message string `json:"message"`
+}
+
+func dataExportToggleToolResult(err error) (*mcp.CallToolResult, bool) {
+	if refusal, ok := externalAuthorizationToolResult(err); ok {
+		return refusal, true
+	}
+	result := dataExportToggleRefusal{Feature: dataExportToggleFeature}
+	var toggle *DataExportToggleError
+	switch {
+	case errors.As(err, &toggle):
+		result.Code, result.Message = toggle.Code, toggle.Message
+	case errors.Is(err, ErrUnavailable):
+		result.Code = unavailableCode
+		result.Message = "Pausing or resuming data exports is temporarily unavailable."
+	default:
+		return nil, false
+	}
+	payload, marshalErr := json.Marshal(result)
+	if marshalErr != nil {
+		return nil, false
+	}
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(payload)}}, IsError: true}, true
+}

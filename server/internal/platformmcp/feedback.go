@@ -391,6 +391,8 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	"get_my_mcp_review_request":             {},
 	"list_data_exports":                     {},
 	"create_data_export":                    {},
+	pauseDataExportToolName:                 {},
+	resumeDataExportToolName:                {},
 	"list_recent_tool_calls":                {},
 	"search_users":                          {},
 	"get_user_metrics_summary":              {},

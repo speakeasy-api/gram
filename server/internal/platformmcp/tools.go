@@ -223,6 +223,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"Before moving any MCP server or gateway to dual or private_only, call get_network_ingress. If ready_for_private_access is false, report its next_action and present its exact setup_url instead of attempting the change; Tailscale credentials are entered only in the dashboard, never in chat. Private access restricts who can reach the AI Control Plane endpoint over the organization's tailnet; it does not change where the upstream MCP server is hosted.",
 			"Which tools an MCP server puts in front of people is a separate decision from which plugin carries the server. Pushing a new tool to a project does not put it on any server. To expose one, list the project's tools, read the exact server, and then add the named tools to it after the user confirms the exact server and tools. Say before acting that everyone holding a plugin that carries the server gets the change immediately, and name those plugins. Removing a tool takes it away from those same people. Never guess a tool from its name; use the exact one the project's tool list returned, and if a tool is missing from that list, say the deployment that produces it has not finished rather than adding something else.",
 			"Creating a data export is a mutation: first show the exact project, endpoint, data source, enabled state, and sensitive-data policy, then ask for explicit confirmation. Never request or accept authorization header values in chat; create the export without headers and send the user to the returned management URL to add authentication securely.",
+			"Pausing or resuming a data export changes only whether one route sends data; nothing about its destination or data source changes, and editing or deleting a destination or route stays in the dashboard. Name the exact project and route from the current data export list and wait for explicit confirmation. Before pausing, tell the user that data produced while the route is paused is dropped, not held back for later — resuming sends only new data — and that the change takes up to about a minute to reach every relay. A route with no destination, or whose destination was deleted, cannot be resumed; say which and send the user to the dashboard. Gram does not record when a route last delivered, so do not state one.",
 			"Dismissing Watchdog findings as false positives, or restoring them, is a mutation: name the exact project and the exact findings, wait for explicit confirmation, then report which findings changed, which were already in that state, and which were not found in the project. A dismissal suppresses only the findings named; a risk exclusion is the tool for a whole class of findings.",
 			"Project-wide chat listings are metadata only: when a conversation was active, how long it ran, which app produced it, whether risk analysis found anything, and a masked participant. Never present a listed chat's title or what was said as known, and send the administrator to the dashboard to read a transcript. Personal session recall is separate: it may present the caller's own sessions by title and their own redacted handoff digest.",
 		}, "\n\n"),
@@ -284,6 +285,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		} else {
 			registerDataExportMutationTool(reg, postgresReader)
 		}
+		registerDataExportRouteToggleTools(reg, postgresReader.dataExportRouteToggle)
 		if postgresReader.recentToolCalls == nil {
 			registerUnavailableRecentToolCallTools(reg)
 		} else {
@@ -314,6 +316,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerUnavailableRiskToolsWithMutations(reg, riskMutations)
 		registerUnavailableDataExportTools(reg)
 		registerUnavailableDataExportMutationTool(reg)
+		registerDataExportRouteToggleTools(reg, nil)
 		registerUnavailableRecentToolCallTools(reg)
 		registerUnavailableMCPNetworkTrafficTool(reg)
 		registerUnavailableOrganizationEventTools(reg)

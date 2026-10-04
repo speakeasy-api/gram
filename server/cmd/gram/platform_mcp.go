@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -434,6 +435,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
+		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
@@ -651,6 +653,24 @@ func newPlatformMCPDistributionService(config platformMCPConfig, pluginTargets p
 		},
 		pluginTargets,
 	)
+}
+
+// newPlatformMCPDataExportRouteToggle composes pausing and resuming one data
+// export route. A composition failure leaves both tools registered as stable
+// refusals rather than removing them from the catalogue.
+func newPlatformMCPDataExportRouteToggle(config platformMCPConfig, authorizer platformmcp.Authorizer, limitStore ratelimit.Store) *platformmcp.DataExportRouteToggleService {
+	service, err := platformmcp.NewDataExportRouteToggleService(
+		config.DB, dataexports.NewRouteEnabledCore(config.AuditLogger, config.Encryption), authorizer,
+		platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.DataExportToggleConnectionLimitName, ratelimit.PerMinute(platformmcp.DataExportTogglesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.DataExportToggleOrganizationLimitName, ratelimit.PerMinute(platformmcp.DataExportTogglesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
+	)
+	if err != nil {
+		config.Logger.WarnContext(context.Background(), "Platform MCP data export pause and resume unavailable", attr.SlogError(err))
+		return nil
+	}
+	return service
 }
 
 // newPlatformMCPToolExposure composes the reads and the incremental write that
@@ -929,6 +949,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
+		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).

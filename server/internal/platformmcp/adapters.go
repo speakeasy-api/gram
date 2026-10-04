@@ -366,6 +366,7 @@ type PostgresReader struct {
 	chatMetadata              *ChatMetadataService
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
+	dataExportRouteToggle     *DataExportRouteToggleService
 	recentToolCalls           *RecentToolCallReadService
 	networkTraffic            MCPNetworkTrafficReader
 	networkTrafficLogsEnabled FeatureChecker
@@ -395,6 +396,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		chatMetadata:              nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
+		dataExportRouteToggle:     nil,
 		recentToolCalls:           nil,
 		networkTraffic:            nil,
 		networkTrafficLogsEnabled: nil,
