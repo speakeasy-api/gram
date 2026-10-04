@@ -3181,6 +3181,12 @@ func TestGeneratePlatformMCPOnboardingWorkflowsOfferProjectCreation(t *testing.T
 	t.Parallel()
 	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
 	require.NoError(t, err)
+	const (
+		keyPhrase     = "choose one idempotency key for this create; pass that same key on the preview and on the confirmed call"
+		previewPhrase = "that key, and `confirmed: false` to preview it"
+		confirmPhrase = "After the user confirms the name and slug"
+		createPhrase  = "call `create_project` again with the same name, the same key, and `confirmed: true`"
+	)
 	for path, extra := range map[string][]string{
 		"skills/add-mcp-from-catalog/SKILL.md": {
 			"do not create it yet",
@@ -3198,26 +3204,38 @@ func TestGeneratePlatformMCPOnboardingWorkflowsOfferProjectCreation(t *testing.T
 		for _, required := range append([]string{
 			"Only when `create_project` is in your tool list",
 			"A managed project assistant has no `create_project` tool and always registers in its own project, so never offer it there",
-			"call `create_project` with that name, `confirmed: true`, and a fresh idempotency key",
-			// The slug is derived, never chosen, and permanent, so the user
-			// sees it before confirming rather than discovering it after.
-			"show the slug it will get",
-			"cut to 40 characters",
-			"After the user confirms the name and slug",
+			// The slug is derived, never chosen, and permanent. The tool's
+			// unconfirmed preview is the only source of it, so the workflow
+			// must not describe the derivation in its own words.
+			// One key covers the preview and the confirmed call, because the
+			// key is a required input on both and the preview records
+			// nothing under it.
+			keyPhrase,
+			"Use a fresh key only for a new attempt after a refusal",
+			previewPhrase,
+			"Do not work the slug out yourself",
+			confirmPhrase,
+			createPhrase,
 			"A `conflict` refusal means a project already holds that slug and nothing was created",
 			"organization administrator access",
 			"say so rather than choosing another project",
 		}, extra...) {
 			require.Contains(t, workflow, required, path)
 		}
+		require.NotContains(t, workflow, "punctuation dropped", "%s must not hand-derive the slug", path)
 		listAt := strings.Index(workflow, "`list_projects`")
 		inspectAt := strings.Index(workflow, "Call `inspect_mcp_candidate`")
-		createAt := strings.Index(workflow, "call `create_project`")
-		require.GreaterOrEqual(t, listAt, 0, "%s must list the existing projects", path)
-		require.GreaterOrEqual(t, inspectAt, 0, "%s must inspect the candidate", path)
+		previewAt := strings.Index(workflow, previewPhrase)
+		confirmAt := strings.Index(workflow, confirmPhrase)
+		createAt := strings.Index(workflow, createPhrase)
+		for name, at := range map[string]int{"list_projects": listAt, "inspection": inspectAt, "preview": previewAt, "confirmation": confirmAt, "confirmed create": createAt} {
+			require.GreaterOrEqual(t, at, 0, "%s is missing the %s step", path, name)
+		}
 		require.Less(t, listAt, createAt, "%s must list the existing projects before creating one", path)
-		require.Less(t, inspectAt, createAt, "%s must inspect before creating a project", path)
-		require.Less(t, strings.Index(workflow, "show the slug it will get"), createAt, "%s must show the slug before creating the project", path)
+		require.Less(t, inspectAt, previewAt, "%s must inspect before starting project creation", path)
+		require.Less(t, strings.Index(workflow, keyPhrase), previewAt, "%s must choose the key before the preview uses it", path)
+		require.Less(t, previewAt, confirmAt, "%s must preview the slug before asking for confirmation", path)
+		require.Less(t, confirmAt, createAt, "%s must get the user's confirmation before the confirmed create", path)
 	}
 }
 

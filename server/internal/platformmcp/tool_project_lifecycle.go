@@ -46,8 +46,8 @@ func registerProjectLifecycleTools(reg *Registrar, service *ProjectLifecycleServ
 		Name:  createProjectToolName,
 		Title: "Create a Project",
 		Description: "Create an empty project in this organization. A project is where MCP servers and skills are kept before anyone receives them; creating one grants nothing and reaches nobody until something is added to it and shared through a plugin. " +
-			"Supply only a display name: the project's slug, which addresses it in dashboard links and never changes, is derived from the name exactly as the dashboard derives it and cannot be chosen. It is the name in lowercase with spaces as hyphens and other punctuation dropped, cut to 40 characters; show it to the user before confirming, and the result returns the slug the project got. " +
-			"Supply an idempotency key and confirmed: true only after the user confirms the exact name and slug. A retry with the same key and name returns the project the first call created instead of making a second one. " +
+			"Supply only a display name: the project's slug, which addresses it in dashboard links and never changes, comes from the name exactly as the dashboard derives it and cannot be chosen. Do not work the slug out yourself. Call first without confirmed: true: nothing is created, and the confirmation_required refusal returns the exact name and slug this call would create. Show that slug to the user. " +
+			"Then call again with confirmed: true, only after the user confirms the exact name and slug. Choose one idempotency key for this create and pass it on both the preview and the confirmed call; the preview records nothing under it. Use a fresh key only for a new attempt after a refusal. A retry with the same key and name returns the project the first call created instead of making a second one. " +
 			"A name with no letters or digits is refused, and a name whose slug matches an existing project is refused as a conflict; nothing is created in either case. The new project comes with the Default environment and Default plugin every project gets.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)},
 	}, ToolMeta{
@@ -78,15 +78,31 @@ func unavailableProjectLifecycleHandler[In any]() mcp.ToolHandlerFor[In, Project
 	}
 }
 
+type projectLifecycleRefusal struct {
+	Code    string `json:"code"`
+	Feature string `json:"feature"`
+	Message string `json:"message"`
+
+	// Name and Slug are present only on an unconfirmed create: the exact
+	// project the confirmed call would make, including the slug the user must
+	// see before confirming because it is derived and never changes.
+	Name string `json:"name,omitempty"`
+	Slug string `json:"slug,omitempty"`
+}
+
 func projectLifecycleToolResult(err error) (*mcp.CallToolResult, bool) {
 	if refusal, ok := externalAuthorizationToolResult(err); ok {
 		return refusal, true
 	}
-	lifecycle, ok := errors.AsType[*ProjectLifecycleError](err)
-	if !ok {
+	var refusal projectLifecycleRefusal
+	if preview, ok := errors.AsType[*ProjectCreatePreviewError](err); ok {
+		refusal = projectLifecycleRefusal{Code: "confirmation_required", Feature: projectLifecycleFeature, Message: preview.Error(), Name: preview.Name, Slug: preview.Slug}
+	} else if lifecycle, ok := errors.AsType[*ProjectLifecycleError](err); ok {
+		refusal = projectLifecycleRefusal{Code: lifecycle.Code, Feature: projectLifecycleFeature, Message: lifecycle.Message, Name: "", Slug: ""}
+	} else {
 		return nil, false
 	}
-	payload, marshalErr := json.Marshal(featureUnavailableResult{Code: lifecycle.Code, Feature: projectLifecycleFeature, Message: lifecycle.Message})
+	payload, marshalErr := json.Marshal(refusal)
 	if marshalErr != nil {
 		return nil, false
 	}

@@ -1,12 +1,16 @@
 package platformmcp
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
@@ -15,10 +19,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	envrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -219,6 +226,94 @@ func TestProjectLifecycleReplaysAreNotCharged(t *testing.T) {
 	requireProjectLifecycleRefusal(t, err, "rate_limited")
 }
 
+// poolInspectingLimiter allows every charge and records how many connections
+// its pool had checked out at that moment. A charge made inside an open
+// transaction always sees at least the transaction's own connection.
+type poolInspectingLimiter struct {
+	pool     *pgxpool.Pool
+	acquired *[]int32
+}
+
+func (l poolInspectingLimiter) Allow(ctx context.Context, key string) (ratelimit.Result, error) {
+	return l.AllowN(ctx, key, 1)
+}
+
+func (l poolInspectingLimiter) AllowN(context.Context, string, int) (ratelimit.Result, error) {
+	*l.acquired = append(*l.acquired, l.pool.Stat().AcquiredConns())
+	return ratelimit.Result{Allowed: true, Remaining: 1, RetryAfter: 0}, nil
+}
+
+// The limiter is a network call. Charging it while a transaction is open would
+// hold a PostgreSQL connection and the receipt lock for as long as the limiter
+// takes, so a slow limiter could pin connections on every write. Every charge
+// must therefore happen with no connection checked out.
+func TestProjectLifecycleChargesTheBudgetOutsideAnyTransaction(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedProjectLifecycleFixture(t, t.Context(), "platform_mcp_project_lifecycle_budget_no_tx")
+	acquired := &[]int32{}
+	limiter := poolInspectingLimiter{pool: fixture.conn, acquired: acquired}
+	fixture.service.changes = OperationBudget{Connection: limiter, Organization: limiter}
+
+	_, err := fixture.create(ctx, "Support Team", uuid.NewString())
+	require.NoError(t, err)
+	_, err = fixture.service.RenameProject(ctx, fixture.principal, RenameProjectInput{ProjectID: fixture.project.ID.String(), Name: "Customer Support", IdempotencyKey: uuid.NewString(), Confirmed: true})
+	require.NoError(t, err)
+
+	require.NotEmpty(t, *acquired, "both writes are charged")
+	for i, count := range *acquired {
+		require.Zero(t, count, "charge %d ran with %d connections checked out", i, count)
+	}
+}
+
+// Nothing between these tools and an external MCP client sanitizes an error:
+// an unclassified one reaches the caller as its text. Every path through
+// create, rename and the preview must therefore end in a readable refusal,
+// with the underlying cause kept in the server log instead.
+func TestProjectLifecycleNeverReturnsDatabaseErrorText(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedProjectLifecycleFixture(t, t.Context(), "platform_mcp_project_lifecycle_db_failure")
+	broken, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_project_lifecycle_db_failure_closed")
+	require.NoError(t, err)
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	// Authorization still answers from the live database, so each call gets
+	// past it and fails on the closed pool, which is what an outage looks
+	// like from here.
+	service, err := NewProjectLifecycleService(logger, broken, projects.NewCore(logger, audit.NewLogger(), nil, false),
+		fixture.engine, NewLiveOrgAdminAuthorizer(fixture.conn, fixture.engine), testOperationBudget())
+	require.NoError(t, err)
+	broken.Close()
+
+	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "project-lifecycle-db-failure", Version: "0.0.1"}, nil))
+	registerProjectLifecycleTools(registrar, service)
+	descriptors := map[string]Descriptor{}
+	for _, descriptor := range registrar.Descriptors() {
+		descriptors[descriptor.Name] = descriptor
+	}
+	ctx = ContextWithPrincipal(ctx, fixture.principal)
+	invoke := func(name string, arguments map[string]any) string {
+		t.Helper()
+		encoded, err := json.Marshal(arguments)
+		require.NoError(t, err)
+		_, err = descriptors[name].Invoke(ctx, encoded)
+		require.Error(t, err, name)
+		return err.Error()
+	}
+
+	created := invoke(createProjectToolName, map[string]any{"name": "Support Team", "idempotency_key": uuid.NewString(), "confirmed": true})
+	renamed := invoke(renameProjectToolName, map[string]any{"project_id": fixture.project.ID.String(), "name": "Renamed", "idempotency_key": uuid.NewString(), "confirmed": true})
+	previewed := invoke(createProjectToolName, map[string]any{"name": "Support Team", "idempotency_key": uuid.NewString(), "confirmed": false})
+	require.Contains(t, created, unavailableCode)
+	require.Contains(t, renamed, unavailableCode)
+	require.Contains(t, previewed, "confirmation_required", "the preview needs no database and still answers")
+	for _, text := range []string{created, renamed, previewed} {
+		for _, leaked := range []string{"pool", "closed", "sql", "pgx", "postgres", "relation", "constraint"} {
+			require.NotContains(t, strings.ToLower(text), leaked, "the refusal must not carry database error text: %s", text)
+		}
+	}
+	require.Contains(t, logs.String(), "closed pool", "the server log keeps the underlying cause")
+}
+
 // The projects table caps the slug at 40 characters. A name at the limit
 // creates; one past it is a readable refusal naming the limit, never a
 // constraint violation surfacing as an unavailable error.
@@ -270,10 +365,79 @@ func TestCreateProjectRequiresConfirmation(t *testing.T) {
 	ctx, fixture := seedProjectLifecycleFixture(t, t.Context(), "platform_mcp_create_project_unconfirmed")
 	before := len(fixture.organizationProjects(t, ctx))
 
+	// A preview is free: it must work with the write allowance spent.
+	fixture.service.changes = OperationBudget{Connection: denyOperationLimiter{}, Organization: denyOperationLimiter{}}
+	projectCreates := auditCount(t, ctx, fixture.conn, audit.ActionProjectCreate)
+
 	_, err := fixture.service.CreateProject(ctx, fixture.principal, CreateProjectInput{Name: "Support Team", IdempotencyKey: uuid.NewString(), Confirmed: false})
-	refusal := requireProjectLifecycleRefusal(t, err, "invalid_request")
-	require.Contains(t, refusal, "Confirm")
+	var preview *ProjectCreatePreviewError
+	require.ErrorAs(t, err, &preview)
+	require.Equal(t, "Support Team", preview.Name)
+	require.Equal(t, "support-team", preview.Slug)
 	require.Len(t, fixture.organizationProjects(t, ctx), before)
+	require.Equal(t, projectCreates, auditCount(t, ctx, fixture.conn, audit.ActionProjectCreate))
+
+	// Over the tool surface the slug is a field of the refusal, not only prose.
+	result, ok := projectLifecycleToolResult(err)
+	require.True(t, ok)
+	require.True(t, result.IsError)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	var payload projectLifecycleRefusal
+	require.NoError(t, json.Unmarshal([]byte(text.Text), &payload))
+	require.Equal(t, "confirmation_required", payload.Code)
+	require.Equal(t, "support-team", payload.Slug)
+	require.Equal(t, "Support Team", payload.Name)
+	require.Contains(t, payload.Message, `"support-team"`)
+}
+
+// The skills pass one idempotency key on both the preview and the confirmed
+// call. The preview must record nothing under it, or the confirmed call would
+// replay a create that never happened instead of creating the project.
+func TestCreateProjectPreviewAndConfirmShareOneKey(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedProjectLifecycleFixture(t, t.Context(), "platform_mcp_create_project_shared_key")
+	before := len(fixture.organizationProjects(t, ctx))
+	key := uuid.NewString()
+
+	_, err := fixture.service.CreateProject(ctx, fixture.principal, CreateProjectInput{Name: "Support Team", IdempotencyKey: key, Confirmed: false})
+	var preview *ProjectCreatePreviewError
+	require.ErrorAs(t, err, &preview)
+	_, err = platformrepo.New(fixture.conn).GetPlatformMCPProjectCreationReceipt(ctx, platformrepo.GetPlatformMCPProjectCreationReceiptParams{
+		OrganizationID: fixture.principal.OrganizationID, UserID: conv.ToPGText(fixture.principal.UserID),
+		Operation: operationCreateProject, IdempotencyKey: key,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "the preview stores nothing under the key")
+	require.Len(t, fixture.organizationProjects(t, ctx), before)
+
+	created, err := fixture.create(ctx, "Support Team", key)
+	require.NoError(t, err)
+	require.False(t, created.Receipt.Replayed, "the confirmed call creates rather than replaying the preview")
+	require.Equal(t, preview.Slug, created.Project.Slug)
+	require.Len(t, fixture.organizationProjects(t, ctx), before+1, "exactly one project")
+}
+
+// The preview is the only place an agent learns the slug, so it must be
+// exactly the slug the confirmed call creates, including for inputs a
+// hand-written rule gets wrong: non-ASCII letters are dropped, runs of
+// spaces and hyphens collapse, and a hyphen left at the end is trimmed.
+func TestCreateProjectPreviewSlugIsTheSlugCreated(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedProjectLifecycleFixture(t, t.Context(), "platform_mcp_create_project_preview")
+
+	for _, name := range []string{
+		"Café Team",
+		"Support  --  Team",
+		strings.Repeat("a", 38) + " -",
+	} {
+		_, err := fixture.service.CreateProject(ctx, fixture.principal, CreateProjectInput{Name: name, IdempotencyKey: uuid.NewString(), Confirmed: false})
+		var preview *ProjectCreatePreviewError
+		require.ErrorAs(t, err, &preview, "%q", name)
+
+		created, err := fixture.create(ctx, name, uuid.NewString())
+		require.NoError(t, err, "%q", name)
+		require.Equal(t, created.Project.Slug, preview.Slug, "%q: the preview must show the slug that was created", name)
+	}
 }
 
 func TestProjectLifecycleRefusesANonAdministrator(t *testing.T) {
@@ -352,7 +516,7 @@ func TestRenameProjectRefusesBeforeWriting(t *testing.T) {
 	updates := auditCount(t, ctx, fixture.conn, audit.ActionProjectUpdate)
 
 	_, err := fixture.service.RenameProject(ctx, fixture.principal, RenameProjectInput{ProjectID: fixture.project.ID.String(), Name: "Renamed", IdempotencyKey: uuid.NewString(), Confirmed: false})
-	require.Contains(t, requireProjectLifecycleRefusal(t, err, "invalid_request"), "Confirm")
+	require.Contains(t, requireProjectLifecycleRefusal(t, err, "confirmation_required"), "Confirm")
 
 	_, err = fixture.service.RenameProject(ctx, fixture.principal, RenameProjectInput{ProjectID: fixture.project.ID.String(), Name: "   ", IdempotencyKey: uuid.NewString(), Confirmed: true})
 	require.Contains(t, requireProjectLifecycleRefusal(t, err, "invalid_request"), "1 to 40 characters")
@@ -407,8 +571,11 @@ func TestProjectLifecycleUnavailableRegistrationMatchesLiveManifest(t *testing.T
 	}
 	require.Equal(t, ProjectScopeNone, unavailable[createProjectToolName].Meta.ProjectScope, "there is no project until create_project makes one")
 	require.Equal(t, ProjectScopeExplicit, unavailable[renameProjectToolName].Meta.ProjectScope)
-	require.Contains(t, unavailable[createProjectToolName].Description, "show it to the user before confirming",
-		"the slug is derived and permanent, so the user must see it before confirming")
+	require.Contains(t, unavailable[createProjectToolName].Description, "Call first without confirmed: true",
+		"the slug is derived and permanent, so the description must send the agent to the preview for it")
+	require.Contains(t, unavailable[createProjectToolName].Description, "Do not work the slug out yourself")
+	require.NotContains(t, unavailable[createProjectToolName].Description, "punctuation dropped",
+		"a prose derivation drifts from the code; the preview is the only source of the slug")
 	require.Contains(t, unavailable[renameProjectToolName].Description, "write access to that exact project",
 		"org admin alone does not authorize a rename, so the description must say so")
 

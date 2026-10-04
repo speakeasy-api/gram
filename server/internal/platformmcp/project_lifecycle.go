@@ -62,10 +62,29 @@ type ProjectLifecycleError struct {
 func (e *ProjectLifecycleError) Error() string { return e.Message }
 func (e *ProjectLifecycleError) Unwrap() error { return e.Cause }
 
+// ProjectCreatePreviewError is the confirmation_required refusal of an unconfirmed
+// create. It carries the exact name and slug the confirmed call would create,
+// so the user confirms the real address rather than an agent's guess at the
+// derivation. Nothing is charged, written, or recorded to produce it.
+type ProjectCreatePreviewError struct {
+	// Name is the display name exactly as it would be stored.
+	Name string
+
+	// Slug is the slug the project would get, from the same derivation the
+	// confirmed call uses.
+	Slug string
+}
+
+func (e *ProjectCreatePreviewError) Error() string {
+	return fmt.Sprintf("Nothing was created. Show the user the name %q and the slug %q it would get; the slug addresses the project in dashboard links and never changes. Call again with confirmed: true only after the user confirms both.", e.Name, e.Slug)
+}
+
+func (e *ProjectCreatePreviewError) Unwrap() error { return ErrProjectLifecycleInvalid }
+
 type CreateProjectInput struct {
 	Name           string `json:"name" jsonschema:"display name for the new project, 1 to 40 characters with at least one letter or digit; its slug is derived from it"`
-	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-chosen key, at most 128 characters, that makes a retry of this exact creation return the same project instead of making a second one"`
-	Confirmed      bool   `json:"confirmed" jsonschema:"true only after the user confirmed creating a project with this exact name"`
+	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-chosen key, at most 128 characters, chosen once per create and passed on both the preview and the confirmed call; a retry of the confirmed call with it returns the same project instead of making a second one"`
+	Confirmed      bool   `json:"confirmed" jsonschema:"false to preview the exact slug without creating anything; true only after the user confirmed this exact name and the slug the preview returned"`
 }
 
 type RenameProjectInput struct {
@@ -149,13 +168,6 @@ func (s *ProjectLifecycleService) CreateProject(ctx context.Context, principal P
 	if !s.valid() {
 		return ProjectMutationOutput{}, projectLifecycleUnavailable(errors.New("project lifecycle service is not composed"))
 	}
-	if !input.Confirmed {
-		return ProjectMutationOutput{}, projectLifecycleInvalid("Confirm the exact project name with the user before creating it.")
-	}
-	key, err := validIdempotencyKey(input.IdempotencyKey)
-	if err != nil {
-		return ProjectMutationOutput{}, err
-	}
 	slug, err := projects.ProjectSlug(input.Name)
 	if err != nil {
 		return ProjectMutationOutput{}, projectNameRefusal(err)
@@ -163,11 +175,34 @@ func (s *ProjectLifecycleService) CreateProject(ctx context.Context, principal P
 	if err := s.requireAdmin(ctx, principal); err != nil {
 		return ProjectMutationOutput{}, err
 	}
+	if !input.Confirmed {
+		// The preview: the slug comes from the same derivation the confirmed
+		// call uses, and nothing is charged, written, or recorded.
+		return ProjectMutationOutput{}, &ProjectCreatePreviewError{Name: input.Name, Slug: slug}
+	}
+	key, err := validIdempotencyKey(input.IdempotencyKey)
+	if err != nil {
+		return ProjectMutationOutput{}, err
+	}
 	inputHash, err := projectInputHash(operationCreateProject, struct {
 		Name string `json:"name"`
 	}{Name: input.Name})
 	if err != nil {
 		return ProjectMutationOutput{}, err
+	}
+
+	// A completed creation under this key replays before anything is charged
+	// or locked, and the budget is charged outside any transaction: the
+	// limiter is a network call, and holding a PostgreSQL connection and the
+	// receipt lock across it would let a slow limiter pin connections. The
+	// locked re-check inside the receipt transaction still replays a request
+	// that completed concurrently; both racers are then charged, which errs
+	// on the conservative side.
+	if replay, ok := s.completedCreateReceipt(ctx, principal, key, inputHash); ok {
+		return s.finish(ctx, principal, replay.result, replay.operation), nil
+	}
+	if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
+		return ProjectMutationOutput{}, projectBudgetError(err)
 	}
 
 	stored, receipt, created, err := s.createInReceiptTransaction(ctx, principal, input.Name, slug, key, inputHash)
@@ -185,6 +220,59 @@ func (s *ProjectLifecycleService) CreateProject(ctx context.Context, principal P
 type createdReceipt struct {
 	projectID uuid.UUID
 	operation OperationReceipt
+}
+
+// storedReplay is a completed receipt found by the pre-check, ready to return
+// without opening a transaction.
+type storedReplay struct {
+	result    projectReceipt
+	operation OperationReceipt
+}
+
+// noReplay is the empty result the pre-checks return beside false.
+var noReplay storedReplay
+
+// completedCreateReceipt is the read-only pre-check for a create replay. It
+// reports only a completed, unexpired receipt whose input matches; anything
+// else — a miss, a different input, a read failure — falls through to the
+// receipt transaction, which decides it authoritatively under the lock.
+func (s *ProjectLifecycleService) completedCreateReceipt(ctx context.Context, principal Principal, key, inputHash string) (storedReplay, bool) {
+	row, err := s.queries.GetPlatformMCPProjectCreationReceipt(ctx, platformrepo.GetPlatformMCPProjectCreationReceiptParams{
+		OrganizationID: principal.OrganizationID, UserID: conv.ToPGText(principal.UserID),
+		Operation: operationCreateProject, IdempotencyKey: key,
+	})
+	if err != nil {
+		return noReplay, false
+	}
+	return replayableReceipt(row, inputHash)
+}
+
+// completedRenameReceipt is the same pre-check for a rename, keyed on the
+// exact project the rename targets.
+func (s *ProjectLifecycleService) completedRenameReceipt(ctx context.Context, principal Principal, projectID uuid.UUID, key, inputHash string) (storedReplay, bool) {
+	row, err := s.queries.GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
+		OrganizationID: principal.OrganizationID, ProjectID: projectID, Operation: operationRenameProject, IdempotencyKey: key,
+		UserID: conv.ToPGText(principal.UserID), SubjectUrn: userSubjectURN(principal.UserID),
+	})
+	if err != nil {
+		return noReplay, false
+	}
+	return replayableReceipt(row, inputHash)
+}
+
+// replayableReceipt judges expiry against the wall clock rather than the
+// service's injectable clock, because the authoritative path decides it with
+// the database's clock_timestamp(); an injected clock would let the pre-check
+// replay a receipt the locked path has already treated as expired.
+func replayableReceipt(row platformrepo.PlatformMcpOperationReceipt, inputHash string) (storedReplay, bool) {
+	if row.Status != receiptStatusSucceeded || row.InputHash != inputHash || !row.ExpiresAt.Time.After(time.Now()) {
+		return noReplay, false
+	}
+	result, err := decodeProjectReceipt(row.ResultPayload)
+	if err != nil {
+		return noReplay, false
+	}
+	return storedReplay{result: result, operation: operationReceiptFromRow(row, true)}, true
 }
 
 func (s *ProjectLifecycleService) createInReceiptTransaction(ctx context.Context, principal Principal, name, slug, key, inputHash string) (projectReceipt, createdReceipt, bool, error) {
@@ -227,13 +315,6 @@ func (s *ProjectLifecycleService) createInReceiptTransaction(ctx context.Context
 		return stored, createdReceipt{projectID: existing.ProjectID, operation: operationReceiptFromRow(existing, true)}, false, nil
 	case !errors.Is(err, pgx.ErrNoRows):
 		return projectReceipt{}, createdReceipt{}, false, s.unexpected(ctx, fmt.Errorf("load project creation receipt: %w", err))
-	}
-
-	// Charged only once the call is known to be a new creation: a replay
-	// writes nothing, so retrying a lost response must not spend the
-	// allowance or be throttled away from the result it is owed.
-	if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
-		return projectReceipt{}, createdReceipt{}, false, projectBudgetError(err)
 	}
 
 	project, err := s.core.CreateInTransaction(ctx, tx, projects.CreateProjectMutation{
@@ -283,7 +364,11 @@ func (s *ProjectLifecycleService) RenameProject(ctx context.Context, principal P
 		return ProjectMutationOutput{}, projectLifecycleUnavailable(errors.New("project lifecycle service is not composed"))
 	}
 	if !input.Confirmed {
-		return ProjectMutationOutput{}, projectLifecycleInvalid("Confirm the exact project and its new name with the user before renaming it.")
+		return ProjectMutationOutput{}, &ProjectLifecycleError{
+			Code:    "confirmation_required",
+			Message: "Nothing was renamed. Confirm the exact project and its new name with the user, then call again with confirmed: true.",
+			Cause:   ErrProjectLifecycleInvalid,
+		}
 	}
 	key, err := validIdempotencyKey(input.IdempotencyKey)
 	if err != nil {
@@ -326,6 +411,15 @@ func (s *ProjectLifecycleService) RenameProject(ctx context.Context, principal P
 		return ProjectMutationOutput{}, err
 	}
 
+	// As for a create: a completed rename replays before anything is charged
+	// or locked, and the budget is charged outside any transaction.
+	if replay, ok := s.completedRenameReceipt(ctx, principal, project.ID, key, inputHash); ok {
+		return s.finish(ctx, principal, replay.result, replay.operation), nil
+	}
+	if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
+		return ProjectMutationOutput{}, projectBudgetError(err)
+	}
+
 	receipt, err := executeMutationReceipt(ctx, mutationReceiptExecution[projectReceipt]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operationRenameProject,
 		IdempotencyKey: key, InputHash: inputHash, Label: "project rename",
@@ -340,13 +434,6 @@ func (s *ProjectLifecycleService) RenameProject(ctx context.Context, principal P
 		},
 		EncodeResult: encodeProjectReceipt,
 		Mutate: func(ctx context.Context, tx pgx.Tx) (projectReceipt, error) {
-			// The executor reaches Mutate only when no stored receipt matched,
-			// so charging here makes a replay free: retrying a lost response
-			// must not spend the allowance or be throttled away from its
-			// result. A refusal rolls back the pending receipt with it.
-			if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
-				return projectReceipt{}, projectBudgetError(err)
-			}
 			renamed, err := s.core.RenameInTransaction(ctx, tx, projects.RenameProjectMutation{
 				OrganizationID: principal.OrganizationID,
 				ProjectID:      project.ID,
