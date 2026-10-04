@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
@@ -21,9 +22,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -279,6 +282,38 @@ func TestCreateMCPFromFunctionsPreviewMatchesTheCreatedSlugs(t *testing.T) {
 		require.True(t, strings.HasPrefix(created.MCPSlug, refusal.Preview.MCPSlugPrefix+"-"), "%q: server slug %q starts with the previewed %q", name, created.MCPSlug, refusal.Preview.MCPSlugPrefix)
 		require.Equal(t, refusal.Preview.Name, created.MCPName, "%q: the name is kept whole", name)
 	}
+}
+
+// One idempotency key spans a creation: the preview records nothing under it,
+// so the confirmed call with that same key creates exactly one server.
+func TestCreateMCPFromFunctionsPreviewAndConfirmShareOneKey(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_create_from_functions_one_key")
+	ctx = fixture.createFromFunctionsContext(ctx)
+	toolsetsBefore, serversBefore := fixture.projectServerCounts(t, ctx)
+
+	input := fixture.createInput("Order Desk", fixture.tools[0])
+	input.Confirmed = false
+	_, err := fixture.service.CreateMCPFromFunctions(ctx, fixture.principal, input)
+	var refusal *MCPToolExposureError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, "confirmation_required", refusal.Code)
+	_, err = fixture.service.queries.GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
+		OrganizationID: fixture.principal.OrganizationID, ProjectID: fixture.project.ID, Operation: operationCreateMCPFromFunctions,
+		IdempotencyKey: input.IdempotencyKey, UserID: conv.ToPGText(fixture.principal.UserID), SubjectUrn: userSubjectURN(fixture.principal.UserID),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "the preview stores nothing under the key")
+
+	input.Confirmed = true
+	created, err := fixture.service.CreateMCPFromFunctions(ctx, fixture.principal, input)
+	require.NoError(t, err)
+	require.False(t, created.Receipt.Replayed, "the confirmed call creates rather than replaying the preview")
+	require.NotNil(t, created.Exposure)
+	require.Equal(t, []string{fixture.tools[0]}, created.Exposure.ToolURNs)
+
+	toolsetsAfter, serversAfter := fixture.projectServerCounts(t, ctx)
+	require.Equal(t, toolsetsBefore+1, toolsetsAfter, "exactly one toolset")
+	require.Equal(t, serversBefore+1, serversAfter, "exactly one server")
 }
 
 // poolCheckingLimiter records how many connections the service's pool had

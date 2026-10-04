@@ -3716,6 +3716,8 @@ func TestGeneratePlatformMCPPackageEmitsToolExposureWorkflow(t *testing.T) {
 		// from prose that can drift from the code that derives it.
 		"`confirmation_required`",
 		"Never work out or describe a slug yourself",
+		// The preview records nothing, so one key spans preview and confirm.
+		"the same idempotency key the preview used",
 	} {
 		require.Contains(t, workflow, guardrail)
 	}

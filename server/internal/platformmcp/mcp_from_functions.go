@@ -325,7 +325,7 @@ func mcpFromFunctionsPreview(name string) *MCPFromFunctionsPreview {
 func mcpFromFunctionsConfirmationRequired(name string) error {
 	return &MCPToolExposureError{
 		Code:    "confirmation_required",
-		Message: "Nothing was created. Show the user the project, the server name, the slugs below, and the exact tools, and call again with confirmed: true and a fresh idempotency key once they confirm.",
+		Message: "Nothing was created. Show the user the project, the server name, the slugs below, and the exact tools, and once they confirm call again with the same request, the same idempotency key, and confirmed: true.",
 		Cause:   ErrMCPToolExposureInvalid,
 		Preview: mcpFromFunctionsPreview(name),
 	}
