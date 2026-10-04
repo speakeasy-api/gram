@@ -175,14 +175,16 @@ func (s *ProjectLifecycleService) CreateProject(ctx context.Context, principal P
 	if err := s.requireAdmin(ctx, principal); err != nil {
 		return ProjectMutationOutput{}, err
 	}
+	// Validated before the preview, so the preview and the confirmed call,
+	// which take the same key, refuse the same input.
+	key, err := validIdempotencyKey(input.IdempotencyKey)
+	if err != nil {
+		return ProjectMutationOutput{}, err
+	}
 	if !input.Confirmed {
 		// The preview: the slug comes from the same derivation the confirmed
 		// call uses, and nothing is charged, written, or recorded.
 		return ProjectMutationOutput{}, &ProjectCreatePreviewError{Name: input.Name, Slug: slug}
-	}
-	key, err := validIdempotencyKey(input.IdempotencyKey)
-	if err != nil {
-		return ProjectMutationOutput{}, err
 	}
 	inputHash, err := projectInputHash(operationCreateProject, struct {
 		Name string `json:"name"`

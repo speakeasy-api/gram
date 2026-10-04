@@ -417,6 +417,24 @@ func TestCreateProjectPreviewAndConfirmShareOneKey(t *testing.T) {
 	require.Len(t, fixture.organizationProjects(t, ctx), before+1, "exactly one project")
 }
 
+// The preview and the confirmed call take the same key, so a key the confirmed
+// call would refuse must be refused by the preview too, in the same words;
+// otherwise a user confirms a create that can never go through.
+func TestCreateProjectPreviewRefusesAnInvalidKeyLikeTheConfirmedCall(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedProjectLifecycleFixture(t, t.Context(), "platform_mcp_create_project_preview_key")
+	before := len(fixture.organizationProjects(t, ctx))
+
+	for name, key := range map[string]string{"empty": "", "too long": strings.Repeat("k", maxIdempotencyKeyLength+1)} {
+		_, previewErr := fixture.service.CreateProject(ctx, fixture.principal, CreateProjectInput{Name: "Support Team", IdempotencyKey: key, Confirmed: false})
+		_, confirmErr := fixture.service.CreateProject(ctx, fixture.principal, CreateProjectInput{Name: "Support Team", IdempotencyKey: key, Confirmed: true})
+		previewMessage := requireProjectLifecycleRefusal(t, previewErr, "invalid_request")
+		require.Equal(t, requireProjectLifecycleRefusal(t, confirmErr, "invalid_request"), previewMessage, name)
+		require.Contains(t, previewMessage, "idempotency key", name)
+	}
+	require.Len(t, fixture.organizationProjects(t, ctx), before)
+}
+
 // The preview is the only place an agent learns the slug, so it must be
 // exactly the slug the confirmed call creates, including for inputs a
 // hand-written rule gets wrong: non-ASCII letters are dropped, runs of
