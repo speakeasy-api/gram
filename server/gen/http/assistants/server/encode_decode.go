@@ -2258,16 +2258,13 @@ func marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsRespo
 		return nil
 	}
 	res := &AssistantIdentityDiagnosticsResponseBody{
-		Health:                 v.Health,
-		ProvisioningEnabled:    v.ProvisioningEnabled,
-		ExecutionEnabled:       v.ExecutionEnabled,
-		SlackDelegationEnabled: v.SlackDelegationEnabled,
-		BindingsTruncated:      v.BindingsTruncated,
-		LastEventID:            v.LastEventID,
-		LastExecutionMode:      v.LastExecutionMode,
-		LastFallbackReason:     v.LastFallbackReason,
-		LastEventStatus:        v.LastEventStatus,
-		LastInitiatingUserID:   v.LastInitiatingUserID,
+		Health:               v.Health,
+		BindingsTruncated:    v.BindingsTruncated,
+		LastEventID:          v.LastEventID,
+		LastExecutionMode:    v.LastExecutionMode,
+		LastFallbackReason:   v.LastFallbackReason,
+		LastEventStatus:      v.LastEventStatus,
+		LastInitiatingUserID: v.LastInitiatingUserID,
 	}
 	if v.Bindings != nil {
 		res.Bindings = make([]*AssistantIdentityBindingResponseBody, len(v.Bindings))

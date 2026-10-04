@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
@@ -83,7 +84,7 @@ func TestExecutionAuthorizationLivePolicyAndPlatformIsolation(t *testing.T) {
 			if mode == sourceKindDashboard {
 				payload = []byte(`{"user_id":"user-2"}`)
 			}
-			raw, err := core.captureExecution(t.Context(), assistant, mode, thread, uuid.NullUUID{UUID: root, Valid: true}, "event-"+mode, payload)
+			raw, err := core.captureExecution(t.Context(), assistant, mode, thread, uuid.NullUUID{UUID: root, Valid: true}, "event-"+mode, payload, nil)
 			require.NoError(t, err)
 			execution, err := decodeExecution(raw)
 			require.NoError(t, err)
@@ -92,20 +93,6 @@ func TestExecutionAuthorizationLivePolicyAndPlatformIsolation(t *testing.T) {
 			require.NotNil(t, dispatched.Load())
 			token := *dispatched.Load()
 			require.True(t, assistanttokens.IsExecutionToken(token), "bound production turn must never mint an owner token")
-			// Rollback stops bound issuance/use without deleting identities, inventing
-			// an execute grant, or substituting the legacy user token path.
-			stopped, gateErr := assistantidentity.New(testIdentityService.Issuer(), false, assistantidentity.Rollout{DisableExecution: true})
-			require.NoError(t, gateErr)
-			manager.ConfigureExecutionIdentity(signer, stopped)
-			_, gateErr = manager.GenerateExecution(t.Context(), *execution)
-			require.ErrorIs(t, gateErr, assistantidentity.ErrRolloutDisabled)
-			_, _, gateErr = manager.AuthorizeRuntime(t.Context(), token)
-			require.Error(t, gateErr)
-			dispatched.Store(nil)
-			_, gateErr = core.processEventTurn(t.Context(), assistantThreadRecord{ID: thread, ProjectID: project, AssistantID: assistant.ID, SourceKind: mode}, assistant, assistantRuntimeRecord{}, assistantThreadEventRecord{ID: uuid.New(), EventID: "event-" + mode, NormalizedPayloadJSON: raw})
-			require.ErrorIs(t, gateErr, assistantidentity.ErrRolloutDisabled)
-			require.Nil(t, dispatched.Load(), "disabled bound execution must not invoke the runtime with owner credentials")
-			manager.ConfigureExecutionIdentity(signer, testIdentityService)
 
 			ctx, claims, err := manager.AuthorizeRuntime(t.Context(), "Bearer "+token)
 			require.NoError(t, err)
@@ -192,28 +179,37 @@ func TestExecutionExistingBindingRunsWithoutGrantOrUpgrade(t *testing.T) {
 	require.NoError(t, err)
 	identity, err := testIdentityService.Resolve(t.Context(), db, "org-test", project, assistant.ID, root)
 	require.NoError(t, err)
+	// Turning off provisioning must not reinterpret an existing binding as its owner.
+	flags := new(feature.InMemory)
+	flags.SetFlag(feature.FlagAgentIdentityCredentials, "org-test", false)
+	core.SetFeatureProvider(flags)
 	thread := seedThreadWithEvent(t, db, assistant.ID, "execution-upgrade", "execution-upgrade", eventStatusPending)
-	raw, err := core.captureExecution(t.Context(), assistant, sourceKindCron, thread, uuid.NullUUID{UUID: root, Valid: true}, "old-event", []byte(`{}`))
+	raw, err := core.captureExecution(t.Context(), assistant, sourceKindCron, thread, uuid.NullUUID{UUID: root, Valid: true}, "old-event", []byte(`{}`), nil)
 	require.NoError(t, err)
 	old, err := decodeExecution(raw)
 	require.NoError(t, err)
-	require.NoError(t, testIdentityService.AdmitModel(t.Context(), db, *old), "existing bindings need no new grant or upgrade")
-	raw, err = core.captureExecution(t.Context(), assistant, sourceKindCron, thread, uuid.NullUUID{UUID: root, Valid: true}, "new-event", []byte(`{}`))
+	require.NotNil(t, old)
+	require.Equal(t, assistantidentity.ExecutionWorkload, old.Mode)
+	manager := assistanttokens.New("legacy-test-secret", db, nil)
+	manager.ConfigureExecutionIdentity(executionTestIssuer(t), testIdentityService)
+	_, err = manager.GenerateExecution(t.Context(), *old)
+	require.NoError(t, err, "existing bindings need no new grant or upgrade")
+	raw, err = core.captureExecution(t.Context(), assistant, sourceKindCron, thread, uuid.NullUUID{UUID: root, Valid: true}, "new-event", []byte(`{}`), nil)
 	require.NoError(t, err)
 	fresh, err := decodeExecution(raw)
 	require.NoError(t, err)
-	require.NoError(t, testIdentityService.AdmitModel(t.Context(), db, *fresh))
+	_, err = manager.GenerateExecution(t.Context(), *fresh)
+	require.NoError(t, err)
 	require.NoError(t, identityrepo.New(db).FixtureSuspendAgent(t.Context(), identityrepo.FixtureSuspendAgentParams{OrganizationID: "org-test", AgentID: identity.Identity.AgentID}))
-	require.ErrorIs(t, testIdentityService.AdmitModel(t.Context(), db, *fresh), assistantidentity.ErrInvalidIdentity)
+	_, err = manager.GenerateExecution(t.Context(), *fresh)
+	require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity)
 	// Suspension is captured as the same workload, not legacy identity. Token
 	// minting rejects it without changing the assistant entity's active state.
-	raw, err = core.captureExecution(t.Context(), assistant, sourceKindCron, thread, uuid.NullUUID{UUID: root, Valid: true}, "suspended-event", []byte(`{}`))
+	raw, err = core.captureExecution(t.Context(), assistant, sourceKindCron, thread, uuid.NullUUID{UUID: root, Valid: true}, "suspended-event", []byte(`{}`), nil)
 	require.NoError(t, err)
 	suspended, err := decodeExecution(raw)
 	require.NoError(t, err)
 	require.NotNil(t, suspended)
-	manager := assistanttokens.New("legacy-test-secret", db, nil)
-	manager.ConfigureExecutionIdentity(executionTestIssuer(t), testIdentityService)
 	token, err := manager.GenerateExecution(t.Context(), *suspended)
 	require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity)
 	require.Empty(t, token)
@@ -223,7 +219,8 @@ func TestExecutionExistingBindingRunsWithoutGrantOrUpgrade(t *testing.T) {
 
 	_, err = agentrepo.New(db).ResumeAgent(t.Context(), agentrepo.ResumeAgentParams{OrganizationID: "org-test", ID: identity.Identity.AgentID})
 	require.NoError(t, err)
-	require.NoError(t, testIdentityService.AdmitModel(t.Context(), db, *fresh), "temporary suspension is not permanent invalidation")
+	_, err = manager.GenerateExecution(t.Context(), *fresh)
+	require.NoError(t, err, "temporary suspension is not permanent invalidation")
 	token, err = manager.GenerateExecution(t.Context(), *suspended)
 	require.NoError(t, err)
 	require.True(t, assistanttokens.IsExecutionToken(token))
@@ -231,7 +228,8 @@ func TestExecutionExistingBindingRunsWithoutGrantOrUpgrade(t *testing.T) {
 	paused := StatusPaused
 	_, err = core.UpdateAssistant(t.Context(), project, assistant.ID, nil, nil, nil, nil, nil, nil, nil, &paused)
 	require.NoError(t, err)
-	require.ErrorIs(t, testIdentityService.AdmitModel(t.Context(), db, *fresh), assistantidentity.ErrInvalidIdentity, "paused assistant cannot dispatch with stale active metadata")
+	_, err = manager.GenerateExecution(t.Context(), *fresh)
+	require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity, "paused assistant cannot dispatch with stale active metadata")
 }
 
 func TestUnboundAssistantDispatchRetainsOriginalToken(t *testing.T) {

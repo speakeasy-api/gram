@@ -2320,13 +2320,6 @@ type AssistantIdentityDiagnosticsResponseBody struct {
 	// legacy, ready, suspended, or unavailable; ready only describes identity
 	// configuration.
 	Health *string `json:"health"`
-	// Whether new identities and explicit upgrades are enabled on this serving
-	// tier.
-	ProvisioningEnabled *bool `json:"provisioning_enabled"`
-	// Whether workload token issuance and use are enabled on this serving tier.
-	ExecutionEnabled *bool `json:"execution_enabled"`
-	// Whether mapped Slack delegation is enabled on this serving tier.
-	SlackDelegationEnabled *bool `json:"slack_delegation_enabled"`
 	// At most 100 current trigger roots, including roots without a binding.
 	Bindings []*AssistantIdentityBindingResponseBody `json:"bindings"`
 	// More roots exist than are returned.
@@ -7554,15 +7547,6 @@ func ValidateAssistantResponseBody(body *AssistantResponseBody) (err error) {
 func ValidateAssistantIdentityDiagnosticsResponseBody(body *AssistantIdentityDiagnosticsResponseBody) (err error) {
 	if body.Health == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("health", "body"))
-	}
-	if body.ProvisioningEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("provisioning_enabled", "body"))
-	}
-	if body.ExecutionEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("execution_enabled", "body"))
-	}
-	if body.SlackDelegationEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("slack_delegation_enabled", "body"))
 	}
 	if body.Bindings == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("bindings", "body"))

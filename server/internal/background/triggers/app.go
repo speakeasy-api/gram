@@ -1045,6 +1045,10 @@ func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInst
 		EventJSON:         nil,
 		RawPayload:        envelope.RawPayload,
 		ThreadBackfill:    routed.backfill,
+		SlackExecution:    nil,
+	}
+	if instance.DefinitionSlug == DefinitionSlugSlack && instance.TargetKind == TargetKindAssistant {
+		task.SlackExecution = captureSlackExecution(ctx, a.db, instance.OrganizationID, envelope.Event)
 	}
 	if envelope.Event != nil {
 		eventJSON, err := json.Marshal(envelope.Event)

@@ -97,8 +97,9 @@ func TestAssistantSlackDenialReplyUsesExactOriginAndStaticPrivateContent(t *test
 	require.NoError(t, err)
 	execution := assistantidentity.Execution{Version: assistantidentity.ExecutionVersion, Identity: *identity.Identity, Issuer: testIdentityService.Issuer(), ThreadID: thread, EventID: "origin", Mode: assistantidentity.ExecutionWorkloadHuman, HumanUserID: "trigger-owner", Ceiling: ceiling, Slack: &assistantidentity.SlackDelegation{TeamID: "TEXAMPLE", UserID: "UEXAMPLE", MembershipID: uuid.New(), MappingID: uuid.New(), MappingRevision: 1, ConnectionGeneration: uuid.New()}}
 	require.NoError(t, identityrepo.New(f.db).FixtureSlackExecutionMapping(t.Context(), identityrepo.FixtureSlackExecutionMappingParams{UserID: "trigger-owner", OrganizationID: "org-trigger-test", SlackTeamID: "TEXAMPLE", SlackUserID: "UEXAMPLE", Generation: uuid.New()}))
-	execution.Slack, _, _, err = assistantidentity.CaptureSlackDelegation(t.Context(), f.db, "org-trigger-test", "TEXAMPLE", "UEXAMPLE")
+	mapping, err := identityrepo.New(f.db).GetSlackExecutionMapping(t.Context(), identityrepo.GetSlackExecutionMappingParams{OrganizationID: "org-trigger-test", SlackTeamID: "TEXAMPLE", SlackUserID: "UEXAMPLE"})
 	require.NoError(t, err)
+	execution.Slack = &assistantidentity.SlackDelegation{TeamID: "TEXAMPLE", UserID: "UEXAMPLE", MembershipID: mapping.MembershipID, MappingID: mapping.MappingID, MappingRevision: mapping.MappingRevision, ConnectionGeneration: mapping.ConnectionGeneration}
 	payload, err := json.Marshal(map[string]any{"_gram_execution": execution, "team_id": "TEXAMPLE", "user_id": "UEXAMPLE", "channel_id": "CEXAMPLE", "thread_id": "123"})
 	require.NoError(t, err)
 	_, err = q.InsertAssistantThreadEvent(t.Context(), assistantrepo.InsertAssistantThreadEventParams{AssistantThreadID: thread, AssistantID: f.assistantID, ProjectID: f.projectID, TriggerInstanceID: conv.ToNullUUID(root.ID), EventID: "origin", CorrelationID: "slack-original", Status: "processing", NormalizedPayloadJson: payload, SourcePayloadJson: []byte(`{}`)})

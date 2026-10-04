@@ -18,6 +18,7 @@ import (
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -116,6 +117,9 @@ func TestIdentityCreationProvisioningFailureRollsBack(t *testing.T) {
 func TestIdentityCreationAPIUpgradeRequiresAuthorizationAndIsIdempotent(t *testing.T) {
 	t.Parallel()
 	svc, ctx, project, db := newRBACServiceWithConn(t, "identity_api_upgrade")
+	flags := new(feature.InMemory)
+	flags.SetFlag(feature.FlagAgentIdentityCredentials, "org-test", true)
+	svc.core.SetFeatureProvider(flags)
 	legacy, err := assistantrepo.New(db).CreateAssistant(ctx, assistantrepo.CreateAssistantParams{ProjectID: project, OrganizationID: "org-test", CreatedByUserID: pgtype.Text{String: "user-1", Valid: true}, Name: "Legacy assistant", Model: "openai/gpt-4o-mini", Instructions: "", WarmTtlSeconds: 300, MaxConcurrency: 1, Status: StatusActive})
 	require.NoError(t, err)
 	payload := &gen.UpgradeAssistantIdentityPayload{ID: legacy.ID.String(), SessionToken: nil, ProjectSlugInput: nil}

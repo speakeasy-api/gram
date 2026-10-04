@@ -98,9 +98,6 @@ func (s *Service) bindRoot(ctx context.Context, tx pgx.Tx, org string, project, 
 		}
 		return ErrBrokenMapping
 	}
-	if s.rollout.DisableProvisioning {
-		return ErrProvisioningDisabled
-	}
 	issuer, err := s.platformIssuer(ctx, q, org, project)
 	if err != nil {
 		return err

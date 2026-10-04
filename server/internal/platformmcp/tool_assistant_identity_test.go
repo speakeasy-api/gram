@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -55,7 +56,6 @@ func TestAssistantIdentityToolContract(t *testing.T) {
 		require.Contains(t, string(a.InputSchema), field)
 	}
 	require.Contains(t, string(a.InputSchema), "missing-active-root repair")
-	require.Contains(t, string(a.InputSchema), "provisioning rollout must be enabled")
 	require.Contains(t, a.Description, "project:write")
 	require.Contains(t, a.Description, "ACTIVE does not prove")
 	ctx := contextWithPrincipal(t.Context(), Principal{OrganizationID: "test-org", UserID: "test-user"})
@@ -161,19 +161,6 @@ func TestAssistantIdentityUpgradeRejectsAmbiguousUnconfirmedAndHiddenTargets(t *
 	require.Equal(t, 1, resolutions)
 }
 
-func TestAssistantIdentityRolloutRefusal(t *testing.T) {
-	t.Parallel()
-	for _, cause := range []error{assistantidentity.ErrProvisioningDisabled, assistantidentity.ErrRolloutDisabled} {
-		result, ok := assistantIdentityToolResult(oops.E(oops.CodeUnavailable, cause, "private backend detail"))
-		require.True(t, ok)
-		require.True(t, result.IsError)
-		content, ok := result.Content[0].(*mcp.TextContent)
-		require.True(t, ok)
-		require.Contains(t, content.Text, "rollout_disabled")
-		require.NotContains(t, content.Text, "private backend detail")
-	}
-}
-
 func TestAssistantIdentityRefusalsDoNotLeakBackendDetails(t *testing.T) {
 	t.Parallel()
 	for _, err := range []error{errors.New("private policy and credential"), oops.E(oops.CodeConflict, nil, "private binding"), oops.E(oops.CodeNotFound, nil, "private assistant"), oops.E(oops.CodeForbidden, nil, "private grants")} {
@@ -242,6 +229,13 @@ func TestAssistantIdentityTrustedOAuthUpgradeMatchesAPI(t *testing.T) {
 	clientID, ok := contextvalues.GetOAuthClientID(ctx)
 	require.True(t, ok)
 	require.Equal(t, principal.ClientID, clientID)
+	flags := new(feature.InMemory)
+	core.SetFeatureProvider(flags)
+	_, err = reader.assistantIdentity.upgrade(ctx, principal, UpgradeAssistantIdentityInput{ProjectID: project.ID.String(), AssistantID: legacy.ID.String(), Confirmed: true})
+	var unavailable *oops.ShareableError
+	require.ErrorAs(t, err, &unavailable)
+	require.Equal(t, oops.CodeNotFound, unavailable.Code, "MCP uses the same agent identity feature gate as the API")
+	flags.SetFlag(feature.FlagAgentIdentityCredentials, principal.OrganizationID, true)
 	output, err := reader.assistantIdentity.upgrade(ctx, principal, UpgradeAssistantIdentityInput{ProjectID: project.ID.String(), AssistantID: legacy.ID.String(), Confirmed: true})
 	require.NoError(t, err, "trusted Platform MCP OAuth attribution must not reject the ordinary user")
 	require.Equal(t, "ACTIVE", *output.IdentityState)

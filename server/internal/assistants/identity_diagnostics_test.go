@@ -5,31 +5,27 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
 
-func TestIdentityDiagnosticsAndProvisioningRollback(t *testing.T) {
+func TestIdentityDiagnosticsAndProvisioningFeatureGate(t *testing.T) {
 	t.Parallel()
 	db, err := assistantsInfra.CloneTestDatabase(t, "identity_diagnostics")
 	require.NoError(t, err)
 	project := newProvisioningProject(t, db, "identity-diagnostics")
 	core := newProvisioningCore(t, db)
-	normal := core.identities
-	stopped, err := assistantidentity.New(normal.Issuer(), false, assistantidentity.Rollout{DisableProvisioning: true})
-	require.NoError(t, err)
-	core.identities = stopped
+	flags := new(feature.InMemory)
+	flags.SetFlag(feature.FlagAgentIdentityCredentials, "org-test", false)
+	core.SetFeatureProvider(flags)
 	legacy, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Legacy", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive)
 	require.NoError(t, err)
 	require.Equal(t, "NEVER_CONFIGURED", legacy.IdentityState)
 	view, err := core.identityDiagnostics(t.Context(), legacy)
 	require.NoError(t, err)
 	require.Equal(t, "legacy", view.Health)
-	require.False(t, view.ProvisioningEnabled)
-	require.True(t, view.ExecutionEnabled)
-	_, err = core.UpgradeAssistantIdentity(t.Context(), "org-test", project, legacy.ID, "user-1")
-	require.ErrorIs(t, err, assistantidentity.ErrProvisioningDisabled)
-	core.identities = normal
+	flags.SetFlag(feature.FlagAgentIdentityCredentials, "org-test", true)
 	bound, err := core.UpgradeAssistantIdentity(t.Context(), "org-test", project, legacy.ID, "user-1")
 	require.NoError(t, err)
 	require.Equal(t, "upgraded", *bound.IdentityUpgradeOutcome)
@@ -69,9 +65,6 @@ func TestIdentityDiagnosticsAndProvisioningRollback(t *testing.T) {
 func TestIdentityAdmissionMetricsKeepDenialAndRetryDistinct(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "issued", identityAdmissionResult(nil))
-	require.Equal(t, "rollout_disabled", identityAdmissionResult(assistantidentity.ErrRolloutDisabled))
-	require.ErrorIs(t, classifyExecutionDispatchError(assistantidentity.ErrRolloutDisabled), assistantidentity.ErrRolloutDisabled)
-	require.NotErrorIs(t, classifyExecutionDispatchError(assistantidentity.ErrRolloutDisabled), errExecutionDenied)
 	require.Equal(t, "denied", identityAdmissionResult(assistantidentity.ErrInvalidIdentity))
 	require.Equal(t, "retryable_error", identityAdmissionResult(context.DeadlineExceeded))
 }

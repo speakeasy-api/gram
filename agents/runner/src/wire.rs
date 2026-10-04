@@ -165,10 +165,6 @@ pub struct ThreadStateView {
 /// thread. Mirrors `server/internal/assistants/runtime.go::threadBootstrap`.
 #[derive(Debug, Deserialize, Clone)]
 pub struct ThreadBootstrap {
-    #[serde(default)]
-    pub assistant_id: Option<String>,
-    #[serde(default)]
-    pub project_id: Option<String>,
     pub model: String,
     #[serde(default)]
     pub instructions: String,

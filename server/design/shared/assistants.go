@@ -134,9 +134,6 @@ var AssistantIdentityDiagnostics = Type("AssistantIdentityDiagnostics", func() {
 	Meta("struct:pkg:path", "types")
 	Description("Safe workload configuration diagnostics, not a permission or OAuth consent decision. Shared by the dashboard and Platform MCP.")
 	Attribute("health", String, "legacy, ready, suspended, or unavailable; ready only describes identity configuration.", func() { Meta("struct:tag:json", "health"); Enum("legacy", "ready", "suspended", "unavailable") })
-	Attribute("provisioning_enabled", Boolean, "Whether new identities and explicit upgrades are enabled on this serving tier.", func() { Meta("struct:tag:json", "provisioning_enabled") })
-	Attribute("execution_enabled", Boolean, "Whether workload token issuance and use are enabled on this serving tier.", func() { Meta("struct:tag:json", "execution_enabled") })
-	Attribute("slack_delegation_enabled", Boolean, "Whether mapped Slack delegation is enabled on this serving tier.", func() { Meta("struct:tag:json", "slack_delegation_enabled") })
 	Attribute("bindings", ArrayOf(AssistantIdentityBinding), "At most 100 current trigger roots, including roots without a binding.", func() { Meta("struct:tag:json", "bindings") })
 	Attribute("bindings_truncated", Boolean, "More roots exist than are returned.", func() { Meta("struct:tag:json", "bindings_truncated") })
 	Attribute("last_event_id", String, "Most recent persisted event ID; not a token.", func() { Meta("struct:tag:json", "last_event_id,omitempty") })
@@ -144,7 +141,7 @@ var AssistantIdentityDiagnostics = Type("AssistantIdentityDiagnostics", func() {
 	Attribute("last_fallback_reason", String, "Bounded reason for autonomous execution when no delegating user was resolved.", func() { Meta("struct:tag:json", "last_fallback_reason,omitempty") })
 	Attribute("last_event_status", String, "Persisted processing status, not a tool permission or consent verdict.", func() { Meta("struct:tag:json", "last_event_status,omitempty") })
 	Attribute("last_initiating_user_id", String, "Selected human delegator, absent for autonomous work; never the acting agent.", func() { Meta("struct:tag:json", "last_initiating_user_id,omitempty") })
-	Required("health", "provisioning_enabled", "execution_enabled", "slack_delegation_enabled", "bindings", "bindings_truncated")
+	Required("health", "bindings", "bindings_truncated")
 })
 
 var AssistantIdentityBinding = Type("AssistantIdentityBinding", func() {

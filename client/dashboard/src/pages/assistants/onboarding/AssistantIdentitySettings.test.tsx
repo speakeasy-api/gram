@@ -7,11 +7,18 @@ import { AssistantIdentitySettings } from "./AssistantIdentitySettings";
 const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
   canWrite: true,
+  flagStatus: "enabled",
   success: vi.fn(),
   onSuccess: undefined as undefined | ((result: Assistant) => void),
 }));
 vi.mock("sonner", () => ({
   toast: { success: mocks.success, error: vi.fn() },
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: (flag: string) => {
+    expect(flag).toBe("agent-identity-credentials");
+    return { status: mocks.flagStatus };
+  },
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
@@ -50,9 +57,6 @@ const assistant: Assistant = {
   identityState: "NEVER_CONFIGURED",
   identityDiagnostics: {
     health: "legacy",
-    provisioningEnabled: true,
-    executionEnabled: true,
-    slackDelegationEnabled: true,
     bindings: [],
     bindingsTruncated: false,
   },
@@ -70,6 +74,7 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.canWrite = true;
+  mocks.flagStatus = "enabled";
 });
 describe("Assistant identity management", () => {
   it.each([
@@ -97,21 +102,27 @@ describe("Assistant identity management", () => {
       request: { riskIDRequestBody: { id: assistant.id } },
     });
   });
-  it("hides mutation without project write or when provisioning is stopped", () => {
+  it("hides mutation without project write", () => {
     mocks.canWrite = false;
     setup();
+    expect(screen.getByText("Workload identity")).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: "Upgrade identity" }),
     ).toBeNull();
-    cleanup();
-    mocks.canWrite = true;
-    setup({
-      ...assistant,
-      identityDiagnostics: {
-        ...assistant.identityDiagnostics!,
-        provisioningEnabled: false,
-      },
-    });
+  });
+  it.each(["loading", "disabled", "missing", "error"])(
+    "hides identity management when the existing feature gate is %s",
+    (status) => {
+      mocks.flagStatus = status;
+      setup();
+      expect(screen.queryByText("Workload identity")).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Upgrade identity" }),
+      ).toBeNull();
+    },
+  );
+  it("does not offer an upgrade without diagnostics", () => {
+    setup({ ...assistant, identityDiagnostics: undefined });
     expect(
       screen.queryByRole("button", { name: "Upgrade identity" }),
     ).toBeNull();
@@ -172,13 +183,12 @@ describe("Assistant identity management", () => {
     });
   });
   it.each([
-    { canWrite: false, provisioningEnabled: true, health: "ready" },
-    { canWrite: true, provisioningEnabled: false, health: "ready" },
-    { canWrite: true, provisioningEnabled: true, health: "suspended" },
-    { canWrite: true, provisioningEnabled: true, health: "unavailable" },
+    { canWrite: false, health: "ready" },
+    { canWrite: true, health: "suspended" },
+    { canWrite: true, health: "unavailable" },
   ] as const)(
     "preserves repair gates for truncated diagnostics: %o",
-    ({ canWrite, provisioningEnabled, health }) => {
+    ({ canWrite, health }) => {
       mocks.canWrite = canWrite;
       setup({
         ...assistant,
@@ -186,7 +196,6 @@ describe("Assistant identity management", () => {
         identityDiagnostics: {
           ...assistant.identityDiagnostics!,
           health,
-          provisioningEnabled,
           bindingsTruncated: true,
         },
       });

@@ -2434,16 +2434,13 @@ func unmarshalAssistantIdentityDiagnosticsResponseBodyToTypesAssistantIdentityDi
 		return nil
 	}
 	res := &types.AssistantIdentityDiagnostics{
-		Health:                 *v.Health,
-		ProvisioningEnabled:    *v.ProvisioningEnabled,
-		ExecutionEnabled:       *v.ExecutionEnabled,
-		SlackDelegationEnabled: *v.SlackDelegationEnabled,
-		BindingsTruncated:      *v.BindingsTruncated,
-		LastEventID:            v.LastEventID,
-		LastExecutionMode:      v.LastExecutionMode,
-		LastFallbackReason:     v.LastFallbackReason,
-		LastEventStatus:        v.LastEventStatus,
-		LastInitiatingUserID:   v.LastInitiatingUserID,
+		Health:               *v.Health,
+		BindingsTruncated:    *v.BindingsTruncated,
+		LastEventID:          v.LastEventID,
+		LastExecutionMode:    v.LastExecutionMode,
+		LastFallbackReason:   v.LastFallbackReason,
+		LastEventStatus:      v.LastEventStatus,
+		LastInitiatingUserID: v.LastInitiatingUserID,
 	}
 	res.Bindings = make([]*types.AssistantIdentityBinding, len(v.Bindings))
 	for i, val := range v.Bindings {

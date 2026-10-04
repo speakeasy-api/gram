@@ -13,13 +13,6 @@ type AssistantIdentityDiagnostics struct {
 	// legacy, ready, suspended, or unavailable; ready only describes identity
 	// configuration.
 	Health string `json:"health"`
-	// Whether new identities and explicit upgrades are enabled on this serving
-	// tier.
-	ProvisioningEnabled bool `json:"provisioning_enabled"`
-	// Whether workload token issuance and use are enabled on this serving tier.
-	ExecutionEnabled bool `json:"execution_enabled"`
-	// Whether mapped Slack delegation is enabled on this serving tier.
-	SlackDelegationEnabled bool `json:"slack_delegation_enabled"`
 	// At most 100 current trigger roots, including roots without a binding.
 	Bindings []*AssistantIdentityBinding `json:"bindings"`
 	// More roots exist than are returned.

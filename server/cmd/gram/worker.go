@@ -141,9 +141,6 @@ func newWorkerCommand() *cli.Command {
 
 	flags := append(workerRuntimeFlags(),
 		&cli.StringFlag{Name: "authz-issuer-url", EnvVars: []string{"GRAM_AUTHZ_ISSUER_URL"}, Usage: "Gram platform signing issuer origin"},
-		&cli.BoolFlag{Name: "assistant-provisioning-disabled", EnvVars: []string{"GRAM_ASSISTANT_PROVISIONING_DISABLED"}, Usage: "Stop new assistant identities and explicit upgrades; preserve existing bindings"},
-		&cli.BoolFlag{Name: "assistant-execution-disabled", EnvVars: []string{"GRAM_ASSISTANT_EXECUTION_DISABLED"}, Usage: "Deny workload token issuance and use without legacy fallback"},
-		&cli.BoolFlag{Name: "assistant-slack-delegation-disabled", EnvVars: []string{"GRAM_ASSISTANT_SLACK_DELEGATION_DISABLED"}, Usage: "Deny mapped Slack delegation without substituting owner credentials"},
 		&cli.StringFlag{Name: "authz-private-key", EnvVars: []string{"GRAM_AUTHZ_PRIVATE_KEY"}, Usage: "Existing Gram platform signing key for assistant execution identity"},
 		&cli.StringFlag{Name: "authz-public-keys", EnvVars: []string{"GRAM_AUTHZ_PUBLIC_KEYS"}, Usage: "Existing Gram platform verification keys for assistant execution identity"},
 		&cli.StringFlag{
@@ -753,7 +750,7 @@ func newWorkerCommand() *cli.Command {
 			// The worker never serves webhook ingress (ProcessWebhook lives in
 			// the HTTP server), so the dashboard site URL used for Slack link
 			// unfurls is not needed here.
-			assistantIdentities, err := assistantidentity.New(c.String("authz-issuer-url"), c.String("environment") == "local", assistantidentity.Rollout{DisableProvisioning: c.Bool("assistant-provisioning-disabled"), DisableExecution: c.Bool("assistant-execution-disabled"), DisableSlackDelegation: c.Bool("assistant-slack-delegation-disabled")})
+			assistantIdentities, err := assistantidentity.New(c.String("authz-issuer-url"), c.String("environment") == "local")
 			if err != nil {
 				return fmt.Errorf("configure assistant platform trust: %w", err)
 			}

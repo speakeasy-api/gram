@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -352,7 +353,11 @@ func (s *ServiceCore) createManagedAssistant(
 		return assistantRecord{}, fmt.Errorf("insert managed assistant mapping: %w", err)
 	}
 
-	if !s.identities.Rollout().DisableProvisioning {
+	evaluation, err := feature.EvaluateFlag(ctx, s.featureFlags, feature.FlagAgentIdentityCredentials, organizationID, feature.OrgProjectGroups(assistantOrgSlug(ctx), ""))
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to evaluate agent identity credentials flag", attr.SlogError(err))
+	}
+	if evaluation == feature.EvaluationEnabled {
 		if _, err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID}); err != nil {
 			return assistantRecord{}, fmt.Errorf("assistant identity Provision: %w", err)
 		}

@@ -10,7 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 )
 
-const ExecutionVersion = 2
+const ExecutionVersion = 1
 
 type ExecutionMode string
 
@@ -19,8 +19,8 @@ const (
 	ExecutionWorkloadHuman ExecutionMode = "WORKLOAD_HUMAN"
 )
 
-// ErrExecutionAdmissionRequired is a rollout boundary, not permission to retry
-// as the assistant owner. AIM-411 supplies positive model/business admission.
+// ErrExecutionAdmissionRequired denotes denied workload authority, never
+// permission to retry as the assistant owner.
 var ErrExecutionAdmissionRequired = errors.New("assistant execution requires workload admission")
 
 // Execution is trusted server metadata persisted with an event. It is not a
@@ -42,12 +42,12 @@ type Execution struct {
 
 func (e Execution) Check() error {
 	if d := e.Slack; d != nil {
-		if e.Version < 2 || e.Mode != ExecutionWorkloadHuman || d.TeamID == "" || d.UserID == "" || d.MembershipID == uuid.Nil || d.MappingID == uuid.Nil || d.ConnectionGeneration == uuid.Nil || d.MappingRevision <= 0 {
+		if e.Mode != ExecutionWorkloadHuman || d.TeamID == "" || d.UserID == "" || d.MembershipID == uuid.Nil || d.MappingID == uuid.Nil || d.ConnectionGeneration == uuid.Nil || d.MappingRevision <= 0 {
 			return ErrInvalidIdentity
 		}
 	}
 	i := e.Identity
-	if (e.Version != 1 && e.Version != ExecutionVersion) || e.Issuer == "" || e.EventID == "" || e.ThreadID == uuid.Nil || i.OrganizationID == "" || i.ProjectID == uuid.Nil || i.AssistantID == uuid.Nil || i.AgentID == uuid.Nil || i.TriggerID == uuid.Nil || i.IssuerID == uuid.Nil || i.Subject == "" || i.AssistantGeneration <= 0 || i.TriggerGeneration <= 0 {
+	if e.Version != ExecutionVersion || e.Issuer == "" || e.EventID == "" || e.ThreadID == uuid.Nil || i.OrganizationID == "" || i.ProjectID == uuid.Nil || i.AssistantID == uuid.Nil || i.AgentID == uuid.Nil || i.TriggerID == uuid.Nil || i.IssuerID == uuid.Nil || i.Subject == "" || i.AssistantGeneration <= 0 || i.TriggerGeneration <= 0 {
 		return ErrInvalidIdentity
 	}
 	switch e.Mode {
@@ -85,9 +85,6 @@ func (e Execution) Check() error {
 // ValidateExecution intentionally bypasses the legacy token revocation cache.
 // Passing this check establishes identity only, not model/tool authorization.
 func (s *Service) ValidateExecution(ctx context.Context, db DB, e Execution) error {
-	if err := s.CheckRollout(e); err != nil {
-		return err
-	}
 	if err := e.Check(); err != nil {
 		return err
 	}
@@ -104,16 +101,6 @@ func (s *Service) ValidateExecution(ctx context.Context, db DB, e Execution) err
 }
 
 func (s *Service) Issuer() string { return s.issuer }
-
-// AdmitExecution cannot authorize from an envelope alone. Runtime callers use
-// Service.AdmitModel, which checks live workload and delegator eligibility. This
-// identity-only helper remains fail-closed for callers holding only a snapshot.
-func AdmitExecution(e Execution) error {
-	if err := e.Check(); err != nil {
-		return err
-	}
-	return ErrExecutionAdmissionRequired
-}
 
 // InvocationEventID identifies this delivery while EventID retains its origin.
 func (e Execution) InvocationEventID() string {

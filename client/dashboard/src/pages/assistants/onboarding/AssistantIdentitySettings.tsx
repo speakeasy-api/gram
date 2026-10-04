@@ -1,6 +1,8 @@
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Text } from "@/components/ui/Text";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
 import type { Assistant } from "@gram/client/models/components/assistant.js";
@@ -25,7 +27,8 @@ export function AssistantIdentitySettings({
 }: {
   assistant: Assistant;
   onUpdated?: () => void;
-}): JSX.Element {
+}): JSX.Element | null {
+  const identityFlag = useFeatureFlag(FEATURE_FLAGS.agentCredentials);
   const diagnostics = assistant.identityDiagnostics;
   const { hasScope } = useRBAC();
   const routes = useRoutes();
@@ -65,9 +68,12 @@ export function AssistantIdentitySettings({
     (missingRoots || diagnostics.bindingsTruncated);
   const canUpgrade =
     hasScope("project:write") &&
-    diagnostics?.provisioningEnabled &&
+    identityFlag.status === "enabled" &&
+    diagnostics !== undefined &&
     (legacy || repairable);
   const action = legacy ? "Upgrade identity" : "Repair missing bindings";
+
+  if (identityFlag.status !== "enabled") return null;
 
   return (
     <Section
@@ -108,25 +114,6 @@ export function AssistantIdentitySettings({
           <Row label="Binding generation">
             <Text small>
               {assistant.identityGeneration ?? "Not configured"}
-            </Text>
-          </Row>
-          <Row label="New identities">
-            <Text small>
-              {diagnostics.provisioningEnabled
-                ? "Enabled"
-                : "Disabled by rollout"}
-            </Text>
-          </Row>
-          <Row label="Workload execution">
-            <Text small>
-              {diagnostics.executionEnabled ? "Enabled" : "Disabled by rollout"}
-            </Text>
-          </Row>
-          <Row label="Slack delegation">
-            <Text small>
-              {diagnostics.slackDelegationEnabled
-                ? "Enabled"
-                : "Disabled by rollout"}
             </Text>
           </Row>
           <div className="mt-2 space-y-1">

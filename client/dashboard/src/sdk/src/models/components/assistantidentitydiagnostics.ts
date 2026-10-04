@@ -40,10 +40,6 @@ export type AssistantIdentityDiagnostics = {
    */
   bindingsTruncated: boolean;
   /**
-   * Whether workload token issuance and use are enabled on this serving tier.
-   */
-  executionEnabled: boolean;
-  /**
    * legacy, ready, suspended, or unavailable; ready only describes identity configuration.
    */
   health: Health;
@@ -67,14 +63,6 @@ export type AssistantIdentityDiagnostics = {
    * Selected human delegator, absent for autonomous work; never the acting agent.
    */
   lastInitiatingUserId?: string | undefined;
-  /**
-   * Whether new identities and explicit upgrades are enabled on this serving tier.
-   */
-  provisioningEnabled: boolean;
-  /**
-   * Whether mapped Slack delegation is enabled on this serving tier.
-   */
-  slackDelegationEnabled: boolean;
 };
 
 /** @internal */
@@ -90,27 +78,21 @@ export const AssistantIdentityDiagnostics$inboundSchema: z.ZodMiniType<
   z.object({
     bindings: z.array(AssistantIdentityBinding$inboundSchema),
     bindings_truncated: z.boolean(),
-    execution_enabled: z.boolean(),
     health: Health$inboundSchema,
     last_event_id: z.optional(z.string()),
     last_event_status: z.optional(z.string()),
     last_execution_mode: z.optional(z.string()),
     last_fallback_reason: z.optional(z.string()),
     last_initiating_user_id: z.optional(z.string()),
-    provisioning_enabled: z.boolean(),
-    slack_delegation_enabled: z.boolean(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "bindings_truncated": "bindingsTruncated",
-      "execution_enabled": "executionEnabled",
       "last_event_id": "lastEventId",
       "last_event_status": "lastEventStatus",
       "last_execution_mode": "lastExecutionMode",
       "last_fallback_reason": "lastFallbackReason",
       "last_initiating_user_id": "lastInitiatingUserId",
-      "provisioning_enabled": "provisioningEnabled",
-      "slack_delegation_enabled": "slackDelegationEnabled",
     });
   }),
 );

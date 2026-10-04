@@ -123,20 +123,12 @@ func (m *Manager) validateExecutionAuthority(ctx context.Context, e assistantide
 	return nil
 }
 
-// AuthorizeExecution validates independent target pins and performs positive
-// model admission without entering the legacy user authorization path.
+// AuthorizeExecution validates the credential's routing pins and live authority.
 func (m *Manager) AuthorizeExecution(ctx context.Context, raw string, target ExecutionTarget) error {
-	e, err := m.ValidateExecution(ctx, raw, target)
-	if err != nil {
-		return fmt.Errorf("assistant execution: %w", err)
-	}
-	if err := m.executionIdentities.AdmitModel(ctx, m.executionDB, *e); err != nil {
-		return fmt.Errorf("assistant execution admission: %w", err)
-	}
-	return nil
+	_, err := m.ValidateExecution(ctx, raw, target)
+	return err
 }
 
-// ValidateExecutionEnvelope is also used for signed OAuth continuation state.
 func (m *Manager) ValidateExecutionEnvelope(ctx context.Context, e assistantidentity.Execution, target ExecutionTarget) error {
 	if e.Identity.OrganizationID != target.OrganizationID || e.Identity.ProjectID != target.ProjectID || e.Identity.AssistantID != target.AssistantID || e.ThreadID != target.ThreadID || e.InvocationEventID() != target.EventID {
 		return assistantidentity.ErrInvalidIdentity

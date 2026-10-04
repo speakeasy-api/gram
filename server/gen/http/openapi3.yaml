@@ -85141,9 +85141,6 @@ components:
                 bindings_truncated:
                     type: boolean
                     description: More roots exist than are returned.
-                execution_enabled:
-                    type: boolean
-                    description: Whether workload token issuance and use are enabled on this serving tier.
                 health:
                     type: string
                     description: legacy, ready, suspended, or unavailable; ready only describes identity configuration.
@@ -85167,18 +85164,9 @@ components:
                 last_initiating_user_id:
                     type: string
                     description: Selected human delegator, absent for autonomous work; never the acting agent.
-                provisioning_enabled:
-                    type: boolean
-                    description: Whether new identities and explicit upgrades are enabled on this serving tier.
-                slack_delegation_enabled:
-                    type: boolean
-                    description: Whether mapped Slack delegation is enabled on this serving tier.
             description: Safe workload configuration diagnostics, not a permission or OAuth consent decision. Shared by the dashboard and Platform MCP.
             required:
                 - health
-                - provisioning_enabled
-                - execution_enabled
-                - slack_delegation_enabled
                 - bindings
                 - bindings_truncated
         AssistantMCPServerRef:

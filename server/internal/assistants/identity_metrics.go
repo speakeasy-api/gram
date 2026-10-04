@@ -12,8 +12,6 @@ func identityAdmissionResult(err error) string {
 	switch {
 	case err == nil:
 		return "issued"
-	case errors.Is(err, assistantidentity.ErrRolloutDisabled):
-		return "rollout_disabled"
 	case errors.Is(err, assistantidentity.ErrActorIneligible), errors.Is(err, assistantidentity.ErrInvalidIdentity), errors.Is(err, assistantidentity.ErrExecutionAdmissionRequired):
 		return "denied"
 	default:

@@ -25,6 +25,7 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -519,8 +520,6 @@ func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error,
 		return oops.E(oops.CodeNotFound, err, "%s", message).LogError(ctx, logger)
 	case errors.Is(err, assistantidentity.ErrActorIneligible):
 		return oops.E(oops.CodeForbidden, err, "%s", message).LogError(ctx, logger)
-	case errors.Is(err, assistantidentity.ErrProvisioningDisabled), errors.Is(err, assistantidentity.ErrRolloutDisabled):
-		return oops.E(oops.CodeUnavailable, err, "Assistant identity is temporarily disabled by rollout")
 	case errors.Is(err, assistantidentity.ErrTombstoned), errors.Is(err, assistantidentity.ErrBrokenMapping), errors.Is(err, assistantidentity.ErrInvalidIdentity):
 		return oops.E(oops.CodeConflict, err, "%s", message).LogError(ctx, logger)
 	case errors.Is(err, errAssistantValidation):
@@ -572,6 +571,13 @@ func (s *Service) UpgradeAssistantIdentity(ctx context.Context, payload *gen.Upg
 	}
 	if err := requireAssistantProvisioningActor(ctx); err != nil {
 		return nil, err
+	}
+	evaluation, err := feature.EvaluateFlag(ctx, s.core.featureFlags, feature.FlagAgentIdentityCredentials, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to evaluate agent identity credentials flag", attr.SlogError(err))
+	}
+	if evaluation != feature.EvaluationEnabled {
+		return nil, oops.C(oops.CodeNotFound)
 	}
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {

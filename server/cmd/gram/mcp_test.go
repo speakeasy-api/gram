@@ -16,7 +16,7 @@ func TestMCPServerFlags(t *testing.T) {
 	t.Parallel()
 
 	names := flagNames(mcpServerFlags())
-	for _, want := range []string{"address", "ssl-key-file", "ssl-cert-file", "temporal-address", "temporal-namespace", "temporal-task-queue", "database-url", "redis-cache-addr", "server-url", "assistant-provisioning-disabled", "assistant-execution-disabled", "assistant-slack-delegation-disabled"} {
+	for _, want := range []string{"address", "ssl-key-file", "ssl-cert-file", "temporal-address", "temporal-namespace", "temporal-task-queue", "database-url", "redis-cache-addr", "server-url"} {
 		require.Containsf(t, names, want, "mcp command must accept the %q flag", want)
 	}
 	require.NotContains(t, names, "loops-api-key", "mcp command must not require email delivery configuration")

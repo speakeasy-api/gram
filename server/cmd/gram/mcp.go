@@ -328,7 +328,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	slackClient := slack_client.NewSlackClient(guardianPolicy)
 	// Listing and reading triggers works without Temporal; scheduling one
 	// returns an error from the trigger tool instead of dispatching.
-	assistantIdentities, err := assistantidentity.New(c.String("authz-issuer-url"), c.String("environment") == "local", assistantidentity.Rollout{DisableProvisioning: c.Bool("assistant-provisioning-disabled"), DisableExecution: c.Bool("assistant-execution-disabled"), DisableSlackDelegation: c.Bool("assistant-slack-delegation-disabled")})
+	assistantIdentities, err := assistantidentity.New(c.String("authz-issuer-url"), c.String("environment") == "local")
 	if err != nil {
 		return fmt.Errorf("configure assistant identities: %w", err)
 	}

@@ -55,7 +55,7 @@ func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, proje
 			return zero, nil
 		}
 		resource = e.Resource
-		if err := e.Revalidate(); err != nil {
+		if err := e.Revalidate(ctx); err != nil {
 			return zero, fmt.Errorf("revalidate invocation authority: %w", err)
 		}
 		q := remotesessions_repo.New(m.db)
@@ -85,7 +85,7 @@ func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, proje
 		if current.ID != selected.ID || current.GrantGeneration != selected.GrantGeneration {
 			return zero, nil
 		}
-		if err := e.Revalidate(); err != nil {
+		if err := e.Revalidate(ctx); err != nil {
 			return zero, fmt.Errorf("revalidate invocation authority: %w", err)
 		}
 		if execution, ok := assistanttokens.BusinessExecution(ctx); ok {

@@ -20,8 +20,7 @@ func (s *ServiceCore) identityDiagnostics(ctx context.Context, a assistantRecord
 	if err != nil {
 		return nil, fmt.Errorf("read assistant identity health: %w", err)
 	}
-	gates := s.identities.Rollout()
-	result := &types.AssistantIdentityDiagnostics{Health: health, ProvisioningEnabled: !gates.DisableProvisioning, ExecutionEnabled: !gates.DisableExecution, SlackDelegationEnabled: !gates.DisableSlackDelegation, Bindings: []*types.AssistantIdentityBinding{}, BindingsTruncated: false, LastEventID: nil, LastExecutionMode: nil, LastFallbackReason: nil, LastEventStatus: nil, LastInitiatingUserID: nil}
+	result := &types.AssistantIdentityDiagnostics{Health: health, Bindings: []*types.AssistantIdentityBinding{}, BindingsTruncated: false, LastEventID: nil, LastExecutionMode: nil, LastFallbackReason: nil, LastEventStatus: nil, LastInitiatingUserID: nil}
 	roots, err := q.ListAssistantIdentityRoots(ctx, assistantrepo.ListAssistantIdentityRootsParams{OrganizationID: a.OrganizationID, ProjectID: a.ProjectID, AssistantID: a.ID.String(), PlatformIssuer: s.identities.Issuer(), PlatformJwksUri: s.identities.Issuer() + jwks.Path})
 	if err != nil {
 		return nil, fmt.Errorf("read assistant workload roots: %w", err)

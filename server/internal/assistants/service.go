@@ -1356,7 +1356,11 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, err
 	}
 
-	if !s.identities.Rollout().DisableProvisioning {
+	evaluation, err := feature.EvaluateFlag(ctx, s.featureFlags, feature.FlagAgentIdentityCredentials, organizationID, feature.OrgProjectGroups(assistantOrgSlug(ctx), ""))
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to evaluate agent identity credentials flag", attr.SlogError(err))
+	}
+	if evaluation == feature.EvaluationEnabled {
 		if _, err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID}); err != nil {
 			return assistantRecord{}, fmt.Errorf("assistant identity Provision: %w", err)
 		}
@@ -2110,7 +2114,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return EnqueueResult{}, fmt.Errorf("find concurrent assistant enqueue: %w", err)
 	}
-	normalizedPayloadJSON, err = s.captureExecution(ctx, assistant, sourceKind, threadID, triggerInstanceID, task.EventID, normalizedPayloadJSON)
+	normalizedPayloadJSON, err = s.captureExecution(ctx, assistant, sourceKind, threadID, triggerInstanceID, task.EventID, normalizedPayloadJSON, task.SlackExecution)
 	if err != nil {
 		return EnqueueResult{}, err
 	}

@@ -238,7 +238,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if err != nil {
 		return nil, err
 	}
-	assistantIdentities, err := assistantidentity.New(c.String("authz-issuer-url"), c.String("environment") == "local", assistantidentity.Rollout{DisableProvisioning: c.Bool("assistant-provisioning-disabled"), DisableExecution: c.Bool("assistant-execution-disabled"), DisableSlackDelegation: c.Bool("assistant-slack-delegation-disabled")})
+	assistantIdentities, err := assistantidentity.New(c.String("authz-issuer-url"), c.String("environment") == "local")
 	if err != nil {
 		return nil, fmt.Errorf("configure assistant platform trust: %w", err)
 	}

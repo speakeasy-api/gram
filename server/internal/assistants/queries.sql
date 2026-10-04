@@ -1670,7 +1670,7 @@ WHERE organization_id = @organization_id AND project_id = @project_id::uuid
 LIMIT 2;
 
 -- name: GetAssistantExecutionReplyOrigin :one
-SELECT e.normalized_payload_json, e.trigger_instance_id, e.correlation_id
+SELECT e.normalized_payload_json, e.trigger_instance_id
 FROM assistant_thread_events e
 JOIN assistant_threads t ON t.id = e.assistant_thread_id AND t.project_id = e.project_id AND t.assistant_id = e.assistant_id
 JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
