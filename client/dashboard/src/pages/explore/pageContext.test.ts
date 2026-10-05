@@ -1,8 +1,10 @@
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import { describe, expect, it } from "vitest";
 import {
+  MAX_FILTER_VALUES,
   queryBodyFromSpec,
   specForDataset,
+  specProblem,
   type ExploreSpec,
 } from "./exploreModel";
 import { applyPageContext } from "./pageContext";
@@ -146,6 +148,20 @@ describe("applyPageContext", () => {
     expect(paged.filters).toEqual([]);
     expect(skipped).toEqual(["client", "model", "duration_ms"]);
     expect(changed).toBe(false);
+  });
+
+  it("caps a page filter's values as the builder caps its own", () => {
+    const many = Array.from(
+      { length: MAX_FILTER_VALUES + 5 },
+      (_, i) => `u${i}`,
+    );
+    const { spec: paged } = applyPageContext(spec(), toolCalls, {
+      filters: { user: many },
+    });
+    expect(paged.filters.at(-1)?.values).toEqual(
+      many.slice(0, MAX_FILTER_VALUES),
+    );
+    expect(specProblem([toolCalls], paged)).toBe("");
   });
 
   it("ignores a page filter with nothing picked", () => {

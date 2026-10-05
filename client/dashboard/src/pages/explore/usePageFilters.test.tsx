@@ -139,6 +139,7 @@ describe("usePageFilters", () => {
   });
 
   it("offers each field the values its first dataset reports", async () => {
+    testState.asked.length = 0;
     const { result } = renderHook(() => usePageFilters(CONFIG), {
       wrapper: wrapper("/page"),
     });

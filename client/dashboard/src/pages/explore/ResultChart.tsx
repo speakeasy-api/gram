@@ -83,10 +83,12 @@ export function ResultChart({
     },
   });
   // The narrowed answer arrives as new buckets; the drag box goes with the
-  // old ones.
+  // old ones. The array is rebuilt on every render, so the reset is keyed on
+  // the buckets themselves, or any re-render would drop the drag box.
+  const bucketKey = buckets.join(",");
   useEffect(() => {
     resetZoom();
-  }, [buckets, resetZoom]);
+  }, [bucketKey, resetZoom]);
 
   const datasets = useMemo<TimeseriesDataset[]>(
     () =>

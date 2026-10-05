@@ -2,6 +2,7 @@ import type { DateRangeValue } from "@/components/filters/filter-schema";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import {
   fieldByName,
+  MAX_FILTER_VALUES,
   operatorsForField,
   type ExploreSpec,
   type FilterDraft,
@@ -82,7 +83,13 @@ export function applyPageContext(
       skipped.push(field);
       continue;
     }
-    added.push({ field, operator: "in", values: [...values] });
+    // Capped as the builder caps its own, so a long pick narrows the query
+    // rather than breaking every widget on the page.
+    added.push({
+      field,
+      operator: "in",
+      values: values.slice(0, MAX_FILTER_VALUES),
+    });
   }
   if (added.length > 0) {
     next = { ...next, filters: [...next.filters, ...added] };
