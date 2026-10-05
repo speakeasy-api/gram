@@ -151,9 +151,12 @@ it.each(["disabled", "loading", "missing", "error"])(
     mocks.flag = status;
     setup();
     await waitFor(() =>
-      expect(screen.getByTestId("rows").textContent).toContain(
-        "unknown_subject",
-      ),
+      expect(
+        screen
+          .getAllByTestId("rows")
+          .map((node) => node.textContent)
+          .join(" "),
+      ).toContain("unknown_subject"),
     );
     expect(mocks.agents).not.toHaveBeenCalled();
     expect(screen.queryByText("Registered agent")).toBeNull();
@@ -178,13 +181,19 @@ it.each(["unknown", "unknown,agent"])(
   async (kind) => {
     setup(`?kind=${kind}`);
     await waitFor(() =>
-      expect(screen.getByTestId("rows").textContent).toContain(
-        "unknown_subject",
-      ),
+      expect(
+        screen
+          .getAllByTestId("rows")
+          .map((node) => node.textContent)
+          .join(" "),
+      ).toContain("unknown_subject"),
     );
-    expect(screen.getByTestId("rows").textContent).not.toContain(
-      "human@example.com",
-    );
+    expect(
+      screen
+        .getAllByTestId("rows")
+        .map((node) => node.textContent)
+        .join(" "),
+    ).not.toContain("human@example.com");
     expect(screen.getByTestId("filters").textContent).toContain("kind");
     expect(
       screen
@@ -193,9 +202,12 @@ it.each(["unknown", "unknown,agent"])(
     ).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: "All" }));
     await waitFor(() =>
-      expect(screen.getByTestId("rows").textContent).toContain(
-        "human@example.com",
-      ),
+      expect(
+        screen
+          .getAllByTestId("rows")
+          .map((node) => node.textContent)
+          .join(" "),
+      ).toContain("human@example.com"),
     );
   },
 );

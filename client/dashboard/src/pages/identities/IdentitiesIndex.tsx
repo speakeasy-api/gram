@@ -11,13 +11,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/Popover";
-import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Info } from "lucide-react";
-import {
-  StatTile,
-  StatTileGroup,
-  StatTileSkeleton,
-} from "@/components/chart/stat-tile";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { defineFilters, useFilterState } from "@/components/filters";
 import {
   useOrganization,
@@ -37,6 +32,7 @@ import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Badge } from "@/components/ui/Badge";
 import { Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
+import { dateTimeFormatters } from "@/lib/dates";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Text } from "@/components/ui/Text";
 import { IdentityLink } from "@/components/identity-link";
@@ -48,7 +44,7 @@ import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { useQuery } from "@tanstack/react-query";
 import { Bot, Plus, User } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Link,
   Navigate,
@@ -58,7 +54,6 @@ import {
   useParams,
 } from "react-router";
 import {
-  identityHasAccount,
   identityKindOf,
   identityUrnForEmployee,
   IDENTITY_KIND_LABELS,
@@ -397,7 +392,6 @@ function IdentitiesIndexContent(): JSX.Element {
       direction: "desc",
     },
   );
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const { values, setValue, clearValue, clearAll } =
     useFilterState(IDENTITY_FILTERS);
 
@@ -445,10 +439,6 @@ function IdentitiesIndexContent(): JSX.Element {
     rolesQuery.isError ||
     usageQuery.isError ||
     (agentsEnabled && agentsQuery.isError);
-  const rosterUnavailable = rosterFailed ? "—" : undefined;
-  const rosterTooltip = rosterFailed
-    ? "The identity roster could not be loaded."
-    : undefined;
   const retryRoster = () => {
     if (membersQuery.isError) void membersQuery.refetch();
     if (rolesQuery.isError) void rolesQuery.refetch();
@@ -475,19 +465,6 @@ function IdentitiesIndexContent(): JSX.Element {
       agentsQuery.data,
     ],
   );
-
-  const counts = useMemo(() => {
-    const tally = { enrolled: 0, noAccount: 0, agent: 0 };
-    for (const identity of identities) {
-      if (identity.status === "enrolled") tally.enrolled += 1;
-      const kind = identityKindOf(identity);
-      if (kind === "person" && !identityHasAccount(identity)) {
-        tally.noAccount += 1;
-      }
-      if (kind === "agent") tally.agent += 1;
-    }
-    return tally;
-  }, [identities]);
 
   const kindKey = (values.kind ?? []).join(",");
   const hasLegacyKindFilter =
@@ -662,8 +639,123 @@ function IdentitiesIndexContent(): JSX.Element {
   // Any change to what is being listed starts the list over: keeping a deep
   // scroll position across a new filter shows the reader page four of
   // something they have not seen page one of.
+  const agentsById = useMemo(
+    () => new Map((agentsQuery.data ?? []).map((agent) => [agent.id, agent])),
+    [agentsQuery.data],
+  );
+  // An agent has no roles, no linked accounts and no inbox: those columns were
+  // an em dash on every row. What it does have is a lifecycle, an owner and a
+  // date it was registered, which is what someone scanning this table wants.
+  const agentColumns = useMemo<Column<Employee>[]>(
+    () => [
+      {
+        key: "identity",
+        header: "Agent",
+        width: "1.6fr",
+        sortable: true,
+        sortValue: (identity) => identity.name.toLowerCase(),
+        render: (identity) => <IdentityCell identity={identity} />,
+      },
+      {
+        key: "status",
+        header: "Status",
+        width: "140px",
+        render: (identity) => {
+          const agent = agentsById.get(identity.registeredAgentId ?? "");
+          if (!agent) return null;
+          return (
+            <Badge
+              size="sm"
+              variant={
+                agent.lifecycle === "active"
+                  ? "success"
+                  : agent.lifecycle === "revoked"
+                    ? "destructive"
+                    : "warning"
+              }
+            >
+              {agent.lifecycle}
+            </Badge>
+          );
+        },
+      },
+      {
+        key: "owner",
+        header: "Owner",
+        width: "1fr",
+        render: (identity) => (
+          <Text muted small className="truncate">
+            {agentsById.get(identity.registeredAgentId ?? "")?.ownerProfile
+              ?.displayName ?? "—"}
+          </Text>
+        ),
+      },
+      {
+        key: "created",
+        header: "Registered",
+        width: "160px",
+        render: (identity) => {
+          const created = agentsById.get(
+            identity.registeredAgentId ?? "",
+          )?.createdAt;
+          return created ? (
+            <time
+              className="tabular-nums"
+              dateTime={created.toISOString()}
+              title={dateTimeFormatters.full.format(created)}
+            >
+              {dateTimeFormatters.day.format(created)}
+            </time>
+          ) : (
+            "—"
+          );
+        },
+      },
+    ],
+    [agentsById],
+  );
+  // One sorted list, split by what the row is. The filters above still narrow
+  // both; the Kind column is dropped inside each table because the heading
+  // already says it.
+  const peopleRows = useMemo(
+    () => sortedRows.filter((row) => identityKindOf(row) !== "agent"),
+    [sortedRows],
+  );
+  const agentRows = useMemo(
+    () => sortedRows.filter((row) => identityKindOf(row) === "agent"),
+    [sortedRows],
+  );
+  const [peopleVisible, setPeopleVisible] = useState(PAGE_SIZE);
+  const [agentsVisible, setAgentsVisible] = useState(PAGE_SIZE);
+  const openIdentity = (row: Employee) =>
+    void navigate(
+      routes.identities.detail.overview.href(
+        encodeIdentityUrn(identityUrnForEmployee(row)),
+      ),
+    );
+  const rosterMessage = (empty: string) =>
+    rosterLoading ? (
+      "Loading identities…"
+    ) : rosterFailed ? (
+      <span>
+        The identity roster could not be loaded.{" "}
+        <button
+          type="button"
+          onClick={retryRoster}
+          className="underline underline-offset-2"
+        >
+          Try again
+        </button>
+      </span>
+    ) : (
+      empty
+    );
+
+  // A changed filter restarts both lists: paging is per table, the filters
+  // are not.
   useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
+    setPeopleVisible(PAGE_SIZE);
+    setAgentsVisible(PAGE_SIZE);
   }, [
     search,
     kindKey,
@@ -682,77 +774,23 @@ function IdentitiesIndexContent(): JSX.Element {
     <Page.Section>
       <Page.Section.Title>Identities</Page.Section.Title>
       <Page.Section.Description>
-        {rosterLoading || rosterFailed
-          ? "Every person and agent the platform knows about, account here or not."
-          : `${rows.length} of ${identities.length} — every person and agent the platform knows about, account here or not.`}
+        {/* What the page is for, not what it currently holds: each table
+            states its own count. */}
+        Who can act through Gram — the people from your identity provider and
+        the agents you register — with what each of them reached.
       </Page.Section.Description>
-      <Page.Section.CTA>
-        {agentsEnabled && (
-          <Button asChild variant="primary">
-            <Link to={`${routes.agents.href()}?create=true`}>
-              <Plus className="size-4" aria-hidden="true" />
-              New agent identity
-            </Link>
-          </Button>
-        )}
-      </Page.Section.CTA>
+      {/* No page-level action: registering an agent belongs to the agents
+          table, which is the only half of this page it applies to. */}
       <Page.Section.Body>
         {/* The section stacks its body children at 8px, which reads as one
             block: the tiles, the controls and the table are three things. */}
-        <div className="flex flex-col gap-4">
-          <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
-            {rosterLoading ? (
-              <>
-                <StatTileSkeleton />
-                <StatTileSkeleton />
-                <StatTileSkeleton />
-                <StatTileSkeleton />
-              </>
-            ) : (
-              <>
-                <StatTile
-                  title="Identities"
-                  value={identities.length}
-                  displayValue={rosterUnavailable}
-                  tooltip={rosterTooltip}
-                  format="compact"
-                  tone="neutral"
-                  icon="users"
-                />
-                <StatTile
-                  title="Enrolled"
-                  value={counts.enrolled}
-                  displayValue={rosterUnavailable}
-                  tooltip={rosterTooltip}
-                  format="compact"
-                  tone="success"
-                  icon="circle-check"
-                />
-                <StatTile
-                  title="No linked account"
-                  value={counts.noAccount}
-                  displayValue={rosterUnavailable}
-                  tooltip={rosterTooltip}
-                  format="compact"
-                  tone={
-                    counts.noAccount > 0 && !rosterFailed
-                      ? "warning"
-                      : "neutral"
-                  }
-                  icon="circle-help"
-                />
-                <StatTile
-                  title="Agents"
-                  value={counts.agent}
-                  displayValue={rosterUnavailable}
-                  tooltip={rosterTooltip}
-                  format="compact"
-                  tone="information"
-                  icon="bot"
-                />
-              </>
-            )}
-          </StatTileGroup>
+        {/* Both tables on screen at once: the page does not scroll past one
+            to reach the other, so each pane takes half the room left under the
+            controls and scrolls its own rows. */}
+        <div className="flex min-h-0 flex-col gap-6">
+          {/* No stat tiles: each table states its own count, and the four
+              numbers above them repeated it without saying anything the rows
+              do not. */}
           <Page.Toolbar>
             <Page.Toolbar.Leading>
               <SegmentedControl
@@ -792,56 +830,123 @@ function IdentitiesIndexContent(): JSX.Element {
               />
             </Page.Toolbar.Actions>
           </Page.Toolbar>
-          {/* Where each kind of row comes from. One screen for people and
-              agents hid the thing that separates them: a person arrives from
-              the identity provider and cannot be created here, while an agent
-              is registered here and issued its key here. */}
-          <Text muted small>
-            {kindKey === "person"
-              ? "People arrive from your identity provider. Gram does not create them."
-              : kindKey === "agent"
-                ? "Agents are registered here, and are issued their keys here."
-                : "People arrive from your identity provider; agents are registered here."}
-          </Text>
-          <Table
-            columns={IDENTITY_COLUMNS}
-            data={sortedRows.slice(0, visibleCount)}
-            sort={sort}
-            onSortChange={setSort}
-            hasMore={visibleCount < sortedRows.length}
-            onLoadMore={async () => {
-              setVisibleCount((count) => count + PAGE_SIZE);
-            }}
-            rowKey={(row) => row.id}
-            onRowClick={(row) =>
-              void navigate(
-                routes.identities.detail.overview.href(
-                  encodeIdentityUrn(identityUrnForEmployee(row)),
-                ),
-              )
-            }
-            noResultsMessage={
-              rosterLoading ? (
-                "Loading identities…"
-              ) : rosterFailed ? (
-                <span>
-                  The identity roster could not be loaded.{" "}
-                  <button
-                    type="button"
-                    onClick={retryRoster}
-                    className="underline underline-offset-2"
-                  >
-                    Try again
-                  </button>
-                </span>
-              ) : (
-                "No identities match these filters"
-              )
-            }
-          />
+          {/* Two tables, because the two kinds are not the same kind of
+              thing: a person arrives from the identity provider and cannot be
+              created here, while an agent is registered here and issued its
+              key here. One table hid that, whatever the Kind column said. */}
+          {kindKey !== "agent" && (
+            <IdentityGroup
+              heading="People"
+              count={peopleRows.length}
+              note="From your identity provider. Gram does not create them."
+              columns={IDENTITY_COLUMNS.filter(
+                (column) => column.key !== "kind",
+              )}
+              rows={peopleRows}
+              visible={peopleVisible}
+              onLoadMore={() => setPeopleVisible((count) => count + PAGE_SIZE)}
+              sort={sort}
+              onSortChange={setSort}
+              onRowClick={openIdentity}
+              emptyMessage={rosterMessage("No people match these filters")}
+            />
+          )}
+          {kindKey !== "person" && (
+            <IdentityGroup
+              heading="Agents"
+              count={agentRows.length}
+              note="Registered here, and issued their keys here."
+              action={
+                agentsEnabled ? (
+                  <Button asChild variant="secondary" size="sm">
+                    <Link to={`${routes.agents.href()}?create=true`}>
+                      <Plus className="size-4" aria-hidden="true" />
+                      New agent identity
+                    </Link>
+                  </Button>
+                ) : undefined
+              }
+              columns={agentColumns}
+              rows={agentRows}
+              visible={agentsVisible}
+              onLoadMore={() => setAgentsVisible((count) => count + PAGE_SIZE)}
+              sort={sort}
+              onSortChange={setSort}
+              onRowClick={openIdentity}
+              emptyMessage={rosterMessage("No agents match these filters")}
+            />
+          )}
         </div>
       </Page.Section.Body>
     </Page.Section>
+  );
+}
+
+/**
+ * One kind of identity: its own heading, its own sentence about where the rows
+ * come from, and its own columns. A person and an agent share almost nothing
+ * but a name, so they share no table.
+ */
+function IdentityGroup({
+  heading,
+  count,
+  note,
+  action,
+  columns,
+  rows,
+  visible,
+  onLoadMore,
+  sort,
+  onSortChange,
+  onRowClick,
+  emptyMessage,
+}: {
+  heading: string;
+  count: number;
+  note: string;
+  action?: ReactNode;
+  columns: Column<Employee>[];
+  rows: Employee[];
+  visible: number;
+  onLoadMore: () => void;
+  sort: SortDescriptor | null;
+  onSortChange: (next: SortDescriptor | null) => void;
+  onRowClick: (row: Employee) => void;
+  emptyMessage: ReactNode;
+}): JSX.Element {
+  return (
+    <section className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex items-end justify-between gap-6">
+        <div className="space-y-1">
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-base font-medium">{heading}</h2>
+            <span className="text-muted-foreground font-mono text-xs">
+              {count}
+            </span>
+          </div>
+          <Text muted small>
+            {note}
+          </Text>
+        </div>
+        {action}
+      </div>
+      {/* The rows scroll inside the pane. More of them load as that scroll
+          reaches the end, which is the pagination this list has: neither the
+          directory nor the agent inventory takes a cursor yet. */}
+      <div className="border-border max-h-[38vh] min-h-0 flex-1 overflow-y-auto border-b">
+        <Table
+          columns={columns}
+          data={rows.slice(0, visible)}
+          sort={sort}
+          onSortChange={onSortChange}
+          hasMore={visible < rows.length}
+          onLoadMore={async () => onLoadMore()}
+          rowKey={(row) => row.id}
+          onRowClick={onRowClick}
+          noResultsMessage={emptyMessage}
+        />
+      </div>
+    </section>
   );
 }
 
