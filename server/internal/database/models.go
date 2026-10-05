@@ -1203,6 +1203,16 @@ type GlobalRole struct {
 	Deleted           bool
 }
 
+type HooksRolloutPin struct {
+	ID             uuid.UUID
+	Seq            int64
+	OrganizationID pgtype.Text
+	Version        pgtype.Int4
+	SetBy          string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type HooksServerNameOverride struct {
 	ID            uuid.UUID
 	ProjectID     uuid.UUID
