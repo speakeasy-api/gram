@@ -108,6 +108,14 @@ describe("encodeSpec and decodeSpec", () => {
       encodeSpec({ ...spec, range: { from: 2_000, to: 1_000 } }),
     ],
     [
+      "a range ending outside the supported Date range",
+      encodeSpec({ ...spec, range: { from: 0, to: Number.MAX_SAFE_INTEGER } }),
+    ],
+    [
+      "a range starting outside the supported Date range",
+      encodeSpec({ ...spec, range: { from: Number.MIN_SAFE_INTEGER, to: 0 } }),
+    ],
+    [
       "a range that is not two numbers",
       JSON.stringify({
         ...JSON.parse(encodeSpec(spec)),
