@@ -9,9 +9,9 @@ import { Table, type Column } from "@/components/ui/Table";
 import { useSdkClient } from "@/contexts/Sdk";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Label } from "@/components/ui/Label";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
-import { Label } from "@/components/ui/Label";
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
 import {
   useIsPlatformAdmin,
@@ -31,20 +31,14 @@ import { useAgentsDeleteMutation } from "@gram/client/react-query/agentsDelete.j
 import { useAgentsResumeMutation } from "@gram/client/react-query/agentsResume.js";
 import { useAgentsRevokeMutation } from "@gram/client/react-query/agentsRevoke.js";
 import { useAgentsSuspendMutation } from "@gram/client/react-query/agentsSuspend.js";
-import { useCreateAgentMutation } from "@gram/client/react-query/createAgent.js";
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
 import { hashKey, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { ArrowLeft } from "lucide-react";
+import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AgentAPIKeys } from "./AgentAPIKeys";
-import {
-  agentPolicyGrantsFromDraft,
-  invalidateAgentPolicy,
-  type AgentPolicyDraft,
-} from "./agent-policy-grants";
-import { AgentPolicyEditor } from "./AgentPolicyEditor";
+import { ProvisionWizard } from "./provision/ProvisionWizard";
 import { AgentPolicySection } from "./AgentPolicySection";
 import { ManagedAgentSessions } from "./ManagedAgentSessions";
 
@@ -102,19 +96,13 @@ function AgentManagementPage(): JSX.Element {
     );
   }
 
-  if (!agentID && searchParams.get("create") === "true") {
+  if (!agentID && searchParams.get("create") === "true" && !isDemo) {
     return (
-      <CreateAgent
-        // Switching any of these would otherwise submit a name and permissions
-        // chosen in a different context.
-        key={`${organization.id}:${session.user.id}:${isDemo}`}
-        disabled={isDemo}
-        onCreated={(id) => {
-          setSearchParams({ id });
-        }}
-        onCancel={() => {
-          setSearchParams({});
-        }}
+      <NewAgentPage
+        // Switching any of these would otherwise carry a name, a server
+        // selection and a credential chosen in a different context.
+        key={`${organization.id}:${session.user.id}`}
+        onDone={(id) => setSearchParams(id ? { id } : {})}
       />
     );
   }
@@ -148,6 +136,32 @@ function AgentManagementPage(): JSX.Element {
   );
 }
 
+/**
+ * The page that creates an agent identity and provisions it in one pass. The
+ * identity only matters once some runtime elsewhere is holding its key, so the
+ * flow does not stop at "created".
+ */
+function NewAgentPage({ onDone }: { onDone: (id?: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <FormPage
+      title="New agent identity"
+      description="Name it, choose the servers it can reach, then connect it to its runtime."
+      width="wide"
+      primaryAction={
+        <Button variant="secondary" disabled={busy} onClick={() => onDone()}>
+          <Button.LeftIcon>
+            <ArrowLeft className="size-4" />
+          </Button.LeftIcon>
+          <Button.Text>All agents</Button.Text>
+        </Button>
+      }
+    >
+      <ProvisionWizard onDone={onDone} onBusy={setBusy} />
+    </FormPage>
+  );
+}
+
 function AgentList({
   onSelect,
   onCreate,
@@ -164,11 +178,40 @@ function AgentList({
   const columns: Column<ManagedAgent>[] = [
     {
       key: "name",
-      header: "Name",
+      header: "Identity",
+      // Name over principal: the name is what a person recognizes, the
+      // principal is what they will have to match against an audit entry.
       render: (agent) => (
-        <Button variant="tertiary" onClick={() => onSelect(agent.id)}>
-          {agent.name}
-        </Button>
+        <button
+          type="button"
+          // The row reads as initials, name and principal; the control it sits
+          // in is named for the agent alone.
+          aria-label={agent.name}
+          className="flex min-w-0 items-center gap-3 text-left"
+          onClick={() => onSelect(agent.id)}
+        >
+          <Avatar>
+            <AvatarFallback>
+              {agent.name.slice(0, 1).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <span className="min-w-0">
+            <span className="block truncate">{agent.name}</span>
+            <span className="text-muted-foreground block truncate font-mono text-xs">
+              agent:{agent.id}
+            </span>
+          </span>
+        </button>
+      ),
+    },
+    {
+      key: "kind",
+      header: "Kind",
+      width: "120px",
+      render: () => (
+        <Badge variant="neutral" size="sm">
+          Agent
+        </Badge>
       ),
     },
     {
@@ -179,13 +222,14 @@ function AgentList({
     {
       key: "lifecycle",
       header: "Status",
+      width: "140px",
       render: (agent) => <LifecycleBadge lifecycle={agent.lifecycle} />,
     },
   ];
   return (
     <ResourceListPage
       title="Agents"
-      description="Agents visible to you."
+      description={`${rows.length} of ${(agents.data ?? []).length} — every agent identity this organization knows about, provisioned here or not.`}
       primaryAction={<Button onClick={onCreate}>New agent identity</Button>}
       search={{
         value: search,
@@ -197,7 +241,8 @@ function AgentList({
       empty={{
         icon: "bot",
         heading: "No agents yet",
-        description: "Create an agent to give it a dedicated identity.",
+        description:
+          "An agent identity is a key its runtime holds, with its own permissions and its own line in the audit log.",
       }}
       onRefresh={() => void agents.refetch()}
       isRefreshing={agents.isFetching}
@@ -233,144 +278,6 @@ function AgentOwner({ agent }: { agent: ManagedAgent }) {
       </Avatar>
       <span>{name}</span>
     </span>
-  );
-}
-
-function CreateAgent({
-  disabled,
-  onCreated,
-  onCancel,
-}: {
-  disabled: boolean;
-  onCreated: (id: string) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [draft, setDraft] = useState<AgentPolicyDraft>({});
-  const [error, setError] = useState<string | null>(null);
-  const organization = useOrganization();
-  const { user } = useSession();
-  const queryClient = useQueryClient();
-  const create = useCreateAgentMutation({
-    onSuccess: (agent) => {
-      void invalidateAgentPolicy(
-        queryClient,
-        organization.id,
-        user.id,
-        agent.id,
-      );
-      toast.success("Agent created");
-      onCreated(agent.id);
-    },
-    // The create is one transaction, so a failure leaves no agent behind and
-    // the draft is still exactly what to retry.
-    onError: (error) =>
-      setError(
-        error.message ||
-          "Unable to create agent. Your name and permissions have been kept.",
-      ),
-  });
-
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmedName = name.trim();
-    if (!trimmedName) return;
-    const policyGrants = agentPolicyGrantsFromDraft(draft);
-    setError(null);
-    create.mutate({
-      request: {
-        createAgentForm: {
-          name: trimmedName,
-          ...(policyGrants.length > 0 ? { policyGrants } : {}),
-        },
-      },
-    });
-  }
-
-  return (
-    <FormPage
-      title="New agent"
-      description="Give a workload its own identity, then issue it a key to connect."
-      width="wide"
-      primaryAction={
-        <Button variant="secondary" onClick={onCancel}>
-          <Button.LeftIcon>
-            <ArrowLeft className="size-4" />
-          </Button.LeftIcon>
-          <Button.Text>All agents</Button.Text>
-        </Button>
-      }
-    >
-      <form onSubmit={onSubmit} className="border bg-card p-6">
-        {disabled && (
-          <Text muted small className="mb-6 block">
-            Agent management is unavailable in the shared demo because it
-            requires active organization membership.
-          </Text>
-        )}
-        <div className="space-y-2">
-          <Label htmlFor="agent-name">Name</Label>
-          <Input
-            id="agent-name"
-            value={name}
-            onChange={setName}
-            placeholder="Release assistant"
-            maxLength={120}
-            disabled={disabled}
-            autoFocus
-          />
-          <Text muted small>
-            You will own this agent. Ownership is your own setup access; it
-            grants nothing to anyone else.
-          </Text>
-        </div>
-        <div className="mt-8 space-y-2">
-          <Label>Permissions</Label>
-          <Text muted small>
-            The ceiling for this agent: the most any of its keys may carry. Each
-            key is narrowed again at issuance, and you can change this later.
-          </Text>
-          <div className="pt-2">
-            <AgentPolicyEditor
-              draft={draft}
-              onChange={setDraft}
-              disabled={disabled || create.isPending}
-            />
-          </div>
-        </div>
-        {error && (
-          <p
-            role="alert"
-            className="border-destructive text-destructive mt-6 border p-3 text-sm"
-          >
-            {error}
-          </p>
-        )}
-        <div className="mt-8 flex items-center justify-end gap-3 border-t pt-5">
-          <Text muted small className="mr-auto">
-            Next: issue an API key to connect it.
-          </Text>
-          <Button
-            variant="tertiary"
-            onClick={onCancel}
-            disabled={create.isPending}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            disabled={disabled || !name.trim() || create.isPending}
-          >
-            <Button.LeftIcon>
-              <Plus className="size-4" />
-            </Button.LeftIcon>
-            <Button.Text>
-              {create.isPending ? "Creating\u2026" : "Create agent"}
-            </Button.Text>
-          </Button>
-        </div>
-      </form>
-    </FormPage>
   );
 }
 
