@@ -14,7 +14,8 @@ type RiskResult struct {
 	PolicyID string
 	// Policy version when this result was produced.
 	PolicyVersion int64
-	// Identity of the concrete mediated execution.
+	// The MCP tool call that raised this finding. Filter listResults by it to see
+	// every finding on that call.
 	ExecutionID *string
 	// Concrete MCP server that executed the operation.
 	McpServerID *string
@@ -24,7 +25,8 @@ type RiskResult struct {
 	ToolsetID *string
 	// Name of the concrete tool, when applicable.
 	ToolName *string
-	// Execution phase inspected by risk.
+	// Which side of the MCP tool call was scanned: request (the arguments) or
+	// response (the result).
 	Phase *string
 	// Concrete mediation surface where the execution was observed.
 	MediationSurface *string

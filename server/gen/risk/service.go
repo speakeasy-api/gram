@@ -894,11 +894,13 @@ type ListRiskResultsPayload struct {
 	ChatID *string
 	// Optional concrete MCP server ID to match exactly.
 	McpServerID *string
-	// Optional risk result ID; returns at most that one finding. Used to resolve a
-	// deep link to a finding that is not on a loaded page.
+	// Optional risk result ID; returns that one finding even when it is not on a
+	// loaded page, such as from a shared link. A finding marked as a false
+	// positive is not returned.
 	ResultID *string
-	// Optional mediated execution ID; returns every finding raised on that one MCP
-	// call.
+	// Optional MCP tool call ID, the execution_id a result carries; returns every
+	// finding raised on that one call across its request and response phases.
+	// Findings marked as false positives are not returned.
 	ExecutionID *string
 	// Optional rule category key to filter by (e.g. secrets, pii, financial).
 	Category *string

@@ -86,7 +86,7 @@ export type RiskResult = {
    */
   exclusionId?: string | undefined;
   /**
-   * Identity of the concrete mediated execution.
+   * The MCP tool call that raised this finding. Filter listResults by it to see every finding on that call.
    */
   executionId?: string | undefined;
   /**
@@ -126,7 +126,7 @@ export type RiskResult = {
    */
   metaMcpServerId?: string | undefined;
   /**
-   * Execution phase inspected by risk.
+   * Which side of the MCP tool call was scanned: request (the arguments) or response (the result).
    */
   phase?: string | undefined;
   /**
