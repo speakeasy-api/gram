@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -101,6 +102,52 @@ func TestDirectRemoteOAuthDiscoveryUsesOIDCCompatibleCandidate(t *testing.T) {
 	result, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), clientWithDirectRemoteBudget(t, client, directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8}), "https://remote.example.test/mcp")
 	require.NoError(t, err)
 	require.Equal(t, "available_dcr", result)
+}
+
+// A provider with no registration_endpoint that advertises Client ID Metadata
+// Document support for public clients is set up automatically, not by hand.
+func TestDirectRemoteOAuthDiscoveryReportsCIMDWithoutDCR(t *testing.T) {
+	t.Parallel()
+
+	client := directRemoteTestClient(t, func(request *http.Request) *http.Response {
+		switch request.URL.String() {
+		case "https://remote.example.test/.well-known/oauth-protected-resource/mcp":
+			return directRemoteTestResponse(request, http.StatusOK, `{"authorization_servers":["https://auth.example.test"]}`)
+		case "https://auth.example.test/.well-known/oauth-authorization-server":
+			return directRemoteTestResponse(request, http.StatusOK, `{"issuer":"https://auth.example.test","authorization_endpoint":"https://auth.example.test/authorize","token_endpoint":"https://auth.example.test/token","client_id_metadata_document_supported":true,"token_endpoint_auth_methods_supported":["none"],"code_challenge_methods_supported":["S256"]}`)
+		default:
+			return directRemoteTestResponse(request, http.StatusNotFound, `{}`)
+		}
+	})
+
+	result, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), clientWithDirectRemoteBudget(t, client, directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8}), "https://remote.example.test/mcp")
+	require.NoError(t, err)
+	require.Equal(t, "available_cimd", result)
+}
+
+func TestDirectRemoteAutomaticRegistration(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		metadata string
+		want     string
+	}{
+		{name: "dynamic registration", metadata: `{"registration_endpoint":"https://auth.example.test/register"}`, want: "available_dcr"},
+		{name: "dynamic registration preferred over CIMD", metadata: `{"registration_endpoint":"https://auth.example.test/register","client_id_metadata_document_supported":true}`, want: "available_dcr"},
+		{name: "CIMD without enumerated methods", metadata: `{"client_id_metadata_document_supported":true}`, want: "available_cimd"},
+		{name: "CIMD refusing public clients", metadata: `{"client_id_metadata_document_supported":true,"token_endpoint_auth_methods_supported":["client_secret_basic"]}`, want: ""},
+		{name: "CIMD flag not a boolean", metadata: `{"client_id_metadata_document_supported":"true"}`, want: ""},
+		{name: "neither", metadata: `{"token_endpoint_auth_methods_supported":["none"]}`, want: ""},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var metadata map[string]any
+			require.NoError(t, json.Unmarshal([]byte(test.metadata), &metadata))
+			require.Equal(t, test.want, directRemoteAutomaticRegistration(metadata))
+		})
+	}
 }
 
 func TestDirectRemoteOAuthDiscoveryReportsAvailableWithoutDCR(t *testing.T) {

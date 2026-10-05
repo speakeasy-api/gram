@@ -161,29 +161,7 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 		return CatalogIdentityProviderAttachmentResult{}, err
 	}
 
-	provider := remotesessions.CreateProvider(discoveredIssuerParams(principal, project, registrationID, metadata))
-	if reuse {
-		provider = remotesessions.UseProvider(existing.ID)
-	}
-	commit := s.identity.Prepare(remotesessions.IdentityPlan{
-		Scope: remotesessions.IdentityScope{
-			OrganizationID:   principal.OrganizationID,
-			ProjectID:        project.ID,
-			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
-			ActorDisplayName: nil,
-		},
-		UserSessionIssuerID: registration.UserSessionIssuerID.UUID,
-		Provider:            provider,
-		Client: remotesessions.RegisterClient(remotesessions.RegistrationPolicy{
-			Scope:                   append([]string(nil), resourceMetadata.ScopesSupported...),
-			Audience:                nil,
-			TokenEndpointAuthMethod: optionalString(browserCatalogDCRAuthMethod),
-			RequireClientSecret:     true,
-			AllowCIMD:               false,
-		}),
-		Bound:           remotesessions.ReuseBound,
-		ResourceDisplay: &remotesessions.ResourceDisplay{ResourceURL: remote.Url, Metadata: resourceMetadata},
-	})
+	commit := s.identity.Prepare(attachmentIdentityPlan(principal, project, registrationID, registration.UserSessionIssuerID.UUID, metadata, existing, reuse, remote.Url, resourceMetadata))
 	if err := commit.Preflight(ctx); err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, attachmentCommitError("check identity-provider attachment", err)
 	}
@@ -223,7 +201,7 @@ func (s *CatalogIdentityProviderAttachmentService) discoverSupportedIssuerMetada
 			continue
 		}
 		metadata, err := remotesessions.DiscoverIssuerMetadata(probeCtx, s.policy, authorizationServer)
-		if err != nil || strings.TrimSpace(metadata.Issuer) == "" || !sameIssuerURL(metadata.Issuer, authorizationServer) || strings.TrimSpace(metadata.AuthorizationEndpoint) == "" || strings.TrimSpace(metadata.TokenEndpoint) == "" || !validDynamicClientRegistrationEndpoint(metadata.RegistrationEndpoint) {
+		if err != nil || strings.TrimSpace(metadata.Issuer) == "" || !sameIssuerURL(metadata.Issuer, authorizationServer) || strings.TrimSpace(metadata.AuthorizationEndpoint) == "" || strings.TrimSpace(metadata.TokenEndpoint) == "" || !supportsAutomaticClientRegistration(metadata.RegistrationEndpoint, metadata.ClientIDMetadataDocumentSupported, metadata.TokenEndpointAuthMethodsSupported) {
 			continue
 		}
 		return metadata, nil
@@ -280,13 +258,48 @@ func (s *CatalogIdentityProviderAttachmentService) reusableIssuer(ctx context.Co
 		return none, false, nil
 	}
 	issuer := issuers[0]
-	if !issuer.ProjectID.Valid || issuer.ProjectID.UUID != project.ID || !issuer.OrganizationID.Valid || issuer.OrganizationID.String != principal.OrganizationID || !issuer.AuthorizationEndpoint.Valid || issuer.AuthorizationEndpoint.String == "" || !issuer.TokenEndpoint.Valid || issuer.TokenEndpoint.String == "" || !issuer.RegistrationEndpoint.Valid || issuer.RegistrationEndpoint.String == "" {
+	if !issuer.ProjectID.Valid || issuer.ProjectID.UUID != project.ID || !issuer.OrganizationID.Valid || issuer.OrganizationID.String != principal.OrganizationID || !issuer.AuthorizationEndpoint.Valid || issuer.AuthorizationEndpoint.String == "" || !issuer.TokenEndpoint.Valid || issuer.TokenEndpoint.String == "" || ((!issuer.RegistrationEndpoint.Valid || issuer.RegistrationEndpoint.String == "") && !remotesessions.SupportsClientIDMetadataDocument(issuer.ClientIDMetadataDocumentSupported, issuer.TokenEndpointAuthMethodsSupported)) {
 		return none, false, ErrIdentityProviderAttachmentConflict
 	}
 	if issuer.TunneledMcpServerID.Valid {
 		return none, false, ErrIdentityProviderAttachmentConflict
 	}
 	return issuer, true, nil
+}
+
+// attachmentIdentityPlan describes the attachment's identity write: the
+// discovered provider (or the reusable stored one) and a client this flow
+// registers itself. Dynamic registration stays the path for a provider that
+// offers it, so existing attachments are unchanged; a provider without it is
+// set up through a Client ID Metadata Document when it supports one, the same
+// path the dashboard's automatic setup takes. A provider offering neither
+// leaves the registration needing manual setup.
+func attachmentIdentityPlan(principal Principal, project ResolvedProject, registrationID, userSessionIssuerID uuid.UUID, metadata remotesessions.DiscoveredIssuerMetadata, existing remotesessionsrepo.RemoteSessionIssuer, reuse bool, resourceURL string, resourceMetadata wellknown.OAuthProtectedResourceMetadata) remotesessions.IdentityPlan {
+	provider := remotesessions.CreateProvider(discoveredIssuerParams(principal, project, registrationID, metadata))
+	allowCIMD := !validDynamicClientRegistrationEndpoint(metadata.RegistrationEndpoint)
+	if reuse {
+		provider = remotesessions.UseProvider(existing.ID)
+		allowCIMD = !existing.RegistrationEndpoint.Valid || strings.TrimSpace(existing.RegistrationEndpoint.String) == ""
+	}
+	return remotesessions.IdentityPlan{
+		Scope: remotesessions.IdentityScope{
+			OrganizationID:   principal.OrganizationID,
+			ProjectID:        project.ID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
+			ActorDisplayName: nil,
+		},
+		UserSessionIssuerID: userSessionIssuerID,
+		Provider:            provider,
+		Client: remotesessions.RegisterClient(remotesessions.RegistrationPolicy{
+			Scope:                   append([]string(nil), resourceMetadata.ScopesSupported...),
+			Audience:                nil,
+			TokenEndpointAuthMethod: optionalString(browserCatalogDCRAuthMethod),
+			RequireClientSecret:     true,
+			AllowCIMD:               allowCIMD,
+		}),
+		Bound:           remotesessions.ReuseBound,
+		ResourceDisplay: &remotesessions.ResourceDisplay{ResourceURL: resourceURL, Metadata: resourceMetadata},
+	}
 }
 
 // attachmentCommitError reports a refused identity write as an attachment
@@ -315,7 +328,7 @@ func discoveredIssuerParams(principal Principal, project ResolvedProject, regist
 		ClientSetupDocumentationUrl:         pgtype.Text{},
 		AuthorizationEndpoint:               conv.ToPGText(metadata.AuthorizationEndpoint),
 		TokenEndpoint:                       conv.ToPGText(metadata.TokenEndpoint),
-		RegistrationEndpoint:                conv.ToPGText(metadata.RegistrationEndpoint),
+		RegistrationEndpoint:                conv.ToPGTextEmpty(metadata.RegistrationEndpoint),
 		JwksUri:                             pgtype.Text{},
 		ServiceDocumentation:                pgtype.Text{},
 		OpPolicyUri:                         pgtype.Text{},
@@ -373,6 +386,14 @@ func attachmentIssuerSlug(registrationID uuid.UUID) string {
 
 func sameIssuerURL(a, b string) bool {
 	return a == b
+}
+
+// supportsAutomaticClientRegistration reports whether this flow can obtain a
+// client from a provider without manual setup: through dynamic client
+// registration, or through a Client ID Metadata Document under the predicate
+// the dashboard's automatic setup uses.
+func supportsAutomaticClientRegistration(registrationEndpoint string, clientIDMetadataDocumentSupported bool, tokenEndpointAuthMethodsSupported []string) bool {
+	return validDynamicClientRegistrationEndpoint(registrationEndpoint) || remotesessions.SupportsClientIDMetadataDocument(clientIDMetadataDocumentSupported, tokenEndpointAuthMethodsSupported)
 }
 
 func validDynamicClientRegistrationEndpoint(raw string) bool {

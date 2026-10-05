@@ -42,7 +42,7 @@ func registerIdentityProviderTool(reg *Registrar, registrations *RegistrationSer
 	addTool(reg, &mcp.Tool{
 		Name:        "attach_platform_mcp_identity_provider",
 		Title:       "Connect an MCP Server's OAuth Provider",
-		Description: "Connect one MCP server to the OAuth provider it advertises, so people can sign in to it. Ask for explicit user confirmation before calling this tool. It works out the provider's metadata and performs dynamic client registration from the stored MCP source. Constraints: non-secret provider URLs may be returned, but it never accepts or returns credentials, OAuth codes, tokens, client secrets, passwords, or API keys. After success, immediately present authorization_url as a clickable link and tell the user to open it and use Connect or Authorize.",
+		Description: "Connect one MCP server to the OAuth provider it advertises, so people can sign in to it. Ask for explicit user confirmation before calling this tool. It works out the provider's metadata from the stored MCP source and obtains an OAuth client automatically: through dynamic client registration when the provider offers it, otherwise through a client ID metadata document when the provider supports one. Constraints: non-secret provider URLs may be returned, but it never accepts or returns credentials, OAuth codes, tokens, client secrets, passwords, or API keys. After success, immediately present authorization_url as a clickable link and tell the user to open it and use Connect or Authorize.",
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
 		// Connection-less: the registration is resolved by user and project,
@@ -105,7 +105,7 @@ func identityProviderAttachmentError(err error) (*mcp.CallToolResult, bool) {
 	var result identityProviderAttachmentErrorResult
 	switch {
 	case errors.Is(err, ErrIdentityProviderAttachmentUnsupported):
-		result = identityProviderAttachmentErrorResult{Code: "automatic_identity_provider_attachment_unsupported", Message: "This MCP server does not advertise exactly one sign-in provider with the OAuth metadata and dynamic client registration needed to set it up automatically, so nothing was changed. Explain that to the user and ask how they want to proceed."}
+		result = identityProviderAttachmentErrorResult{Code: "automatic_identity_provider_attachment_unsupported", Message: "This MCP server does not advertise exactly one sign-in provider with the OAuth metadata and automatic client registration (dynamic client registration or a client ID metadata document) needed to set it up automatically, so nothing was changed. Explain that to the user and ask how they want to proceed."}
 	case errors.Is(err, ErrIdentityProviderAttachmentConflict):
 		result = identityProviderAttachmentErrorResult{Code: "identity_provider_attachment_conflict", Message: "This MCP server already has a different or unclear sign-in provider set up, so nothing was changed. Ask the user how they want to proceed."}
 	case errors.Is(err, ErrIdentityProviderAttachmentUnavailable), errors.Is(err, ErrRegistrationUnavailable), errors.Is(err, ErrOperationRateLimited), errors.Is(err, ErrOperationBudgetUnavailable):
