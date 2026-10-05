@@ -64,6 +64,24 @@ describe("encodeSpec and decodeSpec", () => {
     expect(JSON.parse(encodeSpec(spec))).not.toHaveProperty("range");
   });
 
+  it("open a link with the builder's old spelling of a day as 1d", () => {
+    const old = JSON.stringify({
+      ...JSON.parse(encodeSpec(spec)),
+      window: "24h",
+    });
+    expect(decodeSpec(old, [sessions])?.window).toBe("1d");
+  });
+
+  it("carry the date picker's label for a range", () => {
+    const ranged: ExploreSpec = {
+      ...spec,
+      range: { from: 1_000, to: 2_000, label: "Last Tuesday" },
+    };
+    expect(decodeSpec(encodeSpec(ranged), [sessions])?.range).toEqual(
+      ranged.range,
+    );
+  });
+
   it("keep only the query, whatever else the spec object carries", () => {
     const extra = { ...spec, unrelated: true } as ExploreSpec;
     expect(JSON.parse(encodeSpec(extra))).not.toHaveProperty("unrelated");

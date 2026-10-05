@@ -1,3 +1,4 @@
+import type { DateRangePreset } from "@/elements";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import type { AnalyticsField } from "@gram/client/models/components/analyticsfield.js";
 import type { AnalyticsFilter } from "@gram/client/models/components/analyticsfilter.js";
@@ -11,7 +12,11 @@ import type { AnalyticsQueryResult } from "@gram/client/models/components/analyt
 // here knows a dataset by name, so a new dataset ships with no client change.
 
 export type ChartType = "line" | "area" | "bar" | "ranked" | "table" | "number";
-export type WindowPreset = "1h" | "24h" | "7d" | "30d" | "90d";
+/**
+ * A relative window: the dashboard's date-range presets, so a widget, the
+ * builder and the page around them speak one vocabulary.
+ */
+export type WindowPreset = DateRangePreset;
 export type Grain = NonNullable<AnalyticsQueryPayload["grain"]>;
 export type MeasureOp = AnalyticsMeasure["op"];
 export type FilterOperator = AnalyticsFilter["operator"];
@@ -38,26 +43,53 @@ export const CHART_TYPE_OPTIONS: { value: ChartType; label: string }[] = [
   { value: "number", label: "Number" },
 ];
 
-export const WINDOW_OPTIONS: { value: WindowPreset; label: string }[] = [
-  { value: "1h", label: "Last hour" },
-  { value: "24h", label: "Last 24 hours" },
-  { value: "7d", label: "Last 7 days" },
-  { value: "30d", label: "Last 30 days" },
-  { value: "90d", label: "Last 90 days" },
+/** The windows the builder offers, shortest first: every dashboard preset. */
+export const WINDOW_PRESETS: readonly WindowPreset[] = [
+  "15m",
+  "1h",
+  "4h",
+  "1d",
+  "2d",
+  "3d",
+  "7d",
+  "15d",
+  "30d",
+  "90d",
 ];
 
 // Queries run as you build, and the dataset is scanned across the whole
 // window however selective the filters are, so the window opens short and
 // widening it is the moment someone chooses to pay for more.
-const DEFAULT_WINDOW: WindowPreset = "24h";
+const DEFAULT_WINDOW: WindowPreset = "1d";
 
 const WINDOW_SECONDS: Record<WindowPreset, number> = {
+  "15m": 900,
   "1h": 3_600,
-  "24h": 86_400,
+  "4h": 14_400,
+  "1d": 86_400,
+  "2d": 172_800,
+  "3d": 259_200,
   "7d": 604_800,
+  "15d": 1_296_000,
   "30d": 2_592_000,
   "90d": 7_776_000,
 };
+
+// The builder's first spelling of a day, before it took the dashboard's
+// presets. Widgets and links saved with it still open, as "1d".
+const LEGACY_WINDOWS: Record<string, WindowPreset> = { "24h": "1d" };
+
+/**
+ * A stored or linked window in today's vocabulary, or null when it is not
+ * one: a preset as it is, or an older spelling of one.
+ */
+export function windowPreset(value: unknown): WindowPreset | null {
+  if (isWindowPreset(value)) return value;
+  if (typeof value === "string" && Object.hasOwn(LEGACY_WINDOWS, value)) {
+    return LEGACY_WINDOWS[value]!;
+  }
+  return null;
+}
 
 /** One VISUALIZE row: an aggregation and its target field ("" for count). */
 export interface MeasureDraft {
@@ -98,20 +130,30 @@ export interface ExploreSpec {
   chartType: ChartType;
 }
 
-/** An absolute [from, to) range, in Unix milliseconds. */
+/**
+ * An absolute [from, to) range, in Unix milliseconds, with the label the
+ * date picker gave it ("Last Tuesday"), if any.
+ */
 export interface TimeRange {
   from: number;
   to: number;
+  label?: string | undefined;
 }
 
-/** Resolve a relative window into a stable, hour-aligned [from, to) range. */
+/**
+ * Resolve a relative window into a stable [from, to) range. It ends on the
+ * next hour, so a query's cache key holds within the hour; a window shorter
+ * than an hour ends on the next minute instead, or most of it would lie in
+ * the future.
+ */
 export function windowRange(
   window: WindowPreset,
   now: number = Date.now(),
 ): { from: Date; to: Date } {
-  const hourMs = 3_600_000;
-  const to = new Date(Math.ceil(now / hourMs) * hourMs);
-  const from = new Date(to.getTime() - WINDOW_SECONDS[window] * 1000);
+  const span = WINDOW_SECONDS[window] * 1000;
+  const step = span < 3_600_000 ? 60_000 : 3_600_000;
+  const to = new Date(Math.ceil(now / step) * step);
+  const from = new Date(to.getTime() - span);
   return { from, to };
 }
 
@@ -124,17 +166,17 @@ export function autoGrain(window: WindowPreset): Grain {
 }
 
 /**
- * The bucket width for a span of time, by the same steps the windows take:
- * hours up to a day, days up to thirty, weeks past that.
+ * The bucket width for a span of time: hours up to three days, days up to
+ * thirty, weeks past that.
  */
-export function grainForSpan(ms: number): Grain {
-  if (ms <= WINDOW_SECONDS["24h"] * 1000) return "hour";
+function grainForSpan(ms: number): Grain {
+  if (ms <= WINDOW_SECONDS["3d"] * 1000) return "hour";
   if (ms <= WINDOW_SECONDS["30d"] * 1000) return "day";
   return "week";
 }
 
 /** The [from, to) a spec asks over: its range, or its window resolved. */
-export function specRange(
+function specRange(
   spec: Pick<ExploreSpec, "window" | "range">,
   now: number = Date.now(),
 ): { from: Date; to: Date } {
@@ -142,19 +184,6 @@ export function specRange(
     return { from: new Date(spec.range.from), to: new Date(spec.range.to) };
   }
   return windowRange(spec.window, now);
-}
-
-const rangeFormatter = new Intl.DateTimeFormat("en", {
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-
-/** An absolute range as it reads in the Window control. */
-export function rangeLabel(range: TimeRange): string {
-  return rangeFormatter.formatRange(new Date(range.from), new Date(range.to));
 }
 
 /** The bucket width a spec's timeseries is drawn at. */
@@ -261,7 +290,7 @@ export function isFilterOperator(value: unknown): value is FilterOperator {
 }
 
 export function isWindowPreset(value: unknown): value is WindowPreset {
-  return WINDOW_OPTIONS.some((option) => option.value === value);
+  return WINDOW_PRESETS.some((preset) => preset === value);
 }
 
 export function isChartType(value: unknown): value is ChartType {

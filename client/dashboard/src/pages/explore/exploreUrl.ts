@@ -9,7 +9,7 @@ import {
   isChartType,
   isFilterOperator,
   isMeasureOp,
-  isWindowPreset,
+  windowPreset,
 } from "./exploreModel";
 
 // The URL carries the whole query, so any query is a link and sharing never
@@ -47,7 +47,13 @@ export function encodeSpec(spec: ExploreSpec): string {
     window: spec.window,
     // Only present when set, so a link with no range reads as it always did.
     ...(spec.range
-      ? { range: { from: spec.range.from, to: spec.range.to } }
+      ? {
+          range: {
+            from: spec.range.from,
+            to: spec.range.to,
+            ...(spec.range.label ? { label: spec.range.label } : {}),
+          },
+        }
       : {}),
     chartType: spec.chartType,
   });
@@ -92,14 +98,15 @@ function specFromValue(value: unknown): ExploreSpec | null {
     dimensions,
     orderBy,
     limit,
-    window,
     range,
     chartType,
   } = value;
+  // An older spelling of a window opens as today's.
+  const window = windowPreset(value.window);
   if (typeof dataset !== "string" || dataset === "") return null;
   if (!isStringArray(dimensions)) return null;
   if (typeof orderBy !== "string") return null;
-  if (!isWindowPreset(window) || !isChartType(chartType)) return null;
+  if (window === null || !isChartType(chartType)) return null;
   if (
     typeof limit !== "number" ||
     !Number.isInteger(limit) ||
@@ -143,20 +150,26 @@ function specFromValue(value: unknown): ExploreSpec | null {
   };
 }
 
-/** An absolute range: two whole milliseconds, from before to. */
+/**
+ * An absolute range: two whole milliseconds a date can hold, from before
+ * to, and the picker's label for it when it gave one.
+ */
 function rangeFromValue(value: unknown): TimeRange | null {
   if (!isRecord(value)) return null;
-  const { from, to } = value;
+  const { from, to, label } = value;
   if (
     typeof from !== "number" ||
     typeof to !== "number" ||
     !Number.isSafeInteger(from) ||
     !Number.isSafeInteger(to) ||
+    !Number.isFinite(new Date(from).getTime()) ||
+    !Number.isFinite(new Date(to).getTime()) ||
     from >= to
   ) {
     return null;
   }
-  return { from, to };
+  if (label !== undefined && typeof label !== "string") return null;
+  return { from, to, ...(label ? { label } : {}) };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -68,7 +68,7 @@ function Harness({
   return (
     <FilterRow
       dataset={dataset}
-      window="24h"
+      window="1d"
       filter={filter}
       onChange={(next) => {
         setFilter(next);

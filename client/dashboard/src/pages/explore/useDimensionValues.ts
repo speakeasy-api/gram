@@ -3,7 +3,11 @@ import { analyticsDimensionValues } from "@gram/client/funcs/analyticsDimensionV
 import type { AnalyticsDimensionValuesResult } from "@gram/client/models/components/analyticsdimensionvaluesresult.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp.js";
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import {
+  useQuery,
+  type UseQueryOptions,
+  type UseQueryResult,
+} from "@tanstack/react-query";
 import { windowRange, type WindowPreset } from "./exploreModel";
 
 const DIMENSION_VALUES_KEY = "explore-dimension-values";
@@ -30,10 +34,36 @@ export function useDimensionValues(
   const client = useGramContext();
   const project = useProject();
   const { from, to } = windowRange(window);
-  return useQuery({
+  return useQuery(
+    dimensionValuesQuery(
+      client,
+      project.id,
+      dataset,
+      dimension,
+      from,
+      to,
+      enabled,
+    ),
+  );
+}
+
+/**
+ * The query behind useDimensionValues, for callers that ask about several
+ * dimensions at once or over an absolute range.
+ */
+export function dimensionValuesQuery(
+  client: ReturnType<typeof useGramContext>,
+  projectId: string,
+  dataset: string,
+  dimension: string,
+  from: Date,
+  to: Date,
+  enabled: boolean,
+): UseQueryOptions<AnalyticsDimensionValuesResult, Error> {
+  return {
     queryKey: [
       DIMENSION_VALUES_KEY,
-      project.id,
+      projectId,
       dataset,
       dimension,
       from.toISOString(),
@@ -59,5 +89,5 @@ export function useDimensionValues(
           { fetchOptions: { signal } },
         ),
       ),
-  });
+  };
 }

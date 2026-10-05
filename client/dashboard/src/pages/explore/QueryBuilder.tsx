@@ -1,3 +1,4 @@
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { MultiSelect } from "@/components/ui/MultiSelect";
@@ -30,19 +31,15 @@ import {
   measureAlias,
   measureLabel,
   parseLimit,
-  rangeLabel,
   specForDataset,
-  WINDOW_OPTIONS,
+  WINDOW_PRESETS,
   type ChartType,
   type ExploreSpec,
   type FilterDraft,
   type MeasureDraft,
-  type WindowPreset,
 } from "./exploreModel";
 import { FilterRow } from "./FilterRow";
 
-// The Window control's value while an absolute range stands in for a window.
-const CUSTOM_RANGE = "custom";
 import { MeasureRow } from "./MeasureRow";
 
 // Radix Select cannot carry "" as an item value, so the "keep group order"
@@ -258,33 +255,33 @@ export function QueryBuilder({
           />
         </BuilderField>
         <BuilderField label="Window">
-          {/* A range arrives from a page or a dragged chart; picking a
-              window drops it. */}
-          <Select
-            value={spec.range ? CUSTOM_RANGE : spec.window}
-            onValueChange={(window) =>
-              patch({ window: window as WindowPreset, range: undefined })
+          {/* The dashboard's own date picker: its presets, and a custom
+              range typed, picked on the calendar, or brought by a page or a
+              dragged chart. Picking a preset drops the range. */}
+          <TimeRangePicker
+            preset={spec.range ? null : spec.window}
+            customRange={
+              spec.range
+                ? {
+                    from: new Date(spec.range.from),
+                    to: new Date(spec.range.to),
+                  }
+                : null
             }
-          >
-            <SelectTrigger
-              className={spec.range ? "w-auto min-w-44" : "w-44"}
-              aria-label="Window"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {spec.range ? (
-                <SelectItem value={CUSTOM_RANGE} disabled>
-                  {rangeLabel(spec.range)}
-                </SelectItem>
-              ) : null}
-              {WINDOW_OPTIONS.map((window) => (
-                <SelectItem key={window.value} value={window.value}>
-                  {window.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            customRangeLabel={spec.range?.label ?? null}
+            availablePresets={WINDOW_PRESETS}
+            onPresetChange={(window) => patch({ window, range: undefined })}
+            onCustomRangeChange={(from, to, label) =>
+              patch({
+                range: {
+                  from: from.getTime(),
+                  to: to.getTime(),
+                  ...(label ? { label } : {}),
+                },
+              })
+            }
+            onClearCustomRange={() => patch({ range: undefined })}
+          />
         </BuilderField>
         {/* A timeseries is drawn in time order up to the server's cap, so
             order and limit only apply to whole-window charts. */}

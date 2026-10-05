@@ -1,34 +1,34 @@
+import type { DateRangeValue } from "@/components/filters/filter-schema";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import {
   fieldByName,
-  isWindowPreset,
   operatorsForField,
   type ExploreSpec,
   type FilterDraft,
-  type TimeRange,
-  type WindowPreset,
 } from "./exploreModel";
 
-// A page that places widgets owns one time window and one filter bar, and
-// every widget on it answers within them — Braintrust's dashboard filters,
-// Datadog's template variables. The rules for folding a page into a widget's
-// own question:
+// A page that places widgets owns one date range and one filter bar, the
+// dashboard's shared ones, and every widget on it answers within them —
+// Braintrust's dashboard filters, Datadog's template variables. The page's
+// filter bar is built from catalog fields (see usePageFilters), so what it
+// holds folds into a widget's question with no translation:
 //
-//   - The page's window replaces the widget's. The grain follows the window
-//     that runs, so a 30-day page draws days, not the hours a 24h widget was
+//   - The page's date range replaces the widget's window: a preset as the
+//     window, a custom range as an absolute range. The grain follows what
+//     runs, so a 30-day page draws days, not the hours a 1d widget was
 //     saved with.
 //   - A page filter is ANDed with the widget's own filters.
-//   - A page filter the widget's dataset cannot apply — no such field, or
-//     not by that operator — is skipped for that widget, and named, so the
-//     card says it is not filtered rather than silently answering a wider
+//   - A page filter the widget's dataset cannot apply — no such dimension,
+//     or not by `in` — is skipped for that widget, and named, so the card
+//     says it is not filtered rather than silently answering a wider
 //     question than its neighbours.
 
 /** What a page applies to every widget on it. */
 export interface PageContext {
-  /** A relative window, or the absolute range the page is showing. */
-  window?: WindowPreset | TimeRange | undefined;
-  /** Filters over dimensions, by catalog field name. */
-  filters?: FilterDraft[] | undefined;
+  /** The page's date range, as the shared filter bar holds it. */
+  window?: DateRangeValue | undefined;
+  /** The values picked for each catalog dimension the page filters by. */
+  filters?: Readonly<Record<string, readonly string[]>> | undefined;
   /** A drag across a time chart narrows the page to the dragged range. */
   onRangeSelect?: ((from: Date, to: Date) => void) | undefined;
 }
@@ -52,29 +52,37 @@ export function applyPageContext(
   let changed = false;
 
   const window = page.window;
-  if (isWindowPreset(window)) {
-    if (window !== spec.window || spec.range) {
-      next = { ...next, window, range: undefined };
+  if (window?.customRange) {
+    const { from, to } = window.customRange;
+    next = {
+      ...next,
+      range: {
+        from: from.getTime(),
+        to: to.getTime(),
+        ...(window.customLabel ? { label: window.customLabel } : {}),
+      },
+    };
+    changed = true;
+  } else if (window?.preset) {
+    if (window.preset !== spec.window || spec.range) {
+      next = { ...next, window: window.preset, range: undefined };
       changed = true;
     }
-  } else if (window) {
-    next = { ...next, range: { from: window.from, to: window.to } };
-    changed = true;
   }
 
   const skipped: string[] = [];
   const added: FilterDraft[] = [];
-  for (const filter of page.filters ?? []) {
-    if (filter.values.length === 0) continue;
-    const field = fieldByName(dataset, filter.field);
+  for (const [field, values] of Object.entries(page.filters ?? {})) {
+    if (values.length === 0) continue;
+    const found = fieldByName(dataset, field);
     if (
-      field?.role !== "dimension" ||
-      !operatorsForField(field).includes(filter.operator)
+      found?.role !== "dimension" ||
+      !operatorsForField(found).includes("in")
     ) {
-      if (!skipped.includes(filter.field)) skipped.push(filter.field);
+      skipped.push(field);
       continue;
     }
-    added.push(filter);
+    added.push({ field, operator: "in", values: [...values] });
   }
   if (added.length > 0) {
     next = { ...next, filters: [...next.filters, ...added] };
