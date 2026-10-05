@@ -107,7 +107,11 @@ type InfoResult struct {
 	// Fixed expiration of the organization support session.
 	OrganizationOverrideExpiresAt *string
 	ActiveOrganizationID          string
-	GramAccountType               string
+	// Dashboard base URL of the platform host the active organization lives on.
+	// Set only for an ordinary session whose request arrived on a different
+	// platform host; the dashboard moves there.
+	ActiveOrganizationDashboardURL *string
+	GramAccountType                string
 	// Whether the organization has an active billing subscription
 	HasActiveSubscription bool
 	// Whether the organization is whitelisted to access the platform
