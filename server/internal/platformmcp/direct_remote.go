@@ -19,6 +19,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpoutbound"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -89,7 +90,9 @@ func (s *GuardianDirectRemoteInspector) inspect(ctx context.Context, rawURL stri
 	if err != nil {
 		return DirectRemoteInspection{}, setupFailure(SetupCategoryInvalidURL, err)
 	}
-	probeCtx, cancel := context.WithTimeout(ctx, directRemoteProbeDeadline)
+	probeCtx, detach := mcpoutbound.DetachContext(ctx)
+	defer detach()
+	probeCtx, cancel := context.WithTimeout(probeCtx, directRemoteProbeDeadline)
 	defer cancel()
 	if _, err := s.policy.ValidateHTTPSURL(probeCtx, canonicalURL); err != nil {
 		return DirectRemoteInspection{}, directRemoteValidationError(probeCtx, err)

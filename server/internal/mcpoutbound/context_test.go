@@ -3,6 +3,8 @@ package mcpoutbound_test
 import (
 	"context"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
@@ -35,4 +37,23 @@ func TestDetachContextFollowsParentCancellation(t *testing.T) {
 	cancelParent()
 	<-detached.Done()
 	require.ErrorIs(t, detached.Err(), context.Canceled)
+}
+
+func TestDetachContextKeepsParentDeadline(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		parent, cancelParent := context.WithTimeout(t.Context(), time.Second)
+		defer cancelParent()
+		detached, cancel := mcpoutbound.DetachContext(parent)
+		defer cancel()
+
+		deadline, ok := detached.Deadline()
+		require.True(t, ok)
+		parentDeadline, _ := parent.Deadline()
+		require.Equal(t, parentDeadline, deadline)
+
+		<-detached.Done()
+		require.ErrorIs(t, detached.Err(), context.DeadlineExceeded)
+	})
 }
