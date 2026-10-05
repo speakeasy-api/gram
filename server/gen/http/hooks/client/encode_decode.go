@@ -785,6 +785,19 @@ func EncodeIngestRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 			headStr := strconv.FormatBool(head)
 			req.Header.Set("X-Gram-Replayed", headStr)
 		}
+		if p.Backfilled != nil {
+			head := *p.Backfilled
+			headStr := strconv.FormatBool(head)
+			req.Header.Set("X-Gram-Backfilled", headStr)
+		}
+		if p.ActingUserAssertion != nil {
+			head := *p.ActingUserAssertion
+			req.Header.Set("X-Gram-Acting-User", head)
+		}
+		if p.ActingUserContractVersion != nil {
+			head := *p.ActingUserContractVersion
+			req.Header.Set("X-Gram-Acting-User-Contract", head)
+		}
 		body := NewIngestRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("hooks", "ingest", err)

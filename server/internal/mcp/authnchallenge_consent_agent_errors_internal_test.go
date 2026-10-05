@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -65,7 +66,7 @@ func TestConsumedConsentAgentFailureRequiresRestartWithoutRestoringChallenge(t *
 	require.Equal(t, http.StatusServiceUnavailable, failure.HTTPStatus(t.Context()))
 	require.EqualError(t, failure, "Agent authorization could not be completed. Restart authorization from your client.")
 	_, err = service.authnChallengeCache.Get(t.Context(), state.CacheKey())
-	require.ErrorContains(t, err, "no cache entry for key")
+	require.ErrorIs(t, err, cache.ErrCacheMiss)
 	denied := consumedConsentAgentAuthorizationError(fmt.Errorf("authorize: %w", errConsentAgentDenied))
 	require.Equal(t, http.StatusForbidden, denied.HTTPStatus(t.Context()))
 	require.EqualError(t, denied, "selected agent is not eligible")

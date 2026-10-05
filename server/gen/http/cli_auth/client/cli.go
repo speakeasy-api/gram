@@ -24,7 +24,7 @@ func BuildAuthorizePayload(cliAuthAuthorizeBody string, cliAuthAuthorizeSessionT
 	{
 		err = json.Unmarshal([]byte(cliAuthAuthorizeBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"code_challenge\": \"aaa\",\n      \"code_challenge_method\": \"S256\",\n      \"project_slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"code_challenge\": \"aaa\",\n      \"code_challenge_method\": \"S256\",\n      \"delegation_contract_version\": \"hooks-acting-user.v1\",\n      \"project_slug\": \"abc123\",\n      \"proof_public_key\": \"aaa\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.CodeChallenge) < 43 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.code_challenge", body.CodeChallenge, utf8.RuneCountInString(body.CodeChallenge), 43, true))
@@ -34,6 +34,24 @@ func BuildAuthorizePayload(cliAuthAuthorizeBody string, cliAuthAuthorizeSessionT
 		}
 		if !(body.CodeChallengeMethod == "S256") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.code_challenge_method", body.CodeChallengeMethod, []any{"S256"}))
+		}
+		if body.ProofPublicKey != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.proof_public_key", *body.ProofPublicKey, "^[A-Za-z0-9_-]{43}$"))
+		}
+		if body.ProofPublicKey != nil {
+			if utf8.RuneCountInString(*body.ProofPublicKey) < 43 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.proof_public_key", *body.ProofPublicKey, utf8.RuneCountInString(*body.ProofPublicKey), 43, true))
+			}
+		}
+		if body.ProofPublicKey != nil {
+			if utf8.RuneCountInString(*body.ProofPublicKey) > 43 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.proof_public_key", *body.ProofPublicKey, utf8.RuneCountInString(*body.ProofPublicKey), 43, false))
+			}
+		}
+		if body.DelegationContractVersion != nil {
+			if !(*body.DelegationContractVersion == "hooks-acting-user.v1") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.delegation_contract_version", *body.DelegationContractVersion, []any{"hooks-acting-user.v1"}))
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -46,9 +64,11 @@ func BuildAuthorizePayload(cliAuthAuthorizeBody string, cliAuthAuthorizeSessionT
 		}
 	}
 	v := &cliauth.AuthorizePayload{
-		CodeChallenge:       body.CodeChallenge,
-		CodeChallengeMethod: body.CodeChallengeMethod,
-		ProjectSlug:         body.ProjectSlug,
+		CodeChallenge:             body.CodeChallenge,
+		CodeChallengeMethod:       body.CodeChallengeMethod,
+		ProjectSlug:               body.ProjectSlug,
+		ProofPublicKey:            body.ProofPublicKey,
+		DelegationContractVersion: body.DelegationContractVersion,
 	}
 	v.SessionToken = sessionToken
 
@@ -78,6 +98,74 @@ func BuildRedeemPayload(cliAuthRedeemBody string) (*cliauth.RedeemPayload, error
 	v := &cliauth.RedeemPayload{
 		Code:         body.Code,
 		CodeVerifier: body.CodeVerifier,
+	}
+
+	return v, nil
+}
+
+// BuildDelegateHooksActingUserPayload builds the payload for the cliAuth
+// delegateHooksActingUser endpoint from CLI flags.
+func BuildDelegateHooksActingUserPayload(cliAuthDelegateHooksActingUserBody string) (*cliauth.DelegateHooksActingUserPayload, error) {
+	var err error
+	var body DelegateHooksActingUserRequestBody
+	{
+		err = json.Unmarshal([]byte(cliAuthDelegateHooksActingUserBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"contract_version\": \"hooks-acting-user.v1\",\n      \"event\": \"PreToolUse\",\n      \"idempotency_key\": \"aa\",\n      \"nonce\": \"aaa\",\n      \"observational\": false,\n      \"provider\": \"codex\",\n      \"refresh_token\": \"aaa\",\n      \"session_id\": \"aa\",\n      \"signature\": \"aaa\",\n      \"signed_at\": 1\n   }'")
+		}
+		if utf8.RuneCountInString(body.RefreshToken) > 4096 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.refresh_token", body.RefreshToken, utf8.RuneCountInString(body.RefreshToken), 4096, false))
+		}
+		if !(body.ContractVersion == "hooks-acting-user.v1") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.contract_version", body.ContractVersion, []any{"hooks-acting-user.v1"}))
+		}
+		if !(body.Provider == "claude" || body.Provider == "codex") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider", body.Provider, []any{"claude", "codex"}))
+		}
+		if !(body.Event == "UserPromptSubmit" || body.Event == "PreToolUse") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.event", body.Event, []any{"UserPromptSubmit", "PreToolUse"}))
+		}
+		if utf8.RuneCountInString(body.SessionID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.session_id", body.SessionID, utf8.RuneCountInString(body.SessionID), 1, true))
+		}
+		if utf8.RuneCountInString(body.SessionID) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.session_id", body.SessionID, utf8.RuneCountInString(body.SessionID), 512, false))
+		}
+		if utf8.RuneCountInString(body.IdempotencyKey) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotency_key", body.IdempotencyKey, utf8.RuneCountInString(body.IdempotencyKey), 1, true))
+		}
+		if utf8.RuneCountInString(body.IdempotencyKey) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotency_key", body.IdempotencyKey, utf8.RuneCountInString(body.IdempotencyKey), 512, false))
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.nonce", body.Nonce, "^[A-Za-z0-9_-]{43}$"))
+		if utf8.RuneCountInString(body.Nonce) < 43 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.nonce", body.Nonce, utf8.RuneCountInString(body.Nonce), 43, true))
+		}
+		if utf8.RuneCountInString(body.Nonce) > 43 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.nonce", body.Nonce, utf8.RuneCountInString(body.Nonce), 43, false))
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.signature", body.Signature, "^[A-Za-z0-9_-]{86}$"))
+		if utf8.RuneCountInString(body.Signature) < 86 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.signature", body.Signature, utf8.RuneCountInString(body.Signature), 86, true))
+		}
+		if utf8.RuneCountInString(body.Signature) > 86 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.signature", body.Signature, utf8.RuneCountInString(body.Signature), 86, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &cliauth.DelegateHooksActingUserPayload{
+		RefreshToken:    body.RefreshToken,
+		ContractVersion: body.ContractVersion,
+		Provider:        body.Provider,
+		Event:           body.Event,
+		SessionID:       body.SessionID,
+		IdempotencyKey:  body.IdempotencyKey,
+		Observational:   body.Observational,
+		SignedAt:        body.SignedAt,
+		Nonce:           body.Nonce,
+		Signature:       body.Signature,
 	}
 
 	return v, nil

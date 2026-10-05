@@ -128,6 +128,17 @@ WHERE organization_id = @organization_id
 -- for. Callers must report these rather than their own requested deadline.
 RETURNING id, organization_id, project_id, name, key_prefix, scopes, expires_at;
 
+-- name: GetActiveHooksEnrollment :one
+SELECT EXISTS (
+  SELECT 1
+  FROM api_keys
+  WHERE id = @id
+    AND organization_id = @organization_id
+    AND created_by_user_id = @created_by_user_id
+    AND deleted IS FALSE
+    AND @scope::text = ANY(scopes)
+);
+
 -- name: ListAPIKeysByOrganization :many
 -- Deliberately does NOT join users the way GetAPIKeyByKeyHash does. A key
 -- whose created_by_user_id is not a users.id is unusable (auth's join drops

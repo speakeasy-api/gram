@@ -27,6 +27,18 @@ export type IngestHookEventRequest = {
    * Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.
    */
   xGramReplayed?: boolean | undefined;
+  /**
+   * True only for a synthetic prompt recovered after its live checkpoint; backfilled prompts are observational and never governed.
+   */
+  xGramBackfilled?: boolean | undefined;
+  /**
+   * Opaque Gram-signed, proof-minted acting-user assertion required for governed live invocations and their observational replay.
+   */
+  xGramActingUser?: string | undefined;
+  /**
+   * Exact acting-user delegation contract used by the assertion.
+   */
+  xGramActingUserContract?: string | undefined;
   ingestRequestBody: IngestRequestBody;
 };
 
@@ -36,6 +48,9 @@ export type IngestHookEventRequest$Outbound = {
   "Gram-Project"?: string | undefined;
   "Idempotency-Key"?: string | undefined;
   "X-Gram-Replayed"?: boolean | undefined;
+  "X-Gram-Backfilled"?: boolean | undefined;
+  "X-Gram-Acting-User"?: string | undefined;
+  "X-Gram-Acting-User-Contract"?: string | undefined;
   IngestRequestBody: IngestRequestBody$Outbound;
 };
 
@@ -49,6 +64,9 @@ export const IngestHookEventRequest$outboundSchema: z.ZodMiniType<
     gramProject: z.optional(z.string()),
     idempotencyKey: z.optional(z.string()),
     xGramReplayed: z.optional(z.boolean()),
+    xGramBackfilled: z.optional(z.boolean()),
+    xGramActingUser: z.optional(z.string()),
+    xGramActingUserContract: z.optional(z.string()),
     ingestRequestBody: IngestRequestBody$outboundSchema,
   }),
   z.transform((v) => {
@@ -57,6 +75,9 @@ export const IngestHookEventRequest$outboundSchema: z.ZodMiniType<
       gramProject: "Gram-Project",
       idempotencyKey: "Idempotency-Key",
       xGramReplayed: "X-Gram-Replayed",
+      xGramBackfilled: "X-Gram-Backfilled",
+      xGramActingUser: "X-Gram-Acting-User",
+      xGramActingUserContract: "X-Gram-Acting-User-Contract",
       ingestRequestBody: "IngestRequestBody",
     });
   }),

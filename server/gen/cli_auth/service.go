@@ -17,23 +17,31 @@ import (
 // Interactive device-agent enrollment via a PKCE one-time-code exchange.
 // authorize (dashboard session) mints a short-lived code bound to a PKCE
 // challenge; redeem (no auth — the code+verifier pair is the credential)
-// exchanges it once for a per-user [agent,hooks] API key.
+// exchanges it once for a per-user [agent_user] API key. Proof-bound hooks
+// relay enrollment also grants [hooks].
 type Service interface {
 	// Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf
 	// of the authenticated dashboard user. Resolves the target project (given
 	// slug, else the org's default/first project) and records {user, org, project,
-	// scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL.
-	// Requires a member-available session (org:read); NOT org-admin. Refused (403)
-	// while impersonating an organization or user, or without membership in the
-	// active org.
+	// scopes, challenge} against the code with a ~5 minute TTL. The ordinary scope
+	// is [agent_user]; proof-bound hooks relay enrollment adds [hooks]. Requires a
+	// member-available session (org:read); NOT org-admin. Refused (403) while
+	// impersonating an organization or user, or without membership in the active
+	// org.
 	Authorize(context.Context, *AuthorizePayload) (res *AuthorizeResult, err error)
 	// Exchange a one-time code plus its PKCE code_verifier for a freshly minted
-	// per-user [agent,hooks] API key. No session or API-key auth: proving
-	// knowledge of the code_verifier that matches the stored challenge IS the
-	// credential. The code is single-use — consumed atomically on lookup — so any
+	// per-user [agent_user] API key, with [hooks] added for proof-bound relay
+	// enrollment. No session or API-key auth: proving knowledge of the
+	// code_verifier that matches the stored challenge IS the credential. The code
+	// is single-use — consumed atomically on lookup — so any
 	// missing/expired/already-consumed code or PKCE mismatch returns 401. The raw
 	// key is returned exactly once and never again.
 	Redeem(context.Context, *RedeemPayload) (res *RedeemResult, err error)
+	// Mint a very short-lived acting-user assertion for one approved live hook
+	// invocation. The proof-bound refresh credential and an Ed25519 signature over
+	// every invocation binding are both required. Current active organization
+	// membership is revalidated before minting.
+	DelegateHooksActingUser(context.Context, *DelegateHooksActingUserPayload) (res *DelegateHooksActingUserResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -56,7 +64,7 @@ const ServiceName = "cliAuth"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"authorize", "redeem"}
+var MethodNames = [3]string{"authorize", "redeem", "delegateHooksActingUser"}
 
 // AuthorizePayload is the payload type of the cliAuth service authorize method.
 type AuthorizePayload struct {
@@ -66,8 +74,13 @@ type AuthorizePayload struct {
 	CodeChallengeMethod string
 	// Optional project slug to scope the minted key to. Defaults to the org's
 	// default (first) project when omitted.
-	ProjectSlug  *string
-	SessionToken *string
+	ProjectSlug *string
+	// Optional base64url Ed25519 public key. When present, redeem also returns a
+	// proof-bound hooks delegation refresh credential.
+	ProofPublicKey *string
+	// Required hooks acting-user contract version when proof_public_key is present.
+	DelegationContractVersion *string
+	SessionToken              *string
 }
 
 // AuthorizeResult is the result type of the cliAuth service authorize method.
@@ -76,6 +89,31 @@ type AuthorizeResult struct {
 	// with its code_verifier.
 	Code string
 	// Lifetime of the code in seconds.
+	ExpiresIn int
+}
+
+// DelegateHooksActingUserPayload is the payload type of the cliAuth service
+// delegateHooksActingUser method.
+type DelegateHooksActingUserPayload struct {
+	RefreshToken    string
+	ContractVersion string
+	Provider        string
+	Event           string
+	SessionID       string
+	IdempotencyKey  string
+	// Binds an offline replay or synthetic backfill as observational rather than
+	// live governed work.
+	Observational *bool
+	SignedAt      int64
+	// Cryptographically random, single-use base64url mint nonce and assertion JTI.
+	Nonce     string
+	Signature string
+}
+
+// DelegateHooksActingUserResult is the result type of the cliAuth service
+// delegateHooksActingUser method.
+type DelegateHooksActingUserResult struct {
+	Assertion string
 	ExpiresIn int
 }
 
@@ -90,13 +128,19 @@ type RedeemPayload struct {
 
 // RedeemResult is the result type of the cliAuth service redeem method.
 type RedeemResult struct {
-	// The raw gram_ API key, carrying the [agent,hooks] scopes. Returned exactly
-	// once.
+	// The raw gram_ API key, carrying [agent_user] and, for proof-bound relay
+	// enrollment, [hooks]. Returned exactly once.
 	AccessToken string
 	// Email of the user the key was minted for.
 	UserEmail string
 	// Slug of the project the key is scoped to.
 	ProjectSlug string
+	// Organization bound by the authenticated enrollment session. Present for
+	// proof-bound hook enrollment.
+	OrganizationID *string
+	// Server-signed refresh credential bound to the enrolled Ed25519 public key.
+	// It cannot mint an assertion without proof of the private key.
+	DelegationRefreshToken *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

@@ -16,8 +16,9 @@ import (
 
 // Endpoints wraps the "cliAuth" service endpoints.
 type Endpoints struct {
-	Authorize goa.Endpoint
-	Redeem    goa.Endpoint
+	Authorize               goa.Endpoint
+	Redeem                  goa.Endpoint
+	DelegateHooksActingUser goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "cliAuth" service with endpoints.
@@ -25,8 +26,9 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Authorize: NewAuthorizeEndpoint(s, a.APIKeyAuth),
-		Redeem:    NewRedeemEndpoint(s),
+		Authorize:               NewAuthorizeEndpoint(s, a.APIKeyAuth),
+		Redeem:                  NewRedeemEndpoint(s),
+		DelegateHooksActingUser: NewDelegateHooksActingUserEndpoint(s),
 	}
 }
 
@@ -34,6 +36,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Authorize = m(e.Authorize)
 	e.Redeem = m(e.Redeem)
+	e.DelegateHooksActingUser = m(e.DelegateHooksActingUser)
 }
 
 // NewAuthorizeEndpoint returns an endpoint function that calls the method
@@ -65,5 +68,14 @@ func NewRedeemEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*RedeemPayload)
 		return s.Redeem(ctx, p)
+	}
+}
+
+// NewDelegateHooksActingUserEndpoint returns an endpoint function that calls
+// the method "delegateHooksActingUser" of service "cliAuth".
+func NewDelegateHooksActingUserEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DelegateHooksActingUserPayload)
+		return s.DelegateHooksActingUser(ctx, p)
 	}
 }

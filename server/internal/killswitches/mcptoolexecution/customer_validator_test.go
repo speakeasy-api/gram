@@ -8,11 +8,41 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/hooks/delegation"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
+
+func TestCustomerLifecycleValidatorAcceptsOnlyRegisteredHookActivities(t *testing.T) {
+	t.Parallel()
+	db, orgID := newTestDatabase(t, "ks_customer_hook_activity")
+	tx := testenv.BeginTx(t, t.Context(), db)
+
+	bindings := delegation.ApprovedBindings()
+	keys := make([]killswitches.ResourceKey, len(bindings))
+	for i, binding := range bindings {
+		keys[i] = killswitches.ResourceKey(binding.ResourceKey)
+	}
+	validator := NewCustomerLifecycleValidator()
+	require.NoError(t, validator.ValidateCurrent(t.Context(), tx, killswitches.CurrentReferenceBatch{
+		OrganizationID: killswitches.OrganizationID(orgID),
+		Resources:      &killswitches.CurrentResourceReferences{Kind: ResourceKindHookActivity, Keys: keys},
+	}))
+
+	err := validator.ValidateCurrent(t.Context(), tx, killswitches.CurrentReferenceBatch{
+		OrganizationID: killswitches.OrganizationID(orgID),
+		Resources:      &killswitches.CurrentResourceReferences{Kind: ResourceKindHookActivity, Keys: []killswitches.ResourceKey{"claude:PermissionRequest"}},
+	})
+	require.ErrorIs(t, err, killswitches.ErrInvalidReference)
+
+	err = validator.ValidateCurrent(t.Context(), tx, killswitches.CurrentReferenceBatch{
+		OrganizationID: killswitches.OrganizationID(orgID),
+		Resources:      &killswitches.CurrentResourceReferences{Kind: ResourceKindHookActivity, Keys: nil},
+	})
+	require.ErrorIs(t, err, killswitches.ErrInvalidReference)
+}
 
 func TestCustomerLifecycleValidatorLocksLivenessUpdatesUntilCommit(t *testing.T) {
 	t.Parallel()

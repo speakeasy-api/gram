@@ -45,6 +45,20 @@ func (customerLifecycleValidator) ValidateCurrent(ctx context.Context, dbtx kill
 	if batch.Resources == nil {
 		return nil
 	}
+	if len(batch.Resources.Keys) == 0 {
+		return killswitches.ErrInvalidReference
+	}
+	if batch.Resources.Kind == ResourceKindHookActivity {
+		if batch.OrganizationID == "" {
+			return fmt.Errorf("%w: hook activity is not available", killswitches.ErrInvalidReference)
+		}
+		for _, key := range batch.Resources.Keys {
+			if !supportedHookActivity(string(key)) {
+				return fmt.Errorf("%w: hook activity is not available", killswitches.ErrInvalidReference)
+			}
+		}
+		return nil
+	}
 	if batch.Resources.Kind != ResourceKindMCPServer {
 		return fmt.Errorf("%w: unsupported server reference", killswitches.ErrInvalidReference)
 	}
