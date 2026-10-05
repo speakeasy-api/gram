@@ -281,14 +281,14 @@ func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupT
 		go func() {
 			emailCtx, cancel := context.WithTimeout(detached, 10*time.Second)
 			defer cancel()
-			s.sendSetupTaskAssignmentEmail(emailCtx, ac, organization.Name, organization.Slug, after, updated.UpdatedAt.Time)
+			s.sendSetupTaskAssignmentEmail(emailCtx, ac, organization, after, updated.UpdatedAt.Time)
 		}()
 	}
 
 	return after, nil
 }
 
-func (s *Service) sendSetupTaskAssignmentEmail(ctx context.Context, ac *contextvalues.AuthContext, organizationName, organizationSlug string, task *gen.SetupTask, assignmentTime time.Time) {
+func (s *Service) sendSetupTaskAssignmentEmail(ctx context.Context, ac *contextvalues.AuthContext, organization orgrepo.OrganizationMetadatum, task *gen.SetupTask, assignmentTime time.Time) {
 	if s.email == nil || task == nil || task.Assignee == nil || strings.TrimSpace(task.Assignee.Email) == "" {
 		return
 	}
@@ -303,12 +303,12 @@ func (s *Service) sendSetupTaskAssignmentEmail(ctx context.Context, ac *contextv
 	}
 
 	recipient := conv.NormalizeEmail(task.Assignee.Email)
-	setupLink := fmt.Sprintf("%s/%s/setup?task=%s", strings.TrimRight(s.siteURL, "/"), organizationSlug, task.Key)
+	setupLink := fmt.Sprintf("%s/%s/setup?task=%s", strings.TrimRight(s.orgHosts.SiteURL(organization.DefaultHost).String(), "/"), organization.Slug, task.Key)
 	idempotencyMaterial := fmt.Sprintf("%s\x00%s\x00%s\x00%s", ac.ActiveOrganizationID, task.Key, assignmentTime.UTC().Format(time.RFC3339Nano), recipient)
 	idempotencyKey := fmt.Sprintf("setup-task-assignment:%x", sha256.Sum256([]byte(idempotencyMaterial)))
 	tmpl := email.SetupTaskAssignment{
 		AssignerName:     assignerName,
-		OrganizationName: organizationName,
+		OrganizationName: organization.Name,
 		TaskTitle:        task.Title,
 		TaskDescription:  task.Description,
 		SetupLink:        setupLink,

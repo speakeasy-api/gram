@@ -613,7 +613,7 @@ func TestListChats_Filter_SearchResolvedUserEmail(t *testing.T) {
 	require.NotNil(t, authCtx.Email)
 
 	now := time.Now().UTC()
-	chatID, err := repo.New(ti.conn).UpsertExternalChat(ctx, repo.UpsertExternalChatParams{
+	upserted, err := repo.New(ti.conn).UpsertExternalChat(ctx, repo.UpsertExternalChatParams{
 		ID:             uuid.New(),
 		ProjectID:      ti.projectID,
 		OrganizationID: ti.orgID,
@@ -632,7 +632,7 @@ func TestListChats_Filter_SearchResolvedUserEmail(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Total)
 	require.Len(t, result.Chats, 1)
-	require.Equal(t, chatID.String(), result.Chats[0].ID)
+	require.Equal(t, upserted.ID.String(), result.Chats[0].ID)
 
 	payload.Offset = 1
 	result, err = ti.service.ListChats(ctx, payload)

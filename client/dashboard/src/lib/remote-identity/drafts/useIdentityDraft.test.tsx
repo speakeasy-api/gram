@@ -38,8 +38,11 @@ vi.mock("@gram/client/react-query/remoteSessionsCount.js", () => ({
   invalidateAllRemoteSessionsCount: vi.fn(),
 }));
 vi.mock("../queries/useAllRemoteSessionClients", () => ({
-  useAllRemoteSessionClients: () => ({
-    items: mocks.clients,
+  useAllRemoteSessionClients: (filters: { remoteSessionIssuerId: string }) => ({
+    items: mocks.clients.filter(
+      (client) =>
+        client.remoteSessionIssuerId === filters.remoteSessionIssuerId,
+    ),
     isLoading: false,
   }),
 }));
@@ -259,10 +262,17 @@ describe("Slack identity draft", () => {
     mocks.issuers = [
       {
         ...slackIssuer,
+        id: "provider-example",
         issuer: "https://example.test",
         tokenEndpointAuthMethodsSupported: ["none"],
       },
     ];
+    mocks.clients.push({
+      ...reusableClient,
+      id: "client-example",
+      remoteSessionIssuerId: "provider-example",
+      tokenEndpointAuthMethod: "none",
+    });
     const { result } = draft([], "https://example.test/mcp");
     expect(result.current.slackSetup).toBeUndefined();
     expect(result.current.choice).toBe("existing");

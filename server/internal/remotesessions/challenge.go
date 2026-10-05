@@ -385,6 +385,7 @@ type Client struct {
 	IssuerSlug            string
 
 	// IssuerName is the issuer's operator-set display name, nil when unset.
+	// WithCatalogBranding may fill it and IssuerLogoAssetID from the catalog.
 	IssuerName *string
 
 	// IssuerLogoAssetID references the issuer's logo image in the assets

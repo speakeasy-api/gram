@@ -409,7 +409,7 @@ func (s *ComplianceImportService) upsertActivityChat(ctx context.Context, cfg Co
 	if err != nil {
 		return uuid.Nil, "", err
 	}
-	chatID, err := chatrepo.New(s.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
+	upserted, err := chatrepo.New(s.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
 		ID:             uuid.New(),
 		ProjectID:      cfg.ProjectID,
 		OrganizationID: cfg.OrganizationID,
@@ -429,6 +429,7 @@ func (s *ComplianceImportService) upsertActivityChat(ctx context.Context, cfg Co
 	if err != nil {
 		return uuid.Nil, "", fmt.Errorf("upsert anthropic compliance chat: %w", err)
 	}
+	chatID := upserted.ID
 	messagesCursor, err := chatrepo.New(s.db).LinkAIIntegrationConfigChat(ctx, chatrepo.LinkAIIntegrationConfigChatParams{
 		AiIntegrationConfigID: cfg.ID,
 		ChatID:                chatID,
@@ -504,7 +505,7 @@ func (s *ComplianceImportService) upsertMessagePageChat(ctx context.Context, cfg
 	if err != nil {
 		return err
 	}
-	resolvedChatID, err := chatrepo.New(s.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
+	resolved, err := chatrepo.New(s.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
 		ID:             chatID,
 		ProjectID:      cfg.ProjectID,
 		OrganizationID: cfg.OrganizationID,
@@ -522,9 +523,9 @@ func (s *ComplianceImportService) upsertMessagePageChat(ctx context.Context, cfg
 	if err != nil {
 		return fmt.Errorf("upsert anthropic compliance chat metadata: %w", err)
 	}
-	if resolvedChatID != chatID {
+	if resolved.ID != chatID {
 		s.logger.WarnContext(ctx, "anthropic compliance chat resolved to different id",
-			attr.SlogChatID(resolvedChatID.String()),
+			attr.SlogChatID(resolved.ID.String()),
 			attr.SlogAIIntegrationConfigID(cfg.ID.String()),
 		)
 	}

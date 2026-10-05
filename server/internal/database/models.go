@@ -278,6 +278,27 @@ type Assistant struct {
 	Deleted         bool
 }
 
+type AssistantAgentBinding struct {
+	ID                         uuid.UUID
+	OrganizationID             string
+	ProjectID                  uuid.UUID
+	ProjectRefOrganizationID   pgtype.Text
+	ProjectRefID               uuid.NullUUID
+	OriginalAssistantID        uuid.UUID
+	AssistantRefOrganizationID pgtype.Text
+	AssistantRefProjectID      uuid.NullUUID
+	AssistantID                uuid.NullUUID
+	OriginalAgentID            uuid.UUID
+	AgentRefOrganizationID     pgtype.Text
+	AgentRefProjectID          uuid.NullUUID
+	AgentID                    uuid.NullUUID
+	Generation                 int64
+	CreatedAt                  pgtype.Timestamptz
+	UpdatedAt                  pgtype.Timestamptz
+	DeletedAt                  pgtype.Timestamptz
+	Deleted                    bool
+}
+
 type AssistantDashboardMessage struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID
@@ -2790,6 +2811,17 @@ type RiskExclusion struct {
 	Deleted        bool
 }
 
+type RiskExecutionEvidence struct {
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	ExecutionID      string
+	Phase            string
+	PayloadEncrypted string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	ExpiresAt        pgtype.Timestamptz
+}
+
 type RiskFindingEvidence struct {
 	FindingID      uuid.UUID
 	OrganizationID string
@@ -3634,6 +3666,33 @@ type TriggerThreadRoute struct {
 	UpdatedAt            pgtype.Timestamptz
 	DeletedAt            pgtype.Timestamptz
 	Deleted              bool
+}
+
+type TriggerWorkloadBinding struct {
+	ID                                uuid.UUID
+	OrganizationID                    string
+	ProjectID                         uuid.UUID
+	ProjectRefOrganizationID          pgtype.Text
+	ProjectRefID                      uuid.NullUUID
+	OriginalTriggerID                 uuid.UUID
+	TriggerRefOrganizationID          pgtype.Text
+	TriggerRefProjectID               uuid.NullUUID
+	TriggerID                         uuid.NullUUID
+	OriginalAssistantBindingID        uuid.UUID
+	AssistantBindingRefOrganizationID pgtype.Text
+	AssistantBindingRefProjectID      uuid.NullUUID
+	AssistantBindingID                uuid.NullUUID
+	AssistantBindingGeneration        int64
+	OriginalWorkloadIssuerID          uuid.UUID
+	WorkloadIssuerRefOrganizationID   pgtype.Text
+	WorkloadIssuerRefProjectID        uuid.NullUUID
+	WorkloadIssuerID                  uuid.NullUUID
+	Subject                           string
+	Generation                        int64
+	CreatedAt                         pgtype.Timestamptz
+	UpdatedAt                         pgtype.Timestamptz
+	DeletedAt                         pgtype.Timestamptz
+	Deleted                           bool
 }
 
 type TrustedIssuerSession struct {

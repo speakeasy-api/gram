@@ -544,7 +544,7 @@ func (src *codexCloudSource) upsertSessionChat(ctx context.Context, sessionID st
 		return err
 	}
 
-	chatID, err := chatrepo.New(src.svc.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
+	upserted, err := chatrepo.New(src.svc.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
 		ID:             uuid.New(),
 		ProjectID:      src.cfg.ProjectID,
 		OrganizationID: src.cfg.OrganizationID,
@@ -564,6 +564,7 @@ func (src *codexCloudSource) upsertSessionChat(ctx context.Context, sessionID st
 	if err != nil {
 		return fmt.Errorf("upsert codex cloud chat: %w", err)
 	}
+	chatID := upserted.ID
 	if !known {
 		if _, err := chatrepo.New(src.svc.db).LinkAIIntegrationConfigChat(ctx, chatrepo.LinkAIIntegrationConfigChatParams{
 			AiIntegrationConfigID: src.cfg.ID,

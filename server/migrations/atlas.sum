@@ -1,4 +1,4 @@
-h1:hV/Ej4B+2fT/iFYXiKFGs93Ay2QMdlaOVBxXNDCXhFs=
+h1:7o8l9Ojdf9pfErNHTP/a+4Njr60qM9nmnRAhrgad/fI=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -452,3 +452,5 @@ h1:hV/Ej4B+2fT/iFYXiKFGs93Ay2QMdlaOVBxXNDCXhFs=
 20261001215122_drop-queries-table.sql h1:xWFkosNDeXftjXIZBDHR0ASSnDkvsGvlk7wDYvmeakc=
 20261002134357_user-session-issuer-authorization-server-mode.sql h1:pR9v/zc5B07ORkbtcgZSiWQ4EqIObvo3ZUf9ihjeUy4=
 20261002160117_inference-conversation-adoption.sql h1:srTsjRNcord/S5c6jWJIIHpyjmdsixgH6kY+pQo7JV0=
+20261002211059_assistant_identity_bindings.sql h1:v0pdMZYDkEw62HrMC1qGF2TgLkKJcYSnrvGG8epPUt4=
+20261005153853_risk-execution-evidence.sql h1:KrzAQmFOY8N2X1l5QHdjWuZ4ZDV8c0i6V8K9025RWbA=
