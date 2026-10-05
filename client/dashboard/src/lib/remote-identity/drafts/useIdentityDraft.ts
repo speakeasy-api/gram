@@ -25,12 +25,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
-import {
-  hasSlackReadScopes,
-  isSlackMcpUrl,
-  isSlackProvider,
-  slackClientMismatch,
-} from "../setup/slack";
+import { getOAuthSetupPolicy } from "../setup/oauthPolicies";
 import {
   advertisedScopes,
   normalizeScopes,
@@ -289,7 +284,11 @@ const TIER_BY_SCOPE = {
 
 /** Everything the User Identity row renders and everything it can change. */
 export type UserIdentityDraft = {
-  slackSetup?: {
+  guidedSetup?: {
+    id: string;
+    providerName: string;
+    changeConnectionLabel: string;
+    requiresClientSecret: boolean;
     manualActive: boolean;
     scopesCompatible: boolean;
     providerCompatible: boolean;
@@ -347,7 +346,7 @@ export type UserIdentityDraft = {
   /** Scopes chosen for a manual client. Empty requests the defaults. */
   scopes: string[];
   setScopes: (values: string[]) => void;
-  /** Text summary for the Slack setup host; scopes remains the editable state. */
+  /** Text summary for the guided setup host; scopes remains the editable state. */
   scopeText: string;
   /** Scopes the server and provider advertise, offered as choices. */
   scopeOptions: string[];
@@ -399,10 +398,11 @@ export function useUserIdentityDraft({
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [scopes, setScopes] = useState<string[]>([]);
+  const setupPolicy = getOAuthSetupPolicy(upstreamUrl);
   const [guidedManual, setGuidedManual] = useState(false);
   const [guidedInitialBinding, setGuidedInitialBinding] = useState(false);
   useEffect(() => {
-    if (!enabled && isSlackMcpUrl(upstreamUrl)) {
+    if (!enabled && setupPolicy) {
       setClientId("");
       setClientSecret("");
       setScopes([]);
@@ -410,7 +410,7 @@ export function useUserIdentityDraft({
       setGuidedInitialBinding(false);
       setChoicePick(null);
     }
-  }, [enabled, upstreamUrl]);
+  }, [enabled, upstreamUrl, setupPolicy]);
   const [localStatus, setLocalStatus] = useState<UserIdentityStatus>({
     kind: "idle",
   });
@@ -632,7 +632,6 @@ export function useUserIdentityDraft({
       { remoteSessionIssuerId: selectedIssuer?.id ?? "" },
       { enabled: enabled && !!selectedIssuer },
     );
-  const slackEndpoint = isSlackMcpUrl(upstreamUrl);
   const clientOptions = useMemo<ClientOption[]>(() => {
     const names = providerClients.map(clientOptionName);
     return providerClients.map((candidate, index) => ({
@@ -645,15 +644,15 @@ export function useUserIdentityDraft({
       scopes: candidate.scope ?? [],
     }));
   }, [providerClients]);
-  const reusableClientOptions = slackEndpoint
+  const reusableClientOptions = setupPolicy
     ? clientOptions.filter((option) => {
         const candidate = providerClients.find(
           (entry) => entry.id === option.id,
         );
         return (
           !!candidate &&
-          isSlackProvider(selectedIssuer) &&
-          !slackClientMismatch(candidate, selectedIssuer?.id ?? "")
+          setupPolicy.isProviderCompatible(selectedIssuer) &&
+          !setupPolicy.clientMismatch(candidate, selectedIssuer?.id ?? "")
         );
       })
     : clientOptions;
@@ -693,7 +692,9 @@ export function useUserIdentityDraft({
   const discoveredMetadata = selectedDiscovered
     ? (discoveredMetadataQuery.data ?? null)
     : null;
-  const slackCompatible = isSlackProvider(selectedIssuer ?? discoveredMetadata);
+  const providerCompatible =
+    setupPolicy?.isProviderCompatible(selectedIssuer ?? discoveredMetadata) ??
+    false;
   // Nothing is claimed while the answer is outstanding.
   const capabilitiesLoading =
     !!selectedDiscovered && discoveredMetadataQuery.isLoading;
@@ -708,11 +709,11 @@ export function useUserIdentityDraft({
   const methodChoiceAvailable = support.cimd && support.dcr;
   const existingAvailable = reusableClientOptions.length > 0;
 
-  // Slack starts with a new app; reusing a client is an explicit choice.
-  // Other providers prefer reuse, then automatic registration. A pick the
-  // provider no longer allows falls back.
+  // A guide may start with a new manual client; reuse stays an explicit choice.
+  // Otherwise prefer reuse, then automatic registration. A pick the provider
+  // no longer allows falls back.
   let defaultChoice: RegistrationChoice = "manual";
-  if (!slackEndpoint) {
+  if (!setupPolicy?.prefersManualRegistration) {
     if (existingAvailable) defaultChoice = "existing";
     else if (automaticAvailable) defaultChoice = "auto";
   }
@@ -800,15 +801,13 @@ export function useUserIdentityDraft({
     mutationFn: async () => {
       if (!selected) throw new Error("choose an identity provider");
       if (
-        slackEndpoint &&
+        setupPolicy &&
         manualNeeded &&
-        (!slackCompatible ||
-          !hasSlackReadScopes(scopes) ||
-          !clientSecret.trim())
+        (!providerCompatible ||
+          !setupPolicy.isScopeSelectionCompatible(scopes) ||
+          (setupPolicy.requiresClientSecret && !clientSecret.trim()))
       ) {
-        throw new Error(
-          "Slack setup requires the reviewed provider, supported read/search access, and a client secret.",
-        );
+        throw new Error(setupPolicy.manualConfigurationError);
       }
 
       // A discovered provider is created from what the upstream publishes, so
@@ -883,15 +882,16 @@ export function useUserIdentityDraft({
           scope: requestedScopes.length > 0 ? requestedScopes : undefined,
           // A manual client without a secret is a public client; naming a
           // secret-based method for it is refused by the server.
-          tokenEndpointAuthMethod: guidedManual
-            ? "client_secret_post"
-            : manualNeeded && !secret
-              ? "none"
-              : serverIdentityAuthMethod(
-                  selectedIssuer?.tokenEndpointAuthMethodsSupported ??
-                    draft?.tokenEndpointAuthMethodsSupported ??
-                    [],
-                ),
+          tokenEndpointAuthMethod:
+            guidedManual && setupPolicy
+              ? setupPolicy.tokenEndpointAuthMethod
+              : manualNeeded && !secret
+                ? "none"
+                : serverIdentityAuthMethod(
+                    selectedIssuer?.tokenEndpointAuthMethodsSupported ??
+                      draft?.tokenEndpointAuthMethodsSupported ??
+                      [],
+                  ),
         };
       }
 
@@ -940,7 +940,7 @@ export function useUserIdentityDraft({
       setCleared(false);
       resetChoice();
       setLocalStatus({ kind: "done" });
-      if (slackEndpoint) {
+      if (setupPolicy) {
         setProviderPick(null);
         toast.success("Identity configured");
       }
@@ -995,12 +995,12 @@ export function useUserIdentityDraft({
   if (choice === "existing")
     choiceComplete = !!existingClient && !sameAsConnected;
   if (choice === "manual") choiceComplete = clientId.trim() !== "";
-  if (slackEndpoint && manualNeeded)
+  if (setupPolicy && manualNeeded)
     choiceComplete =
       choiceComplete &&
-      slackCompatible &&
-      !!clientSecret.trim() &&
-      hasSlackReadScopes(scopes);
+      providerCompatible &&
+      (!setupPolicy.requiresClientSecret || !!clientSecret.trim()) &&
+      setupPolicy.isScopeSelectionCompatible(scopes);
 
   const canSave =
     !!selected &&
@@ -1015,22 +1015,28 @@ export function useUserIdentityDraft({
     choiceComplete;
 
   return {
-    slackSetup: slackEndpoint
+    guidedSetup: setupPolicy
       ? {
+          id: setupPolicy.id,
+          providerName: setupPolicy.providerName,
+          changeConnectionLabel: setupPolicy.changeConnectionLabel,
+          requiresClientSecret: setupPolicy.requiresClientSecret,
           manualActive: guidedManual && manualNeeded,
-          scopesCompatible: hasSlackReadScopes(scopes),
-          providerCompatible: slackCompatible,
+          scopesCompatible: setupPolicy.isScopeSelectionCompatible(scopes),
+          providerCompatible: providerCompatible,
           canApplyDefaults:
-            slackCompatible &&
+            providerCompatible &&
             !connected &&
-            (scopes.length === 0 || hasSlackReadScopes(scopes)) &&
+            (scopes.length === 0 ||
+              setupPolicy.isScopeSelectionCompatible(scopes)) &&
             !isPending,
           applyDefaults: (selectedScopes: string[]) => {
             if (
-              !slackCompatible ||
-              !hasSlackReadScopes(selectedScopes) ||
+              !providerCompatible ||
+              !setupPolicy.isScopeSelectionCompatible(selectedScopes) ||
               connected ||
-              (scopes.length > 0 && !hasSlackReadScopes(scopes)) ||
+              (scopes.length > 0 &&
+                !setupPolicy.isScopeSelectionCompatible(scopes)) ||
               isPending
             )
               return;
@@ -1041,7 +1047,7 @@ export function useUserIdentityDraft({
             setLocalStatus({ kind: "idle" });
           },
           incompatibleClients: providerClients.flatMap((candidate) => {
-            const reason = slackClientMismatch(
+            const reason = setupPolicy.clientMismatch(
               candidate,
               selectedIssuer?.id ?? "",
             );
@@ -1082,7 +1088,7 @@ export function useUserIdentityDraft({
 
     choice,
     selectChoice: (next: RegistrationChoice): void => {
-      if (slackEndpoint && next !== "manual") resetChoice();
+      if (setupPolicy && next !== "manual") resetChoice();
       setChoicePick(next);
       setLocalStatus({ kind: "idle" });
     },

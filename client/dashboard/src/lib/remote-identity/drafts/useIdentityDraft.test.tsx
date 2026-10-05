@@ -3,6 +3,7 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as setupPolicies from "../setup/oauthPolicies";
 import { SLACK_DEFAULT_SCOPES } from "../setup/slack";
 import { useUserIdentityDraft } from "./useIdentityDraft";
 
@@ -103,7 +104,10 @@ beforeEach(() => {
   mocks.clients = [reusableClient];
   mocks.commit.mockReset().mockResolvedValue({});
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe("Slack identity draft", () => {
   it("starts with a new app even when a reusable client exists", () => {
@@ -123,13 +127,13 @@ describe("Slack identity draft", () => {
       result.current.setClientSecret("pasted-secret");
     });
     expect(result.current.canSave).toBe(false);
-    expect(result.current.slackSetup?.canApplyDefaults).toBe(true);
-    act(() => result.current.slackSetup?.applyDefaults(SLACK_DEFAULT_SCOPES));
-    expect(result.current.slackSetup?.manualActive).toBe(true);
+    expect(result.current.guidedSetup?.canApplyDefaults).toBe(true);
+    act(() => result.current.guidedSetup?.applyDefaults(SLACK_DEFAULT_SCOPES));
+    expect(result.current.guidedSetup?.manualActive).toBe(true);
     expect(result.current.canSave).toBe(true);
-    expect(result.current.slackSetup?.canApplyDefaults).toBe(true);
+    expect(result.current.guidedSetup?.canApplyDefaults).toBe(true);
     const scopes = ["search:read.private"];
-    act(() => result.current.slackSetup?.applyDefaults(scopes));
+    act(() => result.current.guidedSetup?.applyDefaults(scopes));
     expect(result.current.scopes).toEqual(scopes);
     expect(result.current.clientId).toBe("pasted-id");
     expect(result.current.clientSecret).toBe("pasted-secret");
@@ -155,18 +159,20 @@ describe("Slack identity draft", () => {
     (scope) => {
       const { result } = draft();
       act(() => result.current.setScopes([scope]));
-      expect(result.current.slackSetup?.canApplyDefaults).toBe(false);
-      act(() => result.current.slackSetup?.applyDefaults(SLACK_DEFAULT_SCOPES));
+      expect(result.current.guidedSetup?.canApplyDefaults).toBe(false);
+      act(() =>
+        result.current.guidedSetup?.applyDefaults(SLACK_DEFAULT_SCOPES),
+      );
       expect(result.current.scopes).toEqual([scope]);
-      expect(result.current.slackSetup?.manualActive).toBe(false);
+      expect(result.current.guidedSetup?.manualActive).toBe(false);
     },
   );
 
   it("does not accept unsupported selected defaults", () => {
     const { result } = draft();
-    act(() => result.current.slackSetup?.applyDefaults(["chat:write"]));
+    act(() => result.current.guidedSetup?.applyDefaults(["chat:write"]));
     expect(result.current.scopes).toEqual([]);
-    expect(result.current.slackSetup?.manualActive).toBe(false);
+    expect(result.current.guidedSetup?.manualActive).toBe(false);
   });
 
   it("requires a secret and supported scopes even before guided defaults", async () => {
@@ -199,7 +205,7 @@ describe("Slack identity draft", () => {
       result.current.setClientSecret("secret");
       result.current.setScopes(SLACK_DEFAULT_SCOPES);
     });
-    expect(result.current.slackSetup?.canApplyDefaults).toBe(false);
+    expect(result.current.guidedSetup?.canApplyDefaults).toBe(false);
     expect(result.current.canSave).toBe(false);
     await act(async () => {
       await result.current.save();
@@ -210,11 +216,11 @@ describe("Slack identity draft", () => {
   it("blocks defaults while connected and does not mark a replacement initial-only", async () => {
     const { result } = draft([reusableClient]);
     expect(result.current.connected).toBe(true);
-    expect(result.current.slackSetup?.canApplyDefaults).toBe(false);
-    act(() => result.current.slackSetup?.applyDefaults(SLACK_DEFAULT_SCOPES));
+    expect(result.current.guidedSetup?.canApplyDefaults).toBe(false);
+    act(() => result.current.guidedSetup?.applyDefaults(SLACK_DEFAULT_SCOPES));
     expect(result.current.scopes).toEqual([]);
     act(() => result.current.clear());
-    act(() => result.current.slackSetup?.applyDefaults(SLACK_DEFAULT_SCOPES));
+    act(() => result.current.guidedSetup?.applyDefaults(SLACK_DEFAULT_SCOPES));
     act(() => {
       result.current.setClientId("replacement-id");
       result.current.setClientSecret("secret");
@@ -237,7 +243,7 @@ describe("Slack identity draft", () => {
         }),
     );
     const { result } = draft();
-    act(() => result.current.slackSetup?.applyDefaults(SLACK_DEFAULT_SCOPES));
+    act(() => result.current.guidedSetup?.applyDefaults(SLACK_DEFAULT_SCOPES));
     act(() => {
       result.current.setClientId("manual-id");
       result.current.setClientSecret("secret");
@@ -247,9 +253,9 @@ describe("Slack identity draft", () => {
       saving = result.current.save();
     });
     await waitFor(() => expect(result.current.saving).toBe(true));
-    expect(result.current.slackSetup?.canApplyDefaults).toBe(false);
+    expect(result.current.guidedSetup?.canApplyDefaults).toBe(false);
     act(() =>
-      result.current.slackSetup?.applyDefaults(["search:read.private"]),
+      result.current.guidedSetup?.applyDefaults(["search:read.private"]),
     );
     expect(result.current.scopes).toEqual(SLACK_DEFAULT_SCOPES);
     await act(async () => {
@@ -274,10 +280,66 @@ describe("Slack identity draft", () => {
       tokenEndpointAuthMethod: "none",
     });
     const { result } = draft([], "https://example.test/mcp");
-    expect(result.current.slackSetup).toBeUndefined();
+    expect(result.current.guidedSetup).toBeUndefined();
     expect(result.current.choice).toBe("existing");
     act(() => result.current.selectChoice("manual"));
     act(() => result.current.setClientId("public-client"));
     expect(result.current.canSave).toBe(true);
+  });
+});
+
+describe("provider-independent guided setup", () => {
+  it("uses another policy's scopes, labels and public-client authentication", async () => {
+    const policy: setupPolicies.OAuthSetupPolicy = {
+      id: "example",
+      providerName: "Example",
+      changeConnectionLabel: "Change Example application",
+      matchesUrl: (url) => url === "https://example.test/mcp",
+      prefersManualRegistration: true,
+      requiresClientSecret: false,
+      tokenEndpointAuthMethod: "none",
+      isProviderCompatible: (provider) =>
+        provider?.issuer === "https://example.test",
+      isScopeSelectionCompatible: (scopes) =>
+        scopes?.length === 1 && scopes[0] === "example:read",
+      clientMismatch: () => "Unsupported client",
+      manualConfigurationError: "Choose Example read access",
+    };
+    vi.spyOn(setupPolicies, "getOAuthSetupPolicy").mockReturnValue(policy);
+    mocks.issuers = [
+      {
+        ...slackIssuer,
+        id: "provider-example",
+        issuer: "https://example.test",
+      },
+    ];
+    const { result } = draft([], "https://example.test/mcp");
+    expect(result.current.guidedSetup).toMatchObject({
+      id: "example",
+      providerName: "Example",
+      requiresClientSecret: false,
+      changeConnectionLabel: "Change Example application",
+    });
+    act(() => result.current.guidedSetup?.applyDefaults(SLACK_DEFAULT_SCOPES));
+    expect(result.current.scopes).toEqual([]);
+    act(() => {
+      result.current.guidedSetup?.applyDefaults(["example:read"]);
+      result.current.setClientId("example-public-client");
+    });
+    expect(result.current.canSave).toBe(true);
+    await act(async () => {
+      await result.current.save();
+    });
+    expect(mocks.commit).toHaveBeenCalledWith({
+      commitServerIdentityConfigurationForm: expect.objectContaining({
+        clientMode: "manual",
+        clientConfiguration: expect.objectContaining({
+          clientId: "example-public-client",
+          clientSecret: undefined,
+          scope: ["example:read"],
+          tokenEndpointAuthMethod: "none",
+        }),
+      }),
+    });
   });
 });

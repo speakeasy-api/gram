@@ -57,8 +57,7 @@ import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 import { useUpstreamProbe } from "@/lib/remote-identity";
 import { UserIdentityRow } from "@/lib/remote-identity";
 import { useUserIdentityDraft } from "@/lib/remote-identity";
-import { SlackSetup } from "@/lib/remote-identity/setup/SlackSetup";
-import { isSlackMcpUrl } from "@/lib/remote-identity/setup/slack";
+import { GuidedOAuthSetup } from "@/lib/remote-identity/setup/GuidedOAuthSetup";
 
 export function RemoteMcpIdentitySectionBody({
   target,
@@ -506,25 +505,11 @@ export function RemoteMcpIdentitySectionBody({
             // The provider row is the whole decision, so it takes the full
             // width rather than sitting beside a label that restates it.
             <div className="px-6 py-5">
-              {isSlackMcpUrl(sourceQuery.data?.url) && sourceQuery.data?.url ? (
-                <SlackSetup
-                  serverUrl={sourceQuery.data.url}
-                  draft={userDraft}
-                  disabled={identityReadOnly || userDraft.saving}
-                >
-                  <UserIdentityRow
-                    draft={userDraft}
-                    disabled={identityReadOnly || userDraft.saving}
-                    createHref={routes.remoteIdentityProviders.href()}
-                    clientHref={(issuerId, clientId) =>
-                      routes.remoteIdentityProviders.clientDetail.href(
-                        issuerId,
-                        clientId,
-                      )
-                    }
-                  />
-                </SlackSetup>
-              ) : (
+              <GuidedOAuthSetup
+                serverUrl={sourceQuery.data?.url}
+                draft={userDraft}
+                disabled={identityReadOnly || userDraft.saving}
+              >
                 <UserIdentityRow
                   draft={userDraft}
                   disabled={identityReadOnly || userDraft.saving}
@@ -536,7 +521,7 @@ export function RemoteMcpIdentitySectionBody({
                     )
                   }
                 />
-              )}
+              </GuidedOAuthSetup>
             </div>
           ) : null}
 

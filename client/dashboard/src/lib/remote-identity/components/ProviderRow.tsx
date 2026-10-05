@@ -314,7 +314,7 @@ export function UserIdentityRow({
       {draft.connected ? (
         <ConnectedSummary draft={draft} advancedHref={connectedHref} />
       ) : null}
-      {draft.cleared && !draft.slackSetup ? (
+      {draft.cleared && !draft.guidedSetup ? (
         <Button
           variant="tertiary"
           size="sm"
@@ -329,7 +329,7 @@ export function UserIdentityRow({
 
   return (
     <div className="space-y-4">
-      {draft.slackSetup && !draft.connected ? (
+      {draft.guidedSetup && !draft.connected ? (
         <details>
           <summary className="cursor-pointer text-sm">Advanced</summary>
           <div className="space-y-4 pt-3">
@@ -339,7 +339,7 @@ export function UserIdentityRow({
               <ScopeField
                 draft={draft}
                 disabled={disabled}
-                providerName={selected?.name ?? "Slack"}
+                providerName={selected?.name ?? draft.guidedSetup.providerName}
               />
             )}
           </div>
@@ -363,8 +363,8 @@ export function UserIdentityRow({
       ) : null}
 
       {selected && !draft.connected ? (
-        <div className={cn("space-y-4", !draft.slackSetup && "pl-[52px]")}>
-          {!draft.slackSetup && (
+        <div className={cn("space-y-4", !draft.guidedSetup && "pl-[52px]")}>
+          {!draft.guidedSetup && (
             <RegistrationChoices draft={draft} disabled={disabled} />
           )}
           <ChoiceDetails
@@ -408,15 +408,17 @@ function ClientStatus({
           className={cn(STATUS_DOT, "bg-[var(--fill-success-default)]")}
         />
         <Text small>
-          {draft.slackSetup ? "Identity configured" : "Connected"}
+          {draft.guidedSetup ? "Identity configured" : "Connected"}
         </Text>
         <Button
           variant="tertiary"
           size="xs"
           aria-label={
-            draft.slackSetup ? "Change Slack app" : "Clear connection"
+            draft.guidedSetup?.changeConnectionLabel ?? "Clear connection"
           }
-          tooltip={draft.slackSetup ? "Change Slack app" : "Clear connection"}
+          tooltip={
+            draft.guidedSetup?.changeConnectionLabel ?? "Clear connection"
+          }
           disabled={disabled}
           onClick={draft.clear}
           className="w-7 px-0"
@@ -445,7 +447,7 @@ function ClientStatus({
         className={cn(STATUS_DOT, "border-muted-foreground border")}
       />
       <Text small muted>
-        {draft.slackSetup ? "Identity not configured" : "Not connected"}
+        {draft.guidedSetup ? "Identity not configured" : "Not connected"}
       </Text>
     </span>
   );
@@ -789,7 +791,7 @@ function ManualCredentialsFields({
   disabled: boolean;
   providerName: string;
 }): JSX.Element {
-  const guidedManual = draft.slackSetup?.manualActive ?? false;
+  const guidedManual = draft.guidedSetup?.manualActive ?? false;
   // The guide URL comes from issuer metadata, so it is upstream input: only
   // render the action once it is known to be an ordinary http(s) link.
   const registrationGuideUrl = safeExternalHttpUrl(draft.registrationGuideUrl);
@@ -817,14 +819,16 @@ function ManualCredentialsFields({
             type="password"
             value={draft.clientSecret}
             onChange={draft.setClientSecret}
-            placeholder={draft.slackSetup ? "Required" : "Optional"}
+            placeholder={
+              draft.guidedSetup?.requiresClientSecret ? "Required" : "Optional"
+            }
             disabled={disabled}
             aria-label="Client secret"
             noAutofill
           />
         </div>
       </div>
-      {!guidedManual && !draft.slackSetup && (
+      {!guidedManual && !draft.guidedSetup && (
         <AdvancedOptions>
           <ScopeField
             draft={draft}
@@ -833,7 +837,7 @@ function ManualCredentialsFields({
           />
         </AdvancedOptions>
       )}
-      {registrationGuideUrl && !draft.slackSetup ? (
+      {registrationGuideUrl && !draft.guidedSetup ? (
         <Button variant="secondary" size="sm" asChild>
           <a href={registrationGuideUrl} target="_blank" rel="noreferrer">
             <Button.LeftIcon>

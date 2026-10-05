@@ -31,7 +31,7 @@ export function SlackSetup({
       (choice) => choice.label,
     ),
   );
-  const setup = draft.slackSetup;
+  const setup = draft.guidedSetup;
   useEffect(() => {
     if (
       setup?.canApplyDefaults &&
