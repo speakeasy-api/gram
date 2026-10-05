@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -19,6 +20,10 @@ import (
 const (
 	// mcpFindingEvidenceRetention matches the ClickHouse risk_findings TTL.
 	mcpFindingEvidenceRetention = 90 * 24 * time.Hour
+
+	// MaxMCPExecutionPayloadBytes caps a stored execution payload, matching the
+	// tool IO telemetry body cap.
+	MaxMCPExecutionPayloadBytes = 64 * 1024 // 64 KiB
 )
 
 // ErrMCPFindingEvidenceNotStored means evidence is unavailable or has expired.
@@ -33,7 +38,8 @@ type MCPExecutionPayload struct {
 	// Phase is the inspection phase, request or response.
 	Phase string
 
-	// Payload is the scanned text. Callers must pass an owned copy.
+	// Payload is the scanned text. Callers must pass an owned copy. Store keeps
+	// at most MaxMCPExecutionPayloadBytes of it.
 	Payload string
 }
 
@@ -118,7 +124,7 @@ func (s *MCPFindingEvidenceStore) Store(ctx context.Context, batch MCPFindingEvi
 	}
 
 	if execution := batch.Execution; execution != nil {
-		ciphertext, err := s.enc.Encrypt([]byte(execution.Payload))
+		ciphertext, err := s.enc.Encrypt([]byte(truncateUTF8(execution.Payload, MaxMCPExecutionPayloadBytes)))
 		if err != nil {
 			return fmt.Errorf("encrypt MCP execution evidence: %w", err)
 		}
@@ -139,6 +145,18 @@ func (s *MCPFindingEvidenceStore) Store(ctx context.Context, batch MCPFindingEvi
 		return fmt.Errorf("commit MCP finding evidence: %w", err)
 	}
 	return nil
+}
+
+// truncateUTF8 cuts s to at most maxBytes without splitting a rune.
+func truncateUTF8(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	cut := maxBytes
+	for cut > maxBytes-utf8.UTFMax && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut]
 }
 
 // Reveal returns decrypted evidence only while its retention window is active.

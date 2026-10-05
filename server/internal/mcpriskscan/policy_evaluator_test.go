@@ -90,6 +90,8 @@ func (w *evidenceWriter) snapshot() []risk.MCPFindingEvidenceBatch {
 	return append([]risk.MCPFindingEvidenceBatch(nil), w.batches...)
 }
 
+func payloadStorageAllowed(context.Context, string) (bool, error) { return true, nil }
+
 func TestPolicyEvaluator_BlockDecisionPublishesAttributedFinding(t *testing.T) {
 	t.Parallel()
 	projectID := uuid.New()
@@ -110,7 +112,7 @@ func TestPolicyEvaluator_BlockDecisionPublishesAttributedFinding(t *testing.T) {
 		require.Equal(t, policyID, policy.ID)
 		require.JSONEq(t, `{"token":"secret"}`, request.Text)
 		return []scanners.Finding{{RuleID: "secret.token", Description: "Credential detected", Match: "secret", StartPos: 10, EndPos: 16, Tags: []string{}, Source: "gitleaks", Confidence: 1}}, nil
-	}), publisher, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithMCPFindingEvidenceWriter(evidence))
+	}), publisher, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithMCPFindingEvidenceWriter(evidence, payloadStorageAllowed))
 
 	decision := evaluator.Scan(t.Context(), requestSubject(t.Context(), projectID, serverID, `{"token":"secret"}`))
 	require.True(t, decision.Denied())
@@ -164,7 +166,7 @@ func TestPolicyEvaluator_PublishesWhenEvidenceStorageFails(t *testing.T) {
 		}),
 		publisher,
 		mcpriskscan.DefaultPolicyConfig,
-		mcpriskscan.WithMCPFindingEvidenceWriter(evidence),
+		mcpriskscan.WithMCPFindingEvidenceWriter(evidence, payloadStorageAllowed),
 	)
 
 	decision := evaluator.Scan(t.Context(), requestSubject(t.Context(), projectID, uuid.New(), `{"token":"secret"}`))
@@ -205,7 +207,7 @@ func TestPolicyEvaluator_SlowEvidenceStorageDoesNotStarvePublish(t *testing.T) {
 		}),
 		publisher,
 		mcpriskscan.PolicyConfig{Deadline: 50 * time.Millisecond, FailMode: mcpriskscan.FailOpen, FlagConcurrency: 1},
-		mcpriskscan.WithMCPFindingEvidenceWriter(evidence),
+		mcpriskscan.WithMCPFindingEvidenceWriter(evidence, payloadStorageAllowed),
 	)
 
 	decision := evaluator.Scan(t.Context(), requestSubject(t.Context(), projectID, uuid.New(), `{"token":"secret"}`))
@@ -225,7 +227,7 @@ func TestPolicyEvaluator_BlockLaneStoresOwnedCopyOfScannedPayload(t *testing.T) 
 	evidence := &evidenceWriter{}
 	evaluator := newPolicyEvaluator(t, staticPolicies(policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Block policy", Action: "block", Version: 1}), policyDetectorFunc(func(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
 		return []scanners.Finding{{RuleID: "secret.token", Description: "Credential detected", Match: "secret", StartPos: 10, EndPos: 16, Tags: []string{}, Source: "gitleaks", Confidence: 1}}, nil
-	}), publisher, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithMCPFindingEvidenceWriter(evidence))
+	}), publisher, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithMCPFindingEvidenceWriter(evidence, payloadStorageAllowed))
 
 	const payload = `{"token":"secret"}`
 	buf := []byte(payload)
@@ -259,6 +261,40 @@ func TestPolicyEvaluator_BlockLaneStoresOwnedCopyOfScannedPayload(t *testing.T) 
 	require.Equal(t, "secret", stored[0].Execution.Payload[10:16])
 }
 
+func TestPolicyEvaluator_SkipsPayloadWhenToolIOLogsDisabled(t *testing.T) {
+	t.Parallel()
+	evidence := evaluateBlockWithPayloadStorage(t, func(_ context.Context, organizationID string) (bool, error) {
+		require.Equal(t, "org-test", organizationID)
+		return false, nil
+	})
+	require.Len(t, evidence, 1)
+	require.Nil(t, evidence[0].Execution)
+	require.Len(t, evidence[0].Findings, 1)
+	require.Equal(t, "secret", evidence[0].Findings[0].Match)
+}
+
+func TestPolicyEvaluator_SkipsPayloadWhenToolIOLogsLookupFails(t *testing.T) {
+	t.Parallel()
+	evidence := evaluateBlockWithPayloadStorage(t, func(context.Context, string) (bool, error) {
+		return true, errors.New("feature store unavailable")
+	})
+	require.Len(t, evidence, 1)
+	require.Nil(t, evidence[0].Execution)
+	require.Len(t, evidence[0].Findings, 1)
+}
+
+func evaluateBlockWithPayloadStorage(t *testing.T, payloadStorage mcpriskscan.PayloadStorageCheck) []risk.MCPFindingEvidenceBatch {
+	t.Helper()
+	projectID := uuid.New()
+	evidence := &evidenceWriter{}
+	evaluator := newPolicyEvaluator(t, staticPolicies(policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Block policy", Action: "block", Version: 1}), policyDetectorFunc(func(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
+		return []scanners.Finding{{RuleID: "secret.token", Description: "Credential detected", Match: "secret", StartPos: 10, EndPos: 16, Tags: []string{}, Source: "gitleaks", Confidence: 1}}, nil
+	}), &findingPublisher{}, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithMCPFindingEvidenceWriter(evidence, payloadStorage))
+
+	require.True(t, evaluator.Scan(t.Context(), requestSubject(t.Context(), projectID, uuid.New(), `{"token":"secret"}`)).Denied())
+	return evidence.snapshot()
+}
+
 func TestPolicyEvaluator_FlagLaneStoresPayloadOncePerPhase(t *testing.T) {
 	t.Parallel()
 	projectID := uuid.New()
@@ -270,7 +306,7 @@ func TestPolicyEvaluator_FlagLaneStoresPayloadOncePerPhase(t *testing.T) {
 		policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Second flag", Action: "flag", Version: 1},
 	), policyDetectorFunc(func(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
 		return []scanners.Finding{{RuleID: "flag.rule", Description: "Flagged", Match: "flag", StartPos: 10, EndPos: 14, Tags: []string{}, Source: "gitleaks", Confidence: 1}}, nil
-	}), publisher, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithMCPFindingEvidenceWriter(evidence))
+	}), publisher, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithMCPFindingEvidenceWriter(evidence, payloadStorageAllowed))
 
 	require.False(t, evaluator.Scan(t.Context(), requestSubject(t.Context(), projectID, serverID, `{"query":"flag"}`)).Denied())
 	require.NoError(t, evaluator.Drain(t.Context()))
@@ -293,7 +329,7 @@ func TestPolicyEvaluator_FlagLaneSkipsPayloadStoredByBlockLane(t *testing.T) {
 		policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Flag policy", Action: "flag", Version: 1},
 	), policyDetectorFunc(func(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
 		return []scanners.Finding{{RuleID: "flag.rule", Description: "Flagged", Match: "flag", StartPos: 10, EndPos: 14, Tags: []string{}, Source: "gitleaks", Confidence: 1}}, nil
-	}), publisher, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithMCPFindingEvidenceWriter(evidence))
+	}), publisher, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithMCPFindingEvidenceWriter(evidence, payloadStorageAllowed))
 
 	require.True(t, evaluator.Scan(t.Context(), requestSubject(t.Context(), projectID, serverID, `{"query":"flag"}`)).Denied())
 	require.NoError(t, evaluator.Drain(t.Context()))
@@ -322,7 +358,7 @@ func TestPolicyEvaluator_FlagLaneRetriesPayloadAfterFailedStore(t *testing.T) {
 		policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Second flag", Action: "flag", Version: 1},
 	), policyDetectorFunc(func(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
 		return []scanners.Finding{{RuleID: "flag.rule", Description: "Flagged", Match: "flag", StartPos: 10, EndPos: 14, Tags: []string{}, Source: "gitleaks", Confidence: 1}}, nil
-	}), publisher, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithMCPFindingEvidenceWriter(evidence))
+	}), publisher, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithMCPFindingEvidenceWriter(evidence, payloadStorageAllowed))
 
 	require.False(t, evaluator.Scan(t.Context(), requestSubject(t.Context(), projectID, serverID, `{"query":"flag"}`)).Denied())
 	require.NoError(t, evaluator.Drain(t.Context()))
@@ -356,7 +392,7 @@ func TestPolicyEvaluator_FlagLaneIsDetachedAndAtMostOnce(t *testing.T) {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
-	}), publisher, mcpriskscan.PolicyConfig{Deadline: time.Second, FailMode: mcpriskscan.FailOpen, FlagConcurrency: 1}, mcpriskscan.WithMCPFindingEvidenceWriter(evidence))
+	}), publisher, mcpriskscan.PolicyConfig{Deadline: time.Second, FailMode: mcpriskscan.FailOpen, FlagConcurrency: 1}, mcpriskscan.WithMCPFindingEvidenceWriter(evidence, payloadStorageAllowed))
 
 	subject := requestSubject(t.Context(), projectID, serverID, `{"query":"flag"}`)
 	decision := evaluator.Scan(t.Context(), subject)

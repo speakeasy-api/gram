@@ -78,10 +78,16 @@ type MCPFindingEvidenceWriter interface {
 // PolicyEvaluatorOption configures optional evaluator dependencies.
 type PolicyEvaluatorOption func(*policyEvaluator)
 
-// WithMCPFindingEvidenceWriter enables encrypted evidence persistence.
-func WithMCPFindingEvidenceWriter(writer MCPFindingEvidenceWriter) PolicyEvaluatorOption {
+// PayloadStorageCheck reports whether an organization allows storing scanned
+// tool payloads.
+type PayloadStorageCheck func(ctx context.Context, organizationID string) (bool, error)
+
+// WithMCPFindingEvidenceWriter enables encrypted evidence persistence. Scanned
+// payloads are stored only for organizations payloadStorage admits.
+func WithMCPFindingEvidenceWriter(writer MCPFindingEvidenceWriter, payloadStorage PayloadStorageCheck) PolicyEvaluatorOption {
 	return func(evaluator *policyEvaluator) {
 		evaluator.evidenceWriter = writer
+		evaluator.payloadStorage = payloadStorage
 	}
 }
 
@@ -91,6 +97,7 @@ type policyEvaluator struct {
 	detector        PolicyDetector
 	publisher       gcp.Publisher[*riskv1.Finding]
 	evidenceWriter  MCPFindingEvidenceWriter
+	payloadStorage  PayloadStorageCheck
 	config          PolicyConfig
 	flagSlots       chan struct{}
 	flagScans       sync.WaitGroup
@@ -126,6 +133,7 @@ func NewPolicyEvaluator(
 		detector:        detector,
 		publisher:       publisher,
 		evidenceWriter:  nil,
+		payloadStorage:  nil,
 		config:          config,
 		flagSlots:       make(chan struct{}, config.FlagConcurrency),
 		flagScans:       sync.WaitGroup{},
@@ -368,12 +376,12 @@ func (p *policyEvaluator) publish(ctx context.Context, event Event, policy polic
 	for i, finding := range findings {
 		evidence = append(evidence, risk.MCPFindingEvidence{ID: ids[i], Match: finding.Match})
 	}
-	var scanned *risk.MCPExecutionPayload
-	if payload != "" {
-		scanned = &risk.MCPExecutionPayload{ExecutionID: event.ExecutionID(), Phase: event.Phase(), Payload: payload}
-	}
 	storeCtx, cancel := context.WithTimeout(ctx, mcpFindingEvidenceStoreTimeout)
 	defer cancel()
+	var scanned *risk.MCPExecutionPayload
+	if payload != "" && p.payloadStorageAllowed(storeCtx, event.OrganizationID) {
+		scanned = &risk.MCPExecutionPayload{ExecutionID: event.ExecutionID(), Phase: event.Phase(), Payload: payload}
+	}
 	if err := p.evidenceWriter.Store(storeCtx, risk.MCPFindingEvidenceBatch{
 		OrganizationID: event.OrganizationID,
 		ProjectID:      projectID,
@@ -385,6 +393,20 @@ func (p *policyEvaluator) publish(ctx context.Context, event Event, policy polic
 		return false
 	}
 	return scanned != nil
+}
+
+// payloadStorageAllowed fails closed: a lookup error keeps the payload out of
+// storage.
+func (p *policyEvaluator) payloadStorageAllowed(ctx context.Context, organizationID string) bool {
+	if p.payloadStorage == nil {
+		return false
+	}
+	allowed, err := p.payloadStorage(ctx, organizationID)
+	if err != nil {
+		p.logger.WarnContext(ctx, "failed to check MCP payload storage setting", attr.SlogError(err))
+		return false
+	}
+	return allowed
 }
 
 func (p *policyEvaluator) resolveIndeterminate(ctx context.Context, phase string, err error) Decision {

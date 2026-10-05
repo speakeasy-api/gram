@@ -1,8 +1,10 @@
 package risk_test
 
 import (
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -129,4 +131,29 @@ func TestMCPFindingEvidenceStoreEncryptsAndExpiresExecutionPayloads(t *testing.T
 	require.Zero(t, cleaned)
 	_, err = ti.findingEvidence.RevealExecutionPayload(ctx, orgID, projectID, executionID, "request", now)
 	require.NoError(t, err, "cleanup keeps live payloads")
+}
+
+func TestMCPFindingEvidenceStoreCapsExecutionPayloadAtRuneBoundary(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	now := time.Now().UTC()
+	executionID := uuid.NewString()
+	// The two-byte rune straddles the cap, so the cut lands before it.
+	prefix := strings.Repeat("a", risk.MaxMCPExecutionPayloadBytes-1)
+	require.NoError(t, ti.findingEvidence.Store(ctx, risk.MCPFindingEvidenceBatch{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		CreatedAt:      now,
+		Findings:       []risk.MCPFindingEvidence{{ID: uuid.New(), Match: "secret"}},
+		Execution:      &risk.MCPExecutionPayload{ExecutionID: executionID, Phase: "response", Payload: prefix + "é secret"},
+	}))
+
+	revealed, err := ti.findingEvidence.RevealExecutionPayload(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, executionID, "response", now)
+	require.NoError(t, err)
+	require.Equal(t, prefix, revealed.Payload)
+	require.True(t, utf8.ValidString(revealed.Payload))
 }

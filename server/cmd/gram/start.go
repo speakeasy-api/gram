@@ -1159,7 +1159,7 @@ func newStartCommand() *cli.Command {
 				risk.NewMCPPolicyScanner(riskScanner, shadowMCPClient),
 				publishers.RiskFindings,
 				mcpriskscan.DefaultPolicyConfig,
-				mcpriskscan.WithMCPFindingEvidenceWriter(mcpFindingEvidence),
+				mcpriskscan.WithMCPFindingEvidenceWriter(mcpFindingEvidence, mcpriskscan.PayloadStorageCheck(toolIOLogsEnabled)),
 			)
 			mcpService, err := newMCPService(c, mcpServiceDependencies{
 				CallerAssertions: callerAssertions,
