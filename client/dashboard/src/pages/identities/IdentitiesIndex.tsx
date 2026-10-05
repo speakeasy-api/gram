@@ -725,9 +725,20 @@ function IdentitiesIndexContent(): JSX.Element {
     () => sortedRows.filter((row) => identityKindOf(row) !== "agent"),
     [sortedRows],
   );
+  // The agents table sorts on its own columns, by its own order: the people
+  // table's "last activity, descending" names a column agents do not have.
+  const [agentSort, setAgentSort] = useState<SortDescriptor | null>({
+    id: "identity",
+    direction: "asc",
+  });
   const agentRows = useMemo(
-    () => sortedRows.filter((row) => identityKindOf(row) === "agent"),
-    [sortedRows],
+    () =>
+      sortTableData(
+        sortedRows.filter((row) => identityKindOf(row) === "agent"),
+        agentColumns,
+        agentSort,
+      ) as Employee[],
+    [sortedRows, agentColumns, agentSort],
   );
   const [peopleVisible, setPeopleVisible] = useState(PAGE_SIZE);
   const [agentsVisible, setAgentsVisible] = useState(PAGE_SIZE);
@@ -872,10 +883,10 @@ function IdentitiesIndexContent(): JSX.Element {
               }
               columns={agentColumns}
               rows={agentRows}
+              sort={agentSort}
+              onSortChange={setAgentSort}
               visible={agentsVisible}
               onLoadMore={() => setAgentsVisible((count) => count + PAGE_SIZE)}
-              sort={sort}
-              onSortChange={setSort}
               onRowClick={openIdentity}
               emptyMessage={rosterMessage("No agents match these filters")}
             />
