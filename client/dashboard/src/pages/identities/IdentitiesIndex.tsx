@@ -787,7 +787,7 @@ function IdentitiesIndexContent(): JSX.Element {
         {/* Both tables on screen at once: the page does not scroll past one
             to reach the other, so each pane takes half the room left under the
             controls and scrolls its own rows. */}
-        <div className="flex h-[calc(100dvh-21rem)] min-h-[24rem] flex-col gap-6">
+        <div className="-mb-24 flex h-[calc(100dvh-21rem)] min-h-[20rem] flex-col gap-6">
           {/* No stat tiles: each table states its own count, and the four
               numbers above them repeated it without saying anything the rows
               do not. */}
