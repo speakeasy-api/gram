@@ -739,12 +739,13 @@ WHERE om.id = ANY(@organization_ids::text[])
 -- Organizations that receive the weekly metered usage summary email: enabled
 -- enterprise organizations with an explicit billing alert email and enabled
 -- PAYG organizations (whose fallback audience is resolved by the activity).
--- The anchor day determines the billing-cycle windows; the slug builds the
--- billing page link.
+-- The anchor day determines the billing-cycle windows; the slug and default
+-- host build the billing page link.
 SELECT
     om.id AS organization_id,
     om.name AS organization_name,
     om.slug AS organization_slug,
+    om.default_host,
     om.gram_account_type,
     bm.alert_email,
     bm.billing_cycle_anchor_day

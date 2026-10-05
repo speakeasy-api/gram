@@ -107,6 +107,10 @@ type AuthConfigurations struct {
 	GramServerURL     string
 	SignInRedirectURL string
 	Environment       string
+
+	// NewOrganizationDefaultHost is recorded as the default host of
+	// organizations this service creates. Null records none.
+	NewOrganizationDefaultHost pgtype.Text
 }
 
 // Service for gram dashboard authentication endpoints
@@ -870,6 +874,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		// Switching into an organization says nothing about what created it,
 		// and null leaves whatever was recorded alone.
 		CreationSource: pgtype.Text{String: "", Valid: false},
+		DefaultHost:    s.cfg.NewOrganizationDefaultHost,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").LogError(ctx, s.logger)
 	}
@@ -1156,6 +1161,7 @@ func (s *Service) applySignupWhitelist(ctx context.Context, organizations []sess
 		// Whitelisting an existing organization is not creating one. Null so
 		// the source the creating flow recorded survives this write.
 		CreationSource: pgtype.Text{String: "", Valid: false},
+		DefaultHost:    s.cfg.NewOrganizationDefaultHost,
 	})
 	if err != nil {
 		return "", orgRepo.OrganizationMetadatum{}, fmt.Errorf("whitelist organization for signup: %w", err)
@@ -1350,6 +1356,7 @@ func (s *Service) persistProvisionedOrganization(
 		// Empty writes null rather than an empty string, so "nothing recorded a
 		// source" stays one value on the read side.
 		CreationSource: conv.ToPGTextEmpty(opts.CreationSource),
+		DefaultHost:    s.cfg.NewOrganizationDefaultHost,
 	})
 	if err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("create organization metadata: %w", err)

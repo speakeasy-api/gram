@@ -6,14 +6,16 @@ INSERT INTO organization_metadata (
     slug,
     workos_id,
     whitelisted,
-    creation_source
+    creation_source,
+    default_host
 ) VALUES (
     @id,
     @name,
     @slug,
     @workos_id,
     COALESCE(sqlc.narg('whitelisted')::boolean, FALSE),
-    sqlc.narg('creation_source')::text
+    sqlc.narg('creation_source')::text,
+    sqlc.narg('default_host')::text
 )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
@@ -30,6 +32,9 @@ ON CONFLICT (id) DO UPDATE SET
     -- passes null and leaves whatever is already recorded alone, so a later
     -- upsert from an unrelated path cannot erase the flow that created the row.
     creation_source = COALESCE(EXCLUDED.creation_source, organization_metadata.creation_source),
+    -- default_host is deliberately absent: it is chosen when the organization
+    -- is created, and a later upsert must not move an existing organization's
+    -- URLs to another host.
     updated_at = clock_timestamp()
 RETURNING *, (xmax = 0) AS inserted
 ), enabled AS (
@@ -411,6 +416,11 @@ UPDATE organization_invitations
 SET expires_at = clock_timestamp() - interval '1 hour'
 WHERE id = @id;
 
+-- name: SetOrganizationDefaultHostForTest :exec
+UPDATE organization_metadata
+SET default_host = @default_host
+WHERE id = @id;
+
 -- name: GetInvitationByTokenHash :one
 SELECT *
 FROM organization_invitations
@@ -418,8 +428,8 @@ WHERE token_hash = @token_hash;
 
 -- name: CreateOrganizationMetadataWithRequests :one
 WITH written AS (
-INSERT INTO organization_metadata (id, name, slug)
-VALUES (@id, @name, @slug)
+INSERT INTO organization_metadata (id, name, slug, default_host)
+VALUES (@id, @name, @slug, sqlc.narg('default_host')::text)
 RETURNING *, TRUE AS inserted
 ), enabled AS (
     INSERT INTO organization_features (organization_id, feature_name)
@@ -804,7 +814,8 @@ INSERT INTO organization_metadata (
     workos_id,
     workos_updated_at,
     workos_last_event_id,
-    verified_domains
+    verified_domains,
+    default_host
 ) VALUES (
     @id,
     @name,
@@ -812,7 +823,8 @@ INSERT INTO organization_metadata (
     @workos_id,
     @workos_updated_at,
     @workos_last_event_id,
-    @verified_domains::text[]
+    @verified_domains::text[],
+    sqlc.narg('default_host')::text
 )
 RETURNING *, (xmax = 0) AS inserted
 ), enabled AS (
@@ -856,16 +868,20 @@ INSERT INTO organization_metadata (
     slug,
     workos_id,
     workos_updated_at,
-    workos_last_event_id
+    workos_last_event_id,
+    default_host
 ) VALUES (
     @id,
     @name,
     @slug,
     @workos_id,
     @workos_updated_at,
-    @workos_last_event_id
+    @workos_last_event_id,
+    sqlc.narg('default_host')::text
 )
 ON CONFLICT (id) DO UPDATE SET
+    -- default_host is only written on insert, so an existing organization
+    -- keeps its host.
     name = EXCLUDED.name,
     workos_id = EXCLUDED.workos_id,
     workos_updated_at = EXCLUDED.workos_updated_at,

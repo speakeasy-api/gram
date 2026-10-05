@@ -975,7 +975,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 			}
 		}
 		if blockID, err := uuid.NewV7(); err == nil && !s.isHookDuplicate(ctx) && s.repo != nil && strings.TrimSpace(ev.Context.OrganizationID) != "" && ev.Context.ProjectID != uuid.Nil {
-			userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+			userReason = appendBlockURL(userReason, s.blockViewURL(ctx, ev.Context.OrganizationID, blockID))
 			userID := ev.Context.User.ID
 			userEmail := ev.Context.User.Email
 			asyncCtx := context.WithoutCancel(ctx)
@@ -1034,7 +1034,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
 			if blockID, err := uuid.NewV7(); err == nil {
-				userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+				userReason = appendBlockURL(userReason, s.blockViewURL(ctx, ev.Context.OrganizationID, blockID))
 				// Prefer the email from the session metadata fetched above,
 				// falling back to the raw payload when it wasn't cached.
 				userEmail := conv.PtrValOr(payload.UserEmail, "")
@@ -1318,7 +1318,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		s.logger.WarnContext(ctx, "tool call block: invalid project id; skipping durable block link",
 			attr.SlogEvent("claude_hook_block_invalid_project"), attr.SlogError(parseErr))
 	} else if blockID, err := uuid.NewV7(); err == nil {
-		userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+		userReason = appendBlockURL(userReason, s.blockViewURL(ctx, metadata.GramOrgID, blockID))
 		asyncCtx := context.WithoutCancel(ctx)
 		metaCopy := metadata
 		go func() {

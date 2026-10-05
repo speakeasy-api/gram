@@ -286,8 +286,14 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 			Connection:   ratelimit.New(limitStore, platformmcp.DocsConnectionLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.DocsOrganizationLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
-		Skills:            newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
-		LifecycleMetadata: newBudget(platformmcp.LifecycleConnectionLimitName, platformmcp.LifecycleOrganizationLimitName),
+		Skills: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.SkillsConnectionLimitName, ratelimit.PerMinute(platformmcp.SkillsOperationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.SkillsOrganizationLimitName, ratelimit.PerMinute(platformmcp.SkillsOperationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
+		LifecycleMetadata: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.LifecycleConnectionLimitName, ratelimit.PerMinute(platformmcp.LifecycleOperationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.LifecycleOrganizationLimitName, ratelimit.PerMinute(platformmcp.LifecycleOperationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 		RiskFindings: platformmcp.OperationBudget{
 			Connection:   ratelimit.New(limitStore, platformmcp.RiskFindingsConnectionLimitName, ratelimit.PerMinute(platformmcp.RiskFindingsQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.RiskFindingsOrganizationLimitName, ratelimit.PerMinute(platformmcp.RiskFindingsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
@@ -399,6 +405,15 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithDistributionAdmissionReads(distributionAdmissionReads)
 	if config.PluginPublisher != nil {
 		pluginInventory.WithPublicationEvidence(config.PluginPublisher)
+	}
+	pluginInventory.WithRepublish(config.PublicationRequests, config.PluginPublishSignaler, platformmcp.OperationBudget{
+		Connection:   ratelimit.New(limitStore, platformmcp.PluginRepublishConnectionLimitName, ratelimit.PerMinute(platformmcp.PluginRepublishesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		Organization: ratelimit.New(limitStore, platformmcp.PluginRepublishOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginRepublishesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+	})
+	// Without Temporal there is no publish workflow to describe, so the latest
+	// attempt is reported as unavailable rather than as a call that always fails.
+	if config.TemporalEnv != nil {
+		pluginInventory.WithPublishStatus(&background.TemporalPluginPublisher{TemporalEnv: config.TemporalEnv})
 	}
 	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
 	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger))
@@ -800,8 +815,14 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 			Connection:   ratelimit.New(limitStore, platformmcp.DocsConnectionLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.DocsOrganizationLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
-		Skills:            newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
-		LifecycleMetadata: newBudget(platformmcp.LifecycleConnectionLimitName, platformmcp.LifecycleOrganizationLimitName),
+		Skills: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.SkillsConnectionLimitName, ratelimit.PerMinute(platformmcp.SkillsOperationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.SkillsOrganizationLimitName, ratelimit.PerMinute(platformmcp.SkillsOperationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
+		LifecycleMetadata: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.LifecycleConnectionLimitName, ratelimit.PerMinute(platformmcp.LifecycleOperationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.LifecycleOrganizationLimitName, ratelimit.PerMinute(platformmcp.LifecycleOperationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 		RiskFindings: platformmcp.OperationBudget{
 			Connection:   ratelimit.New(limitStore, platformmcp.RiskFindingsConnectionLimitName, ratelimit.PerMinute(platformmcp.RiskFindingsQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.RiskFindingsOrganizationLimitName, ratelimit.PerMinute(platformmcp.RiskFindingsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
@@ -913,6 +934,15 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDistributionAdmissionReads(distributionAdmissionReads)
 	if config.PluginPublisher != nil {
 		pluginInventory.WithPublicationEvidence(config.PluginPublisher)
+	}
+	pluginInventory.WithRepublish(config.PublicationRequests, config.PluginPublishSignaler, platformmcp.OperationBudget{
+		Connection:   ratelimit.New(limitStore, platformmcp.PluginRepublishConnectionLimitName, ratelimit.PerMinute(platformmcp.PluginRepublishesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		Organization: ratelimit.New(limitStore, platformmcp.PluginRepublishOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginRepublishesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+	})
+	// Without Temporal there is no publish workflow to describe, so the latest
+	// attempt is reported as unavailable rather than as a call that always fails.
+	if config.TemporalEnv != nil {
+		pluginInventory.WithPublishStatus(&background.TemporalPluginPublisher{TemporalEnv: config.TemporalEnv})
 	}
 	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
 	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger))
