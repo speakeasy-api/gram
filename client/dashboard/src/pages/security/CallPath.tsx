@@ -2,11 +2,9 @@ import { cn } from "@/lib/utils";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { X } from "lucide-react";
 import { callOutcome, callPathFor, type CallPathLink } from "./call-path";
+import { DRAWER_CELL_LABEL } from "./finding-drawer-parts";
 import { SEVERITY_EDGE } from "./risk-severity";
 import type { SeverityRating } from "./risk-utils";
-
-const NODE_EYEBROW =
-  "text-muted-foreground font-mono text-[10px] tracking-[0.1em] uppercase";
 
 function PathNode({
   eyebrow,
@@ -26,7 +24,7 @@ function PathNode({
         className,
       )}
     >
-      <span className={NODE_EYEBROW}>{eyebrow}</span>
+      <span className={DRAWER_CELL_LABEL}>{eyebrow}</span>
       <span className="truncate text-[13px] font-normal" title={name}>
         {name}
       </span>
