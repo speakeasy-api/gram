@@ -3131,6 +3131,32 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 	require.Equal(t, base["plugin-b"], changedFP["plugin-b"], "untouched plugin's fingerprint must be stable")
 }
 
+// Moving GRAM_SERVER_URL to another platform host must read as a change, so the
+// next publish rewrites every baked URL onto the new host.
+func TestPublishChangeSignalsFollowServerURL(t *testing.T) {
+	t.Parallel()
+	pluginsFor := func(serverURL string) []PluginInfo {
+		return []PluginInfo{{Name: "Plugin A", Slug: "plugin-a", Description: "A", Servers: []PluginServerInfo{
+			{DisplayName: "a1", MCPURL: serverURL + "/mcp/a1"},
+		}}}
+	}
+	oldCfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai", ProjectSlug: "acme"}
+	newCfg := oldCfg
+	newCfg.ServerURL = "https://ai.speakeasy.com"
+
+	oldFP, err := MCPFingerprints(pluginsFor(oldCfg.ServerURL), oldCfg, true)
+	require.NoError(t, err)
+	newFP, err := MCPFingerprints(pluginsFor(newCfg.ServerURL), newCfg, true)
+	require.NoError(t, err)
+	require.NotEqual(t, oldFP["plugin-a"], newFP["plugin-a"], "MCP plugin must republish onto the new host")
+
+	require.NotEqual(t,
+		hooksConfigHash(hooksConfigSnapshot(oldCfg)),
+		hooksConfigHash(hooksConfigSnapshot(newCfg)),
+		"hooks subtree must regenerate onto the new host",
+	)
+}
+
 func TestGeneratePlatformMCPPackageEmitsPrivateAccessWorkflow(t *testing.T) {
 	t.Parallel()
 	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
