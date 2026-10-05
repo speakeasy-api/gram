@@ -999,12 +999,14 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeBadRequest, nil, "unsupported install page network")
 	}
 	privateNetworkInstall := network == "private"
+	// Set by dashboard links: resolve the slug on the signed-in org's custom domain.
+	orgDomainInstall := !privateNetworkInstall && r.URL.Query().Get("domain") == "custom" && customdomains.FromContext(ctx) == nil
 
 	// We get the authCtx now, because we need session information in order to look up private servers
 	// but we don't check that auth is ok unless we encounter a private toolset on lookup
 	authCtx, authOk := contextvalues.GetAuthContext(ctx)
 
-	if privateNetworkInstall && (authCtx == nil || authCtx.ActiveOrganizationID == "") {
+	if (privateNetworkInstall || orgDomainInstall) && (authCtx == nil || authCtx.ActiveOrganizationID == "") {
 		if s.serverURL != nil {
 			http.Redirect(w, r, s.loginRedirectURL(r), http.StatusFound)
 			return nil
@@ -1019,11 +1021,14 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 			return err
 		}
 		ic, err = s.resolvePrivateInstallContext(ctx, mcpSlug, authCtx.ActiveOrganizationID)
+	} else if orgDomainInstall {
+		ic, err = s.resolveOrgCustomDomainInstallContext(ctx, mcpSlug, authCtx.ActiveOrganizationID)
 	} else {
 		ic, err = s.resolveInstallContext(ctx, mcpSlug)
 	}
 	switch {
 	case errors.Is(err, errToolsetNotFound):
+		s.logger.InfoContext(ctx, "serving not found page: install target not resolved", attr.SlogToolsetMCPSlug(mcpSlug), attr.SlogError(err))
 		return s.serveNotFoundPage(w, mcpSlug)
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger, attr.SlogToolsetMCPSlug(mcpSlug))
@@ -1102,16 +1107,19 @@ func (s *Service) loginRedirectURL(r *http.Request) string {
 	if base, err := url.Parse(requestorigin.PlatformHostBaseURL(r.Context(), serverBase, serverBase)); err == nil {
 		loginURL = base.JoinPath("login")
 	}
+	redirect := *r.URL
+	if customdomains.FromContext(r.Context()) != nil {
+		// The slug only exists on the custom domain the visitor is leaving.
+		redirectQuery := redirect.Query()
+		redirectQuery.Set("domain", "custom")
+		redirect.RawQuery = redirectQuery.Encode()
+	}
 	query := loginURL.Query()
-	query.Set("redirect", r.URL.RequestURI())
+	query.Set("redirect", redirect.RequestURI())
 	loginURL.RawQuery = query.Encode()
 	return loginURL.String()
 }
 
-// resolveInstallContext tries the mcp_endpoints → mcp_server resolution path
-// first, then falls back to the legacy toolsets.mcp_slug lookup only for a
-// plain namespace miss. Policy denials are authoritative 404s and never fall
-// through to an unrelated legacy toolset.
 func (s *Service) resolvePrivateInstallContext(ctx context.Context, mcpSlug, organizationID string) (*installContext, error) {
 	ingress, err := networkingress_repo.New(s.db).GetNetworkIngressByOrganization(ctx, organizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -1172,6 +1180,10 @@ func (s *Service) resolvePrivateInstallContext(ctx context.Context, mcpSlug, org
 	}, nil
 }
 
+// resolveInstallContext tries the mcp_endpoints → mcp_server resolution path
+// first, then falls back to the legacy toolsets.mcp_slug lookup only for a
+// plain namespace miss. Policy denials are authoritative 404s and never fall
+// through to an unrelated legacy toolset.
 func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*installContext, error) {
 	endpoint, server, metaServer, err := mcpendpoints.BySlugAndCustomDomain(ctx, s.db, s.logger, mcpSlug)
 	switch {
@@ -1181,54 +1193,8 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 		return nil, fmt.Errorf("%w: endpoint is not available on this network surface", errToolsetNotFound)
 	case err != nil:
 		return nil, fmt.Errorf("resolve mcp endpoint: %w", err)
-	case metaServer != nil:
-		mode, err := networkaccess.Effective(metaServer.NetworkAccessMode)
-		if err != nil {
-			return nil, fmt.Errorf("%w: invalid network access mode", errToolsetNotFound)
-		}
-		if err := s.requireMetaInstallAdmission(ctx, mode, metaServer.OrganizationID); err != nil {
-			return nil, err
-		}
-		org, err := s.orgsRepo.GetOrganizationMetadata(ctx, metaServer.OrganizationID)
-		if err != nil {
-			return nil, fmt.Errorf("load organization: %w", err)
-		}
-		return &installContext{
-			toolset:        nil,
-			mcpServer:      nil,
-			metaServer:     metaServer,
-			mcpEndpoint:    endpoint,
-			organization:   org,
-			mcpURLOverride: "",
-		}, nil
 	default:
-		var bridgeToolset *toolsets_repo.Toolset
-		if server.ToolsetID.Valid {
-			ts, err := s.toolsetRepo.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
-				ID:        server.ToolsetID.UUID,
-				ProjectID: server.ProjectID,
-			})
-			switch {
-			case errors.Is(err, pgx.ErrNoRows):
-				// Bridge target gone — render as Remote-MCP-flavored.
-			case err != nil:
-				return nil, fmt.Errorf("load toolset for mcp_server: %w", err)
-			default:
-				bridgeToolset = &ts
-			}
-		}
-		org, err := s.lookupInstallOrganization(ctx, bridgeToolset, server)
-		if err != nil {
-			return nil, err
-		}
-		return &installContext{
-			toolset:        bridgeToolset,
-			mcpServer:      server,
-			metaServer:     nil,
-			mcpEndpoint:    endpoint,
-			organization:   org,
-			mcpURLOverride: "",
-		}, nil
+		return s.endpointInstallContext(ctx, endpoint, server, metaServer, "")
 	}
 
 	toolset, err := s.loadToolsetFromContextAndSlug(ctx, mcpSlug)
@@ -1258,9 +1224,90 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	}, nil
 }
 
-// requireMetaInstallAdmission keeps existing public-only gateways independent
-// of the private-ingress rollout while applying one fail-closed admission gate
-// to every non-public Meta MCP install surface.
+// resolveOrgCustomDomainInstallContext resolves a slug in the organization's
+// custom-domain namespace for a session-gated page opened on the platform host.
+func (s *Service) resolveOrgCustomDomainInstallContext(ctx context.Context, mcpSlug, organizationID string) (*installContext, error) {
+	domain, err := s.domainsRepo.GetCustomDomainByOrganization(ctx, organizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, fmt.Errorf("%w: organization has no custom domain", errToolsetNotFound)
+	case err != nil:
+		return nil, fmt.Errorf("load organization custom domain: %w", err)
+	}
+	if !domain.Verified || !domain.Activated {
+		return nil, fmt.Errorf("%w: custom domain is not active", errToolsetNotFound)
+	}
+	result, err := mcpendpoints.Resolve(ctx, s.db, s.logger, mcpendpoints.ResolutionInput{
+		Slug:                 mcpSlug,
+		NamespaceKind:        mcpendpoints.NamespaceCustomDomain,
+		CustomDomainID:       uuid.NullUUID{UUID: domain.ID, Valid: true},
+		ExpectedOrganization: organizationID,
+		Surface:              networkaccess.SurfacePublic,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve custom-domain mcp endpoint: %w", err)
+	}
+	if !result.Found || !result.Allowed || result.Endpoint == nil {
+		return nil, fmt.Errorf("%w: endpoint is not available on the custom domain", errToolsetNotFound)
+	}
+	mcpURL, err := mcpEndpointURL("https://"+domain.Domain, result.Endpoint)
+	if err != nil {
+		return nil, err
+	}
+	return s.endpointInstallContext(ctx, result.Endpoint, result.Server, result.MetaServer, mcpURL)
+}
+
+// endpointInstallContext builds the install context for a resolver-admitted endpoint.
+func (s *Service) endpointInstallContext(ctx context.Context, endpoint *mcpendpoints_repo.McpEndpoint, server *mcpservers_repo.McpServer, metaServer *metamcp_repo.MetaMcpServer, mcpURLOverride string) (*installContext, error) {
+	if metaServer != nil {
+		org, err := s.orgsRepo.GetOrganizationMetadata(ctx, metaServer.OrganizationID)
+		if err != nil {
+			return nil, fmt.Errorf("load organization: %w", err)
+		}
+		return &installContext{
+			toolset:        nil,
+			mcpServer:      nil,
+			metaServer:     metaServer,
+			mcpEndpoint:    endpoint,
+			organization:   org,
+			mcpURLOverride: mcpURLOverride,
+		}, nil
+	}
+
+	if server == nil {
+		return nil, fmt.Errorf("%w: endpoint has no backend", errToolsetNotFound)
+	}
+	var bridgeToolset *toolsets_repo.Toolset
+	if server.ToolsetID.Valid {
+		ts, err := s.toolsetRepo.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
+			ID:        server.ToolsetID.UUID,
+			ProjectID: server.ProjectID,
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			// Bridge target gone — render as Remote-MCP-flavored.
+		case err != nil:
+			return nil, fmt.Errorf("load toolset for mcp_server: %w", err)
+		default:
+			bridgeToolset = &ts
+		}
+	}
+	org, err := s.lookupInstallOrganization(ctx, bridgeToolset, server)
+	if err != nil {
+		return nil, err
+	}
+	return &installContext{
+		toolset:        bridgeToolset,
+		mcpServer:      server,
+		metaServer:     nil,
+		mcpEndpoint:    endpoint,
+		organization:   org,
+		mcpURLOverride: mcpURLOverride,
+	}, nil
+}
+
+// requireMetaInstallAdmission gates the private-network gateway install page on
+// the private-ingress rollout; the public page relies on the resolver's mode check.
 func (s *Service) requireMetaInstallAdmission(ctx context.Context, mode networkaccess.Mode, organizationID string) error {
 	if mode.IsPublicOnly() {
 		return nil
@@ -1763,7 +1810,10 @@ func (s *Service) resolveToolsetMCPURL(ctx context.Context, toolset toolsets_rep
 // resolveMcpEndpointURL builds the MCP URL advertised by an endpoint-routed
 // install from the current request origin. A domain-root endpoint remains bare.
 func (s *Service) resolveMcpEndpointURL(ctx context.Context, endpoint *mcpendpoints_repo.McpEndpoint) (string, error) {
-	baseURL := requestorigin.BaseURL(ctx, s.serverURL.String())
+	return mcpEndpointURL(requestorigin.BaseURL(ctx, s.serverURL.String()), endpoint)
+}
+
+func mcpEndpointURL(baseURL string, endpoint *mcpendpoints_repo.McpEndpoint) (string, error) {
 	if endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool {
 		return baseURL, nil
 	}

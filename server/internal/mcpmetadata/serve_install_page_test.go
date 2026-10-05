@@ -2156,6 +2156,7 @@ type metaEndpointFixtureOptions struct {
 	visibility          string
 	userSessionIssuerID uuid.NullUUID
 	networkAccessMode   networkaccess.Mode
+	customDomainID      uuid.NullUUID
 }
 
 // seedMetaBackedEndpoint creates a gateway (meta_mcp_servers) with a
@@ -2184,7 +2185,7 @@ func seedMetaBackedEndpoint(t *testing.T, ctx context.Context, ti *testInstance,
 
 	_, err = mcpendpoints_repo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
 		ProjectID:       *authCtx.ProjectID,
-		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CustomDomainID:  opts.customDomainID,
 		McpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		MetaMcpServerID: uuid.NullUUID{UUID: meta.ID, Valid: true},
 		Slug:            mcpSlug,
@@ -2256,7 +2257,10 @@ func TestServeInstallPage_MetaBackedEndpoint_RendersGateway(t *testing.T) {
 	assert.NotContains(t, body, "Legacy Same-Slug Toolset")
 }
 
-func TestServeInstallPage_MetaBackedEndpoint_NetworkIngressAdmission(t *testing.T) {
+// TestServeInstallPage_MetaBackedEndpoint_PublicSurfaceSkipsIngressAdmission
+// verifies that a gateway the public surface serves renders its public
+// install page whatever the private-ingress rollout state.
+func TestServeInstallPage_MetaBackedEndpoint_PublicSurfaceSkipsIngressAdmission(t *testing.T) {
 	t.Parallel()
 
 	for _, mode := range []networkaccess.Mode{networkaccess.ModePublicOnly, networkaccess.ModeDual} {
@@ -2276,29 +2280,181 @@ func TestServeInstallPage_MetaBackedEndpoint_NetworkIngressAdmission(t *testing.
 				}
 				ctx, ti := newTestMCPMetadataServiceWithAdmission(t, admission)
 				slug := "meta-admission-" + uuid.New().String()[:8]
-				meta := seedMetaBackedEndpoint(t, ctx, ti, slug, metaEndpointFixtureOptions{
+				seedMetaBackedEndpoint(t, ctx, ti, slug, metaEndpointFixtureOptions{
 					visibility:          "",
 					userSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 					networkAccessMode:   mode,
 				})
 
 				rr := serveMetaInstallPage(t, ctx, ti, slug)
-				if mode.IsPublicOnly() || admissionState == "allowed" {
-					require.Equal(t, http.StatusOK, rr.Code)
-					require.Contains(t, rr.Body.String(), "Install Page Gateway")
-				} else {
-					require.Equal(t, http.StatusNotFound, rr.Code)
-					require.NotContains(t, rr.Body.String(), "Install Page Gateway")
-				}
+				require.Equal(t, http.StatusOK, rr.Code)
+				require.Contains(t, rr.Body.String(), "Install Page Gateway")
 				require.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
-				if mode.IsPublicOnly() || admissionState == "unavailable" {
-					require.Empty(t, admittedOrg)
-				} else {
-					require.Equal(t, meta.OrganizationID, admittedOrg)
-				}
+				require.Empty(t, admittedOrg)
 			})
 		}
 	}
+}
+
+// TestServeInstallPage_MetaBackedEndpoint_PrivateOnlyNotFoundOnPublicSurface
+// verifies that a private-only gateway stays a 404 on the public install page.
+func TestServeInstallPage_MetaBackedEndpoint_PrivateOnlyNotFoundOnPublicSurface(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPMetadataServiceWithAdmission(t, func(context.Context, string) error { return nil })
+
+	slug := "meta-private-only-" + uuid.New().String()[:8]
+	seedMetaBackedEndpoint(t, ctx, ti, slug, metaEndpointFixtureOptions{
+		networkAccessMode: networkaccess.ModePrivateOnly,
+	})
+
+	rr := serveMetaInstallPage(t, ctx, ti, slug)
+	require.Equal(t, http.StatusNotFound, rr.Code)
+	require.NotContains(t, rr.Body.String(), "Install Page Gateway")
+	require.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
+}
+
+// TestServeInstallPage_MetaBackedEndpoint_CustomDomainOnPlatformHost verifies
+// that ?domain=custom on the platform host resolves a gateway slug in the
+// signed-in organization's custom-domain namespace and nowhere else.
+func TestServeInstallPage_MetaBackedEndpoint_CustomDomainOnPlatformHost(t *testing.T) {
+	t.Parallel()
+
+	setup := func(t *testing.T, activated bool) (context.Context, *testInstance, string) {
+		t.Helper()
+		ctx, ti := newTestMCPMetadataService(t)
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+
+		domainsRepo := customdomains_repo.New(ti.conn)
+		domain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
+			OrganizationID:  authCtx.ActiveOrganizationID,
+			Domain:          "gateway-install.example.com",
+			IngressName:     pgtype.Text{String: "", Valid: false},
+			CertSecretName:  pgtype.Text{String: "", Valid: false},
+			ProvisionerKind: "ingress",
+			IpAllowlist:     []string{},
+		})
+		require.NoError(t, err)
+		_, err = domainsRepo.UpdateCustomDomain(ctx, customdomains_repo.UpdateCustomDomainParams{
+			ID:              domain.ID,
+			Verified:        activated,
+			Activated:       activated,
+			IngressName:     pgtype.Text{String: "", Valid: false},
+			CertSecretName:  pgtype.Text{String: "", Valid: false},
+			ProvisionerKind: "ingress",
+		})
+		require.NoError(t, err)
+
+		slug := "meta-domain-" + uuid.New().String()[:8]
+		seedMetaBackedEndpoint(t, ctx, ti, slug, metaEndpointFixtureOptions{
+			networkAccessMode: networkaccess.ModeDual,
+			customDomainID:    uuid.NullUUID{UUID: domain.ID, Valid: true},
+		})
+		platformCtx := requestorigin.WithContext(ctx, requestorigin.Origin{
+			Surface: requestorigin.SurfacePlatform, BaseURL: ti.serverURL.String(),
+		})
+		return platformCtx, ti, slug
+	}
+	hinted := func(slug string) string { return "/mcp/" + slug + "/install?domain=custom" }
+
+	t.Run("renders the custom-domain URL for the owning organization", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti, slug := setup(t, true)
+		rr := serveMetaInstallPageURL(t, ctx, ti, hinted(slug), slug)
+		require.Equal(t, http.StatusOK, rr.Code)
+		body := rr.Body.String()
+		require.Contains(t, body, "Install Page Gateway")
+		require.Contains(t, body, "https://gateway-install.example.com/mcp/"+slug)
+		require.NotContains(t, body, "Legacy Same-Slug Toolset")
+	})
+
+	t.Run("without the hint the platform namespace is authoritative", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti, slug := setup(t, true)
+		rr := serveMetaInstallPage(t, ctx, ti, slug)
+		require.NotContains(t, rr.Body.String(), "Install Page Gateway")
+	})
+
+	t.Run("signed-out visitor is sent to login", func(t *testing.T) {
+		t.Parallel()
+		_, ti, slug := setup(t, true)
+		anonymous := requestorigin.WithContext(context.Background(), requestorigin.Origin{
+			Surface: requestorigin.SurfacePlatform, BaseURL: ti.serverURL.String(),
+		})
+		rr := serveMetaInstallPageURL(t, anonymous, ti, hinted(slug), slug)
+		require.Equal(t, http.StatusFound, rr.Code)
+		loginURL, err := url.Parse(rr.Header().Get("Location"))
+		require.NoError(t, err)
+		require.Equal(t, "/login", loginURL.Path)
+		require.Equal(t, hinted(slug), loginURL.Query().Get("redirect"))
+	})
+
+	t.Run("another organization gets not found", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti, slug := setup(t, true)
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		otherOrgCtx := contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+			ActiveOrganizationID: "org-" + uuid.NewString(),
+			UserID:               authCtx.UserID,
+			SessionID:            authCtx.SessionID,
+			ProjectID:            authCtx.ProjectID,
+		})
+		rr := serveMetaInstallPageURL(t, otherOrgCtx, ti, hinted(slug), slug)
+		require.Equal(t, http.StatusNotFound, rr.Code)
+		require.NotContains(t, rr.Body.String(), "Install Page Gateway")
+		require.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
+	})
+
+	t.Run("inactive custom domain gets not found", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti, slug := setup(t, false)
+		rr := serveMetaInstallPageURL(t, ctx, ti, hinted(slug), slug)
+		require.Equal(t, http.StatusNotFound, rr.Code)
+		require.NotContains(t, rr.Body.String(), "gateway-install.example.com")
+	})
+}
+
+// TestServeInstallPage_CustomDomainLoginRedirectKeepsNamespace verifies that a
+// signed-out visitor on a custom domain returns to the platform host with the
+// hint that resolves the slug there.
+func TestServeInstallPage_CustomDomainLoginRedirectKeepsNamespace(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	domainsRepo := customdomains_repo.New(ti.conn)
+	domain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "gateway-login.example.com",
+		IngressName:     pgtype.Text{String: "", Valid: false},
+		CertSecretName:  pgtype.Text{String: "", Valid: false},
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	slug := "meta-login-" + uuid.New().String()[:8]
+	seedMetaBackedEndpoint(t, ctx, ti, slug, metaEndpointFixtureOptions{
+		customDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
+	})
+
+	domainCtx := customdomains.WithContext(context.Background(), &customdomains.Context{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         domain.Domain,
+		DomainID:       domain.ID,
+	})
+	domainCtx = requestorigin.WithContext(domainCtx, requestorigin.Origin{
+		Surface: requestorigin.SurfaceCustomDomain, BaseURL: "https://" + domain.Domain,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+
+	rr := serveMetaInstallPage(t, domainCtx, ti, slug)
+	require.Equal(t, http.StatusFound, rr.Code)
+	loginURL, err := url.Parse(rr.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, ti.serverURL.Host, loginURL.Host)
+	require.Equal(t, "/mcp/"+slug+"/install?domain=custom", loginURL.Query().Get("redirect"))
 }
 
 // TestServeInstallPage_PrivateMetaBackedEndpoint_NetworkIngressAdmission verifies
