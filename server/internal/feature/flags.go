@@ -170,16 +170,15 @@ const (
 	// of its stop control is unknown.
 	FlagMCPResearchKill Flag = "gram-mcp-research-kill"
 
-	// FlagHooksRollout gates the phased rollout of new observability (hooks)
-	// plugin generator versions. Unlike the other flags it is consulted via its
-	// PAYLOAD, not its boolean state: the flag carries a JSON payload
-	// {"version": N} naming the highest hooksGeneratorVersion the matched org is
-	// cleared to receive. An org gets a new hooks version only when its cleared
-	// version reaches it; a code-side version bump never touches the payload, so
-	// nothing auto-rolls — promoting a version is the deliberate act of raising
-	// the pin in PostHog. The always-immediate canary set lives in code (see
-	// plugins.canaryHooksOrgSlugs), independent of this flag, so a PostHog outage
-	// can't strand it on stale hooks.
+	// FlagHooksRollout is the legacy control for the phased rollout of new
+	// observability (hooks) plugin generator versions, superseded by the
+	// rollout pins staff set in the admin dashboard (package hooksrollout). It
+	// is consulted via its PAYLOAD, not its boolean state: JSON {"version": N}
+	// naming the highest hooksGeneratorVersion the matched org is cleared to
+	// receive. The plugin publisher reads it only for orgs no admin pin covers,
+	// which is every org without an override until a platform-wide default pin
+	// is set. Evaluated server-side with the org groups; fails closed. Remove it
+	// once the default pin is set in production.
 	FlagHooksRollout Flag = "hooks-rollout"
 
 	// FlagOktaConnections gates the Okta integration while it is dogfooded:
