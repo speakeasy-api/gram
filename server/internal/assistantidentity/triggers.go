@@ -49,7 +49,7 @@ func (s *Service) bindRoot(ctx context.Context, tx pgx.Tx, org string, project, 
 	}
 	if root.TargetKind != "assistant" {
 		if hasHistory && retarget {
-			return tombstoneTrigger(ctx, tx, org, project, trigger)
+			return TombstoneTrigger(ctx, tx, org, project, trigger)
 		}
 		if hasHistory {
 			return ErrBrokenMapping
@@ -76,7 +76,7 @@ func (s *Service) bindRoot(ctx context.Context, tx pgx.Tx, org string, project, 
 	}
 	if errors.Is(bindingErr, pgx.ErrNoRows) {
 		if hasHistory && retarget {
-			return tombstoneTrigger(ctx, tx, org, project, trigger)
+			return TombstoneTrigger(ctx, tx, org, project, trigger)
 		}
 		if hasHistory {
 			return ErrBrokenMapping
@@ -116,7 +116,7 @@ func (s *Service) bindRoot(ctx context.Context, tx pgx.Tx, org string, project, 
 		return ErrTombstoned
 	}
 	if hasHistory {
-		if err := tombstoneTrigger(ctx, tx, org, project, trigger); err != nil {
+		if err := TombstoneTrigger(ctx, tx, org, project, trigger); err != nil {
 			return err
 		}
 	}
@@ -183,10 +183,6 @@ func (s *Service) platformIssuer(ctx context.Context, q *repo.Queries, org strin
 // TombstoneTrigger permanently withdraws this root's current association and
 // withdraws its admission in the caller's transaction. History stays.
 func TombstoneTrigger(ctx context.Context, tx pgx.Tx, org string, project, trigger uuid.UUID) error {
-	return tombstoneTrigger(ctx, tx, org, project, trigger)
-}
-
-func tombstoneTrigger(ctx context.Context, tx pgx.Tx, org string, project, trigger uuid.UUID) error {
 	q := repo.New(tx)
 	if _, err := q.LockTrigger(ctx, repo.LockTriggerParams{OrganizationID: org, ProjectID: project, TriggerID: trigger}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return resourceError("lock trigger withdrawal", err)
@@ -234,7 +230,7 @@ func TombstoneAssistant(ctx context.Context, tx pgx.Tx, org string, project, ass
 		return fmt.Errorf("list assistant authority history: %w", err)
 	}
 	for _, trigger := range roots {
-		if err := tombstoneTrigger(ctx, tx, org, project, trigger); err != nil {
+		if err := TombstoneTrigger(ctx, tx, org, project, trigger); err != nil {
 			return err
 		}
 	}
