@@ -198,6 +198,10 @@ install_binary() {
 
     info "Installing speakeasy to $install_path..."
 
+    # Create the install directory as the invoking user when we can (e.g. a
+    # new INSTALL_DIR under $HOME), so only unwritable locations need sudo.
+    mkdir -p "$install_dir" 2>/dev/null || true
+
     # Check if we need sudo
     local use_sudo=""
     if [ ! -w "$install_dir" ]; then
