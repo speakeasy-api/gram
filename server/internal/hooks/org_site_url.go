@@ -42,15 +42,28 @@ func (c *orgDefaultHostCache) get(organizationID string, now time.Time) (pgtype.
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	entry, ok := c.entries[organizationID]
-	if !ok || now.After(entry.expiresAt) {
+	if !ok {
+		return pgtype.Text{String: "", Valid: false}, false
+	}
+	if now.After(entry.expiresAt) {
+		delete(c.entries, organizationID)
 		return pgtype.Text{String: "", Valid: false}, false
 	}
 	return entry.defaultHost, true
 }
 
+// put records an organization's host and sweeps out every expired entry, so
+// organizations that stop hitting denies don't stay in the map. Puts only
+// happen on a cache miss, and the map holds at most the organizations seen
+// within the TTL, so the sweep stays cheap.
 func (c *orgDefaultHostCache) put(organizationID string, defaultHost pgtype.Text, now time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	for id, entry := range c.entries {
+		if now.After(entry.expiresAt) {
+			delete(c.entries, id)
+		}
+	}
 	c.entries[organizationID] = orgDefaultHostEntry{defaultHost: defaultHost, expiresAt: now.Add(orgDefaultHostCacheTTL)}
 }
 
