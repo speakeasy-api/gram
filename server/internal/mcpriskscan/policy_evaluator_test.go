@@ -404,7 +404,8 @@ func TestPolicyEvaluator_FlagLaneIsDetachedAndAtMostOnce(t *testing.T) {
 	}
 	require.False(t, evaluator.Scan(t.Context(), subject).Denied())
 	close(release)
-	require.Eventually(t, func() bool { return len(publisher.snapshot()) == 1 }, time.Second, time.Millisecond)
+	// Evidence is stored after the finding is published.
+	require.Eventually(t, func() bool { return len(publisher.snapshot()) == 1 && len(evidence.snapshot()) == 1 }, time.Second, time.Millisecond)
 	mu.Lock()
 	require.Equal(t, 1, calls)
 	mu.Unlock()
