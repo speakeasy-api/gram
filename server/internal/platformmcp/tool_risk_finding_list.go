@@ -75,8 +75,8 @@ func riskFindingListSchema() *jsonschema.Schema {
 	properties["assistant_id"] = uuidSchema("Optional assistant ID; only findings from chats linked to it. Mutually exclusive with non_assistant.")
 	properties["non_assistant"] = &jsonschema.Schema{Type: "boolean", Description: "Only findings from chats not linked to any assistant."}
 	properties["unique_match"] = &jsonschema.Schema{Type: "boolean", Description: "Collapse to one finding per (policy, rule, matched value), keeping the most recent occurrence."}
-	properties["result_id"] = uuidSchema("Optional finding ID. Fetches that one finding, such as one from a shared link, even when it is not on the current page. Returns nothing if it was marked a false positive.")
-	properties["execution_id"] = stringSchema("Optional MCP tool call ID, the execution_id a finding returns. Lists every finding raised on that one call, across both its request and response phases, so you can see everything the call triggered. Findings marked as false positives stay hidden.", 1, 128)
+	properties["result_id"] = uuidSchema("Optional finding ID. Fetches that one finding, such as one from a shared link, even when it is not on the current page. Returns nothing if it was dismissed, for example as a false positive.")
+	properties["execution_id"] = stringSchema("Optional MCP tool call ID, the execution_id a finding returns. Lists every finding raised on that one call, across both its request and response phases, so you can see everything the call triggered. Dismissed findings, such as false positives, stay hidden.", 1, riskFindingExecutionIDMaxLen)
 	return projectSelectorSchema(properties, nil)
 }
 

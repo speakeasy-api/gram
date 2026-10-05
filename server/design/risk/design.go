@@ -391,10 +391,10 @@ var _ = Service("risk", func() {
 			Attribute("mcp_server_id", String, "Optional concrete MCP server ID to match exactly.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("result_id", String, "Optional risk result ID; returns that one finding even when it is not on a loaded page, such as from a shared link. A finding marked as a false positive is not returned.", func() {
+			Attribute("result_id", String, "Optional risk result ID; returns that one finding even when it is not on a loaded page, such as from a shared link. A dismissed finding, such as a false positive, is not returned.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("execution_id", String, "Optional MCP tool call ID, the execution_id a result carries; returns every finding raised on that one call across its request and response phases. Findings marked as false positives are not returned.")
+			Attribute("execution_id", String, "Optional MCP tool call ID, the execution_id a result carries; returns every finding raised on that one call across its request and response phases. Dismissed findings, such as false positives, are not returned.")
 			Attribute("category", String, "Optional rule category key to filter by (e.g. secrets, pii, financial).")
 			Attribute("rule_id", String, "Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).")
 			Attribute("user_id", String, "Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).")

@@ -37,6 +37,10 @@ const (
 	// riskRuleBreakdownMaxWindow matches the dashboard overview's cap.
 	riskRuleBreakdownMaxWindow = 31 * 24 * time.Hour
 
+	// riskFindingExecutionIDMaxLen bounds the execution_id filter. Execution
+	// IDs are UUIDs; the slack only rejects obviously bogus input.
+	riskFindingExecutionIDMaxLen = 128
+
 	riskFindingCursorKind       = "findings"
 	riskFindingByChatCursorKind = "findings_by_chat"
 )
@@ -353,7 +357,7 @@ func (s *RiskFindingListService) List(ctx context.Context, principal Principal, 
 	if input.Category != "" && !validRiskCategory(input.Category) {
 		return zero, ErrRiskReadInvalid
 	}
-	if len(input.RuleID) > 128 || len(input.ExecutionID) > 128 || len(input.UserID) > 256 || (assistantID.Valid && input.NonAssistant) {
+	if len(input.RuleID) > 128 || len(input.ExecutionID) > riskFindingExecutionIDMaxLen || len(input.UserID) > 256 || (assistantID.Valid && input.NonAssistant) {
 		return zero, ErrRiskReadInvalid
 	}
 	filters := riskFindingFilters{From: input.From, To: input.To, PolicyID: input.PolicyID, ChatID: input.ChatID, MCPServerID: input.MCPServerID, Category: input.Category, RuleID: input.RuleID, UserID: input.UserID, AssistantID: input.AssistantID, NonAssistant: input.NonAssistant, UniqueMatch: input.UniqueMatch, ResultID: input.ResultID, ExecutionID: input.ExecutionID}
