@@ -1172,17 +1172,60 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 		return 0, 0, fmt.Errorf("read openrouter key for usage: %w", keyErr)
 	}
 
-	apiKey, err := o.keyMaterial(key)
-	if err != nil {
-		return 0, limit, fmt.Errorf("resolve openrouter key material: %w", err)
-	}
-
-	used, _, err := o.GetKeyUsage(ctx, apiKey)
+	// Read through the provisioning key rather than the org's own key: GET
+	// /v1/key authenticates as the key itself, so OpenRouter answers 401 once
+	// the key is disabled, which is exactly when a cap-reached or locked org
+	// needs its usage shown.
+	used, err := o.getManagedKeyUsage(ctx, key.KeyHash)
 	if err != nil {
 		return 0, limit, err
 	}
 
 	return used, limit, nil
+}
+
+type managedKeyUsageResponse struct {
+	Data struct {
+		Hash         string   `json:"hash"`
+		UsageMonthly *float64 `json:"usage_monthly"`
+	} `json:"data"`
+}
+
+func (o *OpenRouter) getManagedKeyUsage(ctx context.Context, keyHash string) (float64, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, o.baseURL+"/v1/keys/"+url.PathEscape(keyHash), nil)
+	if err != nil {
+		return 0, fmt.Errorf("build managed key usage request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+o.provisioningKey)
+
+	resp, err := o.orClient.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("send managed key usage request: %w", err)
+	}
+
+	defer o11y.NoLogDefer(func() error {
+		return resp.Body.Close()
+	})
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("fetch OpenRouter key usage: %w", classifyHTTPError(ctx, resp.StatusCode, resp.Header, nil))
+	}
+
+	var usageResp managedKeyUsageResponse
+	if err := json.NewDecoder(resp.Body).Decode(&usageResp); err != nil {
+		return 0, fmt.Errorf("decode managed key usage response: %w", err)
+	}
+	if usageResp.Data.Hash != keyHash {
+		return 0, fmt.Errorf("fetch OpenRouter key usage: %w", ErrAPIKeyIdentityMismatch)
+	}
+
+	var creditsUsed float64
+	if usageResp.Data.UsageMonthly != nil {
+		creditsUsed = math.Round(*usageResp.Data.UsageMonthly*100) / 100
+	}
+
+	return creditsUsed, nil
 }
 
 // GetKeyUsage issues the upstream `/v1/key` call with the given API key and
