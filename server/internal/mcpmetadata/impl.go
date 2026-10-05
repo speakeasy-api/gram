@@ -1007,7 +1007,8 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	authCtx, authOk := contextvalues.GetAuthContext(ctx)
 
 	if (privateNetworkInstall || orgDomainInstall) && (authCtx == nil || authCtx.ActiveOrganizationID == "") {
-		if s.serverURL != nil {
+		// Login cannot give a signed-in visitor an organization; redirecting would loop.
+		if authCtx == nil && s.serverURL != nil {
 			http.Redirect(w, r, s.loginRedirectURL(r), http.StatusFound)
 			return nil
 		}

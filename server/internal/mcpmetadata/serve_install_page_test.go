@@ -2389,6 +2389,20 @@ func TestServeInstallPage_MetaBackedEndpoint_CustomDomainOnPlatformHost(t *testi
 		require.Equal(t, hinted(slug), loginURL.Query().Get("redirect"))
 	})
 
+	t.Run("organization-less session gets not found, not a login loop", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti, slug := setup(t, true)
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		noOrgCtx := contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+			ActiveOrganizationID: "",
+			UserID:               authCtx.UserID,
+			SessionID:            authCtx.SessionID,
+		})
+		rr := serveMetaInstallPageURL(t, noOrgCtx, ti, hinted(slug), slug)
+		require.Equal(t, http.StatusNotFound, rr.Code)
+	})
+
 	t.Run("another organization gets not found", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti, slug := setup(t, true)
