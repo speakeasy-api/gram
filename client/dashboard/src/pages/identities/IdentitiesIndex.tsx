@@ -33,6 +33,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
 import { dateTimeFormatters } from "@/lib/dates";
+import { useHideInsightsDock } from "@/components/insights-context";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Text } from "@/components/ui/Text";
 import { IdentityLink } from "@/components/identity-link";
@@ -350,6 +351,9 @@ export default function IdentitiesIndex(): JSX.Element {
 }
 
 function IdentitiesIndexContent(): JSX.Element {
+  // This page fills the viewport, so the floating dock sat on top of the
+  // agents table rather than beside it.
+  useHideInsightsDock();
   const location = useLocation();
   const routes = useRoutes();
   const organization = useOrganization();
@@ -937,21 +941,36 @@ function IdentityGroup({
           directory nor the agent inventory takes a cursor yet. */}
       {/* The header stays while its rows move: a column you cannot see is a
           column you cannot read a cell against. */}
-      {/* The table clips its own overflow, which would anchor a sticky header
-          to the table rather than to this pane; scrolling moves to the pane so
-          the header can stay put while its rows move. */}
-      <div className="border-border min-h-0 flex-1 overflow-auto overscroll-contain border-b [&_table]:overflow-visible [&_thead]:bg-background [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10">
-        <Table
-          columns={columns}
-          data={rows.slice(0, visible)}
-          sort={sort}
-          onSortChange={onSortChange}
-          hasMore={visible < rows.length}
-          onLoadMore={async () => onLoadMore()}
-          rowKey={(row) => row.id}
-          onRowClick={onRowClick}
-          noResultsMessage={emptyMessage}
-        />
+      {/* The header is its own table, outside the scroller. Sticky kept it
+          in place mid-scroll but it still rode the elastic overscroll at
+          either end, because a sticky element is still inside the box that
+          bounces. Both tables take their column widths from the same column
+          list, so they line up. */}
+      {/* Header and rows are one table to the eye: no gap between the two
+          elements that make it. */}
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="[&_table]:border-b-0 [&_tbody]:hidden">
+          <Table
+            columns={columns}
+            data={[]}
+            rowKey={() => "header"}
+            sort={sort}
+            onSortChange={onSortChange}
+            noResultsMessage={null}
+          />
+        </div>
+        <div className="border-border min-h-0 flex-1 overflow-auto overscroll-contain border-b [&_table]:border-t-0 [&_table]:border-b-0">
+          <Table
+            columns={columns}
+            data={rows.slice(0, visible)}
+            hideHeader
+            hasMore={visible < rows.length}
+            onLoadMore={async () => onLoadMore()}
+            rowKey={(row) => row.id}
+            onRowClick={onRowClick}
+            noResultsMessage={emptyMessage}
+          />
+        </div>
       </div>
     </section>
   );
