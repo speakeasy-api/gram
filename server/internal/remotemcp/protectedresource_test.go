@@ -330,6 +330,57 @@ func TestProxyManager_RecordsChallengeScopes(t *testing.T) {
 	require.Equal(t, first.UpdatedAt.Time, repeat.UpdatedAt.Time)
 }
 
+// Back-to-back challenges with different scopes leave the row holding the
+// latest one, whichever detached write finishes first.
+func TestProxyManager_ChallengeScopesLatestWins(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestServiceForProbe(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	written := make(chan struct{}, 8)
+	manager.SetAfterChallengeScopes(func() { written <- struct{}{} })
+
+	scopeA, scopeB := `Bearer scope="a"`, `Bearer scope="b"`
+	var challenge atomic.Pointer[string]
+	challenge.Store(&scopeA)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("WWW-Authenticate", *challenge.Load())
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(upstream.Close)
+
+	server := seedRemoteMcpServerWithURL(t, ctx, ti, upstream.URL)
+	_, err = repo.New(ti.conn).UpsertRemoteProtectedResource(ctx, repo.UpsertRemoteProtectedResourceParams{
+		ProjectID:              *authCtx.ProjectID,
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ResourceIdentifier:     upstream.URL,
+		MetadataUrl:            "",
+		AuthorizationServers:   []string{"https://auth.example.test"},
+		ScopesSupported:        nil,
+		BearerMethodsSupported: nil,
+		ResourceName:           "",
+		ResourceDocumentation:  "",
+		ResourcePolicyUri:      "",
+		ResourceTosUri:         "",
+		Metadata:               "",
+	})
+	require.NoError(t, err)
+
+	postInitialize(t, ctx, manager, server)
+	challenge.Store(&scopeB)
+	postInitialize(t, ctx, manager, server)
+	<-written
+	<-written
+
+	row := loadProtectedResource(t, ctx, ti, upstream.URL)
+	require.Equal(t, []string{"b"}, row.ChallengeScopes)
+}
+
 // A challenge for a resource without a row records nothing and does not
 // fail the relay.
 func TestProxyManager_ChallengeScopesWithoutRowIsNoop(t *testing.T) {

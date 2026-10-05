@@ -2,6 +2,7 @@ package remotemcp
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -35,6 +36,21 @@ func TestCompareScopes(t *testing.T) {
 	}
 }
 
+func TestChallengeScopesSweep(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	s := newChallengeScopesState()
+	s.seen.Store("stale", &challengeObservation{scopes: []string{"a"}, at: now.Add(-challengeScopesRecheck)})
+	s.seen.Store("fresh", &challengeObservation{scopes: []string{"a"}, at: now.Add(-challengeScopesRecheck + time.Second)})
+	s.sweep(now)
+
+	_, ok := s.seen.Load("stale")
+	require.False(t, ok)
+	_, ok = s.seen.Load("fresh")
+	require.True(t, ok)
+}
+
 func TestParseChallengeScopes(t *testing.T) {
 	t.Parallel()
 
@@ -54,6 +70,10 @@ func TestParseChallengeScopes(t *testing.T) {
 		{name: "second header carries it", headers: []string{`Basic realm="x"`, `Bearer scope="a b"`}, want: []string{"a", "b"}},
 		{name: "first non-empty wins", headers: []string{`Bearer scope=""`, `Bearer scope="a"`}, want: []string{"a"}},
 		{name: "unterminated quote", headers: []string{`Bearer scope="read`}, want: nil},
+		{name: "basic scope ignored", headers: []string{`Basic realm="x", scope="admin"`}, want: nil},
+		{name: "basic before bearer in one header", headers: []string{`Basic scope="admin", Bearer scope="read"`}, want: []string{"read"}},
+		{name: "dpop accepted", headers: []string{`DPoP algs="ES256", scope="read"`}, want: []string{"read"}},
+		{name: "no scheme", headers: []string{`scope="read"`}, want: nil},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

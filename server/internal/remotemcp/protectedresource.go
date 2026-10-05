@@ -3,12 +3,12 @@ package remotemcp
 import (
 	"context"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"log/slog"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 )

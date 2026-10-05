@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -33,19 +34,43 @@ const challengeScopesRecheck = 10 * time.Minute
 // a challenge arriving with every slot taken is dropped, the next one records it.
 const challengeScopesWriteSlots = 4
 
+// challengeScopesLockStripes is the number of locks writes are serialised
+// under, so the row ends up holding the latest observation of its resource.
+const challengeScopesLockStripes = 16
+
 type challengeObservation struct {
 	scopes []string
 	at     time.Time
 }
 
 // challengeScopesState is the per-replica debounce for observeChallengeScopes.
+// seen holds *challengeObservation so a stale entry is only ever removed by
+// identity and a newer observation of the same resource survives.
 type challengeScopesState struct {
 	seen  sync.Map
+	locks [challengeScopesLockStripes]sync.Mutex
 	slots chan struct{}
 }
 
 func newChallengeScopesState() *challengeScopesState {
-	return &challengeScopesState{seen: sync.Map{}, slots: make(chan struct{}, challengeScopesWriteSlots)}
+	return &challengeScopesState{seen: sync.Map{}, locks: [challengeScopesLockStripes]sync.Mutex{}, slots: make(chan struct{}, challengeScopesWriteSlots)}
+}
+
+func (s *challengeScopesState) lock(key string) *sync.Mutex {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(key))
+	return &s.locks[h.Sum32()%challengeScopesLockStripes]
+}
+
+// sweep drops observations past their recheck window so the map stays bounded
+// by the resources challenged recently, not ever.
+func (s *challengeScopesState) sweep(now time.Time) {
+	s.seen.Range(func(key, v any) bool {
+		if obs, ok := v.(*challengeObservation); ok && now.Sub(obs.at) >= challengeScopesRecheck {
+			s.seen.CompareAndDelete(key, v)
+		}
+		return true
+	})
 }
 
 // observeChallengeScopes records the scope auth-param of an upstream 401 or
@@ -63,7 +88,7 @@ func (f *ProxyManager) observeChallengeScopes(ctx context.Context, logger *slog.
 	key := projectID.String() + " " + resourceURL
 	now := time.Now()
 	if v, ok := f.challengeScopes.seen.Load(key); ok {
-		if prev, ok := v.(challengeObservation); ok && slices.Equal(prev.scopes, scopes) && now.Sub(prev.at) < challengeScopesRecheck {
+		if prev, ok := v.(*challengeObservation); ok && slices.Equal(prev.scopes, scopes) && now.Sub(prev.at) < challengeScopesRecheck {
 			if f.afterChallengeScopes != nil {
 				f.afterChallengeScopes()
 			}
@@ -75,7 +100,8 @@ func (f *ProxyManager) observeChallengeScopes(ctx context.Context, logger *slog.
 	default:
 		return
 	}
-	f.challengeScopes.seen.Store(key, challengeObservation{scopes: scopes, at: now})
+	obs := &challengeObservation{scopes: scopes, at: now}
+	f.challengeScopes.seen.Store(key, obs)
 
 	// Only the trace carries over: the write outlives the request and must not inherit its values.
 	detached := trace.ContextWithSpanContext(context.Background(), trace.SpanContextFromContext(ctx))
@@ -84,12 +110,20 @@ func (f *ProxyManager) observeChallengeScopes(ctx context.Context, logger *slog.
 		if f.afterChallengeScopes != nil {
 			defer f.afterChallengeScopes()
 		}
+		mu := f.challengeScopes.lock(key)
+		mu.Lock()
+		defer mu.Unlock()
+		// A newer observation of this resource has taken over the entry; its write lands last.
+		if v, ok := f.challengeScopes.seen.Load(key); ok && v != obs {
+			return
+		}
 		ctx, cancel := context.WithTimeout(detached, challengeScopesWriteBudget)
 		defer cancel()
 		if err := recordChallengeScopes(ctx, f.db, projectID, resourceURL, scopes); err != nil {
-			f.challengeScopes.seen.Delete(key)
+			f.challengeScopes.seen.CompareAndDelete(key, obs)
 			logger.ErrorContext(ctx, "record protected resource challenge scopes", attr.SlogError(err))
 		}
+		f.challengeScopes.sweep(time.Now())
 	}()
 }
 

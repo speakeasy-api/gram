@@ -301,21 +301,46 @@ func parseProtectedResourceMetadataURL(headers []string) *string {
 }
 
 // parseChallengeScopes returns the space-separated scope auth-param (RFC 6750
-// §3) of the first challenge that carries one; nil when none does.
+// §3) of the first Bearer or DPoP challenge that carries one; nil when none
+// does. Other schemes own no such param, so theirs is ignored.
 func parseChallengeScopes(headers []string) []string {
-	for _, value := range authParamValues(headers, "scope") {
-		if scopes := strings.Fields(value); len(scopes) > 0 {
+	for _, p := range authParams(headers) {
+		if !strings.EqualFold(p.name, "scope") || (!strings.EqualFold(p.scheme, "Bearer") && !strings.EqualFold(p.scheme, "DPoP")) {
+			continue
+		}
+		if scopes := strings.Fields(p.value); len(scopes) > 0 {
 			return scopes
 		}
 	}
 	return nil
 }
 
+// authParam is one auth-param of a challenge, with the scheme that opened the challenge.
+type authParam struct {
+	scheme string
+	name   string
+	value  string
+}
+
 // authParamValues returns every value of the named auth-param across the
-// challenge header values, in order, tolerating malformed neighbours.
+// challenge header values, in order, regardless of scheme.
 func authParamValues(headers []string, name string) []string {
 	var values []string
+	for _, p := range authParams(headers) {
+		if strings.EqualFold(p.name, name) {
+			values = append(values, p.value)
+		}
+	}
+	return values
+}
+
+// authParams lists every auth-param across the challenge header values, in
+// order, tolerating malformed neighbours. A bare token starts a new challenge
+// and names its scheme.
+func authParams(headers []string) []authParam {
+	var params []authParam
 	for _, header := range headers {
+		scheme := ""
 		for i := 0; i < len(header); {
 			if header[i] == '"' {
 				_, i, _ = parseAuthParamValue(header, i)
@@ -335,6 +360,7 @@ func authParamValues(headers []string, name string) []string {
 				i++
 			}
 			if i >= len(header) || header[i] != '=' {
+				scheme = param
 				continue
 			}
 			i++
@@ -344,13 +370,13 @@ func authParamValues(headers []string, name string) []string {
 
 			value, next, ok := parseAuthParamValue(header, i)
 			i = next
-			if !ok || !strings.EqualFold(param, name) {
+			if !ok {
 				continue
 			}
-			values = append(values, value)
+			params = append(params, authParam{scheme: scheme, name: param, value: value})
 		}
 	}
-	return values
+	return params
 }
 
 func parseAuthParamValue(header string, start int) (string, int, bool) {
