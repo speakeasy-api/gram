@@ -256,8 +256,12 @@ describe("WidgetView", () => {
     const from = Date.UTC(2026, 8, 1);
     const to = Date.UTC(2026, 8, 8);
     renderView(widget({ chartType: "line" }, { id: "widget-1" }), {
-      window: { from, to },
-      filters: [{ field: "user", operator: "in", values: ["ann"] }],
+      window: {
+        preset: null,
+        customRange: { from: new Date(from), to: new Date(to) },
+        customLabel: null,
+      },
+      filters: { user: ["ann"] },
     });
     const body = testState.bodies.at(-1);
     expect(body?.from.getTime()).toBe(from);
@@ -278,7 +282,7 @@ describe("WidgetView", () => {
   it("says which page filters it could not apply", () => {
     testState.rows = [];
     renderView(widget({ chartType: "table" }), {
-      filters: [{ field: "client", operator: "in", values: ["cursor"] }],
+      filters: { client: ["cursor"] },
     });
     expect(
       screen.getByText(
@@ -290,7 +294,7 @@ describe("WidgetView", () => {
 
   it("keeps the saved widget's link when the page asks nothing different", () => {
     renderView(widget({ chartType: "table" }, { id: "widget-1" }), {
-      window: "24h",
+      window: { preset: "1d", customRange: null, customLabel: null },
     });
     expect(explored().widgetId).toBe("widget-1");
   });

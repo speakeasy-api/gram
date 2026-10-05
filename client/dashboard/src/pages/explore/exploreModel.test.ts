@@ -123,7 +123,7 @@ describe("the describe-to-controls mapping", () => {
       measures: [{ op: "count", field: "" }],
       dimensions: ["user"],
       chartType: "line",
-      window: "24h",
+      window: "1d",
       limit: 0,
     });
     expect(specForDataset(usage)).toMatchObject({
@@ -203,9 +203,24 @@ describe("measure and filter drafts", () => {
 });
 
 describe("the queries a spec describes", () => {
+  it("ends a window shorter than an hour on the next minute, not the next hour", () => {
+    const now = Date.UTC(2026, 8, 14, 10, 17, 30);
+    const { from, to } = windowRange("15m", now);
+    expect(to.toISOString()).toBe("2026-09-14T10:18:00.000Z");
+    expect(from.toISOString()).toBe("2026-09-14T10:03:00.000Z");
+  });
+
+  it("buckets every dashboard preset: hours up to three days, then days, then weeks", () => {
+    expect(autoGrain("15m")).toBe("hour");
+    expect(autoGrain("4h")).toBe("hour");
+    expect(autoGrain("3d")).toBe("hour");
+    expect(autoGrain("15d")).toBe("day");
+    expect(autoGrain("90d")).toBe("week");
+  });
+
   it("aligns the window to the hour so the key stays stable within it", () => {
     const now = Date.UTC(2026, 8, 14, 10, 17, 0);
-    const { from, to } = windowRange("24h", now);
+    const { from, to } = windowRange("1d", now);
     expect(to.toISOString()).toBe("2026-09-14T11:00:00.000Z");
     expect(from.toISOString()).toBe("2026-09-13T11:00:00.000Z");
   });
