@@ -66,6 +66,35 @@ func TestAuthorizeRecord_NilSafe(t *testing.T) {
 	var m *Authorize
 	m.Record(t.Context(), "okta-prod", PKCESupportSupported)
 
-	empty := &Authorize{flows: nil}
+	m.RecordUnanswered(t.Context(), "okta-prod")
+
+	empty := &Authorize{flows: nil, unanswered: nil}
 	empty.Record(t.Context(), "okta-prod", PKCESupportSupported)
+	empty.RecordUnanswered(t.Context(), "okta-prod")
+}
+
+// The unanswered-leg counter carries the issuer and nothing else, so no user
+// identifier can reach a metric label.
+func TestAuthorizeRecordUnanswered_IssuerIsTheOnlyDimension(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+
+	m := NewAuthorize(testenv.NewLogger(t), provider)
+	m.RecordUnanswered(t.Context(), "https://idp.example.com")
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &rm))
+	require.Len(t, rm.ScopeMetrics, 1)
+	require.Len(t, rm.ScopeMetrics[0].Metrics, 1)
+
+	got := rm.ScopeMetrics[0].Metrics[0]
+	require.Equal(t, meterUpstreamAuthorizeUnanswered, got.Name)
+	sum, ok := got.Data.(metricdata.Sum[int64])
+	require.True(t, ok)
+	require.Len(t, sum.DataPoints, 1)
+	require.Equal(t, int64(1), sum.DataPoints[0].Value)
+	require.Equal(t, 1, sum.DataPoints[0].Attributes.Len())
+	metricdatatest.AssertHasAttributes(t, got, attr.OAuthIssuer("https://idp.example.com"))
 }

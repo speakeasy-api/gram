@@ -9,7 +9,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
-const meterUpstreamAuthorize = "gram.remote_session.upstream_authorize"
+const (
+	meterUpstreamAuthorize = "gram.remote_session.upstream_authorize"
+
+	meterUpstreamAuthorizeUnanswered = "gram.remote_session.upstream_authorize.unanswered"
+)
 
 // Authorize holds the upstream-authorize instrument: an unsampled census of
 // authorize-URL attempts against upstream identity providers, one count per
@@ -24,6 +28,12 @@ const meterUpstreamAuthorize = "gram.remote_session.upstream_authorize"
 // flow-level oauth.flow.failed counter and error logs.
 type Authorize struct {
 	flows metric.Int64Counter
+
+	// unanswered counts authorize legs found still pending when the same
+	// user restarted the login: the provider never redirected back to Gram,
+	// typically because it rendered its own error page. Only a restart
+	// reveals one, so a leg the user abandons outright is not counted.
+	unanswered metric.Int64Counter
 }
 
 func NewAuthorize(logger *slog.Logger, meterProvider metric.MeterProvider) *Authorize {
@@ -38,7 +48,16 @@ func NewAuthorize(logger *slog.Logger, meterProvider metric.MeterProvider) *Auth
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterUpstreamAuthorize), attr.SlogError(err))
 	}
 
-	return &Authorize{flows: flows}
+	unanswered, err := meter.Int64Counter(
+		meterUpstreamAuthorizeUnanswered,
+		metric.WithDescription("Upstream authorize legs that never redirected back to Gram before the user restarted the login."),
+		metric.WithUnit("{flow}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterUpstreamAuthorizeUnanswered), attr.SlogError(err))
+	}
+
+	return &Authorize{flows: flows, unanswered: unanswered}
 }
 
 // Record counts one authorize-URL attempt.
@@ -50,4 +69,14 @@ func (m *Authorize) Record(ctx context.Context, issuerURL string, pkceSupport PK
 		attr.OAuthIssuer(issuerURL),
 		attr.PKCESupport(pkceSupport),
 	))
+}
+
+// RecordUnanswered counts one authorize leg the issuer never answered. The
+// issuer is the only dimension: the leg belongs to a user, and no user
+// identifier goes on a metric.
+func (m *Authorize) RecordUnanswered(ctx context.Context, issuerURL string) {
+	if m == nil || m.unanswered == nil {
+		return
+	}
+	m.unanswered.Add(ctx, 1, metric.WithAttributes(attr.OAuthIssuer(issuerURL)))
 }

@@ -509,3 +509,51 @@ func TestRemoteLoginCallback_BareStateDoesNotConsumeLogin(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, uuid.Nil, session.ID)
 }
+
+// An issuer that answers a refused resource with its own error page never
+// calls back, so the first leg's state stays unconsumed. Restarting the login
+// takes the resource-less leg, which completes through the real callback and
+// still records the resource; a further restart sends the resource again.
+func TestRemoteLogin_UnansweredResourceLegRestartsWithoutResource(t *testing.T) {
+	t.Parallel()
+
+	const resource = "https://member.example.com/mcp"
+	var exchanges atomic.Int64
+	ctx, env, first, err := driveSyntheticLogin(t, "unanswered-resource-leg", resourceRejectingToken(&exchanges),
+		withResource(resource),
+		// The provider never redirects back: the only callback carries a
+		// state Gram never issued, which leaves the real leg pending.
+		withCallbackQuery(func(q url.Values) { q.Set("state", "never-issued") }),
+	)
+	require.Error(t, err)
+	require.Empty(t, first.Header().Get("Location"))
+	parsed, err := url.Parse(env.authURL)
+	require.NoError(t, err)
+	require.Equal(t, resource, parsed.Query().Get("resource"), "the first leg sends the resource")
+
+	restart, err := env.mgr.BuildAuthorizationUrl(ctx, env.parent, env.client)
+	require.NoError(t, err)
+	parsed, err = url.Parse(restart)
+	require.NoError(t, err)
+	require.False(t, parsed.Query().Has("resource"), "the restart drops the resource")
+
+	completed, err := env.callback(t, "code=upstream-code-2&state="+url.QueryEscape(stateOf(t, restart)))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusSeeOther, completed.Code)
+	require.Contains(t, completed.Header().Get("Location"), "/connect?state=")
+	require.Equal(t, int64(1), exchanges.Load(), "the exchange carried no resource and succeeded first time")
+	require.False(t, resourceIndicatorFlag(t, ctx, env).Valid, "a login never writes the issuer's flag")
+
+	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            env.subject,
+		RemoteSessionClientID: env.clientID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, resource, session.Resource.String, "the resource is still recorded so the grant stays routable")
+
+	again, err := env.mgr.BuildAuthorizationUrl(ctx, env.parent, env.client)
+	require.NoError(t, err)
+	parsed, err = url.Parse(again)
+	require.NoError(t, err)
+	require.Equal(t, resource, parsed.Query().Get("resource"), "the window's one fallback is spent")
+}
