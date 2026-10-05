@@ -27,6 +27,18 @@ export function AdminMcpSetup(): JSX.Element {
     null,
     2,
   );
+  const claudeDesktopConfig = JSON.stringify(
+    {
+      mcpServers: {
+        "gram-admin": {
+          command: "npx",
+          args: ["-y", "mcp-remote@0.1.25", endpoint],
+        },
+      },
+    },
+    null,
+    2,
+  );
 
   return (
     <main className="mx-auto w-full max-w-3xl space-y-8 pb-10">
@@ -73,7 +85,7 @@ export function AdminMcpSetup(): JSX.Element {
         <div>
           <h2 className="text-lg font-semibold">Install in your agent</h2>
           <p className="text-muted-foreground text-sm">
-            Add a remote Streamable HTTP server. When prompted, sign in with
+            Follow the instructions for your client. When prompted, sign in with
             your staff account and approve the requested access in the browser.
             A successful connection should list the Admin MCP tools.
           </p>
@@ -81,6 +93,7 @@ export function AdminMcpSetup(): JSX.Element {
         <Tabs defaultValue="claude" className="min-w-0">
           <TabsList aria-label="MCP client" className="h-auto flex-wrap">
             <TabsTrigger value="claude">Claude Code</TabsTrigger>
+            <TabsTrigger value="claude-desktop">Claude Desktop</TabsTrigger>
             <TabsTrigger value="codex">Codex</TabsTrigger>
             <TabsTrigger value="cursor">Cursor</TabsTrigger>
             <TabsTrigger value="other">Other agents</TabsTrigger>
@@ -96,6 +109,54 @@ export function AdminMcpSetup(): JSX.Element {
             <p className="text-muted-foreground text-sm">
               Open Claude Code and run <code>/mcp</code> to finish
               authentication.
+            </p>
+          </TabsContent>
+          <TabsContent value="claude-desktop" className="space-y-3 pt-3">
+            <p className="text-sm">
+              Claude Desktop’s Chat and Cowork experiences proxy remote MCP
+              connections through Anthropic’s backend, which cannot reach the
+              company tailnet. Instead, run Admin MCP as a local server through
+              a stdio bridge so the connection uses your Mac’s Tailscale access
+              and MagicDNS.
+            </p>
+            <ol className="list-inside list-decimal space-y-2 text-sm">
+              <li>Install Node.js on your Mac.</li>
+              <li>
+                Open <strong>Settings → Developer → Edit Config</strong>, or
+                edit{" "}
+                <code>
+                  ~/Library/Application
+                  Support/Claude/claude_desktop_config.json
+                </code>
+                .
+              </li>
+              <li>
+                Merge the configuration below with any servers already in the
+                file, save it, and restart Claude Desktop.
+              </li>
+            </ol>
+            <Command
+              value={claudeDesktopConfig}
+              label="Claude Desktop configuration"
+            />
+            <p className="text-muted-foreground text-sm">
+              <code>mcp-remote</code> opens the OAuth browser flow locally. If
+              Claude reports <code>spawn npx ENOENT</code>, run{" "}
+              <code>command -v npx</code> in Terminal and replace{" "}
+              <code>npx</code> in the configuration’s <code>command</code> field
+              with the absolute path it prints. This workaround only applies to
+              Claude Desktop, not claude.ai web or mobile. To avoid hand-editing
+              this file on every staff machine, this setup could later be
+              packaged as a Desktop Extension <code>(.mcpb)</code>. Follow{" "}
+              <a
+                href="https://linear.app/speakeasy/issue/GRW-224/feat-set-up-admin-mcp-locally-in-claude-desktop"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-4"
+              >
+                GRW-224
+              </a>{" "}
+              for updates.
             </p>
           </TabsContent>
           <TabsContent value="codex" className="space-y-3 pt-3">

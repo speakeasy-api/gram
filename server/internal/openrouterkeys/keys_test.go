@@ -371,7 +371,7 @@ func TestEnableKey_RealOpenRouterCompletesOnLockedSession(t *testing.T) {
 		require.NoError(t, err)
 		testBaseURL, err := openrouter.WithTestBaseURL(upstream.URL)
 		require.NoError(t, err)
-		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-key", nil, nil, nil, enc, testBaseURL)
+		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-key", nil, nil, enc, testBaseURL)
 	})
 	adminCtx := withAdmin(t, ctx)
 	orgID := seedKey(t, ctx, ti, "enablereal", "chat", "sk-or-enable-real")
@@ -1443,7 +1443,7 @@ func newRealOpenRouterTestService(t *testing.T, baseURL string) (context.Context
 		require.NoError(t, err)
 		testBaseURL, err := openrouter.WithTestBaseURL(baseURL)
 		require.NoError(t, err)
-		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-secret", nil, nil, nil, enc, testBaseURL)
+		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-secret", nil, nil, enc, testBaseURL)
 	})
 }
 

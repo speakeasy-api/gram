@@ -37,6 +37,8 @@ import { Route as OrganizationsIdOrSlugMembersRouteImport } from './routes/organ
 import { Route as RemoteSessionIssuersIssuerIdIndexRouteImport } from './routes/remote-session-issuers.$issuerId.index'
 import { Route as RemoteSessionIssuersIssuerIdConvergenceRouteImport } from './routes/remote-session-issuers.$issuerId.convergence'
 import { Route as RemoteSessionIssuersIssuerIdSettingsRouteImport } from './routes/remote-session-issuers.$issuerId.settings'
+import { Route as OrganizationsIdOrSlugMcpServersIndexRouteImport } from './routes/organizations.$idOrSlug.mcp-servers.index'
+import { Route as OrganizationsIdOrSlugMcpServersServerIdRouteImport } from './routes/organizations.$idOrSlug.mcp-servers.$serverId'
 import { Route as OrganizationsIdOrSlugProjectsIndexRouteImport } from './routes/organizations.$idOrSlug.projects.index'
 import { Route as OrganizationsIdOrSlugProjectsProjectIdOrSlugRouteImport } from './routes/organizations.$idOrSlug.projects.$projectIdOrSlug'
 
@@ -192,6 +194,18 @@ const RemoteSessionIssuersIssuerIdSettingsRoute =
     path: '/settings',
     getParentRoute: () => RemoteSessionIssuersIssuerIdRoute,
   } as any)
+const OrganizationsIdOrSlugMcpServersIndexRoute =
+  OrganizationsIdOrSlugMcpServersIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => OrganizationsIdOrSlugMcpServersRoute,
+  } as any)
+const OrganizationsIdOrSlugMcpServersServerIdRoute =
+  OrganizationsIdOrSlugMcpServersServerIdRouteImport.update({
+    id: '/$serverId',
+    path: '/$serverId',
+    getParentRoute: () => OrganizationsIdOrSlugMcpServersRoute,
+  } as any)
 const OrganizationsIdOrSlugProjectsIndexRoute =
   OrganizationsIdOrSlugProjectsIndexRouteImport.update({
     id: '/projects/',
@@ -228,13 +242,15 @@ export interface FileRoutesByFullPath {
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
-  '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRoute
+  '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
   '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
   '/remote-session-issuers/$issuerId/convergence': typeof RemoteSessionIssuersIssuerIdConvergenceRoute
   '/remote-session-issuers/$issuerId/settings': typeof RemoteSessionIssuersIssuerIdSettingsRoute
   '/organizations/$idOrSlug/': typeof OrganizationsIdOrSlugIndexRoute
   '/remote-session-issuers/$issuerId/': typeof RemoteSessionIssuersIssuerIdIndexRoute
+  '/organizations/$idOrSlug/mcp-servers/$serverId': typeof OrganizationsIdOrSlugMcpServersServerIdRoute
   '/organizations/$idOrSlug/projects/$projectIdOrSlug': typeof OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute
+  '/organizations/$idOrSlug/mcp-servers/': typeof OrganizationsIdOrSlugMcpServersIndexRoute
   '/organizations/$idOrSlug/projects/': typeof OrganizationsIdOrSlugProjectsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -254,13 +270,14 @@ export interface FileRoutesByTo {
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
-  '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRoute
   '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
   '/remote-session-issuers/$issuerId/convergence': typeof RemoteSessionIssuersIssuerIdConvergenceRoute
   '/remote-session-issuers/$issuerId/settings': typeof RemoteSessionIssuersIssuerIdSettingsRoute
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugIndexRoute
   '/remote-session-issuers/$issuerId': typeof RemoteSessionIssuersIssuerIdIndexRoute
+  '/organizations/$idOrSlug/mcp-servers/$serverId': typeof OrganizationsIdOrSlugMcpServersServerIdRoute
   '/organizations/$idOrSlug/projects/$projectIdOrSlug': typeof OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute
+  '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersIndexRoute
   '/organizations/$idOrSlug/projects': typeof OrganizationsIdOrSlugProjectsIndexRoute
 }
 export interface FileRoutesById {
@@ -287,13 +304,15 @@ export interface FileRoutesById {
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
-  '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRoute
+  '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
   '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
   '/remote-session-issuers/$issuerId/convergence': typeof RemoteSessionIssuersIssuerIdConvergenceRoute
   '/remote-session-issuers/$issuerId/settings': typeof RemoteSessionIssuersIssuerIdSettingsRoute
   '/organizations/$idOrSlug/': typeof OrganizationsIdOrSlugIndexRoute
   '/remote-session-issuers/$issuerId/': typeof RemoteSessionIssuersIssuerIdIndexRoute
+  '/organizations/$idOrSlug/mcp-servers/$serverId': typeof OrganizationsIdOrSlugMcpServersServerIdRoute
   '/organizations/$idOrSlug/projects/$projectIdOrSlug': typeof OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute
+  '/organizations/$idOrSlug/mcp-servers/': typeof OrganizationsIdOrSlugMcpServersIndexRoute
   '/organizations/$idOrSlug/projects/': typeof OrganizationsIdOrSlugProjectsIndexRoute
 }
 export interface FileRouteTypes {
@@ -327,7 +346,9 @@ export interface FileRouteTypes {
     | '/remote-session-issuers/$issuerId/settings'
     | '/organizations/$idOrSlug/'
     | '/remote-session-issuers/$issuerId/'
+    | '/organizations/$idOrSlug/mcp-servers/$serverId'
     | '/organizations/$idOrSlug/projects/$projectIdOrSlug'
+    | '/organizations/$idOrSlug/mcp-servers/'
     | '/organizations/$idOrSlug/projects/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -347,13 +368,14 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/coverage'
     | '/organizations/$idOrSlug/features'
-    | '/organizations/$idOrSlug/mcp-servers'
     | '/organizations/$idOrSlug/members'
     | '/remote-session-issuers/$issuerId/convergence'
     | '/remote-session-issuers/$issuerId/settings'
     | '/organizations/$idOrSlug'
     | '/remote-session-issuers/$issuerId'
+    | '/organizations/$idOrSlug/mcp-servers/$serverId'
     | '/organizations/$idOrSlug/projects/$projectIdOrSlug'
+    | '/organizations/$idOrSlug/mcp-servers'
     | '/organizations/$idOrSlug/projects'
   id:
     | '__root__'
@@ -385,7 +407,9 @@ export interface FileRouteTypes {
     | '/remote-session-issuers/$issuerId/settings'
     | '/organizations/$idOrSlug/'
     | '/remote-session-issuers/$issuerId/'
+    | '/organizations/$idOrSlug/mcp-servers/$serverId'
     | '/organizations/$idOrSlug/projects/$projectIdOrSlug'
+    | '/organizations/$idOrSlug/mcp-servers/'
     | '/organizations/$idOrSlug/projects/'
   fileRoutesById: FileRoutesById
 }
@@ -601,6 +625,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RemoteSessionIssuersIssuerIdSettingsRouteImport
       parentRoute: typeof RemoteSessionIssuersIssuerIdRoute
     }
+    '/organizations/$idOrSlug/mcp-servers/': {
+      id: '/organizations/$idOrSlug/mcp-servers/'
+      path: '/'
+      fullPath: '/organizations/$idOrSlug/mcp-servers/'
+      preLoaderRoute: typeof OrganizationsIdOrSlugMcpServersIndexRouteImport
+      parentRoute: typeof OrganizationsIdOrSlugMcpServersRoute
+    }
+    '/organizations/$idOrSlug/mcp-servers/$serverId': {
+      id: '/organizations/$idOrSlug/mcp-servers/$serverId'
+      path: '/$serverId'
+      fullPath: '/organizations/$idOrSlug/mcp-servers/$serverId'
+      preLoaderRoute: typeof OrganizationsIdOrSlugMcpServersServerIdRouteImport
+      parentRoute: typeof OrganizationsIdOrSlugMcpServersRoute
+    }
     '/organizations/$idOrSlug/projects/': {
       id: '/organizations/$idOrSlug/projects/'
       path: '/projects'
@@ -618,12 +656,30 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface OrganizationsIdOrSlugMcpServersRouteChildren {
+  OrganizationsIdOrSlugMcpServersServerIdRoute: typeof OrganizationsIdOrSlugMcpServersServerIdRoute
+  OrganizationsIdOrSlugMcpServersIndexRoute: typeof OrganizationsIdOrSlugMcpServersIndexRoute
+}
+
+const OrganizationsIdOrSlugMcpServersRouteChildren: OrganizationsIdOrSlugMcpServersRouteChildren =
+  {
+    OrganizationsIdOrSlugMcpServersServerIdRoute:
+      OrganizationsIdOrSlugMcpServersServerIdRoute,
+    OrganizationsIdOrSlugMcpServersIndexRoute:
+      OrganizationsIdOrSlugMcpServersIndexRoute,
+  }
+
+const OrganizationsIdOrSlugMcpServersRouteWithChildren =
+  OrganizationsIdOrSlugMcpServersRoute._addFileChildren(
+    OrganizationsIdOrSlugMcpServersRouteChildren,
+  )
+
 interface OrganizationsIdOrSlugRouteChildren {
   OrganizationsIdOrSlugActivityRoute: typeof OrganizationsIdOrSlugActivityRoute
   OrganizationsIdOrSlugBillingRoute: typeof OrganizationsIdOrSlugBillingRoute
   OrganizationsIdOrSlugCoverageRoute: typeof OrganizationsIdOrSlugCoverageRoute
   OrganizationsIdOrSlugFeaturesRoute: typeof OrganizationsIdOrSlugFeaturesRoute
-  OrganizationsIdOrSlugMcpServersRoute: typeof OrganizationsIdOrSlugMcpServersRoute
+  OrganizationsIdOrSlugMcpServersRoute: typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
   OrganizationsIdOrSlugMembersRoute: typeof OrganizationsIdOrSlugMembersRoute
   OrganizationsIdOrSlugIndexRoute: typeof OrganizationsIdOrSlugIndexRoute
   OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute: typeof OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute
@@ -635,7 +691,8 @@ const OrganizationsIdOrSlugRouteChildren: OrganizationsIdOrSlugRouteChildren = {
   OrganizationsIdOrSlugBillingRoute: OrganizationsIdOrSlugBillingRoute,
   OrganizationsIdOrSlugCoverageRoute: OrganizationsIdOrSlugCoverageRoute,
   OrganizationsIdOrSlugFeaturesRoute: OrganizationsIdOrSlugFeaturesRoute,
-  OrganizationsIdOrSlugMcpServersRoute: OrganizationsIdOrSlugMcpServersRoute,
+  OrganizationsIdOrSlugMcpServersRoute:
+    OrganizationsIdOrSlugMcpServersRouteWithChildren,
   OrganizationsIdOrSlugMembersRoute: OrganizationsIdOrSlugMembersRoute,
   OrganizationsIdOrSlugIndexRoute: OrganizationsIdOrSlugIndexRoute,
   OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute:

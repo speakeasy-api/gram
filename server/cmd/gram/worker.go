@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -356,6 +357,8 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, riskReconcileFlags()...)
 	flags = append(flags, riskLLMFlags()...)
 	flags = append(flags, gcpFlags()...)
+	flags = append(flags, platformHostsCLIFlag())
+	flags = append(flags, orgDefaultHostFlags()...)
 
 	return &cli.Command{
 		Name:  "worker",
@@ -561,7 +564,7 @@ func newWorkerCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}, productFeatures, billingTracker, encryptionClient)
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient)
 			}
 
 			tigrisStore, shutdown, err := newTigrisStore(ctx, c, logger)
@@ -827,8 +830,17 @@ func newWorkerCommand() *cli.Command {
 					return fmt.Errorf("failed to parse site url: %w", err)
 				}
 			}
+			platformHosts, err := customdomains.ParsePlatformHosts(c.StringSlice(platformHostsFlag))
+			if err != nil {
+				return fmt.Errorf("invalid platform hosts: %w", err)
+			}
+			orgHosts, err := orgHostResolverFromCLI(c, serverURL, siteURL, c.String("environment"), platformHosts)
+			if err != nil {
+				return err
+			}
+			identityResolver.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
-			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
+			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, orgHosts)
 
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
 			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, tunnelHTTPClient, auditLogger)
@@ -863,6 +875,7 @@ func newWorkerCommand() *cli.Command {
 				ExpectedARecords:             customDomainARecords,
 				GitHubEvidenceToken:          c.String("github-evidence-token"),
 				SiteURL:                      siteURL,
+				OrgHosts:                     orgHosts,
 				BillingTracker:               billingTracker,
 				BillingRepository:            billingRepo,
 				StripeClient:                 stripeClient,

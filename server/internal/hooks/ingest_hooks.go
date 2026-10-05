@@ -16,6 +16,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -1536,6 +1537,9 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	var titleContent string
 	uncorrelatedPrompt := false
 	nativePrompt := false
+	// Title generation is scheduled on assistant turns only, as the
+	// per-platform hook endpoints do; tool traffic says nothing about the topic.
+	assistantTurn := false
 	switch strings.TrimSpace(payload.Event.Type) {
 	case "prompt.submitted":
 		content := canonicalPromptText(payload)
@@ -1570,6 +1574,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 				return false, nil
 			}
 		}
+		assistantTurn = true
 		msg = baseMsg("assistant", content)
 		if len(outputToolCalls) > 0 {
 			toolCallsJSON, err := json.Marshal(outputToolCalls)
@@ -1600,7 +1605,9 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		msg = baseMsg("assistant", "")
 		msg.FinishReason = conv.ToPGText("tool_calls")
 		msg.ToolCalls = toolCallsJSON
-		titleContent = toolName
+		// A tool name is not message content, so a chat it opened could never be
+		// recognized as a stand-in; seed the surface placeholder instead.
+		titleContent = canonicalPlaceholderTitle(hookSource)
 	case "tool.completed", "tool.failed":
 		content := canonicalToolResultContent(payload)
 		if strings.TrimSpace(content) == "" {
@@ -1631,7 +1638,32 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			return false, fmt.Errorf("set Claude Tag chat title: %w", err)
 		}
 	}
+	if stored && assistantTurn {
+		s.scheduleCanonicalChatTitle(ctx, authCtx, msg.ChatID, hookSource)
+	}
 	return stored && msg.Role == "user", nil
+}
+
+// scheduleCanonicalChatTitle asks the title generator to replace the stand-in
+// a unified-ingest session was seeded with. Claude Tag sessions are skipped:
+// their title is the channel, rewritten on every wake.
+func (s *Service) scheduleCanonicalChatTitle(ctx context.Context, authCtx *contextvalues.AuthContext, chatID uuid.UUID, hookSource string) {
+	if s.chatTitleGenerator == nil || hookSource == "claude-tag" {
+		return
+	}
+	// WithoutCancel so a client that hangs up as soon as the hook is
+	// acknowledged still gets its session named.
+	if err := s.chatTitleGenerator.ScheduleChatTitleGeneration(
+		context.WithoutCancel(ctx),
+		chatID.String(),
+		authCtx.ActiveOrganizationID,
+		authCtx.ProjectID.String(),
+	); err != nil {
+		s.logger.WarnContext(ctx, "failed to schedule chat title generation",
+			attr.SlogError(err),
+			attr.SlogChatID(chatID.String()),
+		)
+	}
 }
 
 func (s *Service) markChatLiteLLMProxied(ctx context.Context, chatID, projectID uuid.UUID) {
@@ -2185,6 +2217,8 @@ func canonicalSkillName(payload *gen.IngestPayload) string {
 // an empty string when the source is unknown. The claude-tag wake-envelope
 // rewrite is only applied to Claude-family sources to prevent non-Claude
 // adapters from being labelled as channel sessions.
+// Apart from a channel label the result is a stand-in that title generation
+// later replaces.
 func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) string {
 	title := canonicalPromptText(payload)
 	if title == "" {
@@ -2195,12 +2229,26 @@ func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) str
 			title = tagTitle
 		}
 	}
-	title = strings.TrimSpace(title)
-	runes := []rune(title)
-	if len(runes) <= 80 {
-		return title
+	return chat.DerivedTitle(title)
+}
+
+// canonicalPlaceholderTitle is the stand-in for a chat opened by an event that
+// carries no text to derive a title from.
+func canonicalPlaceholderTitle(hookSource string) string {
+	switch hookSource {
+	case agentVariantCowork:
+		return chat.DefaultCoworkChatTitle
+	case agentVariantClaudeCode, surfaceClaudeCodeDesktop:
+		return chat.DefaultClaudeChatTitle
+	case "claude", "claude-tag":
+		return chat.DefaultClaudeAmbiguous
+	case "cursor":
+		return chat.DefaultCursorChatTitle
+	case "codex":
+		return chat.DefaultCodexChatTitle
+	default:
+		return chat.DefaultChatTitle
 	}
-	return string(runes[:80])
 }
 
 func canonicalToolCallData(payload *gen.IngestPayload) *gen.HookToolCallData {

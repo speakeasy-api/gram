@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -59,7 +60,7 @@ type Service struct {
 	roleMgr  *RoleManager
 	audit    *audit.Logger
 	email    *email.Service
-	siteURL  *url.URL
+	orgHosts *orghost.Resolver
 	foldGate CanonicalFoldGate
 }
 
@@ -85,7 +86,7 @@ func NewService(
 	authz *authz.Engine,
 	auditLogger *audit.Logger,
 	emailService *email.Service,
-	siteURL *url.URL,
+	orgHosts *orghost.Resolver,
 	foldGate CanonicalFoldGate,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
@@ -100,7 +101,7 @@ func NewService(
 		roleMgr:  roleMgr,
 		audit:    auditLogger,
 		email:    emailService,
-		siteURL:  siteURL,
+		orgHosts: orgHosts,
 		foldGate: foldGate,
 	}
 }
@@ -1589,8 +1590,8 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	// project from the tenant-qualified resource rather than trusting browser
 	// state or a client-supplied project id.
 	manageAccessLink := ""
-	if s.siteURL != nil {
-		accessURL := s.siteURL.JoinPath(org.Slug, "access", "roles")
+	if siteURL := s.orgHosts.SiteURL(org.DefaultHost); siteURL != nil {
+		accessURL := siteURL.JoinPath(org.Slug, "access", "roles")
 		q := url.Values{}
 		q.Set("grant_user", ac.UserID)
 		q.Set("scope", payload.Scope)

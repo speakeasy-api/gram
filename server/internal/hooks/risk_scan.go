@@ -253,7 +253,11 @@ func (s *Service) warnDenyReason(ctx context.Context, ev hookevents.Event, scanR
 	ctx, span := s.tracer.Start(ctx, "hooks.warnDenyReason")
 	defer span.End()
 
-	if s.siteURL == nil || s.cache == nil || ev.Context.User.ID == "" {
+	if s.cache == nil || ev.Context.User.ID == "" {
+		return "", "", false
+	}
+	siteURL := s.orgSiteURL(ctx, ev.Context.OrganizationID)
+	if siteURL == nil {
 		return "", "", false
 	}
 	// Record the challenge (log-safe fields only — never the matched value).
@@ -263,7 +267,7 @@ func (s *Service) warnDenyReason(ctx context.Context, ev hookevents.Event, scanR
 	if toolName != "" {
 		toolPtr = &toolName
 	}
-	ackURL, _, err := risk.GeneratePolicyAckURL(ctx, s.cache, s.siteURL, risk.PolicyAckTokenInput{
+	ackURL, _, err := risk.GeneratePolicyAckURL(ctx, s.cache, siteURL, risk.PolicyAckTokenInput{
 		OrganizationID: ev.Context.OrganizationID,
 		ProjectID:      ev.Context.ProjectID.String(),
 		UserID:         ev.Context.User.ID,

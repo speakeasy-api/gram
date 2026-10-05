@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -138,7 +139,14 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	}), true)
 	siteURL, err := url.Parse("https://app.example.com")
 	require.NoError(t, err)
-	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL, foldAlwaysOn{})
+	orgHosts := orghost.New(orghost.Config{
+		ServerURL:                  siteURL,
+		SiteURL:                    siteURL,
+		PlatformHosts:              map[string]string{"platform.example.com": "https://platform.example.com"},
+		LegacyDefaultHost:          nil,
+		NewOrganizationDefaultHost: nil,
+	})
+	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, auditLogger, emailService, orgHosts, foldAlwaysOn{})
 
 	return ctx, &testInstance{
 		service:     svc,

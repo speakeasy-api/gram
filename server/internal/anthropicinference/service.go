@@ -43,6 +43,9 @@ const (
 	responseBudget = 250 * time.Millisecond
 	// requestBudget leaves 250ms before the documented 10-second upstream timeout.
 	requestBudget = verdictBudget + checkpointBudget + responseBudget
+	// titleScheduleTimeout bounds the goroutine that asks for a title, so a
+	// degraded Temporal frontend cannot pin one goroutine per inference request.
+	titleScheduleTimeout = 2 * time.Second
 	// unavailableDenyReason is the fail-closed copy for a request that could
 	// not be evaluated in full.
 	unavailableDenyReason = "Speakeasy could not evaluate this request. Please try again."
@@ -65,6 +68,11 @@ func denies(result *risk.ScanResult) bool {
 
 type scanner interface {
 	ScanForInferenceEnforcement(context.Context, risk.RealtimeScanRequest) (*risk.InferenceScanOutcome, error)
+}
+
+// ChatTitleGenerator schedules async chat title generation.
+type ChatTitleGenerator interface {
+	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error
 }
 
 type transcriptStore interface {
@@ -91,8 +99,9 @@ type Service struct {
 
 // NewService uses the shared chat writer so captured messages receive the same
 // storage, metering, and asynchronous analysis as other imported conversations.
-func NewService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, writer *chat.ChatMessageWriter, scanner scanner) *Service {
-	return &Service{logger: logger, store: &postgresStore{db: db, writer: writer}, scanner: scanner, metrics: newMetrics(meterProvider, logger)}
+// A nil titles leaves archived conversations with their placeholder title.
+func NewService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, writer *chat.ChatMessageWriter, scanner scanner, titles ChatTitleGenerator) *Service {
+	return &Service{logger: logger, store: &postgresStore{db: db, writer: writer, titles: titles, logger: logger}, scanner: scanner, metrics: newMetrics(meterProvider, logger)}
 }
 
 // Process archives attempts independently of enforcement. Only a successfully
@@ -324,6 +333,8 @@ func policyInputs(messages []Message) ([]policyInput, error) {
 type postgresStore struct {
 	db     *pgxpool.Pool
 	writer *chat.ChatMessageWriter
+	titles ChatTitleGenerator
+	logger *slog.Logger
 }
 
 func (s *postgresStore) ResolveActor(ctx context.Context, config Config, frame Frame) (string, error) {
@@ -382,14 +393,14 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 		return 0, err
 	}
 	externalChatID := "anthropic-inference:" + candidateID.String()
-	chatID, err := chatrepo.New(s.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
+	conversation, err := chatrepo.New(s.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
 		ID:                candidateID,
 		ProjectID:         config.ProjectID,
 		OrganizationID:    config.OrganizationID,
 		UserID:            conv.ToPGTextEmpty(userID),
 		ExternalUserID:    conv.ToPGTextEmpty(externalUserIDLabel),
 		ExternalChatID:    conv.ToPGText(externalChatID),
-		Title:             conv.ToPGText("Claude inference conversation"),
+		Title:             conv.ToPGText(chat.DefaultInferenceChatTitle),
 		CreatedAt:         conv.ToPGTimestamptz(now),
 		UpdatedAt:         conv.ToPGTimestamptz(now),
 		PreferStoredTitle: true,
@@ -397,6 +408,7 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	if err != nil {
 		return 0, fmt.Errorf("upsert inference conversation: %w", err)
 	}
+	chatID := conversation.ID
 	// Only a chat this frame created can lack the key: an adopted chat was
 	// matched on it and a chat continued by session was keyed when created.
 	// The update keeps an existing key, so a redelivery is harmless.
@@ -525,7 +537,31 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	if _, err := s.writer.WriteExternalWithContentParts(ctx, config.ProjectID, writes, parts); err != nil {
 		return 0, fmt.Errorf("write inference messages: %w", err)
 	}
+	// PreferStoredTitle keeps a generated title, so scheduling stops once one
+	// lands and an agent loop costs one start rather than one per model call.
+	if len(writes) > 0 && chat.IsPlaceholderTitle(conversation.Title.String) {
+		s.scheduleTitle(ctx, config, chatID)
+	}
 	return start, nil
+}
+
+// scheduleTitle asks the title generator to replace the inference placeholder.
+// It runs off the request goroutine: the verdict is on a hard budget and a
+// Temporal round trip must not spend any of it.
+func (s *postgresStore) scheduleTitle(ctx context.Context, config Config, chatID uuid.UUID) {
+	if s.titles == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), titleScheduleTimeout)
+		defer cancel()
+		if err := s.titles.ScheduleChatTitleGeneration(ctx, chatID.String(), config.OrganizationID, config.ProjectID.String()); err != nil {
+			s.logger.WarnContext(ctx, "failed to schedule inference conversation title generation",
+				attr.SlogError(err),
+				attr.SlogChatID(chatID.String()),
+			)
+		}
+	}()
 }
 
 // alignFrame locates the incoming transcript within stored history. A frame

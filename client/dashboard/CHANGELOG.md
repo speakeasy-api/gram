@@ -1,5 +1,20 @@
 # dashboard
 
+## 0.131.0
+
+### Minor Changes
+
+- cf3bdc7: Add a Findings page to each identity, listing the person's risk findings with filters by category and rule. Clicking a category or rule on the Security tab opens it filtered. An identity's Open in Risk Events link now filters on every identifier the person reports. Without chat:read, a locked match now says which permission it needs.
+
+### Patch Changes
+
+- 1cad72d: Add ChatGPT Desktop as an MCP client on the hosted install page and in
+  `gram install chatgpt-desktop`, with Developer mode and custom connector steps
+  matched to the server's authentication.
+- e97ebb8: Pin the OAuth redirect URI and client identity URLs that remote session clients register with upstream providers. `GRAM_OUTBOUND_CALLBACK_URL` fixes the origin for existing clients so a server URL change cannot move them, and `GRAM_REGISTRATION_CALLBACK_URL` records a new origin on organization-owned clients created from now on. Remote session clients now report their `callback_url`, and `remoteSessionClients.getNewClientCallbackUrl` returns the redirect URI a new client will register; the dashboard shows these instead of deriving the URL from the server URL.
+- c52cc0b: Keep project favorites when a logged-out visit is sent to the login page. The session-expiry cleanup now snapshots theme and favorites after auth confirms there is no session, instead of deleting them because that document was never classified.
+- 2878e60: Fix Slack previews of platform links showing a broken Speakeasy image. The preview now uses the opaque sticker logo, which Slack can decode and which stays visible in dark mode.
+
 ## 0.130.0
 
 ### Minor Changes
