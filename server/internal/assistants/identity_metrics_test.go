@@ -25,6 +25,7 @@ func TestIdentityAdmissionMetricModes(t *testing.T) {
 		{name: "human fallback", execution: &assistantidentity.Execution{Mode: assistantidentity.ExecutionWorkloadHuman, FallbackReason: "not a metric label"}, mode: string(assistantidentity.ExecutionWorkloadHuman), fallback: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			reader := sdkmetric.NewManualReader()
 			provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 			t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
@@ -36,7 +37,8 @@ func TestIdentityAdmissionMetricModes(t *testing.T) {
 			require.NoError(t, reader.Collect(t.Context(), &result))
 			require.Len(t, result.ScopeMetrics, 1)
 			require.Len(t, result.ScopeMetrics[0].Metrics, 1)
-			data := result.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64])
+			data, ok := result.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64])
+			require.True(t, ok)
 			require.Len(t, data.DataPoints, 1)
 			point := data.DataPoints[0]
 			require.EqualValues(t, 1, point.Value)
