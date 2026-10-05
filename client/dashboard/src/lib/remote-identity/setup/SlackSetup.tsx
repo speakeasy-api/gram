@@ -3,7 +3,6 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Text } from "@/components/ui/Text";
 import { useGetMCPSetupDocs } from "@gram/client/react-query/getMCPSetupDocs.js";
 import { useEffect, useId, useState, type ReactNode } from "react";
-import { Link } from "react-router";
 import type { UserIdentityDraft } from "../drafts/useIdentityDraft";
 import {
   SLACK_DEFAULT_SCOPES,
@@ -16,13 +15,11 @@ export function SlackSetup({
   draft,
   disabled,
   children,
-  connectHref,
 }: {
   serverUrl: string;
   draft: UserIdentityDraft;
   disabled: boolean;
   children: ReactNode;
-  connectHref: string;
 }): JSX.Element | null {
   const descriptionId = useId();
   const { data, isPending } = useGetMCPSetupDocs({ serverUrl }, undefined, {
@@ -100,13 +97,8 @@ export function SlackSetup({
       <div className="space-y-3">
         {children}
         <Text small muted className="block">
-          Slack app configured. To authorize your personal account, open Inspect
-          and choose Connect. If this server is disabled, enable Availability
-          first.
+          Slack app configured.
         </Text>
-        <Button variant="secondary" asChild>
-          <Link to={connectHref}>Connect your Slack account</Link>
-        </Button>
       </div>
     );
   const reusing = draft.choice === "existing";
@@ -126,8 +118,7 @@ export function SlackSetup({
         )}
       </div>
       <Text small muted className="block">
-        Create a Slack app, then save its credentials here. Connecting your
-        personal Slack account is a separate step after configuration.
+        Create a Slack app, then save its credentials here.
       </Text>
       {draft.existingAvailable && (
         <div className="flex flex-wrap gap-2">
@@ -282,9 +273,7 @@ export function SlackSetup({
           {reusing ? "Save configuration" : "4. Save configuration"}
         </Text>
         <Text small muted className="block">
-          Use Save below to store the app configuration. Then connect your
-          personal Slack account from Inspect. Saving does not authorize Slack
-          access.
+          Use Save below to store the app configuration.
         </Text>
       </div>
       {setup.incompatibleClients.map((client) => (

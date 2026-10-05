@@ -509,7 +509,6 @@ export function RemoteMcpIdentitySectionBody({
               {isSlackMcpUrl(sourceQuery.data?.url) && sourceQuery.data?.url ? (
                 <SlackSetup
                   serverUrl={sourceQuery.data.url}
-                  connectHref={routes.mcp.x.inspect.href(target.slug)}
                   draft={userDraft}
                   disabled={identityReadOnly || userDraft.saving}
                 >
