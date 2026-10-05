@@ -780,6 +780,22 @@ describe("AuthProvider organization host", () => {
     expect(replaceSpy).not.toHaveBeenCalled();
   });
 
+  it("stays on a hand-off page that keeps its token on this host", () => {
+    const handoff = "/risk-policy-challenge/acknowledge";
+    window.history.replaceState(null, "", handoff);
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+    );
+
+    renderGate(handoff);
+
+    expect(screen.getByTestId("app")).toBeTruthy();
+    expect(replaceSpy).not.toHaveBeenCalled();
+  });
+
   it("does not move a tab to the same host twice", async () => {
     mocks.sessionData.mockReturnValue(
       gatedSession({

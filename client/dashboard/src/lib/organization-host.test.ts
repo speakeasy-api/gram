@@ -42,6 +42,44 @@ describe("organizationHostRedirectTarget", () => {
     );
   });
 
+  it.each([
+    "/shadow-mcp/request",
+    "/risk-policy-bypass/request",
+    "/risk-policy-challenge/acknowledge",
+    "/risk-policy-challenge/acknowledge/",
+  ])("stays on the hand-off page %s", (pathname) => {
+    expect(
+      organizationHostRedirectTarget("https://ai.example.com", {
+        ...current,
+        pathname,
+        search: "",
+        hash: "#token=secret",
+      }),
+    ).toBe(undefined);
+  });
+
+  it("stays during the CLI login hand-off", () => {
+    expect(
+      organizationHostRedirectTarget("https://ai.example.com", {
+        ...current,
+        pathname: "/",
+        search: "?from_cli=true&cli_callback_url=http%3A%2F%2Flocalhost%3A1234",
+        hash: "",
+      }),
+    ).toBe(undefined);
+  });
+
+  it("still moves a page below a hand-off path's name", () => {
+    expect(
+      organizationHostRedirectTarget("https://ai.example.com", {
+        ...current,
+        pathname: "/acme/shadow-mcp/request-log",
+        search: "",
+        hash: "",
+      }),
+    ).toBe("https://ai.example.com/acme/shadow-mcp/request-log");
+  });
+
   it("treats a different port as a different host", () => {
     expect(
       organizationHostRedirectTarget("https://app.example.com:8443", current),

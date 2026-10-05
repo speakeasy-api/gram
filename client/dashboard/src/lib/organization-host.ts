@@ -11,6 +11,30 @@
 
 const MOVED_HOSTS_KEY = "organizationHostMoves";
 
+/**
+ * Pages that finish a hand-off and stay on the host they were opened on. Each
+ * takes a bearer token from the URL fragment into this host's session storage,
+ * which another host cannot read, so moving mid-flow would lose the token.
+ */
+export const HOST_MOVE_EXEMPT_PATHS = [
+  "/shadow-mcp/request",
+  "/risk-policy-bypass/request",
+  "/risk-policy-challenge/acknowledge",
+];
+
+/**
+ * The CLI login hand-off ("/?from_cli=true&cli_callback_url=…") returns a key
+ * to a local callback and must finish on the host the CLI opened.
+ */
+function isCliHandoff(current: CurrentLocation): boolean {
+  return new URLSearchParams(current.search).get("from_cli") === "true";
+}
+
+function isExempt(current: CurrentLocation): boolean {
+  const path = current.pathname.replace(/\/+$/, "");
+  return HOST_MOVE_EXEMPT_PATHS.includes(path) || isCliHandoff(current);
+}
+
 type CurrentLocation = Pick<Location, "host" | "pathname" | "search" | "hash">;
 
 /**
@@ -21,7 +45,7 @@ export function organizationHostRedirectTarget(
   dashboardUrl: string | undefined,
   current: CurrentLocation,
 ): string | undefined {
-  if (!dashboardUrl) return undefined;
+  if (!dashboardUrl || isExempt(current)) return undefined;
 
   let target: URL;
   try {
