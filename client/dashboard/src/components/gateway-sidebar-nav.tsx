@@ -51,7 +51,7 @@ export function GatewaySidebarNav(): React.JSX.Element | null {
     });
   const endpoints = endpointsResult?.mcpEndpoints ?? [];
   const { mcpUrl } = useResolvedMcpServerUrl(endpoints, isLoadingEndpoints);
-  const installPageUrl = mcpUrl ? gatewayInstallPageUrl(endpoints) : undefined;
+  const installPageUrl = gatewayInstallPageUrl(endpoints);
   const { rows } = useGatewayMemberRows(id);
   const { hasScope } = useRBAC();
   // Mirrors the mcp_servers sidebar: the tab reads org membership as well as
