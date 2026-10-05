@@ -119,6 +119,7 @@ func (r *PostgresReader) ListRecentToolCalls(ctx context.Context, principal Prin
 		MetaMCPMatchers:    metaMCPMatchers,
 		TargetTypes:        nil,
 		HostedToolsetSlugs: nil,
+		MCPServerTargetIDs: nil,
 		ShadowServerNames:  nil,
 		MetaMCPServerIDs:   nil,
 		UserFilters:        nil,

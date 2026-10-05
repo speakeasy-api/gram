@@ -88,9 +88,15 @@ export function identityHandoffs(
         : routes.costs.href(),
       {},
     ),
-    riskEvents: query(routes.riskEvents.href(), {
-      user_id: externalUserId ?? email,
-    }),
+    // Every id the person reports, matched whole, so the list agrees with
+    // the identity's own Findings. Only an id-less person falls back to the
+    // address, which Risk Events matches as a substring.
+    riskEvents: query(
+      routes.riskEvents.href(),
+      identity.externalUserIds.length > 0
+        ? { identifier: identity.externalUserIds.join(",") }
+        : { user_id: email },
+    ),
     challenges: query(`${orgRoutes.access.href()}/challenges`, {
       identity: principalUrn,
     }),

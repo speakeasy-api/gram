@@ -210,18 +210,21 @@ describe("the queries a spec describes", () => {
     expect(from.toISOString()).toBe("2026-09-13T11:00:00.000Z");
   });
 
-  it("buckets the chart shape at the grain the window calls for, and the summary not at all", () => {
+  it("buckets a timeseries at the grain the window calls for, and other charts not at all", () => {
     expect(autoGrain("1h")).toBe("hour");
     expect(autoGrain("7d")).toBe("day");
     expect(autoGrain("90d")).toBe("week");
     const monthly = spec({ chartType: "line", window: "30d" });
-    expect(queryBodyFromSpec(monthly, "chart").grain).toBe("day");
-    expect(queryBodyFromSpec(monthly, "summary").grain).toBe("none");
+    expect(queryBodyFromSpec(monthly).grain).toBe("day");
+    expect(queryBodyFromSpec({ ...monthly, chartType: "table" }).grain).toBe(
+      "none",
+    );
   });
 
   it("draws a chart only for a timeseries over at least one measure", () => {
     expect(hasChartShape(spec({ chartType: "line" }))).toBe(true);
     expect(hasChartShape(spec({ chartType: "bar" }))).toBe(true);
+    expect(hasChartShape(spec({ chartType: "ranked" }))).toBe(false);
     expect(hasChartShape(spec({ chartType: "table" }))).toBe(false);
     expect(hasChartShape(spec({ chartType: "number" }))).toBe(false);
     expect(hasChartShape(spec({ chartType: "line", measures: [] }))).toBe(
@@ -238,8 +241,8 @@ describe("the queries a spec describes", () => {
           { op: "sum", field: "" },
         ],
         filters: [{ field: "surface", operator: "in", values: ["cli"] }],
+        chartType: "table",
       }),
-      "summary",
     );
     expect(body.dataset).toBe("sessions");
     expect(body.dimensions).toEqual(["user"]);
@@ -253,46 +256,45 @@ describe("the queries a spec describes", () => {
     expect(body.ungrouped).toBeUndefined();
   });
 
-  it("caps the chart shape at the server's maximum and leaves order to time", () => {
+  it("caps a timeseries at the server's maximum and leaves order to time", () => {
     const body = queryBodyFromSpec(
-      spec({ orderBy: "count", limit: 20 }),
-      "chart",
+      spec({ chartType: "line", orderBy: "count", limit: 20 }),
     );
     expect(body.limit).toBe(1000);
     expect(body.orderBy).toBeUndefined();
   });
 
   it("drops the breakdown for a number chart", () => {
-    expect(
-      queryBodyFromSpec(spec({ chartType: "number" }), "summary").dimensions,
-    ).toEqual([]);
+    expect(queryBodyFromSpec(spec({ chartType: "number" })).dimensions).toEqual(
+      [],
+    );
   });
 
-  it("orders the summary by a measure only while that measure is still in the query", () => {
+  it("orders a whole-window result by a measure only while that measure is still in the query", () => {
     const ordered = spec({
+      chartType: "table",
       measures: [{ op: "sum", field: "turn_count" }],
       orderBy: "sum_turn_count",
     });
-    expect(queryBodyFromSpec(ordered, "summary").orderBy).toEqual([
+    expect(queryBodyFromSpec(ordered).orderBy).toEqual([
       { measure: "sum_turn_count", direction: "desc" },
     ]);
     expect(
-      queryBodyFromSpec(
-        { ...ordered, measures: [{ op: "count", field: "" }] },
-        "summary",
-      ).orderBy,
+      queryBodyFromSpec({ ...ordered, measures: [{ op: "count", field: "" }] })
+        .orderBy,
     ).toBeUndefined();
   });
 
-  it("leaves the summary limit to the server unless one was typed", () => {
-    expect(queryBodyFromSpec(spec(), "summary").limit).toBeUndefined();
-    expect(queryBodyFromSpec(spec({ limit: 20 }), "summary").limit).toBe(20);
+  it("leaves a whole-window limit to the server unless one was typed", () => {
+    const table = spec({ chartType: "table" });
+    expect(queryBodyFromSpec(table).limit).toBeUndefined();
+    expect(queryBodyFromSpec({ ...table, limit: 20 }).limit).toBe(20);
   });
 
   it("asks for rows at the dataset's grain when nothing is measured", () => {
     const rows = spec({ measures: [{ op: "sum", field: "" }] });
     expect(isRowsMode(rows)).toBe(true);
-    const body = queryBodyFromSpec(rows, "summary");
+    const body = queryBodyFromSpec(rows);
     expect(body.ungrouped).toBe(true);
     expect(body.measures).toBeUndefined();
     expect(body.grain).toBe("none");

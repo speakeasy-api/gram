@@ -265,6 +265,10 @@ func (stubUsageSummaryTelemetry) GetActiveCounts(context.Context, telemetryrepo.
 	return nil, nil
 }
 
+func (stubUsageSummaryTelemetry) GetUnifiedActiveServerCount(context.Context, telemetryrepo.GetTopServersParams) (uint64, error) {
+	return 0, nil
+}
+
 func (stubUsageSummaryTelemetry) GetTopServers(context.Context, telemetryrepo.GetTopServersParams) ([]telemetryrepo.TopServer, error) {
 	return nil, nil
 }

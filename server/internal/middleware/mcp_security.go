@@ -49,7 +49,7 @@ import (
 // chatSessionsCORS and can observe the trust marker it sets. Non-MCP routes
 // are untouched; OPTIONS preflights never reach here for /mcp because
 // chatSessionsCORS answers them itself.
-func MCPSecurity(logger *slog.Logger, trustedOrigins []string) (func(http.Handler) http.Handler, error) {
+func MCPSecurity(logger *slog.Logger, trustedOrigins []string, safeNavigation func(*http.Request) bool) (func(http.Handler) http.Handler, error) {
 	protection := http.NewCrossOriginProtection()
 	for _, origin := range trustedOrigins {
 		if origin == "" {
@@ -74,7 +74,7 @@ func MCPSecurity(logger *slog.Logger, trustedOrigins []string) (func(http.Handle
 			}
 
 			if !chatSessionOriginTrusted(r.Context()) {
-				if err := protection.Check(originCheckProbe(r)); err != nil {
+				if err := protection.Check(originCheckProbe(r, safeNavigation)); err != nil {
 					logMCPSecurityRejection(r, logger, "cross_origin", err.Error())
 					http.Error(w, "forbidden: cross-origin request rejected", http.StatusForbidden)
 					return
@@ -107,7 +107,15 @@ func MCPSecurity(logger *slog.Logger, trustedOrigins []string) (func(http.Handle
 // Check. OPTIONS is left alone: a preflight must be answerable, and one never
 // reaches this middleware anyway because CORSMiddleware and chatSessionsCORS
 // both answer OPTIONS before calling next.
-func originCheckProbe(r *http.Request) *http.Request {
+//
+// safeNavigation names requests that keep safe-method semantics anyway: GETs
+// the route's own handler answers with a page rather than a stream, so a link
+// from another site can still open them.
+func originCheckProbe(r *http.Request, safeNavigation func(*http.Request) bool) *http.Request {
+	if safeNavigation != nil && safeNavigation(r) {
+		return r
+	}
+
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
 		probe := *r

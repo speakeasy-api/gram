@@ -21,6 +21,7 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -55,6 +56,13 @@ func (p *FederatedProvider) GoString() string { return p.String() }
 func (p *FederatedProvider) Fingerprint() string {
 	digest := sha256.Sum256([]byte(p.fingerprint + ":" + p.signingKeyRevision))
 	return hex.EncodeToString(digest[:])
+}
+
+// CallbackBaseURL is the trusted client's recorded callback_base_url. Its
+// remote_login_callback and the federated IdP callback share this origin, so
+// one customer IdP app allowlists a single host.
+func (p *FederatedProvider) CallbackBaseURL() pgtype.Text {
+	return p.client.CallbackBaseUrl
 }
 
 // ValidateResponseIssuer implements RFC 9207 before the code leaves Gram.
@@ -128,11 +136,6 @@ func newFederatedProvider(organizationID string, issuer repo.RemoteSessionIssuer
 	if err != nil || jwksURL.Scheme != "https" {
 		return nil, ErrFederatedConfiguration
 	}
-	// A shared callback needs response issuer identification before code exchange
-	// (RFC 9700 section 4.4.2); a state-selected provider alone is insufficient.
-	if !doc.AuthorizationResponseIssParameterSupported {
-		return nil, ErrFederatedConfiguration
-	}
 	if doc.ResponseTypesSupported != nil && !slices.Contains(doc.ResponseTypesSupported, "code") {
 		return nil, ErrFederatedConfiguration
 	}
@@ -186,9 +189,23 @@ func newFederatedProvider(organizationID string, issuer repo.RemoteSessionIssuer
 	return &FederatedProvider{organizationID: organizationID, client: client, issuer: issuer, metadata: doc, fingerprint: hex.EncodeToString(digest[:]), signingKeyRevision: ""}, nil
 }
 
+// RequireLoginRedirect reports whether the provider can serve federated login.
+// A shared callback needs response issuer identification before code exchange
+// (RFC 9700 section 4.4.2); a state-selected provider alone is insufficient.
+// Token exchange and refresh never receive a redirect, so only login requires it.
+func (p *FederatedProvider) RequireLoginRedirect() error {
+	if p == nil || !p.metadata.AuthorizationResponseIssParameterSupported {
+		return ErrFederatedConfiguration
+	}
+	return nil
+}
+
 func (p *FederatedProvider) BuildAuthorizationURL(callbackURL, state, nonce, verifier string) (*url.URL, error) {
 	if p == nil || state == "" || nonce == "" || !validFederatedVerifier(verifier) {
 		return nil, ErrFederatedIdentity
+	}
+	if err := p.RequireLoginRedirect(); err != nil {
+		return nil, err
 	}
 	callback, err := url.Parse(callbackURL)
 	if err != nil || !validIssuerDiscoveryURL(callback) || callback.Fragment != "" {
@@ -359,7 +376,7 @@ func (m *ChallengeManager) verifyFederatedIdentityMode(ctx context.Context, p *F
 		// Keep dependency failures distinguishable without exposing upstream URLs,
 		// bodies, or claims. Missing/mismatched keys and bad signatures are not
 		// tagged by the resolver as key-set unavailability.
-		if errors.Is(err, errJWTKeySetUnavailable) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		if errors.Is(err, ErrJWTKeySetUnavailable) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			return nil, ErrFederatedUnavailable
 		}
 		return nil, ErrFederatedIdentity
@@ -466,6 +483,11 @@ func classifyFederatedExchangeError(err error) error {
 	if _, ok := errors.AsType[*tokenEndpointSigningError](err); ok {
 		if errors.Is(err, errTokenEndpointSigningUnavailable) {
 			return ErrFederatedUnavailable
+		}
+		// A missing, deleted, or unusable signing key fails every attempt the
+		// same way, so it is the administrator's to repair.
+		if clientAssertionUnconfigured(err) {
+			return ErrFederatedConfiguration
 		}
 		return ErrFederatedSigning
 	}

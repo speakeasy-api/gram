@@ -1,18 +1,21 @@
--- name: UpsertOrganizationMetadata :one
+-- name: UpsertOrganizationMetadataWithRequests :one
+WITH written AS (
 INSERT INTO organization_metadata (
     id,
     name,
     slug,
     workos_id,
     whitelisted,
-    creation_source
+    creation_source,
+    default_host
 ) VALUES (
     @id,
     @name,
     @slug,
     @workos_id,
     COALESCE(sqlc.narg('whitelisted')::boolean, FALSE),
-    sqlc.narg('creation_source')::text
+    sqlc.narg('creation_source')::text,
+    sqlc.narg('default_host')::text
 )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
@@ -29,8 +32,39 @@ ON CONFLICT (id) DO UPDATE SET
     -- passes null and leaves whatever is already recorded alone, so a later
     -- upsert from an unrelated path cannot erase the flow that created the row.
     creation_source = COALESCE(EXCLUDED.creation_source, organization_metadata.creation_source),
+    -- default_host is deliberately absent: it is chosen when the organization
+    -- is created, and a later upsert must not move an existing organization's
+    -- URLs to another host.
     updated_at = clock_timestamp()
-RETURNING *;
+RETURNING *, (xmax = 0) AS inserted
+), enabled AS (
+    INSERT INTO organization_features (organization_id, feature_name)
+    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
+    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written;
 
 -- name: SetAccountType :exec
 UPDATE organization_metadata
@@ -51,6 +85,14 @@ RETURNING *;
 SELECT *
 FROM organization_metadata
 WHERE id = @id;
+
+-- name: LockOrganizationForAdminConfiguration :one
+-- Pin the displayed identity without blocking settings inserts that acquire
+-- foreign-key KEY SHARE locks after the chat-analysis budget lock.
+SELECT *
+FROM organization_metadata
+WHERE id = @id
+FOR NO KEY UPDATE;
 
 -- name: LockOrganizationForInviteAcceptance :one
 SELECT *
@@ -374,14 +416,49 @@ UPDATE organization_invitations
 SET expires_at = clock_timestamp() - interval '1 hour'
 WHERE id = @id;
 
+-- name: SetOrganizationDefaultHostForTest :exec
+UPDATE organization_metadata
+SET default_host = @default_host
+WHERE id = @id;
+
 -- name: GetInvitationByTokenHash :one
 SELECT *
 FROM organization_invitations
 WHERE token_hash = @token_hash;
 
--- name: CreateOrganizationMetadata :exec
-INSERT INTO organization_metadata (id, name, slug)
-VALUES (@id, @name, @slug);
+-- name: CreateOrganizationMetadataWithRequests :one
+WITH written AS (
+INSERT INTO organization_metadata (id, name, slug, default_host)
+VALUES (@id, @name, @slug, sqlc.narg('default_host')::text)
+RETURNING *, TRUE AS inserted
+), enabled AS (
+    INSERT INTO organization_features (organization_id, feature_name)
+    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
+    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written;
 
 -- name: GetOrganizationByWorkosID :one
 SELECT *
@@ -725,10 +802,11 @@ ORDER BY role_urn;
 -- name: LockOrganizationSlug :exec
 SELECT pg_advisory_xact_lock(hashtext(@slug));
 
--- name: CreateOrganizationMetadataFromWorkOS :one
+-- name: CreateOrganizationMetadataFromWorkOSWithRequests :one
 -- Create a Gram organization row from a WorkOS organization event. The caller
 -- chooses the Gram org ID from WorkOS external_id or a deterministic fallback.
 -- Slug is a Gram-owned initial value and is never updated by WorkOS sync.
+WITH written AS (
 INSERT INTO organization_metadata (
     id,
     name,
@@ -736,7 +814,8 @@ INSERT INTO organization_metadata (
     workos_id,
     workos_updated_at,
     workos_last_event_id,
-    verified_domains
+    verified_domains,
+    default_host
 ) VALUES (
     @id,
     @name,
@@ -744,37 +823,99 @@ INSERT INTO organization_metadata (
     @workos_id,
     @workos_updated_at,
     @workos_last_event_id,
-    @verified_domains::text[]
+    @verified_domains::text[],
+    sqlc.narg('default_host')::text
 )
-RETURNING *;
+RETURNING *, (xmax = 0) AS inserted
+), enabled AS (
+    INSERT INTO organization_features (organization_id, feature_name)
+    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
+    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written;
 
--- name: UpsertOrganizationMetadataFromWorkOS :one
+-- name: UpsertOrganizationMetadataFromWorkOSWithRequests :one
 -- Upsert a Gram organization row from a WorkOS organization event.
 -- The caller must only use this when WorkOS external_id is set and is the Gram
 -- org ID. Slug is a Gram-owned initial value chosen by the caller and is never
 -- updated by WorkOS sync after creation.
+WITH written AS (
 INSERT INTO organization_metadata (
     id,
     name,
     slug,
     workos_id,
     workos_updated_at,
-    workos_last_event_id
+    workos_last_event_id,
+    default_host
 ) VALUES (
     @id,
     @name,
     @slug,
     @workos_id,
     @workos_updated_at,
-    @workos_last_event_id
+    @workos_last_event_id,
+    sqlc.narg('default_host')::text
 )
 ON CONFLICT (id) DO UPDATE SET
+    -- default_host is only written on insert, so an existing organization
+    -- keeps its host.
     name = EXCLUDED.name,
     workos_id = EXCLUDED.workos_id,
     workos_updated_at = EXCLUDED.workos_updated_at,
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     updated_at = clock_timestamp()
-RETURNING *;
+RETURNING *, (xmax = 0) AS inserted
+), enabled AS (
+    INSERT INTO organization_features (organization_id, feature_name)
+    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
+    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written;
 
 -- name: UpdateOrganizationMetadataFromWorkOS :one
 -- Update an existing organization row from a WorkOS organization event. Caller
@@ -941,14 +1082,6 @@ FROM organization_metadata
 WHERE id = @organization_id
 FOR UPDATE;
 
--- name: CountBlockedSetupTaskUpdatesFixture :one
--- Test-only synchronization counts actual setup-task lock waiters in this test database.
-SELECT count(*)
-FROM pg_catalog.pg_stat_activity
-WHERE datname = current_database()
-  AND state = 'active'
-  AND wait_event_type = 'Lock'
-  AND query LIKE '-- name: LockOrganizationForSetupTaskUpdate %';
 
 -- name: GetOrganizationSetupTask :one
 SELECT *
@@ -1030,3 +1163,268 @@ ON CONFLICT (organization_id, task_key) DO UPDATE SET
     hidden_at = EXCLUDED.hidden_at,
     updated_at = clock_timestamp()
 WHERE (organization_setup_tasks.hidden_at IS NOT NULL) IS DISTINCT FROM @hidden::boolean;
+
+-- name: LockOnboardingSteps :exec
+SELECT pg_advisory_xact_lock(719438202);
+
+-- name: UpsertOnboardingStep :one
+INSERT INTO onboarding_steps (slug, title, description, completion, hidden_by_default, sort_order)
+VALUES (@slug, @title, @description, @completion, @hidden_by_default, @sort_order)
+ON CONFLICT (slug) DO UPDATE SET
+    title = EXCLUDED.title,
+    description = EXCLUDED.description,
+    completion = EXCLUDED.completion,
+    hidden_by_default = EXCLUDED.hidden_by_default,
+    sort_order = EXCLUDED.sort_order,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+RETURNING id;
+
+-- name: SetOnboardingStepParent :exec
+UPDATE onboarding_steps
+SET parent_step_id = sqlc.narg(parent_step_id), updated_at = clock_timestamp()
+WHERE id = @id AND parent_step_id IS DISTINCT FROM sqlc.narg(parent_step_id);
+
+-- name: RetireOnboardingStepsNotIn :exec
+UPDATE onboarding_steps
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE deleted_at IS NULL AND NOT (slug = ANY(@slugs::text[]));
+
+-- name: DeleteOnboardingStepMethods :exec
+DELETE FROM onboarding_step_methods WHERE step_id = @step_id;
+
+-- name: InsertOnboardingStepMethod :execrows
+INSERT INTO onboarding_step_methods (step_id, integration_method_id)
+SELECT @step_id, m.id
+FROM support_matrix_integration_methods m
+WHERE m.slug = @method_slug AND m.deleted_at IS NULL
+ON CONFLICT DO NOTHING;
+
+-- name: DeleteOnboardingStepDependencies :exec
+DELETE FROM onboarding_step_dependencies WHERE step_id = @step_id;
+
+-- name: InsertOnboardingStepDependency :exec
+INSERT INTO onboarding_step_dependencies (step_id, requires_step_id)
+SELECT @step_id, r.id
+FROM onboarding_steps r
+WHERE r.slug = @requires_slug
+ON CONFLICT DO NOTHING;
+
+-- name: ListOnboardingSteps :many
+SELECT s.id, s.slug, s.title, s.description, s.completion, s.hidden_by_default, s.sort_order,
+  p.slug AS parent_slug,
+  (
+    SELECT coalesce(array_agg(m.slug ORDER BY m.sort_order, m.slug), '{}')::text[]
+    FROM onboarding_step_methods sm
+    JOIN support_matrix_integration_methods m ON m.id = sm.integration_method_id AND m.deleted_at IS NULL
+    WHERE sm.step_id = s.id
+  ) AS method_slugs,
+  (
+    SELECT coalesce(array_agg(r.slug ORDER BY r.sort_order, r.slug), '{}')::text[]
+    FROM onboarding_step_dependencies d
+    JOIN onboarding_steps r ON r.id = d.requires_step_id AND r.deleted_at IS NULL
+    WHERE d.step_id = s.id
+  ) AS requires_slugs
+FROM onboarding_steps s
+LEFT JOIN onboarding_steps p ON p.id = s.parent_step_id AND p.deleted_at IS NULL
+WHERE s.deleted_at IS NULL
+ORDER BY s.sort_order, s.slug;
+
+-- name: GetOrganizationOnboardingStack :one
+SELECT om.id, om.name, om.slug, onboarding.mdm_vendor, onboarding.mdm_vendor_name
+FROM organization_metadata om
+LEFT JOIN organization_onboarding onboarding ON onboarding.organization_id = om.id
+WHERE om.id = @organization_id;
+
+-- name: ListOrganizationOnboardingVendors :many
+SELECT v.vendor, p.slug AS plan_slug
+FROM organization_onboarding_vendors v
+LEFT JOIN support_matrix_plans p ON p.id = v.plan_id AND p.deleted_at IS NULL
+WHERE v.organization_id = @organization_id
+ORDER BY v.vendor;
+
+-- name: UpsertOrganizationOnboardingStack :exec
+INSERT INTO organization_onboarding (organization_id, mdm_vendor, mdm_vendor_name)
+VALUES (@organization_id::text, sqlc.narg(mdm_vendor), sqlc.narg(mdm_vendor_name))
+ON CONFLICT (organization_id) DO UPDATE SET
+    mdm_vendor = EXCLUDED.mdm_vendor,
+    mdm_vendor_name = EXCLUDED.mdm_vendor_name,
+    updated_at = clock_timestamp();
+
+-- name: DeleteOrganizationOnboardingVendors :exec
+DELETE FROM organization_onboarding_vendors WHERE organization_id = @organization_id;
+
+-- name: InsertOrganizationOnboardingVendor :exec
+INSERT INTO organization_onboarding_vendors (organization_id, vendor, plan_id)
+VALUES (
+  @organization_id,
+  @vendor,
+  (SELECT p.id FROM support_matrix_plans p WHERE p.slug = sqlc.narg(plan_slug)::text AND p.deleted_at IS NULL)
+);
+
+-- name: ListSupportMatrixPlatformsForOnboarding :many
+SELECT slug, name, vendor, family, surface
+FROM support_matrix_platforms
+WHERE deleted_at IS NULL
+ORDER BY sort_order, slug;
+
+-- name: ListSupportMatrixPlansForOnboarding :many
+SELECT slug, vendor, name
+FROM support_matrix_plans
+WHERE deleted_at IS NULL
+ORDER BY sort_order, slug;
+
+-- name: LockOnboardingPlaybooks :exec
+SELECT pg_advisory_xact_lock(719438203);
+
+-- name: ListOnboardingUseCases :many
+SELECT u.id, u.slug, u.name, u.description, u.sort_order,
+  d.id AS default_playbook_id
+FROM onboarding_use_cases u
+LEFT JOIN onboarding_playbooks d ON d.use_case_id = u.id AND d.is_default AND d.organization_id IS NULL AND d.deleted_at IS NULL
+WHERE u.deleted_at IS NULL
+ORDER BY u.sort_order, u.name, u.id;
+
+-- name: GetOnboardingUseCase :one
+SELECT id, slug, name, description, sort_order
+FROM onboarding_use_cases
+WHERE id = @id AND deleted_at IS NULL;
+
+-- name: GetOnboardingUseCaseBySlug :one
+SELECT id, slug, name, description, sort_order
+FROM onboarding_use_cases
+WHERE slug = @slug AND deleted_at IS NULL;
+
+-- name: CreateOnboardingUseCase :one
+INSERT INTO onboarding_use_cases (slug, name, description, sort_order)
+VALUES (@slug, @name, @description, (SELECT coalesce(max(sort_order), 0) + 1 FROM onboarding_use_cases))
+RETURNING id, slug, name, description, sort_order;
+
+-- name: UpdateOnboardingUseCase :one
+UPDATE onboarding_use_cases
+SET name = @name, description = @description, updated_at = clock_timestamp()
+WHERE id = @id AND deleted_at IS NULL
+RETURNING id, slug, name, description, sort_order;
+
+-- name: DeleteOnboardingUseCase :execrows
+UPDATE onboarding_use_cases
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = @id AND deleted_at IS NULL;
+
+-- name: DeleteOnboardingPlaybooksOfUseCase :exec
+UPDATE onboarding_playbooks
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE use_case_id = @use_case_id AND deleted_at IS NULL;
+
+-- name: ListOnboardingPlaybooks :many
+-- Every playbook, or, for an organization, the use cases' and its own. A
+-- playbook belongs to a use case or to an organization, never both.
+SELECT p.id, p.use_case_id, p.organization_id, p.name, p.description, p.is_default,
+  u.slug AS use_case_slug, u.name AS use_case_name,
+  om.name AS organization_name
+FROM onboarding_playbooks p
+LEFT JOIN onboarding_use_cases u ON u.id = p.use_case_id AND u.deleted_at IS NULL
+LEFT JOIN organization_metadata om ON om.id = p.organization_id
+WHERE p.deleted_at IS NULL
+  AND (p.use_case_id IS NULL OR u.id IS NOT NULL)
+  AND (
+    sqlc.narg(organization_id)::text IS NULL
+    OR p.organization_id IS NULL
+    OR p.organization_id = sqlc.narg(organization_id)::text
+  )
+ORDER BY p.organization_id NULLS FIRST, u.sort_order, u.name, om.name, p.is_default DESC, p.name, p.id;
+
+-- name: GetOnboardingPlaybook :one
+SELECT p.id, p.use_case_id, p.organization_id, p.name, p.description, p.is_default,
+  u.slug AS use_case_slug, u.name AS use_case_name,
+  om.name AS organization_name
+FROM onboarding_playbooks p
+LEFT JOIN onboarding_use_cases u ON u.id = p.use_case_id AND u.deleted_at IS NULL
+LEFT JOIN organization_metadata om ON om.id = p.organization_id
+WHERE p.id = @id AND p.deleted_at IS NULL
+  AND (p.use_case_id IS NULL OR u.id IS NOT NULL);
+
+-- name: GetOnboardingDefaultPlaybook :one
+SELECT p.id, p.use_case_id, p.organization_id, p.name, p.description, p.is_default,
+  u.slug AS use_case_slug, u.name AS use_case_name
+FROM onboarding_playbooks p
+JOIN onboarding_use_cases u ON u.id = p.use_case_id AND u.deleted_at IS NULL
+WHERE p.use_case_id = @use_case_id AND p.is_default AND p.organization_id IS NULL AND p.deleted_at IS NULL;
+
+-- name: ListOnboardingPlaybookSteps :many
+SELECT ps.playbook_id, s.slug, s.title, ps.position
+FROM onboarding_playbook_steps ps
+JOIN onboarding_steps s ON s.id = ps.step_id AND s.deleted_at IS NULL
+WHERE ps.playbook_id = ANY(@playbook_ids::uuid[])
+ORDER BY ps.playbook_id, ps.position, s.slug;
+
+-- name: CreateOnboardingPlaybook :one
+INSERT INTO onboarding_playbooks (use_case_id, organization_id, name, description, is_default)
+VALUES (sqlc.narg(use_case_id)::uuid, sqlc.narg(organization_id)::text, @name, @description, @is_default)
+RETURNING id, use_case_id, organization_id, name, description, is_default;
+
+-- name: UpdateOnboardingPlaybook :one
+UPDATE onboarding_playbooks
+SET name = @name, description = @description, is_default = @is_default, updated_at = clock_timestamp()
+WHERE id = @id AND deleted_at IS NULL
+RETURNING id, use_case_id, organization_id, name, description, is_default;
+
+-- name: ClearOnboardingDefaultPlaybook :exec
+UPDATE onboarding_playbooks
+SET is_default = false, updated_at = clock_timestamp()
+WHERE use_case_id = @use_case_id AND organization_id IS NULL AND is_default AND deleted_at IS NULL AND id <> @keep_id;
+
+-- name: DeleteOnboardingPlaybook :execrows
+UPDATE onboarding_playbooks
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = @id AND deleted_at IS NULL;
+
+-- name: DeleteOnboardingPlaybookSteps :exec
+DELETE FROM onboarding_playbook_steps WHERE playbook_id = @playbook_id;
+
+-- name: InsertOnboardingPlaybookStep :execrows
+INSERT INTO onboarding_playbook_steps (playbook_id, step_id, position)
+SELECT @playbook_id, s.id, @position
+FROM onboarding_steps s
+WHERE s.slug = @slug AND s.deleted_at IS NULL;
+
+-- name: GetOrganizationOnboardingPlaybookID :one
+SELECT om.id AS organization_id, o.playbook_id
+FROM organization_metadata om
+LEFT JOIN organization_onboarding o ON o.organization_id = om.id
+WHERE om.id = @organization_id;
+
+-- name: SetOrganizationOnboardingPlaybook :exec
+INSERT INTO organization_onboarding (organization_id, playbook_id)
+VALUES (@organization_id::text, sqlc.narg(playbook_id)::uuid)
+ON CONFLICT (organization_id) DO UPDATE SET
+    playbook_id = EXCLUDED.playbook_id,
+    updated_at = clock_timestamp();
+
+-- name: ListOrganizationOnboardingPlaybookSteps :many
+SELECT s.slug
+FROM organization_onboarding o
+JOIN onboarding_playbooks p ON p.id = o.playbook_id AND p.deleted_at IS NULL
+JOIN onboarding_playbook_steps ps ON ps.playbook_id = p.id
+JOIN onboarding_steps s ON s.id = ps.step_id AND s.deleted_at IS NULL
+WHERE o.organization_id = @organization_id
+ORDER BY ps.position, s.slug;
+
+-- name: ListOnboardingStepMethodApplicability :many
+SELECT s.slug AS step_slug, m.slug AS method_slug, m.vendor AS method_vendor,
+  -- Over the stack's platforms of the method's own vendor, or of every vendor
+  -- for a method that belongs to none, so an unrelated vendor in the stack
+  -- never changes the verdict. A platform the matrix does not map the method
+  -- to is unknown, which is not the same as not applicable.
+  coalesce((
+    SELECT bool_and(mp.platform_id IS NOT NULL AND mp.applicability = 'na')
+    FROM support_matrix_platforms p
+    LEFT JOIN support_matrix_method_platforms mp ON mp.platform_id = p.id AND mp.integration_method_id = m.id AND mp.deleted_at IS NULL
+    WHERE p.deleted_at IS NULL AND p.vendor = ANY(@vendors::text[])
+      AND (m.vendor IN ('Cross-platform', 'Others') OR p.vendor = m.vendor)
+  ), false)::boolean AS not_applicable_everywhere
+FROM onboarding_step_methods sm
+JOIN onboarding_steps s ON s.id = sm.step_id AND s.deleted_at IS NULL
+JOIN support_matrix_integration_methods m ON m.id = sm.integration_method_id AND m.deleted_at IS NULL
+WHERE s.slug = ANY(@step_slugs::text[])
+ORDER BY s.slug, m.sort_order, m.slug;

@@ -5641,6 +5641,222 @@ func EncodeListAudienceOptionsError(encoder func(context.Context, http.ResponseW
 	}
 }
 
+// EncodeExplainResourceAccessResponse returns an encoder for responses
+// returned by the access explainResourceAccess endpoint.
+func EncodeExplainResourceAccessResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*access.ExplainResourceAccessResult)
+		enc := encoder(ctx, w)
+		body := NewExplainResourceAccessResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeExplainResourceAccessRequest returns a decoder for requests sent to
+// the access explainResourceAccess endpoint.
+func DecodeExplainResourceAccessRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.ExplainResourceAccessPayload, error) {
+	return func(r *http.Request) (*access.ExplainResourceAccessPayload, error) {
+		var payload *access.ExplainResourceAccessPayload
+		var (
+			resourceKind string
+			resourceID   string
+			userID       string
+			sessionToken *string
+			err          error
+		)
+		qp := r.URL.Query()
+		resourceKind = qp.Get("resource_kind")
+		if resourceKind == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("resource_kind", "query string"))
+		}
+		if !(resourceKind == "mcp") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("resource_kind", resourceKind, []any{"mcp"}))
+		}
+		resourceID = qp.Get("resource_id")
+		if resourceID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "query string"))
+		}
+		userID = qp.Get("user_id")
+		if userID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "query string"))
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewExplainResourceAccessPayload(resourceKind, resourceID, userID, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeExplainResourceAccessError returns an encoder for errors returned by
+// the explainResourceAccess access endpoint.
+func EncodeExplainResourceAccessError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExplainResourceAccessUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExplainResourceAccessForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExplainResourceAccessBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExplainResourceAccessNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExplainResourceAccessConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExplainResourceAccessUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExplainResourceAccessInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExplainResourceAccessInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExplainResourceAccessUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewExplainResourceAccessGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeRequestAccessResponse returns an encoder for responses returned by the
 // access requestAccess endpoint.
 func EncodeRequestAccessResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -7102,6 +7318,16 @@ func marshalAccessListRoleGrantToListRoleGrantResponseBody(v *access.ListRoleGra
 			res.Selectors[i] = marshalAccessSelectorToSelectorResponseBody(val)
 		}
 	}
+	if v.DirectSelectors != nil {
+		res.DirectSelectors = make([]*SelectorResponseBody, len(v.DirectSelectors))
+		for i, val := range v.DirectSelectors {
+			if val == nil {
+				res.DirectSelectors[i] = nil
+				continue
+			}
+			res.DirectSelectors[i] = marshalAccessSelectorToSelectorResponseBody(val)
+		}
+	}
 
 	return res
 }
@@ -7412,6 +7638,88 @@ func marshalAccessAudienceOptionToAudienceOptionResponseBody(v *access.AudienceO
 		DisplayName:  v.DisplayName,
 		Description:  v.Description,
 		MemberCount:  v.MemberCount,
+	}
+
+	return res
+}
+
+// marshalAccessExplainedAccessLevelToExplainedAccessLevelResponseBody builds a
+// value of type *ExplainedAccessLevelResponseBody from a value of type
+// *access.ExplainedAccessLevel.
+func marshalAccessExplainedAccessLevelToExplainedAccessLevelResponseBody(v *access.ExplainedAccessLevel) *ExplainedAccessLevelResponseBody {
+	res := &ExplainedAccessLevelResponseBody{
+		Level:      v.Level,
+		Allowed:    v.Allowed,
+		ToolAccess: v.ToolAccess,
+	}
+	if v.Rules != nil {
+		res.Rules = make([]*ExplainedAccessRuleResponseBody, len(v.Rules))
+		for i, val := range v.Rules {
+			if val == nil {
+				res.Rules[i] = nil
+				continue
+			}
+			res.Rules[i] = marshalAccessExplainedAccessRuleToExplainedAccessRuleResponseBody(val)
+		}
+	} else {
+		res.Rules = []*ExplainedAccessRuleResponseBody{}
+	}
+
+	return res
+}
+
+// marshalAccessExplainedAccessRuleToExplainedAccessRuleResponseBody builds a
+// value of type *ExplainedAccessRuleResponseBody from a value of type
+// *access.ExplainedAccessRule.
+func marshalAccessExplainedAccessRuleToExplainedAccessRuleResponseBody(v *access.ExplainedAccessRule) *ExplainedAccessRuleResponseBody {
+	res := &ExplainedAccessRuleResponseBody{
+		PrincipalUrn:        v.PrincipalUrn,
+		Kind:                v.Kind,
+		DisplayName:         v.DisplayName,
+		Level:               v.Level,
+		AppliesTo:           v.AppliesTo,
+		Effect:              v.Effect,
+		Reason:              v.Reason,
+		ViaDirectoryMapping: v.ViaDirectoryMapping,
+	}
+	if v.Tools != nil {
+		res.Tools = make([]string, len(v.Tools))
+		for i, val := range v.Tools {
+			res.Tools[i] = val
+		}
+	}
+	if v.Dispositions != nil {
+		res.Dispositions = make([]string, len(v.Dispositions))
+		for i, val := range v.Dispositions {
+			res.Dispositions[i] = val
+		}
+	}
+	if v.DirectorySources != nil {
+		res.DirectorySources = make([]*ExplainedAccessDirectorySourceResponseBody, len(v.DirectorySources))
+		for i, val := range v.DirectorySources {
+			if val == nil {
+				res.DirectorySources[i] = nil
+				continue
+			}
+			res.DirectorySources[i] = marshalAccessExplainedAccessDirectorySourceToExplainedAccessDirectorySourceResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalAccessExplainedAccessDirectorySourceToExplainedAccessDirectorySourceResponseBody
+// builds a value of type *ExplainedAccessDirectorySourceResponseBody from a
+// value of type *access.ExplainedAccessDirectorySource.
+func marshalAccessExplainedAccessDirectorySourceToExplainedAccessDirectorySourceResponseBody(v *access.ExplainedAccessDirectorySource) *ExplainedAccessDirectorySourceResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ExplainedAccessDirectorySourceResponseBody{
+		SourceKind:         v.SourceKind,
+		DirectoryGroupName: v.DirectoryGroupName,
+		AttributeKey:       v.AttributeKey,
+		AttributeValue:     v.AttributeValue,
 	}
 
 	return res

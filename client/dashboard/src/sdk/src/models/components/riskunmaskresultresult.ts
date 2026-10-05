@@ -3,9 +3,23 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * Whether plaintext was revealed or the MCP finding evidence is unavailable or expired.
+ */
+export const RevealState = {
+  Available: "available",
+  EvidenceNotStored: "evidence_not_stored",
+} as const;
+/**
+ * Whether plaintext was revealed or the MCP finding evidence is unavailable or expired.
+ */
+export type RevealState = ClosedEnum<typeof RevealState>;
 
 export type RiskUnmaskResultResult = {
   /**
@@ -16,16 +30,32 @@ export type RiskUnmaskResultResult = {
    * The plaintext matched secret or sensitive data for this result. Empty string when the finding has no top-level match (e.g. a spans-only finding).
    */
   match: string;
+  /**
+   * Whether plaintext was revealed or the MCP finding evidence is unavailable or expired.
+   */
+  revealState: RevealState;
 };
+
+/** @internal */
+export const RevealState$inboundSchema: z.ZodMiniEnum<typeof RevealState> = z
+  .enum(RevealState);
 
 /** @internal */
 export const RiskUnmaskResultResult$inboundSchema: z.ZodMiniType<
   RiskUnmaskResultResult,
   unknown
-> = z.object({
-  id: z.string(),
-  match: z.string(),
-});
+> = z.pipe(
+  z.object({
+    id: z.string(),
+    match: z.string(),
+    reveal_state: RevealState$inboundSchema,
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "reveal_state": "revealState",
+    });
+  }),
+);
 
 export function riskUnmaskResultResultFromJSON(
   jsonString: string,

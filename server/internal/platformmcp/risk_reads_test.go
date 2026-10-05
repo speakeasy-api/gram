@@ -413,6 +413,9 @@ func TestRiskToolRegistrationAndStableStubs(t *testing.T) {
 	require.NoError(t, err)
 	_, err = createPolicy.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), payload)
 	require.ErrorContains(t, err, "arguments do not match the tool schema")
+	updatePolicy := descriptorByName(t, reg, "update_risk_policy")
+	require.Contains(t, updatePolicy.Description, "MCP-scoped policies support flag and block actions only.")
+	require.Contains(t, string(updatePolicy.InputSchema), "MCP-scoped policies support flag and block only.")
 
 	create := descriptorByName(t, reg, "create_risk_exclusion")
 	_, err = create.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","match_type":"regex","match_value":"x","enabled":true,"idempotency_key":"key"}`))

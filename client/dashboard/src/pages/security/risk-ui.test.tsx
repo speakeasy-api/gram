@@ -1,5 +1,11 @@
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CategoryLabel,
@@ -9,13 +15,17 @@ import {
 } from "./risk-ui";
 
 const hasScope = vi.fn<(scope: string) => boolean>();
+const unmaskMutation = vi.hoisted(() => ({ mutate: vi.fn() }));
 
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope }),
 }));
 
 vi.mock("@gram/client/react-query/riskUnmaskResult.js", () => ({
-  useRiskUnmaskResultMutation: () => ({ mutate: vi.fn(), isPending: false }),
+  useRiskUnmaskResultMutation: () => ({
+    mutate: unmaskMutation.mutate,
+    isPending: false,
+  }),
 }));
 
 vi.mock("@/components/code", () => ({
@@ -41,7 +51,10 @@ function renderCell(
 }
 
 afterEach(cleanup);
-beforeEach(() => hasScope.mockReset());
+beforeEach(() => {
+  hasScope.mockReset();
+  unmaskMutation.mutate.mockReset();
+});
 
 describe("EventMatchDialog", () => {
   it("shows the judge rationale inline instead of a bare reveal prompt", () => {
@@ -83,11 +96,14 @@ describe("EventMatchDialog", () => {
     expect(screen.getByRole("img", { name: /chat:read/ })).toBeTruthy();
   });
 
-  it("falls back to the redacted match without chat:read and no rationale", () => {
+  it("names the missing permission without chat:read and no rationale", async () => {
     hasScope.mockReturnValue(false);
     renderCell(undefined);
 
-    expect(screen.getByText("<redacted len=42 sha=deadbeef>")).toBeTruthy();
+    expect(screen.getByText("chat:read")).toBeTruthy();
+    // The fingerprint moves to the tooltip, off the page until hovered.
+    expect(screen.queryByText("<redacted len=42 sha=deadbeef>")).toBeNull();
+    await expectFingerprintInTooltip();
     expect(screen.queryByText("Hidden")).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.getByRole("img", { name: /chat:read/ })).toBeTruthy();
@@ -108,6 +124,16 @@ describe("EventMatchDialog", () => {
   });
 });
 
+// Focus opens the tooltip without pointer events.
+async function expectFingerprintInTooltip() {
+  const trigger = screen.getByText("chat:read").closest("[tabindex]");
+  expect(trigger).toBeTruthy();
+  fireEvent.focus(trigger!);
+  expect(
+    (await screen.findAllByText("<redacted len=42 sha=deadbeef>")).length,
+  ).toBeGreaterThan(0);
+}
+
 function renderMasked(matchRedacted = "<redacted len=42 sha=deadbeef>") {
   render(
     <TooltipProvider>
@@ -120,11 +146,13 @@ function renderMasked(matchRedacted = "<redacted len=42 sha=deadbeef>") {
 }
 
 describe("MaskedMatch", () => {
-  it("shows the redacted match without chat:read, and offers no reveal", () => {
+  it("names the missing permission without chat:read, and offers no reveal", async () => {
     hasScope.mockReturnValue(false);
     renderMasked();
 
-    expect(screen.getByText("<redacted len=42 sha=deadbeef>")).toBeTruthy();
+    expect(screen.getByText("chat:read")).toBeTruthy();
+    expect(screen.queryByText("<redacted len=42 sha=deadbeef>")).toBeNull();
+    await expectFingerprintInTooltip();
     expect(screen.queryByText("Hidden")).toBeNull();
     expect(screen.queryByText("Click to reveal")).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
@@ -137,6 +165,25 @@ describe("MaskedMatch", () => {
 
     expect(screen.getByText("Click to reveal")).toBeTruthy();
     expect(screen.queryByText("<redacted len=42 sha=deadbeef>")).toBeNull();
+  });
+
+  it("uses chat:read for MCP evidence and shows the legacy state", () => {
+    hasScope.mockImplementation((scope) => scope === "chat:read");
+    renderMasked("<redacted len=18 sha=deadbeef>");
+
+    fireEvent.click(screen.getByRole("button", { name: /click to reveal/i }));
+    expect(hasScope).toHaveBeenCalledWith("chat:read", undefined);
+    expect(unmaskMutation.mutate).toHaveBeenCalledTimes(1);
+
+    const options = unmaskMutation.mutate.mock.calls[0]?.[1];
+    act(() => {
+      options.onSuccess({
+        id: "00000000-0000-0000-0000-000000000001",
+        match: "",
+        revealState: "evidence_not_stored",
+      });
+    });
+    expect(screen.getByText("Evidence not stored")).toBeTruthy();
   });
 });
 

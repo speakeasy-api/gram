@@ -389,6 +389,92 @@ describe("hasScopeInGrants", () => {
   });
 });
 
+describe("hasScopeInGrants principal precedence", () => {
+  const lockedServer = { resourceKind: "mcp", resourceId: "server_locked" };
+  const roleConnect = {
+    scope: "mcp:connect",
+    selectors: [{ resourceKind: "mcp", resourceId: "*" }, lockedServer],
+    directSelectors: [lockedServer],
+  };
+  const roleBlock = {
+    scope: "mcp:blocked_connect",
+    selectors: [lockedServer],
+  };
+
+  it("lets a direct grant naming the server outrank a role block", () => {
+    expect(
+      hasScopeInGrants(
+        [roleConnect, roleBlock],
+        "mcp:connect",
+        "server_locked",
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps the role block without a direct grant", () => {
+    const grants = [{ ...roleConnect, directSelectors: undefined }, roleBlock];
+
+    expect(hasScopeInGrants(grants, "mcp:connect", "server_locked")).toBe(
+      false,
+    );
+  });
+
+  it("does not let a direct grant for another server outrank the block", () => {
+    const grants = [
+      {
+        ...roleConnect,
+        directSelectors: [{ resourceKind: "mcp", resourceId: "server_other" }],
+      },
+      roleBlock,
+    ];
+
+    expect(hasScopeInGrants(grants, "mcp:connect", "server_locked")).toBe(
+      false,
+    );
+  });
+
+  it("keeps the caller's own block", () => {
+    const grants = [
+      roleConnect,
+      { ...roleBlock, directSelectors: [lockedServer] },
+    ];
+
+    expect(hasScopeInGrants(grants, "mcp:connect", "server_locked")).toBe(
+      false,
+    );
+  });
+
+  it("lets a direct write grant outrank a connect block", () => {
+    const grants = [
+      {
+        scope: "mcp:write",
+        selectors: [lockedServer],
+        directSelectors: [lockedServer],
+        subScopes: ["mcp:read", "mcp:connect"],
+      },
+      roleBlock,
+    ];
+
+    expect(hasScopeInGrants(grants, "mcp:connect", "server_locked")).toBe(true);
+  });
+
+  it("never lets a direct grant outrank a risk policy bypass", () => {
+    const policy = { resourceKind: "risk_policy", resourceId: "policy_a" };
+    const grants = [
+      {
+        scope: "risk_policy:evaluate",
+        selectors: [policy],
+        directSelectors: [policy],
+      },
+      { scope: "risk_policy:bypass", selectors: [policy] },
+    ];
+
+    expect(hasScopeInGrants(grants, "risk_policy:evaluate", "policy_a")).toBe(
+      false,
+    );
+  });
+});
+
 describe("plugin scope isolation", () => {
   it("uses project selectors for plugin scopes", () => {
     expect(resourceKindForScope("plugin:write")).toBe("project");

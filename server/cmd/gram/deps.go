@@ -381,7 +381,7 @@ func newAssetStorage(ctx context.Context, logger *slog.Logger, opts assetStorage
 	switch opts.assetsBackend {
 	case "fs":
 		assetsURI := filepath.Clean(opts.assetsURI)
-		if err := os.MkdirAll(assetsURI, 0750); err != nil && !errors.Is(err, fs.ErrExist) {
+		if err := os.MkdirAll(assetsURI, 0o750); err != nil && !errors.Is(err, fs.ErrExist) {
 			return nil, shutdown, fmt.Errorf("create assets directory: %w", err)
 		}
 
@@ -451,7 +451,7 @@ type temporalClientOptions struct {
 }
 
 func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, opts temporalClientOptions) (*temporal.Environment, func(context.Context) error, error) {
-	var nilShutdownFunc = noopShutdown
+	nilShutdownFunc := noopShutdown
 	if opts.address == "" || opts.namespace == "" {
 		return nil, nilShutdownFunc, nil
 	}
@@ -505,6 +505,9 @@ func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, 
 
 func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath string) *feature.InMemory {
 	inmem := &feature.InMemory{}
+	// Local dev has no Presidio HTTP analyzer, so realtime scans must take the
+	// Pub/Sub lanes to pystreams. A CSV row can still turn this off.
+	inmem.SetFlag(feature.FlagRiskEnforcementPubsub, feature.AnyDistinctID, true)
 
 	if csvPath == "" {
 		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")
@@ -884,7 +887,6 @@ func newAdminOpenRouter(
 		db,
 		env,
 		provisioningKey,
-		nil,
 		productfeatures.NewClient(logger, tracerProvider, db, redisClient),
 		nil,
 		encryptionClient,
@@ -1015,7 +1017,7 @@ func newFunctionOrchestrator(
 			return nil, nilShutdown, fmt.Errorf("--functions-local-runner-root must be set in local environment")
 		}
 
-		if err := os.MkdirAll(codeRootDir, 0750); err != nil && !errors.Is(err, fs.ErrExist) {
+		if err := os.MkdirAll(codeRootDir, 0o750); err != nil && !errors.Is(err, fs.ErrExist) {
 			return nil, nilShutdown, fmt.Errorf("create local functions root directory: %w", err)
 		}
 
@@ -1146,6 +1148,7 @@ func newTriggersApp(
 	auditLogger *audit.Logger,
 	serverURL *url.URL,
 	siteURL *url.URL,
+	platformHosts map[string]string,
 	slackClient *slack_client.SlackClient,
 	cacheImpl cache.Cache,
 ) *bgtriggers.App {
@@ -1179,6 +1182,7 @@ func newTriggersApp(
 		auditLogger,
 		serverURL,
 		siteURL,
+		platformHosts,
 		slackClient,
 		cacheImpl,
 		bgtriggers.NewNoopDispatcher(logger),

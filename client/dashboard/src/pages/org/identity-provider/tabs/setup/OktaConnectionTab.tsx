@@ -170,10 +170,10 @@ function ConnectionCard({
           {step === "submit_client_id" && (
             <NextStepCallout
               title="Next: set up your Okta app"
-              body="Follow the Okta setup checklist. Its last step takes the app's client ID and verifies access."
+              body="Follow the Connect steps above. The last step takes the app's client ID and verifies access."
             >
               <a className={SECTION_LINK} href={`#${CHECKLIST_SECTION_ID}`}>
-                Open setup checklist
+                Go to Connect steps
               </a>
             </NextStepCallout>
           )}
@@ -234,19 +234,12 @@ function ChecklistSection({
 }): JSX.Element {
   return (
     <SettingsSection id={CHECKLIST_SECTION_ID}>
-      <SettingsSection.Header>
-        <SettingsSection.Title>Okta setup checklist</SettingsSection.Title>
-        <SettingsSection.Description>
-          Follow these steps in the Okta Admin Console. Speakeasy marks steps
-          complete when it has evidence from the connection check. Review any
-          steps marked Not checked yourself.
-        </SettingsSection.Description>
-      </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
           <ConnectionChecklist
             connection={connection}
             affordances={STEP_AFFORDANCES}
+            groups={["connect"]}
           />
         </SettingsSection.Body>
       </SettingsSection.Panel>

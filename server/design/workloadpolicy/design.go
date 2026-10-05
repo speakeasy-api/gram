@@ -17,14 +17,16 @@ import (
 
 var _ = Service("workloadIdentities", func() {
 	Description("Configure which workloads an organization recognises as its own: the issuers it trusts, the subjects those issuers may present, and the agent each admitted workload inherits its policy from.")
-	Security(security.Session, security.ProjectSlug)
+	// The trust policy belongs to the organization, so a dashboard session
+	// needs no project. An API key is issued to a project and keeps naming one.
+	Security(security.Session)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
 	})
 	shared.DeclareErrorResponses()
 
 	Method("list", func() {
-		Description("Read the whole trust policy: every trusted issuer and every admitted subject, at both the organization and project tiers, with the agent each subject resolves to. Requires workload:read.")
+		Description("Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -70,6 +72,31 @@ var _ = Service("workloadIdentities", func() {
 		Meta("openapi:operationId", "registerWorkloadIssuer")
 		Meta("openapi:extension:x-speakeasy-name-override", "registerIssuer")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RegisterWorkloadIssuer"}`)
+	})
+
+	Method("updateIssuer", func() {
+		Description("Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.")
+
+		Payload(func() {
+			Extend(UpdateWorkloadIssuerForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(WorkloadIdentityPolicy)
+
+		HTTP(func() {
+			POST("/rpc/workloadIdentities.updateIssuer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateWorkloadIssuer")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateIssuer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateWorkloadIssuer"}`)
 	})
 
 	Method("withdrawIssuer", func() {
@@ -126,6 +153,31 @@ var _ = Service("workloadIdentities", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AdmitWorkloadSubject"}`)
 	})
 
+	Method("updateSubject", func() {
+		Description("Edit an admitted subject's label, tags, or assigned agent. Omitted fields are left unchanged. The subject, match kind, issuer, and tier are fixed at admission. The agent assignment is shared by every admission of the same subject under the same issuer, at either tier, so reassigning it through one admission reassigns it for both. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.")
+
+		Payload(func() {
+			Extend(UpdateWorkloadSubjectForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(WorkloadIdentityPolicy)
+
+		HTTP(func() {
+			POST("/rpc/workloadIdentities.updateSubject")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateWorkloadSubject")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateSubject")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateWorkloadSubject"}`)
+	})
+
 	Method("withdrawSubject", func() {
 		Description("Withdraw an admitted subject and its agent assignment, stopping it authenticating. Requires workload:write.")
 
@@ -174,14 +226,37 @@ var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {
 	Attribute("jwks_uri", String, "Where the issuer publishes the keys its assertions are signed with. Must be an https URL on a fully qualified domain name.", func() {
 		Format(FormatURI)
 	})
-	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to false, and is re-checked on every lookup, so clearing it revokes wildcard rules already written.", func() {
-		Default(false)
-	})
-	Attribute("project_scoped", Boolean, "Register the issuer for the selected project alone rather than the whole organization. Defaults to false.", func() {
+	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Checked when a wildcard rule is admitted and again on every lookup, so clearing it makes wildcard rules already written inert immediately.")
+	Attribute("description", String, "What the platform is and what runs on it, in the operator's words. Trimmed on write; blank is stored as none. At most 500 characters after trimming.")
+	Attribute("tags", ArrayOf(String), "Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.")
+	Attribute("project_scoped", Boolean, "Register the issuer for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.", func() {
 		Default(false)
 	})
 
 	Required("name", "issuer", "jwks_uri")
+})
+
+var UpdateWorkloadIssuerForm = Type("UpdateWorkloadIssuerForm", func() {
+	Description("Form for editing a trusted workload issuer. Every field but id is optional; an omitted field is left unchanged.")
+
+	Attribute("id", String, "The workload issuer id.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The label an operator works with. Unique within its tier.", func() {
+		MinLength(1)
+		MaxLength(100)
+	})
+	Attribute("jwks_uri", String, "Where the issuer publishes the keys its assertions are signed with. Must be an https URL on a fully qualified domain name.", func() {
+		Format(FormatURI)
+	})
+	Attribute("description", String, "What the platform is and what runs on it, in the operator's words. Trimmed on write; blank clears it. At most 500 characters after trimming.")
+	Attribute("tags", ArrayOf(String), "Replaces the issuer's tags; an empty list clears them. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.", func() {
+		// omitzero, not omitempty: an empty list is the instruction to clear
+		// the tags and has to reach the wire, while a nil one stays omitted.
+		Meta("struct:tag:json", "tags,omitzero")
+	})
+
+	Required("id")
 })
 
 var AdmitWorkloadSubjectForm = Type("AdmitWorkloadSubjectForm", func() {
@@ -198,14 +273,34 @@ var AdmitWorkloadSubjectForm = Type("AdmitWorkloadSubjectForm", func() {
 	Attribute("name", String, "Optional label, for platforms whose subjects are not self-describing.", func() {
 		MinLength(1)
 	})
+	Attribute("tags", ArrayOf(String), "Free-form labels for finding the admitted workload in a long list. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.")
 	Attribute("agent_id", String, "The agent whose policy the admitted workload inherits.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("project_scoped", Boolean, "Admit the subject for the selected project alone rather than the whole organization. Defaults to false.", func() {
+	Attribute("project_scoped", Boolean, "Admit the subject for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.", func() {
 		Default(false)
 	})
 
 	Required("issuer", "subject", "agent_id")
+})
+
+var UpdateWorkloadSubjectForm = Type("UpdateWorkloadSubjectForm", func() {
+	Description("Form for editing an admitted workload subject. Every field but id is optional; an omitted field is left unchanged.")
+
+	Attribute("id", String, "The admission id.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Optional label, for platforms whose subjects are not self-describing. Trimmed on write; blank clears it.")
+	Attribute("tags", ArrayOf(String), "Replaces the admission's tags; an empty list clears them. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.", func() {
+		// omitzero, not omitempty: an empty list is the instruction to clear
+		// the tags and has to reach the wire, while a nil one stays omitted.
+		Meta("struct:tag:json", "tags,omitzero")
+	})
+	Attribute("agent_id", String, "The agent whose policy the admitted workload inherits. Shared with any admission of the same subject under the same issuer at the other tier.", func() {
+		Format(FormatUUID)
+	})
+
+	Required("id")
 })
 
 var WorkloadIssuer = Type("WorkloadIssuer", func() {
@@ -221,7 +316,9 @@ var WorkloadIssuer = Type("WorkloadIssuer", func() {
 	Attribute("name", String, "The label an operator works with.")
 	Attribute("issuer", String, "The issuer identifier the assertion's iss claim must carry.")
 	Attribute("jwks_uri", String, "Where the issuer publishes its signing keys.")
+	Attribute("description", String, "What the platform is and what runs on it. Empty rather than absent where none is set.")
 	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule.")
+	Attribute("tags", ArrayOf(String), "Free-form labels for grouping and filtering trusted platforms. Empty rather than absent where none are set.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -229,7 +326,7 @@ var WorkloadIssuer = Type("WorkloadIssuer", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "organization_id", "project_id", "name", "issuer", "jwks_uri", "allow_wildcard_admission", "created_at", "updated_at")
+	Required("id", "organization_id", "project_id", "name", "issuer", "jwks_uri", "description", "allow_wildcard_admission", "tags", "created_at", "updated_at")
 })
 
 var WorkloadAdmission = Type("WorkloadAdmission", func() {
@@ -252,6 +349,7 @@ var WorkloadAdmission = Type("WorkloadAdmission", func() {
 		Enum("exact", "wildcard")
 	})
 	Attribute("name", String, "Optional label; empty when none was supplied.")
+	Attribute("tags", ArrayOf(String), "Free-form labels for finding the admitted workload. Empty rather than absent where none are set.")
 	Attribute("agent_id", String, "The agent whose policy this workload inherits. Empty when the assignment is missing, which the token endpoint refuses.", func() {
 		Format(FormatUUID)
 	})
@@ -264,7 +362,7 @@ var WorkloadAdmission = Type("WorkloadAdmission", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "organization_id", "project_id", "workload_issuer_id", "issuer", "issuer_name", "subject", "match_kind", "name", "agent_id", "agent_name", "wildcard_active", "created_at", "updated_at")
+	Required("id", "organization_id", "project_id", "workload_issuer_id", "issuer", "issuer_name", "subject", "match_kind", "name", "tags", "agent_id", "agent_name", "wildcard_active", "created_at", "updated_at")
 })
 
 var WorkloadIdentityPolicy = Type("WorkloadIdentityPolicy", func() {

@@ -19,7 +19,7 @@ export type ListRiskResultsResult = {
    */
   results: Array<RiskResult>;
   /**
-   * Total number of findings across all enabled policies.
+   * Total number of findings matching the filters across all non-deleted policies.
    */
   totalCount: number;
 };

@@ -23,7 +23,6 @@ import {
   invalidateAllRemoteMcpServerHeaders,
   useRemoteMcpServerHeaders,
 } from "@gram/client/react-query/remoteMcpServerHeaders.js";
-import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/updateRemoteMcpServerHeader.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Loader2, TriangleAlert } from "lucide-react";
@@ -84,7 +83,6 @@ export function RemoteMcpIdentitySectionBody({
     { userSessionIssuerId: target.userSessionIssuerId ?? undefined },
     { enabled: !!target.userSessionIssuerId },
   );
-  const { data: issuersResult } = useRemoteSessionIssuers();
   const {
     data: userSessionIssuer,
     isLoading: issuerLoading,
@@ -205,7 +203,6 @@ export function RemoteMcpIdentitySectionBody({
     mcpServerId: target.permissionResourceId,
     remoteMcpServerId,
     upstreamUrl: sourceQuery.data?.url,
-    issuers: issuersResult?.result.items ?? [],
     linkedClients: clients,
     configured: actualMode === "user",
     enabled: identityResolved && selectedMode === "user",

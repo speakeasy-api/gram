@@ -163,7 +163,7 @@ export class Results extends ClientSDK {
    * unmaskRiskResult risk
    *
    * @remarks
-   * Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.
+   * Return the plaintext match for a single risk result on demand. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.
    */
   async unmask(
     request: UnmaskRiskResultRequest,

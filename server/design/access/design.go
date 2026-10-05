@@ -750,6 +750,36 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AudienceOptions"}`)
 	})
 
+	Method("explainResourceAccess", func() {
+		Description("Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead. Like listIdentityAccess it describes one person's access, so it takes a session only: API keys are not checked against grants and would see any member's rules.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("resource_kind", String, "The kind of resource to explain.", func() {
+				Enum("mcp")
+			})
+			Attribute("resource_id", String, "The resource to explain.")
+			Attribute("user_id", String, "The organization member whose access to explain.")
+			Required("resource_kind", "resource_id", "user_id")
+			security.SessionPayload()
+		})
+
+		Result(ExplainResourceAccessResult)
+
+		HTTP(func() {
+			GET("/rpc/access.explainResourceAccess")
+			Param("resource_kind")
+			Param("resource_id")
+			Param("user_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "explainResourceAccess")
+		Meta("openapi:extension:x-speakeasy-name-override", "explainResourceAccess")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ExplainResourceAccess"}`)
+	})
+
 	Method("requestAccess", func() {
 		Description("Request access to a scope by sending an email notification to organization administrators.")
 		Security(security.ByKey, func() {
@@ -1005,6 +1035,10 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
 		Description("Selector constraints. Null means unrestricted.")
 	})
+
+	Attribute("direct_selectors", ArrayOf(SelectorModel), func() {
+		Description("The subset of this scope's selectors granted to the calling user by name rather than through a role or everyone. For allow scopes it holds only selectors naming a concrete resource, which outrank blocks inherited from roles or everyone on that resource. For blocked scopes it holds the caller's own blocks, which always apply. Omitted when empty.")
+	})
 })
 
 var RoleModel = Type("Role", func() {
@@ -1165,6 +1199,71 @@ var AudienceOptionModel = Type("AudienceOption", func() {
 var ListAudienceOptionsResult = Type("ListAudienceOptionsResult", func() {
 	Required("options")
 	Attribute("options", ArrayOf(AudienceOptionModel), "Principals that can be given access.")
+})
+
+var ExplainedAccessDirectorySourceModel = Type("ExplainedAccessDirectorySource", func() {
+	Required("source_kind")
+
+	Attribute("source_kind", String, "Whether membership of a directory group or a directory attribute value mapped the role.", func() {
+		Enum("group", "attribute")
+	})
+	Attribute("directory_group_name", String, "The directory group, for a group mapping.")
+	Attribute("attribute_key", String, "The directory attribute, for an attribute mapping.")
+	Attribute("attribute_value", String, "The attribute value the member's profile matched, for an attribute mapping.")
+})
+
+// One loaded grant that matched an access check, and how it shaped the
+// decision.
+var ExplainedAccessRuleModel = Type("ExplainedAccessRule", func() {
+	Required("principal_urn", "kind", "display_name", "level", "applies_to", "effect", "via_directory_mapping")
+
+	Attribute("principal_urn", String, "Canonical principal URN holding the rule.")
+	Attribute("kind", String, "What the principal identifies.", func() {
+		Enum("everyone", "role", "user", "unknown")
+	})
+	Attribute("display_name", String, "Human-readable name for the principal.")
+	Attribute("level", String, "The access the rule gives, or the access a \"blocked_\" rule takes away. \"all\" is a grant covering every permission.", func() {
+		Enum("use", "view", "manage", "blocked", "blocked_view", "blocked_manage", "all")
+	})
+	Attribute("applies_to", String, "Whether the rule names this resource, every resource in its project, or every resource of its kind.", func() {
+		Enum("resource", "project", "all_resources")
+	})
+	Attribute("tools", ArrayOf(String), "Tool names the rule is narrowed to, when it is not the whole resource.")
+	Attribute("dispositions", ArrayOf(String), "Tool annotations the rule is narrowed to, when it is not the whole resource.", func() {
+		Elem(func() {
+			Enum("read_only", "destructive", "idempotent", "open_world")
+		})
+	})
+	Attribute("effect", String, "How the rule shaped the decision. allows: proves the access. overrides: a rule made directly to the member that proves the access despite a block from a role or everyone. overridden: a block such a rule overrides. blocks: takes the access away. blocked: an allow that matches but that a block keeps from counting. limits: a block taking away some of the resource's tools.", func() {
+		Enum("allows", "overrides", "overridden", "blocks", "blocked", "limits")
+	})
+	Attribute("reason", String, "Why a blocked rule made directly to the member did not override the block. wildcard_direct_grant: it covers every resource. narrower_direct_grant: it constrains something the tool does not carry. own_exclusion: the member's own block applies.", func() {
+		Enum("wildcard_direct_grant", "narrower_direct_grant", "own_exclusion")
+	})
+	Attribute("via_directory_mapping", Boolean, "Whether the member holds this role only through a directory role mapping.")
+	Attribute("directory_sources", ArrayOf(ExplainedAccessDirectorySourceModel), "The directory role mappings giving the member this role, including when they also hold it directly. Returned only to organization administrators, because attribute values can carry personal data.")
+})
+
+var ExplainedAccessLevelModel = Type("ExplainedAccessLevel", func() {
+	Required("level", "allowed", "rules")
+
+	Attribute("level", String, "The access being explained.", func() {
+		Enum("use", "view", "manage")
+	})
+	Attribute("allowed", Boolean, "Whether the rules give the member this access.")
+	Attribute("tool_access", String, "For use: whether every tool, only some, or none are reachable.", func() {
+		Enum("all", "some", "none")
+	})
+	Attribute("rules", ArrayOf(ExplainedAccessRuleModel), "Every rule matching this access, deciding rules first.")
+})
+
+var ExplainResourceAccessResult = Type("ExplainResourceAccessResult", func() {
+	Required("visibility", "levels")
+
+	Attribute("visibility", String, "Who may connect without a rule. public: connecting is not checked against rules. private: rules decide. disabled: nobody can connect.", func() {
+		Enum("public", "private", "disabled")
+	})
+	Attribute("levels", ArrayOf(ExplainedAccessLevelModel), "The decision for use, view and manage, in that order.")
 })
 
 var MemberModel = Type("AccessMember", func() {

@@ -5,7 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"strconv"
 	"strings"
+	"sync"
+	"unicode/utf8"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/santhosh-tekuri/jsonschema/v6/kind"
@@ -51,6 +55,9 @@ func (v *Validator) validate(raw json.RawMessage, byteLimit int) []Issue {
 	if len(raw) > byteLimit {
 		return []Issue{{Path: "", Message: "record exceeds byte limit"}}
 	}
+	if !validJSONUnicode(raw) {
+		return []Issue{{Path: "", Message: "record must contain valid Unicode text"}}
+	}
 	value, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
 	if err != nil {
 		return []Issue{{Path: "", Message: "expected exactly one JSON value"}}
@@ -61,6 +68,17 @@ func (v *Validator) validate(raw json.RawMessage, byteLimit int) []Issue {
 	object, ok := value.(map[string]any)
 	if !ok {
 		return []Issue{{Path: "", Message: "expected object"}}
+	}
+	meta, _ := object["_meta"].(map[string]any)
+	catalog, _ := meta["com.speakeasy.ai/catalog"].(map[string]any)
+	if documentationURL, ok := catalog["documentationUrl"].(string); ok {
+		parsed, err := url.Parse(documentationURL)
+		if err != nil || parsed.Hostname() == "" || parsed.User != nil {
+			return []Issue{{Path: "/_meta/com.speakeasy.ai~1catalog/documentationUrl", Message: "absolute HTTP(S) URL with a host and without userinfo required"}}
+		}
+	}
+	if issues := validateOktaMapping(meta); len(issues) > 0 {
+		return issues
 	}
 	server, _ := object["server"].(map[string]any)
 	name, _ := server["name"].(string)
@@ -119,4 +137,88 @@ func validationIssues(err error) []Issue {
 	}
 	visit(root)
 	return issues
+}
+
+// encoding/json replaces malformed UTF-8 and unpaired escaped surrogates with
+// U+FFFD. Reject them before decoding keys, matching PostgreSQL jsonb admission.
+// JSON syntax validation remains the decoder's responsibility.
+func validJSONUnicode(raw []byte) bool {
+	if !utf8.Valid(raw) {
+		return false
+	}
+	for i := 0; i < len(raw); i++ {
+		if raw[i] != '\\' {
+			continue
+		}
+		i++
+		if i+4 >= len(raw) || raw[i] != 'u' {
+			continue
+		}
+		code, err := strconv.ParseUint(string(raw[i+1:i+5]), 16, 16)
+		if err != nil {
+			continue
+		}
+		i += 4
+		if code >= 0xdc00 && code <= 0xdfff {
+			return false
+		}
+		if code < 0xd800 || code > 0xdbff {
+			continue
+		}
+		if i+6 >= len(raw) || string(raw[i+1:i+3]) != `\u` {
+			return false
+		}
+		low, err := strconv.ParseUint(string(raw[i+3:i+7]), 16, 16)
+		if err != nil || low < 0xdc00 || low > 0xdfff {
+			return false
+		}
+		i += 6
+	}
+	return true
+}
+
+// schemaPropertyNames lists every property name the contract declares.
+var schemaPropertyNames = sync.OnceValue(func() map[string]bool {
+	names := map[string]bool{}
+	var walk func(any)
+	walk = func(node any) {
+		switch n := node.(type) {
+		case map[string]any:
+			if props, ok := n["properties"].(map[string]any); ok {
+				for name := range props {
+					names[name] = true
+				}
+			}
+			for _, child := range n {
+				walk(child)
+			}
+		case []any:
+			for _, child := range n {
+				walk(child)
+			}
+		}
+	}
+	for _, raw := range [][]byte{contract.Schema, contract.SpeakeasyRegistrySchema} {
+		var doc any
+		if err := json.Unmarshal(raw, &doc); err == nil {
+			walk(doc)
+		}
+	}
+	return names
+})
+
+// LogPath masks every segment that is neither a declared property name nor an
+// array index, because validator paths echo submitted keys of open maps.
+func LogPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	segments := strings.Split(path[1:], "/")
+	for i, segment := range segments {
+		name := strings.ReplaceAll(strings.ReplaceAll(segment, "~1", "/"), "~0", "~")
+		if _, err := strconv.ParseUint(name, 10, 32); err != nil && !schemaPropertyNames()[name] {
+			segments[i] = "*"
+		}
+	}
+	return "/" + strings.Join(segments, "/")
 }

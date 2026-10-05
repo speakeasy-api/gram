@@ -432,6 +432,42 @@ SET disabled_at = NULL,
     updated_at = clock_timestamp()
 WHERE id = @id;
 
+-- name: LockOrganizationWhitelist :one
+-- Pin the exact target and account context shown by whitelist approval.
+SELECT id, name, slug, whitelisted, gram_account_type, disabled_at, updated_at
+FROM organization_metadata
+WHERE id = @id
+FOR UPDATE;
+
+-- name: SetOrganizationWhitelist :one
+-- Only the demo-access gate changes; other account and lifecycle fields survive.
+UPDATE organization_metadata
+SET whitelisted = @whitelisted::boolean,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND whitelisted = @expected_whitelisted::boolean
+RETURNING whitelisted;
+
+-- name: LockOrganizationAccess :one
+-- Pin canonical identity and current access state before a guarded transition.
+SELECT id, name, slug, disabled_at
+FROM organization_metadata
+WHERE id = @id
+FOR UPDATE;
+
+-- name: SetOrganizationAccess :one
+-- Caller holds the metadata lock. Preserve disable timestamp semantics and the
+-- WorkOS webhook cursor while checking that the expected state still matches.
+UPDATE organization_metadata
+SET disabled_at = CASE
+        WHEN @enabled::boolean THEN NULL
+        ELSE COALESCE(disabled_at, clock_timestamp())
+    END,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND disabled_at IS NOT DISTINCT FROM @expected_disabled_at::timestamptz
+RETURNING id, name, slug, disabled_at;
+
 -- name: AdminListProjectsForOrganization :many
 -- Not a plain sum: once AGE-1880 copies legacy servers into mcp_servers, a
 -- toolset and its mcp_servers row would each be counted. The anti join on the
@@ -532,6 +568,32 @@ WHERE our.organization_id = @organization_id
 ORDER BY u.email ASC
 LIMIT 200;
 
+-- name: AdminListOrganizationMembersPage :many
+SELECT
+    u.id,
+    u.email,
+    u.display_name,
+    u.last_login,
+    u.created_at,
+    u.updated_at
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = @organization_id
+  AND our.deleted IS FALSE
+  AND u.deleted_at IS NULL
+  AND u.id > @after_user_id::text
+ORDER BY u.id ASC
+LIMIT @page_limit;
+
+-- name: AdminGetOrganizationMemberCursor :one
+SELECT u.id
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = @organization_id
+  AND our.deleted IS FALSE
+  AND u.deleted_at IS NULL
+  AND u.id = @user_id;
+
 -- name: AdminGetOrganization :one
 -- Resolving a slug is opt-in because every admin write is keyed on id alone.
 -- Both columns are bare TEXT, so one organization's slug can equal another's
@@ -582,6 +644,31 @@ WHERE om.id = sqlc.arg('id')::text
 ORDER BY (om.id = sqlc.arg('id')::text) DESC
 LIMIT 1;
 
+-- name: AdminAcquireStripeSubscriptionLock :exec
+-- Serializes assignments of the same Stripe subscription across organizations.
+SELECT pg_advisory_xact_lock(hashtextextended(sqlc.arg('stripe_subscription_id')::text, 0));
+
+-- name: AdminSetStripeSubscription :one
+UPDATE billing_metadata
+SET
+    stripe_subscription_id = sqlc.arg('stripe_subscription_id')::text,
+    stripe_billing_cycle_anchor = sqlc.arg('stripe_billing_cycle_anchor')::timestamptz,
+    billing_cycle_anchor_day = sqlc.arg('billing_cycle_anchor_day')::integer,
+    updated_at = clock_timestamp()
+FROM organization_metadata
+WHERE billing_metadata.organization_id = organization_metadata.id
+  AND billing_metadata.organization_id = sqlc.arg('organization_id')::text
+  AND billing_metadata.stripe_customer_id = sqlc.arg('stripe_customer_id')::text
+  AND billing_metadata.stripe_subscription_id IS NULL
+  AND organization_metadata.gram_account_type = 'payg'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM billing_metadata AS other
+    WHERE other.stripe_subscription_id = sqlc.arg('stripe_subscription_id')::text
+      AND other.organization_id <> billing_metadata.organization_id
+  )
+RETURNING billing_metadata.organization_id;
+
 -- name: AdminSetStripeCustomer :one
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)
 VALUES (sqlc.arg('organization_id')::text, sqlc.arg('stripe_customer_id')::text)
@@ -597,10 +684,52 @@ RETURNING organization_id;
 SELECT pg_advisory_xact_lock(719438201);
 
 -- name: SeedSupportPlatforms :exec
+-- The catalog owns a platform's name, vendor, family, surface and order, so
+-- those follow the file on every start; staff edit facts, not platforms.
 INSERT INTO support_matrix_platforms (slug, name, vendor, family, surface, sort_order)
 SELECT value->>'id', value->>'name', value->>'vendor', value->>'family', value->>'surface', ordinality::integer
 FROM jsonb_array_elements(sqlc.arg(catalog)::jsonb->'products') WITH ORDINALITY
-ON CONFLICT (slug) DO NOTHING;
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    vendor = EXCLUDED.vendor,
+    family = EXCLUDED.family,
+    surface = EXCLUDED.surface,
+    sort_order = EXCLUDED.sort_order,
+    updated_at = clock_timestamp()
+WHERE support_matrix_platforms.name IS DISTINCT FROM EXCLUDED.name
+   OR support_matrix_platforms.vendor IS DISTINCT FROM EXCLUDED.vendor
+   OR support_matrix_platforms.family IS DISTINCT FROM EXCLUDED.family
+   OR support_matrix_platforms.surface IS DISTINCT FROM EXCLUDED.surface
+   OR support_matrix_platforms.sort_order IS DISTINCT FROM EXCLUDED.sort_order;
+
+-- name: SeedSupportPlans :exec
+-- The catalog owns plans outright: a plan it names is (re)instated with the
+-- catalog's vendor, name and order, and RetireSupportPlans below soft-deletes
+-- the ones it no longer names.
+INSERT INTO support_matrix_plans (slug, vendor, name, sort_order)
+SELECT value->>'id', value->>'vendor', value->>'name', ordinality::integer
+FROM jsonb_array_elements(sqlc.arg(catalog)::jsonb->'plans') WITH ORDINALITY
+ON CONFLICT (slug) DO UPDATE SET
+    vendor = EXCLUDED.vendor,
+    name = EXCLUDED.name,
+    sort_order = EXCLUDED.sort_order,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+WHERE support_matrix_plans.vendor IS DISTINCT FROM EXCLUDED.vendor
+   OR support_matrix_plans.name IS DISTINCT FROM EXCLUDED.name
+   OR support_matrix_plans.sort_order IS DISTINCT FROM EXCLUDED.sort_order
+   OR support_matrix_plans.deleted_at IS NOT NULL;
+
+-- name: RetireSupportPlans :exec
+-- An organization that declared a retired plan keeps its vendor and loses the
+-- plan: the stack reads plans through deleted_at IS NULL.
+UPDATE support_matrix_plans
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE deleted_at IS NULL
+  AND slug NOT IN (
+    SELECT value->>'id'
+    FROM jsonb_array_elements(sqlc.arg(catalog)::jsonb->'plans')
+  );
 
 -- name: SeedSupportMethods :exec
 INSERT INTO support_matrix_integration_methods (slug, name, vendor, plan_notes, sort_order)
@@ -671,3 +800,312 @@ SELECT m.id, c.id, sqlc.arg(status)::text, sqlc.arg(notes)::text, sqlc.arg(needs
 FROM support_matrix_integration_methods m, support_matrix_capabilities c
 WHERE m.slug = sqlc.arg(method_slug)::text AND c.slug = sqlc.arg(capability_slug)::text AND m.deleted_at IS NULL AND c.deleted_at IS NULL
 ON CONFLICT (integration_method_id, capability_id) DO UPDATE SET status = EXCLUDED.status, notes = EXCLUDED.notes, needs_verification = EXCLUDED.needs_verification, verified_at = NULL, updated_at = clock_timestamp(), deleted_at = NULL;
+
+-- name: AdminListUsers :many
+SELECT u.id, u.email, u.display_name, u.last_login
+FROM users u
+WHERE u.deleted_at IS NULL AND u.workos_deleted_at IS NULL
+AND NOT EXISTS (SELECT 1 FROM unnest(@name_patterns::text[]) p(pattern) WHERE NOT (u.display_name ILIKE p.pattern))
+AND NOT EXISTS (SELECT 1 FROM unnest(@email_patterns::text[]) p(pattern) WHERE NOT (u.email ILIKE p.pattern))
+AND (cardinality(@org_patterns::text[]) = 0 OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE
+    AND NOT EXISTS (SELECT 1 FROM unnest(@org_patterns::text[]) p(pattern) WHERE NOT (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern))
+))
+AND NOT EXISTS (
+    SELECT 1 FROM unnest(@any_patterns::text[]) p(pattern)
+    WHERE NOT (u.display_name ILIKE p.pattern OR u.email ILIKE p.pattern OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE AND (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern)
+ ))
+)
+ORDER BY lower(u.email), u.id LIMIT @page_limit::int OFFSET @page_offset::int;
+
+-- name: AdminCountUsers :one
+-- Keep eligibility and search predicates identical to AdminListUsers.
+SELECT count(*)
+FROM users u
+WHERE u.deleted_at IS NULL AND u.workos_deleted_at IS NULL
+AND NOT EXISTS (SELECT 1 FROM unnest(@name_patterns::text[]) p(pattern) WHERE NOT (u.display_name ILIKE p.pattern))
+AND NOT EXISTS (SELECT 1 FROM unnest(@email_patterns::text[]) p(pattern) WHERE NOT (u.email ILIKE p.pattern))
+AND (cardinality(@org_patterns::text[]) = 0 OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE
+    AND NOT EXISTS (SELECT 1 FROM unnest(@org_patterns::text[]) p(pattern) WHERE NOT (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern))
+))
+AND NOT EXISTS (
+    SELECT 1 FROM unnest(@any_patterns::text[]) p(pattern)
+    WHERE NOT (u.display_name ILIKE p.pattern OR u.email ILIKE p.pattern OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE AND (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern)
+ ))
+);
+
+-- name: AdminListUsersOrganizationPreviews :many
+WITH ranked AS (
+    SELECT m.user_id, o.id, o.name, o.slug, o.disabled_at,
+    count(*) OVER (PARTITION BY m.user_id) AS organization_count,
+    row_number() OVER (PARTITION BY m.user_id ORDER BY lower(o.name), o.slug, o.id) AS position
+    FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = ANY(@user_ids::text[]) AND m.deleted IS FALSE
+)
+SELECT user_id, id, name, slug, disabled_at, organization_count FROM ranked WHERE position <= 3
+ORDER BY user_id, position;
+
+-- name: AdminListUserOrganizations :many
+SELECT o.id, o.name, o.slug, o.disabled_at
+FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+WHERE m.user_id = @user_id::text AND m.deleted IS FALSE
+ORDER BY lower(o.name), o.slug, o.id LIMIT @page_limit::int OFFSET @page_offset::int;
+
+-- name: AdminCountUserOrganizations :one
+SELECT (SELECT count(*) FROM organization_user_relationships m WHERE m.user_id = u.id AND m.deleted IS FALSE) AS total
+FROM users u WHERE u.id = @user_id::text AND u.deleted_at IS NULL AND u.workos_deleted_at IS NULL;
+
+-- name: AdminListObservedOktaApplicationNames :many
+-- Staff-only, deliberately cross-tenant: the OIN key is public catalog data
+-- and only counts and labels leave here, never organization ids. Only active
+-- applications with a live assignment count, as suggestions do; Okta's own
+-- applications are excluded by (name, sign-on mode) as the sync defines them.
+-- Labels are admin-editable per tenant and are used for matching, capped.
+WITH live AS (
+    SELECT a.organization_id, a.name, a.label, a.sign_on_mode
+    FROM okta_applications AS a
+    WHERE a.removed_at IS NULL
+      AND a.status = 'ACTIVE'
+      AND EXISTS (
+        SELECT 1 FROM okta_application_assignments AS s
+        WHERE s.organization_id = a.organization_id
+          AND s.identity_provider_connection_id = a.identity_provider_connection_id
+          AND s.okta_app_id = a.okta_app_id
+          AND s.removed_at IS NULL
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM ROWS FROM (unnest(sqlc.arg(internal_names)::text[]), unnest(sqlc.arg(internal_modes)::text[])) AS i(name, mode)
+        WHERE i.name = a.name AND i.mode = a.sign_on_mode
+      )
+)
+SELECT
+    l.name,
+    COUNT(DISTINCT l.organization_id)::integer AS organizations,
+    (ARRAY(SELECT DISTINCT x.label FROM live AS x WHERE x.name = l.name ORDER BY x.label LIMIT 8))::text[] AS labels,
+    (ARRAY(SELECT DISTINCT x.sign_on_mode FROM live AS x WHERE x.name = l.name ORDER BY x.sign_on_mode))::text[] AS sign_on_modes
+FROM live AS l
+GROUP BY l.name
+ORDER BY organizations DESC, l.name;
+
+-- name: AdminListRegistryOktaMappings :many
+-- Every OIN name a catalog entry claims, published or not, so a candidate
+-- already taken can say by whom.
+SELECT
+    e.id AS registry_entry_id,
+    (e.data #>> '{server,name}')::text AS entry_name,
+    (n.value #>> '{}')::text AS oin_name
+FROM mcp_registry_entries AS e
+CROSS JOIN LATERAL jsonb_array_elements(
+    CASE WHEN jsonb_typeof(e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}') = 'array'
+        THEN e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}'
+        ELSE '[]'::jsonb
+    END
+) AS n(value)
+WHERE jsonb_typeof(n.value) = 'string';
+
+-- name: AdminListRegistryEntryFacts :many
+-- The fields the Okta matcher reads, for every entry.
+SELECT
+    id AS registry_entry_id,
+    data
+FROM mcp_registry_entries
+ORDER BY (data #>> '{server,name}') COLLATE "C";
+
+-- Test fixture: an issuer row as the Okta connection references it.
+-- name: AdminGetIssuerFixture :one
+SELECT id, issuer
+FROM remote_session_issuers
+WHERE id = @id;
+
+-- name: RejectOrganizationEntitlementsFixture :exec
+ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK (feature_name = 'automatic-role-distribution') NOT VALID;
+
+-- name: AdminGetMcpServerAuth :one
+-- The server describeMcpServerHealth reports on, keyed on the mcp_servers id or,
+-- for a toolset-only server, the toolset id. A toolset-backed wrapper takes its
+-- issuer from its own row, not its toolset's, matching how the MCP endpoint
+-- resolves it; the legacy OAuth columns live on the toolset only.
+-- toolset_wrapper_count counts live wrappers of the toolset, so the caller can
+-- drop a toolset slug that would also select another wrapper's calls.
+-- url_slug is the slug in the /mcp/<slug> path clients call: the primary live
+-- endpoint's (custom domain first, as mcpendpoints.PrimaryEndpoint ranks them;
+-- a domain root has no such path), else the server's own slug, else the
+-- toolset's mcp_slug when no other wrapper shares that toolset.
+SELECT
+    m.id,
+    COALESCE(m.name, t.name, m.slug, m.id::text)::text AS name,
+    FALSE AS toolset_only,
+    m.toolset_id,
+    m.remote_mcp_server_id,
+    m.tunneled_mcp_server_id,
+    m.visibility,
+    m.created_at,
+    m.user_session_issuer_id,
+    t.external_oauth_server_id,
+    t.oauth_proxy_server_id,
+    COALESCE((
+        SELECT e.slug FROM mcp_endpoints e
+        WHERE e.mcp_server_id = m.id AND e.deleted IS FALSE AND e.is_domain_root IS NOT TRUE
+        ORDER BY (e.custom_domain_id IS NULL), e.created_at, e.id
+        LIMIT 1
+    ), m.slug, CASE WHEN w.wrapper_count <= 1 THEN t.mcp_slug END, '')::text AS url_slug,
+    COALESCE(t.slug, '')::text AS toolset_slug,
+    w.wrapper_count AS toolset_wrapper_count
+FROM mcp_servers m
+LEFT JOIN toolsets t ON t.id = m.toolset_id AND t.project_id = m.project_id AND t.deleted IS FALSE
+CROSS JOIN LATERAL (
+    SELECT count(*)::bigint AS wrapper_count FROM mcp_servers o
+    WHERE o.toolset_id = m.toolset_id AND o.project_id = m.project_id AND o.deleted IS FALSE
+) w
+WHERE m.id = @id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE
+UNION ALL
+SELECT
+    t.id,
+    t.name,
+    TRUE AS toolset_only,
+    t.id AS toolset_id,
+    NULL::uuid AS remote_mcp_server_id,
+    NULL::uuid AS tunneled_mcp_server_id,
+    CASE WHEN t.mcp_is_public THEN 'public' ELSE 'private' END AS visibility,
+    t.created_at,
+    t.user_session_issuer_id,
+    t.external_oauth_server_id,
+    t.oauth_proxy_server_id,
+    COALESCE(t.mcp_slug, '')::text AS url_slug,
+    t.slug AS toolset_slug,
+    0::bigint AS toolset_wrapper_count
+FROM toolsets t
+WHERE t.id = @id
+  AND t.project_id = @project_id
+  AND t.deleted IS FALSE
+  AND t.mcp_enabled IS TRUE
+  AND NOT EXISTS (SELECT 1 FROM mcp_servers m
+                   WHERE m.toolset_id = t.id AND m.deleted IS FALSE);
+
+-- name: AdminGetUserSessionIssuer :one
+-- The issuer a server in the project points at. It may be attached to the
+-- project, the organization or the platform; one attached anywhere else is not
+-- visible to the project and reads as absent.
+SELECT
+    i.id,
+    i.slug,
+    i.classification,
+    i.authn_challenge_mode,
+    (EXTRACT(EPOCH FROM i.session_duration) / 3600)::bigint AS session_duration_hours,
+    i.attachment_scope,
+    i.client_id_metadata_admission_mode,
+    i.use_authentication_host,
+    i.trusted_remote_session_issuer_id,
+    i.trusted_remote_session_client_id,
+    i.created_at
+FROM user_session_issuers i
+WHERE i.id = @id
+  AND i.deleted IS FALSE
+  AND (i.project_id = @project_id::uuid
+       OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = @organization_id::text)));
+
+-- name: AdminListOtherServersUsingIssuer :many
+-- Live servers in the project, other than the one described, that share the
+-- issuer: mcp_servers rows and toolset-only toolsets.
+SELECT m.id, COALESCE(m.name, t.name, m.slug, m.id::text)::text AS name
+FROM mcp_servers m
+LEFT JOIN toolsets t ON t.id = m.toolset_id AND t.project_id = m.project_id AND t.deleted IS FALSE
+WHERE m.project_id = @project_id
+  AND m.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND m.id <> @exclude_id
+  AND m.deleted IS FALSE
+UNION ALL
+SELECT t.id, t.name
+FROM toolsets t
+WHERE t.project_id = @project_id
+  AND t.user_session_issuer_id = @user_session_issuer_id
+  AND t.id <> @exclude_id
+  AND t.deleted IS FALSE
+  AND t.mcp_enabled IS TRUE
+  AND NOT EXISTS (SELECT 1 FROM mcp_servers w
+                   WHERE w.toolset_id = t.id AND w.deleted IS FALSE)
+ORDER BY name, id;
+
+-- name: AdminUserSessionStats :one
+-- A refresh soft-deletes a session row and inserts a new one, so
+-- last_issued_at includes refreshes.
+SELECT
+    count(DISTINCT subject_urn) FILTER (WHERE subject_urn LIKE 'user:%')::bigint AS distinct_subjects_ever,
+    count(DISTINCT subject_urn) FILTER (WHERE subject_urn LIKE 'user:%' AND created_at >= @window_start)::bigint AS distinct_subjects_in_window,
+    min(created_at)::timestamptz AS first_issued_at,
+    max(created_at)::timestamptz AS last_issued_at,
+    count(*) FILTER (WHERE deleted IS FALSE AND refresh_expires_at > clock_timestamp())::bigint AS live
+FROM user_sessions
+WHERE user_session_issuer_id = @user_session_issuer_id;
+
+-- name: AdminListIssuerRemoteSessionClients :many
+-- Live remote session clients attached to the issuer, with their upstream
+-- issuer. Only the columns the health report exposes: no secrets, JWKS bodies
+-- or error text.
+SELECT
+    c.id,
+    (c.client_id_metadata_uri IS NOT NULL)::boolean AS is_cimd,
+    (c.client_id_issued_at IS NOT NULL)::boolean AS is_dcr,
+    c.token_endpoint_auth_method,
+    c.scope,
+    c.grant_types,
+    (c.identity_provider_connection_id IS NOT NULL)::boolean AS has_identity_provider_connection,
+    c.attachment_scope,
+    c.upstream_rejected_at,
+    r.id AS issuer_id,
+    r.slug AS issuer_slug,
+    r.name AS issuer_name,
+    r.issuer AS issuer_url,
+    r.attachment_scope AS issuer_attachment_scope,
+    (r.tunneled_mcp_server_id IS NOT NULL)::boolean AS issuer_tunneled,
+    r.oidc AS issuer_oidc,
+    r.passthrough AS issuer_passthrough,
+    r.code_challenge_methods_supported AS issuer_code_challenge_methods_supported,
+    r.client_id_metadata_document_supported AS issuer_cimd_supported,
+    r.scope_override AS issuer_scope_override,
+    r.metadata_fetched_at AS issuer_metadata_fetched_at,
+    r.metadata_last_error_at AS issuer_metadata_last_error_at,
+    r.jwks_last_error_at AS issuer_jwks_last_error_at
+FROM remote_session_client_user_session_issuers a
+JOIN remote_session_clients c ON c.id = a.remote_session_client_id AND c.deleted IS FALSE
+JOIN remote_session_issuers r ON r.id = c.remote_session_issuer_id AND r.deleted IS FALSE
+WHERE a.user_session_issuer_id = @user_session_issuer_id
+ORDER BY c.created_at, c.id;
+
+-- name: AdminRemoteSessionStats :many
+-- Per client: distinct users with a live upstream session, fresh
+-- authorizations beyond each session's first, and the first link. Keyed on
+-- the client alone: a session is one per (subject, client), and its
+-- user_session_issuer_id records only which issuer first linked it.
+SELECT
+    remote_session_client_id,
+    count(DISTINCT subject_urn) FILTER (WHERE deleted IS FALSE)::bigint AS linked_subjects,
+    COALESCE(sum(grant_generation - 1), 0)::bigint AS reauthorizations,
+    min(created_at)::timestamptz AS first_linked_at
+FROM remote_sessions
+WHERE remote_session_client_id = ANY(@remote_session_client_ids::uuid[])
+GROUP BY remote_session_client_id;
+
+-- name: AdminRemoteSessionValidationCounts :many
+-- Live sessions per client and last validation status. Sessions never
+-- validated have a NULL status and are left out. Keyed on the client alone,
+-- as AdminRemoteSessionStats is.
+SELECT
+    remote_session_client_id,
+    validation_status::text AS validation_status,
+    count(*)::bigint AS sessions
+FROM remote_sessions
+WHERE remote_session_client_id = ANY(@remote_session_client_ids::uuid[])
+  AND deleted IS FALSE
+  AND validation_status IS NOT NULL
+GROUP BY remote_session_client_id, validation_status;

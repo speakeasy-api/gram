@@ -54,6 +54,8 @@ vi.mock("@/routes", () => ({
     "data/exports",
     "setup",
     "setup/:taskSlug",
+    "access-hub",
+    "access-hub/:issuerId",
   ],
 }));
 
@@ -327,6 +329,30 @@ describe("AuthProvider legacy project redirects", () => {
     );
   });
 
+  it.each([
+    "/test-org/access-hub",
+    "/test-org/access-hub/11111111-1111-1111-1111-111111111111",
+    "/test-org/access-hub/11111111-1111-1111-1111-111111111111?tab=machines#rules",
+  ])("preserves Access Hub URL %s over a same-named project", (path) => {
+    const ACCESS_HUB_PROJECT_ORG = {
+      ...ORG,
+      projects: [{ ...PROJECT, slug: "access-hub" }],
+    };
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        organizations: [ACCESS_HUB_PROJECT_ORG],
+        organization: ACCESS_HUB_PROJECT_ORG,
+        activeOrganizationId: ACCESS_HUB_PROJECT_ORG.id,
+        whitelisted: true,
+      }),
+    );
+
+    renderGate(path);
+
+    expect(screen.getByTestId("app")).toBeTruthy();
+    expect(screen.getByTestId("location").textContent).toBe(path);
+  });
+
   it("preserves a legacy project whose slug is agents", () => {
     mocks.sessionData.mockReturnValue(
       gatedSession({
@@ -549,9 +575,9 @@ describe("AuthProvider cross-organization links", () => {
   });
 });
 
-// Portable "/~" paths let external links (marketing CTAs, docs) deep-link
-// into the app without knowing the visitor's org or project slugs. They match
-// no route, so AuthProvider must resolve them before route matching runs.
+// Portable "/@self" paths let external links (marketing CTAs, docs) deep-link
+// into the app without knowing the visitor's org slug. They match no route,
+// so AuthProvider must resolve them before route matching runs.
 describe("AuthProvider portable paths", () => {
   const PROJECT_ORG = {
     id: "org-3",
@@ -570,6 +596,17 @@ describe("AuthProvider portable paths", () => {
     });
   }
 
+  // What auth.info returns for a user with no memberships: the server only
+  // leaves activeOrganizationId empty when the organization list is empty too,
+  // and the client falls back to a blank organization entry.
+  function noOrgSession() {
+    return portableSession({
+      organizations: [],
+      organization: { id: "", name: "", slug: "", projects: [] },
+      activeOrganizationId: "",
+    });
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
@@ -580,51 +617,57 @@ describe("AuthProvider portable paths", () => {
     localStorage.clear();
   });
 
-  it("bounces a logged-out visitor through login with the destination", () => {
+  it("bounces a logged-out /@self visitor through login with the destination", () => {
     mocks.sessionData.mockReturnValue({
       session: null,
       error: new Error("unauthorized"),
       status: "error",
     });
 
-    renderGate("/~/toolsets?tab=all");
+    renderGate("/@self/settings?tab=members#top");
 
     expect(screen.getByTestId("location").textContent).toBe(
-      "/login?redirect=%2F~%2Ftoolsets%3Ftab%3Dall",
+      "/login?redirect=%2F%40self%2Fsettings%3Ftab%3Dmembers%23top",
     );
   });
 
-  it("sends a session with no organization to sign-up with the destination", () => {
-    mocks.sessionData.mockReturnValue(
-      portableSession({ activeOrganizationId: "" }),
-    );
+  it("sends a /@self session with no organization to sign-up", () => {
+    mocks.sessionData.mockReturnValue(noOrgSession());
 
-    renderGate("/~/toolsets");
+    renderGate("/@self/settings");
 
     expect(screen.getByTestId("location").textContent).toBe(
-      "/sign-up?redirect=%2F~%2Ftoolsets",
+      "/sign-up?redirect=%2F%40self%2Fsettings",
     );
   });
 
-  it("expands into the active org and first project", () => {
+  it("expands /@self into the active org", () => {
     mocks.sessionData.mockReturnValue(portableSession());
 
-    renderGate("/~/toolsets?tab=all");
+    renderGate("/@self/settings?tab=members");
 
     expect(screen.getByTestId("location").textContent).toBe(
-      "/acme/projects/proj-a/toolsets?tab=all",
+      "/acme/settings?tab=members",
     );
     expect(screen.getByTestId("app")).toBeTruthy();
   });
 
-  it("prefers the last-visited project", () => {
+  it("resumes a /@self destination after login", () => {
+    mocks.sessionData.mockReturnValue(portableSession());
+
+    renderGate("/login?redirect=%2F%40self%2Fsettings");
+
+    expect(screen.getByTestId("location").textContent).toBe("/acme/settings");
+  });
+
+  it("keeps an explicit project instead of the last-visited one", () => {
     localStorage.setItem("preferredProject", "proj-b");
     mocks.sessionData.mockReturnValue(portableSession());
 
-    renderGate("/~/toolsets");
+    renderGate("/@self/projects/default/toolsets");
 
     expect(screen.getByTestId("location").textContent).toBe(
-      "/acme/projects/proj-b/toolsets",
+      "/acme/projects/default/toolsets",
     );
   });
 
@@ -637,5 +680,227 @@ describe("AuthProvider portable paths", () => {
       "/acme/projects/proj-a/toolsets",
     );
     expect(screen.getByTestId("app")).toBeTruthy();
+  });
+});
+
+describe("AuthProvider organization host", () => {
+  const ORG_HOST = "https://ai.example.test";
+  const PAGE = "/test-org/mcp?tab=logs#recent";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    // The move reads the browser's own location, not the router's.
+    window.history.replaceState(null, "", PAGE);
+    replaceSpy = vi
+      .spyOn(window.location, "replace")
+      .mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    cleanup();
+    sessionStorage.clear();
+    window.history.replaceState(null, "", "/");
+    replaceSpy?.mockRestore();
+    replaceSpy = undefined;
+  });
+
+  it("moves to the organization's host keeping the path, query and hash", async () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+    );
+
+    renderGate(PAGE);
+
+    await waitFor(() => {
+      expect(replaceSpy).toHaveBeenCalledWith(`${ORG_HOST}${PAGE}`);
+    });
+    expect(replaceSpy).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("app")).toBeNull();
+  });
+
+  it("stays when the organization's host is the current host", () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        activeOrganizationDashboardUrl: window.location.origin,
+      }),
+    );
+
+    renderGate(PAGE);
+
+    expect(screen.getByTestId("app")).toBeTruthy();
+    expect(replaceSpy).not.toHaveBeenCalled();
+  });
+
+  it("stays without an active organization", () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        activeOrganizationId: "",
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+    );
+
+    renderGate("/login");
+
+    expect(screen.getByTestId("app")).toBeTruthy();
+    expect(replaceSpy).not.toHaveBeenCalled();
+  });
+
+  it("stays for an impersonation session", () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        impersonatorEmail: "operator@example.test",
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+    );
+
+    renderGate(PAGE);
+
+    expect(screen.getByTestId("app")).toBeTruthy();
+    expect(replaceSpy).not.toHaveBeenCalled();
+  });
+
+  it("stays when the cached session is no longer authorized", () => {
+    mocks.sessionData.mockReturnValue({
+      ...gatedSession({
+        whitelisted: true,
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+      error: new GramError("unauthorized", {
+        response: new Response(null, { status: 401 }),
+        request: new Request("https://app.getgram.ai/rpc/auth.info"),
+        body: "",
+      }),
+      status: "error",
+    });
+
+    renderGate(PAGE);
+
+    expect(replaceSpy).not.toHaveBeenCalled();
+  });
+
+  it("stays when the session has no token", () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        session: "",
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+    );
+
+    renderGate(PAGE);
+
+    expect(replaceSpy).not.toHaveBeenCalled();
+  });
+
+  it("switches to the organization named in the URL instead of moving", async () => {
+    mocks.switchScopes.mockResolvedValue({});
+    const otherPage = "/other-org/projects/other-project/mcp";
+    window.history.replaceState(null, "", otherPage);
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        organizations: [ORG, OTHER_ORG],
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+    );
+
+    renderGate(otherPage);
+
+    await waitFor(() => {
+      expect(mocks.switchScopes).toHaveBeenCalledWith({
+        organizationId: OTHER_ORG.id,
+      });
+    });
+    expect(replaceSpy).not.toHaveBeenCalledWith(`${ORG_HOST}${otherPage}`);
+  });
+
+  it("stays when the dashboard URL is not absolute", () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        activeOrganizationDashboardUrl: "/elsewhere",
+      }),
+    );
+
+    renderGate(PAGE);
+
+    expect(screen.getByTestId("app")).toBeTruthy();
+    expect(replaceSpy).not.toHaveBeenCalled();
+  });
+
+  it("stays on a hand-off page that keeps its token on this host", () => {
+    const handoff = "/risk-policy-challenge/acknowledge";
+    window.history.replaceState(null, "", handoff);
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+    );
+
+    renderGate(handoff);
+
+    expect(screen.getByTestId("app")).toBeTruthy();
+    expect(replaceSpy).not.toHaveBeenCalled();
+  });
+
+  it("still moves another organization to a host this tab visited", async () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+    );
+    renderGate(PAGE);
+    await waitFor(() => {
+      expect(replaceSpy).toHaveBeenCalledTimes(1);
+    });
+    cleanup();
+
+    const otherPage = "/other-org/mcp";
+    window.history.replaceState(null, "", otherPage);
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        organizations: [ORG, OTHER_ORG],
+        organization: OTHER_ORG,
+        activeOrganizationId: OTHER_ORG.id,
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+    );
+    renderGate(otherPage);
+
+    await waitFor(() => {
+      expect(replaceSpy).toHaveBeenCalledTimes(2);
+    });
+    expect(replaceSpy).toHaveBeenLastCalledWith(`${ORG_HOST}${otherPage}`);
+  });
+
+  it("does not move a tab to the same host twice", async () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+    );
+
+    renderGate(PAGE);
+    await waitFor(() => {
+      expect(replaceSpy).toHaveBeenCalledTimes(1);
+    });
+    cleanup();
+
+    // The tab came back to this host: it renders the app instead of leaving.
+    renderGate(PAGE);
+
+    expect(screen.getByTestId("app")).toBeTruthy();
+    expect(replaceSpy).toHaveBeenCalledTimes(1);
   });
 });

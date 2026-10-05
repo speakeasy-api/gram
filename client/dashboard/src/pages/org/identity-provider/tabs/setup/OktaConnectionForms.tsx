@@ -288,10 +288,11 @@ export function AgentSetupForm({
       <ApiErrorAlert error={record.error} />
       <FieldDescription id="okta-agent-help">
         The agent ID is the wlp... value in the Okta agent page URL, and it
-        drives the deep links on the Cross App Access tab. The bound application
-        ID is the Client ID of the app Okta created with the agent; with it,
-        Speakeasy can check that app after each applications sync. Okta does not
-        expose either through its API. Leave a field empty to clear it.
+        drives the Okta deep links in the Server connections table below. The
+        bound application ID is the Client ID of the app Okta created with the
+        agent; with it, Speakeasy can check that app after each applications
+        sync. Okta does not expose either through its API. Leave a field empty
+        to clear it.
       </FieldDescription>
       <a
         href="https://help.okta.com/oie/en-us/content/topics/ai-agents/ai-agent-add-manually.htm"

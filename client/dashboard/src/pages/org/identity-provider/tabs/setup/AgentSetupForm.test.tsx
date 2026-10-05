@@ -79,7 +79,9 @@ describe("AgentSetupForm", () => {
       "https://help.okta.com/oie/en-us/content/topics/ai-agents/ai-agent-add-manually.htm",
     );
     expect(
-      screen.getByText(/drives the deep links on the Cross App Access tab/),
+      screen.getByText(
+        /drives the Okta deep links in the Server connections table below/,
+      ),
     ).toBeTruthy();
     expect(
       screen

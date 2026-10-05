@@ -298,6 +298,9 @@ func EncodeListIssuersRequest(encoder func(*http.Request) goahttp.Encoder) func(
 		if p.Limit != nil {
 			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
 		}
+		if p.Tier != nil {
+			values.Add("tier", *p.Tier)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

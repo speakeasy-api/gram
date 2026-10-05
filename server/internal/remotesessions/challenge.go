@@ -40,6 +40,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -101,6 +102,11 @@ type ParentChallenge struct {
 	// Authority carries only provider-neutral mint-time request authority. It
 	// never contains advisory network identity or provider credentials.
 	Authority networkingress.Authority
+	// BrowserCookieID and BrowserHash bind the login to a host-only browser
+	// cookie on the client's callback host. Set only when that host differs
+	// from the host holding the parent challenge's callback cookie.
+	BrowserCookieID string
+	BrowserHash     string
 }
 
 // RemoteLoginState is the per-remote-leg Redis state, keyed by the opaque
@@ -152,8 +158,13 @@ type RemoteLoginState struct {
 	// ExpectedIssuer is what the RFC 9207 iss parameter must equal; empty skips the check.
 	ExpectedIssuer string `json:"expected_issuer,omitempty"`
 	// Nonce is echoed by the ID token; empty for states minted before it existed.
-	Nonce     string    `json:"nonce,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	Nonce string `json:"nonce,omitempty"`
+	// BrowserCookieID and BrowserHash replace the parent challenge's callback
+	// cookie check when the login lands on a different callback host. Empty
+	// for same-host logins and states minted before they existed.
+	BrowserCookieID string    `json:"browser_cookie_id,omitempty"`
+	BrowserHash     string    `json:"browser_hash,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 // parent rebuilds the ParentChallenge this state was minted from, so the
@@ -173,6 +184,8 @@ func (s RemoteLoginState) parent() ParentChallenge {
 		MetaMcpServerID:     s.MetaMcpServerID,
 		AutoRefresh:         s.AutoRefresh,
 		Authority:           s.Authority,
+		BrowserCookieID:     s.BrowserCookieID,
+		BrowserHash:         s.BrowserHash,
 	}
 }
 
@@ -192,6 +205,10 @@ type ChallengeManager struct {
 	locks     cache.Cache
 	refresher *RefreshService
 	serverURL *url.URL
+
+	// origins pins the redirect_uri and client identity URLs each client was
+	// registered with, independent of serverURL.
+	origins CallbackOrigins
 
 	// revoker pushes RFC 7009 revocations upstream when the consent screen
 	// disconnects a remote session, so the provider drops the tokens rather
@@ -294,6 +311,12 @@ func WithTokenEndpointAssertionSigner(signer TokenEndpointAssertionSigner) Chall
 	return func(m *ChallengeManager) { m.assertions = signer }
 }
 
+// WithCallbackOrigins replaces the default origins, which pin every client to
+// the server URL.
+func WithCallbackOrigins(origins CallbackOrigins) ChallengeManagerOption {
+	return func(m *ChallengeManager) { m.origins = origins }
+}
+
 func NewChallengeManager(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
@@ -322,6 +345,7 @@ func NewChallengeManager(
 		refresher:      nil,
 		issuerMetadata: nil,
 		serverURL:      serverURL,
+		origins:        DefaultCallbackOrigins(serverURL),
 		revoker:        NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy, tunnels),
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
 			interceptors.NewGoogle(logger),
@@ -345,6 +369,7 @@ func NewChallengeManager(
 	// The manager's own refreshes restate identity with the same verifier.
 	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, tunnels, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher), WithRefreshTokenEndpointAssertionSigner(manager.assertions))
 	manager.rotator = NewClientRotator(logger, db, enc, policy, tunnels, cacheImpl, serverURL, manager.revoker, manager.auditLogger, manager.registrationTelemetry)
+	manager.rotator.origins = manager.origins
 	return manager
 }
 
@@ -360,6 +385,7 @@ type Client struct {
 	IssuerSlug            string
 
 	// IssuerName is the issuer's operator-set display name, nil when unset.
+	// WithCatalogBranding may fill it and IssuerLogoAssetID from the catalog.
 	IssuerName *string
 
 	// IssuerLogoAssetID references the issuer's logo image in the assets
@@ -428,6 +454,10 @@ type Client struct {
 	// remote_sessions=true) so a client registered against the old
 	// oauth_proxy_servers URL keeps working without re-registration.
 	LegacyCallbackUrl bool
+
+	// CallbackBaseURL is the origin the client registered its redirect_uri
+	// on. Invalid (NULL) resolves to the pinned outbound callback origin.
+	CallbackBaseURL pgtype.Text
 
 	// IssuerRegistrationEndpoint is the RFC 7591 registration endpoint the
 	// client's issuer publishes, as discovery last refreshed it; empty when
@@ -556,6 +586,7 @@ func (m *ChallengeManager) ListClients(
 			Audience:                                         conv.FromPGTextOrEmpty[string](r.ClientAudience),
 			Passthrough:                                      r.Passthrough,
 			LegacyCallbackUrl:                                r.LegacyCallbackUrl,
+			CallbackBaseURL:                                  r.CallbackBaseUrl,
 			IssuerRegistrationEndpoint:                       conv.FromPGTextOrEmpty[string](r.IssuerRegistrationEndpoint),
 			ClientSecretExpiresAt:                            timestampPtr(r.ClientSecretExpiresAt),
 			UpstreamRejectedAt:                               timestampPtr(r.UpstreamRejectedAt),
@@ -872,7 +903,8 @@ func (m *ChallengeManager) mintAuthorization(
 		return "", fmt.Errorf("generate nonce: %w", err)
 	}
 	codeChallenge := s256Challenge(verifier)
-	redirectURI := m.callbackURL(canonicalCallbackRouteBase)
+	origin := m.origins.ForClient(client.CallbackBaseURL)
+	redirectURI := RemoteLoginCallbackURL(origin)
 	stateParam := stateID
 	if client.LegacyCallbackUrl {
 		// Upstream was registered against the legacy oauth_proxy_servers
@@ -882,7 +914,7 @@ func (m *ChallengeManager) mintAuthorization(
 		// bare stateID, same as the non-legacy path: with the proxy gone,
 		// /oauth/callback serves only these forwards, so there is nothing to
 		// tell them apart from and no envelope is needed.
-		redirectURI = m.legacyCallbackURL()
+		redirectURI = LegacyProxyCallbackURL(origin)
 	}
 
 	// Parse the upstream authorize URL before the cache write so a malformed
@@ -937,6 +969,8 @@ func (m *ChallengeManager) mintAuthorization(
 		ResourceRetried:       retry,
 		ExpectedIssuer:        expectedIssuer,
 		Nonce:                 nonce,
+		BrowserCookieID:       parent.BrowserCookieID,
+		BrowserHash:           parent.BrowserHash,
 		CreatedAt:             time.Now(),
 	}
 	if err := m.cache.Store(ctx, state); err != nil {
@@ -1443,25 +1477,6 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slo
 // the post-callback bounce.
 const canonicalCallbackRouteBase = "mcp"
 
-// callbackURL is the route-base-scoped path the upstream provider redirects
-// back to after the user authenticates. Empty routeBase falls back to "mcp"
-// for back-compat with callers that haven't been threaded with a RouteBase
-// yet (and for in-flight states minted before this parameter landed).
-func (m *ChallengeManager) callbackURL(routeBase string) string {
-	if routeBase == "" {
-		routeBase = canonicalCallbackRouteBase
-	}
-	return strings.TrimRight(m.serverURL.String(), "/") + "/" + routeBase + "/remote_login_callback"
-}
-
-// legacyCallbackURL is the oauth_proxy_servers-era redirect_uri. Used only for
-// clients flagged LegacyCallbackUrl whose upstream registration still points at
-// this path; HandleLegacyProxyCallback forwards them into
-// /mcp/remote_login_callback.
-func (m *ChallengeManager) legacyCallbackURL() string {
-	return strings.TrimRight(m.serverURL.String(), "/") + "/oauth/callback"
-}
-
 // HandleLegacyProxyCallback is the shim behind `GET /oauth/callback`, the
 // oauth_proxy_servers-era redirect_uri that clients flagged LegacyCallbackUrl
 // still send upstream. The proxy that once shared this path is gone, so every
@@ -1469,7 +1484,9 @@ func (m *ChallengeManager) legacyCallbackURL() string {
 // code, error) unchanged to the canonical /mcp/remote_login_callback, where the
 // remote-session flow finishes the exchange.
 func (m *ChallengeManager) HandleLegacyProxyCallback(w http.ResponseWriter, r *http.Request) error {
-	target := strings.TrimRight(m.serverURL.String(), "/") + "/" + canonicalCallbackRouteBase + "/remote_login_callback"
+	// The query carries no client, so forward to the pinned origin. Every
+	// platform host serves the remote-login callback.
+	target := RemoteLoginCallbackURL(m.origins.Outbound)
 	if raw := r.URL.RawQuery; raw != "" {
 		target += "?" + raw
 	}

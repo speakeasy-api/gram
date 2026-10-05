@@ -248,6 +248,12 @@ type syntheticLoginOptions struct {
 	tunnels *tunnelrouting.HTTPClient
 	// maxDBConns constrains the fixture pool for connection-ownership tests.
 	maxDBConns int32
+	// serverURL is the manager's server URL; empty uses http://localhost.
+	serverURL string
+	// callbackOrigins, when set, replaces the manager's default origins.
+	callbackOrigins *remotesessions.CallbackOrigins
+	// clientCallbackBaseURL is the client's recorded callback origin; empty stores NULL.
+	clientCallbackBaseURL string
 }
 
 type syntheticLoginOption func(*syntheticLoginOptions)
@@ -414,6 +420,9 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	var refreshOptions []remotesessions.RefreshOption
 	var issuerMetadata *remotesessions.IssuerMetadataRefresher
 	var issuerMetadataReader *sdkmetric.ManualReader
+	if options.callbackOrigins != nil {
+		managerOptions = append(managerOptions, remotesessions.WithCallbackOrigins(*options.callbackOrigins))
+	}
 	if options.issuerMetadataRefresh {
 		issuerMetadataReader = sdkmetric.NewManualReader()
 		issuerMetadata = remotesessions.NewIssuerMetadataRefresher(logger, sdkmetric.NewMeterProvider(sdkmetric.WithReader(issuerMetadataReader)), ti.conn, policy, options.tunnels, audit.NewLogger())
@@ -459,7 +468,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		policy,
 		options.tunnels,
 		cache.NewRedisCacheAdapter(redisClient),
-		mustURL(t, "http://localhost"),
+		mustURL(t, conv.Default(options.serverURL, "http://localhost")),
 		managerOptions...,
 	)
 	refresher := remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), ti.conn, enc, policy, options.tunnels, cache.NewRedisCacheAdapter(redisClient), refreshOptions...)
@@ -526,6 +535,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		TokenEndpointAuthMethod: conv.ToPGText("none"),
 		Scope:                   options.clientScope,
 		LegacyCallbackUrl:       options.legacyCallbackURL,
+		CallbackBaseUrl:         conv.ToPGTextEmpty(options.clientCallbackBaseURL),
 	})
 	require.NoError(t, err)
 

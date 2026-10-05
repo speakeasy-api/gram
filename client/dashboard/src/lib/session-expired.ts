@@ -62,7 +62,7 @@ export function safeRedirectPath(value: string | null): string | undefined {
 export function redirectToLoginOnUnauthorized(): Promise<void> {
   if (redirecting) return Promise.resolve();
 
-  const { pathname, search } = window.location;
+  const { pathname, search, hash } = window.location;
   if (UNAUTHENTICATED_PATHS.some((p) => pathname.startsWith(p))) {
     return Promise.resolve();
   }
@@ -90,8 +90,10 @@ export function redirectToLoginOnUnauthorized(): Promise<void> {
       if (response?.status !== 401) return;
 
       redirecting = true;
-      clearStorageForLogout();
-      const target = safeRedirectPath(pathname + search);
+      // auth.info 401 is the proof this document is logged out, not an
+      // impersonation load that has not classified yet.
+      clearStorageForLogout(undefined, { confirmedLoggedOut: true });
+      const target = safeRedirectPath(pathname + search + hash);
       if (!target) {
         window.location.assign("/login");
         return;

@@ -804,7 +804,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 		selectedAgent, err := s.authorizeConsentAgent(ctx, challengeState, endpoint, selectedAgentID)
 		if err != nil {
-			return oops.E(oops.CodeForbidden, err, "selected agent is not eligible").LogWarn(ctx, logger)
+			return consentAgentAuthorizationError(err, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
 		// Keep the challenge retryable while the human connects and attaches
 		// required services. Human-owned tokens alone do not authorize an agent.
@@ -814,6 +814,12 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			return oops.E(oops.CodeUnavailable, err, "resolve selected agent identity").LogWarn(ctx, logger)
 		}
 		if err := s.remoteChallengeMgr.CheckAccessTokens(agentCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); err != nil {
+			if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
+				return remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
+			}
+			if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
+				return oops.E(oops.CodeFailedPrecondition, err, "%s", remoteSessionMisconfiguredDescription).LogWarn(ctx, logger)
+			}
 			if !errors.Is(err, remotesessions.ErrNoValidToken) {
 				return oops.E(oops.CodeUnavailable, err, "check agent connections").LogError(ctx, logger)
 			}
@@ -917,7 +923,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		agentAuthorization, ferr = s.authorizeConsentAgent(ctx, challengeState, finalEndpoint, selectedAgentID)
 		if ferr != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
-			return oops.E(oops.CodeForbidden, ferr, "selected agent is not eligible").LogWarn(ctx, logger)
+			return consumedConsentAgentAuthorizationError(ferr).LogWarn(ctx, logger)
 		}
 	}
 
@@ -1256,9 +1262,10 @@ func tokenLine(renderedAt time.Time, token *remotesessions.IntrospectedToken, ac
 }
 
 // issuerCardBranding resolves the branding a consent card renders for its
-// identity provider. The display fallback matches
-// formatRemoteSessionIssuerDisplay in the dashboard: a trimmed non-empty
-// name wins, otherwise the identifier the page always rendered (the slug).
+// identity provider: a trimmed non-empty name wins, otherwise the identifier
+// the page always rendered (the slug). Callers run WithCatalogBranding first,
+// so the name and logo may be the platform catalog's; the dashboard's
+// formatRemoteSessionIssuerDisplay has no such fallback.
 // The resource's own name outranks both, but only when the client recorded
 // it for a resource this endpoint fronts (ownResource): a client shared with
 // another endpoint must not lend that endpoint's name to this one.
@@ -1376,6 +1383,7 @@ func (s *Service) buildRemoteSessionCards(
 	if len(clients) == 0 {
 		return nil, nil
 	}
+	clients = s.remoteChallengeMgr.WithCatalogBranding(ctx, clients)
 
 	// Single round-trip for connection state across all cards. Empty when
 	// the subject hasn't been stamped yet (early render before IDP /
@@ -1444,6 +1452,12 @@ func (s *Service) buildRemoteSessionCards(
 			validatedAt = state.LastValidatedAt.UTC().Format(time.RFC3339)
 			validatedAgo = formatTimeAgo(renderedAt, *state.LastValidatedAt)
 		}
+		// The stored inactive reason embeds the display resolved at probe
+		// time; recompose it so it always names the service the title does.
+		validationReason := state.ValidationReason
+		if state.ValidationStatus == remotesessions.ValidationOutcomeInactive {
+			validationReason = inactiveReason(issuerDisplay)
+		}
 		tokenActive, tokenExpiresAt, tokenExpiresIn := tokenLine(renderedAt, state.Token, state.AccessExpiresAt)
 		requested, _ := c.RequestedScopes()
 		connected := hasSession && state.Status == remotesessions.RemoteSessionActive && !unroutable
@@ -1480,7 +1494,7 @@ func (s *Service) buildRemoteSessionCards(
 			Unverified:             state.ValidationStatus == remotesessions.ValidationOutcomeUnknown,
 			ValidatedAt:            validatedAt,
 			ValidatedAgo:           validatedAgo,
-			ValidationReason:       state.ValidationReason,
+			ValidationReason:       validationReason,
 			ValidationNotice:       "",
 			CanValidate:            routing.canValidate(c, state.Resource),
 			Pending:                false,
@@ -1591,11 +1605,15 @@ func (s *Service) maybeAutoConnect(
 	// autoRefresh is nil: the subject has not been shown the control yet, so
 	// there is no choice to record. The page's own Connect action is what
 	// authors a stored preference.
-	challengeURL, err := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, clients, nil)
+	challengeURL, hop, err := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, clients, nil)
 	if err != nil {
 		// Already logged. Render the page so the user can connect manually
 		// rather than seeing an error for a step they did not take.
 		return false, nil
+	}
+	if hop {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Referrer-Policy", "no-referrer")
 	}
 
 	http.Redirect(w, r, challengeURL, http.StatusSeeOther)

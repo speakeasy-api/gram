@@ -24,6 +24,10 @@ type Client struct {
 	// registerIssuer endpoint.
 	RegisterIssuerDoer goahttp.Doer
 
+	// UpdateIssuer Doer is the HTTP client used to make requests to the
+	// updateIssuer endpoint.
+	UpdateIssuerDoer goahttp.Doer
+
 	// WithdrawIssuer Doer is the HTTP client used to make requests to the
 	// withdrawIssuer endpoint.
 	WithdrawIssuerDoer goahttp.Doer
@@ -31,6 +35,10 @@ type Client struct {
 	// AdmitSubject Doer is the HTTP client used to make requests to the
 	// admitSubject endpoint.
 	AdmitSubjectDoer goahttp.Doer
+
+	// UpdateSubject Doer is the HTTP client used to make requests to the
+	// updateSubject endpoint.
+	UpdateSubjectDoer goahttp.Doer
 
 	// WithdrawSubject Doer is the HTTP client used to make requests to the
 	// withdrawSubject endpoint.
@@ -59,8 +67,10 @@ func NewClient(
 	return &Client{
 		ListDoer:            doer,
 		RegisterIssuerDoer:  doer,
+		UpdateIssuerDoer:    doer,
 		WithdrawIssuerDoer:  doer,
 		AdmitSubjectDoer:    doer,
+		UpdateSubjectDoer:   doer,
 		WithdrawSubjectDoer: doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
@@ -118,6 +128,30 @@ func (c *Client) RegisterIssuer() goa.Endpoint {
 	}
 }
 
+// UpdateIssuer returns an endpoint that makes HTTP requests to the
+// workloadIdentities service updateIssuer server.
+func (c *Client) UpdateIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateIssuerRequest(c.encoder)
+		decodeResponse = DecodeUpdateIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "updateIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // WithdrawIssuer returns an endpoint that makes HTTP requests to the
 // workloadIdentities service withdrawIssuer server.
 func (c *Client) WithdrawIssuer() goa.Endpoint {
@@ -161,6 +195,30 @@ func (c *Client) AdmitSubject() goa.Endpoint {
 		resp, err := c.AdmitSubjectDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("workloadIdentities", "admitSubject", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateSubject returns an endpoint that makes HTTP requests to the
+// workloadIdentities service updateSubject server.
+func (c *Client) UpdateSubject() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateSubjectRequest(c.encoder)
+		decodeResponse = DecodeUpdateSubjectResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateSubjectRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateSubjectDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "updateSubject", err)
 		}
 		return decodeResponse(resp)
 	}

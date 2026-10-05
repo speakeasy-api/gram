@@ -48,7 +48,7 @@ func TestToolsetsService_DeleteToolset_Success(t *testing.T) {
 
 	// Verify it's deleted by trying to get it
 	_, err = ti.service.GetToolset(ctx, &gen.GetToolsetPayload{
-		Slug:             created.Slug,
+		Slug:             string(created.Slug),
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})

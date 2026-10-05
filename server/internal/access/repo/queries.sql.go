@@ -13,7 +13,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const createOrganizationRole = `-- name: CreateOrganizationRole :one
+const createOrganizationRoleWithRequests = `-- name: CreateOrganizationRoleWithRequests :one
+WITH created AS (
 INSERT INTO organization_roles (
     organization_id,
     workos_slug,
@@ -40,7 +41,10 @@ ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
     workos_deleted_at = NULL,
     updated_at = clock_timestamp()
 WHERE organization_roles.deleted_at IS NOT NULL
-RETURNING
+RETURNING id, organization_id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, workos_deleted_at, workos_deleted, workos_last_event_id, created_at, updated_at, deleted_at, deleted
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('organization_id', organization_id, 'role_urn', 'role:organization:' || id::text)), '[]'::jsonb) FROM created)::jsonb AS requests,
     id,
     ('role:organization:' || id::text)::text AS role_urn,
     workos_slug,
@@ -49,9 +53,10 @@ RETURNING
     workos_created_at,
     workos_updated_at,
     0::bigint AS member_count
+FROM created
 `
 
-type CreateOrganizationRoleParams struct {
+type CreateOrganizationRoleWithRequestsParams struct {
 	OrganizationID    string
 	WorkosSlug        string
 	WorkosName        string
@@ -61,7 +66,8 @@ type CreateOrganizationRoleParams struct {
 	WorkosLastEventID pgtype.Text
 }
 
-type CreateOrganizationRoleRow struct {
+type CreateOrganizationRoleWithRequestsRow struct {
+	Requests          []byte
 	ID                uuid.UUID
 	RoleUrn           string
 	WorkosSlug        string
@@ -73,8 +79,8 @@ type CreateOrganizationRoleRow struct {
 }
 
 // Creates an org-scoped role, reactivating a soft-deleted row for the same slug.
-func (q *Queries) CreateOrganizationRole(ctx context.Context, arg CreateOrganizationRoleParams) (CreateOrganizationRoleRow, error) {
-	row := q.db.QueryRow(ctx, createOrganizationRole,
+func (q *Queries) CreateOrganizationRoleWithRequests(ctx context.Context, arg CreateOrganizationRoleWithRequestsParams) (CreateOrganizationRoleWithRequestsRow, error) {
+	row := q.db.QueryRow(ctx, createOrganizationRoleWithRequests,
 		arg.OrganizationID,
 		arg.WorkosSlug,
 		arg.WorkosName,
@@ -83,8 +89,9 @@ func (q *Queries) CreateOrganizationRole(ctx context.Context, arg CreateOrganiza
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
 	)
-	var i CreateOrganizationRoleRow
+	var i CreateOrganizationRoleWithRequestsRow
 	err := row.Scan(
+		&i.Requests,
 		&i.ID,
 		&i.RoleUrn,
 		&i.WorkosSlug,
@@ -288,6 +295,70 @@ func (q *Queries) FindMCPResourceProject(ctx context.Context, arg FindMCPResourc
 	var project_id uuid.UUID
 	err := row.Scan(&project_id)
 	return project_id, err
+}
+
+const findMCPResourceVisibility = `-- name: FindMCPResourceVisibility :one
+SELECT resource_type, visibility FROM (
+  SELECT
+    'toolset'::text AS resource_type,
+    (CASE
+      WHEN NOT toolsets.mcp_enabled THEN 'disabled'
+      WHEN toolsets.mcp_is_public THEN 'public'
+      ELSE 'private'
+    END)::text AS visibility,
+    2 AS source_rank
+  FROM toolsets
+  JOIN projects ON projects.id = toolsets.project_id
+  WHERE projects.organization_id = $1
+    AND toolsets.id = $2::uuid
+    AND toolsets.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT 'mcp_server'::text AS resource_type, mcp_servers.visibility::text AS visibility, 1 AS source_rank
+  FROM mcp_servers
+  JOIN projects ON projects.id = mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND mcp_servers.id = $2::uuid
+    AND mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT 'gateway'::text AS resource_type, meta_mcp_servers.visibility::text AS visibility, 0 AS source_rank
+  FROM meta_mcp_servers
+  JOIN projects ON projects.id = meta_mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND meta_mcp_servers.id = $2::uuid
+    AND meta_mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+) AS owning
+ORDER BY (visibility = 'disabled') DESC, source_rank
+LIMIT 1
+`
+
+type FindMCPResourceVisibilityParams struct {
+	OrganizationID string
+	ResourceID     uuid.UUID
+}
+
+type FindMCPResourceVisibilityRow struct {
+	ResourceType string
+	Visibility   string
+}
+
+// Resolves who may connect to one MCP resource without an access rule, as the
+// same three-valued visibility mcp_servers stores: 'public' endpoints skip the
+// connect check, 'private' ones enforce it, and 'disabled' ones serve nobody.
+// A gateway toolset is public when its MCP endpoint is, and serves nobody
+// while its MCP endpoint is switched off. A hosted wrapper can share its
+// toolset's id; when either row serves nobody, nobody can connect, so
+// 'disabled' wins, and otherwise the wrapper's own visibility does. A gateway
+// (meta server) is reported as such: it has no connect check of its own, each
+// member server is checked instead. Resources are found by the same
+// identifiers and tenancy rules as FindMCPResourceProject.
+func (q *Queries) FindMCPResourceVisibility(ctx context.Context, arg FindMCPResourceVisibilityParams) (FindMCPResourceVisibilityRow, error) {
+	row := q.db.QueryRow(ctx, findMCPResourceVisibility, arg.OrganizationID, arg.ResourceID)
+	var i FindMCPResourceVisibilityRow
+	err := row.Scan(&i.ResourceType, &i.Visibility)
+	return i, err
 }
 
 const getActiveDirectoryGroupName = `-- name: GetActiveDirectoryGroupName :one
@@ -1023,7 +1094,10 @@ func (q *Queries) ListAccessNotificationUsers(ctx context.Context, organizationI
 
 const listAccessibleMCPServersForUser = `-- name: ListAccessibleMCPServersForUser :many
 WITH user_grants AS (
-  SELECT pg.scope, pg.selectors
+  SELECT
+    pg.scope,
+    pg.selectors,
+    (pg.principal_type = 'user' AND pg.principal_urn <> 'user:all') AS direct
   FROM principal_grants pg
   WHERE pg.organization_id = $1
     AND COALESCE(pg.effect, 'allow') = 'allow'
@@ -1051,6 +1125,8 @@ WITH user_grants AS (
   SELECT
     s.id AS server_id,
     ug.scope,
+    ug.direct,
+    COALESCE(ug.selectors->>'resource_id', '*') <> '*' AS concrete,
     -- Whether this grant would also satisfy StrictMatches, which exclusions
     -- use: every dimension it names must be one the check constrains. A
     -- tool- or disposition-scoped block narrows something inside the server,
@@ -1084,6 +1160,7 @@ WHERE NOT EXISTS (
   WHERE blocked.server_id = s.id
     AND blocked.strict
     AND blocked.scope = 'mcp:blocked_' || split_part(allowed.scope, ':', 2)
+    AND (blocked.direct OR NOT (allowed.direct AND allowed.concrete))
 )
 ORDER BY s.name
 `
@@ -1112,7 +1189,9 @@ type ListAccessibleMCPServersForUserRow struct {
 // The shape mirrors the authorization engine's own: a permission is an allow
 // grant for a scope minus a blocked_ grant for THAT SAME scope proving the same
 // server (see authz/expressions.go). mcp:blocked_connect withdraws
-// mcp:connect; it does not withdraw mcp:read.
+// mcp:connect; it does not withdraw mcp:read. A grant made directly to the
+// user that names this server outranks a block inherited from a role or
+// user:all, while the user's own blocks always apply (authz/precedence.go).
 func (q *Queries) ListAccessibleMCPServersForUser(ctx context.Context, arg ListAccessibleMCPServersForUserParams) ([]ListAccessibleMCPServersForUserRow, error) {
 	rows, err := q.db.Query(ctx, listAccessibleMCPServersForUser, arg.OrganizationID, arg.PrincipalUrns)
 	if err != nil {
@@ -1141,7 +1220,10 @@ func (q *Queries) ListAccessibleMCPServersForUser(ctx context.Context, arg ListA
 
 const listAccessibleSkillsForUser = `-- name: ListAccessibleSkillsForUser :many
 WITH user_grants AS (
-  SELECT pg.scope, pg.selectors
+  SELECT
+    pg.scope,
+    pg.selectors,
+    (pg.principal_type = 'user' AND pg.principal_urn <> 'user:all') AS direct
   FROM principal_grants pg
   WHERE pg.organization_id = $1
     AND COALESCE(pg.effect, 'allow') = 'allow'
@@ -1161,7 +1243,11 @@ WITH user_grants AS (
   -- authz.allowedSelectorKeys), so there is no project_id to honour here and
   -- no narrower block that could fail StrictMatches — the wildcard and the
   -- per-skill grant are the only shapes a skill grant can take.
-  SELECT cs.id AS skill_id, ug.scope
+  SELECT
+    cs.id AS skill_id,
+    ug.scope,
+    ug.direct,
+    COALESCE(ug.selectors->>'resource_id', '*') <> '*' AS concrete
   FROM candidate_skills cs
   JOIN user_grants ug ON (
     ug.selectors->>'resource_kind' IN ('*', 'skill')
@@ -1182,6 +1268,7 @@ WHERE NOT EXISTS (
   SELECT 1 FROM grant_matches blocked
   WHERE blocked.skill_id = cs.id
     AND blocked.scope = 'skill:blocked_' || split_part(allowed.scope, ':', 2)
+    AND (blocked.direct OR NOT (allowed.direct AND allowed.concrete))
 )
 ORDER BY cs.display_name, cs.name
 `
@@ -1204,7 +1291,8 @@ type ListAccessibleSkillsForUserRow struct {
 //
 // Authorization only, on the same terms as the MCP query above: a skill
 // distributed to a plugin the user holds is still unreachable if RBAC does not
-// allow it, so distribution is not consulted.
+// allow it, so distribution is not consulted. Principal precedence also
+// matches: a direct grant naming the skill outranks an inherited block.
 // SELECT DISTINCT only permits ORDER BY over selected columns, and
 // skills.display_name is NOT NULL, so the coalesce it replaced never fell back.
 func (q *Queries) ListAccessibleSkillsForUser(ctx context.Context, arg ListAccessibleSkillsForUserParams) ([]ListAccessibleSkillsForUserRow, error) {
@@ -2430,6 +2518,102 @@ func (q *Queries) ListRetainedResolvedChallengeIDs(ctx context.Context, organiza
 	return items, nil
 }
 
+const listUserDirectoryRoleMappingSources = `-- name: ListUserDirectoryRoleMappingSources :many
+WITH member AS (
+  SELECT u.id, u.email
+  FROM users AS u
+  WHERE u.id = $2::text
+),
+profile AS (
+  SELECT d.id, d.attributes
+  FROM directory_users AS d
+  CROSS JOIN member
+  WHERE d.organization_id = $1
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = member.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(member.email)))
+  ORDER BY (d.user_id = member.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+  LIMIT 1
+)
+SELECT
+  drm.role_urn::text AS role_urn,
+  drm.source_kind,
+  dg.name AS directory_group_name,
+  drm.attribute_key,
+  drm.attribute_value
+FROM directory_role_mappings AS drm
+CROSS JOIN profile
+LEFT JOIN directory_groups AS dg
+  ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+WHERE drm.organization_id = $1
+  AND drm.deleted IS FALSE
+  AND (
+    (
+      drm.source_kind = 'group'
+      AND dg.id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM directory_user_group_memberships AS m
+        WHERE m.directory_user_id = profile.id
+          AND m.directory_group_id = drm.directory_group_id
+          AND m.deleted IS FALSE
+      )
+    )
+    OR (
+      drm.source_kind = 'attribute'
+      AND profile.attributes ->> drm.attribute_key = drm.attribute_value
+    )
+  )
+ORDER BY drm.role_urn, drm.source_kind, dg.name, drm.attribute_key, drm.attribute_value, drm.id
+`
+
+type ListUserDirectoryRoleMappingSourcesParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+type ListUserDirectoryRoleMappingSourcesRow struct {
+	RoleUrn            string
+	SourceKind         string
+	DirectoryGroupName pgtype.Text
+	AttributeKey       pgtype.Text
+	AttributeValue     pgtype.Text
+}
+
+// The directory role mappings that currently give a member each of their
+// mapped roles: one row per matching mapping, so a role reached through two
+// groups is listed twice. The profile and matching rules are the same as the
+// mapped half of ListUserRolePrincipals, which decides the roles themselves;
+// this read only says where they came from.
+func (q *Queries) ListUserDirectoryRoleMappingSources(ctx context.Context, arg ListUserDirectoryRoleMappingSourcesParams) ([]ListUserDirectoryRoleMappingSourcesRow, error) {
+	rows, err := q.db.Query(ctx, listUserDirectoryRoleMappingSources, arg.OrganizationID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserDirectoryRoleMappingSourcesRow
+	for rows.Next() {
+		var i ListUserDirectoryRoleMappingSourcesRow
+		if err := rows.Scan(
+			&i.RoleUrn,
+			&i.SourceKind,
+			&i.DirectoryGroupName,
+			&i.AttributeKey,
+			&i.AttributeValue,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserRolePrincipals = `-- name: ListUserRolePrincipals :many
 WITH direct AS (
   SELECT
@@ -3147,7 +3331,8 @@ func (q *Queries) UpsertDirectoryGroupRoleMapping(ctx context.Context, arg Upser
 	return i, err
 }
 
-const upsertGlobalRole = `-- name: UpsertGlobalRole :exec
+const upsertGlobalRoleWithRequests = `-- name: UpsertGlobalRoleWithRequests :one
+WITH upserted AS (
 INSERT INTO global_roles (
     workos_slug,
     workos_name,
@@ -3171,9 +3356,12 @@ ON CONFLICT (workos_slug) DO UPDATE SET
     deleted_at = NULL,
     workos_deleted_at = NULL,
     updated_at = clock_timestamp()
+RETURNING id, (xmax = 0) AS inserted
+)
+SELECT (SELECT COALESCE(jsonb_agg(jsonb_build_object('global_role_id', id)), '[]'::jsonb) FROM upserted WHERE inserted)::jsonb AS requests
 `
 
-type UpsertGlobalRoleParams struct {
+type UpsertGlobalRoleWithRequestsParams struct {
 	WorkosSlug        string
 	WorkosName        string
 	WorkosDescription pgtype.Text
@@ -3184,8 +3372,9 @@ type UpsertGlobalRoleParams struct {
 
 // Upsert an environment-level role. WorkOS sync callers pass an event ID;
 // local/bootstrap callers pass NULL so an existing WorkOS event cursor is preserved.
-func (q *Queries) UpsertGlobalRole(ctx context.Context, arg UpsertGlobalRoleParams) error {
-	_, err := q.db.Exec(ctx, upsertGlobalRole,
+// Only inserts emit fanout requests; the outbox consumer paginates organizations.
+func (q *Queries) UpsertGlobalRoleWithRequests(ctx context.Context, arg UpsertGlobalRoleWithRequestsParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, upsertGlobalRoleWithRequests,
 		arg.WorkosSlug,
 		arg.WorkosName,
 		arg.WorkosDescription,
@@ -3193,108 +3382,9 @@ func (q *Queries) UpsertGlobalRole(ctx context.Context, arg UpsertGlobalRolePara
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
 	)
-	return err
-}
-
-const upsertOrganizationRole = `-- name: UpsertOrganizationRole :one
-WITH upserted AS (
-INSERT INTO organization_roles (
-    organization_id,
-    workos_slug,
-    workos_name,
-    workos_description,
-    workos_created_at,
-    workos_updated_at,
-    workos_last_event_id
-) VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    $6,
-    $7
-)
-ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
-    workos_name = EXCLUDED.workos_name,
-    workos_description = EXCLUDED.workos_description,
-    workos_updated_at = EXCLUDED.workos_updated_at,
-    workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, organization_roles.workos_last_event_id),
-    deleted_at = NULL,
-    workos_deleted_at = NULL,
-    updated_at = clock_timestamp()
-RETURNING
-    id,
-    organization_id,
-    workos_slug,
-    workos_name,
-    workos_description,
-    workos_created_at,
-    workos_updated_at
-)
-SELECT
-  upserted.id,
-  ('role:organization:' || upserted.id::text)::text AS role_urn,
-  upserted.workos_slug,
-  upserted.workos_name,
-  upserted.workos_description,
-  upserted.workos_created_at,
-  upserted.workos_updated_at,
-  COUNT(ora.id)::bigint AS member_count
-FROM upserted
-LEFT JOIN organization_role_assignments AS ora
-  ON ora.organization_id = upserted.organization_id
-  AND ora.role_urn = 'role:organization:' || upserted.id::text
-  AND ora.user_id IS NOT NULL
-  AND ora.deleted_at IS NULL
-GROUP BY upserted.id, upserted.workos_slug, upserted.workos_name, upserted.workos_description, upserted.workos_created_at, upserted.workos_updated_at
-`
-
-type UpsertOrganizationRoleParams struct {
-	OrganizationID    string
-	WorkosSlug        string
-	WorkosName        string
-	WorkosDescription pgtype.Text
-	WorkosCreatedAt   pgtype.Timestamptz
-	WorkosUpdatedAt   pgtype.Timestamptz
-	WorkosLastEventID pgtype.Text
-}
-
-type UpsertOrganizationRoleRow struct {
-	ID                uuid.UUID
-	RoleUrn           string
-	WorkosSlug        string
-	WorkosName        string
-	WorkosDescription pgtype.Text
-	WorkosCreatedAt   pgtype.Timestamptz
-	WorkosUpdatedAt   pgtype.Timestamptz
-	MemberCount       int64
-}
-
-// Upsert an org-scoped role. WorkOS sync callers pass an event ID; local role
-// lifecycle callers pass NULL so an existing WorkOS event cursor is preserved.
-func (q *Queries) UpsertOrganizationRole(ctx context.Context, arg UpsertOrganizationRoleParams) (UpsertOrganizationRoleRow, error) {
-	row := q.db.QueryRow(ctx, upsertOrganizationRole,
-		arg.OrganizationID,
-		arg.WorkosSlug,
-		arg.WorkosName,
-		arg.WorkosDescription,
-		arg.WorkosCreatedAt,
-		arg.WorkosUpdatedAt,
-		arg.WorkosLastEventID,
-	)
-	var i UpsertOrganizationRoleRow
-	err := row.Scan(
-		&i.ID,
-		&i.RoleUrn,
-		&i.WorkosSlug,
-		&i.WorkosName,
-		&i.WorkosDescription,
-		&i.WorkosCreatedAt,
-		&i.WorkosUpdatedAt,
-		&i.MemberCount,
-	)
-	return i, err
+	var requests []byte
+	err := row.Scan(&requests)
+	return requests, err
 }
 
 const upsertOrganizationRoleAssignment = `-- name: UpsertOrganizationRoleAssignment :execrows
@@ -3368,6 +3458,112 @@ func (q *Queries) UpsertOrganizationRoleAssignment(ctx context.Context, arg Upse
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const upsertOrganizationRoleWithRequests = `-- name: UpsertOrganizationRoleWithRequests :one
+WITH upserted AS (
+INSERT INTO organization_roles (
+    organization_id,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7
+)
+ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
+    workos_name = EXCLUDED.workos_name,
+    workos_description = EXCLUDED.workos_description,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, organization_roles.workos_last_event_id),
+    deleted_at = NULL,
+    workos_deleted_at = NULL,
+    updated_at = clock_timestamp()
+RETURNING
+    id,
+    organization_id,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    (xmax = 0) AS inserted
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('organization_id', organization_id, 'role_urn', 'role:organization:' || id::text)), '[]'::jsonb) FROM upserted WHERE inserted)::jsonb AS requests,
+  upserted.id,
+  ('role:organization:' || upserted.id::text)::text AS role_urn,
+  upserted.workos_slug,
+  upserted.workos_name,
+  upserted.workos_description,
+  upserted.workos_created_at,
+  upserted.workos_updated_at,
+  COUNT(ora.id)::bigint AS member_count
+FROM upserted
+LEFT JOIN organization_role_assignments AS ora
+  ON ora.organization_id = upserted.organization_id
+  AND ora.role_urn = 'role:organization:' || upserted.id::text
+  AND ora.user_id IS NOT NULL
+  AND ora.deleted_at IS NULL
+GROUP BY upserted.id, upserted.workos_slug, upserted.workos_name, upserted.workos_description, upserted.workos_created_at, upserted.workos_updated_at
+`
+
+type UpsertOrganizationRoleWithRequestsParams struct {
+	OrganizationID    string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+}
+
+type UpsertOrganizationRoleWithRequestsRow struct {
+	Requests          []byte
+	ID                uuid.UUID
+	RoleUrn           string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	MemberCount       int64
+}
+
+// Upsert an org-scoped role. WorkOS sync callers pass an event ID; local role
+// lifecycle callers pass NULL so an existing WorkOS event cursor is preserved.
+// Ordinary sync updates do not create distribution setup requests.
+func (q *Queries) UpsertOrganizationRoleWithRequests(ctx context.Context, arg UpsertOrganizationRoleWithRequestsParams) (UpsertOrganizationRoleWithRequestsRow, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizationRoleWithRequests,
+		arg.OrganizationID,
+		arg.WorkosSlug,
+		arg.WorkosName,
+		arg.WorkosDescription,
+		arg.WorkosCreatedAt,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+	)
+	var i UpsertOrganizationRoleWithRequestsRow
+	err := row.Scan(
+		&i.Requests,
+		&i.ID,
+		&i.RoleUrn,
+		&i.WorkosSlug,
+		&i.WorkosName,
+		&i.WorkosDescription,
+		&i.WorkosCreatedAt,
+		&i.WorkosUpdatedAt,
+		&i.MemberCount,
+	)
+	return i, err
 }
 
 const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one

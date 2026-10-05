@@ -82,6 +82,10 @@ type Service struct {
 	// workosEnvironmentID scopes WorkOS dashboard links. Empty leaves them out.
 	workosEnvironmentID string
 
+	// newOrganizationDefaultHost is recorded as the default host of
+	// organizations staff create. Null records none.
+	newOrganizationDefaultHost pgtype.Text
+
 	// workos creates organizations in the identity provider. Deployments with
 	// no WorkOS configuration get orgprovision.Unavailable, whose failure
 	// CreateOrganization reports rather than working around.
@@ -99,6 +103,7 @@ type Service struct {
 	billing BillingOperations
 
 	supportCoverage SupportCoverageReader
+	mcpServerHealth MCPServerHealthReader
 }
 
 type BillingOperations interface {
@@ -106,6 +111,8 @@ type BillingOperations interface {
 	GetMeterUsageForOrganization(context.Context, string, *usagegen.GetMeterUsagePayload) (*usagegen.MeterUsageResponse, error)
 	GetSpendBreakdownForOrganization(context.Context, string, *usagegen.GetSpendBreakdownPayload) (*usagegen.SpendBreakdownResponse, error)
 	GetStripeCustomer(context.Context, string) (*stripeclient.CustomerDetails, error)
+	// GetStripeSubscriptionByID loads a live Stripe subscription so an assignment can verify its customer.
+	GetStripeSubscriptionByID(context.Context, string) (*stripeclient.SubscriptionState, error)
 	GetStripeSubscriptionForOrganization(context.Context, string) (*usage.StripeSubscription, error)
 	SetStripeSubscriptionCancelAtPeriodEndForOrganization(context.Context, string, usage.BillingActor, bool) (*usage.StripeSubscription, error)
 }
@@ -203,6 +210,7 @@ func NewService(
 	openRouterSpendCap OpenRouterSpendCapScheduler,
 	billing BillingOperations,
 	supportCoverage SupportCoverageReader,
+	mcpServerHealth MCPServerHealthReader,
 	dashboardURL *url.URL,
 	registry *mcpregistry.Service,
 ) *Service {
@@ -223,14 +231,15 @@ func NewService(
 	)
 
 	return &Service{remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", registry: registry,
-		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
-		logger:         logger,
-		db:             db,
-		oidc:           oidcClient,
-		sessions:       sessionStore,
-		verifier:       NewVerifier(logger, sessionStore, oidcClient, adminCache),
-		allowedOrigins: allowedOrigins,
-		dashboardURL:   dashboardURL,
+		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
+		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
+		logger:                     logger,
+		db:                         db,
+		oidc:                       oidcClient,
+		sessions:                   sessionStore,
+		verifier:                   NewVerifier(logger, sessionStore, oidcClient, adminCache),
+		allowedOrigins:             allowedOrigins,
+		dashboardURL:               dashboardURL,
 		supportHandoffIssuer: supporthandoff.NewIssuer(
 			supporthandoff.NewStore(adminCache),
 		),
@@ -249,7 +258,14 @@ func NewService(
 		trial:           trialNotifier,
 		billing:         billing,
 		supportCoverage: supportCoverage,
+		mcpServerHealth: mcpServerHealth,
 	}
+}
+
+// SetNewOrganizationDefaultHost sets the default host recorded on
+// organizations staff create. Unset records none.
+func (s *Service) SetNewOrganizationDefaultHost(host pgtype.Text) {
+	s.newOrganizationDefaultHost = host
 }
 
 func (s *Service) GetSession(ctx context.Context, _ *gen.GetSessionPayload) (*gen.AdminSession, error) {
@@ -262,7 +278,8 @@ func (s *Service) GetSession(ctx context.Context, _ *gen.GetSessionPayload) (*ge
 
 func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *gen.ProductFeatures {
 	return &gen.ProductFeatures{
-		LogsEnabled: snapshot.LogsEnabled, ToolIoLogsEnabled: snapshot.ToolIoLogsEnabled, SessionCaptureEnabled: snapshot.SessionCaptureEnabled,
+		AutomaticRoleDistribution: snapshot.AutomaticRoleDistribution,
+		LogsEnabled:               snapshot.LogsEnabled, ToolIoLogsEnabled: snapshot.ToolIoLogsEnabled, SessionCaptureEnabled: snapshot.SessionCaptureEnabled,
 		AuthzChallengeLoggingEnabled: snapshot.AuthzChallengeLoggingEnabled, SsoEnabled: snapshot.SsoEnabled, ScimEnabled: snapshot.ScimEnabled,
 		HooksBrowserLoginEnabled: snapshot.HooksBrowserLoginEnabled, HooksFailOpenEnabled: snapshot.HooksFailOpenEnabled,
 		CustomModelKeysEnabled: snapshot.CustomModelKeysEnabled, SkillsEnabled: snapshot.SkillsEnabled, SkillCaptureMetadataOnly: snapshot.SkillCaptureMetadataOnly,
@@ -401,8 +418,21 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.Callback = scopeMCPAdminCookie(server.Callback)
 	server.ListOrganizations = service.rejectEmptyOrganizationStatus(server.ListOrganizations)
 	server.GetSession = service.preauthorizeAdmin(server.GetSession)
-	server.GetOrganizationOnboarding = service.preauthorizeAdmin(server.GetOrganizationOnboarding)
-	server.SetOrganizationOnboarding = service.strictAdminJSON(server.SetOrganizationOnboarding, func() any { return new(onboardingRequestBody) })
+	server.GetOrganizationOnboardingStack = service.preauthorizeAdmin(server.GetOrganizationOnboardingStack)
+	server.SetOrganizationOnboardingStack = service.strictAdminJSON(server.SetOrganizationOnboardingStack, func() any { return new(adminserver.SetOrganizationOnboardingStackRequestBody) })
+	server.GetOnboardingStackOptions = service.preauthorizeAdmin(server.GetOnboardingStackOptions)
+	server.ListOnboardingSteps = service.preauthorizeAdmin(server.ListOnboardingSteps)
+	server.ListOnboardingUseCases = service.preauthorizeAdmin(server.ListOnboardingUseCases)
+	server.CreateOnboardingUseCase = service.strictAdminJSON(server.CreateOnboardingUseCase, func() any { return new(adminserver.CreateOnboardingUseCaseRequestBody) })
+	server.UpdateOnboardingUseCase = service.strictAdminJSON(server.UpdateOnboardingUseCase, func() any { return new(adminserver.UpdateOnboardingUseCaseRequestBody) })
+	server.DeleteOnboardingUseCase = service.strictAdminJSON(server.DeleteOnboardingUseCase, func() any { return new(adminserver.DeleteOnboardingUseCaseRequestBody) })
+	server.ListOnboardingPlaybooks = service.preauthorizeAdmin(server.ListOnboardingPlaybooks)
+	server.CreateOnboardingPlaybook = service.strictAdminJSON(server.CreateOnboardingPlaybook, func() any { return new(adminserver.CreateOnboardingPlaybookRequestBody) })
+	server.UpdateOnboardingPlaybook = service.strictAdminJSON(server.UpdateOnboardingPlaybook, func() any { return new(adminserver.UpdateOnboardingPlaybookRequestBody) })
+	server.DeleteOnboardingPlaybook = service.strictAdminJSON(server.DeleteOnboardingPlaybook, func() any { return new(adminserver.DeleteOnboardingPlaybookRequestBody) })
+	server.CloneOnboardingPlaybook = service.strictAdminJSON(server.CloneOnboardingPlaybook, func() any { return new(adminserver.CloneOnboardingPlaybookRequestBody) })
+	server.GetOrganizationOnboardingPlaybook = service.preauthorizeAdmin(server.GetOrganizationOnboardingPlaybook)
+	server.AssignOrganizationOnboardingPlaybook = service.strictAdminJSON(server.AssignOrganizationOnboardingPlaybook, func() any { return new(adminserver.AssignOrganizationOnboardingPlaybookRequestBody) })
 	server.GetOrganizationFeatures = service.preauthorizeAdmin(server.GetOrganizationFeatures)
 	server.GetOrganizationChatAnalysisSettings = service.preauthorizeAdmin(server.GetOrganizationChatAnalysisSettings)
 	server.GetStripeCustomer = service.preauthorizeAdmin(server.GetStripeCustomer)
@@ -412,6 +442,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.SetOrganizationFeature = service.strictAdminJSON(server.SetOrganizationFeature, func() any { return new(adminserver.SetOrganizationFeatureRequestBody) })
 	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })
 	server.SetStripeCustomer = service.strictAdminJSON(server.SetStripeCustomer, func() any { return new(adminserver.SetStripeCustomerRequestBody) })
+	server.GetStripeSubscriptionCandidate = service.preauthorizeAdmin(server.GetStripeSubscriptionCandidate)
+	server.SetStripeSubscription = service.strictAdminJSON(server.SetStripeSubscription, func() any { return new(adminserver.SetStripeSubscriptionRequestBody) })
 	server.TriggerOrganizationChatAnalysis = service.strictAdminJSON(server.TriggerOrganizationChatAnalysis, func() any { return new(adminserver.TriggerOrganizationChatAnalysisRequestBody) })
 	server.CreateGlobalIssuer = service.strictAdminJSON(server.CreateGlobalIssuer, func() any { return new(adminserver.CreateGlobalIssuerRequestBody) })
 	server.GetGlobalIssuerDuplicatePreflight = service.preauthorizeAdmin(server.GetGlobalIssuerDuplicatePreflight)
@@ -1092,6 +1124,24 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 	if payload.AccountType == nil && payload.Whitelisted == nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "at least one of account_type or whitelisted must be supplied")
 	}
+	if payload.AccountType == nil {
+		tx, err := s.db.Begin(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "begin organization whitelist change").LogError(ctx, s.logger)
+		}
+		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+		actor, displayName, _ := adminActor(ctx)
+		if _, err := SetOrganizationWhitelistTx(ctx, tx, s.audit, payload.ID, *payload.Whitelisted, actor, displayName); err != nil {
+			if errors.Is(err, ErrOrganizationWhitelistNotFound) {
+				return nil, oops.E(oops.CodeNotFound, err, "organization not found")
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "set organization whitelist").LogError(ctx, s.logger)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "commit organization whitelist change").LogError(ctx, s.logger)
+		}
+		return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after whitelist change")
+	}
 	// See ExtendTrial: the design bounds this too, but generated validation only
 	// runs at the HTTP boundary.
 	if payload.AccountType != nil && !constants.IsAccountType(*payload.AccountType) {
@@ -1189,27 +1239,33 @@ func (s *Service) BulkUpdateAccountType(ctx context.Context, payload *gen.BulkUp
 }
 
 func (s *Service) DisableOrganization(ctx context.Context, payload *gen.DisableOrganizationPayload) (*gen.AdminOrganization, error) {
-	rows, err := repo.New(s.db).AdminDisableOrganization(ctx, payload.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "disable organization").LogError(ctx, s.logger)
-	}
-	if rows == 0 {
-		return nil, oops.C(oops.CodeNotFound)
-	}
-
-	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after disable")
+	return s.setOrganizationAccess(ctx, payload.ID, false, "disable")
 }
 
 func (s *Service) EnableOrganization(ctx context.Context, payload *gen.EnableOrganizationPayload) (*gen.AdminOrganization, error) {
-	rows, err := repo.New(s.db).AdminEnableOrganization(ctx, payload.ID)
+	return s.setOrganizationAccess(ctx, payload.ID, true, "enable")
+}
+
+func (s *Service) setOrganizationAccess(ctx context.Context, organizationID string, enabled bool, operation string) (*gen.AdminOrganization, error) {
+	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "enable organization").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin organization access transaction").LogError(ctx, logger)
 	}
-	if rows == 0 {
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	actor, actorDisplayName, _ := adminActor(ctx)
+	_, err = SetOrganizationAccessTx(ctx, tx, s.audit, organizationID, enabled, actor, actorDisplayName)
+	if errors.Is(err, ErrOrganizationAccessNotFound) {
 		return nil, oops.C(oops.CodeNotFound)
 	}
-
-	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after enable")
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "%s organization", operation).LogError(ctx, logger)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit organization access change").LogError(ctx, logger)
+	}
+	return s.readOrganizationAfterWrite(ctx, organizationID, "fetch organization after "+operation)
 }
 
 // TrialExtension is the trial end-date transition an extension wrote.
@@ -1543,6 +1599,7 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		// and that path records no source, so writing it here is what makes the
 		// two orderings agree.
 		CreationSource: conv.ToPGText(orgprovision.SourcePlatformAdmin),
+		DefaultHost:    s.newOrganizationDefaultHost,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create organization metadata: %w", err), organizationCreationUncertain).LogError(ctx, logger)

@@ -48,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	telemrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -128,8 +129,8 @@ type Service struct {
 	trialBundleSeeder auth.EnterpriseTrialBundleSeeder
 	posthog           onboardingTelemetry
 	growth            *growthsignals.Emitter
-	serverURL         string // API server URL; used to build invite links
-	siteURL           string // frontend URL; used for post-callback browser redirects
+	siteURL           string            // frontend URL; used for post-callback browser redirects
+	orgHosts          *orghost.Resolver // resolves the host of links sent by email
 	audit             *audit.Logger
 	svix              *svix.Svix
 }
@@ -138,7 +139,7 @@ var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService EmailSender, trialNotifier trialemails.Notifier, trialBundleSeeder auth.EnterpriseTrialBundleSeeder, posthog onboardingTelemetry, growthEmitter *growthsignals.Emitter, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService EmailSender, trialNotifier trialemails.Notifier, trialBundleSeeder auth.EnterpriseTrialBundleSeeder, posthog onboardingTelemetry, growthEmitter *growthsignals.Emitter, siteURL string, orgHosts *orghost.Resolver, auditLogger *audit.Logger, svix *svix.Svix) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 	if trialNotifier == nil {
 		trialNotifier = trialemails.NoopNotifier{}
@@ -160,8 +161,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		trialBundleSeeder: trialBundleSeeder,
 		posthog:           posthog,
 		growth:            growthEmitter,
-		serverURL:         serverURL,
 		siteURL:           siteURL,
+		orgHosts:          orgHosts,
 		audit:             auditLogger,
 		svix:              svix,
 	}
@@ -337,7 +338,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 
 	inviteLink := ""
 	if s.email != nil {
-		inviteURL, err := url.Parse(s.serverURL + inviteCallbackPath)
+		inviteURL, err := url.Parse(s.orgHosts.ServerURL(org.DefaultHost).String() + inviteCallbackPath)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build invite link").LogError(ctx, logger)
 		}
@@ -1188,15 +1189,15 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
 	orgSlug := org.Slug
 
-	config, err := LoadOnboardingConfiguration(ctx, s.db, org.ID)
+	tasks, err := projectSetupTasks(ctx, orgrepo.New(s.db), org.ID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "setup callback: read onboarding configuration", attr.SlogError(err))
-		span.SetStatus(codes.Error, "read onboarding configuration failed")
+		s.logger.ErrorContext(ctx, "setup callback: project setup tasks", attr.SlogError(err))
+		span.SetStatus(codes.Error, "project setup tasks failed")
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	visible := make(map[string]bool, len(config.Tasks))
-	for _, task := range config.Tasks {
+	visible := make(map[string]bool, len(tasks))
+	for _, task := range tasks {
 		visible[task.Key] = !task.Hidden
 	}
 	// All identity setup steps belong to the combined card. Refresh domains even
@@ -1238,7 +1239,7 @@ func (s *Service) SendEnterpriseAdminOnboardingEmail(ctx context.Context, payloa
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").LogError(ctx, s.logger)
 	}
 
-	setupLink := fmt.Sprintf("%s/%s/setup", strings.TrimRight(s.siteURL, "/"), org.Slug)
+	setupLink := fmt.Sprintf("%s/%s/setup", strings.TrimRight(s.orgHosts.SiteURL(org.DefaultHost).String(), "/"), org.Slug)
 
 	tmpl := email.EnterpriseAdminOnboarding{SetupLink: setupLink}
 

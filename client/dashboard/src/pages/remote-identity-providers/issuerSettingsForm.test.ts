@@ -108,6 +108,27 @@ describe("buildUpdateIssuerForm", () => {
 
   // Without a discovery for the current URL the server must keep the metadata
   // it already has (COALESCE narg semantics), so the arrays are omitted.
+  it("omits the scope override unless the caller supplies it", () => {
+    const form = buildUpdateIssuerForm(baseState);
+
+    expect("scopeOverride" in form).toBe(false);
+  });
+
+  it("sets the scope override from comma-separated input", () => {
+    const form = buildUpdateIssuerForm({
+      ...baseState,
+      scopeOverride: " openid,  mcp_api , ,refresh_token ",
+    });
+
+    expect(form.scopeOverride).toEqual(["openid", "mcp_api", "refresh_token"]);
+  });
+
+  it("clears the scope override with an empty array when blanked", () => {
+    const form = buildUpdateIssuerForm({ ...baseState, scopeOverride: "  " });
+
+    expect(form.scopeOverride).toEqual([]);
+  });
+
   it("omits the RFC 8414 arrays when no discovery has run", () => {
     const form = buildUpdateIssuerForm(baseState);
 

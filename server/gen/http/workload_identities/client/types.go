@@ -25,12 +25,40 @@ type RegisterIssuerRequestBody struct {
 	// an https URL on a fully qualified domain name.
 	JwksURI string `form:"jwks_uri" json:"jwks_uri" xml:"jwks_uri"`
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
-	// Defaults to false, and is re-checked on every lookup, so clearing it revokes
-	// wildcard rules already written.
-	AllowWildcardAdmission bool `form:"allow_wildcard_admission" json:"allow_wildcard_admission" xml:"allow_wildcard_admission"`
+	// Defaults to true. Checked when a wildcard rule is admitted and again on
+	// every lookup, so clearing it makes wildcard rules already written inert
+	// immediately.
+	AllowWildcardAdmission *bool `form:"allow_wildcard_admission,omitempty" json:"allow_wildcard_admission,omitempty" xml:"allow_wildcard_admission,omitempty"`
+	// What the platform is and what runs on it, in the operator's words. Trimmed
+	// on write; blank is stored as none. At most 500 characters after trimming.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Free-form labels for grouping and filtering trusted platforms. Flat strings,
+	// not key/value pairs. Trimmed and de-duplicated on write, then limited to 40
+	// tags of at most 64 characters each.
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// Register the issuer for the selected project alone rather than the whole
-	// organization. Defaults to false.
+	// organization. Requires a caller that names a project; a dashboard session
+	// does not. Defaults to false.
 	ProjectScoped bool `form:"project_scoped" json:"project_scoped" xml:"project_scoped"`
+}
+
+// UpdateIssuerRequestBody is the type of the "workloadIdentities" service
+// "updateIssuer" endpoint HTTP request body.
+type UpdateIssuerRequestBody struct {
+	// The workload issuer id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The label an operator works with. Unique within its tier.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Where the issuer publishes the keys its assertions are signed with. Must be
+	// an https URL on a fully qualified domain name.
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// What the platform is and what runs on it, in the operator's words. Trimmed
+	// on write; blank clears it. At most 500 characters after trimming.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Replaces the issuer's tags; an empty list clears them. Trimmed and
+	// de-duplicated on write, then limited to 40 tags of at most 64 characters
+	// each.
+	Tags []string `json:"tags,omitzero"`
 }
 
 // AdmitSubjectRequestBody is the type of the "workloadIdentities" service
@@ -50,11 +78,33 @@ type AdmitSubjectRequestBody struct {
 	MatchKind string `form:"match_kind" json:"match_kind" xml:"match_kind"`
 	// Optional label, for platforms whose subjects are not self-describing.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Free-form labels for finding the admitted workload in a long list. Flat
+	// strings, not key/value pairs. Trimmed and de-duplicated on write, then
+	// limited to 40 tags of at most 64 characters each.
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// The agent whose policy the admitted workload inherits.
 	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
 	// Admit the subject for the selected project alone rather than the whole
-	// organization. Defaults to false.
+	// organization. Requires a caller that names a project; a dashboard session
+	// does not. Defaults to false.
 	ProjectScoped bool `form:"project_scoped" json:"project_scoped" xml:"project_scoped"`
+}
+
+// UpdateSubjectRequestBody is the type of the "workloadIdentities" service
+// "updateSubject" endpoint HTTP request body.
+type UpdateSubjectRequestBody struct {
+	// The admission id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Optional label, for platforms whose subjects are not self-describing.
+	// Trimmed on write; blank clears it.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Replaces the admission's tags; an empty list clears them. Trimmed and
+	// de-duplicated on write, then limited to 40 tags of at most 64 characters
+	// each.
+	Tags []string `json:"tags,omitzero"`
+	// The agent whose policy the admitted workload inherits. Shared with any
+	// admission of the same subject under the same issuer at the other tier.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 }
 
 // ListResponseBody is the type of the "workloadIdentities" service "list"
@@ -75,6 +125,15 @@ type RegisterIssuerResponseBody struct {
 	Admissions []*WorkloadAdmissionResponseBody `form:"admissions,omitempty" json:"admissions,omitempty" xml:"admissions,omitempty"`
 }
 
+// UpdateIssuerResponseBody is the type of the "workloadIdentities" service
+// "updateIssuer" endpoint HTTP response body.
+type UpdateIssuerResponseBody struct {
+	// Trusted issuers, organization tier first.
+	Issuers []*WorkloadIssuerResponseBody `form:"issuers,omitempty" json:"issuers,omitempty" xml:"issuers,omitempty"`
+	// Admitted subjects.
+	Admissions []*WorkloadAdmissionResponseBody `form:"admissions,omitempty" json:"admissions,omitempty" xml:"admissions,omitempty"`
+}
+
 // WithdrawIssuerResponseBody is the type of the "workloadIdentities" service
 // "withdrawIssuer" endpoint HTTP response body.
 type WithdrawIssuerResponseBody struct {
@@ -87,6 +146,15 @@ type WithdrawIssuerResponseBody struct {
 // AdmitSubjectResponseBody is the type of the "workloadIdentities" service
 // "admitSubject" endpoint HTTP response body.
 type AdmitSubjectResponseBody struct {
+	// Trusted issuers, organization tier first.
+	Issuers []*WorkloadIssuerResponseBody `form:"issuers,omitempty" json:"issuers,omitempty" xml:"issuers,omitempty"`
+	// Admitted subjects.
+	Admissions []*WorkloadAdmissionResponseBody `form:"admissions,omitempty" json:"admissions,omitempty" xml:"admissions,omitempty"`
+}
+
+// UpdateSubjectResponseBody is the type of the "workloadIdentities" service
+// "updateSubject" endpoint HTTP response body.
+type UpdateSubjectResponseBody struct {
 	// Trusted issuers, organization tier first.
 	Issuers []*WorkloadIssuerResponseBody `form:"issuers,omitempty" json:"issuers,omitempty" xml:"issuers,omitempty"`
 	// Admitted subjects.
@@ -457,6 +525,192 @@ type RegisterIssuerUnexpectedResponseBody struct {
 // "workloadIdentities" service "registerIssuer" endpoint HTTP response body
 // for the "gateway_error" error.
 type RegisterIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateIssuerUnauthorizedResponseBody is the type of the "workloadIdentities"
+// service "updateIssuer" endpoint HTTP response body for the "unauthorized"
+// error.
+type UpdateIssuerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateIssuerForbiddenResponseBody is the type of the "workloadIdentities"
+// service "updateIssuer" endpoint HTTP response body for the "forbidden" error.
+type UpdateIssuerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateIssuerBadRequestResponseBody is the type of the "workloadIdentities"
+// service "updateIssuer" endpoint HTTP response body for the "bad_request"
+// error.
+type UpdateIssuerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateIssuerNotFoundResponseBody is the type of the "workloadIdentities"
+// service "updateIssuer" endpoint HTTP response body for the "not_found" error.
+type UpdateIssuerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateIssuerConflictResponseBody is the type of the "workloadIdentities"
+// service "updateIssuer" endpoint HTTP response body for the "conflict" error.
+type UpdateIssuerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateIssuerUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "updateIssuer" endpoint HTTP response body for
+// the "unsupported_media" error.
+type UpdateIssuerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateIssuerInvalidResponseBody is the type of the "workloadIdentities"
+// service "updateIssuer" endpoint HTTP response body for the "invalid" error.
+type UpdateIssuerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateIssuerInvariantViolationResponseBody is the type of the
+// "workloadIdentities" service "updateIssuer" endpoint HTTP response body for
+// the "invariant_violation" error.
+type UpdateIssuerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateIssuerUnexpectedResponseBody is the type of the "workloadIdentities"
+// service "updateIssuer" endpoint HTTP response body for the "unexpected"
+// error.
+type UpdateIssuerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateIssuerGatewayErrorResponseBody is the type of the "workloadIdentities"
+// service "updateIssuer" endpoint HTTP response body for the "gateway_error"
+// error.
+type UpdateIssuerGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -847,6 +1101,194 @@ type AdmitSubjectGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// UpdateSubjectUnauthorizedResponseBody is the type of the
+// "workloadIdentities" service "updateSubject" endpoint HTTP response body for
+// the "unauthorized" error.
+type UpdateSubjectUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSubjectForbiddenResponseBody is the type of the "workloadIdentities"
+// service "updateSubject" endpoint HTTP response body for the "forbidden"
+// error.
+type UpdateSubjectForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSubjectBadRequestResponseBody is the type of the "workloadIdentities"
+// service "updateSubject" endpoint HTTP response body for the "bad_request"
+// error.
+type UpdateSubjectBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSubjectNotFoundResponseBody is the type of the "workloadIdentities"
+// service "updateSubject" endpoint HTTP response body for the "not_found"
+// error.
+type UpdateSubjectNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSubjectConflictResponseBody is the type of the "workloadIdentities"
+// service "updateSubject" endpoint HTTP response body for the "conflict" error.
+type UpdateSubjectConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSubjectUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "updateSubject" endpoint HTTP response body for
+// the "unsupported_media" error.
+type UpdateSubjectUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSubjectInvalidResponseBody is the type of the "workloadIdentities"
+// service "updateSubject" endpoint HTTP response body for the "invalid" error.
+type UpdateSubjectInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSubjectInvariantViolationResponseBody is the type of the
+// "workloadIdentities" service "updateSubject" endpoint HTTP response body for
+// the "invariant_violation" error.
+type UpdateSubjectInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSubjectUnexpectedResponseBody is the type of the "workloadIdentities"
+// service "updateSubject" endpoint HTTP response body for the "unexpected"
+// error.
+type UpdateSubjectUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSubjectGatewayErrorResponseBody is the type of the
+// "workloadIdentities" service "updateSubject" endpoint HTTP response body for
+// the "gateway_error" error.
+type UpdateSubjectGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // WithdrawSubjectUnauthorizedResponseBody is the type of the
 // "workloadIdentities" service "withdrawSubject" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -1051,10 +1493,16 @@ type WorkloadIssuerResponseBody struct {
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
 	// Where the issuer publishes its signing keys.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// What the platform is and what runs on it. Empty rather than absent where
+	// none is set.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
-	AllowWildcardAdmission *bool   `form:"allow_wildcard_admission,omitempty" json:"allow_wildcard_admission,omitempty" xml:"allow_wildcard_admission,omitempty"`
-	CreatedAt              *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt              *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	AllowWildcardAdmission *bool `form:"allow_wildcard_admission,omitempty" json:"allow_wildcard_admission,omitempty" xml:"allow_wildcard_admission,omitempty"`
+	// Free-form labels for grouping and filtering trusted platforms. Empty rather
+	// than absent where none are set.
+	Tags      []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // WorkloadAdmissionResponseBody is used to define fields on response body
@@ -1078,6 +1526,9 @@ type WorkloadAdmissionResponseBody struct {
 	MatchKind *string `form:"match_kind,omitempty" json:"match_kind,omitempty" xml:"match_kind,omitempty"`
 	// Optional label; empty when none was supplied.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Free-form labels for finding the admitted workload. Empty rather than absent
+	// where none are set.
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// The agent whose policy this workload inherits. Empty when the assignment is
 	// missing, which the token endpoint refuses.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
@@ -1099,18 +1550,37 @@ func NewRegisterIssuerRequestBody(p *workloadidentities.RegisterIssuerPayload) *
 		Issuer:                 p.Issuer,
 		JwksURI:                p.JwksURI,
 		AllowWildcardAdmission: p.AllowWildcardAdmission,
+		Description:            p.Description,
 		ProjectScoped:          p.ProjectScoped,
 	}
-	{
-		var zero bool
-		if body.AllowWildcardAdmission == zero {
-			body.AllowWildcardAdmission = false
+	if p.Tags != nil {
+		body.Tags = make([]string, len(p.Tags))
+		for i, val := range p.Tags {
+			body.Tags[i] = val
 		}
 	}
 	{
 		var zero bool
 		if body.ProjectScoped == zero {
 			body.ProjectScoped = false
+		}
+	}
+	return body
+}
+
+// NewUpdateIssuerRequestBody builds the HTTP request body from the payload of
+// the "updateIssuer" endpoint of the "workloadIdentities" service.
+func NewUpdateIssuerRequestBody(p *workloadidentities.UpdateIssuerPayload) *UpdateIssuerRequestBody {
+	body := &UpdateIssuerRequestBody{
+		ID:          p.ID,
+		Name:        p.Name,
+		JwksURI:     p.JwksURI,
+		Description: p.Description,
+	}
+	if p.Tags != nil {
+		body.Tags = make([]string, len(p.Tags))
+		for i, val := range p.Tags {
+			body.Tags[i] = val
 		}
 	}
 	return body
@@ -1133,10 +1603,33 @@ func NewAdmitSubjectRequestBody(p *workloadidentities.AdmitSubjectPayload) *Admi
 			body.MatchKind = "exact"
 		}
 	}
+	if p.Tags != nil {
+		body.Tags = make([]string, len(p.Tags))
+		for i, val := range p.Tags {
+			body.Tags[i] = val
+		}
+	}
 	{
 		var zero bool
 		if body.ProjectScoped == zero {
 			body.ProjectScoped = false
+		}
+	}
+	return body
+}
+
+// NewUpdateSubjectRequestBody builds the HTTP request body from the payload of
+// the "updateSubject" endpoint of the "workloadIdentities" service.
+func NewUpdateSubjectRequestBody(p *workloadidentities.UpdateSubjectPayload) *UpdateSubjectRequestBody {
+	body := &UpdateSubjectRequestBody{
+		ID:      p.ID,
+		Name:    p.Name,
+		AgentID: p.AgentID,
+	}
+	if p.Tags != nil {
+		body.Tags = make([]string, len(p.Tags))
+		for i, val := range p.Tags {
+			body.Tags[i] = val
 		}
 	}
 	return body
@@ -1478,6 +1971,180 @@ func NewRegisterIssuerUnexpected(body *RegisterIssuerUnexpectedResponseBody) *go
 // NewRegisterIssuerGatewayError builds a workloadIdentities service
 // registerIssuer endpoint gateway_error error.
 func NewRegisterIssuerGatewayError(body *RegisterIssuerGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateIssuerWorkloadIdentityPolicyOK builds a "workloadIdentities"
+// service "updateIssuer" endpoint result from a HTTP "OK" response.
+func NewUpdateIssuerWorkloadIdentityPolicyOK(body *UpdateIssuerResponseBody) *workloadidentities.WorkloadIdentityPolicy {
+	v := &workloadidentities.WorkloadIdentityPolicy{}
+	v.Issuers = make([]*types.WorkloadIssuer, len(body.Issuers))
+	for i, val := range body.Issuers {
+		if val == nil {
+			v.Issuers[i] = nil
+			continue
+		}
+		v.Issuers[i] = unmarshalWorkloadIssuerResponseBodyToTypesWorkloadIssuer(val)
+	}
+	v.Admissions = make([]*types.WorkloadAdmission, len(body.Admissions))
+	for i, val := range body.Admissions {
+		if val == nil {
+			v.Admissions[i] = nil
+			continue
+		}
+		v.Admissions[i] = unmarshalWorkloadAdmissionResponseBodyToTypesWorkloadAdmission(val)
+	}
+
+	return v
+}
+
+// NewUpdateIssuerUnauthorized builds a workloadIdentities service updateIssuer
+// endpoint unauthorized error.
+func NewUpdateIssuerUnauthorized(body *UpdateIssuerUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateIssuerForbidden builds a workloadIdentities service updateIssuer
+// endpoint forbidden error.
+func NewUpdateIssuerForbidden(body *UpdateIssuerForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateIssuerBadRequest builds a workloadIdentities service updateIssuer
+// endpoint bad_request error.
+func NewUpdateIssuerBadRequest(body *UpdateIssuerBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateIssuerNotFound builds a workloadIdentities service updateIssuer
+// endpoint not_found error.
+func NewUpdateIssuerNotFound(body *UpdateIssuerNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateIssuerConflict builds a workloadIdentities service updateIssuer
+// endpoint conflict error.
+func NewUpdateIssuerConflict(body *UpdateIssuerConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateIssuerUnsupportedMedia builds a workloadIdentities service
+// updateIssuer endpoint unsupported_media error.
+func NewUpdateIssuerUnsupportedMedia(body *UpdateIssuerUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateIssuerInvalid builds a workloadIdentities service updateIssuer
+// endpoint invalid error.
+func NewUpdateIssuerInvalid(body *UpdateIssuerInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateIssuerInvariantViolation builds a workloadIdentities service
+// updateIssuer endpoint invariant_violation error.
+func NewUpdateIssuerInvariantViolation(body *UpdateIssuerInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateIssuerUnexpected builds a workloadIdentities service updateIssuer
+// endpoint unexpected error.
+func NewUpdateIssuerUnexpected(body *UpdateIssuerUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateIssuerGatewayError builds a workloadIdentities service updateIssuer
+// endpoint gateway_error error.
+func NewUpdateIssuerGatewayError(body *UpdateIssuerGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1838,6 +2505,180 @@ func NewAdmitSubjectGatewayError(body *AdmitSubjectGatewayErrorResponseBody) *go
 	return v
 }
 
+// NewUpdateSubjectWorkloadIdentityPolicyOK builds a "workloadIdentities"
+// service "updateSubject" endpoint result from a HTTP "OK" response.
+func NewUpdateSubjectWorkloadIdentityPolicyOK(body *UpdateSubjectResponseBody) *workloadidentities.WorkloadIdentityPolicy {
+	v := &workloadidentities.WorkloadIdentityPolicy{}
+	v.Issuers = make([]*types.WorkloadIssuer, len(body.Issuers))
+	for i, val := range body.Issuers {
+		if val == nil {
+			v.Issuers[i] = nil
+			continue
+		}
+		v.Issuers[i] = unmarshalWorkloadIssuerResponseBodyToTypesWorkloadIssuer(val)
+	}
+	v.Admissions = make([]*types.WorkloadAdmission, len(body.Admissions))
+	for i, val := range body.Admissions {
+		if val == nil {
+			v.Admissions[i] = nil
+			continue
+		}
+		v.Admissions[i] = unmarshalWorkloadAdmissionResponseBodyToTypesWorkloadAdmission(val)
+	}
+
+	return v
+}
+
+// NewUpdateSubjectUnauthorized builds a workloadIdentities service
+// updateSubject endpoint unauthorized error.
+func NewUpdateSubjectUnauthorized(body *UpdateSubjectUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSubjectForbidden builds a workloadIdentities service updateSubject
+// endpoint forbidden error.
+func NewUpdateSubjectForbidden(body *UpdateSubjectForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSubjectBadRequest builds a workloadIdentities service updateSubject
+// endpoint bad_request error.
+func NewUpdateSubjectBadRequest(body *UpdateSubjectBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSubjectNotFound builds a workloadIdentities service updateSubject
+// endpoint not_found error.
+func NewUpdateSubjectNotFound(body *UpdateSubjectNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSubjectConflict builds a workloadIdentities service updateSubject
+// endpoint conflict error.
+func NewUpdateSubjectConflict(body *UpdateSubjectConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSubjectUnsupportedMedia builds a workloadIdentities service
+// updateSubject endpoint unsupported_media error.
+func NewUpdateSubjectUnsupportedMedia(body *UpdateSubjectUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSubjectInvalid builds a workloadIdentities service updateSubject
+// endpoint invalid error.
+func NewUpdateSubjectInvalid(body *UpdateSubjectInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSubjectInvariantViolation builds a workloadIdentities service
+// updateSubject endpoint invariant_violation error.
+func NewUpdateSubjectInvariantViolation(body *UpdateSubjectInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSubjectUnexpected builds a workloadIdentities service updateSubject
+// endpoint unexpected error.
+func NewUpdateSubjectUnexpected(body *UpdateSubjectUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSubjectGatewayError builds a workloadIdentities service
+// updateSubject endpoint gateway_error error.
+func NewUpdateSubjectGatewayError(body *UpdateSubjectGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewWithdrawSubjectWorkloadIdentityPolicyOK builds a "workloadIdentities"
 // service "withdrawSubject" endpoint result from a HTTP "OK" response.
 func NewWithdrawSubjectWorkloadIdentityPolicyOK(body *WithdrawSubjectResponseBody) *workloadidentities.WorkloadIdentityPolicy {
@@ -2063,6 +2904,32 @@ func ValidateRegisterIssuerResponseBody(body *RegisterIssuerResponseBody) (err e
 	return
 }
 
+// ValidateUpdateIssuerResponseBody runs the validations defined on
+// UpdateIssuerResponseBody
+func ValidateUpdateIssuerResponseBody(body *UpdateIssuerResponseBody) (err error) {
+	if body.Issuers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuers", "body"))
+	}
+	if body.Admissions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("admissions", "body"))
+	}
+	for _, e := range body.Issuers {
+		if e != nil {
+			if err2 := ValidateWorkloadIssuerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Admissions {
+		if e != nil {
+			if err2 := ValidateWorkloadAdmissionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateWithdrawIssuerResponseBody runs the validations defined on
 // WithdrawIssuerResponseBody
 func ValidateWithdrawIssuerResponseBody(body *WithdrawIssuerResponseBody) (err error) {
@@ -2092,6 +2959,32 @@ func ValidateWithdrawIssuerResponseBody(body *WithdrawIssuerResponseBody) (err e
 // ValidateAdmitSubjectResponseBody runs the validations defined on
 // AdmitSubjectResponseBody
 func ValidateAdmitSubjectResponseBody(body *AdmitSubjectResponseBody) (err error) {
+	if body.Issuers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuers", "body"))
+	}
+	if body.Admissions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("admissions", "body"))
+	}
+	for _, e := range body.Issuers {
+		if e != nil {
+			if err2 := ValidateWorkloadIssuerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Admissions {
+		if e != nil {
+			if err2 := ValidateWorkloadAdmissionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateUpdateSubjectResponseBody runs the validations defined on
+// UpdateSubjectResponseBody
+func ValidateUpdateSubjectResponseBody(body *UpdateSubjectResponseBody) (err error) {
 	if body.Issuers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("issuers", "body"))
 	}
@@ -2621,6 +3514,246 @@ func ValidateRegisterIssuerGatewayErrorResponseBody(body *RegisterIssuerGatewayE
 	return
 }
 
+// ValidateUpdateIssuerUnauthorizedResponseBody runs the validations defined on
+// updateIssuer_unauthorized_response_body
+func ValidateUpdateIssuerUnauthorizedResponseBody(body *UpdateIssuerUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerForbiddenResponseBody runs the validations defined on
+// updateIssuer_forbidden_response_body
+func ValidateUpdateIssuerForbiddenResponseBody(body *UpdateIssuerForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerBadRequestResponseBody runs the validations defined on
+// updateIssuer_bad_request_response_body
+func ValidateUpdateIssuerBadRequestResponseBody(body *UpdateIssuerBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerNotFoundResponseBody runs the validations defined on
+// updateIssuer_not_found_response_body
+func ValidateUpdateIssuerNotFoundResponseBody(body *UpdateIssuerNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerConflictResponseBody runs the validations defined on
+// updateIssuer_conflict_response_body
+func ValidateUpdateIssuerConflictResponseBody(body *UpdateIssuerConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerUnsupportedMediaResponseBody runs the validations
+// defined on updateIssuer_unsupported_media_response_body
+func ValidateUpdateIssuerUnsupportedMediaResponseBody(body *UpdateIssuerUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerInvalidResponseBody runs the validations defined on
+// updateIssuer_invalid_response_body
+func ValidateUpdateIssuerInvalidResponseBody(body *UpdateIssuerInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerInvariantViolationResponseBody runs the validations
+// defined on updateIssuer_invariant_violation_response_body
+func ValidateUpdateIssuerInvariantViolationResponseBody(body *UpdateIssuerInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerUnexpectedResponseBody runs the validations defined on
+// updateIssuer_unexpected_response_body
+func ValidateUpdateIssuerUnexpectedResponseBody(body *UpdateIssuerUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateIssuerGatewayErrorResponseBody runs the validations defined on
+// updateIssuer_gateway_error_response_body
+func ValidateUpdateIssuerGatewayErrorResponseBody(body *UpdateIssuerGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateWithdrawIssuerUnauthorizedResponseBody runs the validations defined
 // on withdrawIssuer_unauthorized_response_body
 func ValidateWithdrawIssuerUnauthorizedResponseBody(body *WithdrawIssuerUnauthorizedResponseBody) (err error) {
@@ -3101,6 +4234,246 @@ func ValidateAdmitSubjectGatewayErrorResponseBody(body *AdmitSubjectGatewayError
 	return
 }
 
+// ValidateUpdateSubjectUnauthorizedResponseBody runs the validations defined
+// on updateSubject_unauthorized_response_body
+func ValidateUpdateSubjectUnauthorizedResponseBody(body *UpdateSubjectUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSubjectForbiddenResponseBody runs the validations defined on
+// updateSubject_forbidden_response_body
+func ValidateUpdateSubjectForbiddenResponseBody(body *UpdateSubjectForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSubjectBadRequestResponseBody runs the validations defined on
+// updateSubject_bad_request_response_body
+func ValidateUpdateSubjectBadRequestResponseBody(body *UpdateSubjectBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSubjectNotFoundResponseBody runs the validations defined on
+// updateSubject_not_found_response_body
+func ValidateUpdateSubjectNotFoundResponseBody(body *UpdateSubjectNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSubjectConflictResponseBody runs the validations defined on
+// updateSubject_conflict_response_body
+func ValidateUpdateSubjectConflictResponseBody(body *UpdateSubjectConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSubjectUnsupportedMediaResponseBody runs the validations
+// defined on updateSubject_unsupported_media_response_body
+func ValidateUpdateSubjectUnsupportedMediaResponseBody(body *UpdateSubjectUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSubjectInvalidResponseBody runs the validations defined on
+// updateSubject_invalid_response_body
+func ValidateUpdateSubjectInvalidResponseBody(body *UpdateSubjectInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSubjectInvariantViolationResponseBody runs the validations
+// defined on updateSubject_invariant_violation_response_body
+func ValidateUpdateSubjectInvariantViolationResponseBody(body *UpdateSubjectInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSubjectUnexpectedResponseBody runs the validations defined on
+// updateSubject_unexpected_response_body
+func ValidateUpdateSubjectUnexpectedResponseBody(body *UpdateSubjectUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSubjectGatewayErrorResponseBody runs the validations defined
+// on updateSubject_gateway_error_response_body
+func ValidateUpdateSubjectGatewayErrorResponseBody(body *UpdateSubjectGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateWithdrawSubjectUnauthorizedResponseBody runs the validations defined
 // on withdrawSubject_unauthorized_response_body
 func ValidateWithdrawSubjectUnauthorizedResponseBody(body *WithdrawSubjectUnauthorizedResponseBody) (err error) {
@@ -3362,8 +4735,14 @@ func ValidateWorkloadIssuerResponseBody(body *WorkloadIssuerResponseBody) (err e
 	if body.JwksURI == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("jwks_uri", "body"))
 	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
 	if body.AllowWildcardAdmission == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("allow_wildcard_admission", "body"))
+	}
+	if body.Tags == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tags", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -3412,6 +4791,9 @@ func ValidateWorkloadAdmissionResponseBody(body *WorkloadAdmissionResponseBody) 
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Tags == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tags", "body"))
 	}
 	if body.AgentID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_id", "body"))

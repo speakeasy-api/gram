@@ -5,7 +5,19 @@ import {
   availableClientTypes,
   clientSecretUpdateValue,
   dynamicClientRegistrationAvailability,
+  legacyCallbackURL,
 } from "./issuerFormUtils";
+
+describe("legacyCallbackURL", () => {
+  it("shares the origin of the client's current callback", () => {
+    expect(
+      legacyCallbackURL("https://app.example.com/mcp/remote_login_callback"),
+    ).toBe("https://app.example.com/oauth/callback");
+    expect(
+      legacyCallbackURL("https://ai.example.com/mcp/remote_login_callback"),
+    ).toBe("https://ai.example.com/oauth/callback");
+  });
+});
 
 describe("clientSecretUpdateValue", () => {
   it("does not rotate an unsaved secret for private_key_jwt", () => {

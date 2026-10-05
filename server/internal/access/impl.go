@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -59,7 +60,7 @@ type Service struct {
 	roleMgr  *RoleManager
 	audit    *audit.Logger
 	email    *email.Service
-	siteURL  *url.URL
+	orgHosts *orghost.Resolver
 	foldGate CanonicalFoldGate
 }
 
@@ -85,7 +86,7 @@ func NewService(
 	authz *authz.Engine,
 	auditLogger *audit.Logger,
 	emailService *email.Service,
-	siteURL *url.URL,
+	orgHosts *orghost.Resolver,
 	foldGate CanonicalFoldGate,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
@@ -100,7 +101,7 @@ func NewService(
 		roleMgr:  roleMgr,
 		audit:    auditLogger,
 		email:    emailService,
-		siteURL:  siteURL,
+		orgHosts: orgHosts,
 		foldGate: foldGate,
 	}
 }
@@ -726,13 +727,19 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 
 func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 	scoped := authz.GrantsToScopedGrants(grants)
+	// Direct selectors let clients apply principal precedence: a direct grant
+	// naming a resource outranks a block inherited from a role or everyone.
+	direct := make(map[string][]*gen.Selector)
+	for _, grant := range authz.DirectOverrideGrants(grants) {
+		direct[string(grant.Scope)] = append(direct[string(grant.Scope)], authzSelectorToGen(grant.Selector))
+	}
 	out := make([]*gen.ListRoleGrant, 0, len(scoped))
 	for _, g := range scoped {
 		var selectors []*gen.Selector
 		for _, sel := range g.Selectors {
 			selectors = append(selectors, authzSelectorToGen(sel))
 		}
-		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, SubScopes: g.SubScopes, Selectors: selectors})
+		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, SubScopes: g.SubScopes, Selectors: selectors, DirectSelectors: direct[g.Scope]})
 	}
 	return out
 }
@@ -1583,8 +1590,8 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	// project from the tenant-qualified resource rather than trusting browser
 	// state or a client-supplied project id.
 	manageAccessLink := ""
-	if s.siteURL != nil {
-		accessURL := s.siteURL.JoinPath(org.Slug, "access", "roles")
+	if siteURL := s.orgHosts.SiteURL(org.DefaultHost); siteURL != nil {
+		accessURL := siteURL.JoinPath(org.Slug, "access", "roles")
 		q := url.Values{}
 		q.Set("grant_user", ac.UserID)
 		q.Set("scope", payload.Scope)

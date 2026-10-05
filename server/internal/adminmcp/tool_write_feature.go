@@ -16,16 +16,21 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/roledistribution/requests"
 )
 
 // writableFeatures is the reviewed allowlist for this write, mapped to the
-// side effects shown on the approval page. Each is a reversible flag that
-// organisation admins can also toggle themselves, and each takes the
-// mutator's generic single-row path. Additional features require their own
-// side-effect review before joining this list.
+// side effects shown on the approval page. Remote-session auto-refresh uses
+// the policy setter only while enforcement is off, so its companion flag is
+// never changed. Additional features require their own side-effect review
+// before joining this list.
 var writableFeatures = map[productfeatures.Feature]string{ //nolint:exhaustive // Only reviewed features are writable.
-	productfeatures.FeatureLogs:                 "Updates the organisation's logs entitlement and its feature cache; records a tenant audit event when state changes.",
-	productfeatures.FeatureConsentToolFiltering: "Shows or hides the tool picker on this organisation's MCP consent screens and updates its feature cache; tool selections already stored are still enforced. Records a tenant audit event when state changes.",
+	productfeatures.FeatureSSO:                       "Enables or disables creation of WorkOS SSO setup portal links. Does not create or remove SSO connections, change existing SSO login behaviour, or change the WorkOS-managed SSO connection status. Does not return portal links or change account type, billing or trials. Updates the feature cache and records a tenant audit event when state changes.",
+	productfeatures.FeatureSCIM:                      "Enables or disables creation of WorkOS directory-sync setup portal links. Does not create or remove directories, stop existing directory sync, or change directory-managed membership, roles or the WorkOS-managed SCIM connection status. Does not return portal links or change account type, billing or trials. Updates the feature cache and records a tenant audit event when state changes.",
+	productfeatures.FeatureLogs:                      "Updates the organisation's logs entitlement and its feature cache; records a tenant audit event when state changes.",
+	productfeatures.FeatureConsentToolFiltering:      "Shows or hides the tool picker on this organisation's MCP consent screens and updates its feature cache; tool selections already stored are still enforced. Records a tenant audit event when state changes.",
+	productfeatures.FeatureRemoteSessionAutoRefresh:  "Shows or hides the Auto refresh opt-in on consent screens and allows or stops automatic refresh of eligible sessions whose stored preference is on. Stored per-session choices are unchanged. Requires enforced refresh to remain off; enforcement is not changed. Updates feature caches and records a tenant audit event when state changes.",
+	productfeatures.FeatureAutomaticRoleDistribution: "Temporary staff-only rollout control. Enabling starts setup for active roles. Disabling stops automatic setup but preserves existing plugins and assignments. Re-enabling checks active roles and reuses matching plugins and assignments. Updates the feature cache and records a tenant audit event when state changes.",
 }
 
 func writableFeature(name string) (productfeatures.Feature, bool) {
@@ -36,7 +41,7 @@ func writableFeature(name string) (productfeatures.Feature, bool) {
 
 type PrepareFeatureInput struct {
 	OrganizationID string `json:"organization_id" jsonschema:"Exact canonical organization ID from find_organizations, not a slug"`
-	Feature        string `json:"feature" jsonschema:"Feature to change: logs or consent_tool_filtering"`
+	Feature        string `json:"feature" jsonschema:"Feature to change: logs, consent_tool_filtering, remote_session_auto_refresh, automatic-role-distribution, sso, or scim; sso/scim change setup portal entitlements only, not existing connections; remote_session_auto_refresh requires enforced refresh to be off"`
 	Enabled        bool   `json:"enabled" jsonschema:"Desired enabled state"`
 	RetryKey       string `json:"retry_key" jsonschema:"Unique retry key for this exact change (up to 128 characters)"`
 }
@@ -51,6 +56,10 @@ type featureState struct {
 	Name           string `json:"name"`
 	Slug           string `json:"slug"`
 	Enabled        bool   `json:"enabled"`
+
+	// AutoRefreshEnforced binds the companion policy for auto-refresh proposals
+	// without changing the expected-state encoding of other features.
+	AutoRefreshEnforced *bool `json:"auto_refresh_enforced,omitempty"`
 }
 
 type featurePreview struct {
@@ -71,6 +80,14 @@ type featureWriter struct {
 }
 
 func (f *featureWriter) readState(ctx context.Context, tx pgx.Tx, organizationID string, feature productfeatures.Feature) (featureState, error) {
+	// Preparation, approval revalidation, and execution all reach this first
+	// organization row lock. Match the workers' advisory-before-row ordering;
+	// waiting until ApplyFeatureChangeTx would invert it and permit deadlocks.
+	if feature == productfeatures.FeatureAutomaticRoleDistribution {
+		if err := requests.LockOrganization(ctx, tx, organizationID); err != nil {
+			return featureState{}, fmt.Errorf("lock role distribution feature state: %w", err)
+		}
+	}
 	id, err := featurerepo.New(tx).LockOrganizationMetadata(ctx, organizationID)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && id != organizationID) {
 		return featureState{}, ErrStaleState
@@ -86,7 +103,15 @@ func (f *featureWriter) readState(ctx context.Context, tx pgx.Tx, organizationID
 	if err != nil {
 		return featureState{}, fmt.Errorf("read feature state: %w", err)
 	}
-	return featureState{OrganizationID: id, Name: org.Name, Slug: org.Slug, Enabled: enabled}, nil
+	state := featureState{OrganizationID: id, Name: org.Name, Slug: org.Slug, Enabled: enabled, AutoRefreshEnforced: nil}
+	if feature == productfeatures.FeatureRemoteSessionAutoRefresh {
+		enforced, err := featurerepo.New(tx).IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{OrganizationID: organizationID, FeatureName: string(productfeatures.FeatureRemoteSessionAutoRefreshEnforced)})
+		if err != nil {
+			return featureState{}, fmt.Errorf("read remote session refresh enforcement: %w", err)
+		}
+		state.AutoRefreshEnforced = new(enforced)
+	}
+	return state, nil
 }
 
 func (f *featureWriter) expectedState(ctx context.Context, tx pgx.Tx, proposal Proposal) (featureState, featureChange, error) {
@@ -104,6 +129,9 @@ func (f *featureWriter) expectedState(ctx context.Context, tx pgx.Tx, proposal P
 	state, err := f.readState(ctx, tx, proposal.Target.OrganizationID, feature)
 	if err != nil {
 		return featureState{}, featureChange{}, err
+	}
+	if state.AutoRefreshEnforced != nil && *state.AutoRefreshEnforced {
+		return featureState{}, featureChange{}, ErrStaleState
 	}
 	encoded, err := json.Marshal(state)
 	if err != nil {
@@ -128,7 +156,7 @@ func (f *featureWriter) prepare(ctx context.Context, input PrepareFeatureInput) 
 	}
 	feature, ok := writableFeature(input.Feature)
 	if !ok {
-		return ProposalOutput{}, errors.New("only the logs and consent_tool_filtering features are available for this write")
+		return ProposalOutput{}, errors.New("only logs, consent_tool_filtering, remote_session_auto_refresh, automatic-role-distribution, sso, and scim are available for this write")
 	}
 	owner, err := ownerFromAuthority(authority)
 	if err != nil {
@@ -145,6 +173,9 @@ func (f *featureWriter) prepare(ctx context.Context, input PrepareFeatureInput) 
 	state, err := f.readState(ctx, tx, input.OrganizationID, feature)
 	if err != nil {
 		return ProposalOutput{}, err
+	}
+	if state.AutoRefreshEnforced != nil && *state.AutoRefreshEnforced {
+		return ProposalOutput{}, errors.New("remote session auto-refresh is enforced; this tool cannot change enforcement")
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return ProposalOutput{}, fmt.Errorf("finish feature proposal preparation: %w", err)
@@ -242,7 +273,7 @@ func (f *featureWriter) execution(authority writeAuthority) ProposalExecution {
 }
 
 func (f *featureWriter) registerPrepare(server *mcp.Server) {
-	mcp.AddTool(server, &mcp.Tool{Name: "prepare_set_organization_feature", Title: "Prepare Organization Feature Change", Description: "Prepare an exact, single-organization change to the logs or consent_tool_filtering feature. Returns a server-stored before/after preview and a private staff approval URL. Does not make the change. Requires admin:write; no other features are supported."}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareFeatureInput) (*mcp.CallToolResult, ProposalOutput, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "prepare_set_organization_feature", Title: "Prepare Organization Feature Change", Description: "Prepare an exact, single-organization change to logs, consent_tool_filtering, remote_session_auto_refresh, automatic-role-distribution, sso, or scim. SSO and SCIM changes affect setup portal entitlements only, not existing identity-provider connections, login, directory sync, membership or roles; no portal links are returned. Remote-session auto-refresh changes require enforcement to be off and leave stored per-session choices unchanged; they cannot change enforcement. Returns a server-stored before/after preview and a private staff approval URL. Does not make the change. Requires admin:write; no other features are supported."}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareFeatureInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := f.prepare(ctx, input)
 		return nil, out, err
 	})

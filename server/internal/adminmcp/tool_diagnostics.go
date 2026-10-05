@@ -13,16 +13,14 @@ import (
 )
 
 const (
-	maxOnboardingTasks   = 100
-	maxOnboardingPresets = 50
-	maxPresetTaskKeys    = 100
+	maxOnboardingSteps   = 100
 	maxProjectMCPServers = 100
 )
 
 var errDiagnosticsUnavailable = errors.New("organization or project diagnostics are unavailable")
 
 type OnboardingReader interface {
-	GetOrganizationOnboarding(context.Context, *gen.GetOrganizationOnboardingPayload) (*gen.AdminOnboardingConfiguration, error)
+	GetOrganizationOnboardingPlaybook(context.Context, *gen.GetOrganizationOnboardingPlaybookPayload) (*gen.AdminOrganizationOnboardingPlaybook, error)
 }
 
 type ProjectMCPServerReader interface {
@@ -34,20 +32,27 @@ type OrganizationOnboardingInput struct {
 }
 
 type OrganizationOnboardingOutput struct {
-	OrganizationID string             `json:"organization_id"`
-	Preset         *string            `json:"preset,omitempty"`
-	Tasks          []OnboardingTask   `json:"tasks"`
-	Presets        []OnboardingPreset `json:"presets"`
+	OrganizationID string `json:"organization_id"`
+	// The assigned playbook, absent until staff assign one.
+	Playbook *OnboardingPlaybook `json:"playbook,omitempty"`
+	// Each step of the assigned playbook against the recorded stack.
+	Steps []OnboardingStep `json:"steps"`
 }
 
-type OnboardingTask struct {
-	Key    string `json:"key"`
-	Hidden bool   `json:"hidden"`
+type OnboardingPlaybook struct {
+	ID string `json:"id"`
+	// The use case slug of a shared playbook; absent for the organization's own.
+	UseCase *string `json:"use_case,omitempty"`
+	// Whether it is its use case's default, the one the survey assigns.
+	Default bool `json:"default"`
+	// Whether the playbook belongs to this organization alone.
+	Custom bool `json:"custom"`
 }
 
-type OnboardingPreset struct {
-	Key             string   `json:"key"`
-	VisibleTaskKeys []string `json:"visible_task_keys"`
+type OnboardingStep struct {
+	Slug string `json:"slug"`
+	// Whether the recorded stack supports the step.
+	Applies bool `json:"applies"`
 }
 
 type ListProjectMCPServersInput struct {
@@ -74,10 +79,10 @@ func registerDiagnosticTools(server *mcp.Server, organizations OrganizationReade
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_organization_onboarding",
 		Title:       "Get Organization Onboarding",
-		Description: "Read bounded onboarding configuration for an exact organization ID. Returns task and preset keys with hidden-state only, not customer-authored titles or descriptions.",
+		Description: "Read the onboarding playbook assigned to an exact organization ID: the playbook's id, use case slug and default/custom flags, and each of its steps by slug with whether the organization's recorded stack supports it. Names, descriptions and reasons are omitted.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input OrganizationOnboardingInput) (*mcp.CallToolResult, OrganizationOnboardingOutput, error) {
-		output := OrganizationOnboardingOutput{Tasks: []OnboardingTask{}, Presets: []OnboardingPreset{}}
+		output := OrganizationOnboardingOutput{Steps: []OnboardingStep{}}
 		if !verifiedStaff(ctx) {
 			return nil, output, errDiagnosticsUnavailable
 		}
@@ -88,32 +93,30 @@ func registerDiagnosticTools(server *mcp.Server, organizations OrganizationReade
 		if onboarding == nil {
 			return nil, output, errDiagnosticsUnavailable
 		}
-		result, err := onboarding.GetOrganizationOnboarding(ctx, &gen.GetOrganizationOnboardingPayload{OrganizationID: org.ID})
-		if err != nil || result == nil || result.OrganizationID != org.ID || len(result.Tasks) > maxOnboardingTasks || len(result.Presets) > maxOnboardingPresets {
+		result, err := onboarding.GetOrganizationOnboardingPlaybook(ctx, &gen.GetOrganizationOnboardingPlaybookPayload{OrganizationID: org.ID})
+		if err != nil || result == nil || result.OrganizationID != org.ID || len(result.Applicability) > maxOnboardingSteps {
 			return nil, output, errDiagnosticsUnavailable
 		}
-		for _, task := range result.Tasks {
-			if task == nil || len(task.Key) > 128 {
+		if playbook := result.Playbook; playbook != nil {
+			custom := playbook.OrganizationID != nil
+			// A playbook of another organization can never be the answer here.
+			if len(playbook.ID) > 128 || (custom && *playbook.OrganizationID != org.ID) || (playbook.UseCaseSlug != nil && len(*playbook.UseCaseSlug) > 128) {
 				return nil, OrganizationOnboardingOutput{}, errDiagnosticsUnavailable
 			}
-			output.Tasks = append(output.Tasks, OnboardingTask{Key: task.Key, Hidden: task.Hidden})
+			var useCase *string
+			if playbook.UseCaseSlug != nil {
+				slug := *playbook.UseCaseSlug
+				useCase = &slug
+			}
+			output.Playbook = &OnboardingPlaybook{ID: playbook.ID, UseCase: useCase, Default: playbook.IsDefault, Custom: custom}
 		}
-		for _, preset := range result.Presets {
-			if preset == nil || len(preset.Key) > 128 || len(preset.VisibleTaskKeys) > maxPresetTaskKeys {
+		for _, step := range result.Applicability {
+			if step == nil || len(step.Slug) > 128 {
 				return nil, OrganizationOnboardingOutput{}, errDiagnosticsUnavailable
 			}
-			keys := append([]string(nil), preset.VisibleTaskKeys...)
-			for _, key := range keys {
-				if len(key) > 128 {
-					return nil, OrganizationOnboardingOutput{}, errDiagnosticsUnavailable
-				}
-			}
-			output.Presets = append(output.Presets, OnboardingPreset{Key: preset.Key, VisibleTaskKeys: keys})
+			output.Steps = append(output.Steps, OnboardingStep{Slug: step.Slug, Applies: step.Applies})
 		}
-		if result.Preset != nil && len(*result.Preset) > 128 {
-			return nil, OrganizationOnboardingOutput{}, errDiagnosticsUnavailable
-		}
-		output.OrganizationID, output.Preset = org.ID, result.Preset
+		output.OrganizationID = org.ID
 		return nil, output, nil
 	})
 

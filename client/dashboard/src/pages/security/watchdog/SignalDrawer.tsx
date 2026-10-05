@@ -18,6 +18,7 @@ import { useRiskListResults } from "@gram/client/react-query/riskListResults.js"
 import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { Loader2 } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ExclusionEditor, type ExclusionSheetState } from "../exclusion-sheet";
@@ -38,6 +39,8 @@ import {
   scoreToRating,
 } from "../risk-utils";
 import { useDismissFinding } from "../useDismissFinding";
+import { MCPFindingContext } from "../MCPFindingContext";
+import { isMCPFinding, type MCPFindingNames } from "../mcp-finding-context";
 import { collectFindingsForRules } from "./collect-findings";
 import { EvidenceTitle } from "./EvidenceTitle";
 import { SuppressFindingsDialog } from "./SuppressFindingsDialog";
@@ -116,11 +119,13 @@ function userInitials(email: string): string {
 
 function EvidenceRow({
   result,
+  mcpFindingNames,
   onExclude,
   onDismiss,
   onOpenChat,
 }: {
   result: RiskResult;
+  mcpFindingNames?: MCPFindingNames;
   onExclude: (result: RiskResult) => void;
   onDismiss: (result: RiskResult) => void;
   onOpenChat: (chatId: string, chatMessageId?: string) => void;
@@ -145,13 +150,26 @@ function EvidenceRow({
   const showRuleTitle = evidenceShowsRuleTitle(result.source, result.ruleId);
   return (
     <div className="border-border overflow-hidden rounded-md border">
-      <EvidenceTitle
-        title={result.chatTitle || getRuleTitleFallback(result.ruleId)}
-        createdAt={result.createdAt}
-        chatId={result.chatId}
-        chatMessageId={result.chatMessageId}
-        onOpenChat={onOpenChat}
-      />
+      {isMCPFinding(result) ? (
+        <div className="flex items-start justify-between gap-4 px-3 py-2">
+          <MCPFindingContext
+            finding={result}
+            names={mcpFindingNames}
+            className="min-w-0"
+          />
+          <span className="text-muted-foreground shrink-0 font-mono text-xs">
+            {formatDistanceToNow(result.createdAt, { addSuffix: true })}
+          </span>
+        </div>
+      ) : (
+        <EvidenceTitle
+          title={result.chatTitle || getRuleTitleFallback(result.ruleId)}
+          createdAt={result.createdAt}
+          chatId={result.chatId}
+          chatMessageId={result.chatMessageId}
+          onOpenChat={onOpenChat}
+        />
+      )}
       {rationale ? (
         <div className="px-3 py-3">
           <EventMatchDialog
@@ -213,9 +231,11 @@ function EvidenceRow({
 export function SignalDrawer({
   signal,
   onClose,
+  mcpFindingNames,
 }: {
   signal: RiskSignal | null;
   onClose: () => void;
+  mcpFindingNames?: MCPFindingNames;
 }): JSX.Element {
   const client = useSdkClient();
   const { dismiss, isOptimisticallyDismissed } = useDismissFinding();
@@ -602,6 +622,7 @@ export function SignalDrawer({
                             <EvidenceRow
                               key={result.id}
                               result={result}
+                              mcpFindingNames={mcpFindingNames}
                               onExclude={(r) =>
                                 setExclusionState({
                                   mode: "create",

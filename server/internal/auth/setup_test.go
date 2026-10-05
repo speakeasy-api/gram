@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"testing"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -39,6 +41,16 @@ import (
 
 var (
 	infra *testenv.Environment
+)
+
+// The organization host configuration of the main test service: the server
+// URL, a separate dashboard URL, one extra platform host, and a legacy host.
+const testExtraPlatformHost = "ai.example.com"
+
+var (
+	testServerURL     = &url.URL{Scheme: "http", Host: "localhost:8080"}
+	testSiteURL       = &url.URL{Scheme: "http", Host: "localhost:3000"}
+	testLegacyHostURL = &url.URL{Scheme: "https", Host: "app.example.com"}
 )
 
 type noopCancelScheduler struct{}
@@ -203,6 +215,13 @@ func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, wo
 		GramServerURL:     "http://localhost:8080",
 		SignInRedirectURL: "http://localhost:3000/dashboard",
 		Environment:       "test",
+		OrgHosts: orghost.New(orghost.Config{
+			ServerURL:                  testServerURL,
+			SiteURL:                    testSiteURL,
+			PlatformHosts:              map[string]string{testExtraPlatformHost: "https://" + testExtraPlatformHost},
+			LegacyDefaultHost:          testLegacyHostURL,
+			NewOrganizationDefaultHost: nil,
+		}),
 	}
 
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)

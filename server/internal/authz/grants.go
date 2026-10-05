@@ -384,7 +384,17 @@ func evaluateGrantCheck(grants []Grant, check Check) (grantCheckEvaluation, erro
 		return grantCheckEvaluation{}, fmt.Errorf("evaluate exclusion expression: %w", err)
 	}
 	if !result.Satisfied {
-		return grantCheckEvaluation{Grant: nil, Check: nil, Denied: result.Reason == GrantExpressionReasonExclusionMatched}, nil
+		if result.Reason != GrantExpressionReasonExclusionMatched {
+			return grantCheckEvaluation{Grant: nil, Check: nil, Denied: false}, nil
+		}
+		overrideGrant, overrideCheck, err := directOverride(grants, check)
+		if err != nil {
+			return grantCheckEvaluation{}, fmt.Errorf("evaluate direct grant override: %w", err)
+		}
+		if overrideGrant != nil {
+			return grantCheckEvaluation{Grant: overrideGrant, Check: overrideCheck, Denied: false}, nil
+		}
+		return grantCheckEvaluation{Grant: nil, Check: nil, Denied: true}, nil
 	}
 
 	return grantCheckEvaluation{Grant: grant, Check: matchedCheck, Denied: false}, nil
@@ -393,20 +403,29 @@ func evaluateGrantCheck(grants []Grant, check Check) (grantCheckEvaluation, erro
 func matchingGrant(grants []Grant, checks []Check) (*Grant, *Check) {
 	for i := range grants {
 		grant := &grants[i]
-		for j := range checks {
-			check := &checks[j]
-			if grant.Scope != check.Scope {
-				continue
-			}
-
-			if !check.matchesAllowSelector(grant.Selector) {
-				continue
-			}
+		if check := grantMatchingCheck(grant, checks); check != nil {
 			return grant, check
 		}
 	}
 
 	return nil, nil
+}
+
+// grantMatchingCheck returns the first of checks that grant satisfies, or nil.
+func grantMatchingCheck(grant *Grant, checks []Check) *Check {
+	for j := range checks {
+		check := &checks[j]
+		if grant.Scope != check.Scope {
+			continue
+		}
+
+		if !check.matchesAllowSelector(grant.Selector) {
+			continue
+		}
+		return check
+	}
+
+	return nil
 }
 
 // allScopeGrants returns wildcard grants for every user-visible scope. Used to
