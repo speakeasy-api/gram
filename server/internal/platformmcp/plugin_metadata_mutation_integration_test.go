@@ -52,7 +52,7 @@ func seedPluginMetadataFixture(t *testing.T, name string) (context.Context, plug
 	budget := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
 	service := testPluginTargets(conn).
 		WithAuthorization(engine).
-		WithMetadataMutations(testenv.NewLogger(t), plugindelivery.NewPluginMetadataCore(audit.NewLogger(), plugindelivery.PublicationRequests{Enabled: false}), nil, OperationBudget{Connection: budget, Organization: allowOperationLimiter{}})
+		WithMetadataMutations(testenv.NewLogger(t), plugindelivery.NewPluginMetadataCore(audit.NewLogger(), plugindelivery.PublicationRequests{Enabled: false}), OperationBudget{Connection: budget, Organization: allowOperationLimiter{}})
 	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)})
@@ -441,7 +441,7 @@ func TestPluginMetadataChargesOutsideAnyTransaction(t *testing.T) {
 	t.Parallel()
 	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_plugin_metadata_charge_outside_tx")
 	charge := &connectionObservingLimiter{conn: fixture.conn}
-	fixture.service.WithMetadataMutations(fixture.service.metadataLogger, fixture.service.metadataCore, nil, OperationBudget{Connection: charge, Organization: allowOperationLimiter{}})
+	fixture.service.WithMetadataMutations(fixture.service.metadataLogger, fixture.service.metadataCore, OperationBudget{Connection: charge, Organization: allowOperationLimiter{}})
 
 	_, err := fixture.service.CreatePlugin(ctx, fixture.principal, CreatePluginInput{
 		ProjectID: fixture.project.ID.String(), Name: "Charged outside", IdempotencyKey: "charged-outside", Confirmed: true,
@@ -474,7 +474,7 @@ func TestPluginMetadataNeverReturnsDatabaseErrorText(t *testing.T) {
 	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_plugin_metadata_no_db_text")
 	plugin := seedPlugin(t, ctx, fixture.conn, fixture.principal.OrganizationID, fixture.project.ID, "Existing", "existing")
 	var logs bytes.Buffer
-	fixture.service.WithMetadataMutations(slog.New(slog.NewTextHandler(&logs, nil)), fixture.service.metadataCore, nil, testOperationBudget())
+	fixture.service.WithMetadataMutations(slog.New(slog.NewTextHandler(&logs, nil)), fixture.service.metadataCore, testOperationBudget())
 	createTool := fixture.descriptor(t, operationCreatePlugin)
 	renameTool := fixture.descriptor(t, operationRenamePlugin)
 	fixture.conn.Close()

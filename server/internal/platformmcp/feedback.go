@@ -420,6 +420,7 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	"get_plugin":                            {},
 	operationCreatePlugin:                   {},
 	operationRenamePlugin:                   {},
+	operationRepublishPlugin:                {},
 	"get_my_mcp_access":                     {},
 	"get_my_mcp_connection_status":          {},
 	"get_mcp_client_admission":              {},

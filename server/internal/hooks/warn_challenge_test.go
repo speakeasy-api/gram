@@ -168,7 +168,7 @@ func TestClaude_PreToolUse_Warn_FallsBackToBlockWhenNoLink(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	// Force warnDenyReason to return ok=false: no site URL means no ack link.
-	ti.service.siteURL = nil
+	ti.service.orgHosts = nil
 	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
 		Action:       "warn",
 		PolicyID:     uuid.NewString(),
@@ -409,7 +409,7 @@ func TestIngest_CanonicalWarnFallsBackToBlockWithoutAckLink(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
-	ti.service.siteURL = nil
+	ti.service.orgHosts = nil
 	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
 		Action:          "warn",
 		PolicyID:        uuid.NewString(),

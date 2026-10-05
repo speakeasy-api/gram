@@ -328,11 +328,7 @@ const probeDrainTimeout = 20 * time.Second
 func mcpRuntimeFlags() []cli.Flag {
 	flags := []cli.Flag{
 		pluginPublicationEmitFlag(),
-		&cli.StringSliceFlag{
-			Name:    "platform-hosts",
-			Usage:   "First-party hosts that serve the full product, e.g. app.getgram.ai,ai.speakeasy.com. The server URL's host is always included. Login on the other hosts completes on the same host.",
-			EnvVars: []string{"GRAM_PLATFORM_HOSTS"},
-		},
+		platformHostsCLIFlag(),
 		&cli.StringFlag{
 			Name:    "presidio-analyzer-url",
 			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
@@ -626,6 +622,7 @@ func mcpRuntimeFlags() []cli.Flag {
 	flags = append(flags, gcpFlags()...)
 	flags = append(flags, identityProviderConnectionFlags()...)
 	flags = append(flags, callbackOriginFlags()...)
+	flags = append(flags, orgDefaultHostFlags()...)
 	return flags
 }
 
@@ -849,7 +846,6 @@ func newStartCommand() *cli.Command {
 					db,
 					c.String("environment"),
 					c.String("openrouter-provisioning-key"),
-					openRouterKeyRefresher,
 					productFeatures,
 					billingTracker,
 					encryptionClient,
@@ -881,10 +877,15 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			orgHosts, err := orgHostResolverFromCLI(c, serverURL, siteURL, c.String("environment"), platformHosts)
+			if err != nil {
+				return err
+			}
+			identityResolver.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 
 			trialEmailNotifier := &background.TemporalTrialEmailNotifier{TemporalEnv: temporalEnv}
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
-			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, siteURL.String())
+			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, orgHosts)
 
 			tigrisStore, shutdown, err := newTigrisStore(ctx, c, logger)
 			if err != nil {
@@ -1424,7 +1425,7 @@ func newStartCommand() *cli.Command {
 			platformslack.NewFileProxy(logger, encryptionClient, guardianPolicy.PooledClient()).Attach(mux)
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger)
-			accessService := access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL, telemSvc)
+			accessService := access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, auditLogger, emailService, orgHosts, telemSvc)
 			access.Attach(mux, accessService)
 			agent.Attach(mux, agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures, serverURL.String(), assetStorage, telemLogger, growthEmitter))
 			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, clientAssertionSigner)
@@ -1476,7 +1477,7 @@ func newStartCommand() *cli.Command {
 				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0},
 				identityMapRefreshSignaler,
 				serverURL,
-				siteURL,
+				orgHosts,
 				c.String("jwt-signing-key"),
 				metering.NewRiskRecorder(publishers.MeterReadings),
 			)
@@ -1504,10 +1505,11 @@ func newStartCommand() *cli.Command {
 				sessionManager,
 				identityResolver,
 				auth.AuthConfigurations{
-					IDPBaseURL:        c.String("idp-base-url"),
-					GramServerURL:     c.String("server-url"),
-					SignInRedirectURL: auth.FormSignInRedirectURL(c.String("site-url")),
-					Environment:       c.String("environment"),
+					IDPBaseURL:                 c.String("idp-base-url"),
+					GramServerURL:              c.String("server-url"),
+					SignInRedirectURL:          auth.FormSignInRedirectURL(c.String("site-url")),
+					Environment:                c.String("environment"),
+					NewOrganizationDefaultHost: orgHosts.NewOrganizationDefaultHost(),
 				},
 				authzEngine,
 				billingRepo,
@@ -1530,7 +1532,7 @@ func newStartCommand() *cli.Command {
 			if err := organizations.SyncOnboardingSteps(ctx, db); err != nil {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
-			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, trialEmailNotifier, productfeatures.SeedEnterpriseTrialBundleTx, posthogClient, growthEmitter, serverURL.String(), siteURL.String(), auditLogger, svixClient)
+			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, trialEmailNotifier, productfeatures.SeedEnterpriseTrialBundleTx, posthogClient, growthEmitter, siteURL.String(), orgHosts, auditLogger, svixClient)
 			organizations.Attach(mux, organizationsService)
 			pluginsGitHub, err := plugins.NewGitHubConfig(plugins.GitHubConfigInput{
 				Client:         ghClient,
@@ -1632,7 +1634,9 @@ func newStartCommand() *cli.Command {
 			skillsService := skills.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger,
 				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0}, skillsPublishSignaler, siteURL)
 			skills.Attach(mux, skillsService)
-			toolsetsSvc := toolsets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil).WithNetworkAccessEligibility(networkIngressAdmission)
+			toolsetsSvc := toolsets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil).WithNetworkAccessEligibility(networkIngressAdmission).
+				WithPublicationRequests(publicationEmit)
+			mcpMetadataService.WithPluginPublication(publicationEmit, pluginsPublishSignaler)
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			templates.Attach(mux, templates.NewService(logger, tracerProvider, db, sessionManager, toolsetsSvc, authzEngine, auditLogger))
@@ -2048,6 +2052,7 @@ func newStartCommand() *cli.Command {
 						ExpectedARecords:             customDomainARecords,
 						GitHubEvidenceToken:          c.String("github-evidence-token"),
 						SiteURL:                      siteURL,
+						OrgHosts:                     orgHosts,
 						BillingTracker:               billingTracker,
 						BillingRepository:            billingRepo,
 						StripeClient:                 stripeClient,
@@ -2253,7 +2258,7 @@ func newStartCommand() *cli.Command {
 // authentication host, whose middleware runs first and would divert that host
 // to its MCP-only routes.
 func parsePlatformHosts(c *cli.Context, authenticationHost *mcp.AuthenticationHost) (map[string]string, error) {
-	hosts, err := customdomains.ParsePlatformHosts(c.StringSlice("platform-hosts"))
+	hosts, err := customdomains.ParsePlatformHosts(c.StringSlice(platformHostsFlag))
 	if err != nil {
 		return nil, fmt.Errorf("invalid platform hosts: %w", err)
 	}

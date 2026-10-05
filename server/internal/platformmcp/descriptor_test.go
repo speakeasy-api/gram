@@ -418,6 +418,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		operationSetPluginAssignments,
 		operationCreatePlugin,
 		operationRenamePlugin,
+		operationRepublishPlugin,
 		"list_my_sessions",
 		"continue_session",
 		"list_data_exports",

@@ -151,12 +151,12 @@ type normalizedPluginMetadataMutation struct {
 // through the same core the plugins management API uses, so both surfaces
 // refuse the same inputs the same way. There is deliberately no creation cap:
 // the dashboard has none, and the operation budget already bounds a runaway
-// create loop.
-func (s *PluginsService) WithMetadataMutations(logger *slog.Logger, core *plugindelivery.PluginMetadataCore, publisher plugindelivery.PluginPublishSignaler, budget OperationBudget) *PluginsService {
+// create loop. The post-commit publish signal goes through the same publisher
+// WithRepublish composes.
+func (s *PluginsService) WithMetadataMutations(logger *slog.Logger, core *plugindelivery.PluginMetadataCore, budget OperationBudget) *PluginsService {
 	if s != nil {
 		s.metadataLogger = logger
 		s.metadataCore = core
-		s.metadataPublisher = publisher
 		s.metadataBudget = budget
 	}
 	return s
@@ -459,9 +459,9 @@ func (s *PluginsService) finishPluginMetadataMutation(ctx context.Context, princ
 	output := PluginMetadataMutationOutput{PluginMetadataReceiptResult: result, PublishSignal: "not_requested", Receipt: riskMutationToolReceipt(receipt)}
 	if !receipt.Replayed && result.PublicationRequest != string(plugindelivery.ProjectPublicationEnqueued) {
 		switch {
-		case s.metadataPublisher == nil:
+		case s.publisher == nil:
 			output.PublishSignal = "unavailable"
-		case plugindelivery.SignalPluginPublishAfterRequest(ctx, s.metadataPublisher, plugindelivery.ProjectPublicationRequestOutcome(result.PublicationRequest), project.ID, principal.UserID) != nil:
+		case plugindelivery.SignalPluginPublishAfterRequest(ctx, s.publisher, plugindelivery.ProjectPublicationRequestOutcome(result.PublicationRequest), project.ID, principal.UserID) != nil:
 			output.PublishSignal = "request_failed"
 		default:
 			output.PublishSignal = "best_effort_requested"
