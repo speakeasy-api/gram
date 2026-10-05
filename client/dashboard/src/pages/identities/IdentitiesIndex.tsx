@@ -34,7 +34,6 @@ import { Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
 import { dateTimeFormatters } from "@/lib/dates";
 import { useHideInsightsDock } from "@/components/insights-context";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Text } from "@/components/ui/Text";
 import { IdentityLink } from "@/components/identity-link";
 import { getInitials } from "@/lib/initials";
@@ -810,15 +809,6 @@ function IdentitiesIndexContent(): JSX.Element {
               a bar above the tables, not a band of their own. */}
           <div className="-mt-3 [&>*]:p-1.5 [&_input]:h-8">
             <Page.Toolbar>
-              <Page.Toolbar.Leading>
-                <SegmentedControl
-                  value={kindKey}
-                  onChange={(kind) =>
-                    setValue("kind", kind ? kind.split(",") : [])
-                  }
-                  options={kindOptions}
-                />
-              </Page.Toolbar.Leading>
               <Page.Toolbar.Search
                 value={search}
                 onChange={setSearch}
@@ -974,7 +964,7 @@ function IdentityGroup({
             noResultsMessage={null}
           />
         </div>
-        <div className="border-border min-h-0 flex-1 overflow-auto overscroll-contain border-b [&_table]:border-t-0 [&_table]:border-b-0">
+        <div className="border-border min-h-0 flex-1 overflow-auto overscroll-contain border-b [&>table]:min-h-full [&>table]:content-start [&_table]:border-t-0 [&_table]:border-b-0">
           <Table
             columns={columns}
             data={rows.slice(0, visible)}

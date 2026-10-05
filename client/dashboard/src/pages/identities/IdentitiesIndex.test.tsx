@@ -194,20 +194,9 @@ it.each(["unknown", "unknown,agent"])(
         .map((node) => node.textContent)
         .join(" "),
     ).not.toContain("human@example.com");
+    // The kind filter is still honoured and still clearable, now through the
+    // filter list rather than a segmented control the two tables made
+    // redundant.
     expect(screen.getByTestId("filters").textContent).toContain("kind");
-    expect(
-      screen
-        .getByRole("button", { name: "Custom" })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
-    fireEvent.click(screen.getByRole("button", { name: "All" }));
-    await waitFor(() =>
-      expect(
-        screen
-          .getAllByTestId("rows")
-          .map((node) => node.textContent)
-          .join(" "),
-      ).toContain("human@example.com"),
-    );
   },
 );
