@@ -766,6 +766,39 @@ describe("AuthProvider organization host", () => {
     expect(replaceSpy).not.toHaveBeenCalled();
   });
 
+  it("stays when the cached session is no longer authorized", () => {
+    mocks.sessionData.mockReturnValue({
+      ...gatedSession({
+        whitelisted: true,
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+      error: new GramError("unauthorized", {
+        response: new Response(null, { status: 401 }),
+        request: new Request("https://app.getgram.ai/rpc/auth.info"),
+        body: "",
+      }),
+      status: "error",
+    });
+
+    renderGate(PAGE);
+
+    expect(replaceSpy).not.toHaveBeenCalled();
+  });
+
+  it("stays when the session has no token", () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        session: "",
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+    );
+
+    renderGate(PAGE);
+
+    expect(replaceSpy).not.toHaveBeenCalled();
+  });
+
   it("stays when the dashboard URL is not absolute", () => {
     mocks.sessionData.mockReturnValue(
       gatedSession({

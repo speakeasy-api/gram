@@ -201,8 +201,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // same page. auth.info names that host only for an ordinary session whose
   // active organization belongs elsewhere; session cookies are host-only, so
   // the user signs in once on the new host.
+  const sessionAuthorized =
+    Boolean(session?.session) && !isGramSessionUnauthorizedError(error);
   const organizationHostTarget =
-    session?.activeOrganizationId && !isImpersonating
+    sessionAuthorized && session?.activeOrganizationId && !isImpersonating
       ? organizationHostRedirectTarget(
           session.activeOrganizationDashboardUrl,
           window.location,
