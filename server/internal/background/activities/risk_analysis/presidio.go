@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
-	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -468,7 +468,9 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 
 	// Reformat JSON payloads as YAML with literal block scalars for strings
 	// containing newlines before both token counting and the analyzer request.
+	source := text
 	text = reformatJSONAsYAML(text)
+	reformatted := text
 
 	truncated := len(text) > presidioMaxMessageBytes
 	if originalSize := len(text); truncated {
@@ -498,6 +500,9 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 
 		findings, err := p.analyzeOnce(ctx, text, entities, scoreThreshold, onProgress)
 		if err == nil {
+			if reformatted != source {
+				remapPresidioOffsets(source, reformatted, findings)
+			}
 			return scanners.Result{Findings: findings, STokens: int64(stokenCount), Completed: countErr == nil && !truncated}, false
 		}
 
@@ -751,6 +756,32 @@ func computeRetryBackoff(base time.Duration, attempt int) time.Duration {
 	return time.Duration(rand.Int64N(int64(backoff))) // #nosec G404 -- jitter, not security-sensitive
 }
 
+// remapPresidioOffsets moves finding offsets from the reformatted text
+// Presidio scanned onto the source text, matching the same occurrence of each
+// match, which relies on reformatJSONAsYAML keeping source key order. When
+// the two texts hold a different number of occurrences (one spanned a JSON
+// escape), the ordinal is ambiguous and the finding gets an empty span rather
+// than offsets into the wrong text.
+func remapPresidioOffsets(source, scanned string, findings []scanners.Finding) {
+	for i := range findings {
+		f := &findings[i]
+		if f.Match == "" || f.StartPos < 0 || f.StartPos > len(scanned) {
+			continue
+		}
+		if strings.Count(source, f.Match) != strings.Count(scanned, f.Match) {
+			f.StartPos, f.EndPos = 0, 0
+			continue
+		}
+		nth := strings.Count(scanned[:f.StartPos], f.Match)
+		pos := 0
+		for from, k := 0, 0; k <= nth; k++ {
+			pos = from + strings.Index(source[from:], f.Match)
+			from = pos + len(f.Match)
+		}
+		f.StartPos, f.EndPos = pos, pos+len(f.Match)
+	}
+}
+
 // reformatJSONAsYAML tries to parse text as a JSON value and re-emit it as
 // YAML where any string containing a newline is written as a literal block
 // scalar (`|`). The resulting text carries the same semantic content but
@@ -769,12 +800,11 @@ func reformatJSONAsYAML(text string) string {
 	}
 	dec := json.NewDecoder(strings.NewReader(text))
 	dec.UseNumber()
-	var data any
-	if err := dec.Decode(&data); err != nil {
+	node, err := decodeJSONAsYAMLNode(dec, 0)
+	if err != nil {
 		return text
 	}
 
-	node := jsonValueToYAMLNode(data)
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)
@@ -787,42 +817,60 @@ func reformatJSONAsYAML(text string) string {
 	return buf.String() + text[dec.InputOffset():]
 }
 
-func jsonValueToYAMLNode(v any) *yaml.Node {
-	switch x := v.(type) {
-	case nil:
-		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}
-	case bool:
-		val := "false"
-		if x {
-			val = "true"
-		}
-		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: val}
-	case json.Number:
-		return &yaml.Node{Kind: yaml.ScalarNode, Value: x.String()}
-	case string:
-		return jsonStringToYAMLNode(x)
-	case []any:
-		seq := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
-		for _, item := range x {
-			seq.Content = append(seq.Content, jsonValueToYAMLNode(item))
-		}
-		return seq
-	case map[string]any:
-		m := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		keys := make([]string, 0, len(x))
-		for k := range x {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			m.Content = append(m.Content,
-				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: k},
-				jsonValueToYAMLNode(x[k]),
-			)
-		}
-		return m
+// maxJSONNestingDepth bounds recursion on hostile input, matching the limit
+// encoding/json enforces when decoding into a value.
+const maxJSONNestingDepth = 10000
+
+// decodeJSONAsYAMLNode reads one JSON value from the token stream, keeping
+// object keys in source order so values appear in the order of the source.
+func decodeJSONAsYAMLNode(dec *json.Decoder, depth int) (*yaml.Node, error) {
+	if depth > maxJSONNestingDepth {
+		return nil, errors.New("json nesting too deep")
 	}
-	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: fmt.Sprint(v)}
+	tok, err := dec.Token()
+	if err != nil {
+		return nil, fmt.Errorf("read json token: %w", err)
+	}
+	switch x := tok.(type) {
+	case nil:
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}, nil
+	case bool:
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: strconv.FormatBool(x)}, nil
+	case json.Number:
+		return &yaml.Node{Kind: yaml.ScalarNode, Value: x.String()}, nil
+	case string:
+		return jsonStringToYAMLNode(x), nil
+	case json.Delim:
+		// Token rejects stray closers, so x opens an object or an array.
+		isObject := x == '{'
+		n := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		if isObject {
+			n.Kind, n.Tag = yaml.MappingNode, "!!map"
+		}
+		for dec.More() {
+			if isObject {
+				keyTok, err := dec.Token()
+				if err != nil {
+					return nil, fmt.Errorf("read json key: %w", err)
+				}
+				key, ok := keyTok.(string)
+				if !ok {
+					return nil, fmt.Errorf("unexpected json key %T", keyTok)
+				}
+				n.Content = append(n.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key})
+			}
+			child, err := decodeJSONAsYAMLNode(dec, depth+1)
+			if err != nil {
+				return nil, err
+			}
+			n.Content = append(n.Content, child)
+		}
+		if _, err := dec.Token(); err != nil {
+			return nil, fmt.Errorf("read json closer: %w", err)
+		}
+		return n, nil
+	}
+	return nil, fmt.Errorf("unexpected json token %T", tok)
 }
 
 func jsonStringToYAMLNode(s string) *yaml.Node {
