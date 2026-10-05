@@ -1,8 +1,10 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -95,4 +97,19 @@ func TestPublishedResource_ReadsWellKnownDocument(t *testing.T) {
 	require.NoError(t, err)
 	s := &Service{guardianPolicy: policy}
 	require.Equal(t, srv.URL+"/", s.publishedResource(t.Context(), testenv.NewLogger(t), srv.URL))
+}
+
+// A failed read logs the upstream's host, never the registered URL: its query
+// may carry credentials.
+func TestPublishedResource_FailureLogOmitsRegisteredQuery(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	s := &Service{protectedResourceFetcher: func(context.Context, string) (wellknown.OAuthProtectedResourceMetadata, error) {
+		return wellknown.OAuthProtectedResourceMetadata{}, errors.New("unreachable")
+	}}
+	registered := "https://host.example.com/mcp?api_key=registered-secret"
+	require.Equal(t, registered, s.publishedResource(t.Context(), slog.New(slog.NewJSONHandler(&logs, nil)), registered))
+	require.Contains(t, logs.String(), "host.example.com")
+	require.NotContains(t, logs.String(), "registered-secret")
 }

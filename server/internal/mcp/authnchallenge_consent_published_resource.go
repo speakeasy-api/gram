@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -43,7 +44,13 @@ func (s *Service) publishedResource(ctx context.Context, logger *slog.Logger, re
 	doc, err := fetch(fetchCtx, registered)
 	switch {
 	case err != nil:
-		logger.WarnContext(ctx, "read upstream protected resource metadata; sending the registered resource", attr.SlogURLFull(registered), attr.SlogError(err))
+		// Only the host: a registered URL may carry credentials in its query.
+		// The error names the probed well-known URL, which drops the query.
+		host := ""
+		if u, perr := url.Parse(registered); perr == nil {
+			host = u.Hostname()
+		}
+		logger.WarnContext(ctx, "read upstream protected resource metadata; sending the registered resource", attr.SlogURLDomain(host), attr.SlogError(err))
 		return registered
 	case !grantRoutesToUpstream(doc.Resource, registered, false):
 		return registered
