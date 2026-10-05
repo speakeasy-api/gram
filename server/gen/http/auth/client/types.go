@@ -38,7 +38,11 @@ type InfoResponseBody struct {
 	// Fixed expiration of the organization support session.
 	OrganizationOverrideExpiresAt *string `form:"organization_override_expires_at,omitempty" json:"organization_override_expires_at,omitempty" xml:"organization_override_expires_at,omitempty"`
 	ActiveOrganizationID          *string `form:"active_organization_id,omitempty" json:"active_organization_id,omitempty" xml:"active_organization_id,omitempty"`
-	GramAccountType               *string `form:"gram_account_type,omitempty" json:"gram_account_type,omitempty" xml:"gram_account_type,omitempty"`
+	// Dashboard base URL of the platform host the active organization lives on.
+	// Set only for an ordinary session whose request arrived on a different
+	// platform host; the dashboard moves there.
+	ActiveOrganizationDashboardURL *string `form:"active_organization_dashboard_url,omitempty" json:"active_organization_dashboard_url,omitempty" xml:"active_organization_dashboard_url,omitempty"`
+	GramAccountType                *string `form:"gram_account_type,omitempty" json:"gram_account_type,omitempty" xml:"gram_account_type,omitempty"`
 	// Whether the organization has an active billing subscription
 	HasActiveSubscription *bool `form:"has_active_subscription,omitempty" json:"has_active_subscription,omitempty" xml:"has_active_subscription,omitempty"`
 	// Whether the organization is whitelisted to access the platform
@@ -2278,19 +2282,20 @@ func NewRegisterGatewayError(body *RegisterGatewayErrorResponseBody) *goa.Servic
 // "OK" response.
 func NewInfoResultOK(body *InfoResponseBody, sessionToken string, sessionCookie string) *auth.InfoResult {
 	v := &auth.InfoResult{
-		UserID:                        *body.UserID,
-		UserEmail:                     *body.UserEmail,
-		UserSignature:                 body.UserSignature,
-		UserDisplayName:               body.UserDisplayName,
-		UserPhotoURL:                  body.UserPhotoURL,
-		IsAdmin:                       *body.IsAdmin,
-		ImpersonatorEmail:             body.ImpersonatorEmail,
-		OrganizationOverride:          *body.OrganizationOverride,
-		OrganizationOverrideExpiresAt: body.OrganizationOverrideExpiresAt,
-		ActiveOrganizationID:          *body.ActiveOrganizationID,
-		GramAccountType:               *body.GramAccountType,
-		HasActiveSubscription:         *body.HasActiveSubscription,
-		Whitelisted:                   *body.Whitelisted,
+		UserID:                         *body.UserID,
+		UserEmail:                      *body.UserEmail,
+		UserSignature:                  body.UserSignature,
+		UserDisplayName:                body.UserDisplayName,
+		UserPhotoURL:                   body.UserPhotoURL,
+		IsAdmin:                        *body.IsAdmin,
+		ImpersonatorEmail:              body.ImpersonatorEmail,
+		OrganizationOverride:           *body.OrganizationOverride,
+		OrganizationOverrideExpiresAt:  body.OrganizationOverrideExpiresAt,
+		ActiveOrganizationID:           *body.ActiveOrganizationID,
+		ActiveOrganizationDashboardURL: body.ActiveOrganizationDashboardURL,
+		GramAccountType:                *body.GramAccountType,
+		HasActiveSubscription:          *body.HasActiveSubscription,
+		Whitelisted:                    *body.Whitelisted,
 	}
 	if body.Trial != nil {
 		v.Trial = unmarshalTrialResponseBodyToAuthTrial(body.Trial)
@@ -2482,6 +2487,9 @@ func ValidateInfoResponseBody(body *InfoResponseBody) (err error) {
 	}
 	if body.OrganizationOverrideExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.organization_override_expires_at", *body.OrganizationOverrideExpiresAt, goa.FormatDateTime))
+	}
+	if body.ActiveOrganizationDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.active_organization_dashboard_url", *body.ActiveOrganizationDashboardURL, goa.FormatURI))
 	}
 	if body.Trial != nil {
 		if err2 := ValidateTrialResponseBody(body.Trial); err2 != nil {

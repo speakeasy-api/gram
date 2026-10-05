@@ -104,3 +104,39 @@ func catalogInspectionDescriptor(t *testing.T, registrar *Registrar) Descriptor 
 	require.FailNow(t, "inspect_mcp_candidate descriptor was not registered")
 	return Descriptor{}
 }
+
+func TestCandidateInspectionDirectRemoteProtocols(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		mode           string
+		authentication string
+	}{
+		{"modern", "anonymous"},
+		{"legacy", "anonymous"},
+		{"stateful", "anonymous"},
+		{"auth401", "authentication_required"},
+		{"auth403", "authentication_required"},
+		{"tools-auth", "authentication_required"},
+		{"discover-auth", "authentication_required"},
+		{"stateful-auth-cleanup", "authentication_required"},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			t.Parallel()
+			inspector, _ := directRemoteProtocolFixture(t, tc.mode)
+			registrar := newRegistrar(newTestMCPServer())
+			registerCandidateInspectionTool(registrar, nil, inspector, &testRegistrationGate{enabled: true}, allowBudget())
+			result, err := catalogInspectionDescriptor(t, registrar).Invoke(ContextWithPrincipal(t.Context(), registrationServicePrincipal()), json.RawMessage(`{"remote_url":"https://remote.example.test/mcp"}`))
+			require.NoError(t, err)
+			inspection, ok := result.(CandidateInspection)
+			require.True(t, ok)
+			require.Equal(t, "https://remote.example.test/mcp", inspection.CanonicalURL)
+			require.Equal(t, tc.authentication, inspection.Authentication)
+			if tc.authentication == "authentication_required" {
+				require.Equal(t, "available_dcr", inspection.OAuthDiscovery)
+				require.True(t, inspection.RequiresDashboardSetup)
+			} else {
+				require.Equal(t, []string{"example"}, inspection.ToolNames)
+			}
+		})
+	}
+}

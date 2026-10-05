@@ -735,3 +735,34 @@ func TestCreateOrganization_HTTPRequiresPlatformAdmin(t *testing.T) {
 	}
 	require.Empty(t, fake.names())
 }
+
+func TestCreateOrganization_RecordsNewOrganizationDefaultHost(t *testing.T) {
+	t.Parallel()
+
+	const workosOrgID = "org_01HZADMINDEFAULTHOST"
+	fake := newFakeWorkOS(workosOrgID)
+	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
+	svc.SetNewOrganizationDefaultHost(conv.ToPGText("https://ai.example.test"))
+
+	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "https://example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
+	require.NoError(t, err)
+
+	row, err := orgrepo.New(conn).GetOrganizationMetadata(ctx, res.ID)
+	require.NoError(t, err)
+	require.Equal(t, conv.ToPGText("https://ai.example.test"), row.DefaultHost)
+}
+
+func TestCreateOrganization_WithoutNewOrganizationDefaultHostRecordsNone(t *testing.T) {
+	t.Parallel()
+
+	const workosOrgID = "org_01HZADMINNODEFAULTHOST"
+	fake := newFakeWorkOS(workosOrgID)
+	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
+
+	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "https://example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
+	require.NoError(t, err)
+
+	row, err := orgrepo.New(conn).GetOrganizationMetadata(ctx, res.ID)
+	require.NoError(t, err)
+	require.False(t, row.DefaultHost.Valid)
+}

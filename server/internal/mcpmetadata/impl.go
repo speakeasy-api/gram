@@ -61,6 +61,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -217,6 +218,12 @@ type Service struct {
 	legacyFallback       *mcpmetrics.LegacyFallbackCounter
 	metaInstallAdmission func(context.Context, string) error
 
+	// publicationRequests and publisher refresh plugin packages after a
+	// metadata write changes what they render. publisher is nil when GitHub
+	// publishing is not configured.
+	publicationRequests plugins.PublicationRequests
+	publisher           plugins.PluginPublishSignaler
+
 	// Hosted install page script (embedded and served with cache-busting hash)
 	installPageScriptHash string
 	installPageScriptData []byte
@@ -265,9 +272,17 @@ func NewService(
 		legacyFallback: mcpmetrics.NewLegacyFallbackCounter(meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcpmetadata"), logger),
 
 		metaInstallAdmission:  metaInstallAdmission,
+		publicationRequests:   plugins.PublicationRequests{Enabled: false},
+		publisher:             nil,
 		installPageScriptHash: scriptHashStr,
 		installPageScriptData: hostedPageScriptData,
 	}
+}
+
+func (s *Service) WithPluginPublication(publicationRequests bool, publisher plugins.PluginPublishSignaler) *Service {
+	s.publicationRequests.Enabled = publicationRequests
+	s.publisher = publisher
+	return s
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -497,6 +512,13 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		return nil, err
 	}
 
+	packageChanged := payload.EnvironmentConfigs != nil && renderedHeadersChanged(backend, existing, metadata)
+	if packageChanged {
+		if err := s.requestPluginPublicationForBackend(ctx, dbtx, authCtx, backend); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "enqueue MCP metadata plugin publication").LogError(ctx, logger)
+		}
+	}
+
 	switch {
 	case backend.toolset != nil:
 		if err := s.audit.LogMCPMetadataUpdate(ctx, dbtx, audit.LogMCPMetadataUpdateEvent{
@@ -538,6 +560,10 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "save MCP server metadata").LogError(ctx, logger)
+	}
+
+	if packageChanged {
+		s.publishPluginsForBackend(ctx, authCtx, backend)
 	}
 
 	return metadata, nil

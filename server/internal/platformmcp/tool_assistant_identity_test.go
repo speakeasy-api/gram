@@ -55,6 +55,10 @@ func TestAssistantIdentityToolContract(t *testing.T) {
 		require.Contains(t, string(a.InputSchema), field)
 	}
 	require.Contains(t, a.Description, "project:write")
+	require.Contains(t, a.Description, "without configured workload identity (NEVER_CONFIGURED)")
+	require.Contains(t, a.Description, "Repeating an already active upgrade is safe")
+	require.NotContains(t, a.Description, "legacy")
+	require.Contains(t, string(a.InputSchema), "NEVER_CONFIGURED")
 	require.Contains(t, a.Description, "ACTIVE does not prove")
 	ctx := contextWithPrincipal(t.Context(), Principal{OrganizationID: "test-org", UserID: "test-user"})
 	_, err := b.Invoke(ctx, []byte(`{"project_id":"`+uuid.NewString()+`","assistant_id":"`+uuid.NewString()+`","confirmed":true}`))
