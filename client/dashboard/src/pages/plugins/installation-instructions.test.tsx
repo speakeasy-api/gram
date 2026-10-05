@@ -75,6 +75,37 @@ describe("installation instructions", () => {
     expect(text).not.toContain("every Claude Code installation");
   });
 
+  it("keys Claude Code settings by the marketplace name and turns on auto-update", () => {
+    const text = openProvider("Claude Code");
+    expect(text).toContain(
+      '"extraKnownMarketplaces": { "example-marketplace": { "autoUpdate": true,',
+    );
+    expect(text).toContain(
+      '"enabledPlugins": { "example-plugin@example-marketplace": true }',
+    );
+    expect(text).toContain(
+      "must be exactly example-marketplace, not the GitHub repository name or an older <org>-gram name",
+    );
+    expect(text).toContain("Otherwise Claude Code ignores autoUpdate");
+    expect(text).toContain(
+      "open /plugin → Marketplaces, select example-marketplace, and choose Enable auto-update",
+    );
+    expect(
+      screen
+        .getByRole("link", { name: /Claude Code docs/ })
+        .getAttribute("href"),
+    ).toBe(
+      "https://code.claude.com/docs/en/plugins/org#require-a-marketplace-and-its-plugins",
+    );
+    expect(
+      screen
+        .getByRole("link", { name: /Turn on auto-update/ })
+        .getAttribute("href"),
+    ).toBe(
+      "https://code.claude.com/docs/en/plugins/host-marketplace#turn-on-auto-update",
+    );
+  });
+
   it("uses team-admin controls, current menus and explicit local snapshot updates for Cursor", () => {
     const text = openProvider("Cursor");
     expect(text).toContain(

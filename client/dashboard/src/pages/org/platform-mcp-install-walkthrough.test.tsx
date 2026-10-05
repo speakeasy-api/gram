@@ -112,6 +112,10 @@ describe("PlatformMCPInstallWalkthrough", () => {
     expect(
       screen.getByText("/plugin install speakeasy@speakeasy"),
     ).toBeTruthy();
+    // A marketplace added by command has auto-update off until it is turned on.
+    expect(document.body.textContent).toContain(
+      "select speakeasy, and choose Enable auto-update",
+    );
   });
 
   it("clones the OpenCode package into the directory used by the copy step", () => {

@@ -1,3 +1,7 @@
+import {
+  ClaudeMarketplaceAutoUpdateNote,
+  ClaudeMarketplaceNameNote,
+} from "@/components/claude-code-marketplace-notes";
 import { CodeBlock } from "@/components/code";
 import { InstallSteps } from "@/components/install-steps";
 import { Button } from "@/components/ui/Button";
@@ -199,6 +203,9 @@ function ClaudeCodeInstallContent({
             )}
           </div>
         )}
+        {installCommand && (
+          <ClaudeMarketplaceAutoUpdateNote marketplaceName={marketplaceName} />
+        )}
       </div>
 
       <div>
@@ -249,30 +256,38 @@ function ClaudeCodeInstallContent({
               code: managedSettingsJson ?? undefined,
               language: "json",
               children: managedSettingsJson ? (
-                <p className="text-muted-foreground mt-3 flex items-start gap-1.5 text-xs leading-relaxed">
-                  <Info className="mt-0.5 size-3.5 shrink-0" />
-                  <span>
-                    {!pluginSlug && (
-                      <>
-                        Replace{" "}
-                        <code className="bg-muted px-1 py-0.5 text-xs">
-                          &lt;plugin-slug&gt;
-                        </code>{" "}
-                        with the slug of the plugin you want to enable. Use{" "}
-                      </>
-                    )}
-                    {pluginSlug && "Use "}
-                    <code className="bg-muted px-1 py-0.5 text-xs">
-                      strictKnownMarketplaces
-                    </code>{" "}
-                    alongside{" "}
-                    <code className="bg-muted px-1 py-0.5 text-xs">
-                      extraKnownMarketplaces
-                    </code>{" "}
-                    to restrict allowed marketplaces. Keep the registration
-                    entry; an allowlist does not register a marketplace.
-                  </span>
-                </p>
+                <>
+                  {marketplaceName && (
+                    <ClaudeMarketplaceNameNote
+                      marketplaceName={marketplaceName}
+                    />
+                  )}
+                  <p className="text-muted-foreground mt-3 flex items-start gap-1.5 text-xs leading-relaxed">
+                    <Info className="mt-0.5 size-3.5 shrink-0" />
+                    <span>
+                      {!pluginSlug && (
+                        <>
+                          Replace{" "}
+                          <code className="bg-muted px-1 py-0.5 text-xs">
+                            &lt;plugin-slug&gt;
+                          </code>{" "}
+                          with the slug of the plugin you want to enable.
+                          Use{" "}
+                        </>
+                      )}
+                      {pluginSlug && "Use "}
+                      <code className="bg-muted px-1 py-0.5 text-xs">
+                        strictKnownMarketplaces
+                      </code>{" "}
+                      alongside{" "}
+                      <code className="bg-muted px-1 py-0.5 text-xs">
+                        extraKnownMarketplaces
+                      </code>{" "}
+                      to restrict allowed marketplaces. Keep the registration
+                      entry; an allowlist does not register a marketplace.
+                    </span>
+                  </p>
+                </>
               ) : (
                 <p className="text-muted-foreground text-sm italic">
                   Re-publish to mint a marketplace install URL.

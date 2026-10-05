@@ -1,3 +1,7 @@
+import {
+  ClaudeMarketplaceAutoUpdateNote,
+  ClaudeMarketplaceNameNote,
+} from "@/components/claude-code-marketplace-notes";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
@@ -6,6 +10,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
+import { CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL } from "@/lib/claude-code-marketplace";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
@@ -59,10 +64,12 @@ function ClaudeInstallContent({
           2,
         )
       : null;
+  // Managed enabledPlugins force-enables the plugin; Claude Code has no
+  // plugins.required key, so a snippet using one enabled nothing.
   const requirePluginJson =
     pluginName && marketplaceName
       ? JSON.stringify(
-          { plugins: { required: [`${pluginName}@${marketplaceName}`] } },
+          { enabledPlugins: { [`${pluginName}@${marketplaceName}`]: true } },
           null,
           2,
         )
@@ -96,6 +103,11 @@ function ClaudeInstallContent({
             Publish your plugins to GitHub first to get a marketplace install
             URL.
           </p>
+        )}
+        {addCommand && installCommand && (
+          <ClaudeMarketplaceAutoUpdateNote
+            marketplaceName={marketplaceName ?? undefined}
+          />
         )}
       </div>
 
@@ -155,11 +167,15 @@ function ClaudeInstallContent({
                 identifier.
               </p>
             )}
+            {marketplaceName &&
+              (requireMarketplaceJson || requirePluginJson) && (
+                <ClaudeMarketplaceNameNote marketplaceName={marketplaceName} />
+              )}
           </div>
 
           <Button variant="secondary" size="sm" asChild>
             <a
-              href="https://code.claude.com/docs/en/plugin-marketplaces#require-marketplaces-for-your-team"
+              href={CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2"

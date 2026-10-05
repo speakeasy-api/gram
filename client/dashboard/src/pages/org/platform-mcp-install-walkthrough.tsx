@@ -1,3 +1,4 @@
+import { ClaudeMarketplaceAutoUpdateNote } from "@/components/claude-code-marketplace-notes";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { InstallSteps, type InstallStep } from "@/components/install-steps";
@@ -307,6 +308,11 @@ function marketplaceSteps(client: ClientFamily): InstallStep[] {
       description:
         "Run this command in the Claude Code environment where you want to use Platform MCP. It registers the Speakeasy marketplace for your local Claude Code profile.",
       code: `/plugin marketplace add ${marketplaceURL}`,
+      children: (
+        <ClaudeMarketplaceAutoUpdateNote
+          marketplaceName={PUBLIC_MARKETPLACE_NAME}
+        />
+      ),
     },
     {
       title: "Install Platform MCP for your profile",

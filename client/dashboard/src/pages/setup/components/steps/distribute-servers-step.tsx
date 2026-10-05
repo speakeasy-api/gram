@@ -18,6 +18,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
+import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { MarketplaceSection } from "../marketplace-section";
 import { isMarketplacePublished } from "../marketplace-status";
 import { StepSection } from "../step-section";
@@ -29,6 +30,7 @@ import {
   invalidateAllPlugin,
   usePlugin,
 } from "@gram/client/react-query/plugin";
+import { ClaudeMarketplaceAutoUpdateNote } from "@/components/claude-code-marketplace-notes";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -52,6 +54,34 @@ const INITIAL_VISIBLE = 10;
 
 interface DistributeServersStepProps {
   onComplete: () => void;
+}
+
+// Mounted only once a marketplace URL exists, so the settings read behind the
+// auto-update note runs only when there is a command to show.
+function SelfInstallCommand({ command }: { command: string }): JSX.Element {
+  const { data: marketplaceSettings } = useMarketplaceSettings(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
+  return (
+    <div className="space-y-2">
+      <p className="text-foreground text-sm font-medium">
+        Install for yourself in Claude Code
+      </p>
+      <p className="text-muted-foreground text-xs">
+        Registers the marketplace for your own account.
+      </p>
+      <div className="bg-muted/50 flex items-center justify-between gap-2 border p-3">
+        <code className="text-foreground truncate text-xs">{command}</code>
+        <CopyButton text={command} />
+      </div>
+      <ClaudeMarketplaceAutoUpdateNote
+        marketplaceName={marketplaceSettings?.effectiveName}
+        className="mt-0"
+      />
+    </div>
+  );
 }
 
 /** Stable selection key for a catalog server, matching the catalog page convention. */
@@ -649,20 +679,7 @@ export function DistributeServersStep({
                   organization can install them.
                 </p>
                 {marketplaceCommand && (
-                  <div className="space-y-2">
-                    <p className="text-foreground text-sm font-medium">
-                      Install for yourself in Claude Code
-                    </p>
-                    <p className="text-muted-foreground text-xs">
-                      Registers the marketplace for your own account.
-                    </p>
-                    <div className="bg-muted/50 flex items-center justify-between gap-2 border p-3">
-                      <code className="text-foreground truncate text-xs">
-                        {marketplaceCommand}
-                      </code>
-                      <CopyButton text={marketplaceCommand} />
-                    </div>
-                  </div>
+                  <SelfInstallCommand command={marketplaceCommand} />
                 )}
                 {publishStatus?.repoOwner && publishStatus?.repoName && (
                   <div className="space-y-2">

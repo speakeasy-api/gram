@@ -214,6 +214,8 @@ func platformMCPMarketplaceReadme(marketplaceRepoURL string, mode platformMCPMar
 	b.WriteString("/plugin marketplace add " + marketplaceRepoURL + "\n")
 	b.WriteString("/plugin install " + platformMCPPluginName + "@" + PublicMarketplaceName + "\n")
 	b.WriteString("```\n\n")
+	b.WriteString("Auto-update is off for a marketplace added this way: open `/plugin` → Marketplaces, select `" + PublicMarketplaceName + "`, and choose Enable auto-update, ")
+	b.WriteString("or ask your admin to enforce it in managed settings. See [Turn on auto-update](https://code.claude.com/docs/en/plugins/host-marketplace#turn-on-auto-update).\n\n")
 
 	b.WriteString("## Codex\n\n")
 	b.WriteString("```\n")
