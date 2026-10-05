@@ -40,7 +40,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -227,7 +226,9 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	identityResolver.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 
 	enc, err := encryption.New(c.String("encryption-key"))
-	inv.Require("encryption client", "encryption-key is a valid AES-256 key", err)
+	if err != nil {
+		return fmt.Errorf("create encryption client: %w", err)
+	}
 	env := environments.NewEnvironmentEntries(logger, db, enc, mcpmetadata_repo.New(db))
 	auditLogger := newAuditLogger()
 
@@ -251,7 +252,10 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	}
 	shutdown.funcs = append(shutdown.funcs, stop)
 
-	roleClient := newAccessRoleProvider(ctx, logger, guardianPolicy, c)
+	roleClient, err := newAccessRoleProvider(ctx, logger, guardianPolicy, c)
+	if err != nil {
+		return fmt.Errorf("create access role provider: %w", err)
+	}
 	authzEngine := authz.NewEngine(logger, db,
 		authz.ChallengeLoggingEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureAuthzChallengeLogging)),
 		roleClient, authz.EngineOpts{
@@ -334,12 +338,15 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
 
-	tunnelHTTPClient := newTunnelHTTPClient(c, guardianPolicy, redisClient)
+	tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, redisClient)
+	if err != nil {
+		return fmt.Errorf("create tunnel HTTP client: %w", err)
+	}
 	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner)
 	if err != nil {
 		return err
 	}
-	mcpService := newMCPService(c, mcpServiceDependencies{
+	mcpService, err := newMCPService(c, mcpServiceDependencies{
 		CallerAssertions: callerAssertions,
 		Logger:           logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
 		Sessions: sessionManager, ChatSessions: chatSessions, Environment: env,
@@ -351,6 +358,9 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		PlatformExtras: platformExtras, PlatformFeatureChecker: productFeatures.PlatformFeatureCheck,
 		PlatformToolsets: map[string]platformtools.Toolset{}, Identity: identityResolver, Challenges: remoteSessionDeps.Challenges, IDTokenKeys: remoteSessionDeps.IDTokenKeys, CallbackOrigins: callbackOrigins,
 	})
+	if err != nil {
+		return fmt.Errorf("create MCP service: %w", err)
+	}
 	// Consent runs on this tier in production. Compose the same attachment
 	// service and transactional owner authorizer as gram start, without mounting
 	// its dashboard RPC routes or introducing a Temporal client.

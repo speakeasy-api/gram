@@ -434,10 +434,12 @@ func newAdminCommand() *cli.Command {
 
 			adminEncryption, adminEncryptionErr := encryption.New(c.String("admin-encryption-key"))
 			encryptionClient, encryptionErr := encryption.New(c.String("encryption-key"))
-			inv.Require("admin encryption",
+			if err := inv.Check("admin encryption",
 				"admin-encryption-key is a valid AES-256 key", adminEncryptionErr,
 				"encryption-key is a valid AES-256 key", encryptionErr,
-			)
+			); err != nil {
+				return fmt.Errorf("invalid admin encryption configuration: %w", err)
+			}
 
 			adminServerURL, err := url.Parse(c.String("admin-server-url"))
 			if err != nil {
@@ -535,7 +537,9 @@ func newAdminCommand() *cli.Command {
 			admin.Attach(mux, adminService)
 			if c.Bool("admin-mcp-enabled") {
 				key := c.String("admin-mcp-signing-key")
-				requireAdminMCPSigningKey(key, c.String("admin-encryption-key"), c.String("encryption-key"))
+				if err := validateAdminMCPSigningKey(key, c.String("admin-encryption-key"), c.String("encryption-key")); err != nil {
+					return err
+				}
 				writeOperations, err := adminmcp.ParseWriteOperations(c.String("admin-mcp-write-operations"))
 				if err != nil {
 					return fmt.Errorf("configure staff Admin MCP writes: %w", err)
@@ -649,10 +653,13 @@ func newAdminCommand() *cli.Command {
 	}
 }
 
-func requireAdminMCPSigningKey(key, adminEncryptionKey, applicationEncryptionKey string) {
-	inv.Require("staff Admin MCP signing key",
+func validateAdminMCPSigningKey(key, adminEncryptionKey, applicationEncryptionKey string) error {
+	if err := inv.Check("staff Admin MCP signing key",
 		"is at least 32 bytes", len(key) >= 32,
 		"differs from the admin encryption key", key != adminEncryptionKey,
 		"differs from the application encryption key", key != applicationEncryptionKey,
-	)
+	); err != nil {
+		return fmt.Errorf("invalid staff Admin MCP signing key: %w", err)
+	}
+	return nil
 }

@@ -51,7 +51,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
-	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	meteringchrepo "github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
@@ -332,7 +331,9 @@ func newStreamsCommand() *cli.Command {
 			defer db.Close()
 
 			encryptionClient, err := encryption.New(c.String("encryption-key"))
-			inv.Require("encryption client", "encryption-key is a valid AES-256 key", err)
+			if err != nil {
+				return fmt.Errorf("create encryption client: %w", err)
+			}
 
 			replicaDB, err := newDBClient(ctx, logger, meterProvider, c.String("database-read-replica-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
@@ -367,10 +368,16 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create Stripe client: %w", err)
 			}
-			stripeMeterEvents := newStripeMeterEventClient(logger, guardianPolicy, c)
+			stripeMeterEvents, err := newStripeMeterEventClient(logger, guardianPolicy, c)
+			if err != nil {
+				return fmt.Errorf("create Stripe meter event client: %w", err)
+			}
 			stripeCatalog := newStripeCatalog(c)
 
-			_, billingTracker := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
+			_, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
+			if err != nil {
+				return fmt.Errorf("create billing provider: %w", err)
+			}
 
 			var openRouter openrouter.Provisioner
 			if c.String("environment") == "local" {

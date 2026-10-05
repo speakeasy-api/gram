@@ -796,7 +796,9 @@ func newStartCommand() *cli.Command {
 			}
 
 			encryptionClient, err := encryption.New(c.String("encryption-key"))
-			inv.Require("encryption client", "encryption-key is a valid AES-256 key", err)
+			if err != nil {
+				return fmt.Errorf("create encryption client: %w", err)
+			}
 
 			mcpMetadataRepo := mcpmetadata_repo.New(db)
 			env := environments.NewEnvironmentEntries(logger, db, encryptionClient, mcpMetadataRepo)
@@ -900,7 +902,10 @@ func newStartCommand() *cli.Command {
 			sessionCaptureEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture)
 			sessionPortabilityEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionPortability)
 			challengeLoggingEnabled := authz.ChallengeLoggingEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureAuthzChallengeLogging))
-			roleClient := newAccessRoleProvider(ctx, logger, guardianPolicy, c)
+			roleClient, err := newAccessRoleProvider(ctx, logger, guardianPolicy, c)
+			if err != nil {
+				return fmt.Errorf("create access role provider: %w", err)
+			}
 			var (
 				litellmTraceProcessor   *litellm.TraceProcessor
 				litellmMetricProcessor  *litellm.MetricProcessor
@@ -1100,7 +1105,10 @@ func newStartCommand() *cli.Command {
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
 
-			tunnelHTTPClient := newTunnelHTTPClient(c, guardianPolicy, redisClient)
+			tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, redisClient)
+			if err != nil {
+				return fmt.Errorf("create tunnel HTTP client: %w", err)
+			}
 
 			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner)
 			if err != nil {
@@ -1148,7 +1156,7 @@ func newStartCommand() *cli.Command {
 				mcpFindingEvidence,
 				mcpriskscan.DefaultPolicyConfig,
 			)
-			mcpService := newMCPService(c, mcpServiceDependencies{
+			mcpService, err := newMCPService(c, mcpServiceDependencies{
 				CallerAssertions: callerAssertions,
 				Logger:           logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
 				Sessions: sessionManager, ChatSessions: chatSessionsManager, Environment: env,
@@ -1160,6 +1168,9 @@ func newStartCommand() *cli.Command {
 				PlatformFeatureChecker: platformFeatureChecker, PlatformToolsets: platformToolsets,
 				Identity: identityResolver, Challenges: remoteChallengeManager, IDTokenKeys: remoteSessionDeps.IDTokenKeys, CallbackOrigins: callbackOrigins,
 			})
+			if err != nil {
+				return fmt.Errorf("create MCP service: %w", err)
+			}
 			// The keepalive re-check runs on the API process: the probe needs the runtime's endpoint routing and proxy builders.
 			mcpService.StartRemoteSessionRecheck(ctx)
 
@@ -1730,7 +1741,9 @@ func newStartCommand() *cli.Command {
 			)
 			riskFindings := riskchrepo.New(chDB)
 			riskPolicyCatalog, err := policycatalog.Build()
-			inv.Require("risk policy catalog", "builds", err)
+			if err := inv.Check("risk policy catalog", "builds", err); err != nil {
+				return fmt.Errorf("build risk policy catalog: %w", err)
+			}
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
 				Logger:                   logger,
 				MeterProvider:            meterProvider,

@@ -103,7 +103,7 @@ func TestNewStripeClientRealClientUsesCatalog(t *testing.T) {
 func TestNewStripeMeterEventClientLocalWithoutAPIKeyUsesNoop(t *testing.T) {
 	t.Parallel()
 
-	client := newStripeMeterEventClient(
+	client, err := newStripeMeterEventClient(
 		testenv.NewLogger(t),
 		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
 		newStripeCLIContext(t, map[string]string{
@@ -112,13 +112,14 @@ func TestNewStripeMeterEventClientLocalWithoutAPIKeyUsesNoop(t *testing.T) {
 			stripeMeterEventExportFlagName: "true",
 		}),
 	)
+	require.NoError(t, err)
 	require.NoError(t, client.CreateMeterEvent(t.Context(), stripeclient.V2MeterEventInput{}))
 }
 
 func TestNewStripeMeterEventClientLocalWithAPIKeyUsesRealClient(t *testing.T) {
 	t.Parallel()
 
-	client := newStripeMeterEventClient(
+	client, err := newStripeMeterEventClient(
 		testenv.NewLogger(t),
 		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
 		newStripeCLIContext(t, map[string]string{
@@ -127,13 +128,14 @@ func TestNewStripeMeterEventClientLocalWithAPIKeyUsesRealClient(t *testing.T) {
 			stripeMeterEventExportFlagName: "true",
 		}),
 	)
+	require.NoError(t, err)
 	require.ErrorContains(t, client.CreateMeterEvent(t.Context(), stripeclient.V2MeterEventInput{}), "identifier is required")
 }
 
 func TestNewStripeMeterEventClientStreamingDisabledUsesNoop(t *testing.T) {
 	t.Parallel()
 
-	client := newStripeMeterEventClient(
+	client, err := newStripeMeterEventClient(
 		testenv.NewLogger(t),
 		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
 		newStripeCLIContext(t, map[string]string{
@@ -141,23 +143,23 @@ func TestNewStripeMeterEventClientStreamingDisabledUsesNoop(t *testing.T) {
 			"stripe-api-key": "unset",
 		}),
 	)
+	require.NoError(t, err)
 	require.NoError(t, client.CreateMeterEvent(t.Context(), stripeclient.V2MeterEventInput{}))
 }
 
 func TestNewStripeMeterEventClientNonLocalWithoutAPIKeyFails(t *testing.T) {
 	t.Parallel()
 
-	require.Panics(t, func() {
-		newStripeMeterEventClient(
-			testenv.NewLogger(t),
-			guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
-			newStripeCLIContext(t, map[string]string{
-				"environment":                  "prod",
-				"stripe-api-key":               "unset",
-				stripeMeterEventExportFlagName: "true",
-			}),
-		)
-	})
+	_, err := newStripeMeterEventClient(
+		testenv.NewLogger(t),
+		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
+		newStripeCLIContext(t, map[string]string{
+			"environment":                  "prod",
+			"stripe-api-key":               "unset",
+			stripeMeterEventExportFlagName: "true",
+		}),
+	)
+	require.ErrorContains(t, err, "stripe-api-key is set")
 }
 
 func TestNewStripeCatalogMapsTUMMeter(t *testing.T) {
@@ -348,7 +350,7 @@ func TestNewStripeCatalogRiskMetersRequireExportOptIn(t *testing.T) {
 func TestNewStripeMeterEventClientAllowsMissingBandwidthNamesWhenExportEnabled(t *testing.T) {
 	t.Parallel()
 
-	client := newStripeMeterEventClient(
+	client, err := newStripeMeterEventClient(
 		testenv.NewLogger(t),
 		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
 		newStripeCLIContext(t, map[string]string{
@@ -357,6 +359,7 @@ func TestNewStripeMeterEventClientAllowsMissingBandwidthNamesWhenExportEnabled(t
 			stripeMeterEventExportFlagName: "true",
 		}),
 	)
+	require.NoError(t, err)
 	require.NotNil(t, client)
 }
 
@@ -369,7 +372,7 @@ func TestNewBillingProviderAcceptsStripeWithoutPolar(t *testing.T) {
 		"environment": "prod",
 	})
 
-	repository, tracker := newBillingProvider(
+	repository, tracker, err := newBillingProvider(
 		t.Context(),
 		logger,
 		tracerProvider,
@@ -380,29 +383,29 @@ func TestNewBillingProviderAcceptsStripeWithoutPolar(t *testing.T) {
 		nil,
 		ctx,
 	)
+	require.NoError(t, err)
 	require.NotNil(t, repository)
 	require.NotNil(t, tracker)
 
-	_, _, err := repository.GetCustomerTier(t.Context(), "org_placeholder")
+	_, _, err = repository.GetCustomerTier(t.Context(), "org_placeholder")
 	require.ErrorContains(t, err, "legacy billing operations are unavailable")
 }
 
 func TestNewBillingProviderRejectsNonLocalWithoutProvider(t *testing.T) {
 	t.Parallel()
 
-	require.Panics(t, func() {
-		newBillingProvider(
-			t.Context(),
-			testenv.NewLogger(t),
-			testenv.NewTracerProvider(t),
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			newStripeCLIContext(t, map[string]string{"environment": "prod"}),
-		)
-	})
+	_, _, err := newBillingProvider(
+		t.Context(),
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		newStripeCLIContext(t, map[string]string{"environment": "prod"}),
+	)
+	require.ErrorContains(t, err, "polar or stripe is configured outside local development")
 }
 
 func newStripeCLIContext(t *testing.T, values map[string]string) *cli.Context {

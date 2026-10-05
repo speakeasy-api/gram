@@ -197,10 +197,10 @@ func TestNetworkIngressWorkerUsesDedicatedQueue(t *testing.T) {
 
 func TestNetworkIngressWorkerQueueRejectsSharedMainQueue(t *testing.T) {
 	t.Parallel()
-	require.Panics(t, func() { requireNetworkIngressWorkerQueue("", "main") })
-	require.Panics(t, func() { requireNetworkIngressWorkerQueue("main", "main") })
-	require.Panics(t, func() { requireNetworkIngressWorkerQueue("ordinary", "ordinary") })
-	require.NotPanics(t, func() { requireNetworkIngressWorkerQueue("gram-dev-network-ingress", "main") })
+	require.Error(t, validateNetworkIngressWorkerQueue("", "main"))
+	require.Error(t, validateNetworkIngressWorkerQueue("main", "main"))
+	require.Error(t, validateNetworkIngressWorkerQueue("ordinary", "ordinary"))
+	require.NoError(t, validateNetworkIngressWorkerQueue("gram-dev-network-ingress", "main"))
 }
 
 func TestAppRegistersNetworkIngressProcesses(t *testing.T) {
@@ -226,10 +226,10 @@ func TestNetworkIngressServerUsesPrivateListenerFlags(t *testing.T) {
 
 func TestRequirePrivateServerConfig(t *testing.T) {
 	t.Parallel()
-	require.Panics(t, func() { requirePrivateServerConfig(false, ":8443", "cert", "key", false) })
-	require.Panics(t, func() { requirePrivateServerConfig(true, "", "cert", "key", false) })
-	require.Panics(t, func() { requirePrivateServerConfig(true, ":8443", "", "key", false) })
-	require.Panics(t, func() { requirePrivateServerConfig(true, ":8443", "cert", "", false) })
-	require.Panics(t, func() { requirePrivateServerConfig(true, ":8443", "cert", "key", true) })
-	require.NotPanics(t, func() { requirePrivateServerConfig(true, ":8443", "cert", "key", false) })
+	require.Error(t, validatePrivateServerConfig(false, ":8443", "cert", "key", false))
+	require.Error(t, validatePrivateServerConfig(true, "", "cert", "key", false))
+	require.Error(t, validatePrivateServerConfig(true, ":8443", "", "key", false))
+	require.Error(t, validatePrivateServerConfig(true, ":8443", "cert", "", false))
+	require.Error(t, validatePrivateServerConfig(true, ":8443", "cert", "key", true))
+	require.NoError(t, validatePrivateServerConfig(true, ":8443", "cert", "key", false))
 }

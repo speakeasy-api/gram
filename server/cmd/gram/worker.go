@@ -436,7 +436,9 @@ func newWorkerCommand() *cli.Command {
 			}
 
 			encryptionClient, err := encryption.New(c.String("encryption-key"))
-			inv.Require("encryption client", "encryption-key is a valid AES-256 key", err)
+			if err != nil {
+				return fmt.Errorf("create encryption client: %w", err)
+			}
 
 			auditLogger := newAuditLogger()
 
@@ -536,7 +538,10 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create Stripe client: %w", err)
 			}
 
-			billingRepo, billingTracker := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
+			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
+			if err != nil {
+				return fmt.Errorf("create billing provider: %w", err)
+			}
 
 			var openRouter interface {
 				openrouter.Provisioner
@@ -607,7 +612,10 @@ func newWorkerCommand() *cli.Command {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
 			}
 
-			workosClient, workosAvailable := newWorkOSClient(guardianPolicy, c)
+			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)
+			if err != nil {
+				return fmt.Errorf("create WorkOS client: %w", err)
+			}
 			var backgroundWorkOSClient activities.WorkOSClient = workosClient
 			var identityWorkOSClient identity.WorkOSClient = workosClient
 			if !workosAvailable {
@@ -698,7 +706,9 @@ func newWorkerCommand() *cli.Command {
 			}
 			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, catalogValidator)), featureFlags)
 
-			inv.Require("worker", "jwt-signing-key is set", c.String(usersessions.JWTSigningKeyFlag) != "")
+			if err := inv.Check("worker", "jwt-signing-key is set", c.String(usersessions.JWTSigningKeyFlag) != ""); err != nil {
+				return fmt.Errorf("invalid worker configuration: %w", err)
+			}
 			serverURL, err := url.Parse(c.String("server-url"))
 			if err != nil {
 				return fmt.Errorf("failed to parse server url: %w", err)

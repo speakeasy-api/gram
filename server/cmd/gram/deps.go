@@ -214,7 +214,7 @@ func openClickhouseClient(ctx context.Context, logger *slog.Logger, opts clickho
 	logger = logger.With(attr.SlogComponent(opts.component))
 	nilFunc := noopShutdown
 
-	inv.Require("clickhouse config options",
+	if err := inv.Check("clickhouse config options",
 		"clickhouse host must be set", opts.host != "",
 		"clickhouse database must be set", opts.database != "",
 		"clickhouse username must be set", opts.username != "",
@@ -223,7 +223,9 @@ func openClickhouseClient(ctx context.Context, logger *slog.Logger, opts clickho
 		"clickhouse max open connections must be positive", opts.maxOpenConns > 0,
 		"clickhouse max idle connections must not be negative", opts.maxIdleConns >= 0,
 		"clickhouse max idle connections must not exceed max open connections", opts.maxIdleConns <= opts.maxOpenConns,
-	)
+	); err != nil {
+		return nil, nilFunc, fmt.Errorf("invalid configuration for clickhouse: %w", err)
+	}
 
 	var rootCAs *x509.CertPool
 	if opts.rootCAFile != "" {
@@ -450,11 +452,13 @@ type temporalClientOptions struct {
 
 func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, opts temporalClientOptions) (*temporal.Environment, func(context.Context) error, error) {
 	nilShutdownFunc := noopShutdown
-	inv.Require("temporal client",
+	if err := inv.Check("temporal client",
 		"address is set", opts.address != "",
 		"namespace is set", opts.namespace != "",
 		"client certificate and key are set together", (len(opts.certPEMBlock) > 0) == (len(opts.keyPEMBlock) > 0),
-	)
+	); err != nil {
+		return nil, nilShutdownFunc, fmt.Errorf("invalid configuration for temporal client: %w", err)
+	}
 
 	var connOpts client.ConnectionOptions
 	if len(opts.certPEMBlock) > 0 && len(opts.keyPEMBlock) > 0 {
@@ -581,7 +585,7 @@ func newBillingProvider(
 	stripeClient stripeclient.Client,
 	db *pgxpool.Pool,
 	c *cli.Context,
-) (billing.Repository, billing.Tracker) {
+) (billing.Repository, billing.Tracker, error) {
 	switch {
 	case c.String("polar-api-key") != "":
 		catalog := &polar.Catalog{
@@ -593,7 +597,9 @@ func newBillingProvider(
 			MeterIDServers:      c.String("polar-meter-id-servers"),
 			MeterIDCredits:      c.String("polar-meter-id-credits"),
 		}
-		inv.Require("polar billing provider", "catalog is valid", catalog.Validate())
+		if err := inv.Check("polar billing provider", "catalog is valid", catalog.Validate()); err != nil {
+			return nil, nil, fmt.Errorf("invalid configuration for polar billing: %w", err)
+		}
 
 		retries := guardian.DefaultRetryConfig()
 		retries.WaitMax = 10 * time.Second
@@ -613,19 +619,21 @@ func newBillingProvider(
 
 		pclient := polar.NewClient(guardianPolicy, polarsdk, polarAPIKey, logger, tracerProvider, redisClient, catalog, c.String("polar-webhook-secret"))
 		tracker := tracking.New(pclient, posthogClient, logger)
-		return pclient, tracker
+		return pclient, tracker, nil
 	case c.String("environment") == "local":
 		logger.WarnContext(ctx, "using stub billing client: polar not configured")
 		stub := billing.NewStubClient(logger, tracerProvider)
 		if db != nil {
 			stub = billing.NewStubClientWithLocalProfiles(logger, tracerProvider, db)
 		}
-		return stub, stub
+		return stub, stub, nil
 	default:
-		inv.Require("billing provider", "polar or stripe is configured outside local development", stripeClient != nil)
+		if err := inv.Check("billing provider", "polar or stripe is configured outside local development", stripeClient != nil); err != nil {
+			return nil, nil, fmt.Errorf("invalid configuration for billing provider: %w", err)
+		}
 		logger.InfoContext(ctx, "using Stripe billing provider with legacy billing operations disabled")
 		unavailable := billing.NewUnavailableClient(logger)
-		return unavailable, tracking.New(unavailable, posthogClient, logger)
+		return unavailable, tracking.New(unavailable, posthogClient, logger), nil
 	}
 }
 
@@ -668,17 +676,19 @@ func newStripeMeterEventClient(
 	logger *slog.Logger,
 	guardianPolicy *guardian.Policy,
 	c *cli.Context,
-) stripeclient.V2MeterEventClient {
+) (stripeclient.V2MeterEventClient, error) {
 	if !c.Bool(stripeMeterEventExportFlagName) {
-		return stripeclient.NewNoopV2MeterEventClient()
+		return stripeclient.NewNoopV2MeterEventClient(), nil
 	}
 
 	apiKey := c.String("stripe-api-key")
 	if c.String("environment") == "local" && !stripeclient.IsConfigured(apiKey) {
-		return stripeclient.NewNoopV2MeterEventClient()
+		return stripeclient.NewNoopV2MeterEventClient(), nil
 	}
-	inv.Require("stripe meter event client", "stripe-api-key is set", stripeclient.IsConfigured(apiKey))
-	return stripeclient.NewV2MeterEventClient(logger, guardianPolicy, apiKey)
+	if err := inv.Check("stripe meter event client", "stripe-api-key is set", stripeclient.IsConfigured(apiKey)); err != nil {
+		return nil, fmt.Errorf("invalid configuration for stripe meter events: %w", err)
+	}
+	return stripeclient.NewV2MeterEventClient(logger, guardianPolicy, apiKey), nil
 }
 
 func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
@@ -784,7 +794,7 @@ func workosClientOpts(c *cli.Context) workos.ClientOpts {
 	}
 }
 
-func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) access.RoleProvider {
+func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) (access.RoleProvider, error) {
 	idpClientSecret := c.String("idp-client-secret")
 
 	// Local callers authenticate to dev-idp with its client secret; dev-idp owns
@@ -794,14 +804,16 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPol
 
 		if opts.Endpoint != "" && idpClientSecret != "" && idpClientSecret != "unset" {
 			logger.InfoContext(ctx, "using dev-idp WorkOS emulator as access role provider")
-			return workos.NewClient(guardianPolicy, idpClientSecret, opts)
+			return workos.NewClient(guardianPolicy, idpClientSecret, opts), nil
 		}
 		logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
-		return workos.NewStubClient()
+		return workos.NewStubClient(), nil
 	}
 
-	inv.Require("access role provider", "idp-client-secret is set", idpClientSecret != "" && idpClientSecret != "unset")
-	return workos.NewClient(guardianPolicy, idpClientSecret, workosClientOpts(c))
+	if err := inv.Check("access role provider", "idp-client-secret is set", idpClientSecret != "" && idpClientSecret != "unset"); err != nil {
+		return nil, fmt.Errorf("invalid configuration for access role provider: %w", err)
+	}
+	return workos.NewClient(guardianPolicy, idpClientSecret, workosClientOpts(c)), nil
 }
 
 // newAdminWorkOSOrganizationCreator builds the WorkOS surface the admin server
@@ -878,18 +890,20 @@ func newAdminOpenRouter(
 	)
 }
 
-func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *workos.Client, workosAvailable bool) {
+func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *workos.Client, workosAvailable bool, err error) {
 	env := c.String("environment")
 	credential := c.String("idp-client-secret")
 
 	haveCredential := credential != "" && credential != "unset"
-	inv.Require("WorkOS client", "idp-client-secret is set outside local development", env == "local" || haveCredential)
+	if err := inv.Check("WorkOS client", "idp-client-secret is set outside local development", env == "local" || haveCredential); err != nil {
+		return nil, false, fmt.Errorf("invalid configuration for WorkOS client: %w", err)
+	}
 
 	available := haveCredential
 	if env == "local" {
 		available = c.String("devidp-backend") == "workos"
 	}
-	return workos.NewClient(guardianPolicy, credential, workosClientOpts(c)), available
+	return workos.NewClient(guardianPolicy, credential, workosClientOpts(c)), available, nil
 }
 
 // newIDPUserManagementClient creates a WorkOS user-management SDK client
@@ -953,12 +967,14 @@ func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*
 		tigrisKey := c.String("functions-tigris-key")
 		tigrisSecret := c.String("functions-tigris-secret")
 
-		inv.Require(
+		if err := inv.Check(
 			"tigris flags",
 			"tigris bucket uri must be set", tigrisBucketURI != "",
 			"tigris key must be set", tigrisKey != "",
 			"tigris secret must be set", tigrisSecret != "",
-		)
+		); err != nil {
+			return nil, nilShutdown, fmt.Errorf("invalid configuration for tigris: %w", err)
+		}
 
 		store, err := assets.NewS3BlobStore(ctx, logger, tigrisBucketURI, assets.S3BlobStoreOptions{
 			BaseEndpoint: "https://t3.storage.dev",
@@ -991,7 +1007,9 @@ func newFunctionOrchestrator(
 
 	switch provider := c.String("functions-provider"); provider {
 	case "local":
-		inv.Require("local functions runner", "functions-local-runner-root is set", c.String("functions-local-runner-root") != "")
+		if err := inv.Check("local functions runner", "functions-local-runner-root is set", c.String("functions-local-runner-root") != ""); err != nil {
+			return nil, nilShutdown, fmt.Errorf("invalid configuration for local functions runner: %w", err)
+		}
 		codeRootDir := filepath.Clean(c.String("functions-local-runner-root"))
 
 		if err := os.MkdirAll(codeRootDir, 0o750); err != nil && !errors.Is(err, fs.ErrExist) {
@@ -1012,14 +1030,16 @@ func newFunctionOrchestrator(
 		defaultOrg := c.String("functions-flyio-org")
 		defaultRegion := c.String("functions-flyio-region")
 
-		inv.Require(
+		if err := inv.Check(
 			"flyio flags",
 			"server url must be set", surl != "",
 			"token must be set", tokenstr != "",
 			"oci image must be set", ociImage != "",
 			"default org must be set", defaultOrg != "",
 			"default region must be set", defaultRegion != "",
-		)
+		); err != nil {
+			return nil, nilShutdown, fmt.Errorf("invalid configuration for flyio: %w", err)
+		}
 
 		serverURL, err := url.Parse(surl)
 		if err != nil {
@@ -1584,7 +1604,9 @@ func newIdentityProviderConnectionsProvisioner(ctx context.Context, logger *slog
 
 	keyRing := strings.TrimSpace(c.String(identityProviderKMSKeyRingFlag))
 	local := c.String("environment") == "local"
-	inv.Require("identity provider connections", "kms key ring is set when a signing credential is configured", local || keyRing != "")
+	if err := inv.Check("identity provider connections", "kms key ring is set when a signing credential is configured", local || keyRing != ""); err != nil {
+		return nil, fmt.Errorf("invalid configuration for identity provider connections: %w", err)
+	}
 	if keyRing == "" {
 		keyRing = identityProviderKMSKeyRingLocalDefault
 	}

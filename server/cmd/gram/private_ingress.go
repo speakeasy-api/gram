@@ -64,13 +64,15 @@ func newNetworkIngressServerCommand() *cli.Command {
 		Usage: "Start the dedicated private network ingress server",
 		Flags: flags,
 		Action: func(c *cli.Context) error {
-			requirePrivateServerConfig(
+			if err := validatePrivateServerConfig(
 				c.Bool("network-ingress-enabled"),
 				c.String("netingress-address"),
 				c.String("netingress-tls-cert-file"),
 				c.String("netingress-tls-key-file"),
 				c.Bool("dev-single-process"),
-			)
+			); err != nil {
+				return err
+			}
 
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
@@ -142,14 +144,17 @@ func privateIngressServerFlags() []cli.Flag {
 	)
 }
 
-func requirePrivateServerConfig(enabled bool, address, certFile, keyFile string, devSingleProcess bool) {
-	inv.Require("private network ingress server",
+func validatePrivateServerConfig(enabled bool, address, certFile, keyFile string, devSingleProcess bool) error {
+	if err := inv.Check("private network ingress server",
 		"runtime is enabled", enabled,
 		"address is set", address != "",
 		"TLS certificate is set", certFile != "",
 		"TLS key is set", keyFile != "",
 		"does not run the general worker", !devSingleProcess,
-	)
+	); err != nil {
+		return fmt.Errorf("invalid private network ingress server configuration: %w", err)
+	}
+	return nil
 }
 
 type privateIngressServerDependencies struct {

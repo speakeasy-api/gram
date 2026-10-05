@@ -1,6 +1,7 @@
 package gram
 
 import (
+	"fmt"
 	"log/slog"
 	"net"
 	"net/url"
@@ -19,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -83,15 +83,16 @@ type mcpServiceDependencies struct {
 	CallerAssertions       *mcpauthz.Issuer
 }
 
-func newMCPService(c *cli.Context, d mcpServiceDependencies) *mcp.Service {
+func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, error) {
 	cacheImpl := cache.NewRedisCacheAdapter(d.Redis)
 	checkpoint := mcptoolexecution.NewCheckpoint(d.DB, mcptoolexecution.DefaultEvaluationTimeout, d.Meter, d.Logger)
 	proxy := remotemcp.NewProxyManager(d.Logger, d.Tracer, d.Meter, d.DB, d.Guardian, d.Authz, d.Posthog, d.Telemetry, d.Billing, d.BillingTracker,
 		mcpservers.NewToolDispositionCache(d.Logger, d.DB, cacheImpl), platformmcp.NewSelectedUseRecorder(d.DB), toolfilter.NewSessionToolWitnessStore(d.Logger, cacheImpl), checkpoint, d.MCPRisk)
 	cidrs := c.StringSlice("tunnel-gateway-cidr-blocks")
 	for _, cidr := range cidrs {
-		_, _, err := net.ParseCIDR(cidr)
-		inv.Require("tunnel gateway CIDR blocks", cidr+" parses", err)
+		if _, _, err := net.ParseCIDR(cidr); err != nil {
+			return nil, fmt.Errorf("invalid tunnel gateway CIDR block %q: %w", cidr, err)
+		}
 	}
 	delegation := remotesessions.NewDelegationService(d.DB, d.Encryption, d.Challenges)
 	// Identity-assertion grants are verified against the trusted IdP's keys
@@ -104,5 +105,5 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) *mcp.Service {
 		mcp.TunnelPublicConfig{SessionTTL: 0, LiveSessionCap: c.Int("public-tunnels-live-session-cap"), InitializeRate: ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0}, RequestRate: ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0}, MaxRequestLifetime: 0},
 		mcp.MetaRuntimeConfig{MemberCallTimeout: c.Duration("meta-member-call-timeout"), ValidationTimeout: 0, AutoVerifyWait: 0, RecheckInterval: c.Duration("remote-session-recheck-interval")})
 	service.SetCallbackOrigins(d.CallbackOrigins)
-	return service
+	return service, nil
 }

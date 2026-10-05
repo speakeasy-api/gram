@@ -65,17 +65,21 @@ func (r *privateIngressRuntime) Close(ctx context.Context) {
 	}
 }
 
-func requirePrivateIngressTemporalConfig(c *cli.Context) {
-	inv.Require("private ingress Temporal",
+func validatePrivateIngressTemporalConfig(c *cli.Context) error {
+	if err := inv.Check("private ingress Temporal",
 		"address is set", c.String("temporal-address") != "",
 		"namespace is set", c.String("temporal-namespace") != "",
 		"task queue is set", c.String("temporal-task-queue") != "",
-	)
-	requireNetworkIngressWorkerTemporalTLS(c.String("environment"), c.String("temporal-client-cert"), c.String("temporal-client-key"))
+	); err != nil {
+		return fmt.Errorf("invalid private ingress Temporal configuration: %w", err)
+	}
+	return validateNetworkIngressWorkerTemporalTLS(c.String("environment"), c.String("temporal-client-cert"), c.String("temporal-client-key"))
 }
 
 func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.Logger) (_ *privateIngressRuntime, err error) {
-	requirePrivateIngressTemporalConfig(c)
+	if err := validatePrivateIngressTemporalConfig(c); err != nil {
+		return nil, err
+	}
 	r := &privateIngressRuntime{DB: nil, Redis: nil, Temporal: nil, Kubernetes: nil, Runtime: nil, cleanup: nil}
 	defer func() {
 		if err != nil {
@@ -135,7 +139,9 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 
 	enc, err := encryption.New(c.String("encryption-key"))
-	inv.Require("encryption client", "encryption-key is a valid AES-256 key", err)
+	if err != nil {
+		return nil, fmt.Errorf("create encryption client: %w", err)
+	}
 	env := environments.NewEnvironmentEntries(logger, db, enc, metadatarepo.New(db))
 	r.Kubernetes, err = k8s.InitializeK8sClient(ctx, logger, c.String("environment"), "", "")
 	if err != nil {
@@ -169,7 +175,10 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		return nil, err
 	}
 	r.cleanup = append(r.cleanup, stop)
-	roleClient := newAccessRoleProvider(ctx, logger, guardianPolicy, c)
+	roleClient, err := newAccessRoleProvider(ctx, logger, guardianPolicy, c)
+	if err != nil {
+		return nil, fmt.Errorf("create access role provider: %w", err)
+	}
 	authzEngine := authz.NewEngine(logger, db, authz.ChallengeLoggingEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureAuthzChallengeLogging)), roleClient, authz.EngineOpts{
 		AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential, AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
 		AdmitWorkloadSession: runtimepolicy.AdmitWorkloadSession,
@@ -256,14 +265,17 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-	tunnelHTTPClient := newTunnelHTTPClient(c, guardianPolicy, redisClient)
+	tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, redisClient)
+	if err != nil {
+		return nil, fmt.Errorf("create tunnel HTTP client: %w", err)
+	}
 	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner)
 	if err != nil {
 		return nil, err
 	}
 	r.cleanup = append(r.cleanup, func(context.Context) error { remoteSessionDeps.Refresher.Shutdown(); return nil })
 	challengeManager := remoteSessionDeps.Challenges
-	mcpService := newMCPService(c, mcpServiceDependencies{
+	mcpService, err := newMCPService(c, mcpServiceDependencies{
 		CallerAssertions: callerAssertions,
 		Logger:           logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
 		Sessions: sessionManager, ChatSessions: chatSessions, Environment: env,
@@ -275,6 +287,9 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		PlatformExtras: platformExtras, PlatformFeatureChecker: productFeatures.PlatformFeatureCheck,
 		PlatformToolsets: map[string]platformtools.Toolset{}, Identity: identityResolver, Challenges: challengeManager, IDTokenKeys: remoteSessionDeps.IDTokenKeys, CallbackOrigins: callbackOrigins,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("create MCP service: %w", err)
+	}
 	r.cleanup = append(r.cleanup, func(ctx context.Context) error {
 		drainCtx, cancel := context.WithTimeout(ctx, probeDrainTimeout)
 		defer cancel()

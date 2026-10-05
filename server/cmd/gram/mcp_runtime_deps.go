@@ -2,13 +2,13 @@ package gram
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/url"
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/tunnel/route"
 
@@ -41,16 +41,17 @@ type mcpRemoteSessionDependencies struct {
 // calls (token exchange, refresh, revocation, dynamic client registration) for
 // remote session issuers bound to a tunneled MCP server, instead of dialing
 // them from cloud egress.
-func newTunnelHTTPClient(c *cli.Context, guardianPolicy *guardian.Policy, redisClient *redis.Client) *tunnelrouting.HTTPClient {
+func newTunnelHTTPClient(c *cli.Context, guardianPolicy *guardian.Policy, redisClient *redis.Client) (*tunnelrouting.HTTPClient, error) {
 	// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a typo
 	// here would strand tunnels fail-closed with no signal. Reject
 	// misconfiguration at startup instead.
 	cidrs := c.StringSlice("tunnel-gateway-cidr-blocks")
 	for _, cidr := range cidrs {
-		_, _, err := net.ParseCIDR(cidr)
-		inv.Require("tunnel gateway CIDR blocks", cidr+" parses", err)
+		if _, _, err := net.ParseCIDR(cidr); err != nil {
+			return nil, fmt.Errorf("invalid tunnel gateway CIDR block %q: %w", cidr, err)
+		}
 	}
-	return tunnelrouting.NewHTTPClient(route.NewRedis(redisClient), c.String("tunnel-forward-token"), guardianPolicy, cidrs)
+	return tunnelrouting.NewHTTPClient(route.NewRedis(redisClient), c.String("tunnel-forward-token"), guardianPolicy, cidrs), nil
 }
 
 func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, redisClient *redis.Client, serverURL *url.URL, callbackOrigins remotesessions.CallbackOrigins, auditLogger *audit.Logger, assertionSigner remotesessions.TokenEndpointAssertionSigner) (*mcpRemoteSessionDependencies, error) {

@@ -34,28 +34,26 @@ func TestPrivateIngressRejectsMissingTemporalBeforeDependencies(t *testing.T) {
 	for _, missing := range []string{"temporal-address", "temporal-namespace", "temporal-task-queue"} {
 		values := map[string]string{"environment": "local", "temporal-address": "localhost:7233", "temporal-namespace": "default", "temporal-task-queue": "main"}
 		delete(values, missing)
-		require.Panics(t, func() {
-			_, _ = newPrivateIngressRuntime(t.Context(), privateIngressTemporalTestContext(values), testenv.NewLogger(t))
-		}, missing)
+		_, err := newPrivateIngressRuntime(t.Context(), privateIngressTemporalTestContext(values), testenv.NewLogger(t))
+		require.ErrorContains(t, err, "private ingress Temporal", missing)
 	}
 }
 
 func TestPrivateIngressRejectsNonLocalTemporalWithoutMTLS(t *testing.T) {
 	t.Parallel()
 	values := map[string]string{"environment": "dev", "temporal-address": "temporal.example.com:7233", "temporal-namespace": "default", "temporal-task-queue": "main"}
-	require.Panics(t, func() {
-		_, _ = newPrivateIngressRuntime(t.Context(), privateIngressTemporalTestContext(values), testenv.NewLogger(t))
-	})
+	_, err := newPrivateIngressRuntime(t.Context(), privateIngressTemporalTestContext(values), testenv.NewLogger(t))
+	require.ErrorContains(t, err, "is configured outside local development")
 	values["temporal-client-cert"] = "certificate"
-	require.Panics(t, func() { requirePrivateIngressTemporalConfig(privateIngressTemporalTestContext(values)) })
+	require.Error(t, validatePrivateIngressTemporalConfig(privateIngressTemporalTestContext(values)))
 	values["temporal-client-key"] = "key"
-	require.NotPanics(t, func() { requirePrivateIngressTemporalConfig(privateIngressTemporalTestContext(values)) })
+	require.NoError(t, validatePrivateIngressTemporalConfig(privateIngressTemporalTestContext(values)))
 }
 
 func TestPrivateIngressAllowsLocalTemporalWithoutMTLS(t *testing.T) {
 	t.Parallel()
 	values := map[string]string{"environment": "local", "temporal-address": "localhost:7233", "temporal-namespace": "default", "temporal-task-queue": "main"}
-	require.NotPanics(t, func() { requirePrivateIngressTemporalConfig(privateIngressTemporalTestContext(values)) })
+	require.NoError(t, validatePrivateIngressTemporalConfig(privateIngressTemporalTestContext(values)))
 }
 
 func TestParseSiteURL(t *testing.T) {

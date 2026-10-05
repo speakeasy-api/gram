@@ -54,7 +54,9 @@ func parseSiteURL(raw string) (*url.URL, error) {
 }
 
 func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, redisClient *redis.Client, guardianPolicy *guardian.Policy) (*serverIdentity, error) {
-	inv.Require("server identity", "jwt-signing-key is set", c.String(usersessions.JWTSigningKeyFlag) != "")
+	if err := inv.Check("server identity", "jwt-signing-key is set", c.String(usersessions.JWTSigningKeyFlag) != ""); err != nil {
+		return nil, fmt.Errorf("invalid server identity configuration: %w", err)
+	}
 	siteURL, err := parseSiteURL(c.String("site-url"))
 	if err != nil {
 		return nil, err
@@ -68,12 +70,18 @@ func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger,
 	if c.String("environment") == "local" {
 		featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 	}
-	workosClient, available := newWorkOSClient(guardianPolicy, c)
+	workosClient, available, err := newWorkOSClient(guardianPolicy, c)
+	if err != nil {
+		return nil, fmt.Errorf("create WorkOS client: %w", err)
+	}
 	stripeClient, err := newStripeClient(ctx, logger, guardianPolicy, c)
 	if err != nil {
 		return nil, err
 	}
-	billingRepo, billingTracker := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
+	billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
+	if err != nil {
+		return nil, fmt.Errorf("create billing provider: %w", err)
+	}
 	idpClient := identity.NewWorkOSAdapter(newIDPUserManagementClient(guardianPolicy, c.String("idp-client-secret"), c))
 	productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 
