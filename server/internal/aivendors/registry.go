@@ -470,9 +470,9 @@ var registry = []Product{
 	// matching Skydive's shape, not loopback. CFBundleIdentifier is the exact
 	// install signal; the process name is generic but kept on purpose (matching
 	// convention in goose, pi, crush, qwen above). No binaries: the CLI shim
-	// in Contents/Resources/bin is not installed onto PATH. No config dirs: the
-	// bundle ID already detects the install exactly, and .conductor/ paths in
-	// the binary are per-repository workspace paths, not a per-user config.
+	// in Contents/Resources/bin is not installed onto PATH. ~/.conductor is the
+	// user config directory per Conductor's settings docs; .conductor/ in the
+	// repository root are per-repo workspace settings.
 	{
 		ID:          "conductor",
 		VendorKey:   "conductor",
@@ -481,7 +481,7 @@ var registry = []Product{
 		Signatures: Signatures{
 			BundleIDs:    []string{"com.conductor.app"},
 			Binaries:     nil,
-			ConfigDirs:   nil,
+			ConfigDirs:   []string{"~/.conductor"},
 			ProcessNames: []string{"conductor"},
 		},
 		VersionPlistKey: "",
