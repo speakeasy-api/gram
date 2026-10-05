@@ -65,8 +65,16 @@ type OAuthProtectedResourceMetadata struct {
 	// ResourceTosURI links the resource server's terms of service; discovery drops non-http(s) values.
 	ResourceTosURI string `json:"resource_tos_uri,omitempty"`
 
+	// Token-binding members (RFC 9728 §2); nil when the document omits them.
+	DPoPBoundAccessTokensRequired         *bool    `json:"dpop_bound_access_tokens_required,omitempty"`
+	DPoPSigningAlgValuesSupported         []string `json:"dpop_signing_alg_values_supported,omitempty"`
+	TLSClientCertificateBoundAccessTokens *bool    `json:"tls_client_certificate_bound_access_tokens,omitempty"`
+
 	// Raw is the probed document verbatim, before any sanitizing; never emitted when serving.
 	Raw json.RawMessage `json:"-"`
+
+	// MetadataURL is the well-known URL the document was read from; empty when not probed.
+	MetadataURL string `json:"-"`
 }
 
 // IdentifiesResource reports whether the document names resourceURL as its
@@ -247,15 +255,19 @@ func ResolveOAuthProtectedResourceFromToolset(
 		}
 
 		return &OAuthProtectedResourceMetadata{
-			Resource:               resourceURL,
-			AuthorizationServers:   []string{authorizationServer},
-			ScopesSupported:        nil,
-			BearerMethodsSupported: nil,
-			ResourceDocumentation:  "",
-			ResourceName:           "",
-			ResourcePolicyURI:      "",
-			ResourceTosURI:         "",
-			Raw:                    nil,
+			Resource:                              resourceURL,
+			AuthorizationServers:                  []string{authorizationServer},
+			ScopesSupported:                       nil,
+			BearerMethodsSupported:                nil,
+			ResourceDocumentation:                 "",
+			ResourceName:                          "",
+			ResourcePolicyURI:                     "",
+			ResourceTosURI:                        "",
+			DPoPBoundAccessTokensRequired:         nil,
+			DPoPSigningAlgValuesSupported:         nil,
+			TLSClientCertificateBoundAccessTokens: nil,
+			Raw:                                   nil,
+			MetadataURL:                           "",
 		}, nil
 	}
 

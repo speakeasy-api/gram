@@ -289,6 +289,32 @@ func classifyTransportError(ctx context.Context, err error) ProbeResult {
 }
 
 func parseProtectedResourceMetadataURL(headers []string) *string {
+	for _, value := range authParamValues(headers, "resource_metadata") {
+		metadataURL, err := url.Parse(value)
+		if err != nil || !metadataURL.IsAbs() || metadataURL.Host == "" || metadataURL.User != nil ||
+			(!strings.EqualFold(metadataURL.Scheme, "http") && !strings.EqualFold(metadataURL.Scheme, "https")) {
+			continue
+		}
+		return &value
+	}
+	return nil
+}
+
+// parseChallengeScopes returns the space-separated scope auth-param (RFC 6750
+// §3) of the first challenge that carries one; nil when none does.
+func parseChallengeScopes(headers []string) []string {
+	for _, value := range authParamValues(headers, "scope") {
+		if scopes := strings.Fields(value); len(scopes) > 0 {
+			return scopes
+		}
+	}
+	return nil
+}
+
+// authParamValues returns every value of the named auth-param across the
+// challenge header values, in order, tolerating malformed neighbours.
+func authParamValues(headers []string, name string) []string {
+	var values []string
 	for _, header := range headers {
 		for i := 0; i < len(header); {
 			if header[i] == '"' {
@@ -304,7 +330,7 @@ func parseProtectedResourceMetadataURL(headers []string) *string {
 			for i < len(header) && isAuthTokenByte(header[i]) {
 				i++
 			}
-			name := header[start:i]
+			param := header[start:i]
 			for i < len(header) && (header[i] == ' ' || header[i] == '\t') {
 				i++
 			}
@@ -318,19 +344,13 @@ func parseProtectedResourceMetadataURL(headers []string) *string {
 
 			value, next, ok := parseAuthParamValue(header, i)
 			i = next
-			if !ok || !strings.EqualFold(name, "resource_metadata") {
+			if !ok || !strings.EqualFold(param, name) {
 				continue
 			}
-
-			metadataURL, err := url.Parse(value)
-			if err != nil || !metadataURL.IsAbs() || metadataURL.Host == "" || metadataURL.User != nil ||
-				(!strings.EqualFold(metadataURL.Scheme, "http") && !strings.EqualFold(metadataURL.Scheme, "https")) {
-				continue
-			}
-			return &value
+			values = append(values, value)
 		}
 	}
-	return nil
+	return values
 }
 
 func parseAuthParamValue(header string, start int) (string, int, bool) {

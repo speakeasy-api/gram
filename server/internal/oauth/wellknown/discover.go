@@ -249,6 +249,7 @@ func attemptProtectedResourceProbe(ctx context.Context, client *guardian.HTTPCli
 		}
 	}
 	doc.Raw = json.RawMessage(body)
+	doc.MetadataURL = probeURL
 
 	return doc, nil
 }

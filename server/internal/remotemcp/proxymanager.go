@@ -1,8 +1,11 @@
 package remotemcp
 
 import (
+	"context"
 	"log/slog"
+	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -64,6 +67,7 @@ func WithMetaMCPServerID(metaMCPServerID string) BuildOption {
 type ProxyManager struct {
 	logger         *slog.Logger
 	tracer         trace.Tracer
+	db             *pgxpool.Pool
 	guardianPolicy *guardian.Policy
 	authz          *authz.Engine
 	posthog        *posthog.Posthog
@@ -93,6 +97,10 @@ type ProxyManager struct {
 	// annotation grants: the list interceptor records the rows each session
 	// was shown, the call interceptor matches against them.
 	witnessStore *toolfilter.SessionToolWitnessStore
+
+	challengeScopes *challengeScopesState
+	// afterChallengeScopes runs when a challenge-scope observation is handled; tests only.
+	afterChallengeScopes func()
 }
 
 // NewProxyManager wires the MCP-aware proxy stack with its dependencies.
@@ -123,6 +131,7 @@ func NewProxyManager(
 	return &ProxyManager{
 		logger:                                logger,
 		tracer:                                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
+		db:                                    db,
 		guardianPolicy:                        guardianPolicy,
 		authz:                                 authzEngine,
 		posthog:                               posthogClient,
@@ -140,6 +149,8 @@ func NewProxyManager(
 		resourcesReadUsageTrackingInterceptor: NewResourcesReadUsageTrackingInterceptor(billingTracker, logger),
 		platformMCPSelectedUseRecorder:        platformMCPSelectedUseRecorder,
 		witnessStore:                          witnessStore,
+		challengeScopes:                       newChallengeScopesState(),
+		afterChallengeScopes:                  nil,
 	}
 }
 
@@ -193,12 +204,21 @@ func (f *ProxyManager) Build(
 		})
 	}
 
-	return f.BuildTarget(logger, proxy.ServerIdentity{
+	p := f.BuildTarget(logger, proxy.ServerIdentity{
 		RemoteMCPServerID:   server.ID.String(),
 		TunneledMCPServerID: "",
 		McpServerID:         mcpServerID,
 		MetaMCPServerID:     "",
 	}, server.Url, configured, visibility, organizationID, projectID, upstreamAuth, wwwAuthenticate, selection, options...)
+
+	// The server's URL is the resource identifier its protected resource row is keyed by.
+	if parsedProjectID, err := uuid.Parse(projectID); err == nil && f.db != nil {
+		p.UpstreamResponseInterceptor = func(ctx context.Context, resp *http.Response) error {
+			f.observeChallengeScopes(ctx, logger, parsedProjectID, server.Url, resp.StatusCode, resp.Header.Values("WWW-Authenticate"))
+			return nil
+		}
+	}
+	return p
 }
 
 func (f *ProxyManager) BuildTarget(
