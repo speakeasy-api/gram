@@ -14,6 +14,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
 
@@ -23,21 +24,12 @@ import (
 // requires, and leaves the per-tool member's bytes alone.
 const toolsListLabelledUpstream = `{"jsonrpc":"2.0","id":2,"result":{"ttlMs":60000,"cacheScope":"public","tools":[{"name":"a","inputSchema":{},"x-vendor":"keep"}]}}`
 
-func jsonUpstream(t *testing.T, body string) string {
+// upstreamServing starts an upstream that answers every request with body
+// as contentType.
+func upstreamServing(t *testing.T, contentType, body string) string {
 	t.Helper()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, body)
-	}))
-	t.Cleanup(upstream.Close)
-	return upstream.URL
-}
-
-func sseUpstream(t *testing.T, body string) string {
-	t.Helper()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", contentType)
 		_, _ = io.WriteString(w, body)
 	}))
 	t.Cleanup(upstream.Close)
@@ -89,7 +81,7 @@ func requireCallerVaryingResult(t *testing.T, result map[string]json.RawMessage,
 func TestProxy_Post_ToolsListLabelledWithoutInterceptors(t *testing.T) {
 	t.Parallel()
 
-	p := newProxyForTest(t, jsonUpstream(t, toolsListLabelledUpstream))
+	p := newProxyForTest(t, upstreamServing(t, "application/json", toolsListLabelledUpstream))
 	require.Empty(t, p.ToolsListResponseInterceptors)
 
 	rr, err := postJSON(t, p, toolsListRequest)
@@ -104,7 +96,7 @@ func TestProxy_Post_ToolsListLabelledWithoutInterceptors(t *testing.T) {
 func TestProxy_Post_ResourcesListLabelledWithoutInterceptors(t *testing.T) {
 	t.Parallel()
 
-	p := newProxyForTest(t, jsonUpstream(t,
+	p := newProxyForTest(t, upstreamServing(t, "application/json",
 		`{"jsonrpc":"2.0","id":4,"result":{"cacheScope":"public","resources":[{"name":"a","uri":"file:///a","x-vendor":"keep"}]}}`))
 	require.Empty(t, p.ResourcesListResponseInterceptors)
 
@@ -130,19 +122,19 @@ func TestProxy_Post_OtherCallerVaryingMethodsLabelled(t *testing.T) {
 		list     string
 	}{
 		{
-			name:     "resources/templates/list",
+			name:     mcpversions.MethodResourcesTemplatesList,
 			request:  `{"jsonrpc":"2.0","id":5,"method":"resources/templates/list","params":{}}`,
 			upstream: `{"jsonrpc":"2.0","id":5,"result":{"cacheScope":"public","ttlMs":60000,"resourceTemplates":[{"name":"a","uriTemplate":"file:///{path}"}]}}`,
 			list:     "resourceTemplates",
 		},
 		{
-			name:     "prompts/list",
+			name:     mcpversions.MethodPromptsList,
 			request:  `{"jsonrpc":"2.0","id":6,"method":"prompts/list","params":{}}`,
 			upstream: `{"jsonrpc":"2.0","id":6,"result":{"cacheScope":"public","ttlMs":60000,"prompts":[{"name":"a"}]}}`,
 			list:     "prompts",
 		},
 		{
-			name:     "resources/read",
+			name:     mcpversions.MethodResourcesRead,
 			request:  resourcesReadRequest,
 			upstream: `{"jsonrpc":"2.0","id":3,"result":{"cacheScope":"public","ttlMs":60000,"contents":[{"uri":"file:///etc/hosts","text":"127.0.0.1 localhost"}]}}`,
 			list:     "contents",
@@ -152,7 +144,7 @@ func TestProxy_Post_OtherCallerVaryingMethodsLabelled(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			p := newProxyForTest(t, jsonUpstream(t, tc.upstream))
+			p := newProxyForTest(t, upstreamServing(t, "application/json", tc.upstream))
 
 			rr, err := postJSON(t, p, tc.request)
 			require.NoError(t, err)
@@ -171,7 +163,7 @@ func TestProxy_Post_OtherCallerVaryingMethodsLabelled(t *testing.T) {
 func TestProxy_Post_ToolsListLabelledAfterInterceptorMutation(t *testing.T) {
 	t.Parallel()
 
-	p := newProxyForTest(t, jsonUpstream(t, toolsListLabelledUpstream))
+	p := newProxyForTest(t, upstreamServing(t, "application/json", toolsListLabelledUpstream))
 	p.ToolsListResponseInterceptors = []proxy.ToolsListResponseInterceptor{
 		&mutatingToolsListResponseInterceptor{name: "drop-all", toolsFn: func([]*mcp.Tool) []*mcp.Tool { return nil }, err: nil},
 	}
@@ -190,7 +182,7 @@ func TestProxy_Post_ToolsListLabelledAfterInterceptorMutation(t *testing.T) {
 func TestProxy_Post_ToolsListLabelsResultThatFailsTypedDecode(t *testing.T) {
 	t.Parallel()
 
-	p := newProxyForTest(t, jsonUpstream(t,
+	p := newProxyForTest(t, upstreamServing(t, "application/json",
 		`{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"a","inputSchema":{},"annotations":{"readOnlyHint":"true"}}]}}`))
 	var called int
 	p.ToolsListResponseInterceptors = []proxy.ToolsListResponseInterceptor{
@@ -211,7 +203,7 @@ func TestProxy_Post_ToolsListLabelsResultThatFailsTypedDecode(t *testing.T) {
 func TestProxy_Post_ToolsListWithUndecodableParamsLabelled(t *testing.T) {
 	t.Parallel()
 
-	p := newProxyForTest(t, jsonUpstream(t, toolsListLabelledUpstream))
+	p := newProxyForTest(t, upstreamServing(t, "application/json", toolsListLabelledUpstream))
 
 	rr, err := postJSON(t, p, `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"cursor":123}}`)
 	require.NoError(t, err)
@@ -225,7 +217,7 @@ func TestProxy_Post_ToolsListWithUndecodableParamsLabelled(t *testing.T) {
 func TestProxy_Post_ToolsListResultAlongsideErrorLabelled(t *testing.T) {
 	t.Parallel()
 
-	p := newProxyForTest(t, jsonUpstream(t,
+	p := newProxyForTest(t, upstreamServing(t, "application/json",
 		`{"jsonrpc":"2.0","id":2,"result":{"cacheScope":"public","tools":[{"name":"a","inputSchema":{}}]},"error":{"code":1,"message":"x"}}`))
 
 	rr, err := postJSON(t, p, toolsListRequest)
@@ -240,7 +232,7 @@ func TestProxy_Post_ToolsListResultAlongsideErrorLabelled(t *testing.T) {
 func TestProxy_Post_DuplicateMethodListRequestLabelled(t *testing.T) {
 	t.Parallel()
 
-	p := newProxyForTest(t, jsonUpstream(t, toolsListLabelledUpstream))
+	p := newProxyForTest(t, upstreamServing(t, "application/json", toolsListLabelledUpstream))
 
 	rr, err := postJSON(t, p, `{"jsonrpc":"2.0","id":2,"method":"tools/list","method":"ping"}`)
 	require.NoError(t, err)
@@ -279,7 +271,7 @@ func TestProxy_Post_ListResponsesWithoutResultObjectRelayVerbatim(t *testing.T) 
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			p := newProxyForTest(t, jsonUpstream(t, tc.upstream))
+			p := newProxyForTest(t, upstreamServing(t, "application/json", tc.upstream))
 
 			rr, err := postJSON(t, p, tc.request)
 			require.NoError(t, err)
@@ -293,7 +285,7 @@ func TestProxy_Post_NonListResultNotLabelled(t *testing.T) {
 	t.Parallel()
 
 	upstream := `{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"ok"}]}}`
-	p := newProxyForTest(t, jsonUpstream(t, upstream))
+	p := newProxyForTest(t, upstreamServing(t, "application/json", upstream))
 
 	rr, err := postJSON(t, p, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"a","arguments":{}}}`)
 	require.NoError(t, err)
@@ -307,7 +299,7 @@ func TestProxy_Post_NonListResultNotLabelled(t *testing.T) {
 func TestProxy_Post_StrictToolsListUndecodableResultStillFailsClosed(t *testing.T) {
 	t.Parallel()
 
-	p := newProxyForTest(t, jsonUpstream(t,
+	p := newProxyForTest(t, upstreamServing(t, "application/json",
 		`{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"secret","annotations":{"readOnlyHint":"true"}}]}}`))
 	p.StrictToolSelection = true
 
@@ -330,14 +322,14 @@ func TestProxy_Post_SSEListResultsLabelled(t *testing.T) {
 		wantTTL  string
 	}{
 		{
-			name:     "tools/list",
+			name:     mcpversions.MethodToolsList,
 			request:  toolsListRequest,
 			terminal: toolsListLabelledUpstream,
 			list:     "tools",
 			wantTTL:  upstreamTTL,
 		},
 		{
-			name:     "resources/list",
+			name:     mcpversions.MethodResourcesList,
 			request:  resourcesListRequest,
 			terminal: `{"jsonrpc":"2.0","id":4,"result":{"cacheScope":"public","resources":[{"name":"a","uri":"file:///a"}]}}`,
 			list:     "resources",
@@ -351,21 +343,21 @@ func TestProxy_Post_SSEListResultsLabelled(t *testing.T) {
 			wantTTL:  upstreamTTL,
 		},
 		{
-			name:     "resources/templates/list",
+			name:     mcpversions.MethodResourcesTemplatesList,
 			request:  `{"jsonrpc":"2.0","id":5,"method":"resources/templates/list","params":{}}`,
 			terminal: `{"jsonrpc":"2.0","id":5,"result":{"cacheScope":"public","resourceTemplates":[{"name":"a","uriTemplate":"file:///{path}"}]}}`,
 			list:     "resourceTemplates",
 			wantTTL:  zeroTTL,
 		},
 		{
-			name:     "prompts/list",
+			name:     mcpversions.MethodPromptsList,
 			request:  `{"jsonrpc":"2.0","id":6,"method":"prompts/list","params":{}}`,
 			terminal: `{"jsonrpc":"2.0","id":6,"result":{"cacheScope":"public","prompts":[{"name":"a"}]}}`,
 			list:     "prompts",
 			wantTTL:  zeroTTL,
 		},
 		{
-			name:     "resources/read",
+			name:     mcpversions.MethodResourcesRead,
 			request:  resourcesReadRequest,
 			terminal: `{"jsonrpc":"2.0","id":3,"result":{"cacheScope":"public","contents":[{"uri":"file:///etc/hosts","text":"127.0.0.1 localhost"}]}}`,
 			list:     "contents",
@@ -376,7 +368,7 @@ func TestProxy_Post_SSEListResultsLabelled(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			p := newProxyForTest(t, sseUpstream(t, sseBody(progress, tc.terminal)))
+			p := newProxyForTest(t, upstreamServing(t, "text/event-stream", sseBody(progress, tc.terminal)))
 
 			rr, err := postJSON(t, p, tc.request)
 			require.NoError(t, err)
@@ -403,7 +395,7 @@ func TestProxy_Post_SSEListStreamLabelsOnlyResults(t *testing.T) {
 		otherReply    = `{"jsonrpc":"2.0","id":99,"result":{"cacheScope":"public","tools":[]}}`
 		errorReply    = `{"jsonrpc":"2.0","id":2,"error":{"code":-32601,"message":"method not found"}}`
 	)
-	p := newProxyForTest(t, sseUpstream(t, sseBody(serverRequest, otherReply, errorReply)))
+	p := newProxyForTest(t, upstreamServing(t, "text/event-stream", sseBody(serverRequest, otherReply, errorReply)))
 
 	rr, err := postJSON(t, p, toolsListRequest)
 	require.NoError(t, err)
@@ -426,7 +418,7 @@ func TestProxy_Get_ReplayedResultsLabelled(t *testing.T) {
 		notification = `{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}`
 		errorReply   = `{"jsonrpc":"2.0","id":3,"error":{"code":-32601,"message":"method not found"}}`
 	)
-	p := newProxyForTest(t, sseUpstream(t, sseBody(notification, toolsListLabelledUpstream, errorReply)))
+	p := newProxyForTest(t, upstreamServing(t, "text/event-stream", sseBody(notification, toolsListLabelledUpstream, errorReply)))
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/x/mcp/id", http.NoBody)
 	req.Header.Set("Accept", "text/event-stream")
@@ -447,7 +439,7 @@ func TestProxy_Get_ReplayedResultsLabelled(t *testing.T) {
 func TestProxy_Post_SSEToolsListRejectionWinsOverLabel(t *testing.T) {
 	t.Parallel()
 
-	p := newProxyForTest(t, sseUpstream(t, sseBody(toolsListLabelledUpstream)))
+	p := newProxyForTest(t, upstreamServing(t, "text/event-stream", sseBody(toolsListLabelledUpstream)))
 	p.ToolsListResponseInterceptors = []proxy.ToolsListResponseInterceptor{
 		&mockToolsListResponseInterceptor{name: "reject", err: &proxy.RejectError{Code: -32000, Message: "listing blocked", Data: nil}},
 	}
@@ -509,9 +501,9 @@ func TestProxy_Post_LabelOnlyMutationLogsAtDebug(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			upstreamURL := jsonUpstream(t, toolsListLabelledUpstream)
+			upstreamURL := upstreamServing(t, "application/json", toolsListLabelledUpstream)
 			if tc.sse {
-				upstreamURL = sseUpstream(t, sseBody(toolsListLabelledUpstream))
+				upstreamURL = upstreamServing(t, "text/event-stream", sseBody(toolsListLabelledUpstream))
 			}
 			var logs bytes.Buffer
 			p := newProxyForTest(t, upstreamURL)
@@ -553,7 +545,7 @@ func TestProxy_AnonymousPublicCallerRelaysUpstreamHints(t *testing.T) {
 	t.Run("buffered", func(t *testing.T) {
 		t.Parallel()
 
-		p := newProxyForTest(t, jsonUpstream(t, toolsListLabelledUpstream))
+		p := newProxyForTest(t, upstreamServing(t, "application/json", toolsListLabelledUpstream))
 		p.AnonymousCaller = true
 
 		rr, err := postJSON(t, p, toolsListRequest)
@@ -565,7 +557,7 @@ func TestProxy_AnonymousPublicCallerRelaysUpstreamHints(t *testing.T) {
 	t.Run("sse", func(t *testing.T) {
 		t.Parallel()
 
-		p := newProxyForTest(t, sseUpstream(t, sseBody(toolsListLabelledUpstream)))
+		p := newProxyForTest(t, upstreamServing(t, "text/event-stream", sseBody(toolsListLabelledUpstream)))
 		p.AnonymousCaller = true
 
 		rr, err := postJSON(t, p, toolsListRequest)
@@ -578,7 +570,7 @@ func TestProxy_AnonymousPublicCallerRelaysUpstreamHints(t *testing.T) {
 	t.Run("get", func(t *testing.T) {
 		t.Parallel()
 
-		p := newProxyForTest(t, sseUpstream(t, sseBody(toolsListLabelledUpstream)))
+		p := newProxyForTest(t, upstreamServing(t, "text/event-stream", sseBody(toolsListLabelledUpstream)))
 		p.AnonymousCaller = true
 
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/x/mcp/id", http.NoBody)
@@ -641,7 +633,7 @@ func TestProxy_Post_AnonymousCallerLabelledWhenGramVaries(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			p := newProxyForTest(t, jsonUpstream(t, toolsListLabelledUpstream))
+			p := newProxyForTest(t, upstreamServing(t, "application/json", toolsListLabelledUpstream))
 			p.AnonymousCaller = true
 			tc.configure(p)
 
@@ -675,10 +667,10 @@ func TestProxy_Post_ProtocolRevisionDecidesLabel(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			p := newProxyForTest(t, jsonUpstream(t, toolsListLabelledUpstream))
+			p := newProxyForTest(t, upstreamServing(t, "application/json", toolsListLabelledUpstream))
 			headers := http.Header{}
 			if tc.revision != "" {
-				headers.Set("MCP-Protocol-Version", tc.revision)
+				headers.Set(mcpversions.HTTPHeader, tc.revision)
 			}
 
 			rr, err := postJSONWithHeaders(t, p, toolsListRequest, headers)

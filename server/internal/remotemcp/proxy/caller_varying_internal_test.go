@@ -10,6 +10,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 )
 
 // remoteResponse wraps a raw result payload in a remote message the way the
@@ -233,20 +235,11 @@ func TestApplyCacheLabelLeavesMessageCleanOnFailure(t *testing.T) {
 	require.Equal(t, `{"tools":`, string(rpcResp.Result), "a failed mark must not rewrite the result")
 }
 
-// TestCallerVaryingHintsDerivedFromCacheable guards the coupling between the
-// declared stance and the bytes spliced onto the wire: the two must not be
-// independently maintained literals that can drift apart.
-func TestCallerVaryingHintsDerivedFromCacheable(t *testing.T) {
-	t.Parallel()
+// postRequest builds the inbound POST a user request arrives on.
+func postRequest(t *testing.T) *http.Request {
+	t.Helper()
 
-	msg := remoteResponse(`{"tools":[]}`)
-	require.NoError(t, applyCacheLabel(msg, cacheLabelPrivateZeroTTL))
-
-	rpcResp, ok := msg.Message.(*jsonrpc.Response)
-	require.True(t, ok)
-	var wire mcp.Cacheable
-	require.NoError(t, json.Unmarshal(rpcResp.Result, &wire))
-	require.Equal(t, callerVaryingCacheable, wire, "spliced bytes must decode back to the declared stance")
+	return httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", http.NoBody)
 }
 
 // userRequestOf decodes body into a single-message user request the way the
@@ -267,13 +260,13 @@ func TestRequestCacheLabelByMethod(t *testing.T) {
 		body string
 		want cacheLabel
 	}{
-		{name: "tools/list", body: `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, want: cacheLabelPrivate},
-		{name: "resources/list", body: `{"jsonrpc":"2.0","id":1,"method":"resources/list","params":{}}`, want: cacheLabelPrivate},
+		{name: mcpversions.MethodToolsList, body: `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, want: cacheLabelPrivate},
+		{name: mcpversions.MethodResourcesList, body: `{"jsonrpc":"2.0","id":1,"method":"resources/list","params":{}}`, want: cacheLabelPrivate},
 		{name: "tools/list with undecodable params", body: `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"cursor":123}}`, want: cacheLabelPrivate},
 		{name: "tools/call", body: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"a"}}`, want: cacheLabelUpstream},
-		{name: "resources/templates/list", body: `{"jsonrpc":"2.0","id":1,"method":"resources/templates/list"}`, want: cacheLabelPrivate},
-		{name: "prompts/list", body: `{"jsonrpc":"2.0","id":1,"method":"prompts/list"}`, want: cacheLabelPrivate},
-		{name: "resources/read", body: `{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"file:///a"}}`, want: cacheLabelPrivate},
+		{name: mcpversions.MethodResourcesTemplatesList, body: `{"jsonrpc":"2.0","id":1,"method":"resources/templates/list"}`, want: cacheLabelPrivate},
+		{name: mcpversions.MethodPromptsList, body: `{"jsonrpc":"2.0","id":1,"method":"prompts/list"}`, want: cacheLabelPrivate},
+		{name: mcpversions.MethodResourcesRead, body: `{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"file:///a"}}`, want: cacheLabelPrivate},
 		{name: "initialize", body: `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`, want: cacheLabelUpstream},
 		{name: "tools/list hidden by a later duplicate method", body: `{"jsonrpc":"2.0","id":1,"method":"tools/list","method":"ping"}`, want: cacheLabelPrivate},
 		{name: "resources/list hidden by a later duplicate method", body: `{"jsonrpc":"2.0","id":1,"method":"resources/list","method":"ping"}`, want: cacheLabelPrivate},
@@ -284,7 +277,7 @@ func TestRequestCacheLabelByMethod(t *testing.T) {
 			t.Parallel()
 
 			p := &Proxy{}
-			require.Equal(t, tc.want, p.requestCacheLabel(nil, userRequestOf(t, tc.body)))
+			require.Equal(t, tc.want, p.requestCacheLabel(postRequest(t), userRequestOf(t, tc.body)))
 		})
 	}
 }
@@ -297,9 +290,9 @@ func TestRequestCacheLabelZeroesTTLForFilteredMethod(t *testing.T) {
 
 	p := &Proxy{ToolsListResponseInterceptors: []ToolsListResponseInterceptor{nil}}
 
-	require.Equal(t, cacheLabelPrivateZeroTTL, p.requestCacheLabel(nil, userRequestOf(t, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)))
-	require.Equal(t, cacheLabelPrivateZeroTTL, p.requestCacheLabel(nil, userRequestOf(t, `{"jsonrpc":"2.0","id":1,"method":"tools/list","method":"prompts/list"}`)))
-	require.Equal(t, cacheLabelPrivate, p.requestCacheLabel(nil, userRequestOf(t, `{"jsonrpc":"2.0","id":1,"method":"resources/list"}`)))
+	require.Equal(t, cacheLabelPrivateZeroTTL, p.requestCacheLabel(postRequest(t), userRequestOf(t, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)))
+	require.Equal(t, cacheLabelPrivateZeroTTL, p.requestCacheLabel(postRequest(t), userRequestOf(t, `{"jsonrpc":"2.0","id":1,"method":"tools/list","method":"prompts/list"}`)))
+	require.Equal(t, cacheLabelPrivate, p.requestCacheLabel(postRequest(t), userRequestOf(t, `{"jsonrpc":"2.0","id":1,"method":"resources/list"}`)))
 }
 
 func TestCallerUniform(t *testing.T) {
@@ -348,29 +341,32 @@ func TestCallerUniform(t *testing.T) {
 	}
 }
 
-func TestDeclaresRevisionWithoutCacheHints(t *testing.T) {
+// TestResolveCacheLabelByRevision covers the revision exemption: a recognized
+// revision older than 2026-07-28 defines no cache hints, while an absent or
+// unrecognized one is still labelled.
+func TestResolveCacheLabelByRevision(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
 		name     string
 		revision string
-		want     bool
+		want     cacheLabel
 	}{
-		{name: "2024-11-05", revision: "2024-11-05", want: true},
-		{name: "2025-11-25", revision: "2025-11-25", want: true},
-		{name: "2026-07-28", revision: "2026-07-28", want: false},
-		{name: "unrecognized", revision: "draft", want: false},
-		{name: "absent", revision: "", want: false},
+		{name: mcpversions.Version20241105, revision: mcpversions.Version20241105, want: cacheLabelUpstream},
+		{name: mcpversions.Version20251125, revision: mcpversions.Version20251125, want: cacheLabelUpstream},
+		{name: mcpversions.Version20260728, revision: mcpversions.Version20260728, want: cacheLabelPrivate},
+		{name: "unrecognized", revision: "draft", want: cacheLabelPrivate},
+		{name: "absent", revision: "", want: cacheLabelPrivate},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", http.NoBody)
+			r := postRequest(t)
 			if tc.revision != "" {
-				r.Header.Set("MCP-Protocol-Version", tc.revision)
+				r.Header.Set(mcpversions.HTTPHeader, tc.revision)
 			}
-			require.Equal(t, tc.want, declaresRevisionWithoutCacheHints(r))
+			require.Equal(t, tc.want, (&Proxy{}).resolveCacheLabel(r, false))
 		})
 	}
 }

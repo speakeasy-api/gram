@@ -62,12 +62,8 @@ func WithMetaMCPServerID(metaMCPServerID string) BuildOption {
 	}}
 }
 
-// WithAnonymousCaller records that the handler admitted the caller without
-// any Gram credential. On a public server it lets list and resources/read
-// results relay with the upstream's own cache hints, unless the proxy still
-// forwards a per-caller credential or pass-through header or attaches a list
-// filter. It has no effect on a private server, whose access gate is itself a
-// reason to label every such result caller-varying.
+// WithAnonymousCaller marks the caller as admitted without a Gram credential.
+// It has no effect on a private server.
 func WithAnonymousCaller() BuildOption {
 	return BuildOption{apply: func(options *proxyBuildOptions) {
 		options.anonymousCaller = true

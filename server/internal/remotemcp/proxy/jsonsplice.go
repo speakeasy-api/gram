@@ -38,7 +38,7 @@ import (
 // wire. Do not replace the map round-trip with raw byte assembly — that
 // validation would silently disappear.
 func spliceTopLevelKey(object json.RawMessage, key string, value json.RawMessage) (json.RawMessage, error) {
-	return spliceTopLevelKeys(object, map[string]json.RawMessage{key: value})
+	return spliceTopLevelKeys(object, map[string]json.RawMessage{key: value}, nil)
 }
 
 // spliceTopLevelKeys is spliceTopLevelKey for several members at once,
@@ -48,16 +48,10 @@ func spliceTopLevelKey(object json.RawMessage, key string, value json.RawMessage
 // array once per key rewritten.
 //
 // Every rule spliceTopLevelKey documents applies unchanged to each entry.
-func spliceTopLevelKeys(object json.RawMessage, replacements map[string]json.RawMessage) (json.RawMessage, error) {
-	return spliceTopLevelKeysWithDefaults(object, replacements, nil)
-}
-
-// spliceTopLevelKeysWithDefaults is spliceTopLevelKeys plus defaults: members
-// written only where object does not already carry them, in the same single
-// decode and re-encode. A member present in object keeps its original bytes,
-// whatever its value, including a literal null. Replacements are applied
-// after defaults, so a key in both is replaced.
-func spliceTopLevelKeysWithDefaults(object json.RawMessage, replacements, defaults map[string]json.RawMessage) (json.RawMessage, error) {
+// defaults are written only where object lacks the member, keeping a present
+// member's bytes even when they are a literal null; replacements apply after
+// defaults, so a key in both is replaced.
+func spliceTopLevelKeys(object json.RawMessage, replacements, defaults map[string]json.RawMessage) (json.RawMessage, error) {
 	var members map[string]json.RawMessage
 	if err := json.Unmarshal(object, &members); err != nil {
 		return nil, fmt.Errorf("decode payload object: %w", err)

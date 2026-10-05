@@ -689,9 +689,7 @@ func (s *Service) serveRemoteBackend(
 	}
 
 	// Identity auth above stamps an AuthContext for every caller that
-	// presented a Gram credential, so its absence is what marks an anonymous
-	// caller. A caller wrongly treated as authenticated only costs a cache
-	// label, never the reverse.
+	// presented a Gram credential, so its absence marks an anonymous caller.
 	var options []remotemcp.BuildOption
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); !ok || authCtx == nil {
 		options = append(options, remotemcp.WithAnonymousCaller())

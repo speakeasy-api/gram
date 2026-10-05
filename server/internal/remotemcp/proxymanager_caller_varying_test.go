@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -21,15 +22,8 @@ import (
 )
 
 // TestProxyManagerLabelsListResultsCallerVarying covers the proxy
-// configurations ProxyManager builds for a tools/list or resources/list
-// chain. The filters leave labelling to the proxy, so this is where a
-// regression in any of them would surface.
-//
-// Only an anonymous caller of a public server, with no pass-through header,
-// upstream credential, or session selection, relays the upstream's own cache
-// hints. Every other shape is labelled private, and tools/list additionally
-// zeroes the ttl wherever a filter (mcp:connect on private servers, session
-// selection on either) is attached to its chain.
+// configurations ProxyManager builds for tools/list and resources/list, where
+// a regression in any filter's labelling would surface.
 func TestProxyManagerLabelsListResultsCallerVarying(t *testing.T) {
 	t.Parallel()
 
@@ -76,8 +70,8 @@ func TestProxyManagerLabelsListResultsCallerVarying(t *testing.T) {
 			upstream string
 			filtered bool
 		}{
-			{method: "tools/list", request: toolsListRequest, upstream: toolsListUpstream, filtered: tc.toolsFiltered},
-			{method: "resources/list", request: resourcesListRequest, upstream: resourcesListUpstream, filtered: false},
+			{method: mcpversions.MethodToolsList, request: toolsListRequest, upstream: toolsListUpstream, filtered: tc.toolsFiltered},
+			{method: mcpversions.MethodResourcesList, request: resourcesListRequest, upstream: resourcesListUpstream, filtered: false},
 		} {
 			t.Run(tc.name+" "+list.method, func(t *testing.T) {
 				t.Parallel()
@@ -141,7 +135,7 @@ func TestProxyManagerLabelsListResultsCallerVarying(t *testing.T) {
 					wantTTL = `0`
 				}
 				require.JSONEq(t, wantTTL, string(envelope.Result["ttlMs"]))
-				if tc.selection != nil && list.method == "tools/list" {
+				if tc.selection != nil && list.method == mcpversions.MethodToolsList {
 					require.JSONEq(t, `[{"name":"a","inputSchema":{}}]`, string(envelope.Result["tools"]),
 						"the session selection filter must have run")
 				}

@@ -263,19 +263,11 @@ type Proxy struct {
 	// converting them would break WWW-Authenticate challenge relay.
 	StrictToolSelection bool
 
-	// AnonymousCaller reports that the handler admitted the caller to a public
-	// server without any Gram credential. It is the one input to cache
-	// labelling the proxy cannot derive from its own configuration. When it
-	// is set and the proxy forwards no per-caller credential or configured
-	// pass-through header and attaches no list filter, list and
-	// resources/read results relay with the upstream's own cacheScope and
-	// ttlMs. Otherwise those results are labelled cacheScope "private": MCP
-	// 2026-07-28 reads an absent cacheScope as "public", which would let a
-	// shared intermediary serve a result shaped by Gram's access gate or
-	// filters to another caller.
-	//
-	// The zero value labels, so a handler that does not establish anonymity
-	// fails safe.
+	// AnonymousCaller reports that the caller reached a public server without
+	// a Gram credential, which lets cacheable results keep the upstream's own
+	// cache hints when nothing else Gram forwards varies by caller. The zero
+	// value labels them private, so a handler that does not establish
+	// anonymity fails safe.
 	AnonymousCaller bool
 
 	// WWWAuthenticate is the challenge relayed to the client when the
@@ -473,7 +465,11 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 	// the user's MCP runtime sees upstream's actual response instead of
 	// silently misparsing it as an SSE stream.
 	if isEventStream(upstreamResp.Header) {
-		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, nil, nil, nil, nil, nil, p.streamCacheLabel(r))
+		// A resumed stream can replay a reply to a cacheable request, and
+		// nothing on it says which request a reply answers, so assume any
+		// attached filter shaped it.
+		label := p.resolveCacheLabel(r, len(p.ToolsListResponseInterceptors) > 0 || len(p.ResourcesListResponseInterceptors) > 0)
+		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, nil, nil, nil, nil, nil, label)
 		responseBytes = n
 		if streamErr != nil {
 			// The standalone GET stream is idle by nature — most upstreams
@@ -1263,12 +1259,9 @@ func (p *Proxy) relaySSEStream(
 				}
 			}
 
-			// Label every response event on the stream, not only the one
-			// matching the terminal id: a request is owed exactly one
-			// response, so labelling any other fails safe, and neither a
-			// request whose params never decoded nor a GET stream has a
-			// terminal id to match. Rejection still wins, since a rejected
-			// event is never relayed.
+			// Label every response event, not only the terminal one: a request
+			// is owed one response, and neither undecodable requests nor GET
+			// streams have a terminal id to match. Rejection wins.
 			if rejectionErr == nil {
 				interceptorMutated = remoteMsg.dirty
 				if err := applyCacheLabel(remoteMsg, label); err != nil {
@@ -1355,10 +1348,9 @@ func (p *Proxy) logContextWithIdentity(ctx context.Context, level slog.Level, ms
 	p.Logger.LogAttrs(ctx, level, msg, attrs...)
 }
 
-// mutatedRelayLogLevel picks the level for logging a relayed mutated message.
-// Interceptor mutations are rare and logged at info. The caller-varying cache
-// label alone mutates every labelled result, so a message whose only change
-// is that label logs at debug to keep the volume out of info logs.
+// mutatedRelayLogLevel logs interceptor mutations at info and a message
+// changed only by the cache label, which changes every labelled result, at
+// debug.
 func mutatedRelayLogLevel(interceptorMutated bool) slog.Level {
 	if interceptorMutated {
 		return slog.LevelInfo
