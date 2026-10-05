@@ -315,10 +315,7 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 	start := time.Now()
 	budget := gateBudget(ctx)
 	if _, governed := governedHookBindingOf(typed); governed {
-		budget += gateMintBudget
-		if deadline, ok := ctx.Deadline(); ok {
-			budget = min(budget, time.Until(deadline))
-		}
+		budget = governedGateBudget(ctx, budget)
 	}
 	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
@@ -326,6 +323,21 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 	r.debugf("gate event=%s budget_ms=%d elapsed_ms=%d block=%v",
 		agenthooks.EventOf(typed).NativeName, budget.Milliseconds(), time.Since(start).Milliseconds(), v.block)
 	return v
+}
+
+// governedDeadlineMargin keeps a governed verdict ahead of the caller's own
+// deadline: agenthooks resolves an expired handler context as no decision,
+// which the provider treats as allow.
+const governedDeadlineMargin = 500 * time.Millisecond
+
+// governedGateBudget adds the mint allowance, then stops short of the caller's
+// deadline so the fail-closed verdict always lands first.
+func governedGateBudget(ctx context.Context, budget time.Duration) time.Duration {
+	budget += gateMintBudget
+	if deadline, ok := ctx.Deadline(); ok {
+		budget = min(budget, time.Until(deadline)-governedDeadlineMargin)
+	}
+	return max(budget, 0)
 }
 
 func (r *Relay) gateVerdict(ctx context.Context, typed any) verdict {
