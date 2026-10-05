@@ -11,13 +11,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 )
 
 // AssistantCheckpoint evaluates ai_access against the canonical assistant at
-// every governed model or MCP side-effect boundary. It deliberately has no
-// decision cache, so next-call activation and membership revocation take effect.
+// every governed model or MCP side-effect boundary. Only delegated-user work is
+// governed, behind the MCP killswitch rollout flags; assistant-only work
+// (triggers, MCP auth resumption) continues. It deliberately has no decision
+// cache, so next-call activation and membership revocation take effect.
 type AssistantCheckpoint struct {
 	principal     killswitches.PrincipalAdapter
 	resource      killswitches.ResourceAdapter
@@ -25,9 +28,10 @@ type AssistantCheckpoint struct {
 	transport     killswitches.TransportAdapter
 	failurePolicy killswitches.FailurePolicy
 	timeout       time.Duration
+	flags         feature.Provider
 }
 
-func NewAssistantCheckpoint(db *pgxpool.Pool, timeout time.Duration, meterProvider metric.MeterProvider, logger *slog.Logger) (*AssistantCheckpoint, error) {
+func NewAssistantCheckpoint(db *pgxpool.Pool, timeout time.Duration, meterProvider metric.MeterProvider, logger *slog.Logger, flags feature.Provider) (*AssistantCheckpoint, error) {
 	registry, err := NewRegistry(db)
 	if err != nil {
 		return nil, err
@@ -36,10 +40,10 @@ func NewAssistantCheckpoint(db *pgxpool.Pool, timeout time.Duration, meterProvid
 	if err != nil {
 		return nil, fmt.Errorf("build assistant AI-access evaluator: %w", err)
 	}
-	return newAssistantCheckpoint(registry, evaluation, timeout)
+	return newAssistantCheckpoint(registry, evaluation, timeout, flags)
 }
 
-func newAssistantCheckpoint(registry *killswitches.Registry, evaluation evaluator, timeout time.Duration) (*AssistantCheckpoint, error) {
+func newAssistantCheckpoint(registry *killswitches.Registry, evaluation evaluator, timeout time.Duration, flags feature.Provider) (*AssistantCheckpoint, error) {
 	if registry == nil || evaluation == nil || timeout <= 0 {
 		return nil, errors.New("assistant AI-access checkpoint dependencies are required")
 	}
@@ -59,20 +63,28 @@ func newAssistantCheckpoint(registry *killswitches.Registry, evaluation evaluato
 	if !ok {
 		return nil, errors.New("assistant model coverage is not registered")
 	}
-	return &AssistantCheckpoint{principal: principal, resource: resource, evaluator: evaluation, transport: transport, failurePolicy: coverage.FailurePolicy, timeout: timeout}, nil
+	return &AssistantCheckpoint{principal: principal, resource: resource, evaluator: evaluation, transport: transport, failurePolicy: coverage.FailurePolicy, timeout: timeout, flags: flags}, nil
 }
 
 func (c *AssistantCheckpoint) Evaluate(ctx context.Context, organizationID string, assistantID uuid.UUID) (killswitches.TransportDisposition, error) {
 	if c == nil {
 		return killswitches.NewInfrastructureRejectionDisposition(), errors.New("assistant AI access is unavailable")
 	}
+	identity, ok := mcpidentity.FromContext(ctx)
+	if !ok || identity.Kind() == mcpidentity.KindAssistant {
+		return killswitches.NewContinueDisposition(), nil
+	}
+	if identity.Kind() != mcpidentity.KindDelegatedUser {
+		return c.infrastructureFailure(fmt.Errorf("unexpected assistant provenance %q", identity.Kind()))
+	}
+	return evaluateForRollout(ctx, c.flags, organizationID, func() (killswitches.TransportDisposition, error) {
+		return c.evaluateDelegated(ctx, organizationID, assistantID, identity)
+	})
+}
+
+func (c *AssistantCheckpoint) evaluateDelegated(ctx context.Context, organizationID string, assistantID uuid.UUID, identity mcpidentity.Identity) (killswitches.TransportDisposition, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
-
-	identity, ok := mcpidentity.FromContext(ctx)
-	if !ok || identity.Kind() != mcpidentity.KindDelegatedUser {
-		return c.infrastructureFailure(errors.New("assistant work has no validated current-user delegation"))
-	}
 	organization := killswitches.OrganizationID(organizationID)
 	principals, err := c.principal.DeriveCandidates(ctx, organization, identity)
 	if err != nil {

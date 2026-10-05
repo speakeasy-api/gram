@@ -375,7 +375,7 @@ func TestAuthorizeDelegatedUserRevalidatesMembershipAndNeverSubstitutesOwner(t *
 	require.NoError(t, err, "autonomous credentials retain management reachability")
 	authContext, ok = contextvalues.GetAuthContext(authorized)
 	require.True(t, ok)
-	require.Empty(t, authContext.UserID, "legacy creator attribution must not become acting-user identity")
+	require.Equal(t, "assistant-creator", authContext.UserID, "assistant-only tokens keep creator attribution and grants")
 	identity, ok = mcpidentity.FromContext(authorized)
 	require.True(t, ok)
 	require.Equal(t, mcpidentity.KindAssistant, identity.Kind())

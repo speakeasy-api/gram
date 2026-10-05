@@ -63,7 +63,7 @@ func NewHostedCheckpoint(db *pgxpool.Pool, meterProvider metric.MeterProvider, l
 		return nil, fmt.Errorf("construct evaluator: %w", err)
 	}
 
-	assistant, err := newAssistantCheckpoint(registry, eval, hostedEvaluatorTimeout)
+	assistant, err := newAssistantCheckpoint(registry, eval, hostedEvaluatorTimeout, flags)
 	if err != nil {
 		return nil, err
 	}

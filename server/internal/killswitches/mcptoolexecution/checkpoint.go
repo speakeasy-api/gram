@@ -87,7 +87,7 @@ func newCheckpoint(registry *killswitches.Registry, evaluation evaluator, timeou
 		return nil, errors.New("private proxy coverage contract is not registered")
 	}
 
-	assistant, err := newAssistantCheckpoint(registry, evaluation, timeout)
+	assistant, err := newAssistantCheckpoint(registry, evaluation, timeout, flags)
 	if err != nil {
 		return nil, err
 	}

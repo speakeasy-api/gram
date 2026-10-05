@@ -1,12 +1,14 @@
 package mcptoolexecution
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -27,7 +29,7 @@ func TestAssistantCheckpointDelegationAndNextCallActivation(t *testing.T) {
 	`, projectID, orgID).Scan(&assistantID)
 	require.NoError(t, err)
 
-	checkpoint, err := NewAssistantCheckpoint(conn, time.Second, testenv.NewMeterProvider(t), testenv.NewLogger(t))
+	checkpoint, err := NewAssistantCheckpoint(conn, time.Second, testenv.NewMeterProvider(t), testenv.NewLogger(t), enforcedRollout(orgID))
 	require.NoError(t, err)
 	ctx := mcpidentity.NewValidatorBoundary().StampDelegatedUser(t.Context(), userID)
 
@@ -59,7 +61,7 @@ func TestAssistantCheckpointDelegationAndNextCallActivation(t *testing.T) {
 }
 
 //nolint:paralleltest,tparallel // Direct SQL and sequential subtests keep the fixture deterministic.
-func TestAssistantCheckpointRejectsMissingAndCrossTenantDelegationWithoutMatchNote(t *testing.T) {
+func TestAssistantCheckpointRejectsCrossTenantDelegationAndPassesAssistantOnlyWork(t *testing.T) {
 	t.Parallel()
 	conn, orgID := newTestDatabase(t, "ks_assistant_checkpoint_invalid")
 	projectID := insertProject(t, conn, orgID, "assistant-invalid", false)
@@ -70,8 +72,10 @@ func TestAssistantCheckpointRejectsMissingAndCrossTenantDelegationWithoutMatchNo
 		VALUES ($1, $2, 'Assistant', 'openai/test', '', 300, 1, 'active') RETURNING id
 	`, projectID, orgID).Scan(&assistantID)
 	require.NoError(t, err)
-	checkpoint, err := NewAssistantCheckpoint(conn, time.Second, testenv.NewMeterProvider(t), testenv.NewLogger(t))
 	otherOrgID := "org-other"
+	flags := enforcedRollout(orgID)
+	flags.SetFlag(feature.FlagMCPKillswitchEnforce, otherOrgID, true)
+	checkpoint, err := NewAssistantCheckpoint(conn, time.Second, testenv.NewMeterProvider(t), testenv.NewLogger(t), flags)
 	otherUserID := "user-other"
 	insertOrganization(t, conn, otherOrgID)
 	insertUser(t, conn, otherUserID, false)
@@ -83,7 +87,6 @@ func TestAssistantCheckpointRejectsMissingAndCrossTenantDelegationWithoutMatchNo
 		ctxKind            mcpidentity.Kind
 		userID             string
 	}{
-		{name: "missing", organization: orgID},
 		{name: "cross tenant", organization: "org-other", ctxKind: mcpidentity.KindDelegatedUser, userID: "user-other"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -97,5 +100,15 @@ func TestAssistantCheckpointRejectsMissingAndCrossTenantDelegationWithoutMatchNo
 			_, hasNote := disposition.ExternalNote()
 			require.False(t, hasNote)
 		})
+	}
+
+	// Assistant-only work (triggers, MCP auth resumption) is not governed.
+	for name, ctx := range map[string]context.Context{
+		"unstamped":      t.Context(),
+		"assistant-only": mcpidentity.NewValidatorBoundary().StampAssistant(t.Context()),
+	} {
+		disposition, err := checkpoint.Evaluate(ctx, orgID, assistantID)
+		require.NoError(t, err, name)
+		require.Equal(t, killswitches.TransportDispositionContinue, disposition.Kind(), name)
 	}
 }

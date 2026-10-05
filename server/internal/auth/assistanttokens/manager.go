@@ -37,8 +37,8 @@ type Claims struct {
 	ProjectID string `json:"project_id"`
 	// UserID and SessionID are present together only for a server-issued
 	// delegation from a validated current-user session. SessionID is an opaque
-	// delegation identifier, never the session bearer. UserID-only legacy tokens
-	// remain assistant credentials; owner or creator fields are never substituted.
+	// delegation identifier, never the session bearer. UserID-only tokens remain
+	// assistant credentials: UserID is attribution, never an acting user.
 	UserID      string `json:"user_id,omitempty"`
 	SessionID   string `json:"delegating_session_id,omitempty"`
 	AssistantID string `json:"assistant_id"`
@@ -365,6 +365,16 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 		}
 		email = &user.Email
 		sessionID = &claims.SessionID
+	} else if claims.UserID != "" {
+		// Assistant-only tokens keep the minting user (dashboard sender or
+		// creator) for attribution and grants, as before delegation existed.
+		// The identity stays KindAssistant, so it never satisfies ai_access.
+		owner, err := m.users.GetUser(ctx, claims.UserID)
+		if err != nil {
+			return ctx, nil, oops.E(oops.CodeUnauthorized, err, "unable to load assistant owner")
+		}
+		actingUserID = owner.ID
+		email = &owner.Email
 	}
 
 	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{

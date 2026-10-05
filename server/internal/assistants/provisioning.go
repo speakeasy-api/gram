@@ -325,7 +325,7 @@ func assistantRecordFromManagedRow(row assistantrepo.GetManagedAssistantByProjec
 type dashboardIngestPayload struct {
 	Text           string                      `json:"text"`
 	UserID         string                      `json:"user_id"`
-	ActingFor      actingForDelegation         `json:"acting_for"`
+	ActingFor      *actingForDelegation        `json:"acting_for,omitempty"`
 	CorrelationID  string                      `json:"correlation_id"`
 	IdempotencyKey string                      `json:"idempotency_key"`
 	SkillContext   []dashboardTurnSkillContext `json:"skill_context,omitempty"`
@@ -380,7 +380,7 @@ type DashboardSendResult struct {
 // — a fresh one is minted so the ingest still succeeds, but callers that want
 // retry-safe dedupe should pass a stable key.
 func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assistantID uuid.UUID, userID, sessionID string, chatID uuid.UUID, text, idempotencyKey string, skillIDs []uuid.UUID, attachments []DashboardAttachmentInput) (DashboardSendResult, error) {
-	if userID == "" || sessionID == "" {
+	if userID == "" {
 		return DashboardSendResult{}, errAssistantDelegationUnavailable
 	}
 	assistant, err := s.GetAssistant(ctx, projectID, assistantID)
@@ -438,14 +438,20 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 	if idempotencyKey == "" {
 		idempotencyKey = uuid.NewString()
 	}
+	// Only a validated current-user session delegates ai_access; other callers
+	// keep the assistant-only path with the sender as attribution.
 	now := time.Now().UTC()
-	payload, err := json.Marshal(dashboardIngestPayload{
-		Text:   text,
-		UserID: userID,
-		ActingFor: actingForDelegation{
+	var actingFor *actingForDelegation
+	if sessionID != "" {
+		actingFor = &actingForDelegation{
 			Kind: actingForDelegationKindUserSession, OrganizationID: assistant.OrganizationID,
 			UserID: userID, SessionID: uuid.NewString(), IssuedAt: now, ExpiresAt: now.Add(assistantRuntimeTokenTTL),
-		},
+		}
+	}
+	payload, err := json.Marshal(dashboardIngestPayload{
+		Text:           text,
+		UserID:         userID,
+		ActingFor:      actingFor,
 		CorrelationID:  correlationID,
 		IdempotencyKey: idempotencyKey,
 		SkillContext:   skillContext,

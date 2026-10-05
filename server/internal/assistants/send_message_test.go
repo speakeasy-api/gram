@@ -74,17 +74,33 @@ func (f *fakeDashboardIngestor) IngestDirect(ctx context.Context, instanceID uui
 	return &bgtriggers.Task{}, nil
 }
 
-func TestSendMessageRequiresValidatedCurrentUserSession(t *testing.T) {
+// Senders without a validated current-user session keep the assistant-only
+// path: the turn is accepted but carries no ai_access delegation.
+func TestSendMessageWithoutSessionIsAssistantOnly(t *testing.T) {
 	t.Parallel()
-	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_session_required")
-	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID))
+	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_without_session")
+	ctx = authztest.WithExactGrants(t, ctx, projectWriteGrant(projectID))
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	require.NoError(t, err)
+	ingestor := &fakeDashboardIngestor{core: svc.core, assistantID: managed.ID}
+	svc.core.SetDashboardIngestor(ingestor)
+
 	authContext, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	withoutSession := *authContext
 	withoutSession.SessionID = nil
-	ctx = contextvalues.SetAuthContext(t.Context(), &withoutSession)
-	_, err := svc.SendMessage(ctx, &gen.SendMessagePayload{AssistantID: uuid.NewString(), Message: "hello"})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	res, err := svc.SendMessage(contextvalues.SetAuthContext(ctx, &withoutSession), &gen.SendMessagePayload{AssistantID: managed.ID.String(), Message: "hello"})
+	require.NoError(t, err)
+	require.True(t, res.Accepted)
+	var payload dashboardEventPayload
+	require.NoError(t, json.Unmarshal(ingestor.lastPayload, &payload))
+	require.Equal(t, authContext.UserID, payload.UserID)
+	require.Nil(t, payload.ActingFor)
+
+	withoutUser := withoutSession
+	withoutUser.UserID = ""
+	_, err = svc.SendMessage(contextvalues.SetAuthContext(ctx, &withoutUser), &gen.SendMessagePayload{AssistantID: managed.ID.String(), Message: "hello"})
+	requireOopsCode(t, err, oops.CodeUnauthorized)
 }
 
 func TestSendMessageEnqueues(t *testing.T) {

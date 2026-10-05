@@ -58,6 +58,38 @@ func TestApplyIssuerGate_AssistantFallbackStampsDelegatedUserProvenance(t *testi
 	require.Equal(t, authCtx.UserID, gateAuthCtx.UserID)
 }
 
+// TestApplyIssuerGate_AssistantOnlyTokenStampsAssistantProvenance pins that
+// triggered-run tokens (no delegation) still authenticate MCP calls, as
+// assistant provenance with the creator only as attribution.
+func TestApplyIssuerGate_AssistantOnlyTokenStampsAssistantProvenance(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	assistantID := createAssistant(t, ti, authCtx, "AssistantOnly")
+	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine).Generate(assistanttokens.GenerateInput{
+		OrgID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, UserID: authCtx.UserID,
+		SessionID: "", AssistantID: assistantID, ThreadID: uuid.Nil, TTL: time.Hour,
+	})
+	require.NoError(t, err)
+	endpoint := &mcp.ResolvedMcpEndpoint{
+		AudienceURN:         urn.NewUserSessionIssuer(uuid.New()).String(),
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           *authCtx.ProjectID,
+		RouteBase:           "mcp",
+		Slug:                "assistant-only-gate",
+		UserSessionIssuerID: uuid.New(),
+	}
+
+	newCtx, _, _, err := ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), token, "http://0.0.0.0", endpoint)
+	require.NoError(t, err)
+	identity, stamped := mcpidentity.FromContext(newCtx)
+	require.True(t, stamped)
+	require.Equal(t, mcpidentity.KindAssistant, identity.Kind())
+	require.Empty(t, identity.UserID())
+}
+
 // TestApplyIssuerGate_RejectedAssistantTokenStampsNothing pins that a
 // cross-project assistant token is rejected with a 401 challenge and the
 // returned context carries no provenance at all.

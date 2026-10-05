@@ -1081,7 +1081,7 @@ func newStartCommand() *cli.Command {
 			}
 
 			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
-			assistantAIAccessCheckpoint, err := mcptoolexecution.NewAssistantCheckpoint(db, mcptoolexecution.DefaultEvaluationTimeout, meterProvider, logger)
+			assistantAIAccessCheckpoint, err := mcptoolexecution.NewAssistantCheckpoint(db, mcptoolexecution.DefaultEvaluationTimeout, meterProvider, logger, featureFlags)
 			if err != nil {
 				return fmt.Errorf("initialize assistant AI-access checkpoint: %w", err)
 			}

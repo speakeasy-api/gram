@@ -881,8 +881,10 @@ func (s *Service) authenticateIssuerGate(
 		// belongs to the endpoint's project — otherwise a token minted
 		// in project A could resolve a remote_session linked under
 		// the same user in project B.
-		if assistCtx, claims, aerr := s.assistantTokens.Authorize(ctx, authToken); aerr == nil && claims.ProjectID == endpoint.ProjectID.String() && claims.SessionID != "" {
+		if assistCtx, claims, aerr := s.assistantTokens.Authorize(ctx, authToken); aerr == nil && claims.ProjectID == endpoint.ProjectID.String() && claims.UserID != "" {
 			ssubj := urn.NewUserSubject(claims.UserID)
+			// Authorize stamps the provenance: a delegated user for dashboard
+			// delegations, otherwise KindAssistant, never an acting user.
 			newCtx, subject = assistCtx, &ssubj
 		}
 	}

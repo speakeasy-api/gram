@@ -2807,14 +2807,12 @@ func (s *ServiceCore) processEventTurn(
 
 	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
 
-	delegation, err := turnActingForDelegation(assistant, thread, event, time.Now().UTC())
-	if err != nil {
-		return nil, errors.Join(errAssistantDelegationUnavailable, err)
-	}
-	prompt := ""
+	// Assistant-only by default: triggered runs and MCP auth resumption act as
+	// the creator for attribution, without delegating ai_access.
+	prompt, tokenUserID, delegatingSessionID := "", assistant.CreatedByUserID, ""
 	var inputParts []runtimeContentPart
-	if _, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
-		return nil, errors.Join(errAssistantDelegationUnavailable, errors.New("MCP authorization callbacks are autonomous system work"))
+	if mcpAuthPrompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
+		prompt = mcpAuthPrompt
 	} else {
 		adapter, err := getSourceAdapter(thread.SourceKind)
 		if err != nil {
@@ -2823,6 +2821,14 @@ func (s *ServiceCore) processEventTurn(
 		prompt, err = adapter.DecodeTurn(event)
 		if err != nil {
 			return nil, fmt.Errorf("decode assistant turn: %w", err)
+		}
+		tokenUserID = turnUserID(assistant, thread, event)
+		delegation, delegated, err := turnActingForDelegation(assistant, thread, event)
+		if err != nil {
+			return nil, errors.Join(errAssistantDelegationUnavailable, err)
+		}
+		if delegated {
+			tokenUserID, delegatingSessionID = delegation.UserID, delegation.SessionID
 		}
 		// Best-effort: files attached to the triggering message ride along as
 		// vision/text content. Failures degrade to the metadata-only turn.
@@ -2837,7 +2843,7 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return nil, err
 	}
-	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, delegation)
+	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, tokenUserID, delegatingSessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -2925,28 +2931,48 @@ func (s *ServiceCore) assistantToolsVariant(ctx context.Context, projectID uuid.
 	return feature.AssistantToolsVariant(variant)
 }
 
-func turnActingForDelegation(assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord, now time.Time) (actingForDelegation, error) {
+// turnUserID is the attribution identity for an assistant-only turn: the
+// dashboard sender, or the assistant's creator for every other source.
+func turnUserID(assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) string {
+	if thread.SourceKind == sourceKindDashboard {
+		var payload dashboardEventPayload
+		if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err == nil && payload.UserID != "" {
+			return payload.UserID
+		}
+	}
+	return assistant.CreatedByUserID
+}
+
+// turnActingForDelegation returns the current-user delegation a dashboard turn
+// carries. Turns without one (other sources, or dashboard events queued before
+// delegation existed) stay assistant-only. A present delegation must be
+// well-formed; membership is revalidated on every governed call.
+func turnActingForDelegation(assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) (actingForDelegation, bool, error) {
+	var none actingForDelegation
 	if thread.SourceKind != sourceKindDashboard {
-		return actingForDelegation{}, fmt.Errorf("source %q is autonomous and has no current Gram user", thread.SourceKind)
+		return none, false, nil
 	}
 	var payload dashboardEventPayload
 	if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err != nil {
-		return actingForDelegation{}, fmt.Errorf("decode dashboard delegation: %w", err)
+		return actingForDelegation{}, false, fmt.Errorf("decode dashboard delegation: %w", err)
 	}
 	d := payload.ActingFor
-	if d == nil || d.Kind != actingForDelegationKindUserSession || d.UserID == "" || d.SessionID == "" {
-		return actingForDelegation{}, errors.New("dashboard turn has no concrete user-session delegation")
+	if d == nil {
+		return none, false, nil
+	}
+	if d.Kind != actingForDelegationKindUserSession || d.UserID == "" || d.SessionID == "" {
+		return actingForDelegation{}, false, errors.New("dashboard turn has an incomplete user-session delegation")
 	}
 	if d.UserID != payload.UserID || d.OrganizationID != assistant.OrganizationID {
-		return actingForDelegation{}, errors.New("dashboard delegation tenant or user mismatch")
+		return actingForDelegation{}, false, errors.New("dashboard delegation tenant or user mismatch")
 	}
-	if d.IssuedAt.IsZero() || d.ExpiresAt.IsZero() || !d.ExpiresAt.Equal(d.IssuedAt.Add(assistantRuntimeTokenTTL)) || now.Before(d.IssuedAt.Add(-time.Minute)) || !now.Before(d.ExpiresAt) {
-		return actingForDelegation{}, errors.New("dashboard delegation is expired or malformed")
+	if d.IssuedAt.IsZero() || !d.ExpiresAt.Equal(d.IssuedAt.Add(assistantRuntimeTokenTTL)) {
+		return actingForDelegation{}, false, errors.New("dashboard delegation is malformed")
 	}
 	if event.CreatedAt.Before(d.IssuedAt.Add(-time.Minute)) || event.CreatedAt.After(d.IssuedAt.Add(time.Minute)) {
-		return actingForDelegation{}, errors.New("dashboard delegation issuance does not match the event")
+		return actingForDelegation{}, false, errors.New("dashboard delegation issuance does not match the event")
 	}
-	return *d, nil
+	return *d, true, nil
 }
 
 func (s *ServiceCore) startProcessingLeaseHeartbeat(
@@ -2999,23 +3025,15 @@ func (s *ServiceCore) touchProcessingLease(ctx context.Context, projectID, runti
 // downstream, so platform tools that key on the calling thread (wake,
 // memory, telemetry) keep working under the v2 single-VM-per-assistant
 // runtime — the VM is shared but the auth identity is per-thread.
-func (s *ServiceCore) MintThreadScopedRuntimeToken(assistant assistantRecord, threadID uuid.UUID, delegation actingForDelegation) (string, error) {
-	reference := time.Now()
-	if delegation.IssuedAt.After(reference) {
-		reference = delegation.IssuedAt
-	}
-	ttl := delegation.ExpiresAt.Sub(reference)
-	if ttl <= 0 || ttl > assistantRuntimeTokenTTL {
-		return "", errors.New("assistant delegation is outside its valid lifetime")
-	}
+func (s *ServiceCore) MintThreadScopedRuntimeToken(assistant assistantRecord, threadID uuid.UUID, userID, delegatingSessionID string) (string, error) {
 	token, err := s.assistantTokens.Generate(assistanttokens.GenerateInput{
 		OrgID:       assistant.OrganizationID,
 		ProjectID:   assistant.ProjectID,
-		UserID:      delegation.UserID,
-		SessionID:   delegation.SessionID,
+		UserID:      userID,
+		SessionID:   delegatingSessionID,
 		AssistantID: assistant.ID,
 		ThreadID:    threadID,
-		TTL:         ttl,
+		TTL:         assistantRuntimeTokenTTL,
 	})
 	if err != nil {
 		return "", fmt.Errorf("generate assistant execution token: %w", err)
