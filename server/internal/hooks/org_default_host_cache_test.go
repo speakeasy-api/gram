@@ -25,6 +25,7 @@ func TestOrgDefaultHostCacheExpires(t *testing.T) {
 
 	_, ok = cache.get("<ORG_ID>", now.Add(orgDefaultHostCacheTTL+time.Second))
 	require.False(t, ok)
+	require.NotContains(t, cache.entries, "<ORG_ID>", "expired entries are evicted")
 
 	// A NULL default host is cached too, so organizations without one skip the read.
 	cache.put("<OTHER_ORG_ID>", pgtype.Text{String: "", Valid: false}, now)

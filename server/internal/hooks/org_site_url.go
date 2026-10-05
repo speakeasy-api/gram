@@ -42,7 +42,11 @@ func (c *orgDefaultHostCache) get(organizationID string, now time.Time) (pgtype.
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	entry, ok := c.entries[organizationID]
-	if !ok || now.After(entry.expiresAt) {
+	if !ok {
+		return pgtype.Text{String: "", Valid: false}, false
+	}
+	if now.After(entry.expiresAt) {
+		delete(c.entries, organizationID)
 		return pgtype.Text{String: "", Valid: false}, false
 	}
 	return entry.defaultHost, true
