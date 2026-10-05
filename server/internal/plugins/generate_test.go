@@ -3131,6 +3131,32 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 	require.Equal(t, base["plugin-b"], changedFP["plugin-b"], "untouched plugin's fingerprint must be stable")
 }
 
+// Moving GRAM_SERVER_URL to another platform host must read as a change, so the
+// next publish rewrites every baked URL onto the new host.
+func TestPublishChangeSignalsFollowServerURL(t *testing.T) {
+	t.Parallel()
+	pluginsFor := func(serverURL string) []PluginInfo {
+		return []PluginInfo{{Name: "Plugin A", Slug: "plugin-a", Description: "A", Servers: []PluginServerInfo{
+			{DisplayName: "a1", MCPURL: serverURL + "/mcp/a1"},
+		}}}
+	}
+	oldCfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai", ProjectSlug: "acme"}
+	newCfg := oldCfg
+	newCfg.ServerURL = "https://ai.speakeasy.com"
+
+	oldFP, err := MCPFingerprints(pluginsFor(oldCfg.ServerURL), oldCfg, true)
+	require.NoError(t, err)
+	newFP, err := MCPFingerprints(pluginsFor(newCfg.ServerURL), newCfg, true)
+	require.NoError(t, err)
+	require.NotEqual(t, oldFP["plugin-a"], newFP["plugin-a"], "MCP plugin must republish onto the new host")
+
+	require.NotEqual(t,
+		hooksConfigHash(hooksConfigSnapshot(oldCfg)),
+		hooksConfigHash(hooksConfigSnapshot(newCfg)),
+		"hooks subtree must regenerate onto the new host",
+	)
+}
+
 func TestGeneratePlatformMCPPackageEmitsPrivateAccessWorkflow(t *testing.T) {
 	t.Parallel()
 	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
@@ -3140,11 +3166,15 @@ func TestGeneratePlatformMCPPackageEmitsPrivateAccessWorkflow(t *testing.T) {
 	require.NotEmpty(t, content)
 	require.Equal(t, content, files["agent-plugins/speakeasy/"+skill])
 	workflow := string(content)
-	for _, name := range []string{"list_projects", "list_plugins", "get_plugin", "get_mcp_connection_settings", "set_mcp_address", "set_mcp_network_access"} {
+	for _, name := range []string{"list_projects", "list_plugins", "get_plugin", "get_mcp_connection_settings", "set_mcp_address", "set_mcp_network_access", "republish_plugin"} {
 		require.Contains(t, workflow, name)
 	}
 	require.Contains(t, workflow, "explicit confirmation")
 	require.Contains(t, workflow, "An enqueued request is not a published package")
+	require.Contains(t, workflow, "`last_publish`")
+	require.Contains(t, workflow, "`failure_category: repository_conflict` cannot be fixed by republishing")
+	require.Contains(t, workflow, "treat it as pending until `last_publish.requested_at` is later than the republish or the publication evidence reports `fresh: true`")
+	require.Contains(t, workflow, "`not_configured: true`, no publish has ever been recorded")
 	require.NotContains(t, workflow, "speakeasy-skill-feedback")
 }
 

@@ -1,8 +1,11 @@
 package platformmcp
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -11,7 +14,7 @@ var pluginReadToolNames = []string{"list_plugins", "get_plugin", "list_plugin_as
 
 // pluginMutationToolNames change who receives a plugin or what it carries and
 // stay external-only.
-var pluginMutationToolNames = []string{operationSetPluginAssignments, "distribute_mcp_to_plugin", "remove_mcp_from_plugin"}
+var pluginMutationToolNames = []string{operationSetPluginAssignments, operationRepublishPlugin, "distribute_mcp_to_plugin", "remove_mcp_from_plugin"}
 
 // requirePluginToolAudiences asserts the audience split every plugin tool
 // registration must keep, whether the plugins service is composed or absent.
@@ -50,4 +53,51 @@ func TestUnavailablePluginToolsKeepReadsForBothAudiencesAndMutationsExternal(t *
 	for _, name := range pluginMutationToolNames {
 		require.False(t, assistant[name], "assistant catalogue must not list %q", name)
 	}
+}
+
+// requireRepublishPluginDeclaration asserts the contract both republish_plugin
+// registrations share: an organization-admin write on the external surface,
+// scoped to an explicit project, that is idempotent and never destructive.
+func requireRepublishPluginDeclaration(t *testing.T, registrar *Registrar) {
+	t.Helper()
+
+	descriptor := descriptorByName(t, registrar, operationRepublishPlugin)
+	require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization)
+	require.Equal(t, externalOnly, descriptor.Meta.Audiences)
+	require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
+	require.NotNil(t, descriptor.Annotations)
+	require.False(t, descriptor.Annotations.ReadOnlyHint)
+	require.True(t, descriptor.Annotations.IdempotentHint)
+	require.NotNil(t, descriptor.Annotations.DestructiveHint)
+	require.False(t, *descriptor.Annotations.DestructiveHint)
+	for _, assistant := range registrar.For(AudienceAssistant) {
+		require.NotEqual(t, operationRepublishPlugin, assistant.Name, "republishing stays off the assistant surface")
+	}
+}
+
+func TestUnavailableRepublishPluginToolKeepsTheLiveContract(t *testing.T) {
+	t.Parallel()
+
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	requireRepublishPluginDeclaration(t, registrar)
+	require.Equal(t, unavailableRepublishPluginDescription, descriptorByName(t, registrar, operationRepublishPlugin).Description)
+}
+
+func TestRepublishPluginToolResultCarriesTheDashboardLink(t *testing.T) {
+	t.Parallel()
+
+	result, ok := republishPluginToolResult(&PluginRepublishError{Code: "not_configured", Message: "connect a repository", DashboardURL: "https://app.example.test/org/projects/project/plugins", Cause: ErrPluginRepublishNotConfigured})
+	require.True(t, ok)
+	require.True(t, result.IsError)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	var refusal pluginRepublishRefusalResult
+	require.NoError(t, json.Unmarshal([]byte(text.Text), &refusal))
+	require.Equal(t, pluginRepublishRefusalResult{Code: "not_configured", Message: "connect a repository", DashboardURL: "https://app.example.test/org/projects/project/plugins"}, refusal)
+
+	unavailable, ok := republishPluginToolResult(pluginRepublishUnavailable(context.Canceled))
+	require.True(t, ok)
+	text, ok = unavailable.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.Contains(t, text.Text, unavailableCode)
 }

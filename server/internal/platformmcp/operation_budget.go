@@ -45,17 +45,36 @@ const (
 	ToolExposureReadOrganizationLimitName         = "platform-mcp-tool-exposure-read-organization"
 	ToolExposureMutationConnectionLimitName       = "platform-mcp-tool-exposure-mutation-connection"
 	ToolExposureMutationOrganizationLimitName     = "platform-mcp-tool-exposure-mutation-organization"
+	PluginRepublishConnectionLimitName            = "platform-mcp-plugin-republish-connection"
+	PluginRepublishOrganizationLimitName          = "platform-mcp-plugin-republish-organization"
 	ProjectMutationConnectionLimitName            = "platform-mcp-project-mutation-connection"
 	ProjectMutationOrganizationLimitName          = "platform-mcp-project-mutation-organization"
 )
 
 const (
-	// DocsQueriesPerConnectionPerMinute and DocsQueriesPerOrganizationPerMinute
-	// bound documentation search. Retrieval is in-process and cheap, so these
-	// exist to stop a loop from spending the caller's context on repeated
-	// queries rather than to protect a backend.
-	DocsQueriesPerConnectionPerMinute   = 10
-	DocsQueriesPerOrganizationPerMinute = 100
+	// DocsQueriesPerConnectionPerMinute allows iterative documentation research
+	// over the bounded in-process corpus without throttling ordinary reading.
+	DocsQueriesPerConnectionPerMinute = 120
+
+	// DocsQueriesPerOrganizationPerMinute leaves room for concurrent researchers
+	// while retaining a ceiling on repeated in-process retrieval.
+	DocsQueriesPerOrganizationPerMinute = 1200
+
+	// SkillsOperationsPerConnectionPerMinute leaves room for reviewing dozens of
+	// suggestions, including the reads and approvals sharing this allowance.
+	SkillsOperationsPerConnectionPerMinute = 120
+
+	// SkillsOperationsPerOrganizationPerMinute allows multiple connections to
+	// review skills concurrently while retaining an organization-wide ceiling.
+	SkillsOperationsPerOrganizationPerMinute = 1200
+
+	// LifecycleOperationsPerConnectionPerMinute supports read/change/read across
+	// several servers. The moderate ceiling also bounds client-admission writes.
+	LifecycleOperationsPerConnectionPerMinute = 30
+
+	// LifecycleOperationsPerOrganizationPerMinute leaves room for concurrent
+	// administrators without removing the shared metadata/admission ceiling.
+	LifecycleOperationsPerOrganizationPerMinute = 300
 
 	// DiagnosticQueriesPer* bound the summary reads: the project overview and
 	// the per-MCP diagnosis. They are generous because an administrator
@@ -77,24 +96,34 @@ const (
 	RiskMutationsPerConnectionPerMinute   = 5
 	RiskMutationsPerOrganizationPerMinute = 50
 
-	// PluginAssignmentMutationsPer* bound the access-affecting replacement of one
-	// plugin's complete assignment set on an independent allowance.
-	PluginAssignmentMutationsPerConnectionPerMinute   = 5
-	PluginAssignmentMutationsPerOrganizationPerMinute = 50
-	AccessRoleMutationsPerConnectionPerMinute         = 5
-	AccessRoleMutationsPerOrganizationPerMinute       = 50
-	ShadowAccessDecisionsPerConnectionPerMinute       = 5
-	ShadowAccessDecisionsPerOrganizationPerMinute     = 50
-	ReviewRequestsPerConnectionPerMinute              = 5
-	ReviewRequestsPerOrganizationPerMinute            = 50
+	// PluginAssignmentMutationsPerConnectionPerMinute supports rolling out
+	// assignments across dozens of plugins while bounding access-affecting writes.
+	PluginAssignmentMutationsPerConnectionPerMinute = 30
 
-	// ToolExposureReadsPer* bound the project tool catalogue listing. It is a
-	// bounded, paginated PostgreSQL read of the project's own generated tool
-	// definitions, and an administrator legitimately pages through it while
-	// narrowing down one tool, so it is metered like the other inventory
-	// reads rather than like the write it leads to.
-	ToolExposureReadsPerConnectionPerMinute   = 30
-	ToolExposureReadsPerOrganizationPerMinute = 300
+	// PluginAssignmentMutationsPerOrganizationPerMinute allows concurrent
+	// administrators to manage assignments under an organization-wide ceiling.
+	PluginAssignmentMutationsPerOrganizationPerMinute = 300
+
+	// AccessRoleMutationsPerConnectionPerMinute supports creating, updating and
+	// assigning roles in one bulk administration workflow.
+	AccessRoleMutationsPerConnectionPerMinute = 30
+
+	// AccessRoleMutationsPerOrganizationPerMinute bounds access-role changes
+	// across concurrent administrators independently of other mutation budgets.
+	AccessRoleMutationsPerOrganizationPerMinute = 300
+
+	ShadowAccessDecisionsPerConnectionPerMinute   = 5
+	ShadowAccessDecisionsPerOrganizationPerMinute = 50
+	ReviewRequestsPerConnectionPerMinute          = 5
+	ReviewRequestsPerOrganizationPerMinute        = 50
+
+	// ToolExposureReadsPerConnectionPerMinute allows paging through bounded
+	// project tool definitions without spending the separate mutation allowance.
+	ToolExposureReadsPerConnectionPerMinute = 120
+
+	// ToolExposureReadsPerOrganizationPerMinute supports concurrent tool
+	// inventory inspection while retaining an organization-wide read ceiling.
+	ToolExposureReadsPerOrganizationPerMinute = 1200
 
 	// ToolExposureMutationsPer* bound adding and removing a server's tools on
 	// their own allowance. Both tools share it, so alternating between them
@@ -103,6 +132,12 @@ const (
 	// carrying the server.
 	ToolExposureMutationsPerConnectionPerMinute   = 5
 	ToolExposureMutationsPerOrganizationPerMinute = 50
+
+	// PluginRepublishesPer* bound republish_plugin on its own allowance. Each
+	// allowed call can regenerate every package in a project, so it is metered
+	// like the other package-affecting writes rather than like a read.
+	PluginRepublishesPerConnectionPerMinute   = 5
+	PluginRepublishesPerOrganizationPerMinute = 50
 
 	// ProjectMutationsPer* bound creating and renaming projects on their own
 	// allowance, shared by both tools so alternating between them cannot
