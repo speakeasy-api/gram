@@ -787,7 +787,7 @@ function IdentitiesIndexContent(): JSX.Element {
         {/* Both tables on screen at once: the page does not scroll past one
             to reach the other, so each pane takes half the room left under the
             controls and scrolls its own rows. */}
-        <div className="flex min-h-0 flex-col gap-6">
+        <div className="flex h-[calc(100dvh-21rem)] min-h-[24rem] flex-col gap-6">
           {/* No stat tiles: each table states its own count, and the four
               numbers above them repeated it without saying anything the rows
               do not. */}
@@ -915,7 +915,12 @@ function IdentityGroup({
   emptyMessage: ReactNode;
 }): JSX.Element {
   return (
-    <section className="flex min-h-0 flex-1 flex-col gap-3">
+    <section
+      className="flex min-h-[9rem] flex-col gap-3"
+      // Sized by what it holds: a five-row inventory does not claim the same
+      // height as a forty-row directory, and neither is pinned to half.
+      style={{ flexGrow: Math.max(rows.length, 2), flexBasis: 0 }}
+    >
       <div className="flex items-end justify-between gap-6">
         <div className="space-y-1">
           <div className="flex items-baseline gap-2">
@@ -933,7 +938,12 @@ function IdentityGroup({
       {/* The rows scroll inside the pane. More of them load as that scroll
           reaches the end, which is the pagination this list has: neither the
           directory nor the agent inventory takes a cursor yet. */}
-      <div className="border-border max-h-[38vh] min-h-0 flex-1 overflow-y-auto border-b">
+      {/* The header stays while its rows move: a column you cannot see is a
+          column you cannot read a cell against. */}
+      {/* The table clips its own overflow, which would anchor a sticky header
+          to the table rather than to this pane; scrolling moves to the pane so
+          the header can stay put while its rows move. */}
+      <div className="border-border min-h-0 flex-1 overflow-auto border-b [&_table]:overflow-visible [&_thead]:bg-background [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10">
         <Table
           columns={columns}
           data={rows.slice(0, visible)}
