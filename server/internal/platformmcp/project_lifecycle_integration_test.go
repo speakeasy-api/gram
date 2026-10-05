@@ -77,13 +77,6 @@ func (f projectLifecycleFixture) organizationProjects(t *testing.T, ctx context.
 	return rows
 }
 
-func auditCount(t *testing.T, ctx context.Context, conn *pgxpool.Pool, action audit.Action) int64 {
-	t.Helper()
-	count, err := audittest.AuditLogCountByAction(ctx, conn, action)
-	require.NoError(t, err)
-	return count
-}
-
 // requireProjectLifecycleRefusal asserts a readable refusal with the given
 // code and returns the message the caller would be shown.
 func requireProjectLifecycleRefusal(t *testing.T, err error, code string) string {

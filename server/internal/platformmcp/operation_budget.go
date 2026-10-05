@@ -37,6 +37,8 @@ const (
 const (
 	PluginAssignmentMutationConnectionLimitName   = "platform-mcp-plugin-assignment-mutation-connection"
 	PluginAssignmentMutationOrganizationLimitName = "platform-mcp-plugin-assignment-mutation-organization"
+	PluginMetadataMutationConnectionLimitName     = "platform-mcp-plugin-metadata-mutation-connection"
+	PluginMetadataMutationOrganizationLimitName   = "platform-mcp-plugin-metadata-mutation-organization"
 	AccessRoleMutationConnectionLimitName         = "platform-mcp-access-role-mutation-connection"
 	AccessRoleMutationOrganizationLimitName       = "platform-mcp-access-role-mutation-organization"
 	ShadowAccessDecisionConnectionLimitName       = "platform-mcp-shadow-access-decision-connection"
@@ -45,6 +47,8 @@ const (
 	ToolExposureReadOrganizationLimitName         = "platform-mcp-tool-exposure-read-organization"
 	ToolExposureMutationConnectionLimitName       = "platform-mcp-tool-exposure-mutation-connection"
 	ToolExposureMutationOrganizationLimitName     = "platform-mcp-tool-exposure-mutation-organization"
+	DataExportToggleConnectionLimitName           = "platform-mcp-data-export-toggle-connection"
+	DataExportToggleOrganizationLimitName         = "platform-mcp-data-export-toggle-organization"
 	PluginRepublishConnectionLimitName            = "platform-mcp-plugin-republish-connection"
 	PluginRepublishOrganizationLimitName          = "platform-mcp-plugin-republish-organization"
 	ProjectMutationConnectionLimitName            = "platform-mcp-project-mutation-connection"
@@ -117,6 +121,13 @@ const (
 	ReviewRequestsPerConnectionPerMinute          = 5
 	ReviewRequestsPerOrganizationPerMinute        = 50
 
+	// PluginMetadataMutationsPer* bound creating and renaming plugins together
+	// on their own allowance. This is what stops a conversational create loop;
+	// there is no separate cap on how many plugins a project holds, because the
+	// dashboard has none and the two paths must refuse the same requests.
+	PluginMetadataMutationsPerConnectionPerMinute   = 5
+	PluginMetadataMutationsPerOrganizationPerMinute = 50
+
 	// ToolExposureReadsPerConnectionPerMinute allows paging through bounded
 	// project tool definitions without spending the separate mutation allowance.
 	ToolExposureReadsPerConnectionPerMinute = 120
@@ -132,6 +143,14 @@ const (
 	// carrying the server.
 	ToolExposureMutationsPerConnectionPerMinute   = 5
 	ToolExposureMutationsPerOrganizationPerMinute = 50
+
+	// DataExportTogglesPer* bound pausing and resuming data export routes on
+	// their own allowance. Both tools share it, so alternating between them
+	// cannot multiply the permitted write rate. A person handling an incident
+	// pauses a handful of routes, never dozens a minute; each allowed call
+	// takes the route row lock and writes an audit entry.
+	DataExportTogglesPerConnectionPerMinute   = 5
+	DataExportTogglesPerOrganizationPerMinute = 50
 
 	// PluginRepublishesPer* bound republish_plugin on its own allowance. Each
 	// allowed call can regenerate every package in a project, so it is metered

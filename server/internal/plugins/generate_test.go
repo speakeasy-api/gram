@@ -3269,6 +3269,36 @@ func TestGeneratePlatformMCPOnboardingWorkflowsOfferProjectCreation(t *testing.T
 	}
 }
 
+// The catalogue workflow also runs in managed project assistants, which do not
+// have create_plugin. Offering a new plugin there would send the assistant to
+// a tool it cannot call, so the offer is gated on the tool being present and
+// the assistant hands the user to the dashboard instead.
+func TestGeneratePlatformMCPPackageGatesCatalogPluginCreation(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	const path = "skills/add-mcp-from-catalog/SKILL.md"
+	content := files["speakeasy/"+path]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	workflow := string(content)
+	for _, required := range []string{
+		"Only when `create_plugin` is in your tool list",
+		"A managed project assistant has no `create_plugin` tool, so never offer or call it there",
+		"ask the user to create the plugin in the AICP dashboard or from an external MCP client",
+		"call `list_plugins` again and continue with the plugin they created",
+		// A server without the plugin metadata writes answers
+		// feature_unavailable; the workflow must stop and hand off rather
+		// than retry or quietly use another plugin.
+		"If it refuses with `feature_unavailable`, creating a plugin is not available on this server",
+		"do not retry or substitute another plugin",
+	} {
+		require.Contains(t, workflow, required)
+	}
+	// Every call to create_plugin sits after the gate.
+	require.Less(t, strings.Index(workflow, "Only when `create_plugin` is in your tool list"), strings.Index(workflow, "call `create_plugin`"))
+}
+
 func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 	t.Parallel()
 	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
@@ -3803,6 +3833,31 @@ func TestGeneratePlatformMCPPackageEmitsToolExposureWorkflow(t *testing.T) {
 		"Use `send_platform_mcp_feedback` only after asking for consent",
 		"nothing was changed at all, not that part of the request landed",
 		"not that plugins or the people holding them have converged",
+		// Creating a server is offered only when none fits, only from function
+		// tools, and the result is private until a plugin carries it.
+		"`create_mcp_from_functions`",
+		"never create a server the user did not ask for",
+		"`source_kind` `function`",
+		"reaches nobody until it is put into a plugin",
+		// An organization's first server goes out to everyone holding the
+		// Default plugin, and the skill must say so from the result.
+		"`added_to_default_plugin`",
+		"`preview.would_join_default_plugin`",
+		// The warning itself, not just the field names: a first server reaches
+		// everyone holding the Default plugin, said before confirming from the
+		// preview and after from the result.
+		"say plainly that it joins the project's Default plugin on creation, so everyone holding that plugin receives it",
+		"tell the user it joined the project's Default plugin and everyone holding that plugin receives it",
+		// A requested publication is not a delivered one.
+		"`publication_requested` means a refresh of their plugin was requested, not confirmed delivered: never tell the user people already have the server",
+		"Show the user the `preview` values as returned before asking for confirmation",
+		"a short suffix is added at creation",
+		// The slug a user confirms comes from the tool's own preview, never
+		// from prose that can drift from the code that derives it.
+		"`confirmation_required`",
+		"Never work out or describe a slug yourself",
+		// The preview records nothing, so one key spans preview and confirm.
+		"the same idempotency key the preview used",
 	} {
 		require.Contains(t, workflow, guardrail)
 	}

@@ -416,16 +416,23 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
 		operationSetPluginAssignments,
+		operationCreatePlugin,
+		operationRenamePlugin,
 		operationRepublishPlugin,
 		"list_my_sessions",
 		"continue_session",
 		"list_data_exports",
 		"create_data_export",
+		pauseDataExportToolName,
+		resumeDataExportToolName,
 		// Changing which tools a server exposes republishes every plugin that
 		// carries it to everyone holding one, so it stays on the surface an
 		// administrator drives directly, like the other distribution writes.
 		addToolsToMCPToolName,
 		removeToolsFromMCPToolName,
+		// Authoring a new server from a project's functions is the same kind
+		// of administrator decision.
+		createMCPFromFunctionsToolName,
 		// An assistant is bound to its own project: creating another is
 		// outside its reach, and renaming its own is a decision for a person
 		// with write access to it, not for the assistant.
