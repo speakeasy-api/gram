@@ -74590,6 +74590,104 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: WorkloadIdentities
+  /rpc/workloadIdentities.listPlatforms:
+    get:
+      description: List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.
+      operationId: listWorkloadPlatforms
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadPlatformCatalog'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listPlatforms workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: listPlatforms
+      x-speakeasy-react-hook:
+        name: WorkloadPlatforms
   /rpc/workloadIdentities.registerIssuer:
     post:
       description: Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
@@ -106254,6 +106352,215 @@ components:
         - tags
         - created_at
         - updated_at
+    WorkloadPlatform:
+      type: object
+      properties:
+        description:
+          type: string
+          description: What connecting the platform does.
+        display_name:
+          type: string
+          description: What the operator sees.
+        enabled:
+          type: boolean
+          description: False for a platform listed but not offered.
+        icon:
+          type: string
+          description: The platform's logo, a path on the dashboard's origin. Empty where it has none.
+        issuer:
+          $ref: '#/components/schemas/WorkloadPlatformConstant'
+        jwks_uri:
+          $ref: '#/components/schemas/WorkloadPlatformConstant'
+        key:
+          type: string
+          description: Identifies the entry permanently.
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadPlatformStep'
+          description: The guided setup. Empty for a platform without one, which falls back to the registration form.
+        subject:
+          $ref: '#/components/schemas/WorkloadPlatformSubject'
+        variables:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadPlatformVariable'
+          description: What the operator supplies.
+      description: A platform the catalog offers to trust, with what the operator supplies and the guided setup that connects it.
+      required:
+        - key
+        - display_name
+        - description
+        - icon
+        - enabled
+        - issuer
+        - jwks_uri
+        - variables
+        - subject
+        - steps
+    WorkloadPlatformBlock:
+      type: object
+      properties:
+        alt:
+          type: string
+          description: An image's alternative text.
+        caption:
+          type: string
+          description: Shown under an image.
+        help:
+          type: string
+          description: Shown under a computed value.
+        href:
+          type: string
+          description: A link's https target.
+        label:
+          type: string
+          description: A link's or computed value's label.
+        markdown:
+          type: string
+          description: A text block's Markdown. Raw HTML in it must not be rendered.
+        src:
+          type: string
+          description: An image's path on the dashboard's origin.
+        type:
+          type: string
+          description: The kind of content.
+          enum:
+            - text
+            - image
+            - link
+            - field
+            - subject_rule
+            - agent_picker
+            - tags
+            - computed_status
+            - computed
+        value:
+          type: string
+          description: The value a computed block shows.
+          enum:
+            - ""
+            - token_endpoint
+            - issuer_url
+            - mcp_host
+        variable:
+          type: string
+          description: The variable key a field collects.
+      description: One piece of a guided setup step. Which fields are set depends on type; the rest are empty.
+      required:
+        - type
+        - markdown
+        - src
+        - alt
+        - caption
+        - href
+        - label
+        - variable
+        - value
+        - help
+    WorkloadPlatformCatalog:
+      type: object
+      properties:
+        platforms:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadPlatform'
+          description: The catalog entries.
+      description: Every platform the catalog offers, ordered by key.
+      required:
+        - platforms
+    WorkloadPlatformConstant:
+      type: object
+      properties:
+        value:
+          type: string
+          description: The value, with {key} placeholders for platform-tier variables.
+        visibility:
+          type: string
+          description: Whether the operator sees the value.
+          enum:
+            - hidden
+            - read-only
+      description: A value a catalog platform supplies, the same for every customer.
+      required:
+        - value
+        - visibility
+    WorkloadPlatformStep:
+      type: object
+      properties:
+        blocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadPlatformBlock'
+          description: Rendered in order.
+        id:
+          type: string
+          description: Stable within the platform; used in the dashboard URL.
+        phase:
+          type: string
+          description: collect steps gather values, the create step writes the rows, connect steps describe the platform's side.
+          enum:
+            - collect
+            - create
+            - connect
+        title:
+          type: string
+          description: Heads the step.
+      description: One screen of a guided setup.
+      required:
+        - id
+        - title
+        - phase
+        - blocks
+    WorkloadPlatformSubject:
+      type: object
+      properties:
+        template:
+          type: string
+          description: The subject with {key} placeholders for rule-tier variables; the stem, for a wildcard rule.
+        wildcard:
+          type: boolean
+          description: Whether the rule is the filled template followed by *.
+      description: The access rule a catalog platform produces.
+      required:
+        - template
+        - wildcard
+    WorkloadPlatformVariable:
+      type: object
+      properties:
+        help:
+          type: string
+          description: Where the operator finds the value. Empty where there is no help.
+        key:
+          type: string
+          description: Names the variable in templates, as {key}.
+        label:
+          type: string
+          description: The field's label.
+        pattern:
+          type: string
+          description: A regular expression the whole value must match.
+        pattern_message:
+          type: string
+          description: Shown when the value does not match. Empty where there is none.
+        placeholder:
+          type: string
+          description: Shown in the empty field. Empty where there is none.
+        tier:
+          type: string
+          description: Whether it is supplied once per trusted platform or once per access rule.
+          enum:
+            - platform
+            - rule
+      description: Something the operator supplies when connecting a catalog platform.
+      required:
+        - key
+        - tier
+        - label
+        - help
+        - placeholder
+        - pattern
+        - pattern_message
     KillswitchCapabilityKey: {type: string, enum: [mcp_tool_calls]}
     KillswitchStatus: {type: string, enum: [active, scheduled, expired, lifted]}
     KillswitchListStatus: {type: string, enum: [active, scheduled, expired, lifted]}

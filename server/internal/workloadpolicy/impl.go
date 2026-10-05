@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
+	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/catalog"
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
@@ -63,6 +64,9 @@ type Service struct {
 	authz  *authz.Engine
 	audit  *audit.Logger
 	repo   *repo.Queries
+
+	// catalog is the platforms the Access Hub offers to trust.
+	catalog catalog.Source
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -78,13 +82,14 @@ func NewService(
 ) *Service {
 	logger = logger.With(attr.SlogComponent("workloadpolicy.api"))
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/workloadpolicy"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessions, authzEngine),
-		authz:  authzEngine,
-		audit:  auditLogger,
-		repo:   repo.New(db),
+		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/workloadpolicy"),
+		logger:  logger,
+		db:      db,
+		auth:    auth.New(logger, db, sessions, authzEngine),
+		authz:   authzEngine,
+		audit:   auditLogger,
+		repo:    repo.New(db),
+		catalog: catalog.Embedded(),
 	}
 }
 
@@ -210,6 +215,19 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.Work
 	}
 
 	return s.loadPolicy(ctx, s.db, t)
+}
+
+func (s *Service) ListPlatforms(ctx context.Context, payload *gen.ListPlatformsPayload) (*gen.WorkloadPlatformCatalog, error) {
+	if _, err := s.resolve(ctx, authz.ScopeWorkloadRead); err != nil {
+		return nil, err
+	}
+
+	platforms, err := s.catalog.Platforms(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load the platform catalog").LogError(ctx, s.logger)
+	}
+
+	return mv.BuildWorkloadPlatformCatalogView(platforms), nil
 }
 
 // requireTrustDomain enforces the WIMSE identifier draft's guidance that a trust

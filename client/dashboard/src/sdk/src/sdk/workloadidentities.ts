@@ -4,6 +4,7 @@
 
 import { workloadIdentitiesAdmitSubject } from "../funcs/workloadIdentitiesAdmitSubject.js";
 import { workloadIdentitiesList } from "../funcs/workloadIdentitiesList.js";
+import { workloadIdentitiesListPlatforms } from "../funcs/workloadIdentitiesListPlatforms.js";
 import { workloadIdentitiesRegisterIssuer } from "../funcs/workloadIdentitiesRegisterIssuer.js";
 import { workloadIdentitiesUpdateIssuer } from "../funcs/workloadIdentitiesUpdateIssuer.js";
 import { workloadIdentitiesUpdateSubject } from "../funcs/workloadIdentitiesUpdateSubject.js";
@@ -11,6 +12,7 @@ import { workloadIdentitiesWithdrawIssuer } from "../funcs/workloadIdentitiesWit
 import { workloadIdentitiesWithdrawSubject } from "../funcs/workloadIdentitiesWithdrawSubject.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { WorkloadIdentityPolicy } from "../models/components/workloadidentitypolicy.js";
+import { WorkloadPlatformCatalog } from "../models/components/workloadplatformcatalog.js";
 import {
   AdmitWorkloadSubjectRequest,
   AdmitWorkloadSubjectSecurity,
@@ -19,6 +21,10 @@ import {
   ListWorkloadIdentitiesRequest,
   ListWorkloadIdentitiesSecurity,
 } from "../models/operations/listworkloadidentities.js";
+import {
+  ListWorkloadPlatformsRequest,
+  ListWorkloadPlatformsSecurity,
+} from "../models/operations/listworkloadplatforms.js";
 import {
   RegisterWorkloadIssuerRequest,
   RegisterWorkloadIssuerSecurity,
@@ -73,6 +79,25 @@ export class WorkloadIdentities extends ClientSDK {
     options?: RequestOptions,
   ): Promise<WorkloadIdentityPolicy> {
     return unwrapAsync(workloadIdentitiesList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listPlatforms workloadIdentities
+   *
+   * @remarks
+   * List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.
+   */
+  async listPlatforms(
+    request?: ListWorkloadPlatformsRequest | undefined,
+    security?: ListWorkloadPlatformsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<WorkloadPlatformCatalog> {
+    return unwrapAsync(workloadIdentitiesListPlatforms(
       this,
       request,
       security,

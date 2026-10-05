@@ -257,6 +257,244 @@ func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 	}
 }
 
+// BuildListPlatformsRequest instantiates a HTTP request object with method and
+// path set to call the "workloadIdentities" service "listPlatforms" endpoint
+func (c *Client) BuildListPlatformsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListPlatformsWorkloadIdentitiesPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("workloadIdentities", "listPlatforms", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListPlatformsRequest returns an encoder for requests sent to the
+// workloadIdentities listPlatforms server.
+func EncodeListPlatformsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*workloadidentities.ListPlatformsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("workloadIdentities", "listPlatforms", "*workloadidentities.ListPlatformsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListPlatformsResponse returns a decoder for responses returned by the
+// workloadIdentities listPlatforms endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListPlatformsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListPlatformsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListPlatformsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+			}
+			err = ValidateListPlatformsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+			}
+			res := NewListPlatformsWorkloadPlatformCatalogOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListPlatformsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+			}
+			err = ValidateListPlatformsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+			}
+			return nil, NewListPlatformsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListPlatformsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+			}
+			err = ValidateListPlatformsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+			}
+			return nil, NewListPlatformsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListPlatformsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+			}
+			err = ValidateListPlatformsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+			}
+			return nil, NewListPlatformsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListPlatformsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+			}
+			err = ValidateListPlatformsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+			}
+			return nil, NewListPlatformsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListPlatformsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+			}
+			err = ValidateListPlatformsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+			}
+			return nil, NewListPlatformsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListPlatformsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+			}
+			err = ValidateListPlatformsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+			}
+			return nil, NewListPlatformsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListPlatformsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+			}
+			err = ValidateListPlatformsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+			}
+			return nil, NewListPlatformsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListPlatformsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+				}
+				err = ValidateListPlatformsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+				}
+				return nil, NewListPlatformsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListPlatformsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+				}
+				err = ValidateListPlatformsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+				}
+				return nil, NewListPlatformsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("workloadIdentities", "listPlatforms", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListPlatformsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+			}
+			err = ValidateListPlatformsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+			}
+			return nil, NewListPlatformsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("workloadIdentities", "listPlatforms", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildRegisterIssuerRequest instantiates a HTTP request object with method
 // and path set to call the "workloadIdentities" service "registerIssuer"
 // endpoint
@@ -1756,6 +1994,122 @@ func unmarshalWorkloadAdmissionResponseBodyToTypesWorkloadAdmission(v *WorkloadA
 	res.Tags = make([]string, len(v.Tags))
 	for i, val := range v.Tags {
 		res.Tags[i] = val
+	}
+
+	return res
+}
+
+// unmarshalWorkloadPlatformResponseBodyToWorkloadidentitiesWorkloadPlatform
+// builds a value of type *workloadidentities.WorkloadPlatform from a value of
+// type *WorkloadPlatformResponseBody.
+func unmarshalWorkloadPlatformResponseBodyToWorkloadidentitiesWorkloadPlatform(v *WorkloadPlatformResponseBody) *workloadidentities.WorkloadPlatform {
+	res := &workloadidentities.WorkloadPlatform{
+		Key:         *v.Key,
+		DisplayName: *v.DisplayName,
+		Description: *v.Description,
+		Icon:        *v.Icon,
+		Enabled:     *v.Enabled,
+	}
+	res.Issuer = unmarshalWorkloadPlatformConstantResponseBodyToWorkloadidentitiesWorkloadPlatformConstant(v.Issuer)
+	res.JwksURI = unmarshalWorkloadPlatformConstantResponseBodyToWorkloadidentitiesWorkloadPlatformConstant(v.JwksURI)
+	res.Variables = make([]*workloadidentities.WorkloadPlatformVariable, len(v.Variables))
+	for i, val := range v.Variables {
+		if val == nil {
+			res.Variables[i] = nil
+			continue
+		}
+		res.Variables[i] = unmarshalWorkloadPlatformVariableResponseBodyToWorkloadidentitiesWorkloadPlatformVariable(val)
+	}
+	res.Subject = unmarshalWorkloadPlatformSubjectResponseBodyToWorkloadidentitiesWorkloadPlatformSubject(v.Subject)
+	res.Steps = make([]*workloadidentities.WorkloadPlatformStep, len(v.Steps))
+	for i, val := range v.Steps {
+		if val == nil {
+			res.Steps[i] = nil
+			continue
+		}
+		res.Steps[i] = unmarshalWorkloadPlatformStepResponseBodyToWorkloadidentitiesWorkloadPlatformStep(val)
+	}
+
+	return res
+}
+
+// unmarshalWorkloadPlatformConstantResponseBodyToWorkloadidentitiesWorkloadPlatformConstant
+// builds a value of type *workloadidentities.WorkloadPlatformConstant from a
+// value of type *WorkloadPlatformConstantResponseBody.
+func unmarshalWorkloadPlatformConstantResponseBodyToWorkloadidentitiesWorkloadPlatformConstant(v *WorkloadPlatformConstantResponseBody) *workloadidentities.WorkloadPlatformConstant {
+	res := &workloadidentities.WorkloadPlatformConstant{
+		Value:      *v.Value,
+		Visibility: *v.Visibility,
+	}
+
+	return res
+}
+
+// unmarshalWorkloadPlatformVariableResponseBodyToWorkloadidentitiesWorkloadPlatformVariable
+// builds a value of type *workloadidentities.WorkloadPlatformVariable from a
+// value of type *WorkloadPlatformVariableResponseBody.
+func unmarshalWorkloadPlatformVariableResponseBodyToWorkloadidentitiesWorkloadPlatformVariable(v *WorkloadPlatformVariableResponseBody) *workloadidentities.WorkloadPlatformVariable {
+	res := &workloadidentities.WorkloadPlatformVariable{
+		Key:            *v.Key,
+		Tier:           *v.Tier,
+		Label:          *v.Label,
+		Help:           *v.Help,
+		Placeholder:    *v.Placeholder,
+		Pattern:        *v.Pattern,
+		PatternMessage: *v.PatternMessage,
+	}
+
+	return res
+}
+
+// unmarshalWorkloadPlatformSubjectResponseBodyToWorkloadidentitiesWorkloadPlatformSubject
+// builds a value of type *workloadidentities.WorkloadPlatformSubject from a
+// value of type *WorkloadPlatformSubjectResponseBody.
+func unmarshalWorkloadPlatformSubjectResponseBodyToWorkloadidentitiesWorkloadPlatformSubject(v *WorkloadPlatformSubjectResponseBody) *workloadidentities.WorkloadPlatformSubject {
+	res := &workloadidentities.WorkloadPlatformSubject{
+		Template: *v.Template,
+		Wildcard: *v.Wildcard,
+	}
+
+	return res
+}
+
+// unmarshalWorkloadPlatformStepResponseBodyToWorkloadidentitiesWorkloadPlatformStep
+// builds a value of type *workloadidentities.WorkloadPlatformStep from a value
+// of type *WorkloadPlatformStepResponseBody.
+func unmarshalWorkloadPlatformStepResponseBodyToWorkloadidentitiesWorkloadPlatformStep(v *WorkloadPlatformStepResponseBody) *workloadidentities.WorkloadPlatformStep {
+	res := &workloadidentities.WorkloadPlatformStep{
+		ID:    *v.ID,
+		Title: *v.Title,
+		Phase: *v.Phase,
+	}
+	res.Blocks = make([]*workloadidentities.WorkloadPlatformBlock, len(v.Blocks))
+	for i, val := range v.Blocks {
+		if val == nil {
+			res.Blocks[i] = nil
+			continue
+		}
+		res.Blocks[i] = unmarshalWorkloadPlatformBlockResponseBodyToWorkloadidentitiesWorkloadPlatformBlock(val)
+	}
+
+	return res
+}
+
+// unmarshalWorkloadPlatformBlockResponseBodyToWorkloadidentitiesWorkloadPlatformBlock
+// builds a value of type *workloadidentities.WorkloadPlatformBlock from a
+// value of type *WorkloadPlatformBlockResponseBody.
+func unmarshalWorkloadPlatformBlockResponseBodyToWorkloadidentitiesWorkloadPlatformBlock(v *WorkloadPlatformBlockResponseBody) *workloadidentities.WorkloadPlatformBlock {
+	res := &workloadidentities.WorkloadPlatformBlock{
+		Type:     *v.Type,
+		Markdown: *v.Markdown,
+		Src:      *v.Src,
+		Alt:      *v.Alt,
+		Caption:  *v.Caption,
+		Href:     *v.Href,
+		Label:    *v.Label,
+		Variable: *v.Variable,
+		Value:    *v.Value,
+		Help:     *v.Help,
 	}
 
 	return res

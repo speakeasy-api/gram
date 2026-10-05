@@ -16,6 +16,7 @@ import (
 // Client is the "workloadIdentities" service client.
 type Client struct {
 	ListEndpoint            goa.Endpoint
+	ListPlatformsEndpoint   goa.Endpoint
 	RegisterIssuerEndpoint  goa.Endpoint
 	UpdateIssuerEndpoint    goa.Endpoint
 	WithdrawIssuerEndpoint  goa.Endpoint
@@ -26,9 +27,10 @@ type Client struct {
 
 // NewClient initializes a "workloadIdentities" service client given the
 // endpoints.
-func NewClient(list, registerIssuer, updateIssuer, withdrawIssuer, admitSubject, updateSubject, withdrawSubject goa.Endpoint) *Client {
+func NewClient(list, listPlatforms, registerIssuer, updateIssuer, withdrawIssuer, admitSubject, updateSubject, withdrawSubject goa.Endpoint) *Client {
 	return &Client{
 		ListEndpoint:            list,
+		ListPlatformsEndpoint:   listPlatforms,
 		RegisterIssuerEndpoint:  registerIssuer,
 		UpdateIssuerEndpoint:    updateIssuer,
 		WithdrawIssuerEndpoint:  withdrawIssuer,
@@ -58,6 +60,29 @@ func (c *Client) List(ctx context.Context, p *ListPayload) (res *WorkloadIdentit
 		return
 	}
 	return ires.(*WorkloadIdentityPolicy), nil
+}
+
+// ListPlatforms calls the "listPlatforms" endpoint of the "workloadIdentities"
+// service.
+// ListPlatforms may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListPlatforms(ctx context.Context, p *ListPlatformsPayload) (res *WorkloadPlatformCatalog, err error) {
+	var ires any
+	ires, err = c.ListPlatformsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*WorkloadPlatformCatalog), nil
 }
 
 // RegisterIssuer calls the "registerIssuer" endpoint of the

@@ -49,6 +49,30 @@ var _ = Service("workloadIdentities", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WorkloadIdentities"}`)
 	})
 
+	Method("listPlatforms", func() {
+		Description("List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(WorkloadPlatformCatalog)
+
+		HTTP(func() {
+			GET("/rpc/workloadIdentities.listPlatforms")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listWorkloadPlatforms")
+		Meta("openapi:extension:x-speakeasy-name-override", "listPlatforms")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WorkloadPlatforms"}`)
+	})
+
 	Method("registerIssuer", func() {
 		Description("Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.")
 
@@ -372,4 +396,99 @@ var WorkloadIdentityPolicy = Type("WorkloadIdentityPolicy", func() {
 	Attribute("admissions", ArrayOf(WorkloadAdmission), "Admitted subjects.")
 
 	Required("issuers", "admissions")
+})
+
+var WorkloadPlatformConstant = Type("WorkloadPlatformConstant", func() {
+	Description("A value a catalog platform supplies, the same for every customer.")
+
+	Attribute("value", String, "The value, with {key} placeholders for platform-tier variables.")
+	Attribute("visibility", String, "Whether the operator sees the value.", func() {
+		Enum("hidden", "read-only")
+	})
+
+	Required("value", "visibility")
+})
+
+var WorkloadPlatformVariable = Type("WorkloadPlatformVariable", func() {
+	Description("Something the operator supplies when connecting a catalog platform.")
+
+	Attribute("key", String, "Names the variable in templates, as {key}.")
+	Attribute("tier", String, "Whether it is supplied once per trusted platform or once per access rule.", func() {
+		Enum("platform", "rule")
+	})
+	Attribute("label", String, "The field's label.")
+	Attribute("help", String, "Where the operator finds the value. Empty where there is no help.")
+	Attribute("placeholder", String, "Shown in the empty field. Empty where there is none.")
+	Attribute("pattern", String, "A regular expression the whole value must match.")
+	Attribute("pattern_message", String, "Shown when the value does not match. Empty where there is none.")
+
+	Required("key", "tier", "label", "help", "placeholder", "pattern", "pattern_message")
+})
+
+var WorkloadPlatformSubject = Type("WorkloadPlatformSubject", func() {
+	Description("The access rule a catalog platform produces.")
+
+	Attribute("template", String, "The subject with {key} placeholders for rule-tier variables; the stem, for a wildcard rule.")
+	Attribute("wildcard", Boolean, "Whether the rule is the filled template followed by *.")
+
+	Required("template", "wildcard")
+})
+
+var WorkloadPlatformBlock = Type("WorkloadPlatformBlock", func() {
+	Description("One piece of a guided setup step. Which fields are set depends on type; the rest are empty.")
+
+	Attribute("type", String, "The kind of content.", func() {
+		Enum("text", "image", "link", "field", "subject_rule", "agent_picker", "tags", "computed_status", "computed")
+	})
+	Attribute("markdown", String, "A text block's Markdown. Raw HTML in it must not be rendered.")
+	Attribute("src", String, "An image's path on the dashboard's origin.")
+	Attribute("alt", String, "An image's alternative text.")
+	Attribute("caption", String, "Shown under an image.")
+	Attribute("href", String, "A link's https target.")
+	Attribute("label", String, "A link's or computed value's label.")
+	Attribute("variable", String, "The variable key a field collects.")
+	Attribute("value", String, "The value a computed block shows.", func() {
+		Enum("", "token_endpoint", "issuer_url", "mcp_host")
+	})
+	Attribute("help", String, "Shown under a computed value.")
+
+	Required("type", "markdown", "src", "alt", "caption", "href", "label", "variable", "value", "help")
+})
+
+var WorkloadPlatformStep = Type("WorkloadPlatformStep", func() {
+	Description("One screen of a guided setup.")
+
+	Attribute("id", String, "Stable within the platform; used in the dashboard URL.")
+	Attribute("title", String, "Heads the step.")
+	Attribute("phase", String, "collect steps gather values, the create step writes the rows, connect steps describe the platform's side.", func() {
+		Enum("collect", "create", "connect")
+	})
+	Attribute("blocks", ArrayOf(WorkloadPlatformBlock), "Rendered in order.")
+
+	Required("id", "title", "phase", "blocks")
+})
+
+var WorkloadPlatform = Type("WorkloadPlatform", func() {
+	Description("A platform the catalog offers to trust, with what the operator supplies and the guided setup that connects it.")
+
+	Attribute("key", String, "Identifies the entry permanently.")
+	Attribute("display_name", String, "What the operator sees.")
+	Attribute("description", String, "What connecting the platform does.")
+	Attribute("icon", String, "The platform's logo, a path on the dashboard's origin. Empty where it has none.")
+	Attribute("enabled", Boolean, "False for a platform listed but not offered.")
+	Attribute("issuer", WorkloadPlatformConstant, "The issuer identifier its tokens carry.")
+	Attribute("jwks_uri", WorkloadPlatformConstant, "Where it publishes its signing keys.")
+	Attribute("variables", ArrayOf(WorkloadPlatformVariable), "What the operator supplies.")
+	Attribute("subject", WorkloadPlatformSubject, "The access rule it produces.")
+	Attribute("steps", ArrayOf(WorkloadPlatformStep), "The guided setup. Empty for a platform without one, which falls back to the registration form.")
+
+	Required("key", "display_name", "description", "icon", "enabled", "issuer", "jwks_uri", "variables", "subject", "steps")
+})
+
+var WorkloadPlatformCatalog = Type("WorkloadPlatformCatalog", func() {
+	Description("Every platform the catalog offers, ordered by key.")
+
+	Attribute("platforms", ArrayOf(WorkloadPlatform), "The catalog entries.")
+
+	Required("platforms")
 })

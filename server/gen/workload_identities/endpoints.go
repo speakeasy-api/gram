@@ -17,6 +17,7 @@ import (
 // Endpoints wraps the "workloadIdentities" service endpoints.
 type Endpoints struct {
 	List            goa.Endpoint
+	ListPlatforms   goa.Endpoint
 	RegisterIssuer  goa.Endpoint
 	UpdateIssuer    goa.Endpoint
 	WithdrawIssuer  goa.Endpoint
@@ -32,6 +33,7 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		List:            NewListEndpoint(s, a.APIKeyAuth),
+		ListPlatforms:   NewListPlatformsEndpoint(s, a.APIKeyAuth),
 		RegisterIssuer:  NewRegisterIssuerEndpoint(s, a.APIKeyAuth),
 		UpdateIssuer:    NewUpdateIssuerEndpoint(s, a.APIKeyAuth),
 		WithdrawIssuer:  NewWithdrawIssuerEndpoint(s, a.APIKeyAuth),
@@ -45,6 +47,7 @@ func NewEndpoints(s Service) *Endpoints {
 // endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.List = m(e.List)
+	e.ListPlatforms = m(e.ListPlatforms)
 	e.RegisterIssuer = m(e.RegisterIssuer)
 	e.UpdateIssuer = m(e.UpdateIssuer)
 	e.WithdrawIssuer = m(e.WithdrawIssuer)
@@ -97,6 +100,53 @@ func NewListEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoi
 			return nil, err
 		}
 		return s.List(ctx, p)
+	}
+}
+
+// NewListPlatformsEndpoint returns an endpoint function that calls the method
+// "listPlatforms" of service "workloadIdentities".
+func NewListPlatformsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListPlatformsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListPlatforms(ctx, p)
 	}
 }
 

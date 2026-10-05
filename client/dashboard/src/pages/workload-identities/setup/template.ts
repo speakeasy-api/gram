@@ -1,0 +1,76 @@
+import type { CatalogEntry, CatalogVariable } from "./definition";
+
+const PLACEHOLDER = /\{([a-z_][a-z0-9_]*)\}/g;
+
+export type VariableValues = Record<string, string>;
+
+/** Why a variable's value cannot be used, or null when it can. */
+export function variableProblem(
+  variable: CatalogVariable,
+  value: string,
+): string | null {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return `Enter your ${variable.label}.`;
+  }
+  if (
+    variable.pattern !== undefined &&
+    !new RegExp(`^(?:${variable.pattern})$`).test(trimmed)
+  ) {
+    return variable.patternMessage ?? `${variable.label} is not valid.`;
+  }
+  return null;
+}
+
+/**
+ * The template with each `{key}` replaced by its trimmed value, or null while
+ * any placeholder's value is missing or invalid.
+ */
+export function fillTemplate(
+  entry: CatalogEntry,
+  template: string,
+  values: VariableValues,
+): string | null {
+  let complete = true;
+  const filled = template.replace(PLACEHOLDER, (_, key: string) => {
+    const variable = entry.variables.find((v) => v.key === key);
+    const value = values[key] ?? "";
+    if (variable === undefined || variableProblem(variable, value) !== null) {
+      complete = false;
+      return "";
+    }
+    return value.trim();
+  });
+  return complete ? filled : null;
+}
+
+export interface SubjectRule {
+  subject: string;
+  matchKind: "exact" | "wildcard";
+}
+
+/** The access rule an entry's subject template produces for these values. */
+export function subjectRule(
+  entry: CatalogEntry,
+  values: VariableValues,
+): SubjectRule | null {
+  const filled = fillTemplate(entry, entry.subject.template, values);
+  if (filled === null) {
+    return null;
+  }
+  if (entry.subject.wildcard) {
+    return { subject: `${filled}*`, matchKind: "wildcard" };
+  }
+  return { subject: filled, matchKind: "exact" };
+}
+
+/** Whether every variable has a usable value. */
+export function variablesComplete(
+  entry: CatalogEntry,
+  values: VariableValues,
+): boolean {
+  return entry.variables.every(
+    (variable) =>
+      variableProblem(variable, values[variable.key] ?? "") === null,
+  );
+}

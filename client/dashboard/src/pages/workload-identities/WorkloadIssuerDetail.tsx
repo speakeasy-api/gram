@@ -116,7 +116,49 @@ export function WorkloadIssuerDetailPage(): JSX.Element {
   );
 }
 
-function IssuerDetail({ issuerId }: { issuerId: string }): JSX.Element {
+/**
+ * A catalog platform's page reuses this one. Its values come from the catalog
+ * and are locked, so it is not edited or withdrawn here, and new access goes
+ * through the platform's guided setup rather than the hand-written form.
+ */
+export interface CatalogPlatformContext {
+  /** The platform's name, with its logo where it has one. */
+  title: ReactNode;
+
+  /** The platform's name as plain text, for copy. */
+  name: string;
+
+  description: string;
+
+  /** Opens the platform's guided setup. */
+  registerButton: ReactNode;
+
+  /** Opens the guided setup from the empty state. */
+  setupButton: ReactNode;
+}
+
+export function CatalogEmptyState({
+  catalog,
+}: {
+  catalog: Pick<CatalogPlatformContext, "name" | "setupButton">;
+}): JSX.Element {
+  return (
+    <InlineEmptyState
+      icon="cpu"
+      heading={`No ${catalog.name} connections yet`}
+      description={`There are currently no existing ${catalog.name} connections. Set one up to let it sign in to Gram.`}
+      action={catalog.setupButton}
+    />
+  );
+}
+
+export function IssuerDetail({
+  issuerId,
+  catalog,
+}: {
+  issuerId: string;
+  catalog?: CatalogPlatformContext;
+}): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
   const [admitOpen, setAdmitOpen] = useState(false);
@@ -396,6 +438,8 @@ function IssuerDetail({ issuerId }: { issuerId: string }): JSX.Element {
   let machinesSection: ReactNode;
   if (isPending) {
     machinesSection = <SkeletonTable />;
+  } else if (admissions.length === 0 && catalog !== undefined) {
+    machinesSection = <CatalogEmptyState catalog={catalog} />;
   } else if (admissions.length === 0) {
     machinesSection = (
       <InlineEmptyState
@@ -545,15 +589,21 @@ function IssuerDetail({ issuerId }: { issuerId: string }): JSX.Element {
   return (
     <ResourceListPage
       primaryAction={
-        <Stack direction="horizontal" gap={2}>
-          {editButton}
-          {allowButton}
-        </Stack>
+        catalog?.registerButton ?? (
+          <Stack direction="horizontal" gap={2}>
+            {editButton}
+            {allowButton}
+          </Stack>
+        )
       }
-      title={issuer?.name ?? "Trusted platform"}
+      title={catalog?.title ?? issuer?.name ?? "Trusted platform"}
       stage="preview"
-      description={issuer?.description.trim() || undefined}
-      belowHeader={issuer && <IssuerIdentifiers issuer={issuer} />}
+      description={
+        catalog?.description ?? (issuer?.description.trim() || undefined)
+      }
+      belowHeader={
+        catalog === undefined && issuer && <IssuerIdentifiers issuer={issuer} />
+      }
     >
       {allowUnavailableReason !== null && (
         <Text muted small className="mb-4">
@@ -561,7 +611,10 @@ function IssuerDetail({ issuerId }: { issuerId: string }): JSX.Element {
         </Text>
       )}
       {machinesSection}
-      {issuer && stopTrustingSection}
+      {/* A catalog platform is vetted by Speakeasy, so the organization does
+          not withdraw its trust here; removing its access rules is what
+          stops its identities signing in. */}
+      {issuer && catalog === undefined && stopTrustingSection}
       <RemoveSubjectDialog
         admission={removing}
         onOpenChange={(open) => {

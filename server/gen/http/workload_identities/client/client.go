@@ -20,6 +20,10 @@ type Client struct {
 	// List Doer is the HTTP client used to make requests to the list endpoint.
 	ListDoer goahttp.Doer
 
+	// ListPlatforms Doer is the HTTP client used to make requests to the
+	// listPlatforms endpoint.
+	ListPlatformsDoer goahttp.Doer
+
 	// RegisterIssuer Doer is the HTTP client used to make requests to the
 	// registerIssuer endpoint.
 	RegisterIssuerDoer goahttp.Doer
@@ -66,6 +70,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		ListDoer:            doer,
+		ListPlatformsDoer:   doer,
 		RegisterIssuerDoer:  doer,
 		UpdateIssuerDoer:    doer,
 		WithdrawIssuerDoer:  doer,
@@ -99,6 +104,30 @@ func (c *Client) List() goa.Endpoint {
 		resp, err := c.ListDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("workloadIdentities", "list", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListPlatforms returns an endpoint that makes HTTP requests to the
+// workloadIdentities service listPlatforms server.
+func (c *Client) ListPlatforms() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListPlatformsRequest(c.encoder)
+		decodeResponse = DecodeListPlatformsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListPlatformsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListPlatformsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "listPlatforms", err)
 		}
 		return decodeResponse(resp)
 	}

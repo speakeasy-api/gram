@@ -116,6 +116,13 @@ type ListResponseBody struct {
 	Admissions []*WorkloadAdmissionResponseBody `form:"admissions,omitempty" json:"admissions,omitempty" xml:"admissions,omitempty"`
 }
 
+// ListPlatformsResponseBody is the type of the "workloadIdentities" service
+// "listPlatforms" endpoint HTTP response body.
+type ListPlatformsResponseBody struct {
+	// The catalog entries.
+	Platforms []*WorkloadPlatformResponseBody `form:"platforms,omitempty" json:"platforms,omitempty" xml:"platforms,omitempty"`
+}
+
 // RegisterIssuerResponseBody is the type of the "workloadIdentities" service
 // "registerIssuer" endpoint HTTP response body.
 type RegisterIssuerResponseBody struct {
@@ -336,6 +343,194 @@ type ListUnexpectedResponseBody struct {
 // ListGatewayErrorResponseBody is the type of the "workloadIdentities" service
 // "list" endpoint HTTP response body for the "gateway_error" error.
 type ListGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPlatformsUnauthorizedResponseBody is the type of the
+// "workloadIdentities" service "listPlatforms" endpoint HTTP response body for
+// the "unauthorized" error.
+type ListPlatformsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPlatformsForbiddenResponseBody is the type of the "workloadIdentities"
+// service "listPlatforms" endpoint HTTP response body for the "forbidden"
+// error.
+type ListPlatformsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPlatformsBadRequestResponseBody is the type of the "workloadIdentities"
+// service "listPlatforms" endpoint HTTP response body for the "bad_request"
+// error.
+type ListPlatformsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPlatformsNotFoundResponseBody is the type of the "workloadIdentities"
+// service "listPlatforms" endpoint HTTP response body for the "not_found"
+// error.
+type ListPlatformsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPlatformsConflictResponseBody is the type of the "workloadIdentities"
+// service "listPlatforms" endpoint HTTP response body for the "conflict" error.
+type ListPlatformsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPlatformsUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "listPlatforms" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListPlatformsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPlatformsInvalidResponseBody is the type of the "workloadIdentities"
+// service "listPlatforms" endpoint HTTP response body for the "invalid" error.
+type ListPlatformsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPlatformsInvariantViolationResponseBody is the type of the
+// "workloadIdentities" service "listPlatforms" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListPlatformsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPlatformsUnexpectedResponseBody is the type of the "workloadIdentities"
+// service "listPlatforms" endpoint HTTP response body for the "unexpected"
+// error.
+type ListPlatformsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPlatformsGatewayErrorResponseBody is the type of the
+// "workloadIdentities" service "listPlatforms" endpoint HTTP response body for
+// the "gateway_error" error.
+type ListPlatformsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1542,6 +1737,109 @@ type WorkloadAdmissionResponseBody struct {
 	UpdatedAt      *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// WorkloadPlatformResponseBody is used to define fields on response body types.
+type WorkloadPlatformResponseBody struct {
+	// Identifies the entry permanently.
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+	// What the operator sees.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// What connecting the platform does.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The platform's logo, a path on the dashboard's origin. Empty where it has
+	// none.
+	Icon *string `form:"icon,omitempty" json:"icon,omitempty" xml:"icon,omitempty"`
+	// False for a platform listed but not offered.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// The issuer identifier its tokens carry.
+	Issuer *WorkloadPlatformConstantResponseBody `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Where it publishes its signing keys.
+	JwksURI *WorkloadPlatformConstantResponseBody `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// What the operator supplies.
+	Variables []*WorkloadPlatformVariableResponseBody `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
+	// The access rule it produces.
+	Subject *WorkloadPlatformSubjectResponseBody `form:"subject,omitempty" json:"subject,omitempty" xml:"subject,omitempty"`
+	// The guided setup. Empty for a platform without one, which falls back to the
+	// registration form.
+	Steps []*WorkloadPlatformStepResponseBody `form:"steps,omitempty" json:"steps,omitempty" xml:"steps,omitempty"`
+}
+
+// WorkloadPlatformConstantResponseBody is used to define fields on response
+// body types.
+type WorkloadPlatformConstantResponseBody struct {
+	// The value, with {key} placeholders for platform-tier variables.
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Whether the operator sees the value.
+	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+}
+
+// WorkloadPlatformVariableResponseBody is used to define fields on response
+// body types.
+type WorkloadPlatformVariableResponseBody struct {
+	// Names the variable in templates, as {key}.
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+	// Whether it is supplied once per trusted platform or once per access rule.
+	Tier *string `form:"tier,omitempty" json:"tier,omitempty" xml:"tier,omitempty"`
+	// The field's label.
+	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
+	// Where the operator finds the value. Empty where there is no help.
+	Help *string `form:"help,omitempty" json:"help,omitempty" xml:"help,omitempty"`
+	// Shown in the empty field. Empty where there is none.
+	Placeholder *string `form:"placeholder,omitempty" json:"placeholder,omitempty" xml:"placeholder,omitempty"`
+	// A regular expression the whole value must match.
+	Pattern *string `form:"pattern,omitempty" json:"pattern,omitempty" xml:"pattern,omitempty"`
+	// Shown when the value does not match. Empty where there is none.
+	PatternMessage *string `form:"pattern_message,omitempty" json:"pattern_message,omitempty" xml:"pattern_message,omitempty"`
+}
+
+// WorkloadPlatformSubjectResponseBody is used to define fields on response
+// body types.
+type WorkloadPlatformSubjectResponseBody struct {
+	// The subject with {key} placeholders for rule-tier variables; the stem, for a
+	// wildcard rule.
+	Template *string `form:"template,omitempty" json:"template,omitempty" xml:"template,omitempty"`
+	// Whether the rule is the filled template followed by *.
+	Wildcard *bool `form:"wildcard,omitempty" json:"wildcard,omitempty" xml:"wildcard,omitempty"`
+}
+
+// WorkloadPlatformStepResponseBody is used to define fields on response body
+// types.
+type WorkloadPlatformStepResponseBody struct {
+	// Stable within the platform; used in the dashboard URL.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Heads the step.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// collect steps gather values, the create step writes the rows, connect steps
+	// describe the platform's side.
+	Phase *string `form:"phase,omitempty" json:"phase,omitempty" xml:"phase,omitempty"`
+	// Rendered in order.
+	Blocks []*WorkloadPlatformBlockResponseBody `form:"blocks,omitempty" json:"blocks,omitempty" xml:"blocks,omitempty"`
+}
+
+// WorkloadPlatformBlockResponseBody is used to define fields on response body
+// types.
+type WorkloadPlatformBlockResponseBody struct {
+	// The kind of content.
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// A text block's Markdown. Raw HTML in it must not be rendered.
+	Markdown *string `form:"markdown,omitempty" json:"markdown,omitempty" xml:"markdown,omitempty"`
+	// An image's path on the dashboard's origin.
+	Src *string `form:"src,omitempty" json:"src,omitempty" xml:"src,omitempty"`
+	// An image's alternative text.
+	Alt *string `form:"alt,omitempty" json:"alt,omitempty" xml:"alt,omitempty"`
+	// Shown under an image.
+	Caption *string `form:"caption,omitempty" json:"caption,omitempty" xml:"caption,omitempty"`
+	// A link's https target.
+	Href *string `form:"href,omitempty" json:"href,omitempty" xml:"href,omitempty"`
+	// A link's or computed value's label.
+	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
+	// The variable key a field collects.
+	Variable *string `form:"variable,omitempty" json:"variable,omitempty" xml:"variable,omitempty"`
+	// The value a computed block shows.
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Shown under a computed value.
+	Help *string `form:"help,omitempty" json:"help,omitempty" xml:"help,omitempty"`
+}
+
 // NewRegisterIssuerRequestBody builds the HTTP request body from the payload
 // of the "registerIssuer" endpoint of the "workloadIdentities" service.
 func NewRegisterIssuerRequestBody(p *workloadidentities.RegisterIssuerPayload) *RegisterIssuerRequestBody {
@@ -1797,6 +2095,172 @@ func NewListUnexpected(body *ListUnexpectedResponseBody) *goa.ServiceError {
 // NewListGatewayError builds a workloadIdentities service list endpoint
 // gateway_error error.
 func NewListGatewayError(body *ListGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPlatformsWorkloadPlatformCatalogOK builds a "workloadIdentities"
+// service "listPlatforms" endpoint result from a HTTP "OK" response.
+func NewListPlatformsWorkloadPlatformCatalogOK(body *ListPlatformsResponseBody) *workloadidentities.WorkloadPlatformCatalog {
+	v := &workloadidentities.WorkloadPlatformCatalog{}
+	v.Platforms = make([]*workloadidentities.WorkloadPlatform, len(body.Platforms))
+	for i, val := range body.Platforms {
+		if val == nil {
+			v.Platforms[i] = nil
+			continue
+		}
+		v.Platforms[i] = unmarshalWorkloadPlatformResponseBodyToWorkloadidentitiesWorkloadPlatform(val)
+	}
+
+	return v
+}
+
+// NewListPlatformsUnauthorized builds a workloadIdentities service
+// listPlatforms endpoint unauthorized error.
+func NewListPlatformsUnauthorized(body *ListPlatformsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPlatformsForbidden builds a workloadIdentities service listPlatforms
+// endpoint forbidden error.
+func NewListPlatformsForbidden(body *ListPlatformsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPlatformsBadRequest builds a workloadIdentities service listPlatforms
+// endpoint bad_request error.
+func NewListPlatformsBadRequest(body *ListPlatformsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPlatformsNotFound builds a workloadIdentities service listPlatforms
+// endpoint not_found error.
+func NewListPlatformsNotFound(body *ListPlatformsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPlatformsConflict builds a workloadIdentities service listPlatforms
+// endpoint conflict error.
+func NewListPlatformsConflict(body *ListPlatformsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPlatformsUnsupportedMedia builds a workloadIdentities service
+// listPlatforms endpoint unsupported_media error.
+func NewListPlatformsUnsupportedMedia(body *ListPlatformsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPlatformsInvalid builds a workloadIdentities service listPlatforms
+// endpoint invalid error.
+func NewListPlatformsInvalid(body *ListPlatformsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPlatformsInvariantViolation builds a workloadIdentities service
+// listPlatforms endpoint invariant_violation error.
+func NewListPlatformsInvariantViolation(body *ListPlatformsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPlatformsUnexpected builds a workloadIdentities service listPlatforms
+// endpoint unexpected error.
+func NewListPlatformsUnexpected(body *ListPlatformsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPlatformsGatewayError builds a workloadIdentities service
+// listPlatforms endpoint gateway_error error.
+func NewListPlatformsGatewayError(body *ListPlatformsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2878,6 +3342,22 @@ func ValidateListResponseBody(body *ListResponseBody) (err error) {
 	return
 }
 
+// ValidateListPlatformsResponseBody runs the validations defined on
+// ListPlatformsResponseBody
+func ValidateListPlatformsResponseBody(body *ListPlatformsResponseBody) (err error) {
+	if body.Platforms == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("platforms", "body"))
+	}
+	for _, e := range body.Platforms {
+		if e != nil {
+			if err2 := ValidateWorkloadPlatformResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateRegisterIssuerResponseBody runs the validations defined on
 // RegisterIssuerResponseBody
 func ValidateRegisterIssuerResponseBody(body *RegisterIssuerResponseBody) (err error) {
@@ -3253,6 +3733,246 @@ func ValidateListUnexpectedResponseBody(body *ListUnexpectedResponseBody) (err e
 // ValidateListGatewayErrorResponseBody runs the validations defined on
 // list_gateway_error_response_body
 func ValidateListGatewayErrorResponseBody(body *ListGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPlatformsUnauthorizedResponseBody runs the validations defined
+// on listPlatforms_unauthorized_response_body
+func ValidateListPlatformsUnauthorizedResponseBody(body *ListPlatformsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPlatformsForbiddenResponseBody runs the validations defined on
+// listPlatforms_forbidden_response_body
+func ValidateListPlatformsForbiddenResponseBody(body *ListPlatformsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPlatformsBadRequestResponseBody runs the validations defined on
+// listPlatforms_bad_request_response_body
+func ValidateListPlatformsBadRequestResponseBody(body *ListPlatformsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPlatformsNotFoundResponseBody runs the validations defined on
+// listPlatforms_not_found_response_body
+func ValidateListPlatformsNotFoundResponseBody(body *ListPlatformsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPlatformsConflictResponseBody runs the validations defined on
+// listPlatforms_conflict_response_body
+func ValidateListPlatformsConflictResponseBody(body *ListPlatformsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPlatformsUnsupportedMediaResponseBody runs the validations
+// defined on listPlatforms_unsupported_media_response_body
+func ValidateListPlatformsUnsupportedMediaResponseBody(body *ListPlatformsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPlatformsInvalidResponseBody runs the validations defined on
+// listPlatforms_invalid_response_body
+func ValidateListPlatformsInvalidResponseBody(body *ListPlatformsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPlatformsInvariantViolationResponseBody runs the validations
+// defined on listPlatforms_invariant_violation_response_body
+func ValidateListPlatformsInvariantViolationResponseBody(body *ListPlatformsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPlatformsUnexpectedResponseBody runs the validations defined on
+// listPlatforms_unexpected_response_body
+func ValidateListPlatformsUnexpectedResponseBody(body *ListPlatformsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPlatformsGatewayErrorResponseBody runs the validations defined
+// on listPlatforms_gateway_error_response_body
+func ValidateListPlatformsGatewayErrorResponseBody(body *ListPlatformsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4829,6 +5549,208 @@ func ValidateWorkloadAdmissionResponseBody(body *WorkloadAdmissionResponseBody) 
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateWorkloadPlatformResponseBody runs the validations defined on
+// WorkloadPlatformResponseBody
+func ValidateWorkloadPlatformResponseBody(body *WorkloadPlatformResponseBody) (err error) {
+	if body.Key == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
+	}
+	if body.DisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.Icon == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("icon", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.Issuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
+	}
+	if body.JwksURI == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("jwks_uri", "body"))
+	}
+	if body.Variables == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("variables", "body"))
+	}
+	if body.Subject == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subject", "body"))
+	}
+	if body.Steps == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("steps", "body"))
+	}
+	if body.Issuer != nil {
+		if err2 := ValidateWorkloadPlatformConstantResponseBody(body.Issuer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.JwksURI != nil {
+		if err2 := ValidateWorkloadPlatformConstantResponseBody(body.JwksURI); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Variables {
+		if e != nil {
+			if err2 := ValidateWorkloadPlatformVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.Subject != nil {
+		if err2 := ValidateWorkloadPlatformSubjectResponseBody(body.Subject); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Steps {
+		if e != nil {
+			if err2 := ValidateWorkloadPlatformStepResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateWorkloadPlatformConstantResponseBody runs the validations defined on
+// WorkloadPlatformConstantResponseBody
+func ValidateWorkloadPlatformConstantResponseBody(body *WorkloadPlatformConstantResponseBody) (err error) {
+	if body.Value == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
+	}
+	if body.Visibility == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("visibility", "body"))
+	}
+	if body.Visibility != nil {
+		if !(*body.Visibility == "hidden" || *body.Visibility == "read-only") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"hidden", "read-only"}))
+		}
+	}
+	return
+}
+
+// ValidateWorkloadPlatformVariableResponseBody runs the validations defined on
+// WorkloadPlatformVariableResponseBody
+func ValidateWorkloadPlatformVariableResponseBody(body *WorkloadPlatformVariableResponseBody) (err error) {
+	if body.Key == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
+	}
+	if body.Tier == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tier", "body"))
+	}
+	if body.Label == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("label", "body"))
+	}
+	if body.Help == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("help", "body"))
+	}
+	if body.Placeholder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("placeholder", "body"))
+	}
+	if body.Pattern == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pattern", "body"))
+	}
+	if body.PatternMessage == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pattern_message", "body"))
+	}
+	if body.Tier != nil {
+		if !(*body.Tier == "platform" || *body.Tier == "rule") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.tier", *body.Tier, []any{"platform", "rule"}))
+		}
+	}
+	return
+}
+
+// ValidateWorkloadPlatformSubjectResponseBody runs the validations defined on
+// WorkloadPlatformSubjectResponseBody
+func ValidateWorkloadPlatformSubjectResponseBody(body *WorkloadPlatformSubjectResponseBody) (err error) {
+	if body.Template == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("template", "body"))
+	}
+	if body.Wildcard == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("wildcard", "body"))
+	}
+	return
+}
+
+// ValidateWorkloadPlatformStepResponseBody runs the validations defined on
+// WorkloadPlatformStepResponseBody
+func ValidateWorkloadPlatformStepResponseBody(body *WorkloadPlatformStepResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
+	if body.Phase == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("phase", "body"))
+	}
+	if body.Blocks == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("blocks", "body"))
+	}
+	if body.Phase != nil {
+		if !(*body.Phase == "collect" || *body.Phase == "create" || *body.Phase == "connect") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.phase", *body.Phase, []any{"collect", "create", "connect"}))
+		}
+	}
+	for _, e := range body.Blocks {
+		if e != nil {
+			if err2 := ValidateWorkloadPlatformBlockResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateWorkloadPlatformBlockResponseBody runs the validations defined on
+// WorkloadPlatformBlockResponseBody
+func ValidateWorkloadPlatformBlockResponseBody(body *WorkloadPlatformBlockResponseBody) (err error) {
+	if body.Type == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
+	}
+	if body.Markdown == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("markdown", "body"))
+	}
+	if body.Src == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("src", "body"))
+	}
+	if body.Alt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("alt", "body"))
+	}
+	if body.Caption == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("caption", "body"))
+	}
+	if body.Href == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("href", "body"))
+	}
+	if body.Label == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("label", "body"))
+	}
+	if body.Variable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("variable", "body"))
+	}
+	if body.Value == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
+	}
+	if body.Help == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("help", "body"))
+	}
+	if body.Type != nil {
+		if !(*body.Type == "text" || *body.Type == "image" || *body.Type == "link" || *body.Type == "field" || *body.Type == "subject_rule" || *body.Type == "agent_picker" || *body.Type == "tags" || *body.Type == "computed_status" || *body.Type == "computed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"text", "image", "link", "field", "subject_rule", "agent_picker", "tags", "computed_status", "computed"}))
+		}
+	}
+	if body.Value != nil {
+		if !(*body.Value == "" || *body.Value == "token_endpoint" || *body.Value == "issuer_url" || *body.Value == "mcp_host") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.value", *body.Value, []any{"", "token_endpoint", "issuer_url", "mcp_host"}))
+		}
 	}
 	return
 }

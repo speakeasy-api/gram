@@ -45,6 +45,35 @@ func BuildListPayload(workloadIdentitiesListSessionToken string, workloadIdentit
 	return v, nil
 }
 
+// BuildListPlatformsPayload builds the payload for the workloadIdentities
+// listPlatforms endpoint from CLI flags.
+func BuildListPlatformsPayload(workloadIdentitiesListPlatformsSessionToken string, workloadIdentitiesListPlatformsApikeyToken string, workloadIdentitiesListPlatformsProjectSlugInput string) (*workloadidentities.ListPlatformsPayload, error) {
+	var sessionToken *string
+	{
+		if workloadIdentitiesListPlatformsSessionToken != "" {
+			sessionToken = &workloadIdentitiesListPlatformsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if workloadIdentitiesListPlatformsApikeyToken != "" {
+			apikeyToken = &workloadIdentitiesListPlatformsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if workloadIdentitiesListPlatformsProjectSlugInput != "" {
+			projectSlugInput = &workloadIdentitiesListPlatformsProjectSlugInput
+		}
+	}
+	v := &workloadidentities.ListPlatformsPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildRegisterIssuerPayload builds the payload for the workloadIdentities
 // registerIssuer endpoint from CLI flags.
 func BuildRegisterIssuerPayload(workloadIdentitiesRegisterIssuerBody string, workloadIdentitiesRegisterIssuerSessionToken string, workloadIdentitiesRegisterIssuerApikeyToken string, workloadIdentitiesRegisterIssuerProjectSlugInput string) (*workloadidentities.RegisterIssuerPayload, error) {

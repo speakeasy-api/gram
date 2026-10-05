@@ -1,0 +1,107 @@
+# Claude Tag (Claude in Slack).
+#
+# Every Anthropic organization's tokens come from the same issuer, so the issuer
+# and its keys are constants and the organization ID in the subject is what pins
+# an access rule to one customer. The wildcard is sound because the segment it
+# covers is the agent ID, minted by Anthropic and never chosen by the caller,
+# and the stem ends at /agent/. The organization ID pattern refuses "/", which
+# would otherwise let a value extend the stem past the organization segment.
+key: claude-tag
+display_name: Claude Tag
+description: Let Claude in Slack call your MCP servers from any channel in your Anthropic organization.
+icon: /access-hub/claude-tag.svg
+enabled: true
+
+issuer:
+  value: https://identity.anthropic.com/agents
+  visibility: hidden
+jwks_uri:
+  value: https://identity.anthropic.com/agents/jwks.json
+  visibility: hidden
+
+variables:
+  - key: org_id
+    tier: rule
+    label: Anthropic organization ID
+    help: Shown as Tenant ID for tokens on the Set your authorization server to accept these values card, and inside the Subject prefix.
+    placeholder: Your organization ID
+    pattern: "[A-Za-z0-9-]+"
+    pattern_message: An organization ID is letters, numbers and hyphens.
+
+subject:
+  template: wimse://identity.anthropic.com/org/{org_id}/agent/
+  wildcard: true
+
+setup:
+  steps:
+    - id: before
+      title: Before you start
+      phase: collect
+      blocks:
+        - type: text
+          markdown: |
+            You need:
+
+            - **Claude Tag federated access** in your Anthropic organization, and an Owner or an admin with full Claude Tag management permission there.
+            - **A Gram MCP server** reached on a Gram host, not a custom domain.
+            - **An agent** in Gram whose policy covers what Claude should be able to do.
+        - type: text
+          markdown: |
+            In the Anthropic console, open **Claude Tag → Federated agent access → Authorization servers → Connect an authorization server**. The values the next step asks for are on its **Set your authorization server to accept these values** card.
+        - type: link
+          href: https://claude.com/docs/claude-tag/admins/federated-access/authorization-server
+          label: "Claude Tag: connect an authorization server"
+
+    - id: organization
+      title: Your Anthropic organization
+      phase: collect
+      blocks:
+        - type: field
+          variable: org_id
+        - type: subject_rule
+
+    - id: agent
+      title: Choose an agent and connect
+      phase: create
+      blocks:
+        - type: text
+          markdown: |
+            Every Claude Tag channel in this organization acts under the agent you choose, and can do only what its policy allows. Connecting saves the access rule from the previous step with this agent. You can remove it from the Access Hub at any time.
+        - type: agent_picker
+        - type: tags
+
+    - id: console
+      title: Values for the Anthropic console
+      phase: connect
+      blocks:
+        - type: text
+          markdown: |
+            Enter these values under **Connect an authorization server**. Which MCP servers Claude can reach is set by the agent's policy, not here.
+        - type: computed_status
+        - type: computed
+          value: token_endpoint
+          label: Token endpoint
+        - type: computed
+          value: issuer_url
+          label: Issuer URL
+          help: Leave the field empty if this shows nothing.
+        - type: text
+          markdown: |
+            Tick **This authorization server checks that each token's subject belongs to your organization**, then **Register server**. Gram's access rule is that check.
+        - type: computed
+          value: mcp_host
+          label: Allowed API hosts
+        - type: text
+          markdown: |
+            Leave **Resource** and **Scope** empty, choose an access bundle, and click **Connect server**.
+
+    - id: check
+      title: Check it worked
+      phase: connect
+      blocks:
+        - type: text
+          markdown: |
+            In a Slack **channel** where the bundle applies, start a new thread and ask Claude to list the MCP server's tools. A direct message with Claude will not work: federated connections only run in channel threads.
+        - type: text
+          markdown: |
+            Each channel that signs in appears in **Sessions**, under Claude Tag's issuer and the channel's own subject.
