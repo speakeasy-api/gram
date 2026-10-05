@@ -3202,6 +3202,36 @@ func TestGeneratePlatformMCPPackageGatesRemoteURLProviderAttachment(t *testing.T
 	require.NotContains(t, workflow, "when inspection reported `authentication_required`, ask for explicit confirmation")
 }
 
+// The catalogue workflow also runs in managed project assistants, which do not
+// have create_plugin. Offering a new plugin there would send the assistant to
+// a tool it cannot call, so the offer is gated on the tool being present and
+// the assistant hands the user to the dashboard instead.
+func TestGeneratePlatformMCPPackageGatesCatalogPluginCreation(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	const path = "skills/add-mcp-from-catalog/SKILL.md"
+	content := files["speakeasy/"+path]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	workflow := string(content)
+	for _, required := range []string{
+		"Only when `create_plugin` is in your tool list",
+		"A managed project assistant has no `create_plugin` tool, so never offer or call it there",
+		"ask the user to create the plugin in the AICP dashboard or from an external MCP client",
+		"call `list_plugins` again and continue with the plugin they created",
+		// A server without the plugin metadata writes answers
+		// feature_unavailable; the workflow must stop and hand off rather
+		// than retry or quietly use another plugin.
+		"If it refuses with `feature_unavailable`, creating a plugin is not available on this server",
+		"do not retry or substitute another plugin",
+	} {
+		require.Contains(t, workflow, required)
+	}
+	// Every call to create_plugin sits after the gate.
+	require.Less(t, strings.Index(workflow, "Only when `create_plugin` is in your tool list"), strings.Index(workflow, "call `create_plugin`"))
+}
+
 func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 	t.Parallel()
 	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")

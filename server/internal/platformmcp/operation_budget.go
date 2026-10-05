@@ -37,6 +37,8 @@ const (
 const (
 	PluginAssignmentMutationConnectionLimitName   = "platform-mcp-plugin-assignment-mutation-connection"
 	PluginAssignmentMutationOrganizationLimitName = "platform-mcp-plugin-assignment-mutation-organization"
+	PluginMetadataMutationConnectionLimitName     = "platform-mcp-plugin-metadata-mutation-connection"
+	PluginMetadataMutationOrganizationLimitName   = "platform-mcp-plugin-metadata-mutation-organization"
 	AccessRoleMutationConnectionLimitName         = "platform-mcp-access-role-mutation-connection"
 	AccessRoleMutationOrganizationLimitName       = "platform-mcp-access-role-mutation-organization"
 	ShadowAccessDecisionConnectionLimitName       = "platform-mcp-shadow-access-decision-connection"
@@ -116,6 +118,13 @@ const (
 	ShadowAccessDecisionsPerOrganizationPerMinute = 50
 	ReviewRequestsPerConnectionPerMinute          = 5
 	ReviewRequestsPerOrganizationPerMinute        = 50
+
+	// PluginMetadataMutationsPer* bound creating and renaming plugins together
+	// on their own allowance. This is what stops a conversational create loop;
+	// there is no separate cap on how many plugins a project holds, because the
+	// dashboard has none and the two paths must refuse the same requests.
+	PluginMetadataMutationsPerConnectionPerMinute   = 5
+	PluginMetadataMutationsPerOrganizationPerMinute = 50
 
 	// ToolExposureReadsPerConnectionPerMinute allows paging through bounded
 	// project tool definitions without spending the separate mutation allowance.

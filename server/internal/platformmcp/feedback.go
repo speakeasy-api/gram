@@ -421,6 +421,8 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	"list_plugin_assignments":               {},
 	"list_plugins":                          {},
 	"get_plugin":                            {},
+	operationCreatePlugin:                   {},
+	operationRenamePlugin:                   {},
 	operationRepublishPlugin:                {},
 	"get_my_mcp_access":                     {},
 	"get_my_mcp_connection_status":          {},
