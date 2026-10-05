@@ -112,8 +112,8 @@ type Service struct {
 	// endpoint waits for a verdict before it answers from the org's fail-open
 	// posture. NewService sets legacyClaudeHookDecisionBudget; tests shorten it.
 	claudeDecisionBudget time.Duration
-	// claudeDecisionDrains tracks legacy Claude handlers still running after
-	// their budget so tests can await them deterministically.
+	// claudeDecisionDrains tracks legacy Claude handlers and posture reads that
+	// can outlive the response, so tests can await them deterministically.
 	claudeDecisionDrains sync.WaitGroup
 }
 
