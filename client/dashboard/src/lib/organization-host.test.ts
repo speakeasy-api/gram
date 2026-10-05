@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  alreadyMovedTo,
+  alreadyMoved,
+  moveKey,
   organizationHostRedirectTarget,
-  recordMoveTo,
+  recordMove,
 } from "./organization-host";
 
 const current = {
@@ -126,19 +127,27 @@ describe("move guard", () => {
   });
 
   it("remembers each organization and host this tab moved to", () => {
-    const target = "https://ai.example.com/acme";
-    expect(alreadyMovedTo("org-1", target)).toBe(false);
+    const key = moveKey("org-1", "https://ai.example.com/acme");
+    expect(alreadyMoved(key)).toBe(false);
 
-    expect(recordMoveTo("org-1", target)).toBe(true);
+    expect(recordMove(key)).toBe(true);
 
-    expect(alreadyMovedTo("org-1", "https://ai.example.com/other")).toBe(true);
-    expect(alreadyMovedTo("org-1", "https://app.example.com/acme")).toBe(false);
+    expect(alreadyMoved(moveKey("org-1", "https://ai.example.com/other"))).toBe(
+      true,
+    );
+    expect(alreadyMoved(moveKey("org-1", "https://app.example.com/acme"))).toBe(
+      false,
+    );
     // Another organization on the same host still moves.
-    expect(alreadyMovedTo("org-2", target)).toBe(false);
+    expect(alreadyMoved(moveKey("org-2", "https://ai.example.com/acme"))).toBe(
+      false,
+    );
   });
 
   it("ignores a corrupt record", () => {
     sessionStorage.setItem("organizationHostMoves", "{not json");
-    expect(alreadyMovedTo("org-1", "https://ai.example.com/acme")).toBe(false);
+    expect(alreadyMoved(moveKey("org-1", "https://ai.example.com/acme"))).toBe(
+      false,
+    );
   });
 });

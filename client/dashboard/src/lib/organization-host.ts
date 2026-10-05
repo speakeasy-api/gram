@@ -4,12 +4,15 @@
  * `auth.info` returns `activeOrganizationDashboardUrl` only when the active
  * organization lives on a different configured platform host from the one the
  * request arrived on, so the server owns which hosts qualify. The checks here
- * are the browser's own guard: the target must be an absolute https URL (http only
- * from an http page) on another host, and a tab moves an organization at most once to a given
- * host, so two hosts that disagree can never bounce a tab back and forth.
+ * are the browser's own guard: the target must be an absolute https URL (http
+ * only from an http page) on another host, and a tab moves an organization at
+ * most once to a given host, so two hosts that disagree can never bounce a tab
+ * back and forth.
  */
 
-const MOVED_HOSTS_KEY = "organizationHostMoves";
+import { isCliAuthFlowLocation } from "@/lib/cli-auth-flow";
+
+const HOST_MOVES_KEY = "organizationHostMoves";
 
 /**
  * Pages that finish a hand-off and stay on the host they were opened on. Each
@@ -22,22 +25,13 @@ const HOST_MOVE_EXEMPT_PATHS = [
   "/risk-policy-challenge/acknowledge",
 ];
 
-/**
- * The CLI login hand-off ("/?from_cli=true&cli_callback_url=…") returns a key
- * to a local callback and must finish on the host the CLI opened.
- */
-function isCliHandoff(current: CurrentLocation): boolean {
-  const params = new URLSearchParams(current.search);
-  return (
-    current.pathname === "/" &&
-    params.get("from_cli") === "true" &&
-    Boolean(params.get("cli_callback_url"))
-  );
-}
-
 function isExempt(current: CurrentLocation): boolean {
   const path = current.pathname.replace(/\/+$/, "");
-  return HOST_MOVE_EXEMPT_PATHS.includes(path) || isCliHandoff(current);
+  // The CLI login hand-off must finish on the host the CLI opened.
+  return (
+    HOST_MOVE_EXEMPT_PATHS.includes(path) ||
+    isCliAuthFlowLocation(current.pathname, current.search)
+  );
 }
 
 type CurrentLocation = Pick<
@@ -78,7 +72,7 @@ export function organizationHostRedirectTarget(
 function moves(): string[] {
   try {
     const parsed = JSON.parse(
-      sessionStorage.getItem(MOVED_HOSTS_KEY) ?? "[]",
+      sessionStorage.getItem(HOST_MOVES_KEY) ?? "[]",
     ) as unknown;
     return Array.isArray(parsed)
       ? parsed.filter((move): move is string => typeof move === "string")
@@ -88,20 +82,18 @@ function moves(): string[] {
   }
 }
 
-function moveKey(organizationId: string, target: string): string {
+/**
+ * Identifies moving organizationId to target's host. Moves are recorded per
+ * organization, so switching back to another organization that lives on a
+ * host this tab already visited still moves the tab.
+ */
+export function moveKey(organizationId: string, target: string): string {
   return `${organizationId} ${new URL(target).host}`;
 }
 
-/**
- * Whether this tab already moved this organization from this host to the
- * target's host. The record is per organization, so switching back to another
- * organization that lives on that host still moves the tab.
- */
-export function alreadyMovedTo(
-  organizationId: string,
-  target: string,
-): boolean {
-  return moves().includes(moveKey(organizationId, target));
+/** Whether this tab already made the move from this host. */
+export function alreadyMoved(key: string): boolean {
+  return moves().includes(key);
 }
 
 /**
@@ -110,11 +102,9 @@ export function alreadyMovedTo(
  * false when storage is unavailable: without the guard the move is not safe
  * to make.
  */
-export function recordMoveTo(organizationId: string, target: string): boolean {
+export function recordMove(key: string): boolean {
   try {
-    const recorded = moves();
-    recorded.push(moveKey(organizationId, target));
-    sessionStorage.setItem(MOVED_HOSTS_KEY, JSON.stringify(recorded));
+    sessionStorage.setItem(HOST_MOVES_KEY, JSON.stringify([...moves(), key]));
     return true;
   } catch {
     return false;

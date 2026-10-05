@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { alreadyMovedTo, recordMoveTo } from "@/lib/organization-host";
+import { alreadyMoved, moveKey, recordMove } from "@/lib/organization-host";
 
 /**
  * Sends the browser to target (from organizationHostRedirectTarget) once per
@@ -9,29 +9,20 @@ import { alreadyMovedTo, recordMoveTo } from "@/lib/organization-host";
  * has no session storage to record the move in, stays put.
  */
 export function useOrganizationHostMove(
-  organizationId: string,
+  organizationId: string | undefined,
   target: string | undefined,
 ): boolean {
-  const key = target ? `${organizationId} ${target}` : undefined;
-  const [moving, setMoving] = useState<string>();
-  const [skipped, setSkipped] = useState<string>();
+  const key =
+    organizationId && target ? moveKey(organizationId, target) : undefined;
+  const [handled, setHandled] = useState<{ key: string; moving: boolean }>();
 
   useEffect(() => {
-    if (!target || !key || key === moving || key === skipped) return;
-    if (
-      alreadyMovedTo(organizationId, target) ||
-      !recordMoveTo(organizationId, target)
-    ) {
-      setSkipped(key);
-      return;
-    }
-    setMoving(key);
-    window.location.replace(target);
-  }, [organizationId, target, key, moving, skipped]);
+    if (!key || !target || handled?.key === key) return;
+    const moving = !alreadyMoved(key) && recordMove(key);
+    setHandled({ key, moving });
+    if (moving) window.location.replace(target);
+  }, [key, target, handled]);
 
-  return (
-    target !== undefined &&
-    key !== skipped &&
-    (key === moving || !alreadyMovedTo(organizationId, target))
-  );
+  if (!key) return false;
+  return handled?.key === key ? handled.moving : !alreadyMoved(key);
 }

@@ -209,7 +209,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
         )
       : undefined;
   const movingHost = useOrganizationHostMove(
-    session?.activeOrganizationId ?? "",
+    session?.activeOrganizationId,
     organizationHostTarget,
   );
 
