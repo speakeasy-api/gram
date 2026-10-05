@@ -114,11 +114,19 @@ export function WidgetView({
     );
   }
 
-  // Broken saved widgets open as saved so they can be fixed. Otherwise,
-  // open the merged question the card ran.
-  let headerSpec = paged?.spec ?? null;
-  if (widget.invalidReason) {
+  // Open the merged question the card ran, or the saved one until the
+  // catalog has loaded. A saved widget that no longer works, by the server's
+  // word or the catalog's, opens as saved, so it can be fixed.
+  const broken =
+    Boolean(widget.invalidReason) ||
+    (saved !== null &&
+      datasets !== undefined &&
+      specProblem(datasets, saved) !== "");
+  let headerSpec = paged?.spec ?? saved;
+  let headerWidgetId = paged?.changed ? undefined : widget.id;
+  if (broken) {
     headerSpec = widget.id ? saved : null;
+    headerWidgetId = widget.id;
   }
 
   return (
@@ -133,9 +141,7 @@ export function WidgetView({
         name={widget.name}
         spec={headerSpec}
         // A question the page changed opens as its own query.
-        widgetId={
-          widget.invalidReason || !paged?.changed ? widget.id : undefined
-        }
+        widgetId={headerWidgetId}
       />
       {paged && paged.skipped.length > 0 ? (
         <p className="text-muted-foreground -mt-2 text-xs">

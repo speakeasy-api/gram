@@ -217,6 +217,23 @@ describe("WidgetView", () => {
     expect(url.searchParams.get(WIDGET_PARAM)).toBe("widget-1");
   });
 
+  it("opens a saved widget the catalog breaks as saved, even when the page changes it", () => {
+    renderView(widget({ dimensions: ["team"] }, { id: "widget-1" }), {
+      window: { preset: "30d", customRange: null, customLabel: null },
+    });
+    const opened = explored();
+    expect(opened.widgetId).toBe("widget-1");
+    expect(opened.spec?.window).not.toBe("30d");
+  });
+
+  it("opens a saved widget while the catalog loads", () => {
+    testState.datasets = undefined;
+    renderView(widget({}, { id: "widget-1" }), {
+      window: { preset: "30d", customRange: null, customLabel: null },
+    });
+    expect(explored().widgetId).toBe("widget-1");
+  });
+
   it("says why when the builder cannot read the widget, with no way into Explore", () => {
     renderView({
       name: "Odd",
