@@ -1478,7 +1478,7 @@ func newStartCommand() *cli.Command {
 				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0},
 				identityMapRefreshSignaler,
 				serverURL,
-				siteURL,
+				orgHosts,
 				c.String("jwt-signing-key"),
 				metering.NewRiskRecorder(publishers.MeterReadings),
 			)
