@@ -42,6 +42,10 @@ INSERT INTO chat_messages (chat_id, project_id, role, content)
 VALUES (@chat_id, @project_id, @role, @content)
 RETURNING id;
 
+-- name: DeleteKillswitchPrescriptionFixture :exec
+DELETE FROM killswitch_prescriptions
+WHERE organization_id = @organization_id AND id = @prescription_id;
+
 -- name: InsertKillswitchPrescriptionFixture :exec
 WITH fixture_clock AS (
   SELECT clock_timestamp() - INTERVAL '1 hour' AS active_since

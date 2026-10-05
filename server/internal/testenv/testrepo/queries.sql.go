@@ -955,6 +955,21 @@ func (q *Queries) DeferDeviceIntegrationSyncsFixture(ctx context.Context, device
 	return err
 }
 
+const deleteKillswitchPrescriptionFixture = `-- name: DeleteKillswitchPrescriptionFixture :exec
+DELETE FROM killswitch_prescriptions
+WHERE organization_id = $1 AND id = $2
+`
+
+type DeleteKillswitchPrescriptionFixtureParams struct {
+	OrganizationID string
+	PrescriptionID uuid.UUID
+}
+
+func (q *Queries) DeleteKillswitchPrescriptionFixture(ctx context.Context, arg DeleteKillswitchPrescriptionFixtureParams) error {
+	_, err := q.db.Exec(ctx, deleteKillswitchPrescriptionFixture, arg.OrganizationID, arg.PrescriptionID)
+	return err
+}
+
 const deleteOpenRouterSpendDayFixture = `-- name: DeleteOpenRouterSpendDayFixture :exec
 DELETE FROM openrouter_spend_daily
 WHERE organization_id = $1
