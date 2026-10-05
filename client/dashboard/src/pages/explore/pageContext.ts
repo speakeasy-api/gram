@@ -43,6 +43,18 @@ export interface PagedSpec {
   changed: boolean;
 }
 
+/**
+ * Whether a page's filter on a field narrows a dataset's widgets: the field
+ * is one of its dimensions and filters by `in`, which is all a page asks.
+ */
+export function pageCanFilter(
+  dataset: AnalyticsDataset | undefined,
+  field: string,
+): boolean {
+  const found = fieldByName(dataset, field);
+  return found?.role === "dimension" && operatorsForField(found).includes("in");
+}
+
 export function applyPageContext(
   spec: ExploreSpec,
   dataset: AnalyticsDataset | undefined,
@@ -75,11 +87,7 @@ export function applyPageContext(
   const added: FilterDraft[] = [];
   for (const [field, values] of Object.entries(page.filters ?? {})) {
     if (values.length === 0) continue;
-    const found = fieldByName(dataset, field);
-    if (
-      found?.role !== "dimension" ||
-      !operatorsForField(found).includes("in")
-    ) {
+    if (!pageCanFilter(dataset, field)) {
       skipped.push(field);
       continue;
     }

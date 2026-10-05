@@ -10,8 +10,8 @@ import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useQueries } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-import { WINDOW_PRESETS, windowRange } from "./exploreModel";
-import type { PageContext } from "./pageContext";
+import { findDataset, WINDOW_PRESETS, windowRange } from "./exploreModel";
+import { pageCanFilter, type PageContext } from "./pageContext";
 import { dimensionValuesQuery } from "./useDimensionValues";
 
 /** A catalog dimension a page lets people filter its widgets by. */
@@ -35,6 +35,12 @@ export interface PageFilterConfig {
    * picks one.
    */
   defaultPreset?: DateRangePreset | undefined;
+  /**
+   * The datasets the bar's options come from, in order: the ones the page's
+   * widgets ask, so a value is one a card can be narrowed to. Without them,
+   * any catalog dataset that has the field.
+   */
+  optionsDatasets?: readonly string[] | undefined;
 }
 
 /** The dimension id the page's date range sits under. */
@@ -59,7 +65,7 @@ interface ToolbarFiltersProps {
  * WidgetView on the page.
  *
  * A dimension's options are the values the catalog reports for it over the
- * page's range, from the first dataset that has it.
+ * page's range, from the first of the page's datasets that can filter by it.
  */
 export function usePageFilters(config: PageFilterConfig): {
   toolbar: ToolbarFiltersProps;
@@ -114,7 +120,7 @@ export function usePageFilters(config: PageFilterConfig): {
     [setValue],
   );
 
-  const optionsById = useFieldOptions(config.fields, date);
+  const optionsById = useFieldOptions(config, date);
 
   return {
     toolbar: {
@@ -131,24 +137,22 @@ export function usePageFilters(config: PageFilterConfig): {
 
 /** Each field's values over the page's range, as filter options. */
 function useFieldOptions(
-  fields: readonly PageFilterField[],
+  { fields, optionsDatasets }: PageFilterConfig,
   date: DateRangeValue,
 ): OptionsById {
   const client = useGramContext();
   const project = useProject();
-  const datasets = useAnalyticsDescribe().data?.datasets;
+  const catalog = useAnalyticsDescribe().data?.datasets ?? [];
   // With no page range, options come from the longest window a widget is
   // likely to ask over.
   const { from, to } = date.customRange ?? windowRange(date.preset ?? "30d");
+  const candidates =
+    optionsDatasets?.flatMap((name) => findDataset(catalog, name) ?? []) ??
+    catalog;
   const sources = fields.map(({ field }) => ({
     field,
     dataset:
-      datasets?.find((dataset) =>
-        dataset.fields.some(
-          (candidate) =>
-            candidate.name === field && candidate.role === "dimension",
-        ),
-      )?.name ?? "",
+      candidates.find((dataset) => pageCanFilter(dataset, field))?.name ?? "",
   }));
   const results = useQueries({
     queries: sources.map(({ field, dataset }) =>

@@ -3,7 +3,8 @@ import type { Widget } from "@gram/client/models/components/widget.js";
 import { Page } from "@/components/page-layout";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
-import type { ChartType } from "./exploreModel";
+import { findDataset, type ChartType } from "./exploreModel";
+import { pageCanFilter } from "./pageContext";
 import { usePageFilters, type PageFilterField } from "./usePageFilters";
 import {
   WidgetPlaceholder,
@@ -37,7 +38,10 @@ export function WidgetCards({
   onOpen,
 }: {
   widgets: Widget[];
-  /** Every dataset the project's widgets ask, for which filters apply. */
+  /**
+   * Every dataset the project's widgets ask, for which filters apply and
+   * where their values come from.
+   */
   datasets: readonly string[];
   actionsFor: (widget: Widget) => Action[];
   onOpen: OpenInExplore;
@@ -48,20 +52,16 @@ export function WidgetCards({
   const fields = useMemo(
     () =>
       CARD_FILTER_FIELDS.filter(({ field }) =>
-        (catalog ?? []).some(
-          (dataset) =>
-            datasets.includes(dataset.name) &&
-            dataset.fields.some(
-              (candidate) =>
-                candidate.name === field &&
-                candidate.role === "dimension" &&
-                (candidate.operators ?? []).includes("in"),
-            ),
+        datasets.some((name) =>
+          pageCanFilter(findDataset(catalog ?? [], name), field),
         ),
       ),
     [catalog, datasets],
   );
-  const page = usePageFilters({ fields });
+  const page = usePageFilters({
+    fields,
+    optionsDatasets: datasets,
+  });
 
   return (
     <div className="flex flex-col gap-4">
