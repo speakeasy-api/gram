@@ -10,7 +10,12 @@ import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useQueries } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-import { findDataset, WINDOW_PRESETS, windowRange } from "./exploreModel";
+import {
+  findDataset,
+  WINDOW_PRESETS,
+  windowRange,
+  type WindowPreset,
+} from "./exploreModel";
 import { pageCanFilter, type PageContext } from "./pageContext";
 import { dimensionValuesQuery } from "./useDimensionValues";
 
@@ -36,12 +41,21 @@ export interface PageFilterConfig {
    */
   defaultPreset?: DateRangePreset | undefined;
   /**
+   * The window the bar's options are read over while no range is picked:
+   * the longest a widget on the page asks, so a value only its oldest days
+   * hold can still be picked. Thirty days without one.
+   */
+  optionsWindow?: WindowPreset | undefined;
+  /**
    * The datasets the bar's options come from, in order: the ones the page's
    * widgets ask, so a value is one a card can be narrowed to. Without them,
    * any catalog dataset that has the field.
    */
   optionsDatasets?: readonly string[] | undefined;
 }
+
+/** The window options are read over when the page names none. */
+const DEFAULT_OPTIONS_WINDOW: WindowPreset = "30d";
 
 /** The dimension id the page's date range sits under. */
 const DATE_ID = "date";
@@ -137,15 +151,15 @@ export function usePageFilters(config: PageFilterConfig): {
 
 /** Each field's values over the page's range, as filter options. */
 function useFieldOptions(
-  { fields, optionsDatasets }: PageFilterConfig,
+  { fields, optionsWindow, optionsDatasets }: PageFilterConfig,
   date: DateRangeValue,
 ): OptionsById {
   const client = useGramContext();
   const project = useProject();
   const catalog = useAnalyticsDescribe().data?.datasets ?? [];
-  // With no page range, options come from the longest window a widget is
-  // likely to ask over.
-  const { from, to } = date.customRange ?? windowRange(date.preset ?? "30d");
+  const { from, to } =
+    date.customRange ??
+    windowRange(date.preset ?? optionsWindow ?? DEFAULT_OPTIONS_WINDOW);
   const candidates =
     optionsDatasets?.flatMap((name) => findDataset(catalog, name) ?? []) ??
     catalog;

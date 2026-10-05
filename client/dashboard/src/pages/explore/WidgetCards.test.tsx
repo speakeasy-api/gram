@@ -135,11 +135,12 @@ describe("WidgetCards", () => {
     ).toEqual(["number", "line"]);
   });
 
-  it("reads the bar's values from the project's datasets", () => {
+  it("reads the bar's values from the project's datasets, over its longest window", () => {
     render(
       <WidgetCards
         widgets={[widget("w-1", "First")]}
         datasets={["sessions", "tool_calls"]}
+        optionsWindow="90d"
         actionsFor={() => []}
         onOpen={() => {}}
       />,
@@ -148,5 +149,6 @@ describe("WidgetCards", () => {
       "sessions",
       "tool_calls",
     ]);
+    expect(testState.config?.optionsWindow).toBe("90d");
   });
 });

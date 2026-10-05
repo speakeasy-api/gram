@@ -3,7 +3,7 @@ import type { Widget } from "@gram/client/models/components/widget.js";
 import { Page } from "@/components/page-layout";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
-import { findDataset, type ChartType } from "./exploreModel";
+import { findDataset, type ChartType, type WindowPreset } from "./exploreModel";
 import { pageCanFilter } from "./pageContext";
 import { usePageFilters, type PageFilterField } from "./usePageFilters";
 import {
@@ -34,6 +34,7 @@ const CARD_FILTER_FIELDS: readonly PageFilterField[] = [
 export function WidgetCards({
   widgets,
   datasets,
+  optionsWindow,
   actionsFor,
   onOpen,
 }: {
@@ -43,6 +44,8 @@ export function WidgetCards({
    * where their values come from.
    */
   datasets: readonly string[];
+  /** The longest window the project's widgets ask, to read values over. */
+  optionsWindow?: WindowPreset | undefined;
   actionsFor: (widget: Widget) => Action[];
   onOpen: OpenInExplore;
 }): JSX.Element {
@@ -60,6 +63,7 @@ export function WidgetCards({
   );
   const page = usePageFilters({
     fields,
+    optionsWindow,
     optionsDatasets: datasets,
   });
 

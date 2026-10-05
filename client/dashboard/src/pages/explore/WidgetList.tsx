@@ -34,7 +34,7 @@ import { useMemo, useState, type JSX } from "react";
 import { useLocation, useSearchParams } from "react-router";
 import { ViewToggle } from "@/components/ui/ViewToggle";
 import { WidgetCards } from "./WidgetCards";
-import type { ExploreSpec } from "./exploreModel";
+import { longestWindow, type ExploreSpec } from "./exploreModel";
 import { useCanEditWidget } from "./useCanEditWidget";
 import { useCreatorName } from "./useCreatorName";
 import { useWidgetMutations } from "./useWidgetMutations";
@@ -106,6 +106,12 @@ export function WidgetList({
 
   const datasets = useMemo(
     () => [...new Set(widgets.map((widget) => widget.dataset))].sort(),
+    [widgets],
+  );
+  // The cards' filter values are read over the longest window any widget
+  // asks, so a value only its oldest days hold can still be picked.
+  const optionsWindow = useMemo(
+    () => longestWindow(widgets.map((widget) => widget.query.window)),
     [widgets],
   );
 
@@ -320,6 +326,7 @@ export function WidgetList({
         <WidgetCards
           widgets={rows}
           datasets={datasets}
+          optionsWindow={optionsWindow}
           actionsFor={actionsFor}
           onOpen={(spec, widgetId) =>
             confirmLeave(() => onOpenQuery(spec, widgetId ?? null))

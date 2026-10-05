@@ -208,4 +208,19 @@ describe("usePageFilters", () => {
     expect(testState.asked).not.toContain("sessions/user");
     expect(testState.asked).toContain("sessions/model");
   });
+
+  it("with no range picked, reads values over the window the page names, or 30 days", async () => {
+    testState.days = {};
+    const fields = [{ field: "user", label: "User" }];
+    renderHook(() => usePageFilters({ fields, optionsWindow: "90d" }), {
+      wrapper: wrapper("/page"),
+    });
+    await waitFor(() => expect(testState.days["sessions/user"]).toBe(90));
+
+    testState.days = {};
+    renderHook(() => usePageFilters({ fields }), {
+      wrapper: wrapper("/page"),
+    });
+    await waitFor(() => expect(testState.days["sessions/user"]).toBe(30));
+  });
 });

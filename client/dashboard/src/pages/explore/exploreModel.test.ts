@@ -11,6 +11,7 @@ import {
   hasChartShape,
   initialSpec,
   isRowsMode,
+  longestWindow,
   measureAlias,
   measureLabel,
   measureUnit,
@@ -344,5 +345,17 @@ describe("filterForField", () => {
   it("starts a filter on a field with its first operator and no values", () => {
     const next = filterForField(sessions, "user");
     expect(next).toEqual({ field: "user", operator: "equals", values: [] });
+  });
+});
+
+describe("longestWindow", () => {
+  it("picks the longest window, reading an older spelling as today's", () => {
+    expect(longestWindow(["7d", "90d", "1h"])).toBe("90d");
+    expect(longestWindow(["24h", "4h"])).toBe("1d");
+  });
+
+  it("is undefined when nothing is a window", () => {
+    expect(longestWindow([])).toBeUndefined();
+    expect(longestWindow([undefined, "2h"])).toBeUndefined();
   });
 });
