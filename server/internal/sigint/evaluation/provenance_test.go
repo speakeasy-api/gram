@@ -9,6 +9,7 @@ import (
 	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestReadingIdentityPresence(t *testing.T) {
@@ -25,22 +26,23 @@ func TestReadingIdentityPresence(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			m := message()
-			m.SetRole(conversationv1.Message_ROLE_ASSISTANT)
-			p := &conversationv1.Message_Provenance{}
+			m.SetRole(conversationv1.MessageEvent_ROLE_ASSISTANT)
+			p := &conversationv1.MessageEvent_IngestionContext{}
+			row := storedMessage(m)
 			if tc.actor != "" {
-				p.SetUserId(tc.actor)
+				row.ChatMessage.UserID = conv.ToPGText(tc.actor)
 			}
 			if tc.billing != "" {
 				p.SetBillingUserId(tc.billing)
 			}
-			m.SetProvenance(p)
+			m.SetIngestion(p)
 			sensor, ready := compileSensor(sensors()[0])
 			require.True(t, ready)
 			answers := map[classifier.QuestionKey]classifier.QuestionOutcome{}
 			for _, q := range sensor.questions {
 				answers[q.Key] = classifier.QuestionOutcome{Key: q.Key, Answer: &classifier.Answer{Noul: &classifier.NoulAnswer{Probability: 0.5}}}
 			}
-			r, err := reading((&conversationInput{message: m}).Event(), sensor, answers, "attempt", "time", classifier.Result{})
+			r, err := reading((&conversationInput{message: m, stored: row}).Event(), sensor, answers, "attempt", "time", classifier.Result{})
 			require.NoError(t, err)
 			data, err := proto.Marshal(r)
 			require.NoError(t, err)

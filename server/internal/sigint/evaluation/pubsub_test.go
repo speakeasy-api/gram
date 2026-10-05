@@ -42,13 +42,13 @@ func TestPubSubEvaluationPublishesCompleteSuccess(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, client.Close()) }()
 	broker := gcp.NewEmulatedPubSub(testenv.NewLogger(t), project, client, gen.Descriptors)
-	inputPub, err := gcp.PubSubPublisherForMessage(ctx, broker, &conversationv1.Message{})
+	inputPub, err := gcp.PubSubPublisherForMessage(ctx, broker, &conversationv1.MessageEvent{})
 	require.NoError(t, err)
 	defer func() { require.NoError(t, inputPub.Stop(context.Background())) }()
 	outputPub, err := gcp.PubSubPublisherForMessage(ctx, broker, &sigintv1.Reading{})
 	require.NoError(t, err)
 	defer func() { require.NoError(t, outputPub.Stop(context.Background())) }()
-	sub, err := gcp.PubSubSubscriberForMessage(ctx, broker, &conversationv1.Message{}, &sigintv1.Evaluator{})
+	sub, err := gcp.PubSubSubscriberForMessage(ctx, broker, &conversationv1.MessageEvent{}, &sigintv1.Evaluator{})
 	require.NoError(t, err)
 	// A test-only sink receives readings without adding a production storage consumer.
 	var sink pubsubpb.Subscription
@@ -62,7 +62,7 @@ func TestPubSubEvaluationPublishesCompleteSuccess(t *testing.T) {
 		for _, name := range []string{"readings-test", "gram-sigint-v1-evaluator"} {
 			require.NoError(t, client.SubscriptionAdminClient.DeleteSubscription(cleanup, &pubsubpb.DeleteSubscriptionRequest{Subscription: "projects/" + project + "/subscriptions/" + name}))
 		}
-		for _, name := range []string{"gram-sigint-v1-reading", "gram-conversation-v1-message"} {
+		for _, name := range []string{"gram-sigint-v1-reading", "gram-conversation-v1-message-event"} {
 			require.NoError(t, client.TopicAdminClient.DeleteTopic(cleanup, &pubsubpb.DeleteTopicRequest{Topic: "projects/" + project + "/topics/" + name}))
 		}
 	}()
@@ -92,7 +92,7 @@ func TestPubSubEvaluationPublishesCompleteSuccess(t *testing.T) {
 	require.NotEmpty(t, received.GetReceivedMessages())
 	var reading sigintv1.Reading
 	require.NoError(t, proto.Unmarshal(received.GetReceivedMessages()[0].GetMessage().GetData(), &reading))
-	require.Equal(t, m.GetId(), reading.GetEvent().GetId())
+	require.Equal(t, m.GetMessageId(), reading.GetEvent().GetId())
 	require.Equal(t, "other", reading.GetSensorId())
 	require.Len(t, reading.GetMultiLabel().GetSignals(), 1)
 }

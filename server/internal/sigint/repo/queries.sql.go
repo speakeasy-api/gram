@@ -715,6 +715,98 @@ func (q *Queries) ListSignals(ctx context.Context, arg ListSignalsParams) ([]Sig
 	return items, nil
 }
 
+const loadEvaluationMessages = `-- name: LoadEvaluationMessages :many
+SELECT m.id, m.seq, m.chat_id, m.project_id, m.role, m.content, m.content_raw, m.content_asset_url, m.model, m.message_id, m.finish_reason, m.tool_calls, m.prompt_tokens, m.completion_tokens, m.total_tokens, m.storage_error, m.user_id, m.external_user_id, m.external_message_id, m.origin, m.user_agent, m.ip_address, m.source, m.tool_call_id, m.tool_urn, m.tool_outcome, m.tool_outcome_notes, m.tool_call_summaries, m.content_hash, m.generation, m.replayed, m.created_at, m.risk_analyzed_at, c.user_account_id,
+       COALESCE(m.origin = 'anthropic-inference' AND (
+         m.external_message_id LIKE '%/block:%' OR EXISTS (
+           SELECT 1 FROM chat_messages sibling
+           WHERE sibling.project_id = m.project_id AND sibling.chat_id = m.chat_id
+             AND sibling.external_message_id = m.external_message_id || '/block:0'
+         )
+       ), false)::boolean AS row_local_content,
+       ARRAY(SELECT cp.content_asset_url FROM chat_content_parts cp
+             WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id
+               AND cp.parent_chat_message_id = m.id AND cp.deleted IS FALSE
+             ORDER BY cp.created_at, cp.id)::text[] AS attachment_uris
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+JOIN projects p ON p.id = m.project_id
+WHERE m.project_id = $1::uuid AND p.organization_id = $2
+  AND p.deleted IS FALSE AND c.deleted IS FALSE
+  AND m.id = ANY($3::uuid[])
+`
+
+type LoadEvaluationMessagesParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	MessageIds     []uuid.UUID
+}
+
+type LoadEvaluationMessagesRow struct {
+	ChatMessage     ChatMessage
+	UserAccountID   uuid.NullUUID
+	RowLocalContent bool
+	AttachmentUris  []string
+}
+
+// One tenant-pinned read resolves the batch and its current attachment locators.
+func (q *Queries) LoadEvaluationMessages(ctx context.Context, arg LoadEvaluationMessagesParams) ([]LoadEvaluationMessagesRow, error) {
+	rows, err := q.db.Query(ctx, loadEvaluationMessages, arg.ProjectID, arg.OrganizationID, arg.MessageIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LoadEvaluationMessagesRow
+	for rows.Next() {
+		var i LoadEvaluationMessagesRow
+		if err := rows.Scan(
+			&i.ChatMessage.ID,
+			&i.ChatMessage.Seq,
+			&i.ChatMessage.ChatID,
+			&i.ChatMessage.ProjectID,
+			&i.ChatMessage.Role,
+			&i.ChatMessage.Content,
+			&i.ChatMessage.ContentRaw,
+			&i.ChatMessage.ContentAssetUrl,
+			&i.ChatMessage.Model,
+			&i.ChatMessage.MessageID,
+			&i.ChatMessage.FinishReason,
+			&i.ChatMessage.ToolCalls,
+			&i.ChatMessage.PromptTokens,
+			&i.ChatMessage.CompletionTokens,
+			&i.ChatMessage.TotalTokens,
+			&i.ChatMessage.StorageError,
+			&i.ChatMessage.UserID,
+			&i.ChatMessage.ExternalUserID,
+			&i.ChatMessage.ExternalMessageID,
+			&i.ChatMessage.Origin,
+			&i.ChatMessage.UserAgent,
+			&i.ChatMessage.IpAddress,
+			&i.ChatMessage.Source,
+			&i.ChatMessage.ToolCallID,
+			&i.ChatMessage.ToolUrn,
+			&i.ChatMessage.ToolOutcome,
+			&i.ChatMessage.ToolOutcomeNotes,
+			&i.ChatMessage.ToolCallSummaries,
+			&i.ChatMessage.ContentHash,
+			&i.ChatMessage.Generation,
+			&i.ChatMessage.Replayed,
+			&i.ChatMessage.CreatedAt,
+			&i.ChatMessage.RiskAnalyzedAt,
+			&i.UserAccountID,
+			&i.RowLocalContent,
+			&i.AttachmentUris,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const loadEvaluationSensors = `-- name: LoadEvaluationSensors :many
 SELECT sensor.id AS sensor_id, sensor.slug AS sensor_slug, sensor.mode, sensor.instructions,
        signal.id AS signal_id, signal.slug AS signal_slug, signal.classifier_criteria

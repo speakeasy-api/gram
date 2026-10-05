@@ -3,7 +3,6 @@ package evaluation
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,12 +10,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
-
-	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/stretchr/testify/require"
 )
 
 type memoryBlobs map[string][]byte
@@ -29,43 +26,13 @@ func (m memoryBlobs) Read(_ context.Context, u *url.URL) (io.ReadCloser, error) 
 	return io.NopCloser(bytes.NewReader(data)), nil
 }
 
-func reference(uri, media string, data []byte) *conversationv1.Message_ContentReference {
-	r := &conversationv1.Message_ContentReference{}
-	r.SetUri(uri)
-	r.SetMediaType(media)
-	r.SetSizeBytes(uint64(len(data)))
-	sum := sha256.Sum256(data)
-	r.SetSha256(sum[:])
-	return r
-}
-
-func TestInputInlineAndAssetResolveIdentically(t *testing.T) {
-	t.Parallel()
-	m := message()
-	state, err := input(t.Context(), nil, m)
-	require.NoError(t, err)
-	data, err := proto.Marshal(m.GetBody())
-	require.NoError(t, err)
-	uri := "gs://test-bucket/" + m.GetProjectId() + "/body.pb"
-	m.SetBodyReference(reference(uri, "application/x-protobuf", data))
-	resolved, err := input(t.Context(), memoryBlobs{uri: data}, m)
-	require.NoError(t, err)
-	require.Equal(t, state, resolved)
-}
-
 func TestInputOriginalContentNotDuplicatedAndNumbersPreserved(t *testing.T) {
 	t.Parallel()
 	m := message()
-	body := m.GetBody()
-	body.SetSourceContentJson([]byte(`{"count":9007199254740993,"text":"original"}`))
-	tool := &conversationv1.Message_ToolCall{}
-	tool.SetId("tool")
-	tool.SetName("lookup")
-	tool.SetArgumentsJson(`{"incomplete":`)
-	part := &conversationv1.Message_Part{}
-	part.SetToolCall(tool)
-	body.SetParts(append(body.GetParts(), part))
-	state, err := input(t.Context(), nil, m)
+	row := storedMessage(m)
+	row.ChatMessage.ContentRaw = []byte(`{"count":9007199254740993,"text":"original"}`)
+	row.ChatMessage.ToolCalls = []byte(`[{"id":"tool","function":{"name":"lookup","arguments":"{\"incomplete\":"}}]`)
+	state, err := input(t.Context(), nil, m.GetProjectId(), row)
 	require.NoError(t, err)
 	encoded, err := json.Marshal(state)
 	require.NoError(t, err)
@@ -74,79 +41,70 @@ func TestInputOriginalContentNotDuplicatedAndNumbersPreserved(t *testing.T) {
 	require.Contains(t, string(encoded), "lookup")
 }
 
-func TestInputRejectsCrossProjectAndIntegrityFailure(t *testing.T) {
+func TestInputSplitRowsExcludeArchivalSiblingContent(t *testing.T) {
 	t.Parallel()
 	m := message()
-	data, err := proto.Marshal(m.GetBody())
+	row := storedMessage(m)
+	row.RowLocalContent = true
+	row.ChatMessage.ContentRaw = []byte(`[{"type":"text","text":"sibling content"}]`)
+	state, err := input(t.Context(), nil, m.GetProjectId(), row)
 	require.NoError(t, err)
-	uri := "gs://test-bucket/another-project/body.pb"
-	m.SetBodyReference(reference(uri, "application/x-protobuf", data))
-	_, err = input(t.Context(), nil, m)
-	var permanentFailure *permanentError
-	require.ErrorAs(t, err, &permanentFailure)
-	require.Equal(t, "invalid_reference", permanentFailure.reason)
-	uri = "gs://test-bucket/" + m.GetProjectId() + "/body.pb"
-	m.SetBodyReference(reference(uri, "application/x-protobuf", data))
-	_, err = input(t.Context(), memoryBlobs{uri: bytes.Repeat([]byte("x"), len(data))}, m)
-	require.ErrorAs(t, err, &permanentFailure)
-	require.Equal(t, "asset_integrity", permanentFailure.reason)
-}
-
-func TestInputAssetUnavailableIsRetryable(t *testing.T) {
-	t.Parallel()
-	m := message()
-	m.SetBodyReference(reference("gs://test-bucket/"+m.GetProjectId()+"/body.pb", "application/x-protobuf", nil))
-	_, err := input(t.Context(), memoryBlobs{}, m)
-	require.Error(t, err)
-	var permanentFailure *permanentError
-	require.NotErrorAs(t, err, &permanentFailure)
+	encoded, err := json.Marshal(state)
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), "failed payment")
+	require.NotContains(t, string(encoded), "sibling content")
 }
 
 func TestInputResolvesFilesystemWriterLocator(t *testing.T) {
 	t.Parallel()
 	m := message()
-	expected, err := input(t.Context(), nil, m)
-	require.NoError(t, err)
-	data, err := proto.Marshal(m.GetBody())
+	row := storedMessage(m)
+	data := []byte(`{"text":"original"}`)
+	row.ChatMessage.ContentRaw = data
+	expected, err := input(t.Context(), nil, m.GetProjectId(), row)
 	require.NoError(t, err)
 	root, err := os.OpenRoot(t.TempDir())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, root.Close()) })
 	store := assets.NewFSBlobStore(testenv.NewLogger(t), root)
-	w, locator, err := store.Write(t.Context(), m.GetProjectId()+"/body.pb", "application/x-protobuf", int64(len(data)))
+	w, locator, err := store.Write(t.Context(), m.GetProjectId()+"/content.json", "application/json", int64(len(data)))
 	require.NoError(t, err)
 	_, err = w.Write(data)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
-	m.SetBodyReference(reference(locator.String(), "application/x-protobuf", data))
-	got, err := input(t.Context(), store, m)
+	row.ChatMessage.ContentRaw = nil
+	row.ChatMessage.ContentAssetUrl = conv.ToPGText(locator.String())
+	got, err := input(t.Context(), store, m.GetProjectId(), row)
 	require.NoError(t, err)
 	require.Equal(t, expected, got)
-	for _, uri := range []string{"file:another-project/body.pb", "file:" + m.GetProjectId() + "/../body.pb", "file:" + m.GetProjectId() + "/%2e%2e/body.pb"} {
-		m.GetBodyReference().SetUri(uri)
-		_, err := input(t.Context(), store, m)
+	for _, uri := range []string{"file:another-project/content.json", "file:" + m.GetProjectId() + "/../content.json", "file:" + m.GetProjectId() + "/%2e%2e/content.json"} {
+		row.ChatMessage.ContentAssetUrl = conv.ToPGText(uri)
+		_, err := input(t.Context(), store, m.GetProjectId(), row)
 		var failed *permanentError
 		require.ErrorAs(t, err, &failed)
 		require.Equal(t, "invalid_reference", failed.reason)
 	}
 }
 
-func TestInputResolvesTextPartAndRejectsBinary(t *testing.T) {
+func TestInputAttachmentFailureAndSizeLimit(t *testing.T) {
 	t.Parallel()
 	m := message()
+	row := storedMessage(m)
 	uri := "gs://test-bucket/" + m.GetProjectId() + "/part.txt"
-	data := []byte("asset-backed text")
-	part := &conversationv1.Message_Part{}
-	part.SetContentReference(reference(uri, "text/plain; charset=utf-8", data))
-	m.GetBody().SetParts([]*conversationv1.Message_Part{part})
-	state, err := input(t.Context(), memoryBlobs{uri: data}, m)
+	row.AttachmentUris = []string{uri}
+	_, err := input(t.Context(), memoryBlobs{}, m.GetProjectId(), row)
+	require.Error(t, err)
+	var failed *permanentError
+	require.NotErrorAs(t, err, &failed)
+	state, err := input(t.Context(), memoryBlobs{uri: []byte("attachment text")}, m.GetProjectId(), row)
 	require.NoError(t, err)
 	encoded, err := json.Marshal(state)
 	require.NoError(t, err)
-	require.Contains(t, string(encoded), "asset-backed text")
-	part.GetContentReference().SetMediaType("image/png")
-	_, err = input(t.Context(), memoryBlobs{uri: data}, m)
-	var permanentFailure *permanentError
-	require.ErrorAs(t, err, &permanentFailure)
-	require.Equal(t, "unsupported_content", permanentFailure.reason)
+	require.Contains(t, string(encoded), "attachment text")
+	_, err = input(t.Context(), memoryBlobs{uri: bytes.Repeat([]byte("x"), maxContentBytes)}, m.GetProjectId(), row)
+	require.ErrorAs(t, err, &failed)
+	require.Equal(t, "content_too_large", failed.reason)
+	_, err = input(t.Context(), memoryBlobs{uri: {0xff}}, m.GetProjectId(), row)
+	require.ErrorAs(t, err, &failed)
+	require.Equal(t, "invalid_content", failed.reason)
 }

@@ -337,3 +337,24 @@ WHERE sensor.project_id = @project_id
   AND sensor.id = ANY(@ids::uuid[])
   AND sensor.deleted IS FALSE
 ORDER BY sensor.id;
+
+-- name: LoadEvaluationMessages :many
+-- One tenant-pinned read resolves the batch and its current attachment locators.
+SELECT sqlc.embed(m), c.user_account_id,
+       COALESCE(m.origin = 'anthropic-inference' AND (
+         m.external_message_id LIKE '%/block:%' OR EXISTS (
+           SELECT 1 FROM chat_messages sibling
+           WHERE sibling.project_id = m.project_id AND sibling.chat_id = m.chat_id
+             AND sibling.external_message_id = m.external_message_id || '/block:0'
+         )
+       ), false)::boolean AS row_local_content,
+       ARRAY(SELECT cp.content_asset_url FROM chat_content_parts cp
+             WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id
+               AND cp.parent_chat_message_id = m.id AND cp.deleted IS FALSE
+             ORDER BY cp.created_at, cp.id)::text[] AS attachment_uris
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+JOIN projects p ON p.id = m.project_id
+WHERE m.project_id = @project_id::uuid AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE AND c.deleted IS FALSE
+  AND m.id = ANY(@message_ids::uuid[]);

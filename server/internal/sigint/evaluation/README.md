@@ -1,6 +1,6 @@
 # Sensor evaluation
 
-`gram streams` consumes `gram.conversation.v1.Message` through
+`gram streams` consumes `gram.conversation.v1.MessageEvent` through
 `gram.sigint.v1.Evaluator` and publishes successful `gram.sigint.v1.Reading`
 messages. Configure **`GRAM_SIGINT_OPENROUTER_API_KEY`** with a platform-owned
 OpenRouter inference key. The receiver is not registered when this is unset,
@@ -19,7 +19,9 @@ platform inference key. The flag defaults to false and affects only sigint.
 
 The organization must have `signals_intelligence` enabled. A single SQL statement
 loads active project-owned sensor definitions and signal membership in order.
-Only user and assistant messages are evaluated, including historical replays.
+Only `TYPE_CREATED` events for user and assistant messages are evaluated, including
+historical imports. Attribution updates and attachment-added events are acknowledged
+without evaluation.
 Four events can be evaluated concurrently; the shared Jev client independently
 caps in-flight provider requests at four and uses Guardian rate admission.
 
@@ -33,10 +35,13 @@ necessarily UUIDs. The shared evaluator has no conversation-role or conversation
 requirement. It enforces tenant validity, entitlement, source-aware sensor
 selection, readiness, content limits, classification, and publication semantics.
 
-`ConversationHandler` adapts the existing conversation subscription. It owns
-user/assistant eligibility, persisted message/conversation UUID validation, and
-the `{role, content, parts}` content projection. Assets are resolved only after
-entitlement and runnable sensors have been established.
+`ConversationHandler` adapts the conversation subscription. It validates message
+and conversation UUIDs, groups eligible references by organization/project, and
+batch-loads current messages and attachment locators from PostgreSQL. Duplicate
+message references share a lookup. Missing messages and deleted conversations or
+projects are acknowledged; database failures nack the affected tenant's deliveries.
+The adapter owns the `{role, content, parts}` projection. Asset reads occur only
+after entitlement and runnable sensors have been established.
 
 `Source.Load` receives the event kind alongside organization and project. The
 repository currently selects configuration only for `conversation.message`;
@@ -86,29 +91,36 @@ The fixed namespace is UUIDv5(URL namespace, `gram:sigint:reading`). The UUID is
 serialized as a canonical string on the wire and can be stored in native UUID
 columns in PostgreSQL and ClickHouse.
 Each evaluation has a separate attempt UUID and completion timestamp.
+For conversations, the logical event ID is the persisted message UUID, not the
+`MessageEvent.id` mutation UUID or Pub/Sub delivery ID. The reading refers to the
+message's creation time. Redelivery loads current state again, so the evaluated
+content and attribution can differ between attempts under the same reading ID.
 Sensor and signal slugs are always populated in readings from the same configuration
 snapshot. Choice results also carry the selected signal's slug. Slugs are metadata
 and do not affect reading identity.
 Definition hashes are metadata for traceability, not identity, and include mode, instructions,
 signal IDs, criteria and order. Event content
-is not hashed for reading identity or metadata. Inline and spilled protobuf bodies
-resolve to the same input. Source JSON preserves number representations; tool
-calls and referenced textual content remain available to classification.
+is not hashed for reading identity or metadata. Original JSON comes from the
+message row or its existing content asset and preserves number representations.
+Split Anthropic transcript rows use their row-local text and tool calls rather
+than repeating the full archival content for each sibling. Associated textual
+attachments are loaded from their existing asset locators.
 
-Asset reads use the configured storage backend, enforce project paths, check
-declared hashes/sizes, and cap resolved input at 16 MiB. Unsupported binary parts,
-malformed content, missing assets and integrity failures are permanent failures.
-Other storage errors retry.
+Asset reads use the configured storage backend, enforce project paths, and cap
+resolved input at 16 MiB. Malformed content, non-UTF-8 attachments and missing
+assets are permanent failures. Other storage errors retry. Message events carry
+no content bodies or publication-specific spilled assets.
 
 ## Delivery and observability
 
 Readings preserve ingestion identity separately from billing attribution:
-`actor` contains the event's Gram user ID, external user ID and observed email;
+`actor` contains the persisted message's Gram user ID and external user ID plus
+the ingestion event's observed email;
 `billing_user_id` is the producer's explicit usage allocation, including for
 assistant-generated messages with no actor. Neither identity is inferred from the
 other. `source` namespaces external identities within the organization. Account
-ID/type/billing mode, assistant ID and the historical `replayed` marker are copied
-from the source event (the consumed message snapshot for the conversation adapter).
+ID comes from the current conversation row; account type/billing mode, assistant
+ID and the historical `replayed` marker come from the event's ingestion context.
 Absent provenance remains absent. Directory
 enrichment belongs downstream, as it does for agent-session storage metering.
 These fields do not participate in reading identity or the definition hash.

@@ -77,8 +77,13 @@ func TestReadingIdentitySurvivesSensorConfigurationChanges(t *testing.T) {
 	require.Equal(t, a.GetId(), b.GetId())
 	require.NotEqual(t, a.GetDefinitionHash(), b.GetDefinitionHash())
 	require.NotEqual(t, a.GetEvaluationAttemptId(), b.GetEvaluationAttemptId())
+	// Mutation/delivery identity does not change the logical message reading.
+	m.SetId(uuid.NewString())
+	redelivered, err := reading((&conversationInput{message: m}).Event(), after, outcomes, "redelivery", "2026-09-29T00:01:30Z", result)
+	require.NoError(t, err)
+	require.Equal(t, b.GetId(), redelivered.GetId())
 	// Distinct messages and sensors must still have distinct logical readings.
-	m.SetId("another-message")
+	m.SetMessageId("another-message")
 	c, err := reading((&conversationInput{message: m}).Event(), after, outcomes, "third-attempt", "2026-09-29T00:02:00Z", result)
 	require.NoError(t, err)
 	require.NotEqual(t, b.GetId(), c.GetId())

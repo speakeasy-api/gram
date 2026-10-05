@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime"
 	"net/url"
 	"os"
 	"path"
@@ -17,11 +16,9 @@ import (
 	"unicode/utf8"
 
 	"cloud.google.com/go/storage"
-	"google.golang.org/protobuf/proto"
-
-	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 )
 
 // BlobReader reads immutable assets through the configured storage backend.
@@ -34,19 +31,13 @@ type permanentError struct{ reason string }
 
 func (e *permanentError) Error() string { return "sensor evaluation: " + e.reason }
 func permanent(reason string) error     { return &permanentError{reason: reason} }
+func digest(data []byte) string         { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }
 
-func digest(data []byte) string { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }
-
-func readReference(ctx context.Context, reader BlobReader, project string, ref *conversationv1.Message_ContentReference, remaining *int) ([]byte, error) {
-	if ref == nil {
-		return nil, permanent("invalid_reference")
-	}
-	u, err := url.Parse(ref.GetUri())
+func readReference(ctx context.Context, reader BlobReader, project, uri string, remaining *int) ([]byte, error) {
+	u, err := url.Parse(uri)
 	if err != nil || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
 		return nil, permanent("invalid_reference")
 	}
-	// Backend bucket checks still apply. Explicit project paths also isolate local
-	// filesystem reads and prevent another tenant's asset being evaluated.
 	p := strings.TrimPrefix(u.Path, "/")
 	if u.Scheme == "file" {
 		if u.Opaque != "" {
@@ -65,12 +56,13 @@ func readReference(ctx context.Context, reader BlobReader, project string, ref *
 		return nil, permanent("invalid_reference")
 	}
 	if u.Scheme == "file" {
-		// FSBlobStore reads root-relative locators by stripping file://. Its
-		// writer's relative file:path form becomes opaque after serialization.
 		u = &url.URL{Scheme: "file", Host: project, Path: strings.TrimPrefix(p, project)}
 	}
-	if *remaining < 0 || ref.GetSizeBytes() > uint64(*remaining) {
+	if *remaining < 0 {
 		return nil, permanent("content_too_large")
+	}
+	if reader == nil {
+		return nil, fmt.Errorf("evaluation asset storage unavailable")
 	}
 	r, err := reader.Read(ctx, u)
 	if errors.Is(err, os.ErrNotExist) || errors.Is(err, storage.ErrObjectNotExist) {
@@ -88,15 +80,6 @@ func readReference(ctx context.Context, reader BlobReader, project string, ref *
 		return nil, permanent("content_too_large")
 	}
 	*remaining -= len(data)
-	if ref.GetSizeBytes() != 0 && ref.GetSizeBytes() != uint64(len(data)) {
-		return nil, permanent("asset_integrity")
-	}
-	if hash := ref.GetSha256(); len(hash) != 0 {
-		sum := sha256.Sum256(data)
-		if !bytes.Equal(hash, sum[:]) {
-			return nil, permanent("asset_integrity")
-		}
-	}
 	return data, nil
 }
 
@@ -113,36 +96,25 @@ func jsonValue(data []byte) (any, error) {
 	return value, nil
 }
 
-func input(ctx context.Context, reader BlobReader, m *conversationv1.Message) (classifier.Entry, error) {
+func input(ctx context.Context, reader BlobReader, project string, row repo.LoadEvaluationMessagesRow) (classifier.Entry, error) {
 	var empty classifier.Entry
-	remaining := maxContentBytes
-	body := m.GetBody()
-	if body == nil && m.GetBodyReference() != nil {
-		data, err := readReference(ctx, reader, m.GetProjectId(), m.GetBodyReference(), &remaining)
-		if err != nil {
-			return empty, err
-		}
-		body = &conversationv1.Message_Body{}
-		if proto.Unmarshal(data, body) != nil {
-			return empty, permanent("invalid_body")
-		}
-	}
-	if body == nil {
-		return empty, permanent("missing_body")
-	}
-	if proto.Size(body) > maxContentBytes {
-		return empty, permanent("content_too_large")
-	}
+	m := row.ChatMessage
+	remaining := maxContentBytes - len(m.Content) - len(m.ToolCalls)
 	var content any
-	hasOriginal := body.HasSourceContentJson() || body.HasSourceContent()
+	hasOriginal := !row.RowLocalContent && (len(m.ContentRaw) > 0 || m.ContentAssetUrl.Valid && m.ContentAssetUrl.String != "")
 	if hasOriginal {
-		data := body.GetSourceContentJson()
-		if body.HasSourceContent() {
+		data := m.ContentRaw
+		if len(data) == 0 {
 			var err error
-			data, err = readReference(ctx, reader, m.GetProjectId(), body.GetSourceContent(), &remaining)
+			data, err = readReference(ctx, reader, project, m.ContentAssetUrl.String, &remaining)
 			if err != nil {
 				return empty, err
 			}
+		} else {
+			remaining -= len(data)
+		}
+		if remaining < 0 {
+			return empty, permanent("content_too_large")
 		}
 		var err error
 		content, err = jsonValue(data)
@@ -150,44 +122,53 @@ func input(ctx context.Context, reader BlobReader, m *conversationv1.Message) (c
 			return empty, err
 		}
 	}
-	parts := make([]any, 0, len(body.GetParts()))
-	for _, part := range body.GetParts() {
-		switch {
-		case part.HasText():
-			if !hasOriginal {
-				parts = append(parts, map[string]any{"text": part.GetText()})
-			}
-		case part.HasToolCall():
-			call := part.GetToolCall()
-			parts = append(parts, map[string]any{"tool_call": map[string]string{"id": call.GetId(), "name": call.GetName(), "arguments": call.GetArgumentsJson()}})
-		case part.HasContentReference():
-			ref := part.GetContentReference()
-			media, _, err := mime.ParseMediaType(ref.GetMediaType())
-			if err != nil || (!strings.HasPrefix(media, "text/") && media != "application/json") {
-				return empty, permanent("unsupported_content")
-			}
-			data, err := readReference(ctx, reader, m.GetProjectId(), ref, &remaining)
-			if err != nil {
-				return empty, err
-			}
-			if !utf8.Valid(data) {
+	if remaining < 0 {
+		return empty, permanent("content_too_large")
+	}
+	parts := make([]any, 0)
+	if !hasOriginal && m.Content != "" {
+		parts = append(parts, map[string]any{"text": m.Content})
+	}
+	if len(m.ToolCalls) > 0 {
+		data := bytes.TrimSpace(m.ToolCalls)
+		if len(data) > 0 && data[0] == '"' {
+			var wrapped string
+			if err := json.Unmarshal(data, &wrapped); err != nil {
 				return empty, permanent("invalid_content")
 			}
-			if media == "application/json" {
-				value, err := jsonValue(data)
-				if err != nil {
-					return empty, err
+			data = []byte(wrapped)
+		}
+		var calls []struct {
+			ID       string `json:"id"`
+			Function struct {
+				Name      string          `json:"name"`
+				Arguments json.RawMessage `json:"arguments"`
+			} `json:"function"`
+		}
+		if err := json.Unmarshal(data, &calls); err != nil {
+			return empty, permanent("invalid_content")
+		}
+		for _, call := range calls {
+			arguments := string(call.Function.Arguments)
+			if len(call.Function.Arguments) > 0 && call.Function.Arguments[0] == '"' {
+				if err := json.Unmarshal(call.Function.Arguments, &arguments); err != nil {
+					return empty, permanent("invalid_content")
 				}
-				parts = append(parts, map[string]any{"content": value})
-			} else {
-				parts = append(parts, map[string]any{"text": string(data)})
 			}
-		default:
-			return empty, permanent("invalid_part")
+			parts = append(parts, map[string]any{"tool_call": map[string]string{"id": call.ID, "name": call.Function.Name, "arguments": arguments}})
 		}
 	}
-	state := map[string]any{"role": m.GetRole().String(), "content": content, "parts": parts}
-	data, err := json.Marshal(state)
+	for _, uri := range row.AttachmentUris {
+		data, err := readReference(ctx, reader, project, uri, &remaining)
+		if err != nil {
+			return empty, err
+		}
+		if !utf8.Valid(data) {
+			return empty, permanent("invalid_content")
+		}
+		parts = append(parts, map[string]any{"text": string(data)})
+	}
+	data, err := json.Marshal(map[string]any{"role": "ROLE_" + strings.ToUpper(m.Role), "content": content, "parts": parts})
 	if err != nil {
 		return empty, permanent("invalid_content")
 	}
