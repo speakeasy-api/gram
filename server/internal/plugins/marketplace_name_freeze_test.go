@@ -192,6 +192,32 @@ func assignToOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool,
 	require.NoError(t, err)
 }
 
+// rewritePublishedHooksConfig applies edit to the project's stored published
+// hooks config snapshot and writes it back, keeping the rest of the connection.
+func rewritePublishedHooksConfig(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, edit func(fields map[string]json.RawMessage)) {
+	t.Helper()
+
+	q := pluginsrepo.New(conn)
+	current, err := q.GetGitHubConnection(ctx, projectID)
+	require.NoError(t, err)
+	var fields map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(current.PublishedHooksConfig, &fields))
+	edit(fields)
+	rewritten, err := json.Marshal(fields)
+	require.NoError(t, err)
+	_, err = q.UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
+		ProjectID:                projectID,
+		InstallationID:           current.InstallationID,
+		RepoOwner:                current.RepoOwner,
+		RepoName:                 current.RepoName,
+		MarketplaceToken:         current.MarketplaceToken,
+		PublishedMcpFingerprints: current.PublishedMcpFingerprints,
+		PublishedHooksVersion:    current.PublishedHooksVersion,
+		PublishedHooksConfig:     rewritten,
+	})
+	require.NoError(t, err)
+}
+
 func republish(t *testing.T, ctx context.Context, ti *testInstance) {
 	t.Helper()
 
@@ -386,26 +412,10 @@ func TestMarketplaceName_SnapshotWithoutPublishedNameKeepsTodaysName(t *testing.
 	// Rewrite the snapshot to one written before published names were recorded,
 	// whose hooks marketplace_name lags the live manifests (as a hooks subtree
 	// carried by the rollout gate can).
-	q := pluginsrepo.New(ti.conn)
-	current, err := q.GetGitHubConnection(ctx, projectID)
-	require.NoError(t, err)
-	var fields map[string]json.RawMessage
-	require.NoError(t, json.Unmarshal(current.PublishedHooksConfig, &fields))
-	delete(fields, naming.PublishedMarketplaceNameKey)
-	fields["marketplace_name"] = json.RawMessage(`"stale-speakeasy"`)
-	legacy, err := json.Marshal(fields)
-	require.NoError(t, err)
-	_, err = q.UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
-		ProjectID:                projectID,
-		InstallationID:           current.InstallationID,
-		RepoOwner:                current.RepoOwner,
-		RepoName:                 current.RepoName,
-		MarketplaceToken:         current.MarketplaceToken,
-		PublishedMcpFingerprints: current.PublishedMcpFingerprints,
-		PublishedHooksVersion:    current.PublishedHooksVersion,
-		PublishedHooksConfig:     legacy,
+	rewritePublishedHooksConfig(t, ctx, ti.conn, projectID, func(fields map[string]json.RawMessage) {
+		delete(fields, naming.PublishedMarketplaceNameKey)
+		fields["marketplace_name"] = json.RawMessage(`"stale-speakeasy"`)
 	})
-	require.NoError(t, err)
 	require.Empty(t, recordedMarketplaceName(t, ctx, ti.conn, projectID))
 
 	settings, err := ti.service.GetMarketplaceSettings(ctx, &gen.GetMarketplaceSettingsPayload{})
@@ -430,6 +440,68 @@ func TestMarketplaceName_SnapshotWithoutPublishedNameKeepsTodaysName(t *testing.
 	renameOrganization(t, ctx, ti.conn, orgID, "Renamed Legacy Org")
 	republish(t, ctx, ti)
 	requireMarketplaceNameEverywhere(t, ctx, ti, mock, today)
+}
+
+func TestMarketplaceName_UnchangedPublishDoesNotRecordOverride(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+
+	orgID, _ := marketplaceRenameFixture(t, ctx, ti, "Freeze Legacy Override")
+	name := "team-tools"
+	_, err := ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{MarketplaceName: &name})
+	require.NoError(t, err)
+
+	// The override published before published names were recorded.
+	rewritePublishedHooksConfig(t, ctx, ti.conn, projectID, func(fields map[string]json.RawMessage) {
+		delete(fields, naming.PublishedMarketplaceNameKey)
+	})
+
+	// The rollout sweep skips the unchanged project and leaves the override
+	// unrecorded: the override already fixes the name.
+	mock.pushFilesCalled = false
+	result, err := ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       projectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "Update plugin packages",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+	require.True(t, result.Skipped)
+	require.False(t, mock.pushFilesCalled)
+	require.Empty(t, recordedMarketplaceName(t, ctx, ti.conn, projectID))
+
+	// An admin clears the override while that sweep runs, so the clear finds
+	// no recorded name to forget, and its republish does not land. A recorded
+	// override would now freeze the cleared name.
+	_, err = pluginsrepo.New(ti.conn).UpsertMarketplaceSettings(ctx, pluginsrepo.UpsertMarketplaceSettingsParams{
+		ProjectID:               projectID,
+		SetMarketplaceName:      true,
+		MarketplaceName:         pgtype.Text{},
+		SetObservabilityEnabled: false,
+		ObservabilityEnabled:    pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	computed := defaultMarketplaceNameForTest(t, ctx, ti)
+	settings, err := ti.service.GetMarketplaceSettings(ctx, &gen.GetMarketplaceSettingsPayload{})
+	require.NoError(t, err)
+	require.Equal(t, computed, settings.EffectiveName)
+	require.Equal(t, computed, agentMarketplaceName(t, ctx, ti.conn, orgID, projectID))
+
+	// The next sweep publishes the computed name the manifests now lag.
+	result, err = ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       projectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "Update plugin packages",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+	require.False(t, result.Skipped)
+	requireMarketplaceNameEverywhere(t, ctx, ti, mock, computed)
 }
 
 func TestMarketplaceName_UnchangedEligibleOrgSkipsWithoutHooksRegeneration(t *testing.T) {

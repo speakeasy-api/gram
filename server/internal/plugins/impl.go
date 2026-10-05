@@ -2409,8 +2409,15 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		// proves the repo already carries the resolved name. Record it without a
 		// republish: this freezes the name of a project that last published
 		// before names were recorded. Best effort, since the next sweep retries.
+		//
+		// Only the computed name is recorded. An override fixes the name by
+		// itself, and clearing a published override returns to the computed
+		// name whether or not it was recorded. Recording an override could also
+		// land just after an admin cleared it, when the clear found no recorded
+		// name to forget, and so freeze the cleared name.
 		recorded := naming.PublishedMarketplaceName(existing.PublishedHooksConfig)
-		if recorded != cfg.MarketplaceName {
+		computed := naming.MarketplaceName(cfg.OrgName, cfg.ProjectSlug, cfg.IsDefaultProject)
+		if recorded == "" && cfg.MarketplaceName == computed {
 			if err := s.repo.RecordPublishedMarketplaceName(ctx, repo.RecordPublishedMarketplaceNameParams{
 				MarketplaceName:         cfg.MarketplaceName,
 				ProjectID:               input.ProjectID,
