@@ -198,6 +198,9 @@ func backfillOrganizationMetadata(ctx context.Context, repo *orgrepo.Queries, or
 		WorkosID:          conv.ToPGText(workosOrg.ID),
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(updatedAt),
 		WorkosLastEventID: conv.ToPGText(""),
+		// The backfill reconciles organizations that already exist in WorkOS,
+		// so it records no default host and they use the legacy host.
+		DefaultHost: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return orgrepo.OrganizationMetadatum{}, fmt.Errorf("upsert organization %q from WorkOS snapshot: %w", workosOrg.ID, err)

@@ -63,12 +63,16 @@ pub enum McpCmd {
         tool_name: String,
         reply: oneshot::Sender<Result<(), String>>,
     },
-    /// Sent by `/threads/{id}/turn` when the server-side toolset has
-    /// drifted from the snapshot the runner bootstrapped with. The actor
-    /// diffs `desired` against the configured set, registering added
-    /// servers and disconnecting removed ones. Connects stay deferred to
-    /// the next `EnsureConnected`.
-    Reconcile { desired: Vec<McpServer> },
+    /// Sent by the serialized loop after the prior turn and compaction.
+    /// Clears credential-specific MCP sessions/auth/retry state before rotating
+    /// the opaque token, then applies the queued desired server configuration.
+    /// The loop awaits acknowledgement before submitting input. Connections
+    /// stay deferred to the next `EnsureConnected`.
+    TurnBoundary {
+        token: String,
+        desired: Option<Vec<McpServer>>,
+        reply: oneshot::Sender<Result<(), RunnerError>>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -169,11 +173,47 @@ impl McpActor {
                     let result = self.reconnect_for_tool(&tool_name).await;
                     let _ = reply.send(result);
                 }
-                McpCmd::Reconcile { desired } => {
-                    self.reconcile(desired).await;
+                McpCmd::TurnBoundary {
+                    token,
+                    desired,
+                    reply,
+                } => {
+                    let result = self.turn_boundary(token, desired).await;
+                    let _ = reply.send(result);
                 }
             }
         }
+    }
+
+    async fn turn_boundary(
+        &mut self,
+        token: String,
+        desired: Option<Vec<McpServer>>,
+    ) -> Result<(), RunnerError> {
+        if self.tokens.current()? != token {
+            // HTTP token rotation does not invalidate MCP protocol sessions or
+            // credential-specific OAuth/cooldown state. Tear those down under
+            // the old credential before publishing the next one.
+            let ids: Vec<_> = self
+                .manager
+                .connected_servers()
+                .iter()
+                .map(|handle| handle.server_id().0.clone())
+                .collect();
+            for id in ids {
+                if self.is_connected(&id) {
+                    self.drop_connection(&id, "credential_boundary").await;
+                }
+            }
+            self.auth_pending.clear();
+            self.last_errors.clear();
+            self.last_reconnects.clear();
+            self.tokens.rotate(token)?;
+        }
+        if let Some(desired) = desired {
+            self.reconcile(desired).await;
+        }
+        Ok(())
     }
 
     fn is_connected(&self, id: &str) -> bool {
@@ -506,11 +546,27 @@ struct AuthFlow {
     minted_at: Instant,
 }
 
+pub fn validate_endpoint(raw: &str) -> Result<(), RunnerError> {
+    let url =
+        reqwest::Url::parse(raw).map_err(|_| RunnerError::Loop("invalid HTTP endpoint".into()))?;
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return Err(RunnerError::Loop(
+            "HTTP endpoint requires a host and no userinfo".into(),
+        ));
+    }
+    Ok(())
+}
+
 fn build_mcp_server_config(
     server: &McpServer,
     http_client: &reqwest::Client,
     tokens: &TokenRegistry,
 ) -> Result<McpServerConfig, RunnerError> {
+    validate_endpoint(&server.url)?;
     let mut server_headers = http::HeaderMap::new();
     for (k, v) in &server.headers {
         let name = http::HeaderName::from_bytes(k.as_bytes()).map_err(|source| {
@@ -538,4 +594,65 @@ fn build_mcp_server_config(
         &server.id,
         McpTransportBinding::StreamableHttp(transport),
     ))
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn endpoints_require_http_host_without_userinfo() {
+        for url in [
+            "file:///tmp/test",
+            "mailto:test@example.com",
+            "https://user@example.com",
+            "https://user:secret@example.com",
+            "not a url",
+        ] {
+            assert!(validate_endpoint(url).is_err(), "{url}");
+        }
+        assert!(validate_endpoint("https://example.com/mcp").is_ok());
+        assert!(validate_endpoint("http://127.0.0.1:8080/mcp").is_ok());
+    }
+
+    #[tokio::test]
+    async fn credential_boundary_clears_auth_and_retry_state_only_on_change() {
+        let tokens = TokenRegistry::new("opaque-a");
+        let (inbox_tx, _inbox_rx) = mpsc::unbounded_channel();
+        let http_client = reqwest::Client::new();
+        let mut actor = McpActor {
+            manager: McpServerManager::new(),
+            gram_client: GramBootstrapClient::new(
+                "http://127.0.0.1".into(),
+                crate::http_layer::build_bootstrap_client(http_client.clone()),
+            ),
+            http_client,
+            thread_id: "T".into(),
+            tokens: tokens.clone(),
+            inbox_tx,
+            configured: BTreeMap::new(),
+            auth_pending: BTreeMap::from([("server".into(), None)]),
+            last_errors: BTreeMap::from([("server".into(), ("old error".into(), Instant::now()))]),
+            last_reconnects: BTreeMap::from([("server".into(), Instant::now())]),
+        };
+        actor.turn_boundary("opaque-a".into(), None).await.unwrap();
+        assert_eq!(actor.auth_pending.len(), 1);
+        actor
+            .turn_boundary(
+                "opaque-b".into(),
+                Some(vec![McpServer {
+                    id: "new".into(),
+                    url: "https://example.com/mcp".into(),
+                    headers: BTreeMap::new(),
+                }]),
+            )
+            .await
+            .unwrap();
+        assert_eq!(tokens.current().unwrap(), "opaque-b");
+        assert!(actor.auth_pending.is_empty());
+        assert!(actor.last_errors.is_empty());
+        assert!(actor.last_reconnects.is_empty());
+        assert!(actor.configured.contains_key("new"));
+    }
 }

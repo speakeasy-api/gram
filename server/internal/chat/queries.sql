@@ -139,7 +139,7 @@ DO UPDATE SET
       ELSE COALESCE(EXCLUDED.title, chats.title)
     END
   , updated_at = GREATEST(chats.updated_at, EXCLUDED.updated_at)
-RETURNING id;
+RETURNING id, title;
 
 -- name: GetImportedSessionObservations :many
 -- Read current ownership at consumption time, so attribution repaired between

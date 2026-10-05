@@ -14179,7 +14179,7 @@ func assistantsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-assistants: List assistants for the current project.`)
 	fmt.Fprintln(os.Stderr, `    get-assistant: Get an assistant by ID.`)
 	fmt.Fprintln(os.Stderr, `    create-assistant: Create an assistant.`)
-	fmt.Fprintln(os.Stderr, `    upgrade-assistant-identity: Explicitly upgrade a legacy assistant to a dedicated agent and stable trigger workload identities. Existing assistants are never upgraded implicitly.`)
+	fmt.Fprintln(os.Stderr, `    upgrade-assistant-identity: Explicitly configure workload identity for an assistant without configured workload identity (NEVER_CONFIGURED), creating a dedicated agent and stable trigger workload identities. Existing assistants are never upgraded implicitly. Repeating an already ACTIVE upgrade is safe; tombstoned identities cannot be restored.`)
 	fmt.Fprintln(os.Stderr, `    update-assistant: Update an assistant.`)
 	fmt.Fprintln(os.Stderr, `    delete-assistant: Delete an assistant.`)
 	fmt.Fprintln(os.Stderr, `    send-message: Send a message from the dashboard to an assistant as the calling user. Continue an existing conversation by passing its chat_id (from listChats), or omit chat_id to start a new conversation — the server mints and returns a fresh chat id. The reply is delivered asynchronously; poll the chat service (loadChat) to read it.`)
@@ -14264,7 +14264,7 @@ func assistantsUpgradeAssistantIdentityUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Explicitly upgrade a legacy assistant to a dedicated agent and stable trigger workload identities. Existing assistants are never upgraded implicitly.`)
+	fmt.Fprintln(os.Stderr, `Explicitly configure workload identity for an assistant without configured workload identity (NEVER_CONFIGURED), creating a dedicated agent and stable trigger workload identities. Existing assistants are never upgraded implicitly. Repeating an already ACTIVE upgrade is safe; tombstoned identities cannot be restored.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

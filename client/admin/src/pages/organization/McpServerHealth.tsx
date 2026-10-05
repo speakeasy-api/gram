@@ -1,0 +1,1307 @@
+import { useRef, useState, type JSX, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Link,
+  Navigate,
+  useNavigate,
+  useParams,
+  useSearch,
+} from "@tanstack/react-router";
+import {
+  ArrowRightIcon,
+  CalendarIcon,
+  CheckIcon,
+  CopyIcon,
+  ExternalLinkIcon,
+} from "lucide-react";
+import type { AdminMcpServerHealth } from "@gram/admin-client/models/components/adminmcpserverhealth";
+import type { AdminMcpServerHealthRemoteSessionClient } from "@gram/admin-client/models/components/adminmcpserverhealthremotesessionclient";
+import type { AdminMcpServerToolCallBucket } from "@gram/admin-client/models/components/adminmcpservertoolcallbucket";
+import type { AdminMcpServerToolCalls } from "@gram/admin-client/models/components/adminmcpservertoolcalls";
+import type { AdminMcpServerHealthUserSessionIssuer } from "@gram/admin-client/models/components/adminmcpserverhealthusersessionissuer";
+
+import { CopyValue } from "@/components/CopyValue";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useOnUnmount } from "@/hooks/useOnUnmount";
+import {
+  organizationProjectsQuery,
+  organizationQuery,
+} from "@/lib/adminQueries";
+import { badgeTone } from "@/lib/badgeTone";
+import type { AdminOrganization } from "@/lib/gramAdminApi";
+import {
+  mcpServerHealthQuery,
+  mcpServerToolCallsQuery,
+} from "@/lib/gramAdminClient";
+import { LEAVES_THE_APP } from "@/lib/impersonation";
+import { cn } from "@/lib/utils";
+
+import { SOURCE_LABELS, VISIBILITY_LABELS } from "./mcpServerLabels";
+import {
+  admissionLabel,
+  bucketSquares,
+  callsPerSquare,
+  CHALLENGE_MODE_LABELS,
+  durationLabel,
+  fmtBucketDay,
+  fmtDate,
+  fmtDateTime,
+  fmtShare,
+  humanize,
+  LEGACY_AUTH_LABELS,
+  linkedAccounts,
+  loginChallengeQuery,
+  loginChallengeUrl,
+  platformMcpPrompt,
+  SCOPE_LABELS,
+  toolCallTailQuery,
+  toolCallTailUrl,
+  toolCallTotals,
+  windowRange,
+  worstBucket,
+} from "./mcpServerHealthModel";
+import { HEALTH_WINDOWS, type HealthWindow } from "./mcpServerHealthSearch";
+
+const ROUTE = "/organizations/$idOrSlug/mcp-servers/$serverId";
+const COPY_CONFIRM_MS = 1500;
+
+const CARD = "bg-card rounded-lg border";
+const CARD_HEAD =
+  "flex items-center justify-between gap-3 border-b px-5 py-3.5";
+const MUTED = "text-muted-foreground";
+const MONO = "font-mono text-xs";
+const CARD_TITLE = "text-[0.9375rem] font-semibold";
+// A dot grid behind the chart, drawn in the muted foreground so it holds in
+// both schemes.
+const PLOT =
+  "bg-card bg-[radial-gradient(color-mix(in_oklab,var(--muted-foreground)_35%,transparent)_1px,transparent_1.2px)] [background-size:12px_12px]";
+
+export function McpServerHealthRoute(): JSX.Element | null {
+  const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
+  const { data } = useQuery(organizationQuery(idOrSlug));
+  if (!data) return null;
+  return <McpServerHealth org={data} idOrSlug={idOrSlug} />;
+}
+
+export function McpServerHealth({
+  org,
+  idOrSlug,
+}: {
+  org: AdminOrganization;
+  idOrSlug: string;
+}): JSX.Element {
+  const { serverId } = useParams({ from: ROUTE });
+  const { project, window = 14 } = useSearch({ from: ROUTE });
+  const navigate = useNavigate({ from: ROUTE });
+  const projects = useQuery(organizationProjectsQuery(org.id));
+  const request = {
+    organizationId: org.id,
+    projectId: project ?? "",
+    mcpServerId: serverId,
+    windowDays: window,
+  };
+  // Two reads, so telemetry that fails or runs slow never holds back the
+  // configuration. Both take the window: the configuration counts the people
+  // who signed in inside it. A new window keeps the last answers on screen
+  // until it lands, rather than blanking the page between picks.
+  // Only another window of this same server stands in while a read lands.
+  // Moving to a different server, say through "Other servers on issuer",
+  // must never show the last server's report under the new one's name.
+  const sameServer = (previousKey: readonly unknown[] | undefined): boolean =>
+    previousKey?.[1] === idOrSlug &&
+    previousKey[2] === project &&
+    previousKey[3] === serverId;
+  const health = useQuery({
+    ...mcpServerHealthQuery(idOrSlug, request),
+    enabled: !!project,
+    placeholderData: (previous, previousQuery) =>
+      sameServer(previousQuery?.queryKey) ? previous : undefined,
+  });
+  const toolCalls = useQuery({
+    ...mcpServerToolCallsQuery(idOrSlug, request),
+    enabled: !!project,
+    placeholderData: (previous, previousQuery) =>
+      sameServer(previousQuery?.queryKey) ? previous : undefined,
+  });
+
+  // The server is named inside a project, so an address without one has
+  // nothing to ask for. The list picks a project and links back here.
+  if (!project) {
+    return (
+      <Navigate
+        to="/organizations/$idOrSlug/mcp-servers"
+        params={{ idOrSlug }}
+        replace
+      />
+    );
+  }
+
+  // Fixed copy, never the error's own text: a server error can carry detail
+  // this page must not repeat.
+  if (!health.data) {
+    return health.isError ? (
+      <LoadFailed what="Server health" onRetry={() => void health.refetch()} />
+    ) : (
+      <span className={cn(MUTED, "text-sm")}>Loading...</span>
+    );
+  }
+
+  const projectName =
+    projects.data?.projects.find((p) => p.id === project)?.name ?? project;
+
+  let toolCallsState: ToolCallsState = { status: "loading" };
+  if (toolCalls.data) {
+    toolCallsState = { status: "ready", toolCalls: toolCalls.data };
+  } else if (toolCalls.isError) {
+    toolCallsState = {
+      status: "error",
+      // Telemetry alone: the configuration on screen is fine.
+      retry: () => void toolCalls.refetch(),
+    };
+  }
+
+  return (
+    <HealthReport
+      health={health.data}
+      toolCalls={toolCallsState}
+      idOrSlug={idOrSlug}
+      project={project}
+      projectName={projectName}
+      window={window}
+      // The report is as of its own fetch, so links and ranges built from it
+      // do not drift on every render. While another window's answer stands in
+      // for this one, the read has no time of its own yet (it reports 0), and
+      // "now" is what the new window is measured back from.
+      asOf={new Date(health.dataUpdatedAt || Date.now())}
+      onWindowChange={(next) => {
+        void navigate({
+          search: (prev) => ({ ...prev, window: next }),
+          replace: true,
+        });
+      }}
+    />
+  );
+}
+
+type ToolCallsState =
+  | { status: "loading" }
+  | { status: "error"; retry: () => void }
+  | { status: "ready"; toolCalls: AdminMcpServerToolCalls };
+
+function HealthReport({
+  health,
+  toolCalls,
+  idOrSlug,
+  project,
+  projectName,
+  window,
+  asOf,
+  onWindowChange,
+}: {
+  health: AdminMcpServerHealth;
+  toolCalls: ToolCallsState;
+  idOrSlug: string;
+  project: string;
+  projectName: string;
+  window: HealthWindow;
+  asOf: Date;
+  onWindowChange: (window: HealthWindow) => void;
+}): JSX.Element {
+  const { server, userSessionIssuer: issuer } = health;
+  const loggingOff =
+    toolCalls.status === "ready" &&
+    toolCalls.toolCalls.type === "logging:disabled";
+  const range = windowRange(window, asOf);
+  const clients = issuer?.remoteSessionClients ?? [];
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h4 className="text-[1.438rem] leading-[1.6] font-light">
+              {server.name}
+            </h4>
+            <Badge variant="outline" className={badgeTone.neutral}>
+              {SOURCE_LABELS[server.source] ?? server.source}
+            </Badge>
+            <Badge variant="outline" className={badgeTone.neutral}>
+              {VISIBILITY_LABELS[server.visibility] ?? server.visibility}
+            </Badge>
+          </div>
+          <p
+            className={cn(MUTED, "flex flex-wrap items-center gap-x-2 text-sm")}
+          >
+            <span className="whitespace-nowrap">{projectName} project</span>
+            <span aria-hidden="true">·</span>
+            <span className="whitespace-nowrap">
+              Created {fmtDate(server.createdAt)}
+            </span>
+            <span aria-hidden="true">·</span>
+            <CopyValue label={`${server.name} server id`} value={server.id} />
+          </p>
+        </div>
+        <WindowPicker value={window} onChange={onWindowChange} />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <IssuerCard health={health} />
+        <PeopleCard issuer={issuer} />
+        <UpstreamCard issuer={issuer} />
+        <ToolCallsCard toolCalls={toolCalls} />
+      </div>
+
+      {loggingOff ? (
+        <LoggingOff idOrSlug={idOrSlug} />
+      ) : (
+        <ToolCallsChart
+          state={toolCalls}
+          window={window}
+          range={range}
+          prompt={{
+            serverName: server.name,
+            serverId: server.id,
+            projectName,
+          }}
+        />
+      )}
+
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        {issuer && (
+          <IssuerPanel
+            issuer={issuer}
+            idOrSlug={idOrSlug}
+            project={project}
+            window={window}
+          />
+        )}
+        <LogsCard
+          urlSlug={health.correlation.urlSlug}
+          issuers={clients.map((c) => c.issuer.issuer)}
+          range={range}
+          className={cn(!issuer && "lg:col-span-2")}
+        />
+      </div>
+
+      {clients.length > 0 && <RemoteClients clients={clients} />}
+    </div>
+  );
+}
+
+function WindowPicker({
+  value,
+  onChange,
+}: {
+  value: HealthWindow;
+  onChange: (window: HealthWindow) => void;
+}): JSX.Element {
+  return (
+    <Select
+      value={String(value)}
+      onValueChange={(next) => onChange(Number(next) as HealthWindow)}
+    >
+      <SelectTrigger size="sm" aria-label="Window" className="bg-card">
+        <CalendarIcon />
+        <span className={MUTED}>Window</span>
+        <SelectValue>
+          <span className="font-medium">Last {value} days</span>
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent position="popper" align="end">
+        {HEALTH_WINDOWS.map((days) => (
+          <SelectItem key={days} value={String(days)}>
+            Last {days} days
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+// Sessions belong to the issuer, so an issuer attached above the project
+// counts every project that uses it.
+const SHARED_ISSUER_NOTE = "Counts cover every project using this issuer";
+
+function sharedIssuerNote(
+  issuer: AdminMcpServerHealthUserSessionIssuer,
+): string | undefined {
+  return issuer.attachmentScope === "project" ? undefined : SHARED_ISSUER_NOTE;
+}
+
+function StatCard({
+  label,
+  value,
+  badge,
+  detail,
+  note,
+  muted = false,
+}: {
+  label: string;
+  value: ReactNode;
+  badge?: ReactNode;
+  detail: string;
+  // A caveat on what the figures cover, below the detail.
+  note?: string;
+  muted?: boolean;
+}): JSX.Element {
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      className={cn(CARD, "flex flex-col gap-2 px-5 py-4")}
+    >
+      <span className={cn(MUTED, "text-xs")}>{label}</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className={cn(
+            "text-[1.375rem] font-light tabular-nums",
+            muted && MUTED,
+          )}
+        >
+          {value}
+        </span>
+        {badge}
+      </div>
+      <span className={cn(MUTED, "text-[0.8125rem]")}>{detail}</span>
+      {note && <span className={cn(MUTED, "text-xs")}>{note}</span>}
+    </div>
+  );
+}
+
+function IssuerCard({ health }: { health: AdminMcpServerHealth }): JSX.Element {
+  const issuer = health.userSessionIssuer;
+  if (issuer) {
+    const clients = issuer.remoteSessionClients.length;
+    return (
+      <StatCard
+        label="User session issuer"
+        value="Configured"
+        badge={
+          <Badge variant="outline" className={badgeTone.success}>
+            {CHALLENGE_MODE_LABELS[issuer.authnChallengeMode]}
+          </Badge>
+        }
+        detail={`${durationLabel(issuer.sessionDurationHours)} sessions · ${clients === 1 ? "1 upstream client" : `${clients} upstream clients`}`}
+      />
+    );
+  }
+  const legacy = health.legacyAuth;
+  return (
+    <StatCard
+      label="User session issuer"
+      value="None"
+      badge={
+        legacy && (
+          <Badge variant="outline" className={badgeTone.warning}>
+            legacy: {LEGACY_AUTH_LABELS[legacy] ?? legacy}
+          </Badge>
+        )
+      }
+      detail={
+        legacy
+          ? "Uses an older auth mode this page does not describe"
+          : "No user sign-in configured"
+      }
+    />
+  );
+}
+
+function PeopleCard({
+  issuer,
+}: {
+  issuer: AdminMcpServerHealthUserSessionIssuer | undefined;
+}): JSX.Element {
+  if (!issuer) {
+    return (
+      <StatCard
+        label="People signed in"
+        value="—"
+        muted
+        detail="No issuer, so no sessions to count"
+      />
+    );
+  }
+  const { sessions } = issuer;
+  return (
+    <StatCard
+      label="People signed in"
+      value={
+        <>
+          {sessions.distinctSubjectsEver}{" "}
+          <span className={cn(MUTED, "text-sm")}>ever</span>
+        </>
+      }
+      detail={`${sessions.distinctSubjectsInWindow} in window · ${sessions.live === 1 ? "1 live session" : `${sessions.live} live sessions`}`}
+      note={sharedIssuerNote(issuer)}
+    />
+  );
+}
+
+function UpstreamCard({
+  issuer,
+}: {
+  issuer: AdminMcpServerHealthUserSessionIssuer | undefined;
+}): JSX.Element {
+  const clients = issuer?.remoteSessionClients ?? [];
+  if (clients.length === 0) {
+    return (
+      <StatCard
+        label="Upstream accounts linked"
+        value="—"
+        muted
+        detail="No remote session clients"
+      />
+    );
+  }
+  const accounts = linkedAccounts(clients);
+  return (
+    <StatCard
+      label="Upstream accounts linked"
+      value={accounts.linked}
+      badge={
+        accounts.invalid > 0 && (
+          <Badge variant="outline" className={badgeTone.warning}>
+            {accounts.invalid} invalid
+          </Badge>
+        )
+      }
+      detail={
+        accounts.reauthorizations === 1
+          ? "1 reauthorization"
+          : `${accounts.reauthorizations} reauthorizations`
+      }
+    />
+  );
+}
+
+function ToolCallsCard({
+  toolCalls: state,
+}: {
+  toolCalls: ToolCallsState;
+}): JSX.Element {
+  if (state.status === "loading") {
+    return <StatCard label="Tool calls" value="—" muted detail="Loading..." />;
+  }
+  if (state.status === "error") {
+    return (
+      <StatCard
+        label="Tool calls"
+        value="Unavailable"
+        muted
+        detail="Tool call telemetry did not load"
+      />
+    );
+  }
+  const { toolCalls } = state;
+  if (toolCalls.type === "logging:disabled" || !toolCalls.outcomes) {
+    return (
+      <StatCard
+        label="Tool calls"
+        value="Unknown"
+        badge={
+          <Badge variant="outline" className={badgeTone.neutral}>
+            logging off
+          </Badge>
+        }
+        detail="Not zero: nothing is recorded"
+      />
+    );
+  }
+  const totals = toolCallTotals(toolCalls.outcomes);
+  return (
+    <StatCard
+      label="Tool calls"
+      value={totals.total}
+      badge={
+        totals.total > 0 && (
+          <Badge
+            variant="outline"
+            className={
+              totals.failed > 0 ? badgeTone.warning : badgeTone.success
+            }
+          >
+            {fmtShare(totals.failedShare)} failed
+          </Badge>
+        )
+      }
+      detail={`${totals.failed} failed · ${totals.unauthorized} unauthorized`}
+    />
+  );
+}
+
+function rangeLabel({ from, to }: { from: Date; to: Date }): string {
+  return `${fmtBucketDay(from)} – ${fmtDate(to)}`;
+}
+
+// A stand-in column, never shown, that gives an empty plot the height of a
+// full one.
+const SPACER_POINT: AdminMcpServerToolCallBucket = {
+  bucketStart: new Date(0),
+  total: 0,
+  failed: 0,
+};
+
+function ToolCallsChart({
+  state,
+  window,
+  range,
+  prompt,
+}: {
+  state: ToolCallsState;
+  window: HealthWindow;
+  range: { from: Date; to: Date };
+  prompt: { serverName: string; serverId: string; projectName: string };
+}): JSX.Element {
+  const toolCalls = state.status === "ready" ? state.toolCalls : undefined;
+  const points = toolCalls?.daily ?? [];
+  // Before the answer lands, the window says which bucket it will use.
+  const weekly = toolCalls
+    ? (toolCalls.bucketSeconds ?? 86_400) >= 7 * 86_400
+    : window === 90;
+  const perSquare = callsPerSquare(points);
+  const total = points.reduce((sum, p) => sum + p.total, 0);
+  const failed = points.reduce((sum, p) => sum + p.failed, 0);
+  const share = total === 0 ? 0 : failed / total;
+  const worst = worstBucket(points);
+  // Past fifteen columns every label will not fit, so every other one shows.
+  const labelEvery = points.length > 15 ? 2 : 1;
+  const unit = weekly ? "week" : "day";
+
+  let summary = worst
+    ? `${failed} of ${total} calls failed; the worst ${unit} was ${bucketName(worst, weekly)} with ${worst.failed} of ${worst.total}.`
+    : `${total} calls, none failed.`;
+  let message: ReactNode;
+  if (state.status === "loading") {
+    summary = "Loading.";
+    message = "Loading tool calls...";
+  } else if (state.status === "error") {
+    summary = "Tool calls couldn't be loaded.";
+    message = <LoadFailed what="Tool calls" onRetry={state.retry} />;
+  } else if (total === 0) {
+    message = "No calls reached the server directly in this window.";
+  }
+
+  return (
+    <section className={CARD} aria-labelledby="tool-calls-chart">
+      <div className={CARD_HEAD}>
+        <h2 id="tool-calls-chart" className={CARD_TITLE}>
+          Tool calls per {unit}
+        </h2>
+        <span className={cn(MUTED, "text-xs")}>
+          {rangeLabel(range)}
+          {toolCalls?.watermark &&
+            ` · data as of ${fmtDateTime(toolCalls.watermark)}`}
+        </span>
+      </div>
+      <div className="flex flex-col gap-5 px-5 pt-4 pb-7">
+        <div
+          className={cn(
+            MUTED,
+            "flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.8125rem]",
+          )}
+        >
+          <span>Calls reaching the server</span>
+          <span className="inline-flex items-center gap-1.5">
+            <Square ok />
+            OK{" "}
+            <span className="text-foreground tabular-nums">
+              {toolCalls ? total - failed : "—"}
+            </span>
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Square />
+            Failed{" "}
+            <span className="text-foreground tabular-nums">
+              {toolCalls ? failed : "—"}
+            </span>
+            {toolCalls && ` · ${fmtShare(share)}`}
+          </span>
+          <span>
+            Each square is {perSquare === 1 ? "1 call" : `${perSquare} calls`}
+          </span>
+        </div>
+        {/* One plot for every state, so the page below it never moves:
+            columns are a fixed height whatever the busiest bucket holds, and
+            an empty window lays its message over the same empty plot. */}
+        <div className="relative mx-6">
+          <div
+            role="img"
+            aria-label={`Tool calls per ${unit}, ${rangeLabel(range)}. ${summary}`}
+            className={cn(
+              PLOT,
+              "flex items-end justify-between gap-1 overflow-x-auto px-6 pt-8 pb-4",
+            )}
+          >
+            {points.map((point, index) => (
+              <BucketColumn
+                key={point.bucketStart.toISOString()}
+                point={point}
+                perSquare={perSquare}
+                label={index % labelEvery === 0}
+                weekly={weekly}
+                spike={point === worst}
+              />
+            ))}
+            {points.length === 0 && (
+              <div aria-hidden="true" className="invisible">
+                <BucketColumn
+                  point={SPACER_POINT}
+                  perSquare={1}
+                  label
+                  weekly={false}
+                  spike={false}
+                />
+              </div>
+            )}
+          </div>
+          {/* Beside the plot rather than in it: an image's children are hidden
+            from assistive technology, and the retry has to be reachable. */}
+          {message && (
+            <div
+              className={cn(
+                MUTED,
+                "absolute inset-0 flex items-center justify-center text-sm",
+              )}
+            >
+              <div className="bg-card rounded-md px-2 py-1">{message}</div>
+            </div>
+          )}
+        </div>
+      </div>
+      <p className={cn(MUTED, "border-t px-5 pt-2.5 pb-3.5 text-xs")}>
+        The chart counts calls that reach the server directly. The Tool calls
+        total above also counts calls reported by client hooks, so it can be
+        higher. Failed means status 400 or above. A single failed call still
+        fills a red square. Tool errors returned inside a 200 response count as
+        OK.
+      </p>
+      <PromptBlock
+        prompt={platformMcpPrompt({
+          ...prompt,
+          range: rangeLabel(range),
+          worst: worst && bucketName(worst, weekly),
+        })}
+      />
+    </section>
+  );
+}
+
+function LoadFailed({
+  what,
+  onRetry,
+}: {
+  what: string;
+  onRetry: () => void;
+}): JSX.Element {
+  return (
+    <span className="flex items-center gap-3 text-sm">
+      <span className={MUTED}>{what} couldn't be loaded.</span>
+      <Button variant="outline" size="xs" onClick={onRetry}>
+        Try again
+      </Button>
+    </span>
+  );
+}
+
+function Square({ ok = false }: { ok?: boolean }): JSX.Element {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "inline-block size-[9px] rounded-[2px]",
+        ok ? "bg-[#8cc084]" : "bg-[#b8332b]",
+      )}
+    />
+  );
+}
+
+// Weekly buckets are aligned to the epoch, so they start on a Thursday, not a
+// Monday: the start date is named rather than implied.
+function bucketName(
+  point: AdminMcpServerToolCallBucket,
+  weekly: boolean,
+): string {
+  const day = fmtBucketDay(point.bucketStart);
+  return weekly ? `the week of ${day}` : day;
+}
+
+function BucketColumn({
+  point,
+  perSquare,
+  label,
+  weekly,
+  spike,
+}: {
+  point: AdminMcpServerToolCallBucket;
+  perSquare: number;
+  label: boolean;
+  weekly: boolean;
+  spike: boolean;
+}): JSX.Element {
+  const squares = bucketSquares(point, perSquare);
+  const day = fmtBucketDay(point.bucketStart);
+  const share = point.total === 0 ? 0 : point.failed / point.total;
+  const name = weekly ? `Week of ${day}` : day;
+  return (
+    <div
+      title={`${name}: ${point.total - point.failed} OK, ${point.failed} failed (${fmtShare(share)})`}
+      // As wide as its squares: the label overhangs both sides, so a month of
+      // columns fits and only the spacing between them changes.
+      className="relative flex w-5 shrink-0 flex-col items-center gap-1.5"
+    >
+      {spike && (
+        <span
+          className={cn(
+            MUTED,
+            "bg-card absolute -top-[18px] px-0.5 text-[0.6875rem] whitespace-nowrap",
+          )}
+        >
+          {point.failed} of {point.total}
+        </span>
+      )}
+      {/* wrap-reverse fills from the bottom, so the red squares come first. */}
+      {/* Tall enough for the most squares a column can hold (twelve rows),
+          filled from the bottom. */}
+      <div className="flex h-[130px] w-5 flex-wrap-reverse content-start gap-0.5">
+        {Array.from({ length: squares.failed }, (_, k) => (
+          <Square key={`f${k}`} />
+        ))}
+        {Array.from({ length: squares.ok }, (_, k) => (
+          <Square key={`o${k}`} ok />
+        ))}
+      </div>
+      <span className="flex w-5 justify-center">
+        <span
+          className={cn(
+            MUTED,
+            // Backed, so the dot grid does not run through the date.
+            "bg-card text-[0.6875rem] whitespace-nowrap tabular-nums",
+            !label && "invisible",
+          )}
+        >
+          {day}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function PromptBlock({ prompt }: { prompt: string }): JSX.Element {
+  // The prompt copied, not a flag, for the reason CopyValue gives: a new
+  // window swaps the prompt under a mounted confirmation.
+  const [copied, setCopied] = useState<string>();
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useOnUnmount(() => clearTimeout(timer.current));
+
+  return (
+    <div className="bg-muted/30 flex flex-col gap-2.5 border-t px-5 pt-4 pb-4.5">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium">
+          Investigate with the Platform MCP
+        </span>
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={() => {
+            if (!navigator.clipboard?.writeText) return;
+            void navigator.clipboard.writeText(prompt).then(
+              () => {
+                setCopied(prompt);
+                clearTimeout(timer.current);
+                timer.current = setTimeout(
+                  () => setCopied(undefined),
+                  COPY_CONFIRM_MS,
+                );
+              },
+              () => undefined,
+            );
+          }}
+        >
+          {copied === prompt ? <CheckIcon /> : <CopyIcon />}
+          {copied === prompt ? "Copied" : "Copy prompt"}
+        </Button>
+      </div>
+      <p
+        className={cn(
+          MONO,
+          "bg-card rounded-md border px-3.5 py-3 leading-relaxed whitespace-pre-wrap",
+        )}
+      >
+        {prompt}
+      </p>
+    </div>
+  );
+}
+
+function LoggingOff({ idOrSlug }: { idOrSlug: string }): JSX.Element {
+  return (
+    <section className={CARD} aria-labelledby="tool-call-outcomes">
+      <div className={CARD_HEAD}>
+        <h2 id="tool-call-outcomes" className={CARD_TITLE}>
+          Tool call outcomes
+        </h2>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-6 px-5 py-7">
+        <div className="flex max-w-3xl flex-col gap-1.5">
+          <span className="text-[0.9375rem] font-medium">
+            Logging is off for this organization
+          </span>
+          <span className={cn(MUTED, "text-sm leading-normal")}>
+            Tool calls are not recorded while the logs feature is off, so this
+            server's outcomes are unknown. Treat it as unverified, not healthy.
+            Turning logging on only records calls from that point.
+          </span>
+        </div>
+        <Button asChild size="sm">
+          <Link to="/organizations/$idOrSlug/features" params={{ idOrSlug }}>
+            Review features
+          </Link>
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function KeyValues({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}): JSX.Element {
+  return (
+    <dl
+      className={cn(
+        "grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm",
+        className,
+      )}
+    >
+      {children}
+    </dl>
+  );
+}
+
+function KeyValue({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <div className="contents">
+      <dt className={MUTED}>{label}</dt>
+      <dd className="min-w-0 break-words">{children}</dd>
+    </div>
+  );
+}
+
+function None({ children = "None" }: { children?: string }): JSX.Element {
+  return <span className={MUTED}>{children}</span>;
+}
+
+function IssuerPanel({
+  issuer,
+  idOrSlug,
+  project,
+  window,
+}: {
+  issuer: AdminMcpServerHealthUserSessionIssuer;
+  idOrSlug: string;
+  project: string;
+  window: HealthWindow;
+}): JSX.Element {
+  const trusted = issuer.trustedRemoteSession;
+  const others = issuer.otherServersUsingIssuer;
+  return (
+    <section className={CARD} aria-labelledby="user-session-issuer">
+      <div className={CARD_HEAD}>
+        <h2 id="user-session-issuer" className={CARD_TITLE}>
+          User session issuer
+        </h2>
+        <span className={cn(MONO, MUTED)}>{issuer.slug}</span>
+      </div>
+      <KeyValues className="px-5 py-4">
+        <KeyValue label="Classification">
+          {issuer.classification === "project_default_idp"
+            ? "Project default"
+            : "Custom"}
+        </KeyValue>
+        <KeyValue label="Challenge mode">
+          {CHALLENGE_MODE_LABELS[issuer.authnChallengeMode]}
+        </KeyValue>
+        <KeyValue label="Session duration">
+          {durationLabel(issuer.sessionDurationHours)}
+        </KeyValue>
+        <KeyValue label="Scope">
+          {SCOPE_LABELS[issuer.attachmentScope]}
+        </KeyValue>
+        <KeyValue label="CIMD admission">
+          {admissionLabel(issuer.clientIdMetadataAdmissionMode)}
+        </KeyValue>
+        <KeyValue label="Authentication host">
+          {issuer.useAuthenticationHost ? "Used" : "Not used"}
+        </KeyValue>
+        <KeyValue label="Trusted remote session">
+          {trusted ? (
+            <span className={MONO}>
+              issuer {trusted.issuerId} · client {trusted.clientId}
+            </span>
+          ) : (
+            <None />
+          )}
+        </KeyValue>
+        <KeyValue label="Other servers on issuer">
+          {others.length > 0 ? (
+            <span className="flex flex-wrap gap-x-3">
+              {others.map((other) => (
+                <Link
+                  key={other.id}
+                  to={ROUTE}
+                  params={{ idOrSlug, serverId: other.id }}
+                  search={{ project, window }}
+                  className="underline-offset-4 hover:underline"
+                >
+                  {other.name}
+                </Link>
+              ))}
+            </span>
+          ) : (
+            <None />
+          )}
+        </KeyValue>
+        <KeyValue label="First sign-in">
+          {fmtDate(issuer.sessions.firstIssuedAt)}
+        </KeyValue>
+        <KeyValue label="Last token issued">
+          {issuer.sessions.lastIssuedAt ? (
+            <>
+              {fmtDateTime(issuer.sessions.lastIssuedAt)}{" "}
+              <span className={cn(MUTED, "text-xs")}>(includes refreshes)</span>
+            </>
+          ) : (
+            <None>Never</None>
+          )}
+        </KeyValue>
+      </KeyValues>
+      {sharedIssuerNote(issuer) && (
+        <p className={cn(MUTED, "border-t px-5 py-3 text-xs")}>
+          {sharedIssuerNote(issuer)}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function LogLink({
+  href,
+  title,
+  description,
+  query,
+}: {
+  href: string;
+  title: string;
+  description: string;
+  query: string;
+}): JSX.Element {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="hover:bg-muted/50 flex items-center gap-4 border-t px-5 py-3.5 first-of-type:border-t-0"
+    >
+      <span className="flex min-w-0 grow flex-col gap-1">
+        <span className="text-sm font-medium">{title}</span>
+        <span className={cn(MUTED, "text-[0.8125rem]")}>{description}</span>
+        <span className={cn(MONO, MUTED, "truncate")}>Datadog · {query}</span>
+      </span>
+      <ExternalLinkIcon
+        aria-hidden="true"
+        className={cn(MUTED, "size-4 shrink-0")}
+      />
+      <span className="sr-only">{LEAVES_THE_APP}</span>
+    </a>
+  );
+}
+
+function LogsCard({
+  urlSlug,
+  issuers,
+  range,
+  className,
+}: {
+  // Absent when the server has no slug: then there is no endpoint to tail,
+  // and the login logs are found by issuer alone.
+  urlSlug: string | undefined;
+  issuers: string[];
+  range: { from: Date; to: Date };
+  className?: string;
+}): JSX.Element {
+  const loginQuery = loginChallengeQuery(urlSlug, issuers);
+  return (
+    <section className={cn(CARD, className)} aria-labelledby="logs">
+      <div className={CARD_HEAD}>
+        <h2 id="logs" className={CARD_TITLE}>
+          Logs
+        </h2>
+        <span className={cn(MUTED, "text-xs")}>
+          Opens filtered to this server
+        </span>
+      </div>
+      <div>
+        {urlSlug && (
+          <LogLink
+            href={toolCallTailUrl(urlSlug)}
+            title="Tool call tail"
+            description="Datadog live tail of every request to this server's MCP endpoint. Works with logging off."
+            query={toolCallTailQuery(urlSlug)}
+          />
+        )}
+        {loginQuery && (
+          <LogLink
+            href={loginChallengeUrl(loginQuery, range)}
+            title="Login challenge logs"
+            description={
+              issuers.length > 0
+                ? "OAuth flow, issuer gate and token exchange logs for this server's sign-ins. The issuer terms also match other servers that sign in through the same upstream issuer."
+                : "OAuth flow, issuer gate and token exchange logs for this server's sign-ins"
+            }
+            query={loginQuery}
+          />
+        )}
+        {!urlSlug && !loginQuery && (
+          <p className={cn(MUTED, "px-5 py-3.5 text-sm")}>
+            This server has no URL slug or upstream issuer to filter logs by.
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+const REGISTRATION_LABELS: Record<string, string> = {
+  cimd: "CIMD",
+  dcr: "DCR",
+  static: "Static",
+};
+
+const PKCE_TONE: Record<string, string> = {
+  supported: badgeTone.success,
+  unsupported: badgeTone.warning,
+  none: badgeTone.warning,
+  uncaptured: badgeTone.neutral,
+};
+
+function ErrorAt({ at }: { at: Date | undefined }): JSX.Element {
+  if (!at) return <None />;
+  return (
+    <Badge variant="outline" className={badgeTone.warning}>
+      {fmtDateTime(at)}
+    </Badge>
+  );
+}
+
+function ColumnTitle({ children }: { children: ReactNode }): JSX.Element {
+  return (
+    <span
+      className={cn(MUTED, "text-xs font-semibold tracking-wide uppercase")}
+    >
+      {children}
+    </span>
+  );
+}
+
+const CLIENT_KV = "grid-cols-[minmax(0,8rem)_minmax(0,1fr)] text-[0.8125rem]";
+
+function RemoteClient({
+  client,
+}: {
+  client: AdminMcpServerHealthRemoteSessionClient;
+}): JSX.Element {
+  const { issuer, sessions } = client;
+  const statuses = Object.entries(sessions.validationStatusCounts);
+  return (
+    <li className="grid border-t first:border-t-0 lg:grid-cols-3">
+      <div className="flex flex-col gap-2.5 px-5 py-4 lg:border-r">
+        <div className="flex items-center gap-2">
+          <ColumnTitle>Client</ColumnTitle>
+          <CopyValue label="remote session client id" value={client.id} />
+        </div>
+        <KeyValues className={CLIENT_KV}>
+          <KeyValue label="Registration">
+            {REGISTRATION_LABELS[client.registration]}
+          </KeyValue>
+          <KeyValue label="Auth method">
+            {client.tokenEndpointAuthMethod ? (
+              <span className={MONO}>{client.tokenEndpointAuthMethod}</span>
+            ) : (
+              <None />
+            )}
+          </KeyValue>
+          <KeyValue label="Scopes">
+            {client.scope.length > 0 ? (
+              <span className={MONO}>{client.scope.join(" ")}</span>
+            ) : (
+              <None />
+            )}
+          </KeyValue>
+          <KeyValue label="Grant types">
+            {client.grantTypes.length > 0 ? (
+              <span className={MONO}>{client.grantTypes.join(" ")}</span>
+            ) : (
+              <None />
+            )}
+          </KeyValue>
+          <KeyValue label="Scope">
+            {SCOPE_LABELS[client.attachmentScope]}
+          </KeyValue>
+          <KeyValue label="Upstream rejected">
+            {client.upstreamRejectedAt ? (
+              <ErrorAt at={client.upstreamRejectedAt} />
+            ) : (
+              <None>Never</None>
+            )}
+          </KeyValue>
+        </KeyValues>
+      </div>
+      <div className="flex flex-col gap-2.5 border-t px-5 py-4 lg:border-t-0 lg:border-r">
+        <div className="flex flex-wrap items-center gap-2">
+          <ArrowRightIcon
+            aria-hidden="true"
+            className={cn(MUTED, "size-3.5")}
+          />
+          <ColumnTitle>Issuer</ColumnTitle>
+          <span className="text-sm font-medium">
+            {issuer.name ?? issuer.slug}
+          </span>
+          <Badge variant="outline" className={badgeTone.neutral}>
+            {SCOPE_LABELS[issuer.attachmentScope]}
+          </Badge>
+          <Badge variant="outline" className={badgeTone.neutral}>
+            {issuer.networking}
+          </Badge>
+        </div>
+        <KeyValues className={CLIENT_KV}>
+          <KeyValue label="Scope">
+            {issuer.attachmentScope === "global" ? (
+              <>
+                Platform{" "}
+                <span className={cn(MUTED, "text-xs")}>
+                  (shared by every organization)
+                </span>
+              </>
+            ) : (
+              SCOPE_LABELS[issuer.attachmentScope]
+            )}
+          </KeyValue>
+          <KeyValue label="Issuer URL">
+            <span className={MONO}>{issuer.issuer}</span>
+          </KeyValue>
+          <KeyValue label="OIDC">{issuer.oidc ? "Yes" : "No"}</KeyValue>
+          <KeyValue label="Passthrough">
+            {issuer.passthrough ? "Yes" : "No"}
+          </KeyValue>
+          <KeyValue label="PKCE">
+            <Badge variant="outline" className={PKCE_TONE[issuer.pkce]}>
+              {issuer.pkce}
+            </Badge>
+          </KeyValue>
+          <KeyValue label="CIMD">
+            {issuer.cimdSupported ? "Supported" : "Not supported"}
+          </KeyValue>
+          <KeyValue label="Scope override">
+            {issuer.scopeOverride && issuer.scopeOverride.length > 0 ? (
+              <span className={MONO}>{issuer.scopeOverride.join(" ")}</span>
+            ) : (
+              <None />
+            )}
+          </KeyValue>
+          <KeyValue label="Metadata fetched">
+            {issuer.metadataFetchedAt ? (
+              fmtDateTime(issuer.metadataFetchedAt)
+            ) : (
+              <None>Never</None>
+            )}
+          </KeyValue>
+          <KeyValue label="Metadata error">
+            <ErrorAt at={issuer.metadataLastErrorAt} />
+          </KeyValue>
+          <KeyValue label="JWKS error">
+            <ErrorAt at={issuer.jwksLastErrorAt} />
+          </KeyValue>
+        </KeyValues>
+      </div>
+      <div className="flex flex-col gap-2.5 border-t px-5 py-4 lg:border-t-0">
+        <div className="flex flex-col gap-1">
+          <ColumnTitle>Linked accounts</ColumnTitle>
+          {/* Stats are keyed on the client, and a client can serve more than
+              one issuer, so these are never this issuer's alone. */}
+          <span className={cn(MUTED, "text-xs")}>
+            Counted for this client across every issuer it serves.
+          </span>
+        </div>
+        <KeyValues className={CLIENT_KV}>
+          <KeyValue label="Linked people">{sessions.linkedSubjects}</KeyValue>
+          <KeyValue label="Reauthorizations">
+            {sessions.reauthorizations}
+          </KeyValue>
+          <KeyValue label="First linked">
+            {fmtDate(sessions.firstLinkedAt)}
+          </KeyValue>
+          <KeyValue label="Validation">
+            {statuses.length > 0 ? (
+              <span className="flex flex-wrap gap-1.5">
+                {statuses.map(([status, count]) => (
+                  <Badge
+                    key={status}
+                    variant="outline"
+                    className={
+                      status === "valid" ? badgeTone.success : badgeTone.warning
+                    }
+                  >
+                    {count} {humanize(status).toLowerCase()}
+                  </Badge>
+                ))}
+              </span>
+            ) : (
+              <None>Not validated yet</None>
+            )}
+          </KeyValue>
+        </KeyValues>
+      </div>
+    </li>
+  );
+}
+
+function RemoteClients({
+  clients,
+}: {
+  clients: AdminMcpServerHealthRemoteSessionClient[];
+}): JSX.Element {
+  return (
+    <section className={CARD} aria-labelledby="remote-session-clients">
+      <div className={CARD_HEAD}>
+        <h2 id="remote-session-clients" className={CARD_TITLE}>
+          Remote session clients
+        </h2>
+        <span className={cn(MUTED, "text-xs")}>
+          Each client and the upstream issuer it signs in to
+        </span>
+      </div>
+      <ul>
+        {clients.map((client) => (
+          <RemoteClient key={client.id} client={client} />
+        ))}
+      </ul>
+    </section>
+  );
+}

@@ -25,7 +25,7 @@ type AssistantIdentityManagement interface {
 
 type UpgradeAssistantIdentityInput struct {
 	ProjectID   string `json:"project_id" jsonschema:"exact project UUID owning the assistant; never inferred"`
-	AssistantID string `json:"assistant_id" jsonschema:"exact UUID of the legacy assistant to upgrade"`
+	AssistantID string `json:"assistant_id" jsonschema:"exact UUID of the assistant without configured workload identity (NEVER_CONFIGURED), or an ACTIVE assistant for a safe repeat"`
 	Confirmed   bool   `json:"confirmed" jsonschema:"true only after the user explicitly confirms upgrading this exact assistant in this exact project"`
 }
 
@@ -90,7 +90,7 @@ func registerAssistantIdentityTool(reg *Registrar, service *assistantIdentitySer
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Name:        upgradeAssistantIdentityToolName,
 		Title:       "Upgrade Assistant Workload Identity",
-		Description: "Explicitly upgrade one legacy assistant in an exact project to a dedicated agent and stable workload identity bindings. Ask the user to confirm the exact project and assistant before setting confirmed: true. Requires organization administrator access and the same project:write and ordinary actor authorization as the dashboard. Repeating an already active upgrade is safe; tombstoned identities cannot be restored. Returns only identity configuration state, never credentials, instructions, bindings, or policy. ACTIVE does not prove execution permission or runtime readiness.",
+		Description: "Explicitly configure workload identity for one assistant without configured workload identity (NEVER_CONFIGURED) in an exact project, creating a dedicated agent and stable workload identity bindings. Ask the user to confirm the exact project and assistant before setting confirmed: true. Requires organization administrator access and the same project:write and ordinary actor authorization as the dashboard. Repeating an already active upgrade is safe; tombstoned identities cannot be restored. Returns only identity configuration state, never credentials, instructions, bindings, or policy. ACTIVE does not prove execution permission or runtime readiness.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: nil, ReadOnlyHint: false, Title: ""},
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: nil}, func(ctx context.Context, _ *mcp.CallToolRequest, input UpgradeAssistantIdentityInput) (*mcp.CallToolResult, UpgradeAssistantIdentityOutput, error) {
 		return principalToolCall(ctx, assistantIdentityToolResult, func(principal Principal) (UpgradeAssistantIdentityOutput, error) {

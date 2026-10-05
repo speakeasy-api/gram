@@ -54,7 +54,7 @@ export type AssistantsUpgradeIdentityMutationError =
  * upgradeAssistantIdentity assistants
  *
  * @remarks
- * Explicitly upgrade a legacy assistant to a dedicated agent and stable trigger workload identities. Existing assistants are never upgraded implicitly.
+ * Explicitly configure workload identity for an assistant without configured workload identity (NEVER_CONFIGURED), creating a dedicated agent and stable trigger workload identities. Existing assistants are never upgraded implicitly. Repeating an already ACTIVE upgrade is safe; tombstoned identities cannot be restored.
  */
 export function useAssistantsUpgradeIdentityMutation(
   options?: MutationHookOptions<

@@ -12543,7 +12543,7 @@ paths:
       x-speakeasy-name-override: update
   /rpc/assistants.upgradeIdentity:
     post:
-      description: Explicitly upgrade a legacy assistant to a dedicated agent and stable trigger workload identities. Existing assistants are never upgraded implicitly.
+      description: Explicitly configure workload identity for an assistant without configured workload identity (NEVER_CONFIGURED), creating a dedicated agent and stable trigger workload identities. Existing assistants are never upgraded implicitly. Repeating an already ACTIVE upgrade is safe; tombstoned identities cannot be restored.
       operationId: upgradeAssistantIdentity
       parameters:
         - allowEmptyValue: true
@@ -85679,6 +85679,10 @@ components:
     InfoResponseBody:
       type: object
       properties:
+        active_organization_dashboard_url:
+          type: string
+          description: Dashboard base URL of the platform host the active organization lives on. Set only for an ordinary session whose request arrived on a different platform host; the dashboard moves there.
+          format: uri
         active_organization_id:
           type: string
         gram_account_type:
