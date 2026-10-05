@@ -89,11 +89,31 @@ var remoteSetHashEmpty = func() string {
 	return base64.RawURLEncoding.EncodeToString(h[:])
 }()
 
+// ConsentPath is the path the consent page's forms post to.
+func (d consentTemplateData) ConsentPath() string {
+	if d.SharedConsentPath != "" {
+		return d.SharedConsentPath
+	}
+	return "/" + d.MCPRouteBase + "/" + d.MCPSlug + "/connect"
+}
+
+// consentFormMaxBytes caps the consent form body to defend against memory
+// exhaustion (gosec G120). The tool picker can post consentToolNameLimit names
+// of up to consentInventoryMaxNameBytes bytes each, inflated up to 3x by URL
+// encoding; 1 MiB fits that worst case with room for the fixed fields while
+// staying bounded.
+const consentFormMaxBytes = 1 << 20 // 1 MiB
+
 // consentTemplateData is the field set the consent template renders against.
 type consentTemplateData struct {
-	ClientName         string
-	MCPSlug            string
-	MCPRouteBase       string
+	ClientName   string
+	MCPSlug      string
+	MCPRouteBase string
+	// SharedConsentPath is the consent page path on the issuer's shared
+	// authorization server when it is serving the request. Empty when the
+	// endpoint's own authorization server is, whose consent page lives under
+	// MCPRouteBase and MCPSlug.
+	SharedConsentPath  string
 	State              string
 	CSRFToken          string
 	SubjectDisplay     string
@@ -650,6 +670,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ClientName:              clientName,
 		MCPSlug:                 endpoint.Slug,
 		MCPRouteBase:            endpoint.RouteBase,
+		SharedConsentPath:       sharedConsentPath(endpoint),
 		State:                   stateID,
 		CSRFToken:               challengeState.CSRFToken,
 		SubjectDisplay:          subjectDisplay,
@@ -666,7 +687,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		AutoRefreshOn:           autoRefreshOn,
 		AutoRefreshHasSessions:  autoRefreshHasSessions,
 		ShowToolsIsland:         showToolsIsland,
-		ConsentToolsURL:         fmt.Sprintf("/%s/%s/connect/mcp", endpoint.RouteBase, endpoint.Slug),
+		ConsentToolsURL:         endpoint.consentPath() + "/mcp",
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,
 		ValidationDeadlineMS:    validationDeadlineMS,
@@ -689,12 +710,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 
-	// Cap form body to defend against memory exhaustion (gosec G120). The
-	// tool picker can post consentToolNameLimit names of up to
-	// consentInventoryMaxNameBytes bytes each, inflated up to 3x by URL
-	// encoding; 1 MiB fits that worst case with room for the fixed fields
-	// while staying bounded.
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	r.Body = http.MaxBytesReader(w, r.Body, consentFormMaxBytes)
 	if err := r.ParseForm(); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to parse form").LogError(ctx, s.logger)
 	}
@@ -1619,6 +1635,16 @@ func selectedSessionDuration(options []sessionDurationOption) string {
 		if o.Selected {
 			return o.ShortLabel
 		}
+	}
+	return ""
+}
+
+// sharedConsentPath is the consent page path on the shared authorization
+// server serving the endpoint's OAuth request, or "" when its own
+// authorization server is serving it.
+func sharedConsentPath(endpoint *ResolvedMcpEndpoint) string {
+	if shared := endpoint.servingSharedAuthorizationServer(); shared != nil {
+		return shared.consentPath()
 	}
 	return ""
 }

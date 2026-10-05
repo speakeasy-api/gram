@@ -127,6 +127,14 @@ const (
 
 	// ParamScope requests a space-delimited scope set (RFC 6749 §3.3).
 	ParamScope = "scope"
+
+	// ParamCode carries the authorization code of an authorization_code grant
+	// (RFC 6749 §4.1.3).
+	ParamCode = "code"
+
+	// ParamRefreshToken carries the refresh token of a refresh_token grant
+	// (RFC 6749 §6).
+	ParamRefreshToken = "refresh_token"
 )
 
 // Error carries an OAuth wire error: the shared shape used across the

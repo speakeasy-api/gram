@@ -864,6 +864,15 @@ WHERE id = @id
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)
 VALUES (@organization_id, @stripe_customer_id);
 
+-- name: SetUserSessionIssuerAuthorizationServerModeFixture :execrows
+-- Test-only fixture that switches an issuer's authorization server mode and
+-- pinned issuer URL, ahead of a management API that sets them.
+UPDATE user_session_issuers
+SET authorization_server_mode = @authorization_server_mode,
+    pinned_issuer_url = sqlc.narg('pinned_issuer_url')
+WHERE id = @id
+  AND deleted IS FALSE;
+
 -- name: SetMCPServerNetworkAccessModeFixture :execrows
 -- Test-only fixture for building a pre-existing non-public row so update tests
 -- can prove omitted values fail closed while explicit public_only recovers.

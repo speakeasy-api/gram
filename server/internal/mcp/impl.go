@@ -133,8 +133,12 @@ type Service struct {
 	// authenticationHostBaseURL is the authentication host's base URL, empty
 	// when none is configured. Set by AttachAuthenticationHost.
 	authenticationHostBaseURL string
-	siteURL                   *url.URL
-	posthog                   *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	// platformHosts maps the deployment's extra first-party hosts, by
+	// canonical host, to the base URL rendered for requests on them. Set by
+	// SetPlatformHosts; nil means the server URL is the only platform host.
+	platformHosts map[string]string
+	siteURL       *url.URL
+	posthog       *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	// features resolves flag-controlled behavior (the managed assistant's
 	// Platform MCP toolset variant). Wired from the environment-aware
 	// provider: the posthog client in production, the CSV-backed in-memory
@@ -475,6 +479,7 @@ func NewService(
 		serverURL:                 serverURL,
 		callbackOrigins:           remotesessions.CallbackOrigins{Outbound: nil, Registration: nil},
 		authenticationHostBaseURL: "",
+		platformHosts:             nil,
 		siteURL:                   siteURL,
 		posthog:                   posthog,
 		features:                  features,
@@ -731,6 +736,8 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/token", oops.ErrHandle(service.logger, service.HandleToken).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/revoke", oops.ErrHandle(service.logger, service.HandleRevoke).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
+
+	attachSharedAuthorizationServers(mux, service)
 }
 
 // HandleRemoteLoginCallback is the chi handler at

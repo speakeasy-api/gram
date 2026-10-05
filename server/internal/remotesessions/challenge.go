@@ -92,6 +92,11 @@ type ParentChallenge struct {
 	McpServerID         uuid.NullUUID
 	MetaMcpServerID     uuid.NullUUID
 	FinalRedirectURI    string
+	// ConsentURL is the consent page the callback returns to when it cannot
+	// be rebuilt from RouteBase and McpSlug, as on a shared authorization
+	// server. Unlike FinalRedirectURI it changes only where the browser goes:
+	// the login keeps its consent parent and that parent's browser binding.
+	ConsentURL string
 	// Resource is the RFC 8707 resource indicator sent on the authorize
 	// redirect and code exchange. Empty omits the parameter.
 	Resource string
@@ -143,6 +148,10 @@ type RemoteLoginState struct {
 	// own their own popup-close surface (validated against an allow-list
 	// before it lands here).
 	FinalRedirectURI string `json:"final_redirect_uri,omitempty"`
+	// ConsentURL overrides only the consent page the callback returns to,
+	// for a consent parent whose page is not at /<RouteBase>/{slug}/connect.
+	// Empty for every other login, including states minted before it existed.
+	ConsentURL string `json:"consent_url,omitempty"`
 	// AutoRefresh is the subject's consent-screen auto-refresh choice. Nil
 	// (including in-flight states minted before this field) defers to the
 	// client capability's default at persist time.
@@ -179,6 +188,7 @@ func (s RemoteLoginState) parent() ParentChallenge {
 		McpSlug:             s.McpSlug,
 		RouteBase:           s.RouteBase,
 		FinalRedirectURI:    s.FinalRedirectURI,
+		ConsentURL:          s.ConsentURL,
 		Resource:            s.Resource,
 		McpServerID:         s.McpServerID,
 		MetaMcpServerID:     s.MetaMcpServerID,
@@ -961,6 +971,7 @@ func (m *ChallengeManager) mintAuthorization(
 		McpServerID:           parent.McpServerID,
 		MetaMcpServerID:       parent.MetaMcpServerID,
 		FinalRedirectURI:      parent.FinalRedirectURI,
+		ConsentURL:            parent.ConsentURL,
 		AutoRefresh:           parent.AutoRefresh,
 		Authority:             parent.Authority,
 		Scopes:                scopes,
@@ -1377,6 +1388,9 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		}
 	}
 	redirect := fmt.Sprintf("%s/%s/%s/connect?state=%s", strings.TrimRight(redirectBaseURL, "/"), routeBase, mcpSlug, url.QueryEscape(state.ParentChallengeID))
+	if state.ConsentURL != "" {
+		redirect = state.ConsentURL
+	}
 	if state.FinalRedirectURI != "" {
 		redirect = state.FinalRedirectURI
 	}

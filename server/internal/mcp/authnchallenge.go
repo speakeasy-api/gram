@@ -114,6 +114,14 @@ type EndpointRef struct {
 	// backward compatibility with states minted before this field was
 	// added.
 	RouteBase string `json:"route_base,omitempty"`
+
+	// SharedAuthorizationServer marks a challenge or code minted by the
+	// issuer's shared authorization server. BaseURL and Authority then
+	// describe where the MCP resource lives rather than the request that
+	// minted it, and the flow continues only on that shared authorization
+	// server. False for every state minted by a per-endpoint authorization
+	// server, including those minted before shared ones existed.
+	SharedAuthorizationServer bool `json:"shared_authorization_server,omitempty"`
 }
 
 // AuthnChallengeState is the in-flight context of a single Gram-as-AS authn
@@ -389,7 +397,7 @@ const remoteSessionUnavailableRetryAfter = 30 * time.Second
 
 func issuerGateFailureReason(err error) string {
 	switch {
-	case errors.Is(err, errTokenHostMismatch):
+	case errors.Is(err, errTokenHostMismatch), errors.Is(err, errSharedTokenIssuerMismatch):
 		return issuerGateReasonIssuerMismatch
 	case errors.Is(err, errIssuerGateOrgLookup):
 		return "org_lookup_failed"
@@ -503,10 +511,17 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 		return ctx, nil, nil, false, fmt.Errorf("%w: validate user-session bearer: %w", errCredentialRejected, err)
 	}
 	// Only the issuer-scoped audiences are shared across hosts; a token on the
-	// exact resource audience is already bound to this host.
+	// exact resource audience is already bound to this host, and is checked
+	// against a shared authorization server instead.
+	sharedResourceSession := false
 	if acceptedAudience != userSessionAudienceResource {
 		if err := s.checkPerEndpointTokenHost(ctx, session, endpoint, baseURL); err != nil {
 			return ctx, nil, nil, false, fmt.Errorf("%w: %w", errCredentialRejected, err)
+		}
+	} else {
+		sharedResourceSession, err = s.checkSharedResourceSession(ctx, session, endpoint, baseURL)
+		if err != nil {
+			return ctx, nil, nil, false, err
 		}
 	}
 	if acceptedAudience == userSessionAudienceLegacy {
@@ -575,10 +590,12 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 		}
 	}
 	newCtx = s.identityValidator.StampValidatedSession(newCtx, session)
-	// Only the token endpoint's issuer-scoped grants carry a refresh token.
-	// They are the sessions that validate against the issuer audience; ID-JAG
-	// and workload sessions are minted for the exact resource and have none.
-	refreshable := acceptedAudience != userSessionAudienceResource
+	// Only the token endpoint's authorization-code grants carry a refresh
+	// token: the issuer-scoped sessions of a per-endpoint authorization
+	// server, which validate against the issuer audience, and the
+	// resource-bound sessions of a shared one. ID-JAG and workload sessions are
+	// minted for the exact resource too, and have none.
+	refreshable := acceptedAudience != userSessionAudienceResource || sharedResourceSession
 	return newCtx, &subject, toolSelection, refreshable, nil
 }
 
@@ -1108,6 +1125,22 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 	endpoint.CIMDAdmissionModeRaw = issuer.ClientIDMetadataAdmissionMode
 	endpoint.idJAGConfigured = !issuer.ProjectID.Valid && issuer.OrganizationID.Valid && issuer.TrustedRemoteSessionIssuerID.Valid
 	endpoint.useAuthenticationHost = issuer.UseAuthenticationHost
+	// A shared-mode issuer whose shared authorization server cannot be built
+	// keeps its MCP servers on their per-endpoint authorization servers, which
+	// serve regardless of mode, rather than taking them offline.
+	endpoint.sharedAuthorizationServer = nil
+	if issuerInSharedMode(issuer) {
+		shared, err := s.sharedAuthorizationServerFor(issuer)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "shared authorization server is misconfigured, serving per-endpoint authorization servers",
+				attr.SlogUserSessionIssuerID(issuer.ID.String()),
+				attr.SlogError(err),
+			)
+		} else {
+			endpoint.sharedAuthorizationServer = shared
+		}
+	}
+	endpoint.issuerStamped = true
 	// The authentication host serves only issuers that opt in to it. To any
 	// other issuer it is a host that serves nothing.
 	if OnAuthenticationHost(ctx) && !issuer.UseAuthenticationHost {
