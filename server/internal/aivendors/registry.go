@@ -462,6 +462,37 @@ var registry = []Product{
 		}},
 	},
 
+	// Verified 2026-10-05 against Conductor 0.90.1 (macOS aarch64 DMG): HTTP
+	// 200, a self-referential client_id, and token_endpoint_auth_method "none".
+	// Shorter (/oauth/client.json), invented-segment, and sibling-file paths
+	// all return 404, so this is an exact entry, not a pattern. A desktop app
+	// (Tauri shell orchestrating Claude Code + Codex), with a hosted callback
+	// matching Skydive's shape, not loopback. CFBundleIdentifier is the exact
+	// install signal; the process name is generic but kept on purpose (matching
+	// convention in goose, pi, crush, qwen above). No binaries: the CLI shim
+	// in Contents/Resources/bin is not installed onto PATH. No config dirs: the
+	// bundle ID already detects the install exactly, and .conductor/ paths in
+	// the binary are per-repository workspace paths, not a per-user config.
+	{
+		ID:          "conductor",
+		VendorKey:   "conductor",
+		DisplayName: "Conductor",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    []string{"com.conductor.app"},
+			Binaries:     nil,
+			ConfigDirs:   nil,
+			ProcessNames: []string{"conductor"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Documents: []Document{{
+			URL:         "https://api.conductor.build/oauth/client-metadata.json",
+			DisplayName: "Conductor",
+			Enabled:     true,
+		}},
+	},
+
 	// Products below publish no CIMD document. They register dynamically or
 	// do not speak MCP to Gram at all, so an access decision about them is
 	// recorded and enforces nothing — the dashboard says so rather than
