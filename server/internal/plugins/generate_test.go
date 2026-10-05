@@ -2047,6 +2047,26 @@ func TestHooksConfigHashTracksBinaryReleaseMetadata(t *testing.T) {
 	require.NotEqual(t, hooksConfigHash(current), hooksConfigHash(changedTargets))
 }
 
+// Recording the published marketplace name must never read as a hooks change:
+// the publish path stamps it into every persisted snapshot (carried, skipped,
+// and observability-disabled ones included), so a hash that covered it would
+// regenerate hooks across the fleet, or past the rollout gate.
+func TestHooksConfigHashIgnoresPublishedMarketplaceName(t *testing.T) {
+	t.Parallel()
+
+	snapshot, err := marshalHooksConfig(hooksConfigSnapshot(GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}))
+	require.NoError(t, err)
+
+	stamped, err := naming.WithPublishedMarketplaceName(snapshot, "acme-speakeasy")
+	require.NoError(t, err)
+	restamped, err := naming.WithPublishedMarketplaceName(stamped, "renamed-speakeasy")
+	require.NoError(t, err)
+
+	require.NotEmpty(t, storedHooksConfigHash(snapshot))
+	require.Equal(t, storedHooksConfigHash(snapshot), storedHooksConfigHash(stamped))
+	require.Equal(t, storedHooksConfigHash(snapshot), storedHooksConfigHash(restamped))
+}
+
 // Substring assertions cannot catch shell quoting regressions — run bash -n
 // over every generated shell script.
 func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
