@@ -79467,7 +79467,7 @@ components:
             - oin
         org_url:
           type: string
-          description: Okta org URL, for example https://example.okta.com. Must be https with no path; the host must be an Okta-owned domain.
+          description: Okta org URL, for example https://example.okta.com. Must be https on an Okta-owned domain with no path, except an Admin Console URL with an /admin path, which resolves to its org.
       required:
         - org_url
     CreateIngressRequestBody:
@@ -90811,6 +90811,9 @@ components:
         audience:
           type: string
           description: The resource app's Cross App Access issuer URL as configured in the identity provider; the audience of the identity assertion. Present once confirmed.
+        authorization_server_issuer:
+          type: string
+          description: The server's authorization server issuer; the Issuer URL to enter when enabling Cross App Access on a resource app. Omitted when unknown.
         broken_reason:
           type: string
           description: 'Present when state is broken. audience_mismatch: legacy value, no longer emitted; the administrator-confirmed Okta audience may differ from the server''s authorization server issuer; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app''s client authentication; downstream_rejected: the identity provider issued the assertion but the server''s authorization server refused it.'

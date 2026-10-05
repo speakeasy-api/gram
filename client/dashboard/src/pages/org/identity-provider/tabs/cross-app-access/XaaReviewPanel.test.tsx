@@ -49,7 +49,7 @@ describe("XaaReviewPanel", () => {
     expect(screen.getByText(/it does not change or verify Okta/)).toBeTruthy();
     expect(screen.getByText(/share this confirmation/)).toBeTruthy();
     expect(
-      screen.getByText(/Copy Issuer URL, not the separate Audience\/tenant ID/),
+      screen.getByText(/Not the Audience\/tenant ID or the MCP server URL/),
     ).toBeTruthy();
     expect(
       screen.getByText(/Check for an existing agent connection/).textContent,

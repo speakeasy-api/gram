@@ -176,6 +176,22 @@ function ConfigurationCell({
       <dd className="min-w-0">
         <CopyCell value={row.resourceIndicator} label="resource indicator" />
       </dd>
+      {row.authorizationServerIssuer && (
+        <>
+          <dt
+            className="text-muted-foreground text-xs leading-6"
+            title="Authorization server issuer"
+          >
+            Issuer
+          </dt>
+          <dd className="min-w-0">
+            <CopyCell
+              value={row.authorizationServerIssuer}
+              label="authorization server issuer"
+            />
+          </dd>
+        </>
+      )}
       <dt className="text-muted-foreground text-xs leading-6">Client ID</dt>
       <dd className="min-w-0">
         {clientNote ? (
