@@ -16,7 +16,8 @@ import (
 // "create" endpoint HTTP request body.
 type CreateRequestBody struct {
 	// Okta org URL, for example https://example.okta.com. Must be https on an
-	// Okta-owned domain; an Admin Console URL resolves to its org.
+	// Okta-owned domain with no path, except an Admin Console URL with an /admin
+	// path, which resolves to its org.
 	OrgURL *string `form:"org_url,omitempty" json:"org_url,omitempty" xml:"org_url,omitempty"`
 	// Checklist template. Defaults to custom_app.
 	ListingMode *string `form:"listing_mode,omitempty" json:"listing_mode,omitempty" xml:"listing_mode,omitempty"`

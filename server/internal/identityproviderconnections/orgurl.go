@@ -48,30 +48,30 @@ func NormalizeOktaOrgURL(raw string) (string, error) {
 	if strings.HasSuffix(host, ".") || !isPlainHostname(host) {
 		return "", ErrOrgURLHostNotASCII
 	}
-	allowed := false
-	for _, suffix := range oktaOrgHostSuffixes {
-		if strings.HasSuffix(host, "."+suffix) && len(host) > len(suffix)+1 {
-			allowed = true
+	tenant, suffix := "", ""
+	for _, s := range oktaOrgHostSuffixes {
+		if t, ok := strings.CutSuffix(host, "."+s); ok && t != "" {
+			tenant, suffix = t, s
 			break
 		}
 	}
-	if !allowed {
+	if tenant == "" {
 		return "", ErrOrgURLHostNotAllowed
 	}
 	// Matching on the decoded path would admit encoded spellings of /admin.
 	if strings.Contains(parsed.EscapedPath(), "%") {
 		return "", ErrOrgURLNotOrigin
 	}
-	label, rest, _ := strings.Cut(host, ".")
-	org, isAdminHost := strings.CutSuffix(label, "-admin")
-	isAdminHost = isAdminHost && org != "" && !strings.HasSuffix(org, "-")
+	// The console host adds -admin to the label next to the Okta suffix.
+	org, isAdminHost := strings.CutSuffix(tenant, "-admin")
+	isAdminHost = isAdminHost && org != "" && !strings.HasSuffix(org, "-") && !strings.HasSuffix(org, ".")
 	path := parsed.Path
 	if isAdminHost {
 		// Stripping twice would name a tenant the admin never typed.
 		if strings.HasSuffix(org, "-admin") {
-			return "", ErrOrgURLHostNotAllowed
+			return "", ErrOrgURLNotOrigin
 		}
-		host = org + "." + rest
+		host = org + "." + suffix
 		if path == "/admin" || strings.HasPrefix(path, "/admin/") {
 			path = ""
 		}

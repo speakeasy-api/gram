@@ -39,6 +39,7 @@ export function CreateConnectionForm(): JSX.Element {
 
   const createConnection = () => {
     if (create.isPending || normalizedOrgUrl === undefined) return;
+    setOrgUrl(normalizedOrgUrl);
     create.mutate({
       security: SESSION_SECURITY,
       request: {

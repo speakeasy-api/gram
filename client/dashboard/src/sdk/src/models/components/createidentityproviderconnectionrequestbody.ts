@@ -24,7 +24,7 @@ export type CreateIdentityProviderConnectionRequestBody = {
    */
   listingMode?: ListingMode | undefined;
   /**
-   * Okta org URL, for example https://example.okta.com. Must be https on an Okta-owned domain; an Admin Console URL resolves to its org.
+   * Okta org URL, for example https://example.okta.com. Must be https on an Okta-owned domain with no path, except an Admin Console URL with an /admin path, which resolves to its org.
    */
   orgUrl: string;
 };

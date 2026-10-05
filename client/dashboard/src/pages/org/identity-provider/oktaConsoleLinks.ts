@@ -14,14 +14,17 @@ export function normalizeOktaOrgUrl(input: string): string | undefined {
   const rawHost = match?.[1];
   if (!rawHost || !PLAIN_HOSTNAME.test(rawHost)) return undefined;
   let host = rawHost.toLowerCase();
-  if (!OKTA_ORG_HOST_SUFFIXES.some((suffix) => host.endsWith(`.${suffix}`)))
-    return undefined;
+  const suffix = OKTA_ORG_HOST_SUFFIXES.find((s) => host.endsWith(`.${s}`));
+  if (!suffix) return undefined;
   let path = match[2] ?? "";
-  const adminHost = /^([a-z0-9-]*[a-z0-9])-admin(\..+)$/.exec(host);
-  if (adminHost) {
+  // The console host adds -admin to the label next to the Okta suffix.
+  const org = /^(.*[a-z0-9])-admin$/.exec(
+    host.slice(0, -(suffix.length + 1)),
+  )?.[1];
+  if (org) {
     // Stripping twice would name a tenant the admin never typed.
-    if (adminHost[1]?.endsWith("-admin")) return undefined;
-    host = `${adminHost[1]}${adminHost[2]}`;
+    if (org.endsWith("-admin")) return undefined;
+    host = `${org}.${suffix}`;
     if (path === "/admin" || path.startsWith("/admin/")) path = "";
   }
   if (path !== "" && path !== "/") return undefined;

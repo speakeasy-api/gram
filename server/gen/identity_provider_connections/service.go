@@ -77,7 +77,8 @@ var MethodNames = [8]string{"create", "submitClientId", "verify", "get", "record
 type CreatePayload struct {
 	SessionToken *string
 	// Okta org URL, for example https://example.okta.com. Must be https on an
-	// Okta-owned domain; an Admin Console URL resolves to its org.
+	// Okta-owned domain with no path, except an Admin Console URL with an /admin
+	// path, which resolves to its org.
 	OrgURL string
 	// Checklist template. Defaults to custom_app.
 	ListingMode *string

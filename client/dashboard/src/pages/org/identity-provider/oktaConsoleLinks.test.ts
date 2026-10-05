@@ -141,9 +141,12 @@ describe("normalizeOktaOrgUrl", () => {
     expect(normalizeOktaOrgUrl("https://admin-team.okta.com")).toBe(
       "https://admin-team.okta.com",
     );
-    expect(normalizeOktaOrgUrl("https://sub.acme-admin.okta.com")).toBe(
-      "https://sub.acme-admin.okta.com",
+    expect(normalizeOktaOrgUrl("https://acme-admin.sub.okta.com")).toBe(
+      "https://acme-admin.sub.okta.com",
     );
+    expect(
+      normalizeOktaOrgUrl("https://sub.acme-admin.okta.com/admin/home"),
+    ).toBe("https://sub.acme.okta.com");
   });
 
   it("keeps refusing other paths, even on an admin host", () => {

@@ -95,6 +95,11 @@ describe("CreateConnectionForm", () => {
     });
     fireEvent.blur(input);
     expect(input.value).toBe("https://example.okta.com");
+    fireEvent.change(input, {
+      target: { value: "https://example-admin.okta.com/admin/home" },
+    });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(input.value).toBe("https://example.okta.com");
   });
 
   it("disables the button for a non-Okta URL and while pending", () => {

@@ -908,7 +908,8 @@ func TestNormalizeOktaOrgURL(t *testing.T) {
 		"https://Dev-1-Admin.okta.com/admin/apps/active": "https://dev-1.okta.com",
 		"https://myadmin-co.okta.com":                    "https://myadmin-co.okta.com",
 		"https://admin-team.okta.com":                    "https://admin-team.okta.com",
-		"https://sub.acme-admin.okta.com":                "https://sub.acme-admin.okta.com",
+		"https://acme-admin.sub.okta.com":                "https://acme-admin.sub.okta.com",
+		"https://sub.acme-admin.okta.com/admin/home":     "https://sub.acme.okta.com",
 	} {
 		got, err := identityproviderconnections.NormalizeOktaOrgURL(raw)
 		require.NoError(t, err, raw)

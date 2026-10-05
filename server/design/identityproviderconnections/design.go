@@ -180,7 +180,7 @@ var _ = Service("identityProviderConnections", func() {
 		Payload(func() {
 			security.SessionPayload()
 			Meta("openapi:typename", "CreateIdentityProviderConnectionRequestBody")
-			Attribute("org_url", String, "Okta org URL, for example https://example.okta.com. Must be https on an Okta-owned domain; an Admin Console URL resolves to its org.")
+			Attribute("org_url", String, "Okta org URL, for example https://example.okta.com. Must be https on an Okta-owned domain with no path, except an Admin Console URL with an /admin path, which resolves to its org.")
 			Attribute("listing_mode", String, "Checklist template. Defaults to custom_app.", func() {
 				Enum("custom_app", "oin")
 			})
