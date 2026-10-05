@@ -273,6 +273,7 @@ func (s *Service) buildRemoteConnectURL(
 	// derives none on its own and would record a grant nothing routes to.
 	var clientResource string
 	var rerr error
+	var member metaMemberResource
 	claimedByMember := false
 	if endpoint.MetaMcpServerID.Valid {
 		// Member visibility is judged against the consent subject, as the runtime
@@ -281,7 +282,8 @@ func (s *Service) buildRemoteConnectURL(
 		if cerr != nil {
 			return "", false, oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
 		}
-		clientResource, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client.RemoteSessionIssuerID)
+		member, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client.RemoteSessionIssuerID)
+		clientResource = member.resource
 	}
 	// Gate on the claim, not an empty resource: an ambiguous meta MCP has
 	// decided, and falling back would qualify the credential anyway.
@@ -294,6 +296,11 @@ func (s *Service) buildRemoteConnectURL(
 	}
 	if rerr != nil {
 		return "", false, oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)
+	}
+	// The per-client derivation reads remote server URLs only; a tunneled
+	// member's identifier is never dialed.
+	if clientResource != "" && !member.tunneled {
+		clientResource = s.publishedResource(ctx, logger, clientResource)
 	}
 
 	parent := remotesessions.ParentChallenge{

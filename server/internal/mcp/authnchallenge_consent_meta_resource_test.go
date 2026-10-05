@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -18,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -748,4 +751,65 @@ func TestServeConsentAction_MetaMCPConnectResolvesFromTheRealResync(t *testing.T
 	loc := postConnectAction(t, fx, gatewayClientID)
 	require.Equal(t, "https://aim87-composed.example.com/mcp", loc.Query().Get("resource"),
 		"the member must resolve from the value the resync wrote, not from any fixture")
+}
+
+// probeRecorder answers every RFC 9728 metadata read with resourceURL plus a
+// trailing slash, and records which URLs were read.
+type probeRecorder struct {
+	mu   sync.Mutex
+	urls []string
+}
+
+func (p *probeRecorder) fetch(_ context.Context, resourceURL string) (wellknown.OAuthProtectedResourceMetadata, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.urls = append(p.urls, resourceURL)
+	return wellknown.OAuthProtectedResourceMetadata{Resource: resourceURL + "/"}, nil
+}
+
+func (p *probeRecorder) probed() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.urls)
+}
+
+// GRW-256: a remote member's credential is qualified to the resource its
+// upstream publishes when that differs from the registered URL only in
+// trailing slashes.
+func TestServeConsentAction_MetaMCPConnectSendsMemberPublishedResource(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "grw256-meta-gw")
+	probes := &probeRecorder{mu: sync.Mutex{}, urls: nil}
+	fx.ti.service.SetProtectedResourceFetcher(probes.fetch)
+
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "grw256-meta", "", []uuid.UUID{fx.shared})
+	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
+
+	const registered = "https://published.example.com/mcp"
+	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "grw256-meta-member", registered, conv.ToNullUUID(issuerID), 0)
+
+	loc := postConnectAction(t, fx, clientID)
+	require.Equal(t, registered+"/", loc.Query().Get("resource"))
+	require.Equal(t, registered+"/", mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).Resource)
+	require.Equal(t, []string{registered}, probes.probed())
+}
+
+// GRW-256: a tunneled member's identifier names a host inside a private
+// network, so its metadata is never read and the identifier is sent as
+// recorded.
+func TestServeConsentAction_MetaMCPConnectNeverProbesTunneledMember(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "grw256-tunnel-gw")
+	probes := &probeRecorder{mu: sync.Mutex{}, urls: nil}
+	fx.ti.service.SetProtectedResourceFetcher(probes.fetch)
+
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "grw256-tunnel", "", []uuid.UUID{fx.shared})
+	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
+
+	createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "grw256-tunnel-member", "https://tunneled.internal/mcp", conv.ToNullUUID(issuerID), 0)
+
+	require.Equal(t, "https://tunneled.internal/mcp", postConnectAction(t, fx, clientID).Query().Get("resource"))
+	require.Empty(t, probes.probed(), "a tunneled member's host is never dialed")
 }

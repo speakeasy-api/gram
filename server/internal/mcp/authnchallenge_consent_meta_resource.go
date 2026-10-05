@@ -21,45 +21,56 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
+// metaMemberResource is the upstream resource a meta MCP member claim
+// resolved to.
+type metaMemberResource struct {
+	resource string
+	// tunneled is set when a tunneled member fronts the resource: its
+	// identifier names a host inside a private network that Gram never dials.
+	tunneled bool
+}
+
 // resolveMetaMemberResource returns the upstream resource (remote server URL
 // or tunneled resource identifier) of the meta MCP member whose upstream
 // authenticates against remoteSessionIssuerID.
 //
-// Tri-state: ("", true) means members claimed the issuer but no single member
-// wins, and the caller must not fall back to a weaker derivation; ("", false)
-// is a genuine no-match, the only case where the stored per-client derivation
-// may answer. A NULL remote_session_issuer_id matches nothing. The error is a
-// database or grant-load fault only, and the connect fails closed on it.
+// Tri-state: an empty resource with claimed set means members claimed the
+// issuer but no single member wins, and the caller must not fall back to a
+// weaker derivation; claimed unset is a genuine no-match, the only case where
+// the stored per-client derivation may answer. A NULL remote_session_issuer_id
+// matches nothing. The error is a database or grant-load fault only, and the
+// connect fails closed on it.
 func (s *Service) resolveMetaMemberResource(
 	ctx context.Context,
 	logger *slog.Logger,
 	endpoint *ResolvedMcpEndpoint,
 	remoteSessionIssuerID uuid.UUID,
-) (string, bool, error) {
+) (metaMemberResource, bool, error) {
+	var none metaMemberResource
 	candidates, claimed, err := s.claimingMetaMembers(ctx, endpoint, remoteSessionIssuerID)
 	if err != nil || !claimed {
-		return "", false, err
+		return none, false, err
 	}
 
-	// The resource is sent upstream verbatim: a provider may match it exactly
-	// against its RFC 9728 resource, trailing slash included. Trailing slashes
-	// are ignored only to decide whether members share a destination.
-	resource := ""
+	// The registered spelling is kept: buildRemoteConnectURL may swap in the
+	// upstream's published one, and otherwise sends it verbatim. Trailing
+	// slashes are ignored only to decide whether members share a destination.
+	var resolved metaMemberResource
 	for _, row := range candidates {
 		upstream := row.UpstreamUrl
-		trimmed := strings.TrimRight(upstream, "/")
 		switch {
-		case trimmed == "":
-		// Two members may front one URL — remote_mcp_servers is unique on
-		// (project_id, slug), not url — and a token keyed on that URL serves
-		// either. Spellings differing only in trailing slashes resolve to the
-		// shortest, so the result does not depend on member order.
-		case resource != "" && trimmed == strings.TrimRight(resource, "/"):
-			if len(upstream) < len(resource) {
-				resource = upstream
+		case strings.TrimRight(upstream, "/") == "":
+		case resolved.resource == "":
+			resolved = metaMemberResource{resource: upstream, tunneled: row.Tunneled}
+		case strings.TrimRight(upstream, "/") == strings.TrimRight(resolved.resource, "/"):
+			// Two members may front one URL — remote_mcp_servers is unique on
+			// (project_id, slug), not url — and a token keyed on that URL serves
+			// either. Spellings differing only in trailing slashes resolve to the
+			// shortest, so the result does not depend on member order.
+			if len(upstream) < len(resolved.resource) {
+				resolved.resource = upstream
 			}
-		case resource == "":
-			resource = upstream
+			resolved.tunneled = resolved.tunneled || row.Tunneled
 		default:
 			// One authorization server, two members: a grant records one resource per
 			// (subject, client), so nothing routes both.
@@ -68,10 +79,10 @@ func (s *Service) resolveMetaMemberResource(
 				attr.SlogRemoteSessionIssuerID(remoteSessionIssuerID.String()),
 				attr.SlogMcpServerID(row.McpServerID.String()),
 			)
-			return "", true, nil
+			return none, true, nil
 		}
 	}
-	return resource, true, nil
+	return resolved, true, nil
 }
 
 // claimingMetaMembers lists the proxied members authenticating against
