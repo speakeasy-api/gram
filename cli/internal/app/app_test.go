@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -55,4 +56,35 @@ func TestNewApp_UsesSpeakeasyName(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, "speakeasy", newApp().Name)
+}
+
+func TestNewApp_ControlPlaneMarker(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	app := newApp()
+	app.Writer = &stdout
+	app.ErrWriter = &bytes.Buffer{}
+
+	profilePath := filepath.Join(t.TempDir(), "profile.json")
+	err := app.RunContext(t.Context(), []string{"speakeasy", "--profile-path", profilePath, "--control-plane-cli"})
+
+	require.NoError(t, err)
+	require.Equal(t, "speakeasy-ai-control-plane-cli\n", stdout.String())
+}
+
+func TestNewApp_NoArgsShowsHelp(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	app := newApp()
+	app.Writer = &stdout
+	app.ErrWriter = &bytes.Buffer{}
+
+	profilePath := filepath.Join(t.TempDir(), "profile.json")
+	err := app.RunContext(t.Context(), []string{"speakeasy", "--profile-path", profilePath})
+
+	require.NoError(t, err)
+	require.NotContains(t, stdout.String(), "speakeasy-ai-control-plane-cli")
+	require.Contains(t, stdout.String(), "USAGE:")
 }

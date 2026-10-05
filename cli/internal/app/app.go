@@ -74,6 +74,24 @@ func newApp() *cli.App {
 				EnvVars: []string{"GRAM_PROFILE_PATH"},
 				Hidden:  true,
 			},
+			&cli.BoolFlag{
+				Name:   controlPlaneMarkerFlag,
+				Usage:  "Print a fixed marker that identifies this CLI and exit",
+				Hidden: true,
+			},
+		},
+		Action: func(c *cli.Context) error {
+			if c.Bool(controlPlaneMarkerFlag) {
+				_, err := fmt.Fprintln(c.App.Writer, controlPlaneMarker)
+				if err != nil {
+					return fmt.Errorf("write control plane marker: %w", err)
+				}
+				return nil
+			}
+			if c.Args().Present() {
+				return cli.ShowCommandHelp(c, c.Args().First())
+			}
+			return cli.ShowAppHelp(c)
 		},
 		Before: func(c *cli.Context) error {
 			logger := slog.New(o11y.NewLogHandler(&o11y.LogHandlerOptions{
@@ -121,6 +139,16 @@ const (
 	// speakeasy. The gram Homebrew formulas still install the binary under
 	// this name so existing scripts keep working for one release cycle.
 	legacyCommandName = "gram"
+
+	// controlPlaneMarkerFlag is a hidden flag that prints controlPlaneMarker.
+	// Tools such as the Gram Functions SDK run it to tell this CLI apart from
+	// the Speakeasy SDK generator CLI, which installs a binary with the same
+	// name and rejects the flag.
+	controlPlaneMarkerFlag = "control-plane-cli"
+
+	// controlPlaneMarker is the fixed output of --control-plane-cli. Callers
+	// match it exactly, so it must not change.
+	controlPlaneMarker = "speakeasy-ai-control-plane-cli"
 
 	// legacyCommandNotice is printed to stderr when the CLI runs as gram.
 	legacyCommandNotice = "Warning: the gram command is deprecated and will be removed in a future release. " +

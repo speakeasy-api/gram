@@ -501,6 +501,20 @@ const manifest = g.manifest();
 // }
 ```
 
+## Deploying
+
+Deploying runs the Speakeasy AI Control Plane CLI. Install it with
+`brew install speakeasy-api/tap/cli` or `npm i -g @speakeasy-api/cli`.
+
+The SDK picks the CLI in this order:
+
+1. The path in the `GRAM_CLI_PATH` environment variable.
+2. `cli/bin/gram` from this repository, when `GRAM_DEV` is `1` or `true`.
+3. `speakeasy` on your `PATH`, if `speakeasy --control-plane-cli` confirms it
+   is the AI Control Plane CLI. The Speakeasy SDK generator CLI also installs
+   a `speakeasy` binary, and the SDK skips it.
+4. The legacy `gram` command.
+
 ## Handling Tool Calls
 
 Exporting the Gram instance from your module as the default export will allow

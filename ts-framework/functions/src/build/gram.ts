@@ -1,11 +1,11 @@
 import { getLogger, type Logger } from "@logtape/logtape";
 import { ZipArchive } from "archiver";
 import esbuild from "esbuild";
-import { existsSync } from "node:fs";
 import { mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { $, ProcessPromise, chalk } from "zx";
+import { defaultCLIResolverDeps, resolveCLI } from "./cli.ts";
 import { isCI, type ParsedUserConfig } from "./config.ts";
 
 type Artifacts = {
@@ -20,30 +20,6 @@ async function resolveArtifacts(cfg: ParsedUserConfig): Promise<Artifacts> {
     manifestFilename: join(cfg.outDir, "manifest.json"),
     zipFilename: join(cfg.outDir, "gram.zip"),
   };
-}
-
-function resolveGramCLI(): string {
-  // Check for local development mode using GRAM_DEV env var
-  const isLocalDev =
-    process.env["GRAM_DEV"]?.toLowerCase() === "true" ||
-    process.env["GRAM_DEV"] === "1";
-
-  if (isLocalDev) {
-    // In local dev, use the CLI from cli/bin/gram relative to workspace root
-    // From ts-framework/functions/src/build -> ../../../../cli/bin/gram
-    const localCliPath = resolve(
-      dirname(new URL(import.meta.url).pathname),
-      "../../../../cli/bin/gram",
-    );
-
-    // Check if the local CLI exists
-    if (existsSync(localCliPath)) {
-      return localCliPath;
-    }
-  }
-
-  // Use system-installed gram
-  return "gram";
 }
 
 export async function buildFunctions(logger: Logger, cfg: ParsedUserConfig) {
@@ -178,18 +154,7 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
   const cwd = config.cwd ?? process.cwd();
   const slug = config.slug || (await inferSlug(cwd));
 
-  const gramCLI = resolveGramCLI();
-  // Only check if CLI exists when using system gram
-  if (gramCLI === "gram") {
-    const cmd = process.platform === "win32" ? ["where"] : ["command", "-v"];
-    const gramPath = await $`${cmd} ${gramCLI}`.nothrow();
-
-    if (gramPath.exitCode !== 0) {
-      throw new Error(
-        `Gram CLI not found. Please install it from https://www.speakeasy.com/docs/gram/command-line/installation.`,
-      );
-    }
-  }
+  const gramCLI = await resolveCLI(defaultCLIResolverDeps());
 
   const artifacts = await resolveArtifacts(config);
   const { zipFilename } = artifacts;
@@ -381,9 +346,10 @@ const DASHBOARD_URL = "https://app.getgram.ai";
 async function resolveCreateServerURL(cfg: ParsedUserConfig): Promise<string> {
   const fallback = `${DASHBOARD_URL}?from=cli`;
   try {
+    const cli = await resolveCLI(defaultCLIResolverDeps());
     const result = await $({
       stdio: ["pipe", "pipe", "pipe"],
-    })`${resolveGramCLI()} whoami --json`
+    })`${cli} whoami --json`
       .quiet()
       .nothrow();
     if (result.exitCode !== 0) {
