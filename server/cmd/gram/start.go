@@ -1466,6 +1466,7 @@ func newStartCommand() *cli.Command {
 				authzEngine,
 				auditLogger,
 				productFeatures,
+				featureFlags,
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				riskScanner,
 				hookPIScanner,

@@ -182,6 +182,17 @@ const (
 	// can't strand it on stale hooks.
 	FlagHooksRollout Flag = "hooks-rollout"
 
+	// FlagHooksLegacyOutOfDateNotice lets /rpc/hooks.claude tell users of the
+	// legacy curl hook plugins, once per session, that the plugin is out of
+	// date and their admin must fix the Claude Code managed settings so it can
+	// auto-update. Evaluated server-side on the hook hot path with local
+	// evaluation only, distinct id = organization id and the organization /
+	// slug groups (OrgProjectGroups), so a release condition targets the
+	// organization group key (org slug) or rolls out to everyone. Fails
+	// closed: absent, inconclusive or erroring reads as off. Removed with the
+	// legacy endpoint.
+	FlagHooksLegacyOutOfDateNotice Flag = "hooks-legacy-out-of-date-notice"
+
 	// FlagOktaConnections gates the Okta integration while it is dogfooded:
 	// creating connections, resource connections and server suggestions.
 	FlagOktaConnections Flag = "okta-connections"
