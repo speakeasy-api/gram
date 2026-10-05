@@ -354,6 +354,9 @@ func (s *RiskFindingListService) List(ctx context.Context, principal Principal, 
 		input.ResultID = resultID.UUID.String()
 	}
 	input.ExecutionID = strings.TrimSpace(input.ExecutionID)
+	if executionID, err := uuid.Parse(input.ExecutionID); err == nil {
+		input.ExecutionID = executionID.String()
+	}
 	if input.Category != "" && !validRiskCategory(input.Category) {
 		return zero, ErrRiskReadInvalid
 	}

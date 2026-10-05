@@ -662,6 +662,17 @@ func TestRiskFindingListResultAndExecutionFilters(t *testing.T) {
 	require.Equal(t, "exec-1", f.clickhouse.list[0].ExecutionID)
 }
 
+func TestRiskFindingListCanonicalizesUUIDExecutionID(t *testing.T) {
+	t.Parallel()
+
+	executionID := uuid.NewString()
+	f := newFindingListFixture(t)
+	_, err := f.service.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{ExecutionID: strings.ToUpper(executionID)})
+	require.NoError(t, err)
+	require.Len(t, f.clickhouse.list, 1)
+	require.Equal(t, executionID, f.clickhouse.list[0].ExecutionID)
+}
+
 func TestRiskFindingListCursorBindsResultAndExecutionFilters(t *testing.T) {
 	t.Parallel()
 
