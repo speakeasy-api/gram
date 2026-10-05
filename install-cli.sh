@@ -153,9 +153,9 @@ verify_checksum() {
 install_binary() {
     local binary="$1"
     local install_dir="$2"
-    local install_path="$install_dir/gram"
+    local install_path="$install_dir/$3"
 
-    info "Installing gram to $install_path..."
+    info "Installing speakeasy to $install_path..."
 
     # Check if we need sudo
     local use_sudo=""
@@ -182,7 +182,7 @@ install_binary() {
 
 # Main installation logic
 main() {
-    info "Installing Gram CLI..."
+    info "Installing the speakeasy CLI..."
 
     # Detect system
     local os
@@ -198,18 +198,25 @@ main() {
     tag_name=$(get_latest_tag)
     info "Latest version: $tag_name"
 
-    # Construct download URLs
-    local filename="gram_${os}_${arch}.zip"
-    local download_url="https://github.com/speakeasy-api/gram/releases/download/${tag_name}/${filename}"
-    local checksums_url="https://github.com/speakeasy-api/gram/releases/download/${tag_name}/checksums.txt"
+    # Construct download URLs. Releases made before the CLI was renamed only
+    # publish gram archives, so fall back to those.
+    local release_url="https://github.com/speakeasy-api/gram/releases/download/${tag_name}"
+    local archive_name="speakeasy"
+    local filename="${archive_name}_${os}_${arch}.zip"
+    local checksums_url="${release_url}/checksums.txt"
 
     # Create temporary directory
     tmp_dir=$(mktemp -d)
     trap 'rm -rf "$tmp_dir"' EXIT
 
     # Download binary archive
-    info "Downloading: $download_url"
-    download "$download_url" "$tmp_dir/$filename"
+    info "Downloading: ${release_url}/${filename}"
+    if ! download "${release_url}/${filename}" "$tmp_dir/$filename" 2>/dev/null; then
+        archive_name="gram"
+        filename="${archive_name}_${os}_${arch}.zip"
+        info "Downloading: ${release_url}/${filename}"
+        download "${release_url}/${filename}" "$tmp_dir/$filename"
+    fi
 
     # Download checksums
     info "Downloading checksums..."
@@ -229,21 +236,23 @@ main() {
     # Determine install location
     local install_dir
     if [ "$os" = "windows" ]; then
-        install_dir="${PROGRAMFILES:-C:\\Program Files}\\gram"
-        local binary_name="gram.exe"
+        install_dir="${PROGRAMFILES:-C:\\Program Files}\\speakeasy"
+        local binary_name="${archive_name}.exe"
+        local install_name="speakeasy.exe"
     else
         install_dir="/usr/local/bin"
-        local binary_name="gram"
+        local binary_name="${archive_name}"
+        local install_name="speakeasy"
     fi
 
     # Install binary
-    install_binary "$tmp_dir/$binary_name" "$install_dir"
+    install_binary "$tmp_dir/$binary_name" "$install_dir" "$install_name"
 
     # Verify installation
-    if command_exists gram; then
-        gram --version
-        printf "\n${GREEN}Success!${NC} Gram CLI has been installed.\n"
-        printf "Run 'gram --help' to get started.\n"
+    if command_exists speakeasy; then
+        speakeasy --version
+        printf "\n${GREEN}Success!${NC} The speakeasy CLI has been installed.\n"
+        printf "Run 'speakeasy --help' to get started.\n"
     else
         printf "\n${YELLOW}Note:${NC} You may need to add $install_dir to your PATH\n"
         printf "Run 'export PATH=\$PATH:$install_dir' or add it to your shell profile.\n"

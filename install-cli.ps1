@@ -3,9 +3,9 @@
 
 <#
 .SYNOPSIS
-    Installs the Gram CLI on Windows
+    Installs the speakeasy CLI on Windows
 .DESCRIPTION
-    Downloads and installs the latest version of Gram CLI from GitHub releases
+    Downloads and installs the latest version of the speakeasy CLI from GitHub releases
 .EXAMPLE
     .\install-cli.ps1
 .EXAMPLE
@@ -125,8 +125,8 @@ function Install-Binary {
         [string]$InstallDir
     )
 
-    $installPath = Join-Path $InstallDir "gram.exe"
-    Write-Info "Installing gram to $installPath..."
+    $installPath = Join-Path $InstallDir "speakeasy.exe"
+    Write-Info "Installing speakeasy to $installPath..."
 
     # Create install directory if it doesn't exist
     if (-not (Test-Path $InstallDir)) {
@@ -150,7 +150,7 @@ function Install-Binary {
 }
 
 function Main {
-    Write-Info "Installing Gram CLI..."
+    Write-Info "Installing the speakeasy CLI..."
 
     # This script is Windows-only
     $os = "windows"
@@ -163,20 +163,31 @@ function Main {
     $tagName = Get-LatestTag
     Write-Info "Latest version: $tagName"
 
-    # Construct download URLs
-    $filename = "gram_${os}_${arch}.zip"
-    $downloadUrl = "https://github.com/speakeasy-api/gram/releases/download/${tagName}/${filename}"
-    $checksumsUrl = "https://github.com/speakeasy-api/gram/releases/download/${tagName}/checksums.txt"
+    # Construct download URLs. Releases made before the CLI was renamed only
+    # publish gram archives, so fall back to those.
+    $releaseUrl = "https://github.com/speakeasy-api/gram/releases/download/${tagName}"
+    $archiveName = "speakeasy"
+    $filename = "${archiveName}_${os}_${arch}.zip"
+    $checksumsUrl = "${releaseUrl}/checksums.txt"
 
     # Create temporary directory
-    $tmpDir = Join-Path $env:TEMP "gram-install-$(New-Guid)"
+    $tmpDir = Join-Path $env:TEMP "speakeasy-install-$(New-Guid)"
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
 
     try {
         # Download binary archive
-        Write-Info "Downloading: $downloadUrl"
+        Write-Info "Downloading: ${releaseUrl}/${filename}"
         $zipPath = Join-Path $tmpDir $filename
-        Download-File -Url $downloadUrl -Output $zipPath
+        try {
+            Invoke-WebRequest -Uri "${releaseUrl}/${filename}" -OutFile $zipPath -UseBasicParsing
+        }
+        catch {
+            $archiveName = "gram"
+            $filename = "${archiveName}_${os}_${arch}.zip"
+            $zipPath = Join-Path $tmpDir $filename
+            Write-Info "Downloading: ${releaseUrl}/${filename}"
+            Download-File -Url "${releaseUrl}/${filename}" -Output $zipPath
+        }
 
         # Download checksums
         Write-Info "Downloading checksums..."
@@ -196,8 +207,8 @@ function Main {
         }
 
         # Determine install location and binary name (Windows-only)
-        $installDir = Join-Path $env:LOCALAPPDATA "Programs\gram"
-        $binaryName = "gram.exe"
+        $installDir = Join-Path $env:LOCALAPPDATA "Programs\speakeasy"
+        $binaryName = "${archiveName}.exe"
 
         $binaryPath = Join-Path $tmpDir $binaryName
 
@@ -220,19 +231,19 @@ function Main {
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
         # Verify installation
-        if (Test-CommandExists "gram") {
+        if (Test-CommandExists "speakeasy") {
             Write-Host ""
-            & gram --version
+            & speakeasy --version
             Write-Host ""
             Write-Host "Success! " -ForegroundColor Green -NoNewline
-            Write-Host "Gram CLI has been installed."
-            Write-Host "Run 'gram --help' to get started."
+            Write-Host "The speakeasy CLI has been installed."
+            Write-Host "Run 'speakeasy --help' to get started."
         }
         else {
             Write-Host ""
             Write-Host "Note: " -ForegroundColor Yellow -NoNewline
             Write-Host "Please restart your terminal for the installation to take effect."
-            Write-Host "Then run 'gram --help' to get started."
+            Write-Host "Then run 'speakeasy --help' to get started."
         }
     }
     finally {
