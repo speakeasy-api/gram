@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -88,6 +89,42 @@ func TestDenyLinksUseOrganizationDefaultHost(t *testing.T) {
 	useTestOrgHosts(t, ctx, ti, pgtype.Text{String: testPlatformBaseURL, Valid: true})
 
 	requireDenyLinksOn(t, ctx, ti, testPlatformBaseURL)
+}
+
+// A failed organization read must not drop the deny links: they fall back to
+// the legacy host, and the failure is not cached.
+func TestDenyLinksFallBackToLegacyHostWhenOrganizationReadFails(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	useTestOrgHosts(t, ctx, ti, pgtype.Text{String: testPlatformBaseURL, Valid: true})
+
+	// An organization id with no row makes GetOrganizationMetadata fail.
+	missingOrgID := "org_missing_" + uuid.NewString()
+	got := ti.service.orgSiteURL(ctx, missingOrgID)
+	require.NotNil(t, got)
+	require.Equal(t, "https://app.example.test", got.String())
+	_, cached := ti.service.orgHostCache.get(missingOrgID, time.Now())
+	require.False(t, cached)
+}
+
+// Consecutive deny links for an organization reuse the cached default host
+// instead of reading the row again.
+func TestDenyLinksCacheOrganizationDefaultHost(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	useTestOrgHosts(t, ctx, ti, pgtype.Text{String: testPlatformBaseURL, Valid: true})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	require.Equal(t, testPlatformBaseURL, ti.service.orgSiteURL(ctx, authCtx.ActiveOrganizationID).String())
+
+	require.NoError(t, organizationsrepo.New(ti.conn).SetOrganizationDefaultHostForTest(ctx, organizationsrepo.SetOrganizationDefaultHostForTestParams{
+		DefaultHost: pgtype.Text{String: "", Valid: false},
+		ID:          authCtx.ActiveOrganizationID,
+	}))
+	require.Equal(t, testPlatformBaseURL, ti.service.orgSiteURL(ctx, authCtx.ActiveOrganizationID).String())
 }
 
 func TestDenyLinksWithoutDefaultHostUseSiteURL(t *testing.T) {

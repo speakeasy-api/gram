@@ -94,7 +94,10 @@ type Service struct {
 	suggestionSignaler suggest.Signaler
 	serverURL          *url.URL
 	orgHosts           *orghost.Resolver
-	jwtSecret          string
+	// orgHostCache keeps deny-link host lookups off the database on the deny
+	// hot path; nil disables caching.
+	orgHostCache *orgDefaultHostCache
+	jwtSecret    string
 	// nowFunc supplies the event timestamp for ingest paths that stamp
 	// server-side because the client sends none (the Cursor hook, and the
 	// Codex/OTEL fallbacks). Injectable so tests can pin telemetry event time
@@ -306,6 +309,7 @@ func NewService(
 		identityMapRefresh: identityMapRefresh,
 		serverURL:          serverURL,
 		orgHosts:           orgHosts,
+		orgHostCache:       newOrgDefaultHostCache(),
 		jwtSecret:          jwtSecret,
 		nowFunc:            time.Now,
 	}
