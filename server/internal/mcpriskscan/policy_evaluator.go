@@ -39,6 +39,10 @@ const (
 	// mcpFindingEvidenceStoreTimeout bounds secondary evidence persistence
 	// without extending the policy evaluation deadline.
 	mcpFindingEvidenceStoreTimeout = time.Second
+
+	// mcpPayloadStorageLookupTimeout bounds the payload storage setting lookup
+	// on its own so a slow lookup cannot consume the evidence store budget.
+	mcpPayloadStorageLookupTimeout = 250 * time.Millisecond
 )
 
 // PolicyConfig controls bounded MCP policy evaluation.
@@ -377,13 +381,13 @@ func (p *policyEvaluator) publish(ctx context.Context, event Event, policy polic
 	for i, finding := range findings {
 		evidence = append(evidence, risk.MCPFindingEvidence{ID: ids[i], Match: finding.Match})
 	}
-	storeCtx, cancel := context.WithTimeout(ctx, mcpFindingEvidenceStoreTimeout)
-	defer cancel()
-	disallowed := payload != "" && !p.payloadStorageAllowed(storeCtx, event.OrganizationID)
+	disallowed := payload != "" && !p.payloadStorageAllowed(ctx, event.OrganizationID)
 	var scanned *risk.MCPExecutionPayload
 	if payload != "" && !disallowed {
 		scanned = &risk.MCPExecutionPayload{ExecutionID: event.ExecutionID(), Phase: event.Phase(), Payload: payload}
 	}
+	storeCtx, cancel := context.WithTimeout(ctx, mcpFindingEvidenceStoreTimeout)
+	defer cancel()
 	if err := p.evidenceWriter.Store(storeCtx, risk.MCPFindingEvidenceBatch{
 		OrganizationID: event.OrganizationID,
 		ProjectID:      projectID,
@@ -403,6 +407,8 @@ func (p *policyEvaluator) payloadStorageAllowed(ctx context.Context, organizatio
 	if p.payloadStorage == nil {
 		return false
 	}
+	ctx, cancel := context.WithTimeout(ctx, mcpPayloadStorageLookupTimeout)
+	defer cancel()
 	allowed, err := p.payloadStorage(ctx, organizationID)
 	if err != nil {
 		p.logger.WarnContext(ctx, "failed to check MCP payload storage setting", attr.SlogError(err))
