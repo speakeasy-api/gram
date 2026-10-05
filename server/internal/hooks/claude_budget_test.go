@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -20,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 const (
@@ -35,16 +37,28 @@ const (
 )
 
 // hooksPostureFeatures enables every product feature except hooks_fail_open,
-// which follows failOpen.
+// which follows failOpen, or fails with err when it is set. When read is set,
+// each hooks_fail_open lookup signals it without blocking.
 type hooksPostureFeatures struct {
 	failOpen bool
+	err      error
+	read     chan struct{}
 }
 
 func (f hooksPostureFeatures) IsFeatureEnabled(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
-	if feature == productfeatures.FeatureHooksFailOpen {
-		return f.failOpen, nil
+	if feature != productfeatures.FeatureHooksFailOpen {
+		return true, nil
 	}
-	return true, nil
+	if f.read != nil {
+		select {
+		case f.read <- struct{}{}:
+		default:
+		}
+	}
+	if f.err != nil {
+		return false, f.err
+	}
+	return f.failOpen, nil
 }
 
 // slowRiskScanner holds every enforcement scan until the test finishes it,
@@ -264,6 +278,106 @@ func TestClaude_DecisionBudget_FailClosedBlocksPromptWithReason(t *testing.T) {
 	require.Equal(t, "block", *result.Decision)
 	require.NotNil(t, result.Reason)
 	require.Contains(t, *result.Reason, "Speakeasy blocked this prompt: its security check did not finish in time")
+}
+
+// An organization whose fail-open setting cannot be read is answered as
+// fail-closed: a pass-through could let through an event its organization
+// chose to block.
+func TestClaude_DecisionBudget_UnreadablePostureFailsClosed(t *testing.T) {
+	t.Parallel()
+	ctx, ti, scanner := newBudgetedClaudeService(t, true, nil)
+	ti.service.productFeatures = hooksPostureFeatures{failOpen: true, err: errors.New("feature store unavailable")}
+
+	sessionID := uuid.NewString()
+	toolName := "Bash"
+	toolUseID := "toolu_budget_unreadable_posture"
+	userEmail := "budget-unreadable-posture@example.com"
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{"command": "ls"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	requireScanStarted(t, scanner)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok)
+	require.NotNil(t, output.PermissionDecision)
+	require.Equal(t, "deny", *output.PermissionDecision)
+	require.NotNil(t, output.PermissionDecisionReason)
+	require.Contains(t, *output.PermissionDecisionReason, "security check did not finish in time")
+}
+
+// The fail-open posture is read while the verdict is still pending, not once
+// the budget fires, so an overrun is answered at the budget and a pass-through
+// is marked superseded before a late deny can record its block.
+func TestClaude_DecisionBudget_ReadsPostureWhileVerdictPending(t *testing.T) {
+	t.Parallel()
+	ctx, ti, scanner := newBudgetedClaudeService(t, true, nil)
+	// A budget this long cannot fire during the test, so any posture read it
+	// observes overlapped the pending verdict.
+	ti.service.claudeDecisionBudget = time.Hour
+	postureRead := make(chan struct{}, 1)
+	ti.service.productFeatures = hooksPostureFeatures{failOpen: true, read: postureRead}
+
+	sessionID := uuid.NewString()
+	prompt := "a prompt whose verdict is still pending"
+	type claudeResponse struct {
+		result *gen.ClaudeHookResult
+		err    error
+	}
+	responses := make(chan claudeResponse, 1)
+	go func() {
+		result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+			HookEventName: "UserPromptSubmit",
+			SessionID:     &sessionID,
+			Prompt:        &prompt,
+		})
+		responses <- claudeResponse{result: result, err: err}
+	}()
+
+	requireScanStarted(t, scanner)
+	select {
+	case <-postureRead:
+	case <-time.After(testClaudeBudgetAnswerWithin):
+		require.FailNow(t, "the posture must be read while the verdict is pending")
+	}
+
+	scanner.finish()
+	response := <-responses
+	require.NoError(t, response.err)
+	require.NotNil(t, response.result)
+	require.Nil(t, response.result.Decision, "the handler's own allow answers")
+}
+
+// hooksFailOpen reports fail-open only for a setting it read as enabled.
+func TestHooksFailOpen_TrueOnlyForReadEnabledSetting(t *testing.T) {
+	t.Parallel()
+	organizationID := uuid.NewString()
+	cases := []struct {
+		name           string
+		organizationID string
+		features       ProductFeaturesClient
+		want           bool
+	}{
+		{name: "enabled setting", organizationID: organizationID, features: hooksPostureFeatures{failOpen: true}, want: true},
+		{name: "disabled setting", organizationID: organizationID, features: hooksPostureFeatures{failOpen: false}, want: false},
+		{name: "failed read", organizationID: organizationID, features: hooksPostureFeatures{failOpen: true, err: errors.New("feature store unavailable")}, want: false},
+		{name: "unknown organization", organizationID: "", features: hooksPostureFeatures{failOpen: true}, want: false},
+		{name: "no feature client", organizationID: organizationID, features: nil, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := &Service{logger: testenv.NewLogger(t), productFeatures: tc.features}
+			require.Equal(t, tc.want, s.hooksFailOpen(t.Context(), tc.organizationID))
+		})
+	}
 }
 
 // A handler that overruns the budget keeps running after the response, so a
