@@ -933,15 +933,15 @@ function IdentityGroup({
   // each scrolls its own rows rather than pushing the other down.
   return (
     <section className="flex min-h-[9rem] flex-1 basis-0 flex-col gap-3">
-      <div className="flex items-end justify-between gap-6">
-        <div className="space-y-1">
-          <div className="flex items-baseline gap-2">
-            <h2 className="text-base font-medium">{heading}</h2>
-            <span className="text-muted-foreground font-mono text-xs">
-              {count}
-            </span>
-          </div>
-          <Text muted small>
+      <div className="flex items-baseline justify-between gap-6">
+        {/* Title, count and provenance on one line: the note is a caption for
+            the heading, not a paragraph under it. */}
+        <div className="flex min-w-0 items-baseline gap-3">
+          <h2 className="text-base font-medium">{heading}</h2>
+          <span className="text-muted-foreground font-mono text-xs">
+            {count}
+          </span>
+          <Text muted small className="truncate">
             {note}
           </Text>
         </div>
