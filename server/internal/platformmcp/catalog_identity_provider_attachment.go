@@ -27,6 +27,7 @@ import (
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -258,7 +259,7 @@ func (s *CatalogIdentityProviderAttachmentService) reusableIssuer(ctx context.Co
 		return none, false, nil
 	}
 	issuer := issuers[0]
-	if !issuer.ProjectID.Valid || issuer.ProjectID.UUID != project.ID || !issuer.OrganizationID.Valid || issuer.OrganizationID.String != principal.OrganizationID || !issuer.AuthorizationEndpoint.Valid || issuer.AuthorizationEndpoint.String == "" || !issuer.TokenEndpoint.Valid || issuer.TokenEndpoint.String == "" || ((!issuer.RegistrationEndpoint.Valid || issuer.RegistrationEndpoint.String == "") && !remotesessions.SupportsClientIDMetadataDocument(issuer.ClientIDMetadataDocumentSupported, issuer.TokenEndpointAuthMethodsSupported)) {
+	if !issuer.ProjectID.Valid || issuer.ProjectID.UUID != project.ID || !issuer.OrganizationID.Valid || issuer.OrganizationID.String != principal.OrganizationID || !issuer.AuthorizationEndpoint.Valid || issuer.AuthorizationEndpoint.String == "" || !issuer.TokenEndpoint.Valid || issuer.TokenEndpoint.String == "" || !supportsAutomaticClientRegistration(issuer.RegistrationEndpoint.String, issuer.ClientIDMetadataDocumentSupported, issuer.TokenEndpointAuthMethodsSupported) {
 		return none, false, ErrIdentityProviderAttachmentConflict
 	}
 	if issuer.TunneledMcpServerID.Valid {
@@ -275,11 +276,14 @@ func (s *CatalogIdentityProviderAttachmentService) reusableIssuer(ctx context.Co
 // one, the same path the dashboard's automatic setup takes. A provider offering
 // neither leaves the registration needing manual setup.
 func attachmentIdentityPlan(principal Principal, project ResolvedProject, registrationID, userSessionIssuerID uuid.UUID, metadata remotesessions.DiscoveredIssuerMetadata, existing remotesessionsrepo.RemoteSessionIssuer, reuse bool, resourceURL string, resourceMetadata wellknown.OAuthProtectedResourceMetadata) remotesessions.IdentityPlan {
-	provider := remotesessions.CreateProvider(discoveredIssuerParams(principal, project, registrationID, metadata))
-	allowCIMD := !attachmentCanUseDynamicRegistration(metadata.RegistrationEndpoint, metadata.TokenEndpointAuthMethodsSupported)
+	var provider remotesessions.ProviderChoice
+	var allowCIMD bool
 	if reuse {
 		provider = remotesessions.UseProvider(existing.ID)
 		allowCIMD = !attachmentCanUseDynamicRegistration(existing.RegistrationEndpoint.String, existing.TokenEndpointAuthMethodsSupported)
+	} else {
+		provider = remotesessions.CreateProvider(discoveredIssuerParams(principal, project, registrationID, metadata))
+		allowCIMD = !attachmentCanUseDynamicRegistration(metadata.RegistrationEndpoint, metadata.TokenEndpointAuthMethodsSupported)
 	}
 	return remotesessions.IdentityPlan{
 		Scope: remotesessions.IdentityScope{
@@ -407,8 +411,7 @@ func attachmentCanUseDynamicRegistration(registrationEndpoint string, tokenEndpo
 }
 
 func validDynamicClientRegistrationEndpoint(raw string) bool {
-	endpoint, err := url.Parse(raw)
-	return err == nil && endpoint.Scheme == "https" && endpoint.Host != "" && endpoint.User == nil
+	return urls.IsAbsoluteHTTPS(raw)
 }
 
 func optionalString(value string) *string {
