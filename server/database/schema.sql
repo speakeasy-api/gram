@@ -68,8 +68,10 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
 
   creation_source TEXT, -- which flow created the organization; NULL where nothing recorded one
   -- Platform host the org's rendered URLs (emails, Slack messages, background
-  -- jobs) use. NULL means the canonical host. Validated in application code and
-  -- re-checked on read.
+  -- jobs) use. NULL means the legacy default host (GRAM_LEGACY_DEFAULT_HOST,
+  -- app.getgram.ai in prod), so existing orgs keep it when the canonical host
+  -- changes. New orgs store GRAM_NEW_ORG_DEFAULT_HOST. Validated in application
+  -- code and re-checked on read.
   default_host TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),

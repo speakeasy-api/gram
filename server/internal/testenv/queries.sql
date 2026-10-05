@@ -249,6 +249,10 @@ WHERE public_id = @public_id;
 -- name: CountPublishOutboxRows :one
 SELECT COUNT(*) FROM publish_outbox;
 
+-- name: CountPublishOutboxRowsByTopic :one
+SELECT COUNT(*) FROM publish_outbox
+WHERE organization_id = @organization_id AND topic = @topic;
+
 -- name: ListPublishOutboxRows :many
 SELECT id, public_id, organization_id, topic, message, attributes,
        attempts, last_error, retry_after, locked_until, lease_token, created_at
@@ -1794,6 +1798,15 @@ SELECT id FROM publish_outbox WHERE id = @id AND organization_id = @organization
 -- Resolve a service-owned session lock by its exact application key.
 SELECT locks.pid::integer FROM pg_catalog.pg_locks AS locks
 WHERE locks.locktype = 'advisory' AND locks.granted
+  AND locks.database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database())
+  AND locks.classid = ((hashtextextended(@key::text, 0) >> 32) & 4294967295)::oid
+  AND locks.objid = (hashtextextended(@key::text, 0) & 4294967295)::oid
+  AND locks.objsubid = 1;
+
+-- name: CountAdvisoryLockWaitersFixture :one
+-- Count sessions blocked on an advisory lock by its exact application key.
+SELECT count(*)::integer FROM pg_catalog.pg_locks AS locks
+WHERE locks.locktype = 'advisory' AND NOT locks.granted
   AND locks.database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database())
   AND locks.classid = ((hashtextextended(@key::text, 0) >> 32) & 4294967295)::oid
   AND locks.objid = (hashtextextended(@key::text, 0) & 4294967295)::oid

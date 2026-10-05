@@ -309,7 +309,8 @@ INSERT INTO organization_metadata (
     workos_id,
     workos_updated_at,
     workos_last_event_id,
-    verified_domains
+    verified_domains,
+    default_host
 ) VALUES (
     $1,
     $2,
@@ -317,7 +318,8 @@ INSERT INTO organization_metadata (
     $4,
     $5,
     $6,
-    $7::text[]
+    $7::text[],
+    $8::text
 )
 RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
 ), enabled AS (
@@ -358,6 +360,7 @@ type CreateOrganizationMetadataFromWorkOSWithRequestsParams struct {
 	WorkosUpdatedAt   pgtype.Timestamptz
 	WorkosLastEventID pgtype.Text
 	VerifiedDomains   []string
+	DefaultHost       pgtype.Text
 }
 
 type CreateOrganizationMetadataFromWorkOSWithRequestsRow struct {
@@ -396,6 +399,7 @@ func (q *Queries) CreateOrganizationMetadataFromWorkOSWithRequests(ctx context.C
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
 		arg.VerifiedDomains,
+		arg.DefaultHost,
 	)
 	var i CreateOrganizationMetadataFromWorkOSWithRequestsRow
 	err := row.Scan(
@@ -426,8 +430,8 @@ func (q *Queries) CreateOrganizationMetadataFromWorkOSWithRequests(ctx context.C
 
 const createOrganizationMetadataWithRequests = `-- name: CreateOrganizationMetadataWithRequests :one
 WITH written AS (
-INSERT INTO organization_metadata (id, name, slug)
-VALUES ($1, $2, $3)
+INSERT INTO organization_metadata (id, name, slug, default_host)
+VALUES ($1, $2, $3, $4::text)
 RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at, TRUE AS inserted
 ), enabled AS (
     INSERT INTO organization_features (organization_id, feature_name)
@@ -460,9 +464,10 @@ FROM written
 `
 
 type CreateOrganizationMetadataWithRequestsParams struct {
-	ID   string
-	Name string
-	Slug string
+	ID          string
+	Name        string
+	Slug        string
+	DefaultHost pgtype.Text
 }
 
 type CreateOrganizationMetadataWithRequestsRow struct {
@@ -490,7 +495,12 @@ type CreateOrganizationMetadataWithRequestsRow struct {
 }
 
 func (q *Queries) CreateOrganizationMetadataWithRequests(ctx context.Context, arg CreateOrganizationMetadataWithRequestsParams) (CreateOrganizationMetadataWithRequestsRow, error) {
-	row := q.db.QueryRow(ctx, createOrganizationMetadataWithRequests, arg.ID, arg.Name, arg.Slug)
+	row := q.db.QueryRow(ctx, createOrganizationMetadataWithRequests,
+		arg.ID,
+		arg.Name,
+		arg.Slug,
+		arg.DefaultHost,
+	)
 	var i CreateOrganizationMetadataWithRequestsRow
 	err := row.Scan(
 		&i.Requests,
@@ -2857,6 +2867,22 @@ func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) 
 	return i, err
 }
 
+const setOrganizationDefaultHostForTest = `-- name: SetOrganizationDefaultHostForTest :exec
+UPDATE organization_metadata
+SET default_host = $1
+WHERE id = $2
+`
+
+type SetOrganizationDefaultHostForTestParams struct {
+	DefaultHost pgtype.Text
+	ID          string
+}
+
+func (q *Queries) SetOrganizationDefaultHostForTest(ctx context.Context, arg SetOrganizationDefaultHostForTestParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationDefaultHostForTest, arg.DefaultHost, arg.ID)
+	return err
+}
+
 const setOrganizationOnboardingPlaybook = `-- name: SetOrganizationOnboardingPlaybook :exec
 INSERT INTO organization_onboarding (organization_id, playbook_id)
 VALUES ($1::text, $2::uuid)
@@ -3451,16 +3477,20 @@ INSERT INTO organization_metadata (
     slug,
     workos_id,
     workos_updated_at,
-    workos_last_event_id
+    workos_last_event_id,
+    default_host
 ) VALUES (
     $1,
     $2,
     $3,
     $4,
     $5,
-    $6
+    $6,
+    $7::text
 )
 ON CONFLICT (id) DO UPDATE SET
+    -- default_host is only written on insert, so an existing organization
+    -- keeps its host.
     name = EXCLUDED.name,
     workos_id = EXCLUDED.workos_id,
     workos_updated_at = EXCLUDED.workos_updated_at,
@@ -3504,6 +3534,7 @@ type UpsertOrganizationMetadataFromWorkOSWithRequestsParams struct {
 	WorkosID          pgtype.Text
 	WorkosUpdatedAt   pgtype.Timestamptz
 	WorkosLastEventID pgtype.Text
+	DefaultHost       pgtype.Text
 }
 
 type UpsertOrganizationMetadataFromWorkOSWithRequestsRow struct {
@@ -3542,6 +3573,7 @@ func (q *Queries) UpsertOrganizationMetadataFromWorkOSWithRequests(ctx context.C
 		arg.WorkosID,
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
+		arg.DefaultHost,
 	)
 	var i UpsertOrganizationMetadataFromWorkOSWithRequestsRow
 	err := row.Scan(
@@ -3578,14 +3610,16 @@ INSERT INTO organization_metadata (
     slug,
     workos_id,
     whitelisted,
-    creation_source
+    creation_source,
+    default_host
 ) VALUES (
     $1,
     $2,
     $3,
     $4,
     COALESCE($5::boolean, FALSE),
-    $6::text
+    $6::text,
+    $7::text
 )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
@@ -3602,6 +3636,9 @@ ON CONFLICT (id) DO UPDATE SET
     -- passes null and leaves whatever is already recorded alone, so a later
     -- upsert from an unrelated path cannot erase the flow that created the row.
     creation_source = COALESCE(EXCLUDED.creation_source, organization_metadata.creation_source),
+    -- default_host is deliberately absent: it is chosen when the organization
+    -- is created, and a later upsert must not move an existing organization's
+    -- URLs to another host.
     updated_at = clock_timestamp()
 RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
 ), enabled AS (
@@ -3641,6 +3678,7 @@ type UpsertOrganizationMetadataWithRequestsParams struct {
 	WorkosID       pgtype.Text
 	Whitelisted    pgtype.Bool
 	CreationSource pgtype.Text
+	DefaultHost    pgtype.Text
 }
 
 type UpsertOrganizationMetadataWithRequestsRow struct {
@@ -3675,6 +3713,7 @@ func (q *Queries) UpsertOrganizationMetadataWithRequests(ctx context.Context, ar
 		arg.WorkosID,
 		arg.Whitelisted,
 		arg.CreationSource,
+		arg.DefaultHost,
 	)
 	var i UpsertOrganizationMetadataWithRequestsRow
 	err := row.Scan(

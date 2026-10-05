@@ -251,8 +251,8 @@ WHERE d.activated IS TRUE
   AND d.ingress_name IS NOT NULL
   AND d.deleted IS FALSE;
 
--- name: GetOrganizationSlugForHealthNotification :one
-SELECT slug
+-- name: GetOrganizationForHealthNotification :one
+SELECT slug, default_host
 FROM organization_metadata
 WHERE id = @organization_id;
 

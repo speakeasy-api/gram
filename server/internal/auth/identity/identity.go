@@ -138,6 +138,10 @@ type Resolver struct {
 	pylon         *pylon.Pylon
 	posthog       *posthog.Posthog
 	growth        *growthsignals.Emitter
+
+	// newOrganizationDefaultHost is recorded as the default host of
+	// organizations membership sync creates.
+	newOrganizationDefaultHost pgtype.Text
 }
 
 func NewResolver(
@@ -169,7 +173,15 @@ func NewResolver(
 		pylon:         pylon,
 		posthog:       posthog,
 		growth:        growth,
+
+		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 	}
+}
+
+// SetNewOrganizationDefaultHost sets the default host recorded on
+// organizations membership sync creates. Unset records none.
+func (r *Resolver) SetNewOrganizationDefaultHost(host pgtype.Text) {
+	r.newOrganizationDefaultHost = host
 }
 
 // ExchangeCodeForTokens exchanges an authorization code for user identity
@@ -671,6 +683,7 @@ func (r *Resolver) upsertOrgFromMembership(ctx context.Context, m workos.Member)
 			// organization exists, never what asked for it, and a row it
 			// inserts first is filled in by the flow that did know.
 			CreationSource: pgtype.Text{String: "", Valid: false},
+			DefaultHost:    r.newOrganizationDefaultHost,
 		}); err != nil {
 			return fmt.Errorf("upsert org metadata from workos %q: %w", m.OrganizationID, err)
 		}
