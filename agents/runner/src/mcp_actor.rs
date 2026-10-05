@@ -190,30 +190,8 @@ impl McpActor {
         token: String,
         desired: Option<Vec<McpServer>>,
     ) -> Result<(), RunnerError> {
-        if self.tokens.current()? != token {
-            // HTTP token rotation does not invalidate MCP protocol sessions or
-            // credential-specific OAuth/cooldown state. Tear those down under
-            // the old credential before publishing the next one.
-            let ids: Vec<_> = self
-                .manager
-                .connected_servers()
-                .iter()
-                .map(|handle| handle.server_id().0.clone())
-                .collect();
-            for id in ids {
-                if self.is_connected(&id) {
-                    self.drop_connection(&id, "credential_boundary").await;
-                }
-            }
-            self.auth_pending.clear();
-            self.last_errors.clear();
-            self.last_reconnects.clear();
-            self.tokens.rotate(token)?;
-        }
-        if let Some(desired) = desired {
-            self.reconcile(desired).await;
-        }
-        Ok(())
+        let desired = desired.unwrap_or_else(|| self.configured.values().cloned().collect());
+        self.reconcile(desired, token).await
     }
 
     fn is_connected(&self, id: &str) -> bool {
@@ -378,31 +356,51 @@ impl McpActor {
         }
     }
 
-    async fn reconcile(&mut self, desired: Vec<McpServer>) {
+    async fn reconcile(
+        &mut self,
+        desired: Vec<McpServer>,
+        token: String,
+    ) -> Result<(), RunnerError> {
         let desired_map: BTreeMap<String, McpServer> =
             desired.into_iter().map(|s| (s.id.clone(), s)).collect();
 
-        let mut attached: Vec<String> = Vec::new();
+        // Build every changed configuration before mutating credentials, live
+        // sessions, or the desired set. An invalid replacement must not leave
+        // the old endpoint registered under the next invocation's credential.
+        let mut prepared = Vec::new();
+        let mut attached = Vec::new();
         for (id, server) in &desired_map {
             let is_new = !self.configured.contains_key(id);
             let changed = self.configured.get(id).is_some_and(|prev| prev != server);
             if is_new {
                 attached.push(id.clone());
             }
-            if !is_new && !changed {
-                continue;
+            if is_new || changed {
+                let config = build_mcp_server_config(server, &self.http_client, &self.tokens)?;
+                prepared.push((id.clone(), config, changed));
             }
-            let config = match build_mcp_server_config(server, &self.http_client, &self.tokens) {
-                Ok(cfg) => cfg,
-                Err(err) => {
-                    tracing::warn!(
-                        server_id = %id,
-                        error = %err,
-                        "skip reconciled mcp server: config build failed"
-                    );
-                    continue;
+        }
+        if self.tokens.current()? != token {
+            // HTTP token rotation does not invalidate MCP protocol sessions or
+            // credential-specific OAuth/cooldown state. Tear those down under
+            // the old credential before publishing the next one.
+            let ids: Vec<_> = self
+                .manager
+                .connected_servers()
+                .iter()
+                .map(|handle| handle.server_id().0.clone())
+                .collect();
+            for id in ids {
+                if self.is_connected(&id) {
+                    self.drop_connection(&id, "credential_boundary").await;
                 }
-            };
+            }
+            self.auth_pending.clear();
+            self.last_errors.clear();
+            self.last_reconnects.clear();
+            self.tokens.rotate(token)?;
+        }
+        for (id, config, changed) in prepared {
             self.manager.register_server_with_options(
                 config,
                 McpServerOptions::new().with_timeout(MCP_HANDSHAKE_TIMEOUT),
@@ -412,11 +410,11 @@ impl McpActor {
                 // error, and reconnect-debounce state so the next
                 // EnsureConnected reconnects fresh and an immediate
                 // reconnect is not suppressed by a pre-drift timestamp.
-                self.auth_pending.remove(id);
-                self.last_errors.remove(id);
-                self.last_reconnects.remove(id);
-                if self.is_connected(id) {
-                    self.drop_connection(id, "config_drift").await;
+                self.auth_pending.remove(&id);
+                self.last_errors.remove(&id);
+                self.last_reconnects.remove(&id);
+                if self.is_connected(&id) {
+                    self.drop_connection(&id, "config_drift").await;
                 }
             }
         }
@@ -439,7 +437,7 @@ impl McpActor {
         self.configured = desired_map;
 
         if attached.is_empty() && detached.is_empty() {
-            return;
+            return Ok(());
         }
         let mut notice =
             String::from("<message-context>\nEventType: assistant_mcp_servers_updated\n");
@@ -452,6 +450,7 @@ impl McpActor {
         notice
             .push_str("Use tool_search to discover tools on attached servers.\n</message-context>");
         self.send_notice(notice);
+        Ok(())
     }
 
     /// Creates (or reuses) the auth flow for a server whose connect
@@ -561,11 +560,7 @@ pub fn validate_endpoint(raw: &str) -> Result<(), RunnerError> {
     Ok(())
 }
 
-fn build_mcp_server_config(
-    server: &McpServer,
-    http_client: &reqwest::Client,
-    tokens: &TokenRegistry,
-) -> Result<McpServerConfig, RunnerError> {
+pub fn validated_server_headers(server: &McpServer) -> Result<http::HeaderMap, RunnerError> {
     validate_endpoint(&server.url)?;
     let mut server_headers = http::HeaderMap::new();
     for (k, v) in &server.headers {
@@ -584,6 +579,15 @@ fn build_mcp_server_config(
             })?;
         server_headers.insert(name, value);
     }
+    Ok(server_headers)
+}
+
+fn build_mcp_server_config(
+    server: &McpServer,
+    http_client: &reqwest::Client,
+    tokens: &TokenRegistry,
+) -> Result<McpServerConfig, RunnerError> {
+    let server_headers = validated_server_headers(server)?;
     let mcp_http = Arc::new(McpRotatingClient::new(
         http_client.clone(),
         tokens.clone(),
@@ -614,6 +618,149 @@ mod tests {
         }
         assert!(validate_endpoint("https://example.com/mcp").is_ok());
         assert!(validate_endpoint("http://127.0.0.1:8080/mcp").is_ok());
+    }
+
+    #[tokio::test]
+    async fn invalid_same_id_replacement_rejects_ack_without_reconnecting_old_endpoint() {
+        use axum::{
+            Json, Router, extract::Path, http::HeaderMap, response::IntoResponse, routing::post,
+        };
+        use serde_json::{Value, json};
+        let (events_tx, mut events) = mpsc::unbounded_channel();
+        let post_events = events_tx.clone();
+        let app = Router::new().route("/{endpoint}", post(move |Path(endpoint): Path<String>, headers: HeaderMap, Json(message): Json<Value>| {
+            let events = post_events.clone();
+            async move {
+                let bearer = headers.get("authorization").unwrap().to_str().unwrap().to_string();
+                let method = message["method"].as_str().unwrap().to_string();
+                events.send((endpoint.clone(), bearer, method.clone())).unwrap();
+                if message.get("id").is_none() { return axum::http::StatusCode::ACCEPTED.into_response(); }
+                let result = if method == "initialize" {
+                    json!({"protocolVersion": message["params"]["protocolVersion"], "capabilities":{"tools":{}}, "serverInfo":{"name":"fixture", "version":"1"}})
+                } else { json!({"tools":[]}) };
+                let mut response = Json(json!({"jsonrpc":"2.0", "id":message["id"], "result":result})).into_response();
+                response.headers_mut().insert("mcp-session-id", format!("session-{endpoint}").parse().unwrap());
+                response
+            }
+        }).get(|| async { axum::http::StatusCode::METHOD_NOT_ALLOWED }).delete(move |Path(endpoint): Path<String>, headers: HeaderMap| {
+            let events = events_tx.clone();
+            async move {
+                events.send((endpoint, headers.get("authorization").unwrap().to_str().unwrap().to_string(), "DELETE".into())).unwrap();
+                axum::http::StatusCode::OK
+            }
+        }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let tokens = TokenRegistry::new("opaque-a");
+        let client = reqwest::Client::new();
+        let (notice_tx, _notices) = mpsc::unbounded_channel();
+        let old = McpServer {
+            id: "same-id".into(),
+            url: format!("http://{addr}/old"),
+            headers: BTreeMap::new(),
+        };
+        let (cmd, _catalog) = spawn_mcp_actor(
+            GramBootstrapClient::new(
+                format!("http://{addr}"),
+                crate::http_layer::build_bootstrap_client(client.clone()),
+            ),
+            client,
+            "T",
+            std::slice::from_ref(&old),
+            &tokens,
+            notice_tx,
+        )
+        .unwrap();
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::EnsureConnected { reply }).await.unwrap();
+        assert_eq!(
+            ack.await.unwrap()[0].status,
+            McpServerConnectionStatus::Connected
+        );
+        for token in ["opaque-a", "opaque-b"] {
+            for headers in [
+                BTreeMap::from([("bad header".into(), "value".into())]),
+                BTreeMap::from([("x-test".into(), "bad\nvalue".into())]),
+            ] {
+                let replacement = McpServer {
+                    url: format!("http://{addr}/replacement"),
+                    headers,
+                    ..old.clone()
+                };
+                let (reply, ack) = oneshot::channel();
+                cmd.send(McpCmd::TurnBoundary {
+                    token: token.into(),
+                    desired: Some(vec![replacement]),
+                    reply,
+                })
+                .await
+                .unwrap();
+                assert!(
+                    ack.await.unwrap().is_err(),
+                    "invalid config must fail boundary acknowledgement"
+                );
+                assert_eq!(
+                    tokens.current().unwrap(),
+                    "opaque-a",
+                    "failed preparation must not publish the next credential"
+                );
+                let (reply, ack) = oneshot::channel();
+                cmd.send(McpCmd::EnsureConnected { reply }).await.unwrap();
+                assert_eq!(
+                    ack.await.unwrap()[0].status,
+                    McpServerConnectionStatus::Connected
+                );
+            }
+        }
+        // A valid boundary closes the actual prior protocol session under A,
+        // then reconnects only the replacement endpoint under B.
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::TurnBoundary {
+            token: "opaque-b".into(),
+            desired: Some(vec![McpServer {
+                url: format!("http://{addr}/replacement"),
+                ..old
+            }]),
+            reply,
+        })
+        .await
+        .unwrap();
+        ack.await.unwrap().unwrap();
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::EnsureConnected { reply }).await.unwrap();
+        assert_eq!(
+            ack.await.unwrap()[0].status,
+            McpServerConnectionStatus::Connected
+        );
+        let mut initialized = Vec::new();
+        let mut deleted_old_under_a = false;
+        while let Ok((endpoint, bearer, method)) = events.try_recv() {
+            assert!(
+                !(endpoint == "old" && bearer == "Bearer opaque-b"),
+                "old endpoint must never receive the next credential"
+            );
+            if method == "initialize" {
+                initialized.push((endpoint.clone(), bearer.clone()));
+            }
+            if method == "DELETE" && endpoint == "old" && bearer == "Bearer opaque-a" {
+                deleted_old_under_a = true;
+            }
+        }
+        assert_eq!(
+            initialized,
+            vec![
+                ("old".into(), "Bearer opaque-a".into()),
+                ("replacement".into(), "Bearer opaque-b".into())
+            ]
+        );
+        assert!(
+            deleted_old_under_a,
+            "credential boundary must tear down the actual prior MCP session"
+        );
+        server_task.abort();
     }
 
     #[tokio::test]

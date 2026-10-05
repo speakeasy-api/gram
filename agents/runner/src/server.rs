@@ -179,8 +179,8 @@ async fn thread_turn_inner(
         .as_ref()
         .unwrap_or(&bootstrap.mcp_servers)
     {
-        crate::mcp_actor::validate_endpoint(&server.url)
-            .map_err(|_| (StatusCode::BAD_REQUEST, "invalid MCP endpoint".into()))?;
+        crate::mcp_actor::validated_server_headers(server)
+            .map_err(|_| (StatusCode::BAD_REQUEST, "invalid MCP configuration".into()))?;
     }
     let _admission = host.admission.lock().await;
     for (cell, actual, hint) in [
@@ -349,6 +349,25 @@ mod tests {
         assert!(host.identity.assistant_id.get().is_none());
         assert!(host.seen.is_empty() && host.threads.is_empty());
 
+        for invalid_headers in [
+            std::collections::BTreeMap::from([("bad header".into(), "value".into())]),
+            std::collections::BTreeMap::from([("x-test".into(), "bad\nvalue".into())]),
+        ] {
+            let mut invalid_config = request(Some("opaque-valid"), None);
+            invalid_config.mcp_servers = Some(vec![crate::wire::McpServer {
+                id: "same-id".into(),
+                url: "http://127.0.0.1/mcp".into(),
+                headers: invalid_headers,
+            }]);
+            let rejected =
+                thread_turn_inner(host.clone(), "T".into(), headers.clone(), invalid_config)
+                    .await
+                    .unwrap_err();
+            assert_eq!(rejected.0, StatusCode::BAD_REQUEST);
+            assert!(host.seen.is_empty() && host.threads.is_empty());
+            assert!(host.identity.assistant_id.get().is_none());
+        }
+
         // Install warm state without a model network call; retain the inbox.
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let warm = Arc::new(ConfiguredThread {
@@ -394,7 +413,7 @@ mod tests {
         .await
         .unwrap_err();
         assert_eq!(denied_duplicate.0, StatusCode::UNAUTHORIZED);
-        assert_eq!(calls.load(Ordering::SeqCst), 5);
+        assert_eq!(calls.load(Ordering::SeqCst), 7);
         assert!(rx.try_recv().is_err());
         task.abort();
     }
