@@ -104,6 +104,13 @@ type Service struct {
 	// relative to the attribute_metrics_summaries MV cutoff. Defaults to
 	// time.Now via NewService; access through now() for nil-safety.
 	nowFunc func() time.Time
+	// claudeDecisionBudget bounds how long the legacy /rpc/hooks.claude
+	// endpoint waits for a verdict before it answers from the org's fail-open
+	// posture. NewService sets legacyClaudeHookDecisionBudget; tests shorten it.
+	claudeDecisionBudget time.Duration
+	// claudeDecisionDrains tracks legacy Claude handlers still running after
+	// their budget so tests can await them deterministically.
+	claudeDecisionDrains sync.WaitGroup
 }
 
 // now returns the current time via the injected clock, falling back to
@@ -282,36 +289,38 @@ func NewService(
 	riskRecorder *metering.RiskRecorder,
 ) *Service {
 	return &Service{
-		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
-		metrics:            newMetrics(meterProvider, logger),
-		logger:             logger.With(attr.SlogComponent("hooks")),
-		db:                 db,
-		telemetryLogger:    telemetryLogger,
-		otelLogPublisher:   otelLogPublisher,
-		otelTeeDrains:      sync.WaitGroup{},
-		auth:               auth.New(logger, db, sessionsMgr, authz),
-		authz:              authz,
-		audit:              auditLogger,
-		cache:              cacheAdapter,
-		temporalEnv:        temporalEnv,
-		repo:               repo.New(db),
-		productFeatures:    pfClient,
-		chatTitleGenerator: chatTitleGenerator,
-		riskScanner:        riskScanner,
-		piScanner:          piScanner,
-		riskRecorder:       riskRecorder,
-		policyBypass:       policyBypass,
-		spendGate:          spendGate,
-		shadowMCPClient:    shadowMCPClient,
-		writer:             writer,
-		efficacySignaler:   efficacySignaler,
-		suggestionSignaler: suggestionSignaler,
-		identityMapRefresh: identityMapRefresh,
-		serverURL:          serverURL,
-		orgHosts:           orgHosts,
-		orgHostCache:       newOrgDefaultHostCache(),
-		jwtSecret:          jwtSecret,
-		nowFunc:            time.Now,
+		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
+		metrics:              newMetrics(meterProvider, logger),
+		logger:               logger.With(attr.SlogComponent("hooks")),
+		db:                   db,
+		telemetryLogger:      telemetryLogger,
+		otelLogPublisher:     otelLogPublisher,
+		otelTeeDrains:        sync.WaitGroup{},
+		auth:                 auth.New(logger, db, sessionsMgr, authz),
+		authz:                authz,
+		audit:                auditLogger,
+		cache:                cacheAdapter,
+		temporalEnv:          temporalEnv,
+		repo:                 repo.New(db),
+		productFeatures:      pfClient,
+		chatTitleGenerator:   chatTitleGenerator,
+		riskScanner:          riskScanner,
+		piScanner:            piScanner,
+		riskRecorder:         riskRecorder,
+		policyBypass:         policyBypass,
+		spendGate:            spendGate,
+		shadowMCPClient:      shadowMCPClient,
+		writer:               writer,
+		efficacySignaler:     efficacySignaler,
+		suggestionSignaler:   suggestionSignaler,
+		identityMapRefresh:   identityMapRefresh,
+		serverURL:            serverURL,
+		orgHosts:             orgHosts,
+		orgHostCache:         newOrgDefaultHostCache(),
+		jwtSecret:            jwtSecret,
+		nowFunc:              time.Now,
+		claudeDecisionBudget: legacyClaudeHookDecisionBudget,
+		claudeDecisionDrains: sync.WaitGroup{},
 	}
 }
 

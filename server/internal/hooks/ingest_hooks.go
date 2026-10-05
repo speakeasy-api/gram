@@ -171,7 +171,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		if res != nil && res.Result != nil {
 			decision = res.Result.Decision
 		}
-		s.metrics.RecordHookEventDuration(ctx, source, eventType, outcome, decision, orgSlug, *riskScanned, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, source, eventType, outcome, decision, orgSlug, riskScanned.Load(), time.Since(start))
 	}()
 
 	if err := validateCanonicalIngestPayload(payload); err != nil {

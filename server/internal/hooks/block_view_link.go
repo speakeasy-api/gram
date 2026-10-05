@@ -57,9 +57,10 @@ func (s *Service) blockViewURL(ctx context.Context, organizationID string, block
 // insertToolCallBlock persists the durable block row for a pre-minted id. It is
 // meant to run detached (the deny response doesn't wait on it); the row becomes
 // visible to the block page within moments. Best-effort: logs and returns on
-// failure.
+// failure. Skipped when the event was already answered as a pass-through
+// (isVerdictSuperseded), since no block reached the user.
 func (s *Service) insertToolCallBlock(ctx context.Context, blockID uuid.UUID, p toolCallBlockParams) {
-	if s.repo == nil || strings.TrimSpace(p.OrganizationID) == "" || p.ProjectID == uuid.Nil {
+	if s.repo == nil || strings.TrimSpace(p.OrganizationID) == "" || p.ProjectID == uuid.Nil || isVerdictSuperseded(ctx) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, toolCallBlockWriteTimeout)

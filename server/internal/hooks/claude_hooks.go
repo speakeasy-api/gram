@@ -241,7 +241,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, *riskScanned, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, riskScanned.Load(), time.Since(start))
 	}()
 
 	if hasPluginAuth {
@@ -323,35 +323,38 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		return makeHookResult(payload.HookEventName), nil
 	}
 
-	// Route to appropriate handler based on hook type
-	var (
-		result *gen.ClaudeHookResult
-	)
+	result, answeredFromPosture, err := s.decideClaudeHookWithinBudget(ctx, logger, start, hookEvent, payload.HookEventName)
+	if answeredFromPosture {
+		outcome = hookMetricOutcomeBudgetExceeded
+	}
+	return result, err
+}
+
+// dispatchClaudeHookEvent routes a normalized Claude hook event to its handler.
+func (s *Service) dispatchClaudeHookEvent(ctx context.Context, logger *slog.Logger, hookEvent any, hookEventName string) (*gen.ClaudeHookResult, error) {
 	switch ev := hookEvent.(type) {
 	case *hookevents.SessionStart:
-		result, err = s.handleSessionStart(ctx, ev)
+		return s.handleSessionStart(ctx, ev)
 	case *hookevents.ConfigChange:
-		result, err = s.handleConfigChange(ctx, ev)
+		return s.handleConfigChange(ctx, ev)
 	case *hookevents.BeforeToolUse:
-		result, err = s.handlePreToolUse(ctx, ev)
+		return s.handlePreToolUse(ctx, ev)
 	case *hookevents.AfterToolUse:
-		result, err = s.handlePostToolUse(ctx, ev)
+		return s.handlePostToolUse(ctx, ev)
 	case *hookevents.AfterToolUseFailure:
-		result, err = s.handlePostToolUseFailure(ctx, ev)
+		return s.handlePostToolUseFailure(ctx, ev)
 	case *hookevents.UserPromptSubmit:
-		result, err = s.handleUserPromptSubmit(ctx, ev)
+		return s.handleUserPromptSubmit(ctx, ev)
 	case *hookevents.Stop:
-		result, err = s.handleStop(ctx, ev)
+		return s.handleStop(ctx, ev)
 	case *hookevents.SessionEnd:
-		result, err = s.handleSessionEnd(ctx, ev)
+		return s.handleSessionEnd(ctx, ev)
 	case *hookevents.Notification:
-		result, err = s.handleNotification(ctx, ev)
+		return s.handleNotification(ctx, ev)
 	default:
-		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
-		result = makeHookResult(payload.HookEventName)
+		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", hookEventName))
+		return makeHookResult(hookEventName), nil
 	}
-
-	return result, err
 }
 
 func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.ClaudePayload, timestamp time.Time) (any, error) {
@@ -1406,7 +1409,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 	serverPrefix string,
 	detail string,
 ) (uuid.UUID, uuid.UUID, bool) {
-	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) {
+	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) || isVerdictSuperseded(ctx) {
 		return uuid.Nil, uuid.Nil, false
 	}
 
@@ -1502,7 +1505,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 // gram.hook.block_reason. trace_summaries_mv aggregates with max(), so the
 // trace will surface as blocked regardless of which row arrives first.
 func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, reason string) {
-	if s.telemetryLogger == nil || reason == "" || s.isHookDuplicate(ctx) {
+	if s.telemetryLogger == nil || reason == "" || s.isHookDuplicate(ctx) || isVerdictSuperseded(ctx) {
 		return
 	}
 

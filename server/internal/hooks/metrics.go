@@ -20,6 +20,10 @@ const (
 	hookMetricOutcomeFailure         = "failure"
 	hookMetricOutcomeUnauthorized    = "unauthorized"
 	hookMetricOutcomeUnauthenticated = "unauthenticated"
+	// hookMetricOutcomeBudgetExceeded marks a response derived from the org's
+	// hooks fail-open setting because the handler missed its decision budget.
+	// The decision dimension then says whether that setting allowed or blocked.
+	hookMetricOutcomeBudgetExceeded = "budget_exceeded"
 
 	hookMetricDecisionAllow = "allow"
 	hookMetricDecisionDeny  = "deny"

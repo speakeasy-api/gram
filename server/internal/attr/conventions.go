@@ -659,6 +659,13 @@ const (
 	// context or no policies), so gating latency can be separated from the
 	// no-scan baseline.
 	HookRiskScannedKey = attribute.Key("gram.hook.risk_scanned")
+	// HookFailOpenKey records whether a hook endpoint answered an event from
+	// the fail-open side of the organization's hooks posture when it had no
+	// verdict to return, for example after the decision overran its budget.
+	HookFailOpenKey = attribute.Key("gram.hook.fail_open")
+	// HookElapsedMsKey is the server-side time, in milliseconds, between a
+	// hook request arriving and the logged event.
+	HookElapsedMsKey = attribute.Key("gram.hook.elapsed_ms")
 	// HookReplayedKey is set (true) on telemetry rows for events redelivered
 	// from a device's offline spool after control-plane downtime, so
 	// dashboards can separate downtime backlog from live traffic. The row's
@@ -1063,8 +1070,16 @@ func SlogHookServerNameOverrideID(v string) slog.Attr {
 }
 
 func HookDecision(v string) attribute.KeyValue { return HookDecisionKey.String(v) }
+func SlogHookDecision(v string) slog.Attr      { return slog.String(string(HookDecisionKey), v) }
 
 func HookRiskScanned(v bool) attribute.KeyValue { return HookRiskScannedKey.Bool(v) }
+
+func HookFailOpen(v bool) attribute.KeyValue { return HookFailOpenKey.Bool(v) }
+func SlogHookFailOpen(v bool) slog.Attr      { return slog.Bool(string(HookFailOpenKey), v) }
+
+func SlogHookElapsed(v time.Duration) slog.Attr {
+	return slog.Int64(string(HookElapsedMsKey), v.Milliseconds())
+}
 
 func SlogTelemetryPublishFailedCount(v int) slog.Attr {
 	return slog.Int(string(TelemetryPublishFailedCountKey), v)
