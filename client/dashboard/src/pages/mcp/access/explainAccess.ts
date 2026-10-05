@@ -231,9 +231,21 @@ function rulesSentence(
   return `Nothing grants ${memberName} ${access} on ${serverName}. Access is off until a rule grants it.`;
 }
 
-/** What a rule does, e.g. "Connect · All tools". */
-export function ruleAccessLabel(rule: ExplainedAccessRule): string {
+/**
+ * What a rule does, read against the access being explained, e.g.
+ * "Connect · All tools". Higher access includes lower (Manage includes View
+ * and Connect, View includes Connect), so a grant can decide a level other
+ * than its own; it then says which level it includes, e.g. "View · includes
+ * Connect". Blocks never span levels, so they always name the level shown.
+ */
+export function ruleAccessLabel(
+  rule: ExplainedAccessRule,
+  explained: ExplainedLevel,
+): string {
   const access = RULE_LEVEL_NAME[rule.level];
+  if (!ruleIsBlock(rule) && rule.level !== explained) {
+    return `${access} · includes ${LEVEL_NAME[explained]}`;
+  }
   if (rule.level !== "use" && rule.level !== "blocked") return access;
   const narrowing = narrowingLabel(rule);
   return `${access} · ${narrowing.charAt(0).toUpperCase()}${narrowing.slice(1)}`;

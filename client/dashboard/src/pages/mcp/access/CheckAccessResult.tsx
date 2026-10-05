@@ -198,7 +198,13 @@ function LevelWhy({
       key: "rule",
       header: "Rule",
       width: "1fr",
-      render: (rule) => <RuleDescription rule={rule} serverName={serverName} />,
+      render: (rule) => (
+        <RuleDescription
+          rule={rule}
+          explained={level.level}
+          serverName={serverName}
+        />
+      ),
     },
     {
       key: "effect",
@@ -285,9 +291,11 @@ function RuleSource({ rule }: { rule: ExplainedAccessRule }): JSX.Element {
 
 function RuleDescription({
   rule,
+  explained,
   serverName,
 }: {
   rule: ExplainedAccessRule;
+  explained: ExplainedLevel;
   serverName: string;
 }): JSX.Element {
   const block = ruleIsBlock(rule);
@@ -301,7 +309,7 @@ function RuleDescription({
         {block ? "Blocks" : "Grants"}
       </span>
       <span className={cn(lost && "text-muted-foreground line-through")}>
-        {ruleAccessLabel(rule)}
+        {ruleAccessLabel(rule, explained)}
       </span>
       <span className="text-muted-foreground">on</span>
       <Badge variant="neutral" size="sm">

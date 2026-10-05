@@ -176,8 +176,33 @@ describe("rule labels", () => {
           dispositions: ["destructive"],
           effect: "limits",
         }),
+        "use",
       ),
     ).toBe("Connect · Destructive tools");
+  });
+
+  it("says when a higher grant includes the access shown", () => {
+    expect(
+      ruleAccessLabel(
+        rule({ displayName: "Engineer", level: "view", effect: "blocked" }),
+        "use",
+      ),
+    ).toBe("View · includes Connect");
+    expect(
+      ruleAccessLabel(
+        rule({ displayName: "Engineer", level: "manage", effect: "allows" }),
+        "view",
+      ),
+    ).toBe("Manage · includes View");
+  });
+
+  it("names a grant at the level shown plainly", () => {
+    expect(
+      ruleAccessLabel(
+        rule({ displayName: "Engineer", level: "view", effect: "allows" }),
+        "view",
+      ),
+    ).toBe("View");
   });
 
   it("explains a blocked wildcard direct grant", () => {
