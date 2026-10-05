@@ -426,6 +426,9 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		// administrator drives directly, like the other distribution writes.
 		addToolsToMCPToolName,
 		removeToolsFromMCPToolName,
+		// Authoring a new server from a project's functions is the same kind
+		// of administrator decision.
+		createMCPFromFunctionsToolName,
 	} {
 		require.False(t, admitted[name], "tool %q must not be admitted to the assistant", name)
 	}
