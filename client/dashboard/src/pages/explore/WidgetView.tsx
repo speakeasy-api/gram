@@ -99,11 +99,11 @@ export function WidgetView({
   } else if (widget.invalidReason) {
     body = <WidgetBroken reason={widget.invalidReason} />;
   } else if (datasets === undefined || paged === null) {
-    body = describe.isError ? (
-      <WidgetError text="The catalog did not load." />
-    ) : (
-      <WidgetLoading />
-    );
+    if (describe.isError) {
+      body = <WidgetError text="The catalog did not load." />;
+    } else {
+      body = <WidgetLoading />;
+    }
   } else {
     body = (
       <WidgetAnswer
@@ -143,12 +143,12 @@ export function WidgetView({
         // A question the page changed opens as its own query.
         widgetId={headerWidgetId}
       />
-      {paged && paged.skipped.length > 0 ? (
+      {paged && paged.skipped.length > 0 && (
         <p className="text-muted-foreground -mt-2 text-xs">
           Not filtered by {paged.skipped.join(", ")}, which {saved?.dataset}{" "}
           cannot filter on.
         </p>
-      ) : null}
+      )}
       <div className="flex min-h-0 flex-col overflow-auto" style={bodyStyle}>
         {body}
       </div>
