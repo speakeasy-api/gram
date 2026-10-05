@@ -102,7 +102,8 @@ contracts; no new tool, permission, or seed shape is needed.
 Run `mise exec -- go run ./server/cmd/risk-pi-report -cascade` from the repository
 root with `OPENROUTER_DEV_KEY` configured. The report uses production orchestration
 and records confirmation calls, confirmation refusals, refusal-fallback calls,
-prefilter misses, total provider cost, latency, precision, and recall. Run without `-cascade` for the baseline. JSONL cases can
+prefilter misses, total provider cost, latency, precision, and recall. Run without
+`-cascade` for the baseline. JSONL cases can
 provide a `window` with up to five rendered messages and a `target_index`; cases
 without a window evaluate the target with its trajectory. Both Jev and Opus
 receive the same bounded trajectory used by the Gemini baseline. Conversation
@@ -127,7 +128,8 @@ production prevalence or accuracy measurements.
 The report's Opus 5.5 benchmark had 155 errors counted as unflagged; a re-run
 showed they are safety-classifier refusals, which the refusal fallback above
 now handles. Its costs include planning estimates, and its cached cascade did
-not exercise Jev-error fallback. This implementation returns unavailable on Jev errors. The research
+not exercise Jev-error fallback. This implementation returns unavailable on Jev
+errors. The research
 motivates further evaluation; it does not establish rollout readiness for this
 implementation's revised Jev instructions, confirmation window, or timeout.
 
@@ -156,7 +158,8 @@ surface.
 Success evidence: `TestCascadeConfirmedInjection` and
 `TestCascadeOpusFailureIsUnavailable` cover confirmed findings and unavailable
 reviews; `TestCascadeOpusRefusalFallsBackToOpus48` and
-`TestCascadeBothModelsRefusingIsUnavailable` cover the refusal fallback. `TestRiskFindingsMCPInProcess`, `TestRiskFindingsEvidence`, and
+`TestCascadeBothModelsRefusingIsUnavailable` cover the refusal fallback.
+`TestRiskFindingsMCPInProcess`, `TestRiskFindingsEvidence`, and
 `TestRiskFindingsValidationAndGates` cover the existing MCP result, redaction,
 and access/feature boundaries. No Platform MCP schema or shipped workflow needs
 to change for these internal classifier decisions.

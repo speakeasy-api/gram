@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"path/filepath"
 	"testing"
@@ -203,4 +204,35 @@ func TestCommittedRecallFixturesUseReviewedDirectiveTaxonomy(t *testing.T) {
 
 	unannotated := labeledCase{ID: "unreviewed", Label: "malicious", Source: "adversarial_fable"}
 	require.False(t, directivePresentForGate(unannotated), "source membership must never imply taxonomy inclusion")
+}
+
+func TestSummaryShowsPrefilterMissesWithoutConfirmations(t *testing.T) {
+	t.Parallel()
+	var summary modeSummary
+	summary.Name = "cascade"
+	summary.Evaluation.PrefilterMissedAttacks = 3
+	var output bytes.Buffer
+	printSummary(&output, []modeSummary{summary})
+	require.Contains(t, output.String(), "confirmations=0")
+	require.Contains(t, output.String(), "prefilter_missed_attacks=3")
+}
+
+func TestLoadCorpusPreservesAgentDojoTaskOccurrences(t *testing.T) {
+	t.Parallel()
+	corpusDir := filepath.Join("..", "..", "internal", "scanners", "promptinjection", "testdata", "prompt_injection")
+	corpus, err := loadCorpus(corpusDir, "")
+	require.NoError(t, err)
+	cases := filterSources(corpus, "agentdojo")
+	require.Len(t, cases, 246)
+	malicious := 0
+	ids := make(map[string]bool, len(cases))
+	for _, row := range cases {
+		require.False(t, ids[row.ID], "case IDs remain unique")
+		ids[row.ID] = true
+		if row.Label == "malicious" {
+			malicious++
+		}
+	}
+	require.Equal(t, 204, malicious)
+	require.Equal(t, 42, len(cases)-malicious)
 }

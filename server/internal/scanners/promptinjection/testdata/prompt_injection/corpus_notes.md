@@ -19,7 +19,12 @@ This directory holds the labeled corpus consumed by `mise risk:report`. Notes be
 | `agentdojo.jsonl`           | AgentDojo v1.2.2 ground-truth tool outputs, injected and clean                                                        | MIT        | 246  | 204 malicious / 42 benign  |
 | `agentdyn.jsonl`            | AgentDyn ground-truth tool outputs; benign outputs include legitimate instructions (OTP, checkout, forms)             | MIT        | 250  | 150 malicious / 100 benign |
 
-The first five files are the base corpus (933 after dedup); the remaining files are the **agent-runtime extended slices** (see below). The merged trajectory twins add 74 synthetic rows before cross-file deduplication.
+The first five files are the base corpus (933 after dedup). The remaining files cover
+**agent-runtime extended slices**, synthetic trajectory twins, and public tool-output
+slices (LLMail-Inject, AgentDojo, and AgentDyn), described below. All 74 trajectory
+twins and 246 AgentDojo task occurrences are preserved even when their current-event
+text repeats; their contexts remain distinct. Other source files retain text-based
+cross-file deduplication.
 
 ## Agent-runtime extended slices
 

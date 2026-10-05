@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"math"
 	"os"
@@ -698,7 +699,7 @@ func scopedMode(name string, corpus []labeledCase, findings [][]scanners.Finding
 }
 
 // printSummary writes a compact per-mode table for the tuning loop.
-func printSummary(w *os.File, modes []modeSummary) {
+func printSummary(w io.Writer, modes []modeSummary) {
 	p := func(format string, a ...any) { _, _ = fmt.Fprintf(w, format, a...) }
 	p("\n=== risk-pi-report summary ===\n")
 	for _, m := range modes {
@@ -716,7 +717,7 @@ func printSummary(w *os.File, modes []modeSummary) {
 				m.Evaluation.DecisionLatencyP50MS, m.Evaluation.DecisionLatencyP95MS, m.Evaluation.DecisionLatencyP99MS,
 				m.Evaluation.PromptTokens, m.Evaluation.CompletionTokens, m.Evaluation.CostUSD)
 		}
-		if m.Evaluation.ConfirmationCalls > 0 {
+		if m.Evaluation.ConfirmationCalls > 0 || m.Evaluation.PrefilterMissedAttacks > 0 {
 			p("             confirmations=%d refusals=%d refusal_fallbacks=%d prefilter_missed_attacks=%d\n",
 				m.Evaluation.ConfirmationCalls, m.Evaluation.ConfirmationRefusals,
 				m.Evaluation.RefusalFallbackCalls, m.Evaluation.PrefilterMissedAttacks)
@@ -824,9 +825,9 @@ func loadCorpus(dir, extraCorpus string) ([]labeledCase, error) {
 		}
 	}
 	for _, name := range optionalCorpusFiles {
-		// Paired trajectory rows intentionally share current-event text. Preserve
-		// those semantics; the committed merge is deduped across source corpora.
-		dedupe := name != "trajectory_twins.jsonl"
+		// Paired trajectories and AgentDojo task occurrences can share text
+		// while carrying different context; preserve every such case.
+		dedupe := name != "trajectory_twins.jsonl" && name != "agentdojo.jsonl"
 		if err := load(filepath.Join(dir, name), true, dedupe); err != nil {
 			return nil, err
 		}
