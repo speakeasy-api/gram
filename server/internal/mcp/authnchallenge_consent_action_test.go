@@ -586,3 +586,30 @@ func TestServeConsentAction_ConnectSendsTheUpstreamsResourceSpelling(t *testing.
 		})
 	}
 }
+
+// GRW-256: an issuer marked as refusing the RFC 8707 parameter never receives
+// the resource, so Connect does not wait on the upstream's metadata for it.
+// The grant still records the registered URL for routing.
+func TestServeConsentAction_ConnectSkipsMetadataWhenIssuerRefusesResource(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedMultiClientConsentEndpoint(t)
+	var probes atomic.Int64
+	fx.ti.service.SetProtectedResourceFetcher(func(context.Context, string) (wellknown.OAuthProtectedResourceMetadata, error) {
+		probes.Add(1)
+		return wellknown.OAuthProtectedResourceMetadata{}, fmt.Errorf("metadata must not be read")
+	})
+
+	_, err := remotesessions_repo.New(fx.ti.conn).UpdateRemoteSessionIssuer(ctx, remotesessions_repo.UpdateRemoteSessionIssuerParams{
+		ResourceIndicatorSupported: pgtype.Bool{Bool: false, Valid: true},
+		ID:                         clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA),
+		ProjectID:                  conv.ToNullUUID(fx.projectID),
+	})
+	require.NoError(t, err)
+
+	loc := postConnectAction(t, fx, fx.clientA)
+	_, hasResource := loc.Query()["resource"]
+	require.False(t, hasResource, "the issuer refuses the parameter")
+	require.Equal(t, consentUpstreamA+"/", mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).Resource)
+	require.Zero(t, probes.Load())
+}

@@ -298,8 +298,11 @@ func (s *Service) buildRemoteConnectURL(
 		return "", false, oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)
 	}
 	// The per-client derivation reads remote server URLs only; a tunneled
-	// member's identifier is never dialed.
-	if clientResource != "" && !member.tunneled {
+	// member's identifier is never dialed. An issuer marked as refusing the
+	// RFC 8707 parameter never sees the resource, so its spelling is not worth
+	// a metadata read.
+	sendsResource := client.IssuerResourceIndicatorSupported == nil || *client.IssuerResourceIndicatorSupported
+	if clientResource != "" && !member.tunneled && sendsResource {
 		clientResource = s.publishedResource(ctx, logger, clientResource)
 	}
 
