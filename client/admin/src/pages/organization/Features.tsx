@@ -22,6 +22,7 @@ import {
   type AdminOrganization,
   type AdminOrganizationChatAnalysisSettings,
 } from "@/lib/gramAdminApi";
+import { HooksRolloutOverride } from "@/pages/organization/HooksRolloutOverride";
 import type { ProductFeatures } from "@gram/admin-client/models/components/productfeatures";
 import type { FeatureName } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
 
@@ -174,6 +175,7 @@ export function Features({ org }: { org: AdminOrganization }): JSX.Element {
     <div className="space-y-6">
       <ProductFeatures org={org} />
       <ChatAnalysis org={org} />
+      <HooksRolloutOverride org={org} />
     </div>
   );
 }
