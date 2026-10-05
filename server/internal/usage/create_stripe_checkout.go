@@ -37,7 +37,7 @@ const (
 	stripeCheckoutExpirySafetyMargin     = time.Minute
 
 	// stripeCheckoutReturnBasePrefix marks the intent key segment that records
-	// a Checkout return base URL other than the site URL.
+	// the Checkout return base URL.
 	stripeCheckoutReturnBasePrefix = "return-"
 	// maxStripeIdempotencyKeyLength is the longest idempotency key Stripe accepts.
 	maxStripeIdempotencyKeyLength = 255
@@ -163,10 +163,12 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 	case err != nil:
 		return "", oops.E(oops.CodeUnexpected, err, "failed to check the trial lifecycle").LogError(ctx, s.logger)
 	}
-	proposedIntent := newStripeCheckoutIntentForTrial(authCtx.ActiveOrganizationID, now, productTrialEnd, expectedTrial)
-	if returnBaseURL := s.platformHostBaseURL(ctx, s.siteURL); returnBaseURL != s.siteURL.String() {
-		proposedIntent = withStripeCheckoutReturnBase(proposedIntent, returnBaseURL)
-	}
+	// Record the return base on every new intent, the site URL included, so a
+	// replay rebuilds the original URLs even after the site URL changes.
+	proposedIntent := withStripeCheckoutReturnBase(
+		newStripeCheckoutIntentForTrial(authCtx.ActiveOrganizationID, now, productTrialEnd, expectedTrial),
+		s.platformHostBaseURL(ctx, s.siteURL),
+	)
 
 	billingMetadata, err := repo.New(s.db).GetBillingMetadata(ctx, authCtx.ActiveOrganizationID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -575,11 +577,11 @@ func checkoutIntentTrialFingerprint(idempotencyKey string) string {
 	return ""
 }
 
-// withStripeCheckoutReturnBase records a return base URL other than the site
-// URL in the intent key, just before the trial fingerprint, which stays the
-// last segment. Stripe replays a key only with byte-identical input, so every
-// replay of the intent derives its return URLs from the key rather than from
-// the host of the request that happens to replay it. The base URL is base64url
+// withStripeCheckoutReturnBase records the return base URL in the intent key,
+// just before the trial fingerprint, which stays the last segment. It records
+// the site URL too. Stripe replays a key only with byte-identical input, so
+// every replay of the intent derives its return URLs from the key rather than
+// from the request host or the current site URL. The base URL is base64url
 // encoded because the key's segments are colon-separated. A base URL too long
 // to fit in Stripe's idempotency key limit is left out, so Checkout returns to
 // the site URL.
@@ -596,7 +598,9 @@ func withStripeCheckoutReturnBase(intent stripeCheckoutIntent, returnBaseURL str
 
 // stripeCheckoutBillingURL returns the Checkout success and cancel URL for an
 // intent key: the billing page on the return base URL recorded in the key, or
-// on siteURL for a key that records none.
+// on siteURL for a key that records none. Keys without a return segment were
+// issued for the site host before every key recorded one; they keep resolving
+// to the current site URL as they always have.
 func stripeCheckoutBillingURL(idempotencyKey string, siteURL *url.URL, organizationSlug string) (string, error) {
 	base := siteURL
 	segments := strings.Split(idempotencyKey, ":")
