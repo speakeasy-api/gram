@@ -8,7 +8,6 @@ package mcp
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -53,9 +52,6 @@ func (s *Service) publishedResource(ctx context.Context, logger *slog.Logger, re
 }
 
 func (s *Service) fetchProtectedResource(ctx context.Context, resourceURL string) (wellknown.OAuthProtectedResourceMetadata, error) {
-	if s.guardianPolicy == nil {
-		return wellknown.OAuthProtectedResourceMetadata{}, errors.New("no outbound http policy")
-	}
 	doc, _, err := wellknown.DiscoverProtectedResourceMetadata(ctx, s.guardianPolicy, resourceURL)
 	if err != nil {
 		return wellknown.OAuthProtectedResourceMetadata{}, fmt.Errorf("discover protected resource metadata: %w", err)
