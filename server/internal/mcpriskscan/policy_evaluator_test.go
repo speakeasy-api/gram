@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -281,6 +282,28 @@ func TestPolicyEvaluator_SkipsPayloadWhenToolIOLogsLookupFails(t *testing.T) {
 	require.Len(t, evidence, 1)
 	require.Nil(t, evidence[0].Execution)
 	require.Len(t, evidence[0].Findings, 1)
+}
+
+func TestPolicyEvaluator_ChecksPayloadStorageOncePerPhase(t *testing.T) {
+	t.Parallel()
+	projectID := uuid.New()
+	var checks atomic.Int32
+	evidence := &evidenceWriter{}
+	evaluator := newPolicyEvaluator(t, staticPolicies(
+		policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Block policy", Action: "block", Version: 1},
+		policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "First flag", Action: "flag", Version: 1},
+		policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Second flag", Action: "flag", Version: 1},
+	), policyDetectorFunc(func(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
+		return []scanners.Finding{{RuleID: "flag.rule", Description: "Flagged", Match: "flag", StartPos: 10, EndPos: 14, Tags: []string{}, Source: "gitleaks", Confidence: 1}}, nil
+	}), &findingPublisher{}, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithMCPFindingEvidenceWriter(evidence, func(context.Context, string) (bool, error) {
+		checks.Add(1)
+		return false, nil
+	}))
+
+	require.True(t, evaluator.Scan(t.Context(), requestSubject(t.Context(), projectID, uuid.New(), `{"query":"flag"}`)).Denied())
+	require.NoError(t, evaluator.Drain(t.Context()))
+	require.Equal(t, int32(1), checks.Load())
+	require.Len(t, evidence.snapshot(), 3)
 }
 
 func evaluateBlockWithPayloadStorage(t *testing.T, payloadStorage mcpriskscan.PayloadStorageCheck) []risk.MCPFindingEvidenceBatch {

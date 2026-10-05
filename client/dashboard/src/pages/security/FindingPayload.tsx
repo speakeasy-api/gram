@@ -14,6 +14,7 @@ import {
   redactionChipLabel,
   findingByteSpans,
   layoutPayload,
+  STORED_PAYLOAD_MAX_BYTES,
   type PayloadSegment,
   type PayloadTokenKind,
   type SpanRange,
@@ -109,7 +110,8 @@ function PayloadCode({
 
   const cutNote = truncatedIds.includes(result.id) && (
     <span className="text-muted-foreground text-xs">
-      The stored payload stops at 64 KB; this match is past the cut.
+      The stored payload stops at {STORED_PAYLOAD_MAX_BYTES / 1024} KB; this
+      match is past the cut.
     </span>
   );
 
@@ -126,8 +128,8 @@ function PayloadCode({
   return (
     <>
       <div className="bg-foreground dark:bg-card overflow-x-auto py-3.5 font-mono text-xs leading-[1.7]">
-        {/* Scopes the code-syntax palette to its dark values on this always-dark
-          block. */}
+        {/* Scopes the code-syntax palette to its dark values on this
+            always-dark block. */}
         <div className="dark">
           {lines.map((line, i) => (
             <div key={i} className="grid grid-cols-[40px_minmax(0,1fr)] pr-4">

@@ -134,7 +134,7 @@ func newMCPRiskEvaluator(
 		risk.NewMCPPolicyScanner(scanner, shadowMCPClient),
 		publishers.RiskFindings,
 		mcpriskscan.DefaultPolicyConfig,
-		mcpriskscan.WithMCPFindingEvidenceWriter(risk.NewMCPFindingEvidenceStore(db, enc), mcpriskscan.PayloadStorageCheck(toolIOLogsEnabled)),
+		mcpriskscan.WithMCPFindingEvidenceWriter(risk.NewMCPFindingEvidenceStore(db, enc), toolIOLogsEnabled),
 	)
 	return evaluator, scanner, nil
 }
