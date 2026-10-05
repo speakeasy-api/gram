@@ -187,6 +187,7 @@ describe("WidgetView", () => {
       'This widget no longer works: field "user" is not a dimension',
     );
     expect(testState.bodies).toEqual([]);
+    expect(screen.queryByRole("link")).toBeNull();
   });
 
   it("says why when the catalog no longer has what it asks, and runs nothing", () => {
@@ -194,7 +195,16 @@ describe("WidgetView", () => {
     expect(screen.getByRole("alert").textContent).toContain(
       'field "team" is not a dimension of sessions',
     );
+    // Unsaved, it would open Explore on nothing; there is no way in.
+    expect(screen.queryByRole("link")).toBeNull();
     expect(testState.bodies.every((body) => body === null)).toBe(true);
+  });
+
+  it("still opens a saved widget that no longer works, where it is fixed", () => {
+    renderView(widget({ dimensions: ["team"] }, { id: "widget-1" }));
+    const link = screen.getByRole("link", { name: /Open in Explore/ });
+    const url = new URL(link.getAttribute("href") ?? "", "https://x.invalid");
+    expect(url.searchParams.get(WIDGET_PARAM)).toBe("widget-1");
   });
 
   it("says why when the builder cannot read the widget, with no way into Explore", () => {

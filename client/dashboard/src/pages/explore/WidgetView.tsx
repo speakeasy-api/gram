@@ -77,7 +77,13 @@ export function WidgetView({
         className,
       )}
     >
-      <WidgetHeader name={widget.name} spec={spec} widgetId={widget.id} />
+      <WidgetHeader
+        name={widget.name}
+        // The server's verdict stands even where the catalog's agrees, so
+        // only a saved widget it broke is opened, to be fixed.
+        spec={widget.invalidReason && !widget.id ? null : spec}
+        widgetId={widget.id}
+      />
       <div className="flex min-h-0 flex-col overflow-auto" style={bodyStyle}>
         {spec === null ? (
           <WidgetBroken
@@ -106,14 +112,22 @@ function WidgetHeader({
   widgetId: string | undefined;
 }): JSX.Element {
   const routes = useRoutes();
+  const datasets = useAnalyticsDescribe().data?.datasets;
+  // A saved widget opens in the builder even when it no longer works, which
+  // is where it is fixed. Anything else that no longer works would open
+  // Explore on its default view, so it offers no way in.
+  const openable =
+    spec !== null &&
+    (widgetId !== undefined ||
+      (datasets !== undefined && specProblem(datasets, spec) === ""));
   // Any chart on any page is a starting point for a question: the builder
   // opens on exactly this query, through the same link a shared query uses.
   const href = useMemo(() => {
-    if (spec === null) return null;
+    if (spec === null || !openable) return null;
     const params = new URLSearchParams({ [QUERY_PARAM]: encodeSpec(spec) });
     if (widgetId) params.set(WIDGET_PARAM, widgetId);
     return `${routes.explore.href()}?${params.toString()}`;
-  }, [spec, widgetId, routes.explore]);
+  }, [spec, openable, widgetId, routes.explore]);
   return (
     <header className="flex min-w-0 items-center justify-between gap-2">
       <h3 className="text-eyebrow truncate" title={name}>
