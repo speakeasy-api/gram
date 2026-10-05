@@ -11,6 +11,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Text } from "@/components/ui/Text";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import type { RiskMCPServerScope } from "@gram/client/models/components/riskmcpserverscope.js";
 import {
   ALL_TOOLS_WILDCARD,
@@ -26,6 +27,7 @@ import { useRiskListMcpPlatformToolsets } from "@gram/client/react-query/riskLis
 import { useQueries } from "@tanstack/react-query";
 import { ChevronDown, Info, Loader2, Network, Server, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
 
 type AnnotationFields = Partial<Record<ToolAnnotation, boolean>>;
 
@@ -42,6 +44,9 @@ type PickerServer = {
   memberCount?: number;
   tools: PickerTool[];
   toolsLoading: boolean;
+  /** Tools come from metadata recorded on the server's Inspect tab rather
+   *  than from a toolset, so an empty list means "not discovered yet". */
+  discoversTools: boolean;
 };
 
 type ServerSelection =
@@ -146,6 +151,7 @@ export function PolicyMCPScopePicker({
         kind: "server",
         tools,
         toolsLoading: metadataQuery?.isLoading ?? false,
+        discoversTools: !toolset,
       };
     }),
     ...(platformToolsetsQuery.data?.toolsets ?? []).map(
@@ -163,6 +169,7 @@ export function PolicyMCPScopePicker({
           }))
           .sort((left, right) => left.name.localeCompare(right.name)),
         toolsLoading: false,
+        discoversTools: false,
       }),
     ),
     ...(gatewaysQuery.data?.metaMcpServers ?? []).map(
@@ -173,6 +180,7 @@ export function PolicyMCPScopePicker({
         memberCount: gateway.memberCount,
         tools: [],
         toolsLoading: false,
+        discoversTools: false,
       }),
     ),
   ];
@@ -368,6 +376,17 @@ export function PolicyMCPScopePicker({
     if (selection.kind === "rule") return total + ruleTools(server).length;
     return total;
   }, 0);
+  // These servers cover every tool, but none have been discovered, so they
+  // add nothing to toolsInScope even though their tools are all in scope.
+  const undiscoveredServersInScope = pickerServers.filter((server) => {
+    if (!server.discoversTools || server.toolsLoading) return false;
+    if (server.tools.length > 0) return false;
+    const selection = selectionFor(server);
+    return (
+      selection.kind === "wildcard" ||
+      (selection.kind === "rule" && value.toolAnnotations.length === 0)
+    );
+  }).length;
   const ruleLabel =
     value.toolAnnotations.length === 0
       ? "All tools"
@@ -692,6 +711,9 @@ export function PolicyMCPScopePicker({
             <div className="bg-muted/30 border-border flex min-h-10 items-center gap-4 border-t px-4 py-2.5">
               <span className="font-mono text-xs">
                 {explicitCount} servers · {toolsInScope} tools in scope
+                {undiscoveredServersInScope > 0
+                  ? ` · all tools on ${undiscoveredServersInScope} ${undiscoveredServersInScope === 1 ? "server" : "servers"} with no discovered tools`
+                  : null}
               </span>
               {action === "block" ? (
                 <span className="text-muted-foreground ml-auto flex items-center gap-1.5 text-xs">
@@ -851,9 +873,7 @@ function FocusedServerPane({
               <Loader2 className="size-4 animate-spin" /> Loading tools...
             </Text>
           ) : server.tools.length === 0 ? (
-            <Text small muted className="p-3">
-              No tools are available for this server.
-            </Text>
+            <NoToolsNotice server={server} toolAnnotations={toolAnnotations} />
           ) : (
             server.tools.map((tool) => {
               const checked = selected && selectedTools.includes(tool.name);
@@ -892,6 +912,43 @@ function FocusedServerPane({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function NoToolsNotice({
+  server,
+  toolAnnotations,
+}: {
+  server: PickerServer;
+  toolAnnotations: ToolAnnotation[];
+}): JSX.Element {
+  const routes = useRoutes();
+  const scopeNote =
+    toolAnnotations.length === 0
+      ? "Selecting no tools puts every tool on this server in policy scope, including tools discovered later."
+      : "The tool rule matches tools by their discovered annotations, so it matches nothing on this server until its tools are discovered.";
+
+  return (
+    <div className="space-y-2 p-3">
+      <Text small muted>
+        {server.discoversTools
+          ? "No tools discovered yet. MCP tools need to be discovered before you can pick them individually. They are discovered when someone who can edit this server opens its Inspect tab."
+          : "This server has no tools yet."}
+      </Text>
+      <Text small muted>
+        {scopeNote}
+      </Text>
+      {server.discoversTools ? (
+        <Link
+          to={routes.mcp.x.inspect.href(server.slug ?? server.id)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-muted-foreground hover:text-foreground inline-block text-xs underline"
+        >
+          Discover tools on {server.name}
+        </Link>
+      ) : null}
     </div>
   );
 }

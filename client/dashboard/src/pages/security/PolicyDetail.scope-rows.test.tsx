@@ -11,6 +11,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { useState, type ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { PolicyMCPScopePicker } from "./PolicyMCPScopePicker";
@@ -58,7 +59,12 @@ vi.mock("@/contexts/Sdk", () => ({
 }));
 
 vi.mock("@/routes", () => ({
-  useRoutes: () => ({ policyCenter: { goTo: vi.fn() } }),
+  useRoutes: () => ({
+    policyCenter: { goTo: vi.fn() },
+    mcp: {
+      x: { inspect: { href: (slug: string) => `/mcp/x/${slug}/inspect` } },
+    },
+  }),
 }));
 
 vi.mock("nuqs", () => ({
@@ -121,10 +127,28 @@ vi.mock("@gram/client/react-query/mcpServers.js", () => ({
           name: "Support MCP",
           toolsetId: "toolset-1",
         },
+        // Remote-backed: its tools come from discovered metadata, and none
+        // have been discovered yet.
+        {
+          id: "44444444-4444-4444-8444-444444444444",
+          name: "Docs MCP",
+          slug: "docs-mcp",
+          remoteMcpServerId: "remote-1",
+        },
       ],
     },
     isLoading: false,
     isError: false,
+  }),
+}));
+
+vi.mock("@gram/client/react-query/listMcpServerToolMetadata.js", () => ({
+  buildListMcpServerToolMetadataQuery: (
+    _client: unknown,
+    request: { mcpServerId: string },
+  ) => ({
+    queryKey: ["listMcpServerToolMetadata", request.mcpServerId],
+    queryFn: async () => ({ tools: [] }),
   }),
 }));
 
@@ -309,11 +333,13 @@ function renderEditor(p: RiskPolicy) {
     defaultOptions: { queries: { retry: false } },
   });
   return render(
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <StandardPolicyEditor policy={p} />
-      </TooltipProvider>
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <StandardPolicyEditor policy={p} />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -327,14 +353,20 @@ function ScopePickerHarness(): JSX.Element {
   });
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <PolicyMCPScopePicker value={value} onChange={setValue} action="flag" />
-        <output data-testid="mcp-scope-payload">
-          {JSON.stringify(policyMCPScopePayload(value))}
-        </output>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <PolicyMCPScopePicker
+            value={value}
+            onChange={setValue}
+            action="flag"
+          />
+          <output data-testid="mcp-scope-payload">
+            {JSON.stringify(policyMCPScopePayload(value))}
+          </output>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </MemoryRouter>
   );
 }
 
@@ -656,9 +688,7 @@ describe("StandardPolicyEditor scope rows", () => {
     await waitFor(() => {
       expect(server.getAttribute("aria-checked")).toBe("false");
     });
-    expect(
-      screen.queryByText("No tools are available for this server."),
-    ).toBeNull();
+    expect(screen.queryByText("This server has no tools yet.")).toBeNull();
 
     const tool = screen.getByRole("checkbox", { name: "deleteTicket" });
     fireEvent.click(tool);
@@ -820,6 +850,73 @@ describe("PolicyMCPScopePicker all-server selection", () => {
       toolAnnotations: [],
       servers: [],
     });
+  });
+
+  it("explains discovery and the all-tools scope for a server with no discovered tools", async () => {
+    render(<ScopePickerHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Docs MCP/ }));
+
+    expect(
+      await screen.findByText(/^No tools discovered yet\. MCP tools need/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Selecting no tools puts every tool on this server in policy scope, including tools discovered later.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Discover tools on Docs MCP" })
+        .getAttribute("href"),
+    ).toBe("/mcp/x/docs-mcp/inspect");
+  });
+
+  it("counts a selected server with no discovered tools as all tools in scope", async () => {
+    render(<ScopePickerHarness />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Docs MCP" }));
+
+    expect(
+      await screen.findByText(
+        "1 servers · 0 tools in scope · all tools on 1 server with no discovered tools",
+      ),
+    ).toBeTruthy();
+    expect(
+      JSON.parse(screen.getByTestId("mcp-scope-payload").textContent ?? "null"),
+    ).toEqual({
+      allServers: false,
+      toolAnnotations: [],
+      servers: [{ mcpServerId: "44444444-4444-4444-8444-444444444444" }],
+    });
+  });
+
+  it("warns that an annotation rule matches nothing until tools are discovered", async () => {
+    render(<ScopePickerHarness />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Tool rule: All tools" }),
+    );
+    fireEvent.click(screen.getByText("Tools with MCP annotations"));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Docs MCP" }));
+
+    expect(
+      await screen.findByText(
+        "The tool rule matches tools by their discovered annotations, so it matches nothing on this server until its tools are discovered.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("1 servers · 0 tools in scope")).toBeTruthy();
+  });
+
+  it("does not describe toolset-backed servers as undiscovered", () => {
+    render(<ScopePickerHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Billing MCP/ }));
+
+    expect(screen.getByText("This server has no tools yet.")).toBeTruthy();
+    expect(screen.queryByText(/No tools discovered yet/)).toBeNull();
+    expect(screen.queryByRole("link", { name: /Discover tools/ })).toBeNull();
   });
 
   it("clears every server when All MCP servers is unchecked", () => {
