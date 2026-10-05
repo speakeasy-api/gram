@@ -18,23 +18,30 @@ import (
 func TestAttachmentClientScopes(t *testing.T) {
 	t.Parallel()
 
+	issuerScopes := []string{"issuer:read", "issuer:write"}
 	for _, tt := range []struct {
 		name     string
+		resource []string
 		override []string
 		want     []string
 	}{
-		{name: "new issuer", override: nil, want: []string{"resource:read"}},
-		{name: "reused issuer without override", override: []string{}, want: []string{"resource:read"}},
-		{name: "reused issuer with override", override: []string{"openid", "profile"}, want: nil},
+		{name: "new issuer", resource: []string{"resource:read"}, override: nil, want: []string{"resource:read"}},
+		{name: "reused issuer without override", resource: []string{"resource:read"}, override: []string{}, want: []string{"resource:read"}},
+		{name: "reused issuer with override", resource: []string{"resource:read"}, override: []string{"openid", "profile"}, want: nil},
+		{name: "resource omits scopes", resource: nil, override: nil, want: []string{"issuer:read", "issuer:write"}},
+		{name: "resource advertises no scopes", resource: []string{}, override: nil, want: []string{"issuer:read", "issuer:write"}},
+		{name: "override beats the issuer fallback", resource: nil, override: []string{"openid"}, want: nil},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			resourceScopes := []string{"resource:read"}
-			scopes := attachmentClientScopes(resourceScopes, tt.override)
+			scopes := attachmentClientScopes(tt.resource, issuerScopes, tt.override)
 			require.Equal(t, tt.want, scopes)
 			if len(scopes) > 0 {
 				scopes[0] = "changed"
-				require.Equal(t, []string{"resource:read"}, resourceScopes, "client scopes must not alias discovery metadata")
+				require.NotEqual(t, "changed", issuerScopes[0], "client scopes must not alias discovery metadata")
+				if len(tt.resource) > 0 {
+					require.Equal(t, "resource:read", tt.resource[0], "client scopes must not alias discovery metadata")
+				}
 			}
 		})
 	}

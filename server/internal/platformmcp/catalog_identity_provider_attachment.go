@@ -162,8 +162,10 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	}
 
 	provider := remotesessions.CreateProvider(discoveredIssuerParams(principal, project, registrationID, metadata))
+	issuerScopes := metadata.ScopesSupported
 	if reuse {
 		provider = remotesessions.UseProvider(existing.ID)
+		issuerScopes = existing.ScopesSupported
 	}
 	commit := s.identity.Prepare(remotesessions.IdentityPlan{
 		Scope: remotesessions.IdentityScope{
@@ -175,7 +177,7 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 		UserSessionIssuerID: registration.UserSessionIssuerID.UUID,
 		Provider:            provider,
 		Client: remotesessions.RegisterClient(remotesessions.RegistrationPolicy{
-			Scope:                   attachmentClientScopes(resourceMetadata.ScopesSupported, existing.ScopeOverride),
+			Scope:                   attachmentClientScopes(resourceMetadata.ScopesSupported, issuerScopes, existing.ScopeOverride),
 			Audience:                nil,
 			TokenEndpointAuthMethod: optionalString(browserCatalogDCRAuthMethod),
 			RequireClientSecret:     true,
@@ -212,13 +214,17 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	return CatalogIdentityProviderAttachmentResult{Attached: true, ProviderURL: metadata.Issuer}, nil
 }
 
-// Keep client scope unset when an issuer override exists so authorization can
-// inherit that override rather than prefer the resource's advertised scopes.
-func attachmentClientScopes(resourceScopes, issuerScopeOverride []string) []string {
+// attachmentClientScopes is the scope a new client stores: the resource's
+// advertised scopes, else the issuer's. An issuer override leaves it unset so
+// authorization inherits the override.
+func attachmentClientScopes(resourceScopes, issuerScopes, issuerScopeOverride []string) []string {
 	if len(issuerScopeOverride) > 0 {
 		return nil
 	}
-	return append([]string(nil), resourceScopes...)
+	if len(resourceScopes) > 0 {
+		return append([]string(nil), resourceScopes...)
+	}
+	return append([]string(nil), issuerScopes...)
 }
 
 func (s *CatalogIdentityProviderAttachmentService) discoverSupportedIssuerMetadata(ctx context.Context, authorizationServers []string) (remotesessions.DiscoveredIssuerMetadata, error) {
