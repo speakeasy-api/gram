@@ -3,12 +3,14 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
@@ -235,4 +237,84 @@ func TestLoadCorpusPreservesAgentDojoTaskOccurrences(t *testing.T) {
 	}
 	require.Equal(t, 204, malicious)
 	require.Equal(t, 42, len(cases)-malicious)
+}
+
+func TestDeepsetIsEntirelyDiagnostic(t *testing.T) {
+	t.Parallel()
+	corpus := []labeledCase{
+		{ID: "validation", Source: "heldout", Label: "malicious"},
+		{ID: "relabelled", Source: "deepset", Label: "benign", OriginalLabel: "malicious", RelabelReason: "persona_roleplay"},
+		{ID: "retained", Source: "deepset", Label: "malicious"},
+	}
+	validation, diagnostic := partitionCorpus(corpus)
+	require.Len(t, validation, 1)
+	require.Len(t, diagnostic, 2)
+	positive := []scanners.Finding{{RuleID: "pi", Confidence: 1}}
+	findings := [][]scanners.Finding{positive}
+	summary := summarizeCorpus(validation, []modeSummary{summarizeFindings("judge_run_1", validation, findings)}, [][][]scanners.Finding{findings})
+	diagnosticFindings := [][]scanners.Finding{positive, nil}
+	diagnostics := summarizeCorpus(diagnostic, []modeSummary{summarizeFindings("judge_run_1", diagnostic, diagnosticFindings)}, [][][]scanners.Finding{diagnosticFindings})
+	diagnostics.Scope = "diagnostic only: deepset labels selected using model disagreements"
+	summary.Diagnostics = &diagnostics
+	require.Equal(t, counts{TP: 1}, summary.Counts)
+	require.InDelta(t, 1.0, summary.Overall.Accuracy, 0.0001)
+	require.Equal(t, counts{FP: 1, FN: 1}, summary.Diagnostics.Counts)
+	require.Zero(t, summary.Distributions.FalsePositiveRate.Mean)
+	require.Equal(t, 0, summary.Stability.StableFalsePositives)
+	require.Equal(t, 1, summary.Diagnostics.Stability.StableFalsePositives)
+	require.Equal(t, "heldout", summary.Sources[0].Source)
+	require.Equal(t, "deepset", summary.Diagnostics.Sources[0].Source)
+	examples := changedExamples(diagnostic, make([][]scanners.Finding, 2), diagnosticFindings, "benign", 10)
+	require.Equal(t, "malicious", examples[0].OriginalLabel)
+	require.Equal(t, "persona_roleplay", examples[0].RelabelReason)
+	encoded, err := json.Marshal(summary)
+	require.NoError(t, err)
+	var decoded accuracySummary
+	require.NoError(t, json.Unmarshal(encoded, &decoded))
+	require.Equal(t, 1, decoded.Total)
+	require.Equal(t, 2, decoded.Diagnostics.Total)
+}
+
+func TestLoadedDeepsetPartitionPreservesProvenance(t *testing.T) {
+	t.Parallel()
+	corpusDir := filepath.Join("..", "..", "internal", "scanners", "promptinjection", "testdata", "prompt_injection")
+	corpus, err := loadCorpus(corpusDir, "")
+	require.NoError(t, err)
+	validation, diagnostic := partitionCorpus(corpus)
+	require.Equal(t, len(corpus), len(validation)+len(diagnostic))
+	require.NotEmpty(t, diagnostic)
+	for _, c := range validation {
+		require.NotEqual(t, "deepset", c.Source)
+	}
+	for _, c := range diagnostic {
+		require.Equal(t, "deepset", c.Source)
+	}
+	found := false
+	for _, c := range diagnostic {
+		if c.ID == "deepset.train.0032" {
+			found = true
+			require.Equal(t, "malicious", c.OriginalLabel)
+			require.Equal(t, "persona_roleplay", c.RelabelReason)
+		}
+	}
+	require.True(t, found)
+}
+
+func TestEmptyValidationNeedsNoModelCalls(t *testing.T) {
+	t.Parallel()
+	summary, err := evaluateCorpus(t.Context(), options{repeats: 2}, nil, ra.CompiledScope{}, false)
+	require.NoError(t, err)
+	require.Zero(t, summary.Total)
+	require.Len(t, summary.Modes, 2)
+	for _, mode := range summary.Modes {
+		require.Zero(t, mode.Evaluation.PhysicalCalls)
+	}
+	require.Zero(t, summary.Distributions.CostUSD.Mean)
+}
+
+func TestDeepsetOnlyCannotPassValidationFloors(t *testing.T) {
+	t.Parallel()
+	corpusDir := filepath.Join("..", "..", "internal", "scanners", "promptinjection", "testdata", "prompt_injection")
+	err := run(t.Context(), options{corpusDir: corpusDir, sources: "deepset", repeats: 1, samples: 1, checkFloors: true})
+	require.ErrorContains(t, err, "no validation cases")
 }

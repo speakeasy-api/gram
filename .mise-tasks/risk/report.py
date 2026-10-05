@@ -94,7 +94,11 @@ def print_report(payload: dict[str, Any], metrics_file: Path) -> None:
     print(f"timestamp:  {payload.get('timestamp', '-')}")
     print(f"artifact:   {metrics_file}")
     print(f"corpus:     {corpus_status(summary)}")
+    print(f"scope:      {summary.get('scope', 'legacy report; scope unspecified')}")
     print()
+
+    if summary.get("total") == 0:
+        print("No cases in this scope; accuracy metrics are unavailable.")
 
     modes = summary.get("modes") or []
     if modes:
@@ -162,6 +166,8 @@ def print_report(payload: dict[str, Any], metrics_file: Path) -> None:
                 example_rows(l1.get("recovered_true_positives", [])),
             )
             print()
+        if diagnostics := summary.get("diagnostics"):
+            print_report({**payload, "summary": diagnostics}, metrics_file)
         return
 
     print("L0 default:")

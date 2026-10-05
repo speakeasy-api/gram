@@ -63,6 +63,12 @@ These came from reading every case where a typed judge (Opus 5.5) said not-PI an
 
 Keeping `original_label` means the external labels stay visible and diffable instead of being silently rewritten. Recall on the deepset slice is still not a signal of detector quality on its own. Trust per-source recall on `litellm_extended` and the mutation slices for tuning decisions.
 
+## Validation and diagnostic reporting
+
+The entire `deepset` source is diagnostic only: the relabeling candidates were selected using Opus 5.5 disagreements, so even the rows that retained their original label are model-conditioned. All deepset cases still run, but their counts, accuracy, scope effects, stability, latency, and cost appear in a separate `summary.diagnostics` JSON section and a separately labeled console report. Physical calls and cost are partition-specific; sum validation and diagnostic costs for the complete workload. They do not contribute to the headline validation totals, modes, distributions, or recall gates. Original labels and relabel reasons remain in the corpus and emitted examples.
+
+The top-level summary covers the remaining selected sources; this exclusion alone does not establish that those sources are a held-out benchmark. The corpus hash covers both partitions. A deepset-only run has zero validation cases and populated diagnostics. Consumers rendering JSON as HTML must honor `scope` and render `diagnostics` separately rather than combining totals. Historical report artifacts predate this separation and must not be presented as independent validation.
+
 ## Regenerating fixtures
 
 - `deepset.jsonl`: `curl` the train + test parquet files from HuggingFace and convert with pandas + pyarrow. The conversion script lives only in commit history; rerun is rare.

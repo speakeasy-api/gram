@@ -59,10 +59,12 @@ type labeledCase struct {
 	// Window optionally supplies five-message evidence for contextual evaluation.
 	Window *judgemessage.Window `json:"window,omitempty"`
 
-	ID     string `json:"id"`
-	Label  string `json:"label"`
-	Text   string `json:"text"`
-	Source string `json:"source"`
+	ID            string `json:"id"`
+	Label         string `json:"label"`
+	Text          string `json:"text"`
+	Source        string `json:"source"`
+	OriginalLabel string `json:"original_label,omitempty"`
+	RelabelReason string `json:"relabel_reason,omitempty"`
 	// Optional agent-runtime framing: plain rows omit these (judged as end-user
 	// content); typed rows carry the message type + tool the judge and scope use.
 	Type                   string         `json:"type,omitempty"`       // message.Type; default user_message
@@ -156,11 +158,13 @@ type ruleHist struct {
 }
 
 type exampleCase struct {
-	ID     string  `json:"id"`
-	Source string  `json:"source"`
-	RuleID string  `json:"rule_id"`
-	Score  float64 `json:"score"`
-	Text   string  `json:"text"`
+	OriginalLabel string  `json:"original_label,omitempty"`
+	RelabelReason string  `json:"relabel_reason,omitempty"`
+	ID            string  `json:"id"`
+	Source        string  `json:"source"`
+	RuleID        string  `json:"rule_id"`
+	Score         float64 `json:"score"`
+	Text          string  `json:"text"`
 }
 
 type modeSummary struct {
@@ -204,6 +208,11 @@ type evaluationStats struct {
 }
 
 type accuracySummary struct {
+	// Scope identifies which corpus supplies every metric in this summary.
+	Scope string `json:"scope"`
+
+	// Diagnostics keeps model-conditioned data out of validation aggregates.
+	Diagnostics    *accuracySummary    `json:"diagnostics,omitempty"`
 	Total          int                 `json:"total"`
 	Counts         counts              `json:"counts"`
 	Overall        metricsBlock        `json:"overall"`
@@ -414,43 +423,28 @@ func run(ctx context.Context, opts options) error {
 	if opts.samples < 1 {
 		return fmt.Errorf("--samples must be at least 1")
 	}
-	modes := make([]modeSummary, 0, opts.repeats*2)
-	allFindings := make([][][]scanners.Finding, 0, opts.repeats)
-	for repeat := 1; repeat <= opts.repeats; repeat++ {
-		fmt.Fprintf(os.Stderr, "trial %d/%d\n", repeat, opts.repeats)
-		judgeMode, judgeFindings, err := scanJudgeMode(ctx, opts, corpus)
+	validation, diagnostic := partitionCorpus(corpus)
+	if opts.checkFloors && len(validation) == 0 {
+		return fmt.Errorf("cannot check recall floors: selected corpus contains no validation cases (deepset is diagnostic only)")
+	}
+	summary, err := evaluateCorpus(ctx, opts, validation, scope, hasScope)
+	if err != nil {
+		return err
+	}
+	if len(diagnostic) > 0 {
+		diagnostics, err := evaluateCorpus(ctx, opts, diagnostic, scope, hasScope)
 		if err != nil {
 			return err
 		}
-		judgeMode.Name = fmt.Sprintf("judge_run_%d", repeat)
-		modes = append(modes, judgeMode)
-		allFindings = append(allFindings, judgeFindings)
-		if hasScope && scope.Active() {
-			modes = append(modes, scopedMode(fmt.Sprintf("scoped_run_%d", repeat), corpus, judgeFindings, scope))
-		}
-	}
-	judgeMode := modes[0]
-	recallGateRuns := make([]recallGateSummary, len(allFindings))
-	for i, findings := range allFindings {
-		recallGateRuns[i] = summarizeRecallGate(corpus, findings)
-	}
-	worstRecallGate := worstRecallGate(recallGateRuns)
-
-	summary := accuracySummary{
-		Total:          judgeMode.Total,
-		Counts:         judgeMode.Counts,
-		Overall:        judgeMode.Overall,
-		Sources:        judgeMode.Sources,
-		Rules:          judgeMode.Rules,
-		Modes:          modes,
-		Stability:      summarizeStability(corpus, allFindings),
-		Distributions:  summarizeDistributions(modes, recallGateRuns),
-		KnownGaps:      summarizeKnownGaps(corpus),
-		RecallGate:     worstRecallGate,
-		RecallGateRuns: recallGateRuns,
+		diagnostics.Scope = "diagnostic only: deepset labels selected using model disagreements"
+		summary.Diagnostics = &diagnostics
 	}
 
-	printSummary(os.Stderr, modes)
+	fmt.Fprintln(os.Stderr, summary.Scope)
+	if summary.Total == 0 {
+		fmt.Fprintln(os.Stderr, "No validation cases selected; headline metrics are unavailable.")
+	}
+	printSummary(os.Stderr, summary.Modes)
 	fmt.Fprintf(os.Stderr, "stability: flips=%d/%d (%.2f%%) stable_fp=%d benign_flips=%d\n",
 		summary.Stability.Flipped, summary.Total, summary.Stability.FlipRate*100,
 		summary.Stability.StableFalsePositives, summary.Stability.FlippedBenign)
@@ -463,6 +457,11 @@ func run(ctx context.Context, opts options) error {
 		}
 	}
 
+	if summary.Diagnostics != nil {
+		fmt.Fprintln(os.Stderr, summary.Diagnostics.Scope)
+		printSummary(os.Stderr, summary.Diagnostics.Modes)
+	}
+
 	if opts.checkFloors {
 		if err := checkRecallFloors(fl, summary.RecallGateRuns); err != nil {
 			return err
@@ -470,6 +469,68 @@ func run(ctx context.Context, opts options) error {
 	}
 
 	return writeMetrics(opts.outFile, opts, corpus, summary)
+}
+
+// partitionCorpus excludes the entire model-conditioned source, including rows
+// that retained their source label after model-guided review.
+func partitionCorpus(corpus []labeledCase) (validation, diagnostic []labeledCase) {
+	for _, c := range corpus {
+		if c.Source == "deepset" {
+			diagnostic = append(diagnostic, c)
+		} else {
+			validation = append(validation, c)
+		}
+	}
+	return validation, diagnostic
+}
+
+func evaluateCorpus(ctx context.Context, opts options, corpus []labeledCase, scope ra.CompiledScope, hasScope bool) (accuracySummary, error) {
+	modes := make([]modeSummary, 0, opts.repeats*2)
+	allFindings := make([][][]scanners.Finding, 0, opts.repeats)
+	for repeat := 1; repeat <= opts.repeats; repeat++ {
+		fmt.Fprintf(os.Stderr, "trial %d/%d\n", repeat, opts.repeats)
+		var judgeMode modeSummary
+		judgeFindings := make([][]scanners.Finding, len(corpus))
+		var err error
+		if len(corpus) > 0 {
+			judgeMode, judgeFindings, err = scanJudgeMode(ctx, opts, corpus)
+		}
+		if err != nil {
+			return accuracySummary{}, err
+		}
+		judgeMode.Name = fmt.Sprintf("judge_run_%d", repeat)
+		modes = append(modes, judgeMode)
+		allFindings = append(allFindings, judgeFindings)
+		if hasScope && scope.Active() {
+			modes = append(modes, scopedMode(fmt.Sprintf("scoped_run_%d", repeat), corpus, judgeFindings, scope))
+		}
+	}
+	return summarizeCorpus(corpus, modes, allFindings), nil
+}
+
+func summarizeCorpus(corpus []labeledCase, modes []modeSummary, allFindings [][][]scanners.Finding) accuracySummary {
+	judgeMode := modes[0]
+	recallGateRuns := make([]recallGateSummary, len(allFindings))
+	for i, findings := range allFindings {
+		recallGateRuns[i] = summarizeRecallGate(corpus, findings)
+	}
+	worstRecallGate := worstRecallGate(recallGateRuns)
+
+	return accuracySummary{
+		Scope:          "validation excluding model-conditioned deepset",
+		Diagnostics:    nil,
+		Total:          judgeMode.Total,
+		Counts:         judgeMode.Counts,
+		Overall:        judgeMode.Overall,
+		Sources:        judgeMode.Sources,
+		Rules:          judgeMode.Rules,
+		Modes:          modes,
+		Stability:      summarizeStability(corpus, allFindings),
+		Distributions:  summarizeDistributions(modes, recallGateRuns),
+		KnownGaps:      summarizeKnownGaps(corpus),
+		RecallGate:     worstRecallGate,
+		RecallGateRuns: recallGateRuns,
+	}
 }
 
 func checkRecallFloors(fl floors, runs []recallGateSummary) error {
@@ -956,7 +1017,7 @@ func scopeImpact(corpus []labeledCase, findings [][]scanners.Finding, inScope []
 			continue
 		}
 		f := highestConfidenceFinding(findings[i])
-		ex := exampleCase{ID: c.ID, Source: c.Source, RuleID: f.RuleID, Score: f.Confidence, Text: c.Text}
+		ex := exampleCase{OriginalLabel: c.OriginalLabel, RelabelReason: c.RelabelReason, ID: c.ID, Source: c.Source, RuleID: f.RuleID, Score: f.Confidence, Text: c.Text}
 		if c.Label == "malicious" {
 			lostTPs = append(lostTPs, ex)
 		} else {
@@ -1289,13 +1350,16 @@ func (d *devProvisioner) GetModelUsage(_ context.Context, _ string, _ string, _ 
 var _ openrouter.Provisioner = (*devProvisioner)(nil)
 
 func summarizeFindings(mode string, corpus []labeledCase, findings [][]scanners.Finding) modeSummary {
+	if len(corpus) != len(findings) {
+		panic("cannot summarize findings that are not aligned with the corpus")
+	}
 	overall := counts{TP: 0, FP: 0, TN: 0, FN: 0}
 	bySource := map[string]*counts{}
 	ruleTP := map[string]int{}
 	ruleFP := map[string]int{}
 
 	for i, c := range corpus {
-		fs := findings[i]
+		fs := findings[i] //nolint:gosec // G602: equal corpus and findings lengths are checked above.
 		flagged := len(fs) > 0
 
 		bucket, ok := bySource[c.Source]
@@ -1379,6 +1443,7 @@ func changedExamples(corpus []labeledCase, baseline, candidate [][]scanners.Find
 		}
 		f := highestConfidenceFinding(candidate[i])
 		examples = append(examples, exampleCase{
+			OriginalLabel: c.OriginalLabel, RelabelReason: c.RelabelReason,
 			ID:     c.ID,
 			Source: c.Source,
 			RuleID: f.RuleID,
@@ -1405,7 +1470,7 @@ func missedExamples(corpus []labeledCase, candidate [][]scanners.Finding, limit 
 		if c.Label != "malicious" || len(candidate[i]) > 0 {
 			continue
 		}
-		examples = append(examples, exampleCase{ID: c.ID, Source: c.Source, RuleID: "", Score: 0, Text: c.Text})
+		examples = append(examples, exampleCase{OriginalLabel: c.OriginalLabel, RelabelReason: c.RelabelReason, ID: c.ID, Source: c.Source, RuleID: "", Score: 0, Text: c.Text})
 	}
 	sort.Slice(examples, func(i, j int) bool { return examples[i].ID < examples[j].ID })
 	if len(examples) > limit {
