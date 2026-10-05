@@ -90,6 +90,7 @@ func (c *checkpointCompletionClient) GetObjectCompletion(ctx context.Context, re
 	if err := c.check(ctx, request.OrgID); err != nil {
 		return nil, err
 	}
+	c.providerAttempts++
 	return assistantTextResponse("unused"), nil
 }
 
@@ -97,6 +98,7 @@ func (c *checkpointCompletionClient) CreateEmbeddings(ctx context.Context, orgID
 	if err := c.check(ctx, orgID); err != nil {
 		return nil, err
 	}
+	c.providerAttempts++
 	return [][]float32{{1}}, nil
 }
 

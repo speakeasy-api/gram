@@ -193,6 +193,10 @@ type attemptCheckRoundTripper struct {
 
 func (t *attemptCheckRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err := t.check(req); err != nil {
+		// RoundTrippers own the request body even when they refuse to send it.
+		if req.Body != nil {
+			_ = req.Body.Close()
+		}
 		return nil, &attemptRejectedError{cause: err}
 	}
 	resp, err := t.next.RoundTrip(req)

@@ -146,8 +146,9 @@ type prescriptionFixture struct {
 	ExternalNote  string
 }
 
-// insertPrescription creates an immediately active prescription with the
-// concrete user principal and mcp_server resource kind.
+// insertPrescription creates an immediately active prescription. The
+// definition, principal kind, and resource kind default to mcp_tool_execution,
+// user, and mcp_server.
 func insertPrescription(t *testing.T, conn *pgxpool.Pool, organizationID string, fixture prescriptionFixture) {
 	t.Helper()
 

@@ -190,12 +190,24 @@ func TestValidatedGramSessionActingUser(t *testing.T) {
 	_, ok = ValidatedGramSessionActingUser(WithValidatedGramSession(t.Context(), &missingSession, false))
 	require.False(t, ok)
 
-	for name, authCtx := range map[string]*AuthContext{
-		"api key attribution":        {ActiveOrganizationID: "org", UserID: "creator", APIKeyID: "key"},
-		"assistant/chat attribution": {ActiveOrganizationID: "org", UserID: "owner", ExternalUserID: "assistant"},
-		"anonymous organization":     {ActiveOrganizationID: "org"},
+	// Each case starts from a validated session so the rejection under test,
+	// not the missing validation marker, is what fails.
+	for name, build := range map[string]func() context.Context{
+		"api key attribution": func() context.Context {
+			withKey := *base
+			withKey.APIKeyID = "key"
+			return WithValidatedGramSession(t.Context(), &withKey, false)
+		},
+		"assistant attribution": func() context.Context {
+			return SetAssistantPrincipal(WithValidatedGramSession(t.Context(), base, false), AssistantPrincipal{})
+		},
+		"anonymous organization": func() context.Context {
+			anonymous := *base
+			anonymous.UserID = ""
+			return WithValidatedGramSession(t.Context(), &anonymous, false)
+		},
 	} {
-		_, ok = ValidatedGramSessionActingUser(SetAuthContext(t.Context(), authCtx))
+		_, ok = ValidatedGramSessionActingUser(build())
 		require.False(t, ok, name)
 	}
 }
