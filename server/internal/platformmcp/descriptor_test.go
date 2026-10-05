@@ -426,8 +426,8 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		addToolsToMCPToolName,
 		removeToolsFromMCPToolName,
 		// An assistant is bound to its own project: creating another is
-		// outside its reach, and renaming its own is an organization
-		// administrator's decision.
+		// outside its reach, and renaming its own is a decision for a person
+		// with write access to it, not for the assistant.
 		createProjectToolName,
 		renameProjectToolName,
 	} {
