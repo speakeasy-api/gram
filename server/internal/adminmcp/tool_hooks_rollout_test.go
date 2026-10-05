@@ -84,7 +84,7 @@ func TestGetOrganizationHooksRolloutReadsExactTarget(t *testing.T) {
 	reads := &recordingHooksRolloutReader{
 		recordingOrganizationReader: recordingOrganizationReader{org: &gen.AdminOrganization{ID: "org-a"}},
 		organization: &gen.AdminOrganizationHooksRollout{
-			OrganizationID: "org-a", CurrentVersion: 42, Source: "organization", EffectiveVersion: &effective, Eligible: &eligible,
+			OrganizationID: "org-a", CurrentVersion: 42, Source: gen.AdminHooksRolloutSource("organization"), EffectiveVersion: &effective, Eligible: &eligible,
 			Override: &gen.AdminHooksRolloutPin{Version: 41, SetBy: "operator@example.com", SetAt: "2026-01-02T00:00:00Z"},
 		},
 	}

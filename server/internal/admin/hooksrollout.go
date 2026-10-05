@@ -14,7 +14,7 @@ import (
 // adminSourceLegacyFlag is how the admin API names hooksrollout.SourceUnset:
 // with no pin to apply, the plugin publisher falls back to the hooks-rollout
 // PostHog flag.
-const adminSourceLegacyFlag = "legacy_flag"
+const adminSourceLegacyFlag gen.AdminHooksRolloutSource = "legacy_flag"
 
 func (s *Service) GetHooksRollout(ctx context.Context, _ *gen.GetHooksRolloutPayload) (*gen.AdminHooksRollout, error) {
 	return s.hooksRolloutResult(ctx)
@@ -179,12 +179,12 @@ func (s *Service) organizationHooksRolloutResult(ctx context.Context, organizati
 		Eligible:         nil,
 	}
 	if hooksrollout.IsCanary(organizationSlug) {
-		result.Source = string(hooksrollout.SourceCanary)
+		result.Source = gen.AdminHooksRolloutSource(hooksrollout.SourceCanary)
 		result.Eligible = new(true)
 		return result, nil
 	}
 	if pin, source := pins.Effective(); pin != nil {
-		result.Source = string(source)
+		result.Source = gen.AdminHooksRolloutSource(source)
 		result.EffectiveVersion = new(pin.Version)
 		result.Eligible = new(pin.Version >= current)
 	}

@@ -146,7 +146,7 @@ func registerHooksRolloutTools(server *mcp.Server, organizations OrganizationRea
 		return nil, OrganizationHooksRollout{
 			OrganizationID:   org.ID,
 			CurrentVersion:   result.CurrentVersion,
-			Source:           result.Source,
+			Source:           string(result.Source),
 			EffectiveVersion: result.EffectiveVersion,
 			Eligible:         result.Eligible,
 			Override:         hooksRolloutPin(result.Override),

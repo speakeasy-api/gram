@@ -419,6 +419,12 @@ type AdminHooksRolloutPin struct {
 	SetAt string
 }
 
+// What decides an organization's hooks version: canary organizations always
+// get the current version, organization and default name the pin that applies,
+// and legacy_flag means no pin applies yet and the hooks-rollout PostHog flag
+// decides.
+type AdminHooksRolloutSource string
+
 // Current usage and configured state for one materialized platform-managed
 // OpenRouter key, without key material or provider identifiers.
 type AdminInferenceKey struct {
@@ -949,11 +955,7 @@ type AdminOrganizationHooksRollout struct {
 	Override *AdminHooksRolloutPin
 	// The platform-wide default pin. Absent until one is set.
 	DefaultPin *AdminHooksRolloutPin
-	// What decides the organization's hooks version: canary organizations always
-	// get current_version, organization and default name the pin that applies, and
-	// legacy_flag means no pin applies yet and the hooks-rollout PostHog flag
-	// decides.
-	Source string
+	Source     AdminHooksRolloutSource
 	// Version of the pin that applies. Absent for canary and legacy_flag.
 	EffectiveVersion *int
 	// Whether the organization's next publish moves its hooks plugin to

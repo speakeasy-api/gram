@@ -148,7 +148,7 @@ func TestOrganizationHooksRollout_LegacyFlagUntilPinned(t *testing.T) {
 	result, err := svc.GetOrganizationHooksRollout(ctx, &gen.GetOrganizationHooksRolloutPayload{AdminSessionToken: nil, OrganizationID: orgID})
 	require.NoError(t, err)
 	require.Equal(t, orgID, result.OrganizationID)
-	require.Equal(t, "legacy_flag", result.Source)
+	require.Equal(t, gen.AdminHooksRolloutSource("legacy_flag"), result.Source)
 	require.Nil(t, result.EffectiveVersion)
 	require.Nil(t, result.Eligible, "the admin server cannot read the legacy flag")
 }
@@ -165,13 +165,13 @@ func TestOrganizationHooksRollout_OverrideAndDefault(t *testing.T) {
 
 	result, err := svc.GetOrganizationHooksRollout(ctx, &gen.GetOrganizationHooksRolloutPayload{AdminSessionToken: nil, OrganizationID: orgID})
 	require.NoError(t, err)
-	require.Equal(t, "default", result.Source)
+	require.Equal(t, gen.AdminHooksRolloutSource("default"), result.Source)
 	require.Equal(t, current, *result.EffectiveVersion)
 	require.True(t, *result.Eligible)
 
 	result, err = svc.SetOrganizationHooksRollout(ctx, &gen.SetOrganizationHooksRolloutPayload{AdminSessionToken: nil, OrganizationID: orgID, Version: current - 1})
 	require.NoError(t, err)
-	require.Equal(t, "organization", result.Source)
+	require.Equal(t, gen.AdminHooksRolloutSource("organization"), result.Source)
 	require.Equal(t, current-1, *result.EffectiveVersion)
 	require.False(t, *result.Eligible, "an override below current holds the organization back")
 	require.NotNil(t, result.Override)
@@ -188,7 +188,7 @@ func TestOrganizationHooksRollout_OverrideAndDefault(t *testing.T) {
 
 	result, err = svc.ClearOrganizationHooksRollout(ctx, &gen.ClearOrganizationHooksRolloutPayload{AdminSessionToken: nil, OrganizationID: orgID})
 	require.NoError(t, err)
-	require.Equal(t, "default", result.Source)
+	require.Equal(t, gen.AdminHooksRolloutSource("default"), result.Source)
 	require.Nil(t, result.Override)
 	require.True(t, *result.Eligible)
 
@@ -208,7 +208,7 @@ func TestOrganizationHooksRollout_CanaryIgnoresPins(t *testing.T) {
 
 	result, err := svc.SetOrganizationHooksRollout(ctx, &gen.SetOrganizationHooksRolloutPayload{AdminSessionToken: nil, OrganizationID: orgID, Version: 1})
 	require.NoError(t, err)
-	require.Equal(t, "canary", result.Source)
+	require.Equal(t, gen.AdminHooksRolloutSource("canary"), result.Source)
 	require.Nil(t, result.EffectiveVersion)
 	require.True(t, *result.Eligible)
 }

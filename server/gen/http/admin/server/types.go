@@ -2182,11 +2182,7 @@ type GetOrganizationHooksRolloutResponseBody struct {
 	Override *AdminHooksRolloutPinResponseBody `form:"override,omitempty" json:"override,omitempty" xml:"override,omitempty"`
 	// The platform-wide default pin. Absent until one is set.
 	DefaultPin *AdminHooksRolloutPinResponseBody `form:"default_pin,omitempty" json:"default_pin,omitempty" xml:"default_pin,omitempty"`
-	// What decides the organization's hooks version: canary organizations always
-	// get current_version, organization and default name the pin that applies, and
-	// legacy_flag means no pin applies yet and the hooks-rollout PostHog flag
-	// decides.
-	Source string `form:"source" json:"source" xml:"source"`
+	Source     string                            `form:"source" json:"source" xml:"source"`
 	// Version of the pin that applies. Absent for canary and legacy_flag.
 	EffectiveVersion *int `form:"effective_version,omitempty" json:"effective_version,omitempty" xml:"effective_version,omitempty"`
 	// Whether the organization's next publish moves its hooks plugin to
@@ -2205,11 +2201,7 @@ type SetOrganizationHooksRolloutResponseBody struct {
 	Override *AdminHooksRolloutPinResponseBody `form:"override,omitempty" json:"override,omitempty" xml:"override,omitempty"`
 	// The platform-wide default pin. Absent until one is set.
 	DefaultPin *AdminHooksRolloutPinResponseBody `form:"default_pin,omitempty" json:"default_pin,omitempty" xml:"default_pin,omitempty"`
-	// What decides the organization's hooks version: canary organizations always
-	// get current_version, organization and default name the pin that applies, and
-	// legacy_flag means no pin applies yet and the hooks-rollout PostHog flag
-	// decides.
-	Source string `form:"source" json:"source" xml:"source"`
+	Source     string                            `form:"source" json:"source" xml:"source"`
 	// Version of the pin that applies. Absent for canary and legacy_flag.
 	EffectiveVersion *int `form:"effective_version,omitempty" json:"effective_version,omitempty" xml:"effective_version,omitempty"`
 	// Whether the organization's next publish moves its hooks plugin to
@@ -2228,11 +2220,7 @@ type ClearOrganizationHooksRolloutResponseBody struct {
 	Override *AdminHooksRolloutPinResponseBody `form:"override,omitempty" json:"override,omitempty" xml:"override,omitempty"`
 	// The platform-wide default pin. Absent until one is set.
 	DefaultPin *AdminHooksRolloutPinResponseBody `form:"default_pin,omitempty" json:"default_pin,omitempty" xml:"default_pin,omitempty"`
-	// What decides the organization's hooks version: canary organizations always
-	// get current_version, organization and default name the pin that applies, and
-	// legacy_flag means no pin applies yet and the hooks-rollout PostHog flag
-	// decides.
-	Source string `form:"source" json:"source" xml:"source"`
+	Source     string                            `form:"source" json:"source" xml:"source"`
 	// Version of the pin that applies. Absent for canary and legacy_flag.
 	EffectiveVersion *int `form:"effective_version,omitempty" json:"effective_version,omitempty" xml:"effective_version,omitempty"`
 	// Whether the organization's next publish moves its hooks plugin to
@@ -22059,7 +22047,7 @@ func NewGetOrganizationHooksRolloutResponseBody(res *admin.AdminOrganizationHook
 	body := &GetOrganizationHooksRolloutResponseBody{
 		OrganizationID:   res.OrganizationID,
 		CurrentVersion:   res.CurrentVersion,
-		Source:           res.Source,
+		Source:           string(res.Source),
 		EffectiveVersion: res.EffectiveVersion,
 		Eligible:         res.Eligible,
 	}
@@ -22079,7 +22067,7 @@ func NewSetOrganizationHooksRolloutResponseBody(res *admin.AdminOrganizationHook
 	body := &SetOrganizationHooksRolloutResponseBody{
 		OrganizationID:   res.OrganizationID,
 		CurrentVersion:   res.CurrentVersion,
-		Source:           res.Source,
+		Source:           string(res.Source),
 		EffectiveVersion: res.EffectiveVersion,
 		Eligible:         res.Eligible,
 	}
@@ -22099,7 +22087,7 @@ func NewClearOrganizationHooksRolloutResponseBody(res *admin.AdminOrganizationHo
 	body := &ClearOrganizationHooksRolloutResponseBody{
 		OrganizationID:   res.OrganizationID,
 		CurrentVersion:   res.CurrentVersion,
-		Source:           res.Source,
+		Source:           string(res.Source),
 		EffectiveVersion: res.EffectiveVersion,
 		Eligible:         res.Eligible,
 	}

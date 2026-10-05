@@ -11,6 +11,11 @@ import (
 // design cannot express.
 const maxHooksRolloutVersion = 100000
 
+var AdminHooksRolloutSource = Type("AdminHooksRolloutSource", String, func() {
+	Description("What decides an organization's hooks version: canary organizations always get the current version, organization and default name the pin that applies, and legacy_flag means no pin applies yet and the hooks-rollout PostHog flag decides.")
+	Enum("canary", "organization", "default", "legacy_flag")
+})
+
 var AdminHooksRolloutPin = Type("AdminHooksRolloutPin", func() {
 	Description("A hooks version rollout pin: the highest hooks generator version its scope is cleared to receive.")
 	Required("version", "set_by", "set_at")
@@ -60,9 +65,7 @@ var AdminOrganizationHooksRollout = Type("AdminOrganizationHooksRollout", func()
 	Attribute("current_version", Int, "The hooks generator version this server build publishes to an organization once its pin reaches it.")
 	Attribute("override", AdminHooksRolloutPin, "The organization's own pin. Absent when it follows the default pin.")
 	Attribute("default_pin", AdminHooksRolloutPin, "The platform-wide default pin. Absent until one is set.")
-	Attribute("source", String, "What decides the organization's hooks version: canary organizations always get current_version, organization and default name the pin that applies, and legacy_flag means no pin applies yet and the hooks-rollout PostHog flag decides.", func() {
-		Enum("canary", "organization", "default", "legacy_flag")
-	})
+	Attribute("source", AdminHooksRolloutSource)
 	Attribute("effective_version", Int, "Version of the pin that applies. Absent for canary and legacy_flag.")
 	Attribute("eligible", Boolean, "Whether the organization's next publish moves its hooks plugin to current_version. Absent for legacy_flag, which the admin server cannot read.")
 })
