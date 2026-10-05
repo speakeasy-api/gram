@@ -34,7 +34,11 @@ function finding(startPos: number, endPos: number): RiskResult {
   };
 }
 
-function renderPayload(result: RiskResult, revealed: boolean) {
+function renderPayload(
+  result: RiskResult,
+  revealed: boolean,
+  revealState: "available" | "evidence_not_stored" = "available",
+) {
   render(
     <TooltipProvider>
       <FindingPayload
@@ -46,8 +50,8 @@ function renderPayload(result: RiskResult, revealed: boolean) {
         payload={{
           data: {
             id: "00000000-0000-0000-0000-000000000001",
-            revealState: "available",
-            payload: PAYLOAD,
+            revealState,
+            payload: revealState === "available" ? PAYLOAD : "",
             expiresAt: new Date("2026-12-15T00:00:00Z"),
           },
           isPending: false,
@@ -88,5 +92,18 @@ describe("FindingPayload with a match past the stored cut", () => {
     renderPayload(finding(0, 10), false);
 
     expect(screen.queryByText(CUT_NOTE)).toBeNull();
+  });
+});
+
+describe("FindingPayload without a stored payload", () => {
+  it("explains the missing payload and keeps the single-match view", () => {
+    renderPayload(finding(0, 10), false, "evidence_not_stored");
+
+    expect(screen.getByText("Payload not stored")).toBeTruthy();
+    expect(screen.getByText(/Record Tool I\/O was off/)).toBeTruthy();
+    expect(screen.getByText("Click to reveal")).toBeTruthy();
+    expect(
+      screen.queryByText(/Only the redacted fingerprint remains/),
+    ).toBeNull();
   });
 });

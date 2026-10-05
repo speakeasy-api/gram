@@ -182,24 +182,21 @@ function MatchFallback({ result }: { result: RiskResult }): JSX.Element {
   );
 }
 
+// The payload is gone but the finding's own match may still be stored, so the
+// single-match view stays available below the explanation.
 function EvidenceNotStoredBlock({
-  fingerprint,
+  result,
 }: {
-  fingerprint: string | undefined;
+  result: RiskResult;
 }): JSX.Element {
   return (
     <div className="bg-card flex flex-col gap-2.5 border p-5">
-      <span className="text-sm font-normal">Evidence not stored</span>
+      <span className="text-sm font-normal">Payload not stored</span>
       <p className="text-muted-foreground text-[13px] text-pretty">
         This finding was recorded before MCP evidence storage, while Record Tool
-        I/O was off, or its 90-day retention window has passed. Only the
-        redacted fingerprint remains.
+        I/O was off, or its 90-day retention window has passed.
       </p>
-      {fingerprint && (
-        <span className="self-start border px-1.5 py-0.5 font-mono text-xs">
-          {fingerprint}
-        </span>
-      )}
+      <MatchFallback result={result} />
     </div>
   );
 }
@@ -223,7 +220,7 @@ function PayloadBody({
 }): JSX.Element {
   if (!canReveal) return <MatchFallback result={result} />;
   if (payload.data?.revealState === "evidence_not_stored") {
-    return <EvidenceNotStoredBlock fingerprint={result.matchRedacted} />;
+    return <EvidenceNotStoredBlock result={result} />;
   }
   if (payload.data) {
     return (
