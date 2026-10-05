@@ -127,7 +127,7 @@ func UsageCommands() []string {
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
-		"auth (callback|login|switch-scopes|enter-demo|logout|register|info)",
+		"auth (callback|login|switch-scopes|enter-demo|logout|register|info|transfer-out|transfer-in)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
 		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
 		"chat-sessions (create|revoke)",
@@ -841,6 +841,15 @@ func ParseEndpoint(
 
 		authInfoFlags            = flag.NewFlagSet("info", flag.ExitOnError)
 		authInfoSessionTokenFlag = authInfoFlags.String("session-token", "", "")
+
+		authTransferOutFlags            = flag.NewFlagSet("transfer-out", flag.ExitOnError)
+		authTransferOutTargetHostFlag   = authTransferOutFlags.String("target-host", "REQUIRED", "")
+		authTransferOutRedirectFlag     = authTransferOutFlags.String("redirect", "", "")
+		authTransferOutSessionTokenFlag = authTransferOutFlags.String("session-token", "", "")
+
+		authTransferInFlags        = flag.NewFlagSet("transfer-in", flag.ExitOnError)
+		authTransferInTokenFlag    = authTransferInFlags.String("token", "REQUIRED", "")
+		authTransferInRedirectFlag = authTransferInFlags.String("redirect", "", "")
 
 		businessMemoriesFlags = flag.NewFlagSet("business-memories", flag.ContinueOnError)
 
@@ -4908,6 +4917,8 @@ func ParseEndpoint(
 	authLogoutFlags.Usage = authLogoutUsage
 	authRegisterFlags.Usage = authRegisterUsage
 	authInfoFlags.Usage = authInfoUsage
+	authTransferOutFlags.Usage = authTransferOutUsage
+	authTransferInFlags.Usage = authTransferInUsage
 
 	businessMemoriesFlags.Usage = businessMemoriesUsage
 	businessMemoriesListBusinessMemoriesFlags.Usage = businessMemoriesListBusinessMemoriesUsage
@@ -6397,6 +6408,12 @@ func ParseEndpoint(
 
 			case "info":
 				epf = authInfoFlags
+
+			case "transfer-out":
+				epf = authTransferOutFlags
+
+			case "transfer-in":
+				epf = authTransferInFlags
 
 			}
 
@@ -9297,6 +9314,12 @@ func ParseEndpoint(
 			case "info":
 				endpoint = c.Info()
 				data, err = authc.BuildInfoPayload(*authInfoSessionTokenFlag)
+			case "transfer-out":
+				endpoint = c.TransferOut()
+				data, err = authc.BuildTransferOutPayload(*authTransferOutTargetHostFlag, *authTransferOutRedirectFlag, *authTransferOutSessionTokenFlag)
+			case "transfer-in":
+				endpoint = c.TransferIn()
+				data, err = authc.BuildTransferInPayload(*authTransferInTokenFlag, *authTransferInRedirectFlag)
 			}
 		case "business-memories":
 			c := businessmemoriesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -14455,6 +14478,8 @@ func authUsage() {
 	fmt.Fprintln(os.Stderr, `    logout: Logs out the current user by clearing their session.`)
 	fmt.Fprintln(os.Stderr, `    register: Register a new org for a user with their session information.`)
 	fmt.Fprintln(os.Stderr, `    info: Provides information about the current authentication status.`)
+	fmt.Fprintln(os.Stderr, `    transfer-out: Initiates a cross-domain session transfer. Creates a signed, one-time-use token and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).`)
+	fmt.Fprintln(os.Stderr, `    transfer-in: Completes a cross-domain session transfer. Validates the transfer token and creates a new session cookie on this host. The transfer token is one-time-use and expires after 60 seconds.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s auth COMMAND --help\n", os.Args[0])
@@ -14597,6 +14622,48 @@ func authInfoUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth info --session-token \"abc123\"")
+}
+
+func authTransferOutUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth transfer-out", os.Args[0])
+	fmt.Fprint(os.Stderr, " -target-host STRING")
+	fmt.Fprint(os.Stderr, " -redirect STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Initiates a cross-domain session transfer. Creates a signed, one-time-use token and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -target-host STRING: `)
+	fmt.Fprintln(os.Stderr, `    -redirect STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth transfer-out --target-host \"abc123\" --redirect \"abc123\" --session-token \"abc123\"")
+}
+
+func authTransferInUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth transfer-in", os.Args[0])
+	fmt.Fprint(os.Stderr, " -token STRING")
+	fmt.Fprint(os.Stderr, " -redirect STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Completes a cross-domain session transfer. Validates the transfer token and creates a new session cookie on this host. The transfer token is one-time-use and expires after 60 seconds.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -redirect STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth transfer-in --token \"abc123\" --redirect \"abc123\"")
 }
 
 // businessMemoriesUsage displays the usage of the business-memories command

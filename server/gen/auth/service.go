@@ -31,6 +31,15 @@ type Service interface {
 	Register(context.Context, *RegisterPayload) (err error)
 	// Provides information about the current authentication status.
 	Info(context.Context, *InfoPayload) (res *InfoResult, err error)
+	// Initiates a cross-domain session transfer. Creates a signed, one-time-use
+	// token and redirects to the target platform host's transferIn endpoint. Used
+	// to share session cookies seamlessly between platform hosts (e.g.
+	// app.getgram.ai and ai.speakeasy.com).
+	TransferOut(context.Context, *TransferOutPayload) (res *TransferOutResult, err error)
+	// Completes a cross-domain session transfer. Validates the transfer token and
+	// creates a new session cookie on this host. The transfer token is
+	// one-time-use and expires after 60 seconds.
+	TransferIn(context.Context, *TransferInPayload) (res *TransferInResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -53,7 +62,7 @@ const ServiceName = "auth"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"callback", "login", "switchScopes", "enterDemo", "logout", "register", "info"}
+var MethodNames = [9]string{"callback", "login", "switchScopes", "enterDemo", "logout", "register", "info", "transferOut", "transferIn"}
 
 // CallbackPayload is the payload type of the auth service callback method.
 type CallbackPayload struct {
@@ -201,6 +210,42 @@ type SwitchScopesResult struct {
 	SessionToken string
 	// The authentication session
 	SessionCookie string
+}
+
+// TransferInPayload is the payload type of the auth service transferIn method.
+type TransferInPayload struct {
+	// The signed transfer token from the source host's transferOut endpoint
+	Token string
+	// Optional URL path to redirect to after the session is established
+	Redirect *string
+}
+
+// TransferInResult is the result type of the auth service transferIn method.
+type TransferInResult struct {
+	// The URL to redirect to after the session is established
+	Location string
+	// The new authentication session on this host
+	SessionToken string
+	// The new authentication session on this host
+	SessionCookie string
+}
+
+// TransferOutPayload is the payload type of the auth service transferOut
+// method.
+type TransferOutPayload struct {
+	// The target platform host to transfer the session to (e.g. ai.speakeasy.com)
+	TargetHost string
+	// Optional URL path to redirect to after the transfer completes on the target
+	// host
+	Redirect     *string
+	SessionToken *string
+}
+
+// TransferOutResult is the result type of the auth service transferOut method.
+type TransferOutResult struct {
+	// The URL to redirect to (the target host's transferIn endpoint with the
+	// transfer token)
+	Location string
 }
 
 type Trial struct {

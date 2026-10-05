@@ -253,4 +253,72 @@ var _ = Service("auth", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "info")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SessionInfo"}`)
 	})
+
+	Method("transferOut", func() {
+		Description("Initiates a cross-domain session transfer. Creates a signed, one-time-use token and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).")
+
+		Payload(func() {
+			Attribute("target_host", String, "The target platform host to transfer the session to (e.g. ai.speakeasy.com)")
+			Attribute("redirect", String, "Optional URL path to redirect to after the transfer completes on the target host")
+			security.SessionPayload()
+			Required("target_host")
+		})
+
+		Result(func() {
+			Attribute("location", String, "The URL to redirect to (the target host's transferIn endpoint with the transfer token)")
+			Required("location")
+		})
+
+		HTTP(func() {
+			GET("/rpc/auth.transferOut")
+			Param("target_host")
+			Param("redirect")
+			security.SessionHeader()
+
+			Response(StatusTemporaryRedirect, func() {
+				Header("location:Location", String, func() {
+				})
+			})
+		})
+
+		Meta("openapi:operationId", "authTransferOut")
+		Meta("openapi:extension:x-speakeasy-name-override", "transferOut")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
+	})
+
+	Method("transferIn", func() {
+		Description("Completes a cross-domain session transfer. Validates the transfer token and creates a new session cookie on this host. The transfer token is one-time-use and expires after 60 seconds.")
+
+		NoSecurity()
+
+		Payload(func() {
+			Attribute("token", String, "The signed transfer token from the source host's transferOut endpoint")
+			Attribute("redirect", String, "Optional URL path to redirect to after the session is established")
+			Required("token")
+		})
+
+		Result(func() {
+			Attribute("location", String, "The URL to redirect to after the session is established")
+			Attribute("session_token", String, "The new authentication session on this host")
+			Attribute("session_cookie", String, "The new authentication session on this host")
+			Required("location", "session_token", "session_cookie")
+		})
+
+		HTTP(func() {
+			GET("/rpc/auth.transferIn")
+			Param("token")
+			Param("redirect")
+
+			Response(StatusTemporaryRedirect, func() {
+				Header("location:Location", String, func() {
+				})
+				security.WriteSessionCookie()
+				security.SessionHeader()
+			})
+		})
+
+		Meta("openapi:operationId", "authTransferIn")
+		Meta("openapi:extension:x-speakeasy-name-override", "transferIn")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
+	})
 })

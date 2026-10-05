@@ -1730,6 +1730,496 @@ func DecodeInfoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 	}
 }
 
+// BuildTransferOutRequest instantiates a HTTP request object with method and
+// path set to call the "auth" service "transferOut" endpoint
+func (c *Client) BuildTransferOutRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: TransferOutAuthPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("auth", "transferOut", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeTransferOutRequest returns an encoder for requests sent to the auth
+// transferOut server.
+func EncodeTransferOutRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*auth.TransferOutPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("auth", "transferOut", "*auth.TransferOutPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("target_host", p.TargetHost)
+		if p.Redirect != nil {
+			values.Add("redirect", *p.Redirect)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeTransferOutResponse returns a decoder for responses returned by the
+// auth transferOut endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeTransferOutResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeTransferOutResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusTemporaryRedirect:
+			var (
+				location string
+				err      error
+			)
+			locationRaw := resp.Header.Get("Location")
+			if locationRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("location", "header"))
+			}
+			location = locationRaw
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "transferOut", err)
+			}
+			res := NewTransferOutResultTemporaryRedirect(location)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body TransferOutUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "transferOut", err)
+			}
+			err = ValidateTransferOutUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "transferOut", err)
+			}
+			return nil, NewTransferOutUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body TransferOutForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "transferOut", err)
+			}
+			err = ValidateTransferOutForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "transferOut", err)
+			}
+			return nil, NewTransferOutForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body TransferOutBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "transferOut", err)
+			}
+			err = ValidateTransferOutBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "transferOut", err)
+			}
+			return nil, NewTransferOutBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body TransferOutNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "transferOut", err)
+			}
+			err = ValidateTransferOutNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "transferOut", err)
+			}
+			return nil, NewTransferOutNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body TransferOutConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "transferOut", err)
+			}
+			err = ValidateTransferOutConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "transferOut", err)
+			}
+			return nil, NewTransferOutConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body TransferOutUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "transferOut", err)
+			}
+			err = ValidateTransferOutUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "transferOut", err)
+			}
+			return nil, NewTransferOutUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body TransferOutInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "transferOut", err)
+			}
+			err = ValidateTransferOutInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "transferOut", err)
+			}
+			return nil, NewTransferOutInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body TransferOutInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "transferOut", err)
+				}
+				err = ValidateTransferOutInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "transferOut", err)
+				}
+				return nil, NewTransferOutInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body TransferOutUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "transferOut", err)
+				}
+				err = ValidateTransferOutUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "transferOut", err)
+				}
+				return nil, NewTransferOutUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("auth", "transferOut", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body TransferOutGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "transferOut", err)
+			}
+			err = ValidateTransferOutGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "transferOut", err)
+			}
+			return nil, NewTransferOutGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("auth", "transferOut", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildTransferInRequest instantiates a HTTP request object with method and
+// path set to call the "auth" service "transferIn" endpoint
+func (c *Client) BuildTransferInRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: TransferInAuthPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("auth", "transferIn", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeTransferInRequest returns an encoder for requests sent to the auth
+// transferIn server.
+func EncodeTransferInRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*auth.TransferInPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("auth", "transferIn", "*auth.TransferInPayload", v)
+		}
+		values := req.URL.Query()
+		values.Add("token", p.Token)
+		if p.Redirect != nil {
+			values.Add("redirect", *p.Redirect)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeTransferInResponse returns a decoder for responses returned by the
+// auth transferIn endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeTransferInResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeTransferInResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusTemporaryRedirect:
+			var (
+				location     string
+				sessionToken string
+				err          error
+			)
+			locationRaw := resp.Header.Get("Location")
+			if locationRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("location", "header"))
+			}
+			location = locationRaw
+			sessionTokenRaw := resp.Header.Get("Gram-Session")
+			if sessionTokenRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("session_token", "header"))
+			}
+			sessionToken = sessionTokenRaw
+			var (
+				sessionCookie    string
+				sessionCookieRaw string
+
+				cookies = resp.Cookies()
+			)
+			for _, c := range cookies {
+				switch c.Name {
+				case "gram_session":
+					sessionCookieRaw = c.Value
+				}
+			}
+			if sessionCookieRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("session_cookie", "cookie"))
+			}
+			sessionCookie = sessionCookieRaw
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "transferIn", err)
+			}
+			res := NewTransferInResultTemporaryRedirect(location, sessionToken, sessionCookie)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body TransferInUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "transferIn", err)
+			}
+			err = ValidateTransferInUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "transferIn", err)
+			}
+			return nil, NewTransferInUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body TransferInForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "transferIn", err)
+			}
+			err = ValidateTransferInForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "transferIn", err)
+			}
+			return nil, NewTransferInForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body TransferInBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "transferIn", err)
+			}
+			err = ValidateTransferInBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "transferIn", err)
+			}
+			return nil, NewTransferInBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body TransferInNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "transferIn", err)
+			}
+			err = ValidateTransferInNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "transferIn", err)
+			}
+			return nil, NewTransferInNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body TransferInConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "transferIn", err)
+			}
+			err = ValidateTransferInConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "transferIn", err)
+			}
+			return nil, NewTransferInConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body TransferInUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "transferIn", err)
+			}
+			err = ValidateTransferInUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "transferIn", err)
+			}
+			return nil, NewTransferInUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body TransferInInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "transferIn", err)
+			}
+			err = ValidateTransferInInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "transferIn", err)
+			}
+			return nil, NewTransferInInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body TransferInInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "transferIn", err)
+				}
+				err = ValidateTransferInInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "transferIn", err)
+				}
+				return nil, NewTransferInInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body TransferInUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("auth", "transferIn", err)
+				}
+				err = ValidateTransferInUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("auth", "transferIn", err)
+				}
+				return nil, NewTransferInUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("auth", "transferIn", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body TransferInGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "transferIn", err)
+			}
+			err = ValidateTransferInGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "transferIn", err)
+			}
+			return nil, NewTransferInGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("auth", "transferIn", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalTrialResponseBodyToAuthTrial builds a value of type *auth.Trial
 // from a value of type *TrialResponseBody.
 func unmarshalTrialResponseBodyToAuthTrial(v *TrialResponseBody) *auth.Trial {
