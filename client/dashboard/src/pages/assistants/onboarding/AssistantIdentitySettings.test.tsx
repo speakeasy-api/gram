@@ -157,11 +157,11 @@ describe("Assistant identity management", () => {
     });
   });
 
-  it("shows only legacy attribution and setup before confirmation", () => {
+  it("shows owner attribution and identity setup before confirmation", () => {
     setup();
     expect(
       screen.getByText(
-        "This assistant uses legacy authentication bindings. Actions are attributed to the owner.",
+        "This assistant has no agent identity configured. Actions are attributed to the owner.",
       ),
     ).toBeTruthy();
     expect(
