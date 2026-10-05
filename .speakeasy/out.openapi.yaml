@@ -571,6 +571,114 @@ paths:
       x-speakeasy-name-override: deleteRole
       x-speakeasy-react-hook:
         name: DeleteRole
+  /rpc/access.explainResourceAccess:
+    get:
+      description: 'Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead. Like listIdentityAccess it describes one person''s access, so it takes a session only: API keys are not checked against grants and would see any member''s rules.'
+      operationId: explainResourceAccess
+      parameters:
+        - allowEmptyValue: true
+          description: The kind of resource to explain.
+          in: query
+          name: resource_kind
+          required: true
+          schema:
+            description: The kind of resource to explain.
+            enum:
+              - mcp
+            type: string
+        - allowEmptyValue: true
+          description: The resource to explain.
+          in: query
+          name: resource_id
+          required: true
+          schema:
+            description: The resource to explain.
+            type: string
+        - allowEmptyValue: true
+          description: The organization member whose access to explain.
+          in: query
+          name: user_id
+          required: true
+          schema:
+            description: The organization member whose access to explain.
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExplainResourceAccessResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: explainResourceAccess access
+      tags:
+        - access
+      x-speakeasy-name-override: explainResourceAccess
+      x-speakeasy-react-hook:
+        name: ExplainResourceAccess
   /rpc/access.getRole:
     get:
       description: Get a role by ID.
@@ -82411,6 +82519,156 @@ components:
           example: dev@acme.corp
       required:
         - email
+    ExplainResourceAccessResult:
+      type: object
+      properties:
+        levels:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExplainedAccessLevel'
+          description: The decision for use, view and manage, in that order.
+        visibility:
+          type: string
+          description: 'Who may connect without a rule. public: connecting is not checked against rules. private: rules decide. disabled: nobody can connect.'
+          enum:
+            - public
+            - private
+            - disabled
+      required:
+        - visibility
+        - levels
+    ExplainedAccessDirectorySource:
+      type: object
+      properties:
+        attribute_key:
+          type: string
+          description: The directory attribute, for an attribute mapping.
+        attribute_value:
+          type: string
+          description: The attribute value the member's profile matched, for an attribute mapping.
+        directory_group_name:
+          type: string
+          description: The directory group, for a group mapping.
+        source_kind:
+          type: string
+          description: Whether membership of a directory group or a directory attribute value mapped the role.
+          enum:
+            - group
+            - attribute
+      required:
+        - source_kind
+    ExplainedAccessLevel:
+      type: object
+      properties:
+        allowed:
+          type: boolean
+          description: Whether the rules give the member this access.
+        level:
+          type: string
+          description: The access being explained.
+          enum:
+            - use
+            - view
+            - manage
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExplainedAccessRule'
+          description: Every rule matching this access, deciding rules first.
+        tool_access:
+          type: string
+          description: 'For use: whether every tool, only some, or none are reachable.'
+          enum:
+            - all
+            - some
+            - none
+      required:
+        - level
+        - allowed
+        - rules
+    ExplainedAccessRule:
+      type: object
+      properties:
+        applies_to:
+          type: string
+          description: Whether the rule names this resource, every resource in its project, or every resource of its kind.
+          enum:
+            - resource
+            - project
+            - all_resources
+        directory_sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExplainedAccessDirectorySource'
+          description: The directory role mappings giving the member this role, including when they also hold it directly. Returned only to organization administrators, because attribute values can carry personal data.
+        display_name:
+          type: string
+          description: Human-readable name for the principal.
+        dispositions:
+          type: array
+          items:
+            type: string
+            enum:
+              - read_only
+              - destructive
+              - idempotent
+              - open_world
+          description: Tool annotations the rule is narrowed to, when it is not the whole resource.
+        effect:
+          type: string
+          description: 'How the rule shaped the decision. allows: proves the access. overrides: a rule made directly to the member that proves the access despite a block from a role or everyone. overridden: a block such a rule overrides. blocks: takes the access away. blocked: an allow that matches but that a block keeps from counting. limits: a block taking away some of the resource''s tools.'
+          enum:
+            - allows
+            - overrides
+            - overridden
+            - blocks
+            - blocked
+            - limits
+        kind:
+          type: string
+          description: What the principal identifies.
+          enum:
+            - everyone
+            - role
+            - user
+            - unknown
+        level:
+          type: string
+          description: The access the rule gives, or the access a "blocked_" rule takes away. "all" is a grant covering every permission.
+          enum:
+            - use
+            - view
+            - manage
+            - blocked
+            - blocked_view
+            - blocked_manage
+            - all
+        principal_urn:
+          type: string
+          description: Canonical principal URN holding the rule.
+        reason:
+          type: string
+          description: 'Why a blocked rule made directly to the member did not override the block. wildcard_direct_grant: it covers every resource. narrower_direct_grant: it constrains something the tool does not carry. own_exclusion: the member''s own block applies.'
+          enum:
+            - wildcard_direct_grant
+            - narrower_direct_grant
+            - own_exclusion
+        tools:
+          type: array
+          items:
+            type: string
+          description: Tool names the rule is narrowed to, when it is not the whole resource.
+        via_directory_mapping:
+          type: boolean
+          description: Whether the member holds this role only through a directory role mapping.
+      required:
+        - principal_urn
+        - kind
+        - display_name
+        - level
+        - applies_to
+        - effect
+        - via_directory_mapping
     ExportMcpMetadataRequestBody:
       type: object
       properties:

@@ -477,6 +477,14 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     tool_calls dataset, a 7-day window and a table ordered by p95 duration,
     runs it, and returns rows; the bar names the widget with Priya Raman as
     its creator and **Save** stays disabled until something is edited.
+27. **Check access** — open MCP → **GitHub** → Team Access and pick Mateo
+    Alvarez in Check access. Connect is **Blocked**: the Contractors block
+    wins, Engineer's grants show as blocked, and his own grant covering
+    every server is blocked because it does not name GitHub. Contractors
+    reads "Mapped from employee_type = contractor" for an organization
+    admin. View and Manage stay allowed, since the block covers Connect
+    only. Pick Priya Raman: Connect is **Allowed** because her grant naming
+    GitHub overrides the Contractors block, which shows as overridden.
 
 ## On failure
 
