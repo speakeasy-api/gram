@@ -2,6 +2,8 @@ import { Link } from "@/components/ui/Link";
 import {
   CLAUDE_CODE_MARKETPLACE_AUTO_UPDATE_DOCS_URL,
   CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL,
+  claudeMarketplaceNameNoteParts,
+  type ClaudeCodeNotePart,
 } from "@/lib/claude-code-marketplace";
 import { cn } from "@/lib/utils";
 import { Info } from "lucide-react";
@@ -35,7 +37,6 @@ function Note({
   className?: string;
   children: React.ReactNode;
 }): React.JSX.Element {
-  // A div, not a p: the docs link's icon can suspend into a block fallback.
   return (
     <div
       className={cn(
@@ -47,6 +48,11 @@ function Note({
       <span>{children}</span>
     </div>
   );
+}
+
+function NotePart({ part }: { part: ClaudeCodeNotePart }): React.ReactNode {
+  if (typeof part === "string") return part;
+  return <code className={INLINE_CODE_CLASS}>{part.code}</code>;
 }
 
 /**
@@ -63,17 +69,15 @@ export function ClaudeMarketplaceNameNote({
   marketplaceName: string;
   className?: string;
 }): React.JSX.Element {
+  const parts = claudeMarketplaceNameNoteParts({
+    code: marketplaceName,
+    fallback: marketplaceName,
+  });
   return (
     <Note className={className}>
-      The <code className={INLINE_CODE_CLASS}>extraKnownMarketplaces</code> key
-      and the <code className={INLINE_CODE_CLASS}>@</code> suffix in{" "}
-      <code className={INLINE_CODE_CLASS}>enabledPlugins</code> must be exactly{" "}
-      <code className={INLINE_CODE_CLASS}>{marketplaceName}</code>, not the
-      GitHub repository name or an older{" "}
-      <code className={INLINE_CODE_CLASS}>&lt;org&gt;-gram</code> name.
-      Otherwise Claude Code ignores{" "}
-      <code className={INLINE_CODE_CLASS}>autoUpdate</code> or never installs
-      the plugin.{" "}
+      {parts.map((part, index) => (
+        <NotePart key={index} part={part} />
+      ))}{" "}
       <NoteLink href={CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL}>
         Claude Code docs
       </NoteLink>

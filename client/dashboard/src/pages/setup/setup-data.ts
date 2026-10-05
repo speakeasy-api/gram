@@ -1,4 +1,7 @@
-import { CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL } from "@/lib/claude-code-marketplace";
+import {
+  CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL,
+  claudeMarketplaceNameNoteParts,
+} from "@/lib/claude-code-marketplace";
 import { getCursorInstallCommand } from "@/lib/cursor-install-command";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import {
@@ -38,26 +41,14 @@ const claudeCodeSettingsJSON = (origin: string) => `{
   }
 }`;
 
-// Claude Code applies autoUpdate only from the extraKnownMarketplaces entry
-// keyed by the marketplace.json name, and installs enabledPlugins entries only
-// under that same name, so every step carrying the settings block says so
-// with the actual name filled in.
-const claudeCodeMarketplaceNameNote: Array<
-  string | { code: string; fallback: string }
-> = [
-  " The ",
-  { code: "extraKnownMarketplaces", fallback: "extraKnownMarketplaces" },
-  " key and the ",
-  { code: "@", fallback: "@" },
-  " suffix in ",
-  { code: "enabledPlugins", fallback: "enabledPlugins" },
-  " must be exactly ",
-  { code: "{{GRAM_MARKETPLACE_NAME}}", fallback: "your marketplace name" },
-  ", not the GitHub repository name or an older ",
-  { code: "<org>-gram", fallback: "<org>-gram" },
-  " name. Otherwise Claude Code ignores ",
-  { code: "autoUpdate", fallback: "autoUpdate" },
-  " or never installs the plugin.",
+// Every step carrying the settings block says the marketplace keys must be the
+// marketplace.json name, with the actual name filled in.
+const claudeCodeMarketplaceNameNote = [
+  " ",
+  ...claudeMarketplaceNameNoteParts({
+    code: "{{GRAM_MARKETPLACE_NAME}}",
+    fallback: "your marketplace name",
+  }),
 ];
 
 // Setup copy names the host the reader is on (app.getgram.ai or
