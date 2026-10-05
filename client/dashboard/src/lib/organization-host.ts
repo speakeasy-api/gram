@@ -4,8 +4,8 @@
  * `auth.info` returns `activeOrganizationDashboardUrl` only when the active
  * organization lives on a different configured platform host from the one the
  * request arrived on, so the server owns which hosts qualify. The checks here
- * are the browser's own guard: the target must be an absolute http(s) URL on
- * another host, and a tab moves at most once to a given host, so two hosts
+ * are the browser's own guard: the target must be an absolute https URL (http only
+ * from an http page) on another host, and a tab moves at most once to a given host, so two hosts
  * that disagree can never bounce a tab back and forth.
  */
 
@@ -35,7 +35,18 @@ function isExempt(current: CurrentLocation): boolean {
   return HOST_MOVE_EXEMPT_PATHS.includes(path) || isCliHandoff(current);
 }
 
-type CurrentLocation = Pick<Location, "host" | "pathname" | "search" | "hash">;
+type CurrentLocation = Pick<
+  Location,
+  "protocol" | "host" | "pathname" | "search" | "hash"
+>;
+
+/**
+ * Only https targets qualify. Plain http is allowed only from a page that is
+ * itself on http (local development), so a move never downgrades a session.
+ */
+function allowedProtocol(target: string, current: string): boolean {
+  return target === "https:" || (target === "http:" && current === "http:");
+}
 
 /**
  * The URL that keeps the current path, query and hash on the organization's
@@ -53,9 +64,7 @@ export function organizationHostRedirectTarget(
   } catch {
     return undefined;
   }
-  if (target.protocol !== "https:" && target.protocol !== "http:") {
-    return undefined;
-  }
+  if (!allowedProtocol(target.protocol, current.protocol)) return undefined;
   if (target.host === current.host) return undefined;
 
   return target.origin + current.pathname + current.search + current.hash;

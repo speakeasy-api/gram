@@ -6,6 +6,7 @@ import {
 } from "./organization-host";
 
 const current = {
+  protocol: "https:",
   host: "app.example.com",
   pathname: "/acme/mcp/servers",
   search: "?tab=logs&q=a%20b",
@@ -78,6 +79,22 @@ describe("organizationHostRedirectTarget", () => {
         hash: "",
       }),
     ).toBe("https://ai.example.com/acme/shadow-mcp/request-log");
+  });
+
+  it("refuses an http target from an https page", () => {
+    expect(
+      organizationHostRedirectTarget("http://ai.example.com", current),
+    ).toBe(undefined);
+  });
+
+  it("allows an http target from an http page", () => {
+    expect(
+      organizationHostRedirectTarget("http://localhost:5174", {
+        ...current,
+        protocol: "http:",
+        host: "localhost:5173",
+      }),
+    ).toBe("http://localhost:5174/acme/mcp/servers?tab=logs&q=a%20b#recent");
   });
 
   it("treats a different port as a different host", () => {
