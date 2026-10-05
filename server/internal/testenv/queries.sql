@@ -866,12 +866,18 @@ VALUES (@organization_id, @stripe_customer_id);
 
 -- name: SetUserSessionIssuerAuthorizationServerModeFixture :execrows
 -- Test-only fixture that switches an issuer's authorization server mode and
--- pinned issuer URL, ahead of a management API that sets them.
-UPDATE user_session_issuers
+-- pinned issuer URL, ahead of a management API that sets them. Project-scoped
+-- issuers carry no organization_id, so their tenancy is read through the
+-- project.
+UPDATE user_session_issuers AS issuer
 SET authorization_server_mode = @authorization_server_mode,
     pinned_issuer_url = sqlc.narg('pinned_issuer_url')
-WHERE id = @id
-  AND deleted IS FALSE;
+WHERE issuer.id = @issuer_id
+  AND issuer.deleted IS FALSE
+  AND COALESCE(
+    issuer.organization_id,
+    (SELECT p.organization_id FROM projects AS p WHERE p.id = issuer.project_id)
+  ) = @organization_id::text;
 
 -- name: SetMCPServerNetworkAccessModeFixture :execrows
 -- Test-only fixture for building a pre-existing non-public row so update tests

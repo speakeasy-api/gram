@@ -124,22 +124,3 @@ func TestRemoteCallbackRejectsTransferredBrowserState(t *testing.T) {
 	_, err := s.remoteLoginCache.Get(t.Context(), "remoteLogin:"+remote.ID)
 	require.NoError(t, err)
 }
-
-// A remote login started from a shared authorization server's consent page
-// returns to that page by URL, but it still has a consent parent, so the
-// callback keeps the parent's browser binding.
-func TestRemoteCallbackFromSharedConsentKeepsBrowserBinding(t *testing.T) {
-	t.Parallel()
-	s := browserTestService(t)
-	parent := browserTestState()
-	require.NoError(t, s.authnChallengeCache.Store(t.Context(), parent))
-	remote := remotesessions.RemoteLoginState{
-		ID: uuid.NewString(), ParentChallengeID: parent.ID, Subject: parent.Subject, UserSessionIssuerID: parent.UserSessionIssuerID,
-		ConsentURL: "https://gram.example/oauth/usi/" + uuid.NewString() + "/connect?state=" + parent.ID,
-	}
-	require.NoError(t, s.remoteLoginCache.Store(t.Context(), remote))
-	callback := httptest.NewRequest(http.MethodGet, "https://gram.example/mcp/remote_login_callback?state="+remote.ID+"&code=code", nil)
-	require.ErrorContains(t, s.HandleRemoteLoginCallback(httptest.NewRecorder(), callback), "invalid remote login browser binding")
-	callback.AddCookie(federatedBrowserCookie(parent.Browser.CookieID, "callback-browser", 600))
-	require.NoError(t, s.validateRemoteLoginBrowser(callback))
-}

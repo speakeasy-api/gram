@@ -48,6 +48,11 @@ const sharedResourceLogMaxBytes = 512
 // in shared mode named an authorization server other than that issuer's.
 var errSharedTokenIssuerMismatch = errors.New("resource-bound token names another authorization server")
 
+// errIssuerGateIssuerLookup marks an operational failure to load the issuer a
+// resource-bound token is checked against, after the token itself validated,
+// so the rejection is not labeled a bad credential.
+var errIssuerGateIssuerLookup = errors.New("load issuer of resource-bound session")
+
 // sharedAuthorizationServer is the OAuth authorization server a user session
 // issuer in shared mode serves for all of its MCP servers. Unlike a
 // per-endpoint authorization server, its identity depends neither on the MCP
@@ -451,7 +456,11 @@ func (s *Service) sharedResourceContext(ctx context.Context, host string) (conte
 // unknown issuers are refused before their resource is read, so the metric's
 // issuer dimension only ever carries ids of real shared issuers.
 func (s *Service) recordSharedResourceRejection(ctx context.Context, logger *slog.Logger, issuerID uuid.UUID, stage mcpmetrics.OAuthFlowStage, rejection sharedResourceRejection, resources []string) {
-	logged := strings.Join(resources, ", ")
+	redacted := make([]string, 0, len(resources))
+	for _, resource := range resources {
+		redacted = append(redacted, redactResourceForLog(resource))
+	}
+	logged := strings.Join(redacted, ", ")
 	if len(logged) > sharedResourceLogMaxBytes {
 		logged = strings.ToValidUTF8(logged[:sharedResourceLogMaxBytes], "")
 	}
@@ -472,6 +481,23 @@ func (s *Service) recordSharedTokenResourceMismatch(ctx context.Context, logger 
 		return
 	}
 	s.recordSharedResourceRejection(ctx, logger, endpoint.UserSessionIssuerID, mcpmetrics.OAuthFlowStageToken, sharedResourceMismatch, resources)
+}
+
+// unparseableResourceLogValue stands in for a resource indicator that is not a
+// URL at all, which may hold anything a client sent.
+const unparseableResourceLogValue = "<unparseable>"
+
+// redactResourceForLog reduces a client-supplied resource indicator to what
+// diagnosing a rejection needs, its scheme, host, and path. Userinfo, query,
+// and fragment are dropped: no valid resource has them, and a client can put
+// credentials there.
+func redactResourceForLog(resource string) string {
+	parsed, err := url.Parse(resource)
+	if err != nil {
+		return unparseableResourceLogValue
+	}
+	redacted := url.URL{Scheme: parsed.Scheme, Host: parsed.Host, Path: parsed.Path}
+	return redacted.String()
 }
 
 // sharedSessionResource is the RFC 8707 resource a session minted for this
@@ -540,7 +566,7 @@ func (s *Service) checkSharedResourceSession(ctx context.Context, session sessio
 			if errors.As(err, &shareable) && shareable.Code == oops.CodeNotFound {
 				return false, fmt.Errorf("%w: load issuer of resource-bound session: %w", errCredentialRejected, err)
 			}
-			return false, fmt.Errorf("load issuer of resource-bound session: %w", err)
+			return false, fmt.Errorf("%w: %w", errIssuerGateIssuerLookup, err)
 		}
 	}
 	shared := endpoint.sharedAuthorizationServer

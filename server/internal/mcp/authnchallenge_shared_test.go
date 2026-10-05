@@ -111,7 +111,8 @@ func setIssuerMode(t *testing.T, ctx context.Context, ti *testInstance, issuerID
 	rows, err := testrepo.New(ti.conn).SetUserSessionIssuerAuthorizationServerModeFixture(ctx, testrepo.SetUserSessionIssuerAuthorizationServerModeFixtureParams{
 		AuthorizationServerMode: mode,
 		PinnedIssuerUrl:         conv.ToPGTextEmpty(pinnedIssuerURL),
-		ID:                      issuerID,
+		IssuerID:                issuerID,
+		OrganizationID:          requireProjectAuthContext(t, ctx).ActiveOrganizationID,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), rows)
@@ -617,7 +618,7 @@ func TestSharedAuthorizationServer_RefreshReplayStaysOnTheSharedServer(t *testin
 
 	replayed := sharedToken(t, ctx, ti, f.issuer.ID.String(), form)
 	require.Equal(t, http.StatusOK, replayed.Code, replayed.Body.String())
-	require.Equal(t, decodeSharedTokenResponse(t, first).RefreshToken, decodeSharedTokenResponse(t, replayed).RefreshToken)
+	assertSameTokenPair(t, first.Body.String(), replayed.Body.String())
 
 	perEndpoint := performRefreshRequest(ctx, ti, f.slugA, f.client.ClientID, refreshToken)
 	require.NoError(t, perEndpoint.err)

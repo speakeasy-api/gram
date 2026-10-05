@@ -97,7 +97,8 @@ const (
 	ParamClientAssertionType = "client_assertion_type"
 )
 
-// Token request parameters for the assertion and token exchange grants.
+// Token request parameters: the grant type, and the parameters of the
+// authorization code, refresh token, assertion, and token exchange grants.
 const (
 	// ParamGrantType selects the token endpoint grant (RFC 6749 §4.1.3).
 	ParamGrantType = "grant_type"

@@ -401,6 +401,8 @@ func issuerGateFailureReason(err error) string {
 		return issuerGateReasonIssuerMismatch
 	case errors.Is(err, errIssuerGateOrgLookup):
 		return "org_lookup_failed"
+	case errors.Is(err, errIssuerGateIssuerLookup):
+		return "issuer_lookup_failed"
 	case errors.Is(err, errIssuerGateCallerProfile):
 		return "caller_profile_unavailable"
 	case errors.Is(err, errToolSelectionResourceMismatch):
