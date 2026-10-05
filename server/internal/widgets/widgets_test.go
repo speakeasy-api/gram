@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/widgets"
 	widgetsrepo "github.com/speakeasy-api/gram/server/internal/widgets/repo"
@@ -586,4 +587,14 @@ func TestGetPreset(t *testing.T) {
 
 	_, err = ti.service.GetPreset(t.Context(), &gen.GetPresetPayload{Page: "home", SessionToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeUnauthorized)
+}
+
+func TestGetPresetWithoutProjectRead(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = authztest.WithExactGrants(t, ctx)
+
+	preset, err := ti.service.GetPreset(ctx, &gen.GetPresetPayload{Page: "home", SessionToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Nil(t, preset, "a denied caller receives no preset or page-existence information")
 }

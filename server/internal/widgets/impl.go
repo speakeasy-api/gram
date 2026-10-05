@@ -52,13 +52,13 @@ type Service struct {
 	authz   *authz.Engine
 	audit   *audit.Logger
 	catalog *analytics.Catalog
-	presets func() (map[string]presetPage, error)
+	presets func() (map[string]mv.PresetPageSource, error)
 	now     func() time.Time
 }
 
 // builtinPresets parses the embedded presets once. TestPresets keeps a
 // broken file from shipping, so a failure here is a server error.
-var builtinPresets = sync.OnceValues(func() (map[string]presetPage, error) {
+var builtinPresets = sync.OnceValues(func() (map[string]mv.PresetPageSource, error) {
 	return parsePresets(presetsJSON)
 })
 
@@ -179,7 +179,7 @@ func (s *Service) GetPreset(ctx context.Context, payload *gen.GetPresetPayload) 
 		return nil, oops.E(oops.CodeNotFound, nil, "no preset for page %q", payload.Page)
 	}
 	now := s.now()
-	return presetView(page, func(dataset string, query, visualization []byte) string {
+	return mv.BuildWidgetPresetView(page, func(dataset string, query, visualization []byte) string {
 		return s.validate(ctx, dataset, query, visualization, now)
 	}), nil
 }

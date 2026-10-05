@@ -2,9 +2,18 @@ import type { WidgetPreset } from "@gram/client/models/components/widgetpreset.j
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { WidgetGrid } from "./WidgetGrid";
+import { PresetWidgets, WidgetGrid } from "./WidgetGrid";
 
 const testState = vi.hoisted(() => ({ staff: false }));
+const presetQuery = vi.hoisted(() => ({
+  data: undefined as WidgetPreset | undefined,
+  isError: false,
+  refetch: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/widgetPreset.js", () => ({
+  useWidgetPreset: () => presetQuery,
+}));
 
 vi.mock("@/contexts/Auth", () => ({
   useIsSpeakeasyStaff: () => testState.staff,
@@ -128,5 +137,38 @@ describe("WidgetGrid", () => {
     testState.staff = true;
     render(<WidgetGrid preset={preset} />);
     expect(screen.queryByRole("switch")).toBeNull();
+  });
+});
+
+describe("PresetWidgets", () => {
+  beforeEach(() => {
+    testState.staff = false;
+    localStorage.clear();
+    presetQuery.data = undefined;
+    presetQuery.isError = false;
+    presetQuery.refetch.mockClear();
+  });
+  afterEach(cleanup);
+
+  it("shows loading until the page preset arrives", () => {
+    render(<PresetWidgets page="home" />);
+    expect(screen.getByLabelText("Loading widgets")).toBeTruthy();
+  });
+
+  it("renders the fetched layout", () => {
+    presetQuery.data = preset;
+    render(<PresetWidgets page="home" />);
+    expect(screen.getAllByRole("region")).toHaveLength(5);
+    expect(screen.getByRole("region", { name: "A" })).toBeTruthy();
+  });
+
+  it("offers a retry when the preset could not load", () => {
+    presetQuery.isError = true;
+    render(<PresetWidgets page="home" />);
+    expect(screen.getByRole("alert").textContent).toContain(
+      "This page's widgets did not load.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(presetQuery.refetch).toHaveBeenCalledOnce();
   });
 });

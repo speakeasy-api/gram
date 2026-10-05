@@ -10,7 +10,7 @@ import (
 	"slices"
 	"time"
 
-	gen "github.com/speakeasy-api/gram/server/gen/widgets"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 )
 
@@ -35,31 +35,13 @@ var presetSpans = []int{3, 4, 6, 12}
 const gridColumns = 12
 
 type presetFile struct {
-	Pages []presetPage `json:"pages"`
-}
-
-type presetPage struct {
-	Page string      `json:"page"`
-	Rows []presetRow `json:"rows"`
-}
-
-type presetRow struct {
-	Widgets []presetWidget `json:"widgets"`
-}
-
-type presetWidget struct {
-	Key           string          `json:"key"`
-	Name          string          `json:"name"`
-	Dataset       string          `json:"dataset"`
-	Span          int             `json:"span"`
-	Query         json.RawMessage `json:"query"`
-	Visualization json.RawMessage `json:"visualization"`
+	Pages []mv.PresetPageSource `json:"pages"`
 }
 
 // parsePresets reads a presets file strictly: an unknown key, a duplicate
 // page or card, a span off the grid or a row wider than it is an error,
 // not something to guess around.
-func parsePresets(raw []byte) (map[string]presetPage, error) {
+func parsePresets(raw []byte) (map[string]mv.PresetPageSource, error) {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	var file presetFile
@@ -67,7 +49,7 @@ func parsePresets(raw []byte) (map[string]presetPage, error) {
 		return nil, fmt.Errorf("decode presets: %w", err)
 	}
 
-	pages := make(map[string]presetPage, len(file.Pages))
+	pages := make(map[string]mv.PresetPageSource, len(file.Pages))
 	for _, page := range file.Pages {
 		if page.Page == "" {
 			return nil, errors.New("a preset page has no name")
@@ -114,7 +96,7 @@ func parsePresets(raw []byte) (map[string]presetPage, error) {
 
 // presetProblems returns what is wrong with each preset widget against the
 // catalog, one line per broken widget; none means every page works.
-func presetProblems(catalog *analytics.Catalog, pages map[string]presetPage, now time.Time) ([]string, error) {
+func presetProblems(catalog *analytics.Catalog, pages map[string]mv.PresetPageSource, now time.Time) ([]string, error) {
 	var problems []string
 	for _, name := range slices.Sorted(maps.Keys(pages)) {
 		for _, row := range pages[name].Rows {
@@ -130,53 +112,4 @@ func presetProblems(catalog *analytics.Catalog, pages map[string]presetPage, now
 		}
 	}
 	return problems, nil
-}
-
-// presetView renders a preset page, validating each widget as it is read.
-func presetView(page presetPage, check func(dataset string, query, visualization []byte) string) *gen.WidgetPreset {
-	out := &gen.WidgetPreset{Page: page.Page, Rows: make([]*gen.PresetRow, 0, len(page.Rows))}
-	for _, row := range page.Rows {
-		widgets := make([]*gen.PresetWidget, 0, len(row.Widgets))
-		for _, widget := range row.Widgets {
-			reason := check(widget.Dataset, widget.Query, widget.Visualization)
-			query, err := decodeObject(widget.Query)
-			if err != nil && reason == "" {
-				reason = "query is not a JSON object"
-			}
-			visualization, err := decodeObject(widget.Visualization)
-			if err != nil && reason == "" {
-				reason = "visualization is not a JSON object"
-			}
-			var invalid *string
-			if reason != "" {
-				invalid = &reason
-			}
-			widgets = append(widgets, &gen.PresetWidget{
-				Key:           widget.Key,
-				Name:          widget.Name,
-				Dataset:       widget.Dataset,
-				Query:         query,
-				Visualization: visualization,
-				Span:          widget.Span,
-				InvalidReason: invalid,
-			})
-		}
-		out.Rows = append(out.Rows, &gen.PresetRow{Widgets: widgets})
-	}
-	return out
-}
-
-// decodeObject reads a JSON object keeping numbers as written, as a saved
-// widget's are.
-func decodeObject(raw []byte) (map[string]any, error) {
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.UseNumber()
-	out := map[string]any{}
-	if err := dec.Decode(&out); err != nil {
-		return map[string]any{}, fmt.Errorf("decode object: %w", err)
-	}
-	if out == nil {
-		return map[string]any{}, errors.New("decode object: null")
-	}
-	return out, nil
 }

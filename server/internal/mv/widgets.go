@@ -17,14 +17,7 @@ import (
 // even a JSON object is reported the same way rather than failing the whole
 // list.
 func BuildWidgetView(row widgetsrepo.Widget, invalidReason string) *gen.Widget {
-	query, reason := decodeWidgetObject("query", row.Query)
-	if invalidReason == "" {
-		invalidReason = reason
-	}
-	visualization, reason := decodeWidgetObject("visualization", row.Visualization)
-	if invalidReason == "" {
-		invalidReason = reason
-	}
+	query, visualization, invalidReason := decodeWidgetObjects(row.Query, row.Visualization, invalidReason)
 
 	return &gen.Widget{
 		ID:              row.ID.String(),
@@ -40,6 +33,21 @@ func BuildWidgetView(row widgetsrepo.Widget, invalidReason string) *gen.Widget {
 		CreatedAt:       conv.FromPGTimestamptz(row.CreatedAt),
 		UpdatedAt:       conv.FromPGTimestamptz(row.UpdatedAt),
 	}
+}
+
+// decodeWidgetObjects preserves a validator's reason, otherwise reporting the
+// first invalid JSON object. Saved widgets and presets use the same decoder.
+func decodeWidgetObjects(queryRaw, visualizationRaw []byte, invalidReason string) (map[string]any, map[string]any, string) {
+	query, reason := decodeWidgetObject("query", queryRaw)
+	if invalidReason == "" {
+		invalidReason = reason
+	}
+	visualization, reason := decodeWidgetObject("visualization", visualizationRaw)
+	if invalidReason == "" {
+		invalidReason = reason
+	}
+
+	return query, visualization, invalidReason
 }
 
 // decodeWidgetObject reads a stored JSON object, returning an empty one and a
