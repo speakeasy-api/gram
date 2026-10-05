@@ -114,6 +114,13 @@ export function WidgetView({
     );
   }
 
+  // Broken saved widgets open as saved so they can be fixed. Otherwise,
+  // open the merged question the card ran.
+  let headerSpec = paged?.spec ?? null;
+  if (widget.invalidReason) {
+    headerSpec = widget.id ? saved : null;
+  }
+
   return (
     <section
       aria-label={widget.name}
@@ -124,17 +131,8 @@ export function WidgetView({
     >
       <WidgetHeader
         name={widget.name}
-        // A widget the server says is broken opens as it was saved, where it
-        // is fixed, and only when it was saved. Otherwise the card opens
-        // what it ran; a question the page changed is no longer the saved
-        // widget, so it opens as a query of its own.
-        spec={
-          widget.invalidReason
-            ? widget.id
-              ? saved
-              : null
-            : (paged?.spec ?? null)
-        }
+        spec={headerSpec}
+        // A question the page changed opens as its own query.
         widgetId={
           widget.invalidReason || !paged?.changed ? widget.id : undefined
         }
