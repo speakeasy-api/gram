@@ -20,6 +20,8 @@ import {
 
 type Naming = "create" | "copy" | "rename";
 
+const RANGED_REASON = "Pick a window to save: a widget keeps a relative one";
+
 /**
  * The widget the builder has open, above the builder: its name, whether the
  * builder has moved on from it, and saving, renaming, duplicating and
@@ -95,6 +97,9 @@ export function WidgetBar({
   // has no edits to mark and saving would overwrite it with something else.
   const readable = open ? specFromStoredWidget(open) !== null : false;
   const changed = open && readable ? differsFromWidget(spec, open) : false;
+  // A widget keeps a relative window and follows you forward in time, so a
+  // query over an absolute range is shared by its link, not saved.
+  const ranged = spec.range !== undefined;
 
   return (
     <div className="flex min-w-0 items-center gap-2">
@@ -110,7 +115,8 @@ export function WidgetBar({
               variant="secondary"
               size="sm"
               icon="save"
-              disabled={!readable || !changed || mutations.pending}
+              disabled={!readable || !changed || ranged || mutations.pending}
+              title={ranged ? RANGED_REASON : undefined}
               onClick={() =>
                 mutations.update(
                   open.id,
@@ -136,7 +142,10 @@ export function WidgetBar({
               {
                 label: "Save as new widget",
                 icon: "file-plus",
-                description: "Keeps the builder's unsaved edits",
+                description: ranged
+                  ? RANGED_REASON
+                  : "Keeps the builder's unsaved edits",
+                disabled: ranged,
                 onClick: () => setNaming("copy"),
               },
               {
@@ -167,7 +176,8 @@ export function WidgetBar({
             variant="secondary"
             size="sm"
             icon="save"
-            disabled={resolving}
+            disabled={resolving || ranged}
+            title={ranged ? RANGED_REASON : undefined}
             onClick={() => setNaming("create")}
           >
             Save widget

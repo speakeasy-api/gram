@@ -171,13 +171,20 @@ export function widgetKey(spec: ExploreSpec): string {
   return JSON.stringify([spec.dataset, widgetFromSpec(spec)]);
 }
 
-/** Whether the builder holds anything the widget does not. */
+/**
+ * Whether the builder holds anything the widget does not. An absolute range
+ * is always a difference: a widget keeps a relative window.
+ */
 export function differsFromWidget(
   spec: ExploreSpec,
   widget: StoredWidget,
 ): boolean {
   const saved = specFromStoredWidget(widget);
-  return saved === null || widgetKey(saved) !== widgetKey(spec);
+  return (
+    saved === null ||
+    spec.range !== undefined ||
+    widgetKey(saved) !== widgetKey(spec)
+  );
 }
 
 function listOf(value: unknown): unknown[] {

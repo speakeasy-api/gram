@@ -89,7 +89,19 @@ export interface ExploreSpec {
    */
   limit: number;
   window: WindowPreset;
+  /**
+   * An absolute range that replaces the window, set when a page asks a
+   * widget over its own time range or a chart is dragged across. A widget
+   * keeps a relative window, so a spec with a range cannot be saved as one.
+   */
+  range?: TimeRange | undefined;
   chartType: ChartType;
+}
+
+/** An absolute [from, to) range, in Unix milliseconds. */
+export interface TimeRange {
+  from: number;
+  to: number;
 }
 
 /** Resolve a relative window into a stable, hour-aligned [from, to) range. */
@@ -108,16 +120,48 @@ export function windowRange(
  * still yields a readable series. The catalog's finest grain is an hour.
  */
 export function autoGrain(window: WindowPreset): Grain {
-  switch (window) {
-    case "1h":
-    case "24h":
-      return "hour";
-    case "7d":
-    case "30d":
-      return "day";
-    case "90d":
-      return "week";
+  return grainForSpan(WINDOW_SECONDS[window] * 1000);
+}
+
+/**
+ * The bucket width for a span of time, by the same steps the windows take:
+ * hours up to a day, days up to thirty, weeks past that.
+ */
+export function grainForSpan(ms: number): Grain {
+  if (ms <= WINDOW_SECONDS["24h"] * 1000) return "hour";
+  if (ms <= WINDOW_SECONDS["30d"] * 1000) return "day";
+  return "week";
+}
+
+/** The [from, to) a spec asks over: its range, or its window resolved. */
+export function specRange(
+  spec: Pick<ExploreSpec, "window" | "range">,
+  now: number = Date.now(),
+): { from: Date; to: Date } {
+  if (spec.range) {
+    return { from: new Date(spec.range.from), to: new Date(spec.range.to) };
   }
+  return windowRange(spec.window, now);
+}
+
+const rangeFormatter = new Intl.DateTimeFormat("en", {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+/** An absolute range as it reads in the Window control. */
+export function rangeLabel(range: TimeRange): string {
+  return rangeFormatter.formatRange(new Date(range.from), new Date(range.to));
+}
+
+/** The bucket width a spec's timeseries is drawn at. */
+export function specGrain(spec: Pick<ExploreSpec, "window" | "range">): Grain {
+  return spec.range
+    ? grainForSpan(spec.range.to - spec.range.from)
+    : autoGrain(spec.window);
 }
 
 /** Whether the chart type renders a bucketed timeseries. */
@@ -462,7 +506,7 @@ export function hasChartShape(spec: ExploreSpec): boolean {
  * the chart to a table.
  */
 export function queryBodyFromSpec(spec: ExploreSpec): AnalyticsQueryPayload {
-  const { from, to } = windowRange(spec.window);
+  const { from, to } = specRange(spec);
   const measures = completeMeasures(spec.measures);
   const dimensions = queryDimensions(spec);
   const filters = completeFilters(spec.filters);
@@ -499,7 +543,7 @@ export function queryBodyFromSpec(spec: ExploreSpec): AnalyticsQueryPayload {
     // Buckets multiply rows: a day of hourly buckets over ten users is 240
     // of them, so the cap is the server's maximum rather than the builder's
     // limit. Bucketed rows come back in time order, so no order is sent.
-    return { ...base, grain: autoGrain(spec.window), limit: MAX_LIMIT };
+    return { ...base, grain: specGrain(spec), limit: MAX_LIMIT };
   }
   const aliases = measures.map(measureAlias);
   return {
