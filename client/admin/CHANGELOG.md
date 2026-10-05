@@ -1,5 +1,11 @@
 # admin
 
+## 0.8.0
+
+### Minor Changes
+
+- 1da2e80: Add a health page for each MCP server in an organization's MCP servers list, showing its authentication setup, sign-ins, linked upstream accounts, tool call outcomes per day, a Platform MCP investigation prompt and Datadog log links.
+
 ## 0.7.0
 
 ### Minor Changes

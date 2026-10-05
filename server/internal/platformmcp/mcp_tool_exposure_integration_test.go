@@ -25,6 +25,7 @@ import (
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -136,9 +137,16 @@ func seedToolExposureFixture(t *testing.T, ctx context.Context, name string) (co
 	// Stands in for toolsets.TriggerToolsetIndexForVersion, which needs a
 	// Temporal environment this package's tests do not run.
 	indexed := &[]uuid.UUID{}
-	service.WithIndexing(func(_ context.Context, indexedProject, indexedToolset uuid.UUID) error {
+	service.WithIndexing(func(ctx context.Context, indexedProject, indexedToolset uuid.UUID) error {
 		require.Equal(t, project.ID, indexedProject)
 		*indexed = append(*indexed, indexedToolset)
+		// Answer as the real trigger does for this toolset's state: one that
+		// is not MCP-enabled is reported as needing no index.
+		target, err := toolsetsrepo.New(conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: indexedToolset, ProjectID: indexedProject})
+		require.NoError(t, err)
+		if !target.McpEnabled {
+			return toolsets.ErrToolsetIndexNotRequired
+		}
 		return nil
 	})
 

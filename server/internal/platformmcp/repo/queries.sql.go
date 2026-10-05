@@ -3114,6 +3114,62 @@ func (q *Queries) GetPlatformMCPPluginMembershipVersion(ctx context.Context, arg
 	return membership_version, err
 }
 
+const getPlatformMCPProjectCreationReceipt = `-- name: GetPlatformMCPProjectCreationReceipt :one
+SELECT id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, result_payload, expires_at, created_at, updated_at
+FROM platform_mcp_operation_receipts
+WHERE organization_id = $1
+  AND user_id = $2
+  AND operation = $3
+  AND idempotency_key = $4
+  AND expires_at > clock_timestamp()
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+type GetPlatformMCPProjectCreationReceiptParams struct {
+	OrganizationID string
+	UserID         pgtype.Text
+	Operation      string
+	IdempotencyKey string
+}
+
+// An operation that creates its own project has no project to key a receipt
+// on before it runs, so its replay lookup spans the organization: the receipt
+// is written against the project the operation created, and a retry finds it
+// by user, operation and key alone. Callers hold the advisory lock taken by
+// LockPlatformMCPOperationReceipt with an empty project id. Expired receipts
+// are ignored rather than reclaimed: each is pinned to the project it made,
+// so a fresh run under the same key can never collide with it.
+func (q *Queries) GetPlatformMCPProjectCreationReceipt(ctx context.Context, arg GetPlatformMCPProjectCreationReceiptParams) (PlatformMcpOperationReceipt, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPProjectCreationReceipt,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.Operation,
+		arg.IdempotencyKey,
+	)
+	var i PlatformMcpOperationReceipt
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RegistrationID,
+		&i.ConnectionID,
+		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
+		&i.Operation,
+		&i.IdempotencyKey,
+		&i.InputHash,
+		&i.Status,
+		&i.ResultCode,
+		&i.ResultPayload,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getPlatformMCPReadiness = `-- name: GetPlatformMCPReadiness :one
 SELECT readiness.id, readiness.organization_id, readiness.project_id, readiness.registration_id, readiness.connection_id, readiness.connection_generation, readiness.user_id, readiness.acting_surface, readiness.provider_authorization_fingerprint, readiness.state, readiness.evidence_code, readiness.checked_at, readiness.expires_at, readiness.created_at, readiness.updated_at
 FROM platform_mcp_readiness AS readiness

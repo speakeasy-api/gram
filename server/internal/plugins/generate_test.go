@@ -3131,6 +3131,32 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 	require.Equal(t, base["plugin-b"], changedFP["plugin-b"], "untouched plugin's fingerprint must be stable")
 }
 
+// Moving GRAM_SERVER_URL to another platform host must read as a change, so the
+// next publish rewrites every baked URL onto the new host.
+func TestPublishChangeSignalsFollowServerURL(t *testing.T) {
+	t.Parallel()
+	pluginsFor := func(serverURL string) []PluginInfo {
+		return []PluginInfo{{Name: "Plugin A", Slug: "plugin-a", Description: "A", Servers: []PluginServerInfo{
+			{DisplayName: "a1", MCPURL: serverURL + "/mcp/a1"},
+		}}}
+	}
+	oldCfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai", ProjectSlug: "acme"}
+	newCfg := oldCfg
+	newCfg.ServerURL = "https://ai.speakeasy.com"
+
+	oldFP, err := MCPFingerprints(pluginsFor(oldCfg.ServerURL), oldCfg, true)
+	require.NoError(t, err)
+	newFP, err := MCPFingerprints(pluginsFor(newCfg.ServerURL), newCfg, true)
+	require.NoError(t, err)
+	require.NotEqual(t, oldFP["plugin-a"], newFP["plugin-a"], "MCP plugin must republish onto the new host")
+
+	require.NotEqual(t,
+		hooksConfigHash(hooksConfigSnapshot(oldCfg)),
+		hooksConfigHash(hooksConfigSnapshot(newCfg)),
+		"hooks subtree must regenerate onto the new host",
+	)
+}
+
 func TestGeneratePlatformMCPPackageEmitsPrivateAccessWorkflow(t *testing.T) {
 	t.Parallel()
 	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
@@ -3140,11 +3166,15 @@ func TestGeneratePlatformMCPPackageEmitsPrivateAccessWorkflow(t *testing.T) {
 	require.NotEmpty(t, content)
 	require.Equal(t, content, files["agent-plugins/speakeasy/"+skill])
 	workflow := string(content)
-	for _, name := range []string{"list_projects", "list_plugins", "get_plugin", "get_mcp_connection_settings", "set_mcp_address", "set_mcp_network_access"} {
+	for _, name := range []string{"list_projects", "list_plugins", "get_plugin", "get_mcp_connection_settings", "set_mcp_address", "set_mcp_network_access", "republish_plugin"} {
 		require.Contains(t, workflow, name)
 	}
 	require.Contains(t, workflow, "explicit confirmation")
 	require.Contains(t, workflow, "An enqueued request is not a published package")
+	require.Contains(t, workflow, "`last_publish`")
+	require.Contains(t, workflow, "`failure_category: repository_conflict` cannot be fixed by republishing")
+	require.Contains(t, workflow, "treat it as pending until `last_publish.requested_at` is later than the republish or the publication evidence reports `fresh: true`")
+	require.Contains(t, workflow, "`not_configured: true`, no publish has ever been recorded")
 	require.NotContains(t, workflow, "speakeasy-skill-feedback")
 }
 
@@ -3170,6 +3200,103 @@ func TestGeneratePlatformMCPPackageGatesRemoteURLProviderAttachment(t *testing.T
 		require.Contains(t, workflow, required)
 	}
 	require.NotContains(t, workflow, "when inspection reported `authentication_required`, ask for explicit confirmation")
+}
+
+// A first-run conversation has no project to choose from, so the onboarding
+// workflows must offer to create one through the Platform MCP instead of
+// stopping. The offer is gated on the tool being present, because a managed
+// project assistant does not have it, and the creation happens only after
+// inspection, so a rejected candidate leaves no empty project behind.
+func TestGeneratePlatformMCPOnboardingWorkflowsOfferProjectCreation(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	const (
+		keyPhrase     = "choose one idempotency key for this create; pass that same key on the preview and on the confirmed call"
+		previewPhrase = "that key, and `confirmed: false` to preview it"
+		confirmPhrase = "After the user confirms the name and slug"
+		createPhrase  = "call `create_project` again with the same name, the same key, and `confirmed: true`"
+	)
+	for path, extra := range map[string][]string{
+		"skills/add-mcp-from-catalog/SKILL.md": {
+			"do not create it yet",
+			"still wants this candidate after inspection",
+		},
+		"skills/add-mcp-from-remote-url/SKILL.md": {
+			"Confirming the new project's name is not consent to register",
+			"confirm this exact URL in that exact new project",
+		},
+	} {
+		content := files["speakeasy/"+path]
+		require.NotEmpty(t, content, path)
+		require.Equal(t, content, files["agent-plugins/speakeasy/"+path], path)
+		workflow := string(content)
+		for _, required := range append([]string{
+			"Only when `create_project` is in your tool list",
+			"A managed project assistant has no `create_project` tool and always registers in its own project, so never offer it there",
+			// The slug is derived, never chosen, and permanent. The tool's
+			// unconfirmed preview is the only source of it, so the workflow
+			// must not describe the derivation in its own words.
+			// One key covers the preview and the confirmed call, because the
+			// key is a required input on both and the preview records
+			// nothing under it.
+			keyPhrase,
+			"Use a fresh key only for a new attempt after a refusal",
+			previewPhrase,
+			"Do not work the slug out yourself",
+			confirmPhrase,
+			createPhrase,
+			"A `conflict` refusal means a project already holds that slug and nothing was created",
+			"organization administrator access",
+			"say so rather than choosing another project",
+		}, extra...) {
+			require.Contains(t, workflow, required, path)
+		}
+		require.NotContains(t, workflow, "punctuation dropped", "%s must not hand-derive the slug", path)
+		listAt := strings.Index(workflow, "`list_projects`")
+		inspectAt := strings.Index(workflow, "Call `inspect_mcp_candidate`")
+		previewAt := strings.Index(workflow, previewPhrase)
+		confirmAt := strings.Index(workflow, confirmPhrase)
+		createAt := strings.Index(workflow, createPhrase)
+		for name, at := range map[string]int{"list_projects": listAt, "inspection": inspectAt, "preview": previewAt, "confirmation": confirmAt, "confirmed create": createAt} {
+			require.GreaterOrEqual(t, at, 0, "%s is missing the %s step", path, name)
+		}
+		require.Less(t, listAt, createAt, "%s must list the existing projects before creating one", path)
+		require.Less(t, inspectAt, previewAt, "%s must inspect before starting project creation", path)
+		require.Less(t, strings.Index(workflow, keyPhrase), previewAt, "%s must choose the key before the preview uses it", path)
+		require.Less(t, previewAt, confirmAt, "%s must preview the slug before asking for confirmation", path)
+		require.Less(t, confirmAt, createAt, "%s must get the user's confirmation before the confirmed create", path)
+	}
+}
+
+// The catalogue workflow also runs in managed project assistants, which do not
+// have create_plugin. Offering a new plugin there would send the assistant to
+// a tool it cannot call, so the offer is gated on the tool being present and
+// the assistant hands the user to the dashboard instead.
+func TestGeneratePlatformMCPPackageGatesCatalogPluginCreation(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	const path = "skills/add-mcp-from-catalog/SKILL.md"
+	content := files["speakeasy/"+path]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	workflow := string(content)
+	for _, required := range []string{
+		"Only when `create_plugin` is in your tool list",
+		"A managed project assistant has no `create_plugin` tool, so never offer or call it there",
+		"ask the user to create the plugin in the AICP dashboard or from an external MCP client",
+		"call `list_plugins` again and continue with the plugin they created",
+		// A server without the plugin metadata writes answers
+		// feature_unavailable; the workflow must stop and hand off rather
+		// than retry or quietly use another plugin.
+		"If it refuses with `feature_unavailable`, creating a plugin is not available on this server",
+		"do not retry or substitute another plugin",
+	} {
+		require.Contains(t, workflow, required)
+	}
+	// Every call to create_plugin sits after the gate.
+	require.Less(t, strings.Index(workflow, "Only when `create_plugin` is in your tool list"), strings.Index(workflow, "call `create_plugin`"))
 }
 
 func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
@@ -3706,6 +3833,31 @@ func TestGeneratePlatformMCPPackageEmitsToolExposureWorkflow(t *testing.T) {
 		"Use `send_platform_mcp_feedback` only after asking for consent",
 		"nothing was changed at all, not that part of the request landed",
 		"not that plugins or the people holding them have converged",
+		// Creating a server is offered only when none fits, only from function
+		// tools, and the result is private until a plugin carries it.
+		"`create_mcp_from_functions`",
+		"never create a server the user did not ask for",
+		"`source_kind` `function`",
+		"reaches nobody until it is put into a plugin",
+		// An organization's first server goes out to everyone holding the
+		// Default plugin, and the skill must say so from the result.
+		"`added_to_default_plugin`",
+		"`preview.would_join_default_plugin`",
+		// The warning itself, not just the field names: a first server reaches
+		// everyone holding the Default plugin, said before confirming from the
+		// preview and after from the result.
+		"say plainly that it joins the project's Default plugin on creation, so everyone holding that plugin receives it",
+		"tell the user it joined the project's Default plugin and everyone holding that plugin receives it",
+		// A requested publication is not a delivered one.
+		"`publication_requested` means a refresh of their plugin was requested, not confirmed delivered: never tell the user people already have the server",
+		"Show the user the `preview` values as returned before asking for confirmation",
+		"a short suffix is added at creation",
+		// The slug a user confirms comes from the tool's own preview, never
+		// from prose that can drift from the code that derives it.
+		"`confirmation_required`",
+		"Never work out or describe a slug yourself",
+		// The preview records nothing, so one key spans preview and confirm.
+		"the same idempotency key the preview used",
 	} {
 		require.Contains(t, workflow, guardrail)
 	}

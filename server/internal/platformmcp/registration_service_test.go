@@ -699,3 +699,45 @@ func (c retainedTestCatalog) InspectIdentity(context.Context, string, string) (C
 func (s *recordingRegistrationStore) FindReceipt(context.Context, Principal, ResolvedProject, CatalogRegistrationRequest, time.Time) (OperationReceipt, bool, error) {
 	return OperationReceipt{}, false, nil
 }
+
+func TestRegistrationServiceDirectRemoteProtocols(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		mode       string
+		nextAction string
+	}{
+		{"modern", "ready"},
+		{"legacy", "ready"},
+		{"stateful", "ready"},
+		{"auth401", "secure_dashboard_setup_required"},
+		{"auth403", "secure_dashboard_setup_required"},
+		{"tools-auth", "secure_dashboard_setup_required"},
+		{"discover-auth", "secure_dashboard_setup_required"},
+		{"stateful-auth-cleanup", "secure_dashboard_setup_required"},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			t.Parallel()
+			inspector, _ := directRemoteProtocolFixture(t, tc.mode)
+			registrationID := uuid.New()
+			store := &recordingRegistrationStore{
+				project:   ResolvedProject{ID: uuid.New(), Slug: "project"},
+				begin:     OperationReceipt{ID: uuid.New()},
+				converged: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusPending},
+				completed: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusSucceeded},
+				dashboard: RegistrationDashboardSetup{OrganizationSlug: "organization", MCPServerRoute: "server"},
+			}
+			service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithDirectRemoteInspector(inspector)
+			service.WithDashboardURL(&url.URL{Scheme: "https", Host: "dashboard.example.test"})
+			result, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{ProjectSlug: "project", RemoteURL: "https://remote.example.test/mcp", DisplayName: "Example", IdempotencyKey: "request-key"})
+			require.NoError(t, err)
+			require.Equal(t, registrationID.String(), result.Registration)
+			require.Equal(t, "https://remote.example.test/mcp", store.configuration.remoteURL)
+			require.Equal(t, tc.nextAction, result.NextAction)
+			if tc.nextAction == "secure_dashboard_setup_required" {
+				require.NotEmpty(t, result.DashboardSetupURL)
+			} else {
+				require.Empty(t, result.DashboardSetupURL)
+			}
+		})
+	}
+}

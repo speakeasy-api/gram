@@ -2,6 +2,7 @@ package mcpservers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -33,6 +34,42 @@ type MCPServerTransactionInput struct {
 	ToolsetID             uuid.NullUUID
 	UnproxiedMCPServerID  uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
+}
+
+// ErrServerReferenceOutsideProject marks a create that named a backend,
+// environment or variation group belonging to another project. The foreign
+// keys only enforce existence, not tenancy, so this check is what keeps a
+// server and the toolset behind it in the same project.
+var ErrServerReferenceOutsideProject = errors.New("mcp server reference is not in this project")
+
+// CreateProjectMCPServerInTransaction is the project-checked entry point for
+// every caller that creates a server from caller-supplied references: the
+// management API's createMcpServer and the Platform MCP's server authoring. It
+// refuses a reference outside input.ProjectID before creating anything, so
+// neither caller can produce a server in one project fronting a toolset in
+// another.
+func CreateProjectMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, input MCPServerTransactionInput) (repo.McpServer, error) {
+	// Checked before the ownership queries, which would otherwise dereference
+	// a nil transaction before the delegate's own guard runs.
+	if tx == nil || auditLogger == nil || input.ProjectID == uuid.Nil || input.Name == "" || input.Visibility == "" {
+		return repo.McpServer{}, fmt.Errorf("invalid MCP server transaction input")
+	}
+	ids := serverIDs{
+		EnvironmentID:         input.EnvironmentID,
+		UserSessionIssuerID:   input.UserSessionIssuerID,
+		RemoteMcpServerID:     input.RemoteMCPServerID,
+		TunneledMcpServerID:   input.TunneledMCPServerID,
+		ToolsetID:             input.ToolsetID,
+		UnproxiedMcpServerID:  input.UnproxiedMCPServerID,
+		ToolVariationsGroupID: input.ToolVariationsGroupID,
+	}
+	if err := validateServerBackendExclusivity(ids); err != nil {
+		return repo.McpServer{}, fmt.Errorf("validate MCP server backend: %w", err)
+	}
+	if err := verifyServerReferenceOwnership(ctx, tx, input.ProjectID, ids); err != nil {
+		return repo.McpServer{}, err
+	}
+	return CreateMCPServerInTransaction(ctx, tx, auditLogger, input)
 }
 
 // CreateMCPServerInTransaction creates the MCP server, its required lifetime

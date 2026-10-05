@@ -390,10 +390,6 @@ type ExistingKeyLookup interface {
 // billing lock perform the associated reads and write on that same session.
 type DBTX = repo.DBTX
 
-type KeyRefresher interface {
-	ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string, keyType KeyType, limit *int) error
-}
-
 type OpenRouter struct {
 	provisioningKey string
 	env             string
@@ -402,7 +398,6 @@ type OpenRouter struct {
 	repo            *repo.Queries
 	orgRepo         *orgRepo.Queries
 	orClient        *guardian.HTTPClient
-	refresher       KeyRefresher
 	featureClient   *productfeatures.Client
 	enc             *encryption.Client
 	// baseURL is OpenRouterBaseURL outside of tests.
@@ -436,7 +431,7 @@ func WithTestBaseURL(baseURL string) (Option, error) {
 	}, nil
 }
 
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, tracking billing.Tracker, enc *encryption.Client, options ...Option) *OpenRouter {
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, featureClient *productfeatures.Client, tracking billing.Tracker, enc *encryption.Client, options ...Option) *OpenRouter {
 	orClient := guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig())
 
 	openRouter := &OpenRouter{
@@ -447,7 +442,6 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolic
 		repo:            repo.New(db),
 		orgRepo:         orgRepo.New(db),
 		orClient:        orClient,
-		refresher:       refresher,
 		featureClient:   featureClient,
 		enc:             enc,
 		baseURL:         OpenRouterBaseURL,
@@ -571,6 +565,13 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := o.repo.WithTx(dbtx)
+	// Hold the billing lock across the tier read, the upstream create and the
+	// insert. A billing change either commits first and is read here, or waits
+	// and then finds the stored key to update. Billing before provisioning is
+	// the order every caller that takes both locks uses.
+	if err := AcquireAPIKeyBillingTransactionLock(ctx, dbtx, orgID, keyType); err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "error locking openrouter key billing").LogError(ctx, o.logger)
+	}
 	if err := AcquireAPIKeyProvisioningTransactionLock(ctx, dbtx, orgID, keyType); err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "error locking openrouter key provisioning").LogError(ctx, o.logger)
 	}
@@ -639,12 +640,6 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to store openrouter key data").LogError(ctx, o.logger)
-	}
-
-	if o.refresher != nil {
-		if err := o.refresher.ScheduleOpenRouterKeyRefresh(ctx, orgID, keyType, nil); err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "error scheduling open router key refresh").LogError(ctx, o.logger)
-		}
 	}
 
 	return *keyResponse.Key, nil

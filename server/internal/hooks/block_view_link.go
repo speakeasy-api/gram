@@ -44,12 +44,14 @@ type toolCallBlockParams struct {
 // blockViewURL builds the durable block-page URL for a pre-minted block id. The
 // id is minted on the hot path so the URL can go in the deny response
 // immediately, while the backing row is inserted off the hot path (see
-// insertToolCallBlock). Returns "" when no site URL is configured.
-func (s *Service) blockViewURL(blockID uuid.UUID) string {
-	if s.siteURL == nil {
+// insertToolCallBlock). The link is on the organization's default host.
+// Returns "" when no dashboard URL is available.
+func (s *Service) blockViewURL(ctx context.Context, organizationID string, blockID uuid.UUID) string {
+	siteURL := s.orgSiteURL(ctx, organizationID)
+	if siteURL == nil {
 		return ""
 	}
-	return s.siteURL.JoinPath("blocks", blockID.String()).String()
+	return siteURL.JoinPath("blocks", blockID.String()).String()
 }
 
 // insertToolCallBlock persists the durable block row for a pre-minted id. It is
@@ -178,7 +180,7 @@ func (s *Service) recordToolCallBlockAsync(ctx context.Context, p toolCallBlockP
 		return ""
 	}
 	go s.insertToolCallBlock(context.WithoutCancel(ctx), blockID, p)
-	return s.blockViewURL(blockID)
+	return s.blockViewURL(ctx, p.OrganizationID, blockID)
 }
 
 // chatIDForBlock derives the chat a blocked tool call belongs to from its
