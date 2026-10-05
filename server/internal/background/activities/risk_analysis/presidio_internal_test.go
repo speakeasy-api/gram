@@ -828,9 +828,9 @@ func TestReformatJSONAsYAML_PreservesTrailingBytes(t *testing.T) {
 	assert.Contains(t, out, "sarah@example.com", "trailing bytes must survive into the Presidio payload")
 }
 
-// TestReformatJSONAsYAML_SortsMapKeys makes the output deterministic so
-// repeated scans of the same payload produce stable Presidio offsets.
-func TestReformatJSONAsYAML_SortsMapKeys(t *testing.T) {
+// TestReformatJSONAsYAML_KeepsSourceKeyOrder keeps values in source order so
+// finding offsets can be mapped back to the same occurrence in the source.
+func TestReformatJSONAsYAML_KeepsSourceKeyOrder(t *testing.T) {
 	t.Parallel()
 
 	in := `{"zebra":"z","apple":"a","mango":"m"}`
@@ -842,8 +842,8 @@ func TestReformatJSONAsYAML_SortsMapKeys(t *testing.T) {
 	require.GreaterOrEqual(t, appleIdx, 0)
 	require.GreaterOrEqual(t, mangoIdx, 0)
 	require.GreaterOrEqual(t, zebraIdx, 0)
+	assert.Less(t, zebraIdx, appleIdx)
 	assert.Less(t, appleIdx, mangoIdx)
-	assert.Less(t, mangoIdx, zebraIdx)
 }
 
 // TestAnalyzeOncePayloadIsYAMLForJSONInput is the end-to-end assertion
@@ -965,4 +965,21 @@ func TestRemapPresidioOffsets_IndexesSourceText(t *testing.T) {
 	assert.Less(t, findings[0].StartPos, findings[1].StartPos, "repeated matches keep their order")
 	assert.Equal(t, 0, findings[3].StartPos, "a match spanning an escape has no source span")
 	assert.Equal(t, 0, findings[3].EndPos)
+
+	// Keys sort as a, z, but the source has z first.
+	source = `{"z":"x@y.io","a":"x@y.io"}`
+	scanned = reformatJSONAsYAML(source)
+	start := strings.Index(scanned, "a: ") + len("a: ")
+	reordered := []scanners.Finding{{Match: "x@y.io", StartPos: start, EndPos: start + len("x@y.io")}}
+	remapPresidioOffsets(source, scanned, reordered)
+	assert.Equal(t, strings.Index(source, `"a":"`)+len(`"a":"`), reordered[0].StartPos, "a duplicated value maps to its own key's occurrence")
+
+	// The escaped occurrence makes the ordinal of the verbatim one ambiguous.
+	source = `{"a":"\u0078@y.io","b":"x@y.io"}`
+	scanned = reformatJSONAsYAML(source)
+	start = strings.LastIndex(scanned, "x@y.io")
+	escaped := []scanners.Finding{{Match: "x@y.io", StartPos: start, EndPos: start + len("x@y.io")}}
+	remapPresidioOffsets(source, scanned, escaped)
+	assert.Equal(t, 0, escaped[0].StartPos, "ambiguous occurrence counts get an empty span")
+	assert.Equal(t, 0, escaped[0].EndPos)
 }
