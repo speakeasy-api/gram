@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
-import { useMemo, type JSX } from "react";
+import { useMemo, type JSX, type ReactNode } from "react";
 import { Link } from "react-router";
 import {
   completeMeasures,
@@ -57,6 +57,8 @@ export function WidgetView({
   widget,
   page,
   height,
+  onOpen,
+  actions,
   className,
 }: {
   widget: ViewableWidget;
@@ -64,6 +66,13 @@ export function WidgetView({
   page?: PageContext;
   /** The body's height in pixels; the chart type decides when unset. */
   height?: number;
+  /**
+   * Open the widget in Explore yourself, in place of the link, for a caller
+   * that has to check something first, such as edits not yet saved.
+   */
+  onOpen?: (() => void) | undefined;
+  /** Controls beside Open in Explore, such as a widget's actions menu. */
+  actions?: ReactNode;
   className?: string;
 }): JSX.Element {
   const describe = useAnalyticsDescribe();
@@ -142,6 +151,8 @@ export function WidgetView({
         spec={headerSpec}
         // A question the page changed opens as its own query.
         widgetId={headerWidgetId}
+        onOpen={onOpen}
+        actions={actions}
       />
       {paged && paged.skipped.length > 0 && (
         <p className="text-muted-foreground -mt-2 text-xs">
@@ -156,14 +167,21 @@ export function WidgetView({
   );
 }
 
+const OPEN_CLASSES =
+  "text-muted-foreground hover:text-foreground inline-flex shrink-0 items-center gap-1 text-xs no-underline hover:underline";
+
 function WidgetHeader({
   name,
   spec,
   widgetId,
+  onOpen,
+  actions,
 }: {
   name: string;
   spec: ExploreSpec | null;
   widgetId: string | undefined;
+  onOpen: (() => void) | undefined;
+  actions: ReactNode;
 }): JSX.Element {
   const routes = useRoutes();
   const datasets = useAnalyticsDescribe().data?.datasets;
@@ -187,15 +205,20 @@ function WidgetHeader({
       <h3 className="text-eyebrow truncate" title={name}>
         {name}
       </h3>
-      {href ? (
-        <Link
-          to={href}
-          className="text-muted-foreground hover:text-foreground inline-flex shrink-0 items-center gap-1 text-xs no-underline hover:underline"
-        >
-          Open in Explore
-          <Icon name="arrow-up-right" className="size-3" />
-        </Link>
-      ) : null}
+      <span className="flex shrink-0 items-center gap-1">
+        {href && onOpen ? (
+          <button type="button" onClick={onOpen} className={OPEN_CLASSES}>
+            Open in Explore
+            <Icon name="arrow-up-right" className="size-3" />
+          </button>
+        ) : href ? (
+          <Link to={href} className={OPEN_CLASSES}>
+            Open in Explore
+            <Icon name="arrow-up-right" className="size-3" />
+          </Link>
+        ) : null}
+        {actions}
+      </span>
     </header>
   );
 }

@@ -1,6 +1,9 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Button } from "@/components/ui/Button";
-import { MoreActions } from "@/components/ui/MoreActions";
+import {
+  MoreActions,
+  type Action as MoreActionsItem,
+} from "@/components/ui/MoreActions";
 import { SearchBar } from "@/components/ui/SearchBar";
 import {
   Select,
@@ -28,6 +31,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useMemo, useState, type JSX } from "react";
+import { useLocation, useSearchParams } from "react-router";
+import { ViewToggle } from "@/components/ui/ViewToggle";
+import { WidgetCards } from "./WidgetCards";
 import { useCanEditWidget } from "./useCanEditWidget";
 import { useCreatorName } from "./useCreatorName";
 import { useWidgetMutations } from "./useWidgetMutations";
@@ -86,6 +92,7 @@ export function WidgetList({
   const canEdit = useCanEditWidget();
   const mutations = useWidgetMutations();
 
+  const [view, setView] = useListView();
   const [search, setSearch] = useState("");
   const [createdBy, setCreatedBy] = useState(ANYONE);
   const [dataset, setDataset] = useState(ALL_DATASETS);
@@ -97,6 +104,43 @@ export function WidgetList({
     () => [...new Set(widgets.map((widget) => widget.dataset))].sort(),
     [widgets],
   );
+
+  // The same actions on a row and on a card.
+  const actionsFor = (widget: Widget): MoreActionsItem[] => [
+    {
+      label: "Open",
+      icon: "square-arrow-out-up-right",
+      onClick: () => confirmLeave(() => onOpen(widget)),
+    },
+    ...(canEdit(widget)
+      ? [
+          {
+            label: "Rename",
+            icon: "pencil" as const,
+            onClick: () => setRenaming(widget),
+          },
+        ]
+      : []),
+    {
+      label: "Duplicate",
+      icon: "copy",
+      disabled: mutations.pending,
+      onClick: () => confirmLeave(() => mutations.duplicate(widget.id, onOpen)),
+    },
+    // Someone else's widget without project write can only be
+    // copied.
+    ...(canEdit(widget)
+      ? [
+          {
+            label: "Delete",
+            icon: "trash" as const,
+            destructive: true,
+            separatorBefore: true,
+            onClick: () => setDeleting(widget),
+          },
+        ]
+      : []),
+  ];
 
   const columns: Column<Widget>[] = [
     {
@@ -175,42 +219,7 @@ export function WidgetList({
         <span onClick={(event) => event.stopPropagation()}>
           <MoreActions
             triggerAriaLabel={`Actions for ${widget.name}`}
-            actions={[
-              {
-                label: "Open",
-                icon: "square-arrow-out-up-right",
-                onClick: () => confirmLeave(() => onOpen(widget)),
-              },
-              ...(canEdit(widget)
-                ? [
-                    {
-                      label: "Rename",
-                      icon: "pencil" as const,
-                      onClick: () => setRenaming(widget),
-                    },
-                  ]
-                : []),
-              {
-                label: "Duplicate",
-                icon: "copy",
-                disabled: mutations.pending,
-                onClick: () =>
-                  confirmLeave(() => mutations.duplicate(widget.id, onOpen)),
-              },
-              // Someone else's widget without project write can only be
-              // copied.
-              ...(canEdit(widget)
-                ? [
-                    {
-                      label: "Delete",
-                      icon: "trash" as const,
-                      destructive: true,
-                      separatorBefore: true,
-                      onClick: () => setDeleting(widget),
-                    },
-                  ]
-                : []),
-            ]}
+            actions={actionsFor(widget)}
           />
         </span>
       ),
@@ -296,16 +305,30 @@ export function WidgetList({
             ))}
           </SelectContent>
         </Select>
+        <div className="ml-auto">
+          <ViewToggle
+            value={view === "cards" ? "grid" : "table"}
+            onChange={(mode) => setView(mode === "grid" ? "cards" : "list")}
+          />
+        </div>
       </div>
-      <Table
-        columns={columns}
-        data={rows}
-        rowKey={(widget) => widget.id}
-        onRowClick={(widget) => confirmLeave(() => onOpen(widget))}
-        sort={sort}
-        onSortChange={setSort}
-        noResultsMessage="No widgets match these filters."
-      />
+      {view === "cards" ? (
+        <WidgetCards
+          widgets={rows}
+          actionsFor={actionsFor}
+          onOpen={(widget) => confirmLeave(() => onOpen(widget))}
+        />
+      ) : (
+        <Table
+          columns={columns}
+          data={rows}
+          rowKey={(widget) => widget.id}
+          onRowClick={(widget) => confirmLeave(() => onOpen(widget))}
+          sort={sort}
+          onSortChange={setSort}
+          noResultsMessage="No widgets match these filters."
+        />
+      )}
 
       <WidgetDetailsDialog
         key={renaming?.id ?? "closed"}
@@ -348,6 +371,33 @@ export function WidgetList({
       />
     </div>
   );
+}
+
+type ListView = "list" | "cards";
+
+/** The search parameter holding how the Widgets tab shows its widgets. */
+const VIEW_PARAM = "view";
+
+/**
+ * Whether the Widgets tab lists widgets or draws them as cards, kept in the
+ * URL beside the tab so a link opens on the same view. Switching keeps the
+ * history entry's state, as switching tabs does.
+ */
+function useListView(): [ListView, (view: ListView) => void] {
+  const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const view: ListView = params.get(VIEW_PARAM) === "cards" ? "cards" : "list";
+  const set = (next: ListView) =>
+    setParams(
+      (prev) => {
+        const out = new URLSearchParams(prev);
+        if (next === "cards") out.set(VIEW_PARAM, "cards");
+        else out.delete(VIEW_PARAM);
+        return out;
+      },
+      { replace: true, state: location.state },
+    );
+  return [view, set];
 }
 
 function ChartTypeCell({ type }: { type: unknown }): JSX.Element {

@@ -7,6 +7,7 @@ import {
   fireEvent,
   render,
   screen,
+  within,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
@@ -248,6 +249,9 @@ vi.mock("./useDimensionValues", () => ({
     isFetching: false,
   }),
 }));
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({ explore: { href: () => "/explore" } }),
+}));
 vi.mock("@/components/page-templates", () => ({
   WorkbenchPage: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
@@ -311,6 +315,26 @@ const toolCalls: AnalyticsDataset = {
     },
   ],
 };
+
+// Cards mount as they scroll into view; here every card is in view.
+class VisibleObserver {
+  private readonly callback: IntersectionObserverCallback;
+  constructor(callback: IntersectionObserverCallback) {
+    this.callback = callback;
+  }
+  observe(target: Element) {
+    this.callback(
+      [{ isIntersecting: true, target } as IntersectionObserverEntry],
+      this as unknown as IntersectionObserver,
+    );
+  }
+  disconnect() {}
+  unobserve() {}
+  takeRecords() {
+    return [];
+  }
+}
+vi.stubGlobal("IntersectionObserver", VisibleObserver);
 
 /** Where the router is, and a way to step back through its history. */
 const nav = { pathname: "", search: "", back: () => {} };
@@ -828,6 +852,55 @@ describe("Explore", () => {
         "disabled",
         true,
       );
+    });
+
+    it("draws each widget as a card on its own saved question, and keeps the view in the URL", () => {
+      testState.widgets = [
+        storedWidget("w-1", "Slow tools", p95ByTool),
+        storedWidget("w-2", "Sessions by user", {
+          ...p95ByTool,
+          dataset: "sessions",
+          measures: [{ op: "count", field: "" }],
+          dimensions: ["user"],
+          orderBy: "",
+        }),
+      ];
+      renderExplore();
+      showWidgets();
+      testState.bodies = [];
+      fireEvent.click(screen.getByRole("radio", { name: "Grid view" }));
+
+      expect(param("view")).toBe("cards");
+      expect(screen.getByRole("region", { name: "Slow tools" })).toBeTruthy();
+      expect(
+        screen.getByRole("region", { name: "Sessions by user" }),
+      ).toBeTruthy();
+      expect(screen.queryByRole("table")).toBeNull();
+      const asked = testState.bodies
+        .filter((body) => body !== null)
+        .map((body) => body.dataset);
+      expect(asked).toContain("tool_calls");
+      expect(asked).toContain("sessions");
+    });
+
+    it("opens a card's widget in the builder, and filters cards as it filters rows", () => {
+      testState.widgets = [
+        storedWidget("w-1", "Slow tools", p95ByTool),
+        storedWidget("w-2", "Other tools", p95ByTool),
+      ];
+      renderExplore("/explore?tab=widgets&view=cards");
+      fireEvent.change(screen.getByPlaceholderText("Search widgets"), {
+        target: { value: "slow" },
+      });
+      expect(screen.queryByRole("region", { name: "Other tools" })).toBeNull();
+
+      const card = screen.getByRole("region", { name: "Slow tools" });
+      fireEvent.click(
+        within(card).getByRole("button", { name: /Open in Explore/ }),
+      );
+      expect(param("tab")).toBeNull();
+      expect(param("widget")).toBe("w-1");
+      expect(urlSpec()).toMatchObject(p95ByTool);
     });
 
     it("saves the builder as a widget with a description, then has it open", () => {
