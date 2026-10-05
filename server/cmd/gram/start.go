@@ -1510,6 +1510,7 @@ func newStartCommand() *cli.Command {
 					SignInRedirectURL:          auth.FormSignInRedirectURL(c.String("site-url")),
 					Environment:                c.String("environment"),
 					NewOrganizationDefaultHost: orgHosts.NewOrganizationDefaultHost(),
+					OrgHosts:                   orgHosts,
 				},
 				authzEngine,
 				billingRepo,
