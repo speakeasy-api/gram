@@ -249,7 +249,7 @@ async function init(argv: string[]): Promise<void> {
 
   if (installCli) {
     tlog.message("Installing Gram CLI");
-    await $`which gram || (curl -fsSL https://go.getgram.ai/cli.sh | bash; gram auth)`;
+    await $`which speakeasy || (curl -fsSL https://go.getgram.ai/cli.sh | bash; speakeasy auth)`;
   }
 
   let successMessage = `All done! Run \`cd ${dir} && ${packageManager} run build\` to build your first Gram Function.`;

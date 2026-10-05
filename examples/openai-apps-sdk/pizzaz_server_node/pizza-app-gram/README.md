@@ -35,7 +35,7 @@ pnpm build
 Ensure you are authenticated with your Gram account by running:
 
 ```bash
-gram auth
+speakeasy auth
 ```
 
 After building, push your function to Gram with:

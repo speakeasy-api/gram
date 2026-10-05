@@ -209,7 +209,7 @@ spec:
 TUNNEL_KEY=${shellQuote(renderedKey)} \\
 TUNNEL_LOCAL_MCP_URL='${MCP_URL_SENTINEL}' \\
 TUNNEL_SERVICE_VERSION='${SERVICE_VERSION_SENTINEL}' \\
-gram tunnel run`;
+speakeasy tunnel run`;
 
   return [
     {
@@ -241,7 +241,7 @@ gram tunnel run`;
       value: "cli",
       label: "CLI",
       language: "bash",
-      hint: "Run the Gram CLI agent on the same host as your MCP server.",
+      hint: "Run the speakeasy CLI agent on the same host as your MCP server.",
       code: cli,
       slots: {
         [MCP_URL_SENTINEL]: shellSlot(mcpUrl),
@@ -382,7 +382,7 @@ docker run --rm --name gram-tunnel-${slug} \\
 TUNNEL_KEY=${shellQuote(renderedKey)} \\
 TUNNEL_LOCAL_MCP_URL=${shellQuote(cliUpstream)} \\
 TUNNEL_SERVICE_VERSION='${SERVICE_VERSION_SENTINEL}' \\
-gram tunnel run`;
+speakeasy tunnel run`;
 
   return [
     {
@@ -412,7 +412,7 @@ gram tunnel run`;
       value: "cli",
       label: "CLI",
       language: "bash",
-      hint: "Start the hello-world MCP container from the Docker tab, then run the Gram CLI agent against it on localhost:3000.",
+      hint: "Start the hello-world MCP container from the Docker tab, then run the speakeasy CLI agent against it on localhost:3000.",
       code: cli,
       slots: {
         [SERVICE_VERSION_SENTINEL]: shellSlot(serviceVersion),
