@@ -23,12 +23,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// TestApplyIssuerGate_AssistantFallbackStampsAssistantProvenance drives the
-// issuer gate's accepted assistant-runtime fallback end to end and proves the
-// returned context carries KindAssistant provenance with no user ID — never
-// KindUserSession — even though the fallback mints a user-shaped session
-// subject and a user-shaped AuthContext for downstream plumbing.
-func TestApplyIssuerGate_AssistantFallbackStampsAssistantProvenance(t *testing.T) {
+// TestApplyIssuerGate_AssistantFallbackStampsDelegatedUserProvenance drives
+// the accepted assistant-runtime fallback and proves the signed current-user
+// delegation remains authoritative through MCP authentication.
+func TestApplyIssuerGate_AssistantFallbackStampsDelegatedUserProvenance(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -52,16 +50,44 @@ func TestApplyIssuerGate_AssistantFallbackStampsAssistantProvenance(t *testing.T
 
 	identity, stamped := mcpidentity.FromContext(newCtx)
 	require.True(t, stamped, "the accepted assistant fallback must stamp provenance")
-	require.Equal(t, mcpidentity.KindAssistant, identity.Kind())
-	require.Empty(t, identity.UserID())
+	require.Equal(t, mcpidentity.KindDelegatedUser, identity.Kind())
+	require.Equal(t, authCtx.UserID, identity.UserID())
 
-	// The gate's AuthContext deliberately reads as the assistant's owning
-	// user so downstream session plumbing works — which is exactly why the
-	// provenance stamp, not the subject shape, is the enforcement-grade
-	// signal that this caller is not an acting user.
 	gateAuthCtx, ok := contextvalues.GetAuthContext(newCtx)
 	require.True(t, ok)
 	require.Equal(t, authCtx.UserID, gateAuthCtx.UserID)
+}
+
+// TestApplyIssuerGate_AssistantOnlyTokenStampsAssistantProvenance pins that
+// triggered-run tokens (no delegation) still authenticate MCP calls, as
+// assistant provenance with the creator only as attribution.
+func TestApplyIssuerGate_AssistantOnlyTokenStampsAssistantProvenance(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	assistantID := createAssistant(t, ti, authCtx, "AssistantOnly")
+	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine).Generate(assistanttokens.GenerateInput{
+		OrgID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, UserID: authCtx.UserID,
+		SessionID: "", AssistantID: assistantID, ThreadID: uuid.Nil, TTL: time.Hour,
+	})
+	require.NoError(t, err)
+	endpoint := &mcp.ResolvedMcpEndpoint{
+		AudienceURN:         urn.NewUserSessionIssuer(uuid.New()).String(),
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           *authCtx.ProjectID,
+		RouteBase:           "mcp",
+		Slug:                "assistant-only-gate",
+		UserSessionIssuerID: uuid.New(),
+	}
+
+	newCtx, _, _, err := ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), token, "http://0.0.0.0", endpoint)
+	require.NoError(t, err)
+	identity, stamped := mcpidentity.FromContext(newCtx)
+	require.True(t, stamped)
+	require.Equal(t, mcpidentity.KindAssistant, identity.Kind())
+	require.Empty(t, identity.UserID())
 }
 
 // TestApplyIssuerGate_RejectedAssistantTokenStampsNothing pins that a
@@ -85,6 +111,7 @@ func TestApplyIssuerGate_RejectedAssistantTokenStampsNothing(t *testing.T) {
 		OrgID:       authCtx.ActiveOrganizationID,
 		ProjectID:   otherProject.ID,
 		UserID:      authCtx.UserID,
+		SessionID:   "session-test",
 		AssistantID: assistantID,
 		ThreadID:    uuid.Nil,
 		TTL:         time.Hour,
@@ -111,8 +138,8 @@ func TestApplyIssuerGate_RejectedAssistantTokenStampsNothing(t *testing.T) {
 // TestTryPublicIdentityAuth_StampsCredentialProvenance pins the provenance
 // class each legacy authenticateToken strategy stamps at credential
 // validation: assistant tokens, API keys of either accepted scope, and
-// chat-session tokens. None of them may claim an acting user, and a token
-// every strategy rejects leaves the context unattributed.
+// chat-session tokens. Only delegated assistant tokens may carry an acting
+// user, and a token every strategy rejects leaves the context unattributed.
 func TestTryPublicIdentityAuth_StampsCredentialProvenance(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
@@ -129,13 +156,13 @@ func TestTryPublicIdentityAuth_StampsCredentialProvenance(t *testing.T) {
 		return mcpidentity.FromContext(authedCtx)
 	}
 
-	t.Run("assistant token stamps assistant", func(t *testing.T) {
+	t.Run("assistant token preserves delegated user", func(t *testing.T) {
 		t.Parallel()
 		assistantID := createAssistant(t, ti, authCtx, "LegacyAuth")
 		identity, stamped := authorize(t, mintAssistantToken(t, ti, authCtx, assistantID))
 		require.True(t, stamped)
-		require.Equal(t, mcpidentity.KindAssistant, identity.Kind())
-		require.Empty(t, identity.UserID())
+		require.Equal(t, mcpidentity.KindDelegatedUser, identity.Kind())
+		require.Equal(t, authCtx.UserID, identity.UserID())
 	})
 
 	t.Run("consumer-scope API key stamps api_key", func(t *testing.T) {

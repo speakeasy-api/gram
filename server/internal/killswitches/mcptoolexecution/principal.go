@@ -100,7 +100,7 @@ func (a *AuthenticatedUserPrincipalAdapter) DeriveCandidates(ctx context.Context
 		return killswitches.PrincipalCandidateResult{}, fmt.Errorf("unsupported principal source type %T", source)
 	}
 	switch identity.Kind() {
-	case mcpidentity.KindUserSession:
+	case mcpidentity.KindUserSession, mcpidentity.KindDelegatedUser:
 		return a.deriveActiveUser(ctx, organizationID, identity.UserID())
 	case mcpidentity.KindConsentDiscovery, mcpidentity.KindAnonymous, mcpidentity.KindAPIKey, mcpidentity.KindAssistant, mcpidentity.KindAgent, mcpidentity.KindChatSession, mcpidentity.KindWorkload:
 		return killswitches.UnsupportedPrincipalCandidateResult(), nil

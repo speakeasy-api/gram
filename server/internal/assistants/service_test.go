@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -862,8 +861,16 @@ func insertAssistantFixture(t *testing.T, conn *pgxpool.Pool) (projectID, assist
 		ProjectID:     proj.ID,
 		CorrelationID: "corr-1",
 		ChatID:        chatID,
-		SourceKind:    sourceKindSlack,
+		SourceKind:    sourceKindDashboard,
 		SourceRefJson: []byte("{}"),
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	payload, err := json.Marshal(dashboardEventPayload{
+		Text: "hello", UserID: "user-test", ActingFor: &actingForDelegation{
+			Kind: actingForDelegationKindUserSession, OrganizationID: "org-test", UserID: "user-test", SessionID: "session-test", IssuedAt: now, ExpiresAt: now.Add(assistantRuntimeTokenTTL),
+		},
 	})
 	require.NoError(t, err)
 
@@ -875,7 +882,7 @@ func insertAssistantFixture(t *testing.T, conn *pgxpool.Pool) (projectID, assist
 		EventID:               "evt-1",
 		CorrelationID:         "corr-1",
 		Status:                eventStatusPending,
-		NormalizedPayloadJson: []byte(`{"text":"hello"}`),
+		NormalizedPayloadJson: payload,
 		SourcePayloadJson:     []byte("{}"),
 	})
 	require.NoError(t, err)
@@ -1257,47 +1264,119 @@ func TestAssistantEventSkillSnapshotNullBaselineInitializesWhenAdvanceDisallowed
 	require.JSONEq(t, string(current), string(persisted))
 }
 
-func TestProcessEventTurnNestsSkillNoticeForRegularAndMCPAuthPrompts(t *testing.T) {
+// Triggered and MCP-auth turns have no current Gram user, so they run with an
+// assistant-only token: the creator is attribution, never a delegated user.
+//
+//nolint:paralleltest,tparallel // Subtests share atomic runtime-work sentinels.
+func TestProcessEventTurnRunsAutonomousAndSystemWorkAssistantOnly(t *testing.T) {
 	t.Parallel()
 
-	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_skill_snapshot_prompts")
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_autonomous_turns")
 	require.NoError(t, err)
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
 	logger := testenv.NewLogger(t)
 	prompt := &atomic.Pointer[string]{}
-	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnPrompt: prompt}
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, assistanttokens.New("test-jwt-secret", conn, nil), nil, telemetry.NewStub(logger), nil, newTestAuditLogger())
+	token := &atomic.Pointer[string]{}
+	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnPrompt: prompt, runTurnToken: token}
+	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, tokens, nil, telemetry.NewStub(logger), nil, newTestAuditLogger())
 	assistant, err := core.GetAssistant(t.Context(), projectID, assistantID)
 	require.NoError(t, err)
-	thread := assistantThreadRecord{ID: threadID, AssistantID: assistantID, ProjectID: projectID, CorrelationID: "corr-1", SourceKind: sourceKindSlack}
+	assistant.CreatedByUserID = "assistant-creator"
 	runtime := assistantRuntimeRecord{ID: uuid.New(), AssistantID: assistantID, ProjectID: projectID, Backend: runtimeBackendFlyIO}
-	baseline, err := marshalAssistantSkillSetSnapshot(newAssistantSkillSetSnapshot([]assistantSkillRow{{SkillID: uuid.New(), Name: "removed", ResolvedVersionID: uuid.New(), Description: "old"}}))
+	now := time.Now().UTC()
+	callbackPayload, err := json.Marshal(struct {
+		mcpAuthEventPayload
+		UserID    string               `json:"user_id"`
+		ActingFor *actingForDelegation `json:"acting_for"`
+	}{
+		mcpAuthEventPayload: mcpAuthEventPayload{GramEventKind: mcpAuthEventKind, Status: mcpAuthStatusSuccess},
+		UserID:              "callback-user",
+		ActingFor:           &actingForDelegation{Kind: actingForDelegationKindUserSession, OrganizationID: assistant.OrganizationID, UserID: "callback-user", SessionID: uuid.NewString(), IssuedAt: now, ExpiresAt: now.Add(assistantRuntimeTokenTTL)},
+	})
 	require.NoError(t, err)
 
-	regular := assistantThreadEventRecord{ID: uuid.New(), EventID: "regular", NormalizedPayloadJSON: []byte(`{"event_type":"message","text":"hello"}`), SkillSetSnapshot: baseline}
-	current, err := core.processEventTurn(t.Context(), thread, assistant, runtime, regular)
-	require.NoError(t, err)
-	require.NotNil(t, current)
-	require.Contains(t, *prompt.Load(), "<assistant-environment-change>")
-	require.Less(t, strings.Index(*prompt.Load(), "<assistant-environment-change>"), strings.Index(*prompt.Load(), "</message-context>"))
+	for _, test := range []struct {
+		name, source string
+		payload      []byte
+	}{
+		{name: "external source", source: sourceKindSlack, payload: []byte(`{"event_type":"message","text":"hello"}`)},
+		{name: "MCP callback", source: sourceKindDashboard, payload: callbackPayload},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			thread := assistantThreadRecord{ID: threadID, AssistantID: assistantID, ProjectID: projectID, CorrelationID: "corr-1", SourceKind: test.source}
+			event := assistantThreadEventRecord{ID: uuid.New(), EventID: test.name, NormalizedPayloadJSON: test.payload, CreatedAt: time.Now().UTC()}
+			prompt.Store(nil)
+			token.Store(nil)
+			_, err := core.processEventTurn(t.Context(), thread, assistant, runtime, event)
+			require.NoError(t, err)
+			require.NotNil(t, prompt.Load(), "assistant-only work must reach the runtime")
+			require.NotNil(t, token.Load())
+			claims, err := tokens.Validate(*token.Load())
+			require.NoError(t, err)
+			require.Equal(t, "assistant-creator", claims.UserID, "attribution stays the creator")
+			require.Empty(t, claims.SessionID, "autonomous work never carries a delegation")
+		})
+	}
 
-	mcpAuth := assistantThreadEventRecord{ID: uuid.New(), EventID: "mcp-auth", NormalizedPayloadJSON: []byte(`{"gram_event_kind":"assistant_mcp_auth","status":"success"}`), SkillSetSnapshot: baseline}
-	_, err = core.processEventTurn(t.Context(), thread, assistant, runtime, mcpAuth)
+	// A dashboard turn carrying a delegation mints a delegated token.
+	delegation := actingForDelegation{Kind: actingForDelegationKindUserSession, OrganizationID: assistant.OrganizationID, UserID: "dashboard-user", SessionID: uuid.NewString(), IssuedAt: now, ExpiresAt: now.Add(assistantRuntimeTokenTTL)}
+	dashboardPayload, err := json.Marshal(dashboardEventPayload{Text: "hello", UserID: delegation.UserID, ActingFor: &delegation})
 	require.NoError(t, err)
-	require.Contains(t, *prompt.Load(), "<assistant-environment-change>")
-	require.Less(t, strings.Index(*prompt.Load(), "<assistant-environment-change>"), strings.Index(*prompt.Load(), "</message-context>"))
+	thread := assistantThreadRecord{ID: threadID, AssistantID: assistantID, ProjectID: projectID, CorrelationID: "corr-1", SourceKind: sourceKindDashboard}
+	event := assistantThreadEventRecord{ID: uuid.New(), EventID: "dashboard", NormalizedPayloadJSON: dashboardPayload, CreatedAt: now}
+	token.Store(nil)
+	_, err = core.processEventTurn(t.Context(), thread, assistant, runtime, event)
+	require.NoError(t, err)
+	require.NotNil(t, token.Load())
+	claims, err := tokens.Validate(*token.Load())
+	require.NoError(t, err)
+	require.Equal(t, delegation.UserID, claims.UserID)
+	require.Equal(t, delegation.SessionID, claims.SessionID)
+}
 
-	regular.SkillSetSnapshot = current
-	want, err := slackAdapter{}.DecodeTurn(regular)
-	require.NoError(t, err)
-	_, err = core.processEventTurn(t.Context(), thread, assistant, runtime, regular)
-	require.NoError(t, err)
-	require.Equal(t, want, *prompt.Load(), "no delta must leave the adapter prompt byte-identical")
+//nolint:paralleltest,tparallel // Subtests share deterministic delegation fixtures.
+func TestTurnActingForDelegationValidation(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	assistant := assistantRecord{OrganizationID: "org-test"}
+	thread := assistantThreadRecord{SourceKind: sourceKindDashboard}
+	valid := actingForDelegation{Kind: actingForDelegationKindUserSession, OrganizationID: "org-test", UserID: "user-test", SessionID: "session-test", IssuedAt: now, ExpiresAt: now.Add(assistantRuntimeTokenTTL)}
+	eventFor := func(d *actingForDelegation, userID string) assistantThreadEventRecord {
+		payload, err := json.Marshal(dashboardEventPayload{Text: "hello", UserID: userID, ActingFor: d})
+		require.NoError(t, err)
+		return assistantThreadEventRecord{NormalizedPayloadJSON: payload, CreatedAt: now}
+	}
 
-	regular.SkillSetSnapshot = nil
-	_, err = core.processEventTurn(t.Context(), thread, assistant, runtime, regular)
+	got, delegated, err := turnActingForDelegation(assistant, thread, eventFor(&valid, valid.UserID))
 	require.NoError(t, err)
-	require.Equal(t, want, *prompt.Load(), "a NULL baseline must not emit a notice")
+	require.True(t, delegated)
+	require.Equal(t, valid, got)
+
+	// Pre-delegation dashboard events and other sources stay assistant-only.
+	_, delegated, err = turnActingForDelegation(assistant, thread, eventFor(nil, valid.UserID))
+	require.NoError(t, err)
+	require.False(t, delegated)
+	_, delegated, err = turnActingForDelegation(assistant, assistantThreadRecord{SourceKind: sourceKindSlack}, eventFor(&valid, valid.UserID))
+	require.NoError(t, err)
+	require.False(t, delegated)
+
+	for _, test := range []struct {
+		name string
+		d    *actingForDelegation
+		user string
+		when time.Time
+	}{
+		{name: "incomplete", d: func() *actingForDelegation { d := valid; d.SessionID = ""; return &d }(), user: valid.UserID, when: now},
+		{name: "tampered user", d: &valid, user: "other-user", when: now},
+		{name: "malformed lifetime", d: func() *actingForDelegation { d := valid; d.ExpiresAt = d.IssuedAt; return &d }(), user: valid.UserID, when: now},
+		{name: "cross tenant", d: func() *actingForDelegation { d := valid; d.OrganizationID = "org-other"; return &d }(), user: valid.UserID, when: now},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, _, err := turnActingForDelegation(assistant, thread, eventFor(test.d, test.user))
+			require.Error(t, err)
+		})
+	}
 }
 
 func TestServiceCoreProcessThreadEventsRequeuesOnTurnFailure(t *testing.T) {
@@ -2405,6 +2484,7 @@ type testRuntimeBackend struct {
 	runTurnErr        error
 	runTurnMCPServers *atomic.Pointer[[]runtimeMCPServer]
 	runTurnPrompt     *atomic.Pointer[string]
+	runTurnToken      *atomic.Pointer[string]
 	interruptErr      error
 	interruptResult   bool
 	interruptThreadID *atomic.Pointer[uuid.UUID]
@@ -2470,6 +2550,10 @@ func (t testRuntimeBackend) RunTurn(_ context.Context, _ assistantRuntimeRecord,
 	if t.runTurnPrompt != nil {
 		prompt := turn.Prompt
 		t.runTurnPrompt.Store(&prompt)
+	}
+	if t.runTurnToken != nil {
+		token := turn.AuthToken
+		t.runTurnToken.Store(&token)
 	}
 	return t.runTurnErr
 }

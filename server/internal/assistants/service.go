@@ -131,6 +131,7 @@ const (
 )
 
 var errAssistantValidation = errors.New("assistant validation")
+var errAssistantDelegationUnavailable = errors.New("assistant current-user delegation unavailable")
 
 func assistantValidationError(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", errAssistantValidation, fmt.Sprintf(format, args...))
@@ -2678,8 +2679,12 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			// other pending event on the thread is drained on the warm runtime
 			// instead of waiting out the warm timer; the failed event is no
 			// longer claimable, so this cannot loop on it.
-			if errors.Is(runErr, ErrCompletionFailed) || errors.Is(runErr, ErrHistoryCorrupted) {
-				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event failed at completion provider", "ERROR", runErr)
+			if errors.Is(runErr, ErrCompletionFailed) || errors.Is(runErr, ErrHistoryCorrupted) || errors.Is(runErr, errAssistantDelegationUnavailable) {
+				message := "assistant event failed at completion provider"
+				if errors.Is(runErr, errAssistantDelegationUnavailable) {
+					message = "assistant event rejected without current-user delegation"
+				}
+				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", message, "ERROR", runErr)
 				if err := s.failEvent(ctx, thread.ProjectID, event.ID, runErr); err != nil {
 					return ProcessThreadEventsResult{}, err
 				}
@@ -2802,11 +2807,11 @@ func (s *ServiceCore) processEventTurn(
 
 	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
 
-	prompt, actorUserID := "", assistant.CreatedByUserID
+	// Assistant-only by default: triggered runs and MCP auth resumption act as
+	// the creator for attribution, without delegating ai_access.
+	prompt, tokenUserID, delegatingSessionID := "", assistant.CreatedByUserID, ""
 	var inputParts []runtimeContentPart
 	if mcpAuthPrompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
-		// MCP auth resumption is a system event with no human sender — act as
-		// the assistant's creator.
 		prompt = mcpAuthPrompt
 	} else {
 		adapter, err := getSourceAdapter(thread.SourceKind)
@@ -2817,7 +2822,14 @@ func (s *ServiceCore) processEventTurn(
 		if err != nil {
 			return nil, fmt.Errorf("decode assistant turn: %w", err)
 		}
-		actorUserID = turnUserID(assistant, thread, event)
+		tokenUserID = turnUserID(assistant, thread, event)
+		delegation, delegated, err := turnActingForDelegation(assistant, thread, event)
+		if err != nil {
+			return nil, errors.Join(errAssistantDelegationUnavailable, err)
+		}
+		if delegated {
+			tokenUserID, delegatingSessionID = delegation.UserID, delegation.SessionID
+		}
 		// Best-effort: files attached to the triggering message ride along as
 		// vision/text content. Failures degrade to the metadata-only turn.
 		switch thread.SourceKind {
@@ -2831,7 +2843,7 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return nil, err
 	}
-	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, actorUserID)
+	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, tokenUserID, delegatingSessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -2919,12 +2931,8 @@ func (s *ServiceCore) assistantToolsVariant(ctx context.Context, projectID uuid.
 	return feature.AssistantToolsVariant(variant)
 }
 
-// turnUserID returns the Gram user whose identity a turn should act under.
-// Dashboard turns carry a Gram user id on the event payload (the sender), so
-// MCP calls, audit attribution, and per-user RBAC reflect the actual sender
-// rather than the assistant's creator. Other sources either don't carry a
-// Gram user identity (cron/wake) or carry an external one (Slack), so they
-// fall back to the creator.
+// turnUserID is the attribution identity for an assistant-only turn: the
+// dashboard sender, or the assistant's creator for every other source.
 func turnUserID(assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) string {
 	if thread.SourceKind == sourceKindDashboard {
 		var payload dashboardEventPayload
@@ -2933,6 +2941,38 @@ func turnUserID(assistant assistantRecord, thread assistantThreadRecord, event a
 		}
 	}
 	return assistant.CreatedByUserID
+}
+
+// turnActingForDelegation returns the current-user delegation a dashboard turn
+// carries. Turns without one (other sources, or dashboard events queued before
+// delegation existed) stay assistant-only. A present delegation must be
+// well-formed; membership is revalidated on every governed call.
+func turnActingForDelegation(assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) (actingForDelegation, bool, error) {
+	var none actingForDelegation
+	if thread.SourceKind != sourceKindDashboard {
+		return none, false, nil
+	}
+	var payload dashboardEventPayload
+	if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err != nil {
+		return actingForDelegation{}, false, fmt.Errorf("decode dashboard delegation: %w", err)
+	}
+	d := payload.ActingFor
+	if d == nil {
+		return none, false, nil
+	}
+	if d.Kind != actingForDelegationKindUserSession || d.UserID == "" || d.SessionID == "" {
+		return actingForDelegation{}, false, errors.New("dashboard turn has an incomplete user-session delegation")
+	}
+	if d.UserID != payload.UserID || d.OrganizationID != assistant.OrganizationID {
+		return actingForDelegation{}, false, errors.New("dashboard delegation tenant or user mismatch")
+	}
+	if d.IssuedAt.IsZero() || !d.ExpiresAt.Equal(d.IssuedAt.Add(assistantRuntimeTokenTTL)) {
+		return actingForDelegation{}, false, errors.New("dashboard delegation is malformed")
+	}
+	if event.CreatedAt.Before(d.IssuedAt.Add(-time.Minute)) || event.CreatedAt.After(d.IssuedAt.Add(time.Minute)) {
+		return actingForDelegation{}, false, errors.New("dashboard delegation issuance does not match the event")
+	}
+	return *d, true, nil
 }
 
 func (s *ServiceCore) startProcessingLeaseHeartbeat(
@@ -2985,11 +3025,12 @@ func (s *ServiceCore) touchProcessingLease(ctx context.Context, projectID, runti
 // downstream, so platform tools that key on the calling thread (wake,
 // memory, telemetry) keep working under the v2 single-VM-per-assistant
 // runtime — the VM is shared but the auth identity is per-thread.
-func (s *ServiceCore) MintThreadScopedRuntimeToken(assistant assistantRecord, threadID uuid.UUID, userID string) (string, error) {
+func (s *ServiceCore) MintThreadScopedRuntimeToken(assistant assistantRecord, threadID uuid.UUID, userID, delegatingSessionID string) (string, error) {
 	token, err := s.assistantTokens.Generate(assistanttokens.GenerateInput{
 		OrgID:       assistant.OrganizationID,
 		ProjectID:   assistant.ProjectID,
 		UserID:      userID,
+		SessionID:   delegatingSessionID,
 		AssistantID: assistant.ID,
 		ThreadID:    threadID,
 		TTL:         assistantRuntimeTokenTTL,

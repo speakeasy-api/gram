@@ -73,6 +73,9 @@ func (customerLifecycleValidator) ValidateCurrent(ctx context.Context, dbtx kill
 		locked, err = litellmrepo.New(dbtx).LockActiveLiteLLMInstancesInOrganization(ctx, litellmrepo.LockActiveLiteLLMInstancesInOrganizationParams{
 			Ids: ids, OrganizationID: string(batch.OrganizationID),
 		})
+	case ResourceKindAssistant:
+		resourceName = "assistants"
+		locked, err = lockActiveAssistantsInOrganization(ctx, dbtx, ids, string(batch.OrganizationID))
 	case ResourceKindMCPServer:
 		resourceName = "servers"
 		locked, err = mcpserversrepo.New(dbtx).LockLiveMCPServersInOrganization(ctx, mcpserversrepo.LockLiveMCPServersInOrganizationParams{
@@ -88,6 +91,18 @@ func (customerLifecycleValidator) ValidateCurrent(ctx context.Context, dbtx kill
 		return fmt.Errorf("%w: one or more %s are not available", killswitches.ErrInvalidReference, resourceName)
 	}
 	return nil
+}
+
+func lockActiveAssistantsInOrganization(ctx context.Context, dbtx killswitches.LifecycleTransactionQueries, ids []uuid.UUID, organizationID string) ([]uuid.UUID, error) {
+	rows, err := dbtx.Query(ctx, `SELECT id FROM assistants WHERE id = ANY($1::uuid[]) AND organization_id = $2 AND status = 'active' AND deleted IS FALSE ORDER BY id FOR UPDATE`, ids, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("query assistants: %w", err)
+	}
+	locked, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return nil, fmt.Errorf("read assistants: %w", err)
+	}
+	return locked, nil
 }
 
 // ValidateLiveMCPServersInOrganization validates a canonical resource batch in
