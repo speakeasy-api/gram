@@ -44,10 +44,10 @@ func TestMCPToolExecutionRegistration(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, killswitches.FailurePolicyFailClosed, aiDefinition.FailurePolicy)
 	require.Equal(t, []killswitches.PrincipalKind{PrincipalKindUser}, aiDefinition.PrincipalKinds)
-	require.ElementsMatch(t, []killswitches.ResourceKind{ResourceKindMCPServer, ResourceKindHookActivity, ResourceKindLiteLLMInstance, hostedinference.ResourceKindGramHostedInference}, aiDefinition.ResourceKinds)
+	require.ElementsMatch(t, []killswitches.ResourceKind{ResourceKindMCPServer, ResourceKindHookActivity, ResourceKindLiteLLMInstance, hostedinference.ResourceKindGramHostedInference, ResourceKindAssistant}, aiDefinition.ResourceKinds)
 	require.Equal(t, IdentityContractKeyAuthenticatedUserAIResource, aiDefinition.IdentityContract)
-	require.ElementsMatch(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse, SurfaceLiteLLMPreInference, hostedinference.SurfaceGramHostedInference}, aiDefinition.Surfaces)
-	require.ElementsMatch(t, []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC, TransportAdapterHookNative, TransportAdapterLiteLLMGenericGuardrail, hostedinference.TransportAdapterGramHostedInference}, aiDefinition.TransportAdapters)
+	require.ElementsMatch(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse, SurfaceLiteLLMPreInference, hostedinference.SurfaceGramHostedInference, SurfaceAssistantModelCall, SurfaceAssistantMCPToolCall}, aiDefinition.Surfaces)
+	require.ElementsMatch(t, []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC, TransportAdapterHookNative, TransportAdapterLiteLLMGenericGuardrail, hostedinference.TransportAdapterGramHostedInference, TransportAdapterAssistantRuntime}, aiDefinition.TransportAdapters)
 	require.Equal(t, DefaultAIAccessExternalNote, aiDefinition.DefaultExternalNote)
 	require.NotEqual(t, definition.DefaultExternalNote, aiDefinition.DefaultExternalNote)
 	require.Equal(t, EnforcementOwner, aiDefinition.EnforcementOwner)
@@ -61,6 +61,9 @@ func TestMCPToolExecutionRegistration(t *testing.T) {
 	resourceAdapter, ok := registry.ResourceAdapter(ResourceKindMCPServer)
 	require.True(t, ok)
 	require.Equal(t, ResourceKindMCPServer, resourceAdapter.Kind())
+	assistantResource, ok := registry.ResourceAdapter(ResourceKindAssistant)
+	require.True(t, ok)
+	require.Equal(t, ResourceKindAssistant, assistantResource.Kind())
 }
 
 // TestMCPCoverageInventory proves each declared surface has its own coverage
@@ -73,7 +76,7 @@ func TestMCPCoverageInventory(t *testing.T) {
 	require.NoError(t, err)
 
 	inventory := registry.CoverageInventory()
-	require.Len(t, inventory, 10)
+	require.Len(t, inventory, 12)
 	coverageByDefinition := map[killswitches.DefinitionKey][]killswitches.Surface{}
 	for _, contract := range inventory {
 		coverageByDefinition[contract.Definition] = append(coverageByDefinition[contract.Definition], contract.Surface)
@@ -89,7 +92,7 @@ func TestMCPCoverageInventory(t *testing.T) {
 		require.NotEmpty(t, contract.ProtectedWork)
 	}
 	require.Equal(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall}, coverageByDefinition[DefinitionKeyMCPToolExecution])
-	require.ElementsMatch(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse, SurfaceLiteLLMPreInference, hostedinference.SurfaceGramHostedInference}, coverageByDefinition[DefinitionKeyAIAccess])
+	require.ElementsMatch(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse, SurfaceLiteLLMPreInference, hostedinference.SurfaceGramHostedInference, SurfaceAssistantModelCall, SurfaceAssistantMCPToolCall}, coverageByDefinition[DefinitionKeyAIAccess])
 
 	hosted, ok := registry.Coverage(DefinitionKeyMCPToolExecution, SurfaceHostedToolsCall)
 	require.True(t, ok)
@@ -109,7 +112,7 @@ func TestMCPCoverageInventory(t *testing.T) {
 	hostedInference, ok := registry.Coverage(DefinitionKeyAIAccess, hostedinference.SurfaceGramHostedInference)
 	require.True(t, ok)
 	require.Equal(t, hostedinference.TransportAdapterGramHostedInference, hostedInference.TransportAdapter)
-	for _, excludedSurface := range []killswitches.Surface{"killswitch_management", "audit_read", "platform_break_glass", "hooks", "litellm", "assistant_runtime", "hooks_permission_request", "hooks_backfill"} {
+	for _, excludedSurface := range []killswitches.Surface{"killswitch_management", "audit_read", "platform_break_glass", "hooks", "litellm", "assistant_runtime", "hooks_permission_request", "hooks_backfill", "hosted_inference", "assistant_runtime_native_tool"} {
 		_, covered := registry.Coverage(DefinitionKeyAIAccess, excludedSurface)
 		require.False(t, covered, string(excludedSurface))
 	}

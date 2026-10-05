@@ -17,9 +17,21 @@ type dashboardSourceRef struct {
 	UserID string `json:"user_id"`
 }
 
+const actingForDelegationKindUserSession = "user_session"
+
+type actingForDelegation struct {
+	Kind           string    `json:"kind"`
+	OrganizationID string    `json:"organization_id"`
+	UserID         string    `json:"user_id"`
+	SessionID      string    `json:"session_id"`
+	IssuedAt       time.Time `json:"issued_at"`
+	ExpiresAt      time.Time `json:"expires_at"`
+}
+
 type dashboardEventPayload struct {
 	Text         string                      `json:"text"`
 	UserID       string                      `json:"user_id,omitempty"`
+	ActingFor    *actingForDelegation        `json:"acting_for,omitempty"`
 	SkillContext []dashboardTurnSkillContext `json:"skill_context,omitempty"`
 	Attachments  []dashboardTurnAttachment   `json:"attachments,omitempty"`
 }

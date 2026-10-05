@@ -303,6 +303,7 @@ func mintAssistantToken(t *testing.T, ti *testInstance, authCtx *contextvalues.A
 		OrgID:       authCtx.ActiveOrganizationID,
 		ProjectID:   *authCtx.ProjectID,
 		UserID:      authCtx.UserID,
+		SessionID:   "session-test",
 		AssistantID: assistantID,
 		ThreadID:    uuid.Nil,
 		TTL:         time.Hour,
@@ -336,6 +337,7 @@ func mintThreadAssistantToken(t *testing.T, ti *testInstance, authCtx *contextva
 		OrgID:       authCtx.ActiveOrganizationID,
 		ProjectID:   *authCtx.ProjectID,
 		UserID:      authCtx.UserID,
+		SessionID:   "session-test",
 		AssistantID: assistantID,
 		ThreadID:    threadID,
 		TTL:         time.Hour,
@@ -528,7 +530,7 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 		require.Equal(t, platformtools.PlatformToolsetID(platformtools.PlatformMCPReadToolsetSlug).String(), event[attr.McpServerIDKey])
 		require.Empty(t, event[attr.ToolsetIDKey])
 		require.Equal(t, mcpriskscan.MethodToolsCall, event["gram.mcp.risk.scan.method"])
-		require.Equal(t, "false", event["gram.mcp.risk.scan.identity_stamped"], "platform auth does not fabricate MCP principal provenance from AuthContext.UserID")
+		require.Equal(t, "true", event["gram.mcp.risk.scan.identity_stamped"], "assistant tokens carry validated runtime provenance, never AuthContext.UserID")
 	}
 	for i := 0; i < len(events); i += 2 {
 		require.Equal(t, mcpriskscan.PhaseRequest, events[i]["gram.mcp.risk.scan.phase"])

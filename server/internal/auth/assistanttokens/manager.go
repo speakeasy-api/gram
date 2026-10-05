@@ -17,6 +17,7 @@ import (
 	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -34,10 +35,12 @@ const revocationCacheTTL = 5 * time.Second
 type Claims struct {
 	OrgID     string `json:"org_id"`
 	ProjectID string `json:"project_id"`
-	// UserID is the assistant owner at mint time. It outlives an ownership
-	// transfer by at most the token TTL — after that the next /turn mints
-	// a fresh token against the new owner.
-	UserID      string `json:"user_id"`
+	// UserID and SessionID are present together only for a server-issued
+	// delegation from a validated current-user session. SessionID is an opaque
+	// delegation identifier, never the session bearer. UserID-only legacy tokens
+	// remain assistant credentials; owner or creator fields are never substituted.
+	UserID      string `json:"user_id,omitempty"`
+	SessionID   string `json:"delegating_session_id,omitempty"`
 	AssistantID string `json:"assistant_id"`
 	// ThreadID is omitted for v2 assistant-scoped tokens (a single VM serves
 	// every thread under one assistant). Older v1 tokens still carry it and
@@ -72,7 +75,7 @@ type MCPAuthFlowInput struct {
 type MCPAuthFlowClaims struct {
 	OrgID             string `json:"org_id"`
 	ProjectID         string `json:"project_id"`
-	UserID            string `json:"user_id"`
+	UserID            string `json:"user_id,omitempty"`
 	AssistantID       string `json:"assistant_id"`
 	ThreadID          string `json:"thread_id"`
 	FlowID            string `json:"flow_id"`
@@ -91,6 +94,7 @@ type GenerateInput struct {
 	OrgID       string
 	ProjectID   uuid.UUID
 	UserID      string
+	SessionID   string
 	AssistantID uuid.UUID
 	// ThreadID may be uuid.Nil for assistant-scoped (v2) tokens.
 	ThreadID uuid.UUID
@@ -135,6 +139,7 @@ func (m *Manager) Generate(input GenerateInput) (string, error) {
 		OrgID:       input.OrgID,
 		ProjectID:   input.ProjectID.String(),
 		UserID:      input.UserID,
+		SessionID:   input.SessionID,
 		AssistantID: input.AssistantID.String(),
 		ThreadID:    threadClaim,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -262,6 +267,7 @@ func (m *Manager) Validate(tokenString string) (*Claims, error) {
 		OrgID:       "",
 		ProjectID:   "",
 		UserID:      "",
+		SessionID:   "",
 		AssistantID: "",
 		ThreadID:    "",
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -333,27 +339,45 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "unable to load assistant organization")
 	}
 
-	owner, err := m.users.GetUser(ctx, claims.UserID)
-	if err != nil {
-		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "unable to load assistant owner")
-	}
-
 	if err := m.checkRevocation(ctx, projectID, assistantID, threadID); err != nil {
 		return ctx, nil, err
 	}
 
-	email := owner.Email
+	delegated := claims.UserID != "" && claims.SessionID != ""
+	if claims.UserID == "" && claims.SessionID != "" {
+		return ctx, nil, oops.E(oops.CodeUnauthorized, nil, "assistant token has incomplete delegation claims")
+	}
+	var email *string
+	var sessionID *string
+	actingUserID := ""
+	if delegated {
+		actingUserID = claims.UserID
+		member, err := m.orgs.HasActiveOrganizationUser(ctx, organizationsrepo.HasActiveOrganizationUserParams{UserID: claims.UserID, OrganizationID: claims.OrgID})
+		if err != nil {
+			return ctx, nil, oops.E(oops.CodeUnauthorized, err, "unable to validate delegated user")
+		}
+		if !member {
+			return ctx, nil, oops.E(oops.CodeUnauthorized, nil, "delegated user is not an active organization member")
+		}
+		user, err := m.users.GetUser(ctx, claims.UserID)
+		if err != nil {
+			return ctx, nil, oops.E(oops.CodeUnauthorized, err, "unable to load delegated user")
+		}
+		email = &user.Email
+		sessionID = &claims.SessionID
+	}
+
 	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
 		ActiveOrganizationID:  claims.OrgID,
-		UserID:                owner.ID,
+		UserID:                actingUserID,
 		ExternalUserID:        "",
 		APIKeyID:              "",
 		APIKeyName:            "",
 		OrgWidePluginHooksKey: false,
-		SessionID:             nil,
+		SessionID:             sessionID,
 		ProjectID:             &project.ID,
 		OrganizationSlug:      org.Slug,
-		Email:                 &email,
+		Email:                 email,
 		ProjectSlug:           &project.Slug,
 		AccountType:           org.GramAccountType,
 		Whitelisted:           org.Whitelisted,
@@ -366,11 +390,17 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 		AssistantID: assistantID,
 		ThreadID:    threadID,
 	})
+	identityBoundary := mcpidentity.NewValidatorBoundary()
+	if delegated {
+		ctx = identityBoundary.StampDelegatedUser(ctx, claims.UserID)
+	} else {
+		ctx = identityBoundary.StampAssistant(ctx)
+	}
 
 	if m.authz != nil {
 		ctx, err = m.authz.PrepareContext(ctx)
 		if err != nil {
-			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load assistant owner grants")
+			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load assistant grants")
 		}
 	}
 

@@ -50,6 +50,8 @@ func testIdentityContext(t *testing.T, kind mcpidentity.Kind, userID string) con
 		return boundary.StampAssistant(t.Context())
 	case mcpidentity.KindAgent:
 		return stampValidatedSession(t, boundary, urn.NewAgentSubject(uuid.New()))
+	case mcpidentity.KindDelegatedUser:
+		return boundary.StampDelegatedUser(t.Context(), userID)
 	case mcpidentity.KindChatSession:
 		return boundary.StampChatSession(t.Context())
 	case mcpidentity.KindWorkload:
