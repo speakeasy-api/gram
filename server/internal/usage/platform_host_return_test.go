@@ -245,7 +245,8 @@ func TestStripeCheckoutReturnBaseRoundTripsThroughIdempotencyKey(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "https://app.example.test/acme/billing", canonical)
 
-	withPort := withStripeCheckoutReturnBase(intent, "http://localhost:5173")
+	withPort, recorded := withStripeCheckoutReturnBase(intent, "http://localhost:5173")
+	require.True(t, recorded)
 	require.Equal(t, fingerprint, checkoutIntentTrialFingerprint(withPort.idempotencyKey))
 	returned, err := stripeCheckoutBillingURL(withPort.idempotencyKey, siteURL, "acme")
 	require.NoError(t, err)
@@ -259,14 +260,16 @@ func TestStripeCheckoutReturnBaseOmittedWhenKeyWouldExceedStripeLimit(t *testing
 	intent := newStripeCheckoutIntent("<ORG_ID>", time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC), nil)
 	longHost := "https://" + strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + ".example.test"
 
-	withLongHost := withStripeCheckoutReturnBase(intent, longHost)
+	withLongHost, recorded := withStripeCheckoutReturnBase(intent, longHost)
+	require.False(t, recorded)
 	require.LessOrEqual(t, len(withLongHost.idempotencyKey), maxStripeIdempotencyKeyLength)
 	require.Equal(t, intent.idempotencyKey, withLongHost.idempotencyKey)
 	returned, err := stripeCheckoutBillingURL(withLongHost.idempotencyKey, siteURL, "acme")
 	require.NoError(t, err)
 	require.Equal(t, "https://app.example.test/acme/billing", returned)
 
-	withExtraHost := withStripeCheckoutReturnBase(intent, extraPlatformHostURL)
+	withExtraHost, recorded := withStripeCheckoutReturnBase(intent, extraPlatformHostURL)
+	require.True(t, recorded)
 	require.LessOrEqual(t, len(withExtraHost.idempotencyKey), maxStripeIdempotencyKeyLength)
 	returned, err = stripeCheckoutBillingURL(withExtraHost.idempotencyKey, siteURL, "acme")
 	require.NoError(t, err)

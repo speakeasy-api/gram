@@ -164,11 +164,19 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 		return "", oops.E(oops.CodeUnexpected, err, "failed to check the trial lifecycle").LogError(ctx, s.logger)
 	}
 	// Record the return base on every new intent, the site URL included, so a
-	// replay rebuilds the original URLs even after the site URL changes.
-	proposedIntent := withStripeCheckoutReturnBase(
+	// replay rebuilds the original URLs even after the site URL changes. Only a
+	// base URL too long for Stripe's key limit is left out; log it, since that
+	// intent would fail to replay across a site URL change.
+	returnBaseURL := s.platformHostBaseURL(ctx, s.siteURL)
+	proposedIntent, recorded := withStripeCheckoutReturnBase(
 		newStripeCheckoutIntentForTrial(authCtx.ActiveOrganizationID, now, productTrialEnd, expectedTrial),
-		s.platformHostBaseURL(ctx, s.siteURL),
+		returnBaseURL,
 	)
+	if !recorded {
+		s.logger.WarnContext(ctx, "stripe checkout return base too long to record in idempotency key",
+			attr.SlogURLFull(returnBaseURL),
+		)
+	}
 
 	billingMetadata, err := repo.New(s.db).GetBillingMetadata(ctx, authCtx.ActiveOrganizationID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -584,16 +592,17 @@ func checkoutIntentTrialFingerprint(idempotencyKey string) string {
 // from the request host or the current site URL. The base URL is base64url
 // encoded because the key's segments are colon-separated. A base URL too long
 // to fit in Stripe's idempotency key limit is left out, so Checkout returns to
-// the site URL.
-func withStripeCheckoutReturnBase(intent stripeCheckoutIntent, returnBaseURL string) stripeCheckoutIntent {
+// the site URL and the second result is false: such an intent is not safe to
+// replay across a site URL change.
+func withStripeCheckoutReturnBase(intent stripeCheckoutIntent, returnBaseURL string) (stripeCheckoutIntent, bool) {
 	separator := strings.LastIndexByte(intent.idempotencyKey, ':')
 	key := intent.idempotencyKey[:separator] + ":" + stripeCheckoutReturnBasePrefix +
 		base64.RawURLEncoding.EncodeToString([]byte(returnBaseURL)) + intent.idempotencyKey[separator:]
 	if len(key) > maxStripeIdempotencyKeyLength {
-		return intent
+		return intent, false
 	}
 	intent.idempotencyKey = key
-	return intent
+	return intent, true
 }
 
 // stripeCheckoutBillingURL returns the Checkout success and cancel URL for an
