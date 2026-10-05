@@ -18,7 +18,7 @@ vi.mock("./useDimensionValues", () => ({
   useDimensionValues: (
     dataset: string,
     dimension: string,
-    _window: string,
+    _span: unknown,
     enabled: boolean,
   ) => {
     testState.asks.push({ dataset, dimension, enabled });
@@ -68,7 +68,7 @@ function Harness({
   return (
     <FilterRow
       dataset={dataset}
-      window="1d"
+      span={{ window: "1d" }}
       filter={filter}
       onChange={(next) => {
         setFilter(next);

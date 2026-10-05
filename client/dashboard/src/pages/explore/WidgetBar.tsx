@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/Button";
 import { MoreActions } from "@/components/ui/MoreActions";
 import type { Widget } from "@gram/client/models/components/widget.js";
-import { useState, type JSX } from "react";
+import { useId, useState, type JSX } from "react";
 import type { ExploreSpec } from "./exploreModel";
 import { useCanEditWidget } from "./useCanEditWidget";
 import { useWidgetMutations } from "./useWidgetMutations";
@@ -100,6 +100,14 @@ export function WidgetBar({
   // A widget keeps a relative window and follows you forward in time, so a
   // query over an absolute range is shared by its link, not saved.
   const ranged = spec.range !== undefined;
+  // A disabled button takes no focus and shows no tooltip, so the reason it
+  // is disabled is shown beside it and named as its description.
+  const rangedHintId = useId();
+  const rangedHint = ranged ? (
+    <span id={rangedHintId} className="text-muted-foreground text-xs">
+      {RANGED_REASON}
+    </span>
+  ) : null;
 
   return (
     <div className="flex min-w-0 items-center gap-2">
@@ -110,13 +118,14 @@ export function WidgetBar({
           ) : null}
           {/* Someone else's widget without project write cannot be
               changed, only copied. */}
+          {editable ? rangedHint : null}
           {editable ? (
             <Button
               variant="secondary"
               size="sm"
               icon="save"
               disabled={!readable || !changed || ranged || mutations.pending}
-              title={ranged ? RANGED_REASON : undefined}
+              aria-describedby={ranged ? rangedHintId : undefined}
               onClick={() =>
                 mutations.update(
                   open.id,
@@ -172,12 +181,13 @@ export function WidgetBar({
       ) : (
         <>
           <UnsavedDot label="Unsaved widget" tooltip="Not saved yet" />
+          {rangedHint}
           <Button
             variant="secondary"
             size="sm"
             icon="save"
             disabled={resolving || ranged}
-            title={ranged ? RANGED_REASON : undefined}
+            aria-describedby={ranged ? rangedHintId : undefined}
             onClick={() => setNaming("create")}
           >
             Save widget

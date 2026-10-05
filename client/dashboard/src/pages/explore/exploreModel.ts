@@ -176,7 +176,7 @@ function grainForSpan(ms: number): Grain {
 }
 
 /** The [from, to) a spec asks over: its range, or its window resolved. */
-function specRange(
+export function specRange(
   spec: Pick<ExploreSpec, "window" | "range">,
   now: number = Date.now(),
 ): { from: Date; to: Date } {
