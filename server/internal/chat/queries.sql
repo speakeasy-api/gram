@@ -271,11 +271,8 @@ VALUES (
 
 -- name: GetMessagesForPublication :many
 -- Read authoritative identity and attribution in the write transaction.
--- Bodies are carried from preparation rather than fetched or rebuilt here.
-SELECT m.id, m.chat_id, m.role, m.created_at, m.message_id, m.tool_call_id,
-       m.finish_reason, m.source, m.user_id, m.external_user_id,
-       m.external_message_id, m.model, m.user_agent, m.replayed,
-       c.external_chat_id, c.cwd, c.user_account_id
+-- Content is fetched by consumers, never serialized into these events.
+SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 WHERE m.project_id = @project_id::uuid AND m.id = ANY(@ids::uuid[])

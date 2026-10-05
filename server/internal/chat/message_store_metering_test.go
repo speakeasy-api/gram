@@ -215,8 +215,8 @@ func TestChatMessageWriterMetersExternalMessageOnceAtStorageTime(t *testing.T) {
 	require.Len(t, meterMessages(t, ti), 1)
 	publications := conversationMessages(t, ti)
 	require.Len(t, publications, 1)
-	require.Equal(t, "external-message-1", publications[0].GetProvenance().GetExternalMessageId())
-	require.Equal(t, historical.Format(time.RFC3339Nano), publications[0].GetCreatedAt())
+	require.NotEmpty(t, publications[0].GetMessageId())
+	require.Equal(t, historical.Format(time.RFC3339Nano), publications[0].GetMessageCreatedAt())
 }
 
 func TestChatMessageWriterRejectsExternalMessageForAnotherProject(t *testing.T) {
@@ -424,11 +424,8 @@ func TestChatMessageWriterPreservesInitialReadingOnCorrelatedPromotion(t *testin
 	require.JSONEq(t, string(base.ToolCalls), string(storedMessages[0].ToolCalls))
 	publications := conversationMessages(t, ti)
 	require.Len(t, publications, 1, "metadata-only promotion must not republish the message")
-	require.Equal(t, initialMessages[0].ID.String(), publications[0].GetId())
-	require.Equal(t, "litellm", publications[0].GetProvenance().GetSource())
-	require.Equal(t, base.MessageID.String, publications[0].GetCorrelationId())
-	require.Equal(t, base.Content, publications[0].GetBody().GetParts()[0].GetText())
-	require.Equal(t, "lookup", publications[0].GetBody().GetParts()[1].GetToolCall().GetName())
+	require.Equal(t, initialMessages[0].ID.String(), publications[0].GetMessageId())
+	require.Equal(t, "litellm", publications[0].GetIngestion().GetSource())
 }
 
 func TestChatMessageWriterPreservesNativeReadingOnLaterLiteLLMObservation(t *testing.T) {
@@ -510,10 +507,8 @@ func TestChatMessageWriterWriteInTxRollsBackMessageAndReading(t *testing.T) {
 		},
 		UserEmail: "",
 	}}
-	prepared, err := writer.PreparePublications(ctx, ti.projectID, writes)
-	require.NoError(t, err)
 	tx := testenv.BeginTx(t, ctx, ti.conn)
-	_, err = writer.WriteInTx(ctx, tx, writes, prepared)
+	_, err := writer.WriteInTx(ctx, tx, writes)
 	require.NoError(t, err)
 	require.NoError(t, tx.Rollback(ctx))
 

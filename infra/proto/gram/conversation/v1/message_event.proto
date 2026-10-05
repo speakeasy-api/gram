@@ -1,0 +1,122 @@
+edition = "2024";
+
+package gram.conversation.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1;conversationv1";
+
+// MessageEvent notifies consumers of a committed message mutation, not a
+// content snapshot. Producers must enqueue it through the outbox in the
+// transaction performing the mutation. Exact conflict no-ops emit nothing.
+//
+// Delivery is at-least-once and may be out of order. Consumers fetch current
+// state using project_id and message_id; this event does not identify a
+// historical database version. Content may have gained attachments since the
+// event was produced, and the message may no longer exist when it is consumed.
+message MessageEvent {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+
+    // A new message row was inserted.
+    TYPE_CREATED = 1;
+
+    // Ingestion attribution was updated, including native-hook promotion,
+    // actor/source enrichment, and associated timestamp/replay corrections.
+    // Message content is unchanged.
+    TYPE_ATTRIBUTION_UPDATED = 2;
+
+    // Attachment content is durably stored and linked to this message.
+    // Emitted when the attachment association commits, not merely when an
+    // asset upload completes. attachment_ids identifies the added attachments.
+    TYPE_ATTACHMENTS_ADDED = 3;
+  }
+
+  enum Role {
+    ROLE_UNSPECIFIED = 0;
+    ROLE_SYSTEM = 1;
+    ROLE_DEVELOPER = 2;
+    ROLE_USER = 3;
+    ROLE_ASSISTANT = 4;
+    ROLE_TOOL = 5;
+  }
+
+  // Ingestion-time facts captured by the producer of this event, independently
+  // of later database enrichment. This is not a complete message attribution
+  // snapshot. Absent values mean unknown or unassigned, not cleared values.
+  message IngestionContext {
+    // Canonical normalized ingestion source.
+    string source = 1;
+
+    // Gram user to whom ingestion explicitly allocates usage. Independent of
+    // actor identity; consumers must not infer it from the actor or account owner.
+    // Absence means unassigned. This is not proof that a charge occurred.
+    string billing_user_id = 2;
+
+    // Gram assistant resource associated with the workload, when supplied.
+    string assistant_id = 3;
+
+    // Actor email explicitly observed by ingestion, not a directory lookup.
+    string observed_user_email = 4;
+
+    // AI provider explicitly reported by ingestion.
+    string provider = 5;
+
+    // Original hook source before normalization, when applicable.
+    string hook_source = 6;
+
+    // Device hostname observed by ingestion.
+    string hostname = 7;
+
+    // Ingestion-time classification of the external AI account, such as "team"
+    // or "personal". Not the organization's Gram billing plan.
+    string account_type = 8;
+
+    // External AI account billing mode, such as "metered" or "flat_rate".
+    // "unknown" or absence can represent an unresolved mode. Does not select a
+    // billing user or determine Gram pricing.
+    string billing_mode = 9;
+
+    // Historical source import/replay marker, not Pub/Sub redelivery.
+    bool replayed = 10;
+  }
+
+  // UUID identifying this mutation event. Stable across outbox publication
+  // retries and redelivery; distinct mutations receive distinct event IDs.
+  string id = 1;
+
+  // Producers must supply a recognized, non-UNSPECIFIED event type.
+  Type type = 2;
+
+  string organization_id = 3;
+  string project_id = 4;
+
+  // Persisted Gram conversation UUID.
+  string conversation_id = 5;
+
+  // Persisted Gram message UUID, distinct from the mutation event ID.
+  string message_id = 6;
+
+  // Role at the time of the mutation; allows filtering before fetching content.
+  Role role = 7;
+
+  // Time the producer recorded this mutation, preserved on redelivery.
+  // UTC RFC3339Nano; not an ordering token or a database commit timestamp.
+  string occurred_at = 8;
+
+  // Message time recorded by this mutation, including historical source time
+  // where supplied. May be corrected by attribution promotion. UTC RFC3339Nano.
+  string message_created_at = 9;
+
+  IngestionContext ingestion = 10;
+
+  // Persisted chat content-part UUIDs added to this message by this event.
+  // Non-empty for TYPE_ATTACHMENTS_ADDED; empty for other event types.
+  // Consumers fetch these within project_id and message_id. Unparented
+  // attachments cannot emit a message event until associated with a message.
+  repeated string attachment_ids = 11;
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: { seconds: 345600 /* 4 days */ }
+  };
+}

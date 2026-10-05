@@ -34,7 +34,7 @@ import (
 
 type alwaysEnabledFeatures struct{}
 
-func TestPromptFallbackSuppressesPublicationPreparationFailure(t *testing.T) {
+func TestPromptFallbackSuppressesLargeDuplicateWithoutAssetStorage(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
@@ -55,8 +55,6 @@ func TestPromptFallbackSuppressesPublicationPreparationFailure(t *testing.T) {
 	params.ID = uuid.New()
 	params.Source = conv.ToPGText("litellm")
 	params.ContentRaw = []byte(`{"payload":"` + strings.Repeat("x", 8*1024*1024) + `"}`)
-	_, err = writer.PreparePublications(ctx, *authCtx.ProjectID, []chat.MessageWrite{{Params: params}})
-	require.Error(t, err)
 	inserted, err = ti.service.insertUncorrelatedAgentPrompt(ctx, metadata, params, "duplicate prompt", false)
 	require.NoError(t, err)
 	require.False(t, inserted)

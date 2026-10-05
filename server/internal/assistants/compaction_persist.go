@@ -153,11 +153,6 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		})
 	}
 
-	prepared, err := s.chatWriter.PreparePublications(ctx, projectID, writes)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "prepare compacted message publication").LogError(ctx, s.logger, logAttrs...)
-	}
-	// Hold the generation lock only after all body assets are uploaded.
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin compaction transaction").LogError(ctx, s.logger, logAttrs...)
@@ -173,7 +168,7 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 	for i := range writes {
 		writes[i].Params.Generation = currentGen + 1
 	}
-	n, err := s.chatWriter.WriteInTx(ctx, tx, writes, prepared)
+	n, err := s.chatWriter.WriteInTx(ctx, tx, writes)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "write compacted chat messages").LogError(ctx, s.logger, logAttrs...)
 	}

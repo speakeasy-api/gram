@@ -421,14 +421,13 @@ func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexa
 				Generation:  0,
 				CreatedAt:   conv.ToPGTimestamptz(createdAt),
 			},
-			PublishRowLocalContent: false,
-			BillingUserID:          userID,
-			WorkloadSource:         metering.WorkloadSourceImport,
-			UserEmail:              event.Actor.UserEmail,
-			Provider:               codexProviderOpenAI,
-			HookHostname:           "",
-			AccountType:            complianceAccountTypeTeam,
-			BillingMode:            src.cfg.BillingMode,
+			BillingUserID:  userID,
+			WorkloadSource: metering.WorkloadSourceImport,
+			UserEmail:      event.Actor.UserEmail,
+			Provider:       codexProviderOpenAI,
+			HookHostname:   "",
+			AccountType:    complianceAccountTypeTeam,
+			BillingMode:    src.cfg.BillingMode,
 		})
 	}
 	if fallbacks := src.timestampFallbacks() - fallbacksBefore; fallbacks > 0 {

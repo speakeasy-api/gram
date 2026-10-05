@@ -1357,10 +1357,7 @@ func (q *Queries) GetMaxGenerationForChat(ctx context.Context, arg GetMaxGenerat
 }
 
 const getMessagesForPublication = `-- name: GetMessagesForPublication :many
-SELECT m.id, m.chat_id, m.role, m.created_at, m.message_id, m.tool_call_id,
-       m.finish_reason, m.source, m.user_id, m.external_user_id,
-       m.external_message_id, m.model, m.user_agent, m.replayed,
-       c.external_chat_id, c.cwd, c.user_account_id
+SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 WHERE m.project_id = $1::uuid AND m.id = ANY($2::uuid[])
@@ -1373,27 +1370,16 @@ type GetMessagesForPublicationParams struct {
 }
 
 type GetMessagesForPublicationRow struct {
-	ID                uuid.UUID
-	ChatID            uuid.UUID
-	Role              string
-	CreatedAt         pgtype.Timestamptz
-	MessageID         pgtype.Text
-	ToolCallID        pgtype.Text
-	FinishReason      pgtype.Text
-	Source            pgtype.Text
-	UserID            pgtype.Text
-	ExternalUserID    pgtype.Text
-	ExternalMessageID pgtype.Text
-	Model             pgtype.Text
-	UserAgent         pgtype.Text
-	Replayed          bool
-	ExternalChatID    pgtype.Text
-	Cwd               pgtype.Text
-	UserAccountID     uuid.NullUUID
+	ID        uuid.UUID
+	ChatID    uuid.UUID
+	Role      string
+	CreatedAt pgtype.Timestamptz
+	Source    pgtype.Text
+	Replayed  bool
 }
 
 // Read authoritative identity and attribution in the write transaction.
-// Bodies are carried from preparation rather than fetched or rebuilt here.
+// Content is fetched by consumers, never serialized into these events.
 func (q *Queries) GetMessagesForPublication(ctx context.Context, arg GetMessagesForPublicationParams) ([]GetMessagesForPublicationRow, error) {
 	rows, err := q.db.Query(ctx, getMessagesForPublication, arg.ProjectID, arg.Ids)
 	if err != nil {
@@ -1408,19 +1394,8 @@ func (q *Queries) GetMessagesForPublication(ctx context.Context, arg GetMessages
 			&i.ChatID,
 			&i.Role,
 			&i.CreatedAt,
-			&i.MessageID,
-			&i.ToolCallID,
-			&i.FinishReason,
 			&i.Source,
-			&i.UserID,
-			&i.ExternalUserID,
-			&i.ExternalMessageID,
-			&i.Model,
-			&i.UserAgent,
 			&i.Replayed,
-			&i.ExternalChatID,
-			&i.Cwd,
-			&i.UserAccountID,
 		); err != nil {
 			return nil, err
 		}
