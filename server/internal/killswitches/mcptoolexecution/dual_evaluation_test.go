@@ -25,10 +25,10 @@ func TestPrivateCheckpointDualDefinitionMatrixAndNextCall(t *testing.T) {
 	require.NoError(t, err)
 
 	userID := "user_" + uuid.NewString()
-	insertUser(t, conn, userID, nil)
-	insertMembership(t, conn, orgID, userID, nil)
-	projectID := insertProject(t, conn, orgID, "dual-matrix", nil)
-	serverID := insertMCPServer(t, conn, orgID, projectID, nil)
+	insertUser(t, conn, userID, false)
+	insertMembership(t, conn, orgID, userID, false)
+	projectID := insertProject(t, conn, orgID, "dual-matrix", false)
+	serverID := insertMCPServer(t, conn, orgID, projectID, false)
 	ctx := testIdentityContext(t, mcpidentity.KindUserSession, userID)
 
 	evaluate := func() killswitches.TransportDisposition {
@@ -102,10 +102,10 @@ func TestAIAccessLifecyclePersistsExactMCPIdentity(t *testing.T) {
 	require.NoError(t, err)
 
 	userID := "user_" + uuid.NewString()
-	insertUser(t, conn, userID, nil)
-	insertMembership(t, conn, orgID, userID, nil)
-	projectID := insertProject(t, conn, orgID, "ai-lifecycle", nil)
-	serverID := insertMCPServer(t, conn, orgID, projectID, nil)
+	insertUser(t, conn, userID, false)
+	insertMembership(t, conn, orgID, userID, false)
+	projectID := insertProject(t, conn, orgID, "ai-lifecycle", false)
+	serverID := insertMCPServer(t, conn, orgID, projectID, false)
 
 	activated, err := lifecycle.ActivatePrescription(t.Context(), killswitches.ActivatePrescriptionRequest{
 		MutationContext: killswitches.MutationContext{
@@ -150,10 +150,10 @@ func TestEvaluatorHasNoImplicitCapabilityHierarchy(t *testing.T) {
 	require.NoError(t, err)
 
 	userID := "user_" + uuid.NewString()
-	insertUser(t, conn, userID, nil)
-	insertMembership(t, conn, orgID, userID, nil)
-	projectID := insertProject(t, conn, orgID, "no-hierarchy", nil)
-	serverID := insertMCPServer(t, conn, orgID, projectID, nil)
+	insertUser(t, conn, userID, false)
+	insertMembership(t, conn, orgID, userID, false)
+	projectID := insertProject(t, conn, orgID, "no-hierarchy", false)
+	serverID := insertMCPServer(t, conn, orgID, projectID, false)
 	insertPrescription(t, conn, orgID, prescriptionFixture{
 		ID:            uuid.New(),
 		DefinitionKey: DefinitionKeyAIAccess,
