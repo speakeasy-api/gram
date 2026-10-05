@@ -33,11 +33,11 @@ func IsStandardMCPRequestHeader(name string) bool {
 
 // VariableHeaderName returns the request header the hosted runtime reads a
 // configured tool variable name or header display name from: "MCP-" followed
-// by the name, with underscores and spaces written as dashes (a variable
+// by the name, with every underscore and space written as a dash (a variable
 // PARAM_REGION arrives as MCP-PARAM-REGION, a display name "Param Region" as
 // MCP-Param-Region).
 func VariableHeaderName(name string) string {
-	return "MCP-" + strings.NewReplacer("_", "-", " ", "-").Replace(strings.TrimSpace(name))
+	return "MCP-" + strings.NewReplacer("_", "-", " ", "-").Replace(name)
 }
 
 // IsReservedVariableHeaderName reports whether a configured tool variable

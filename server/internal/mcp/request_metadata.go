@@ -87,8 +87,11 @@ func rawRequestMeta(params json.RawMessage) (meta map[string]json.RawMessage, ok
 // for a missing or malformed required `_meta` member. Both carry HTTP 400.
 // Messages name only the header or member, never client-supplied values.
 //
-// Notifications and responses are not validated: the revision defines header
-// requirements for requests only.
+// Notifications are checked for the MCP-Protocol-Version and Mcp-Method
+// headers only, matching the go-sdk v1.7.0 server: the schema makes `_meta`
+// optional on notifications, and no notification carries Mcp-Name. A
+// rejected notification is still acknowledged without a body. Responses
+// (no method) are not validated.
 //
 // Header values outside visible ASCII are compared with the body rather than
 // rejected as invalid characters. The go-sdk v1.7.0 client sends Mcp-Name
@@ -96,7 +99,7 @@ func rawRequestMeta(params json.RawMessage) (meta map[string]json.RawMessage, ok
 // already rejects control characters in header values; a value that does not
 // match the body is still rejected.
 func validateRequestMetadata(header http.Header, req *rawRequest, resolution mcpversions.Resolution) error {
-	if !mcpversions.AtLeast(resolution.InEffect, mcpversions.Version20260728) || req.Method == "" || !req.ID.IsSet() {
+	if !mcpversions.AtLeast(resolution.InEffect, mcpversions.Version20260728) || req.Method == "" {
 		return nil
 	}
 
@@ -116,6 +119,9 @@ func validateRequestMetadata(header http.Header, req *rawRequest, resolution mcp
 	}
 	if method != req.Method {
 		return headerMismatchError(req.ID, fmt.Sprintf("%s header does not match the request method", httpheaders.MethodHeader))
+	}
+	if !req.ID.IsSet() {
+		return nil
 	}
 
 	meta, paramsIsObject := rawRequestMeta(req.Params)

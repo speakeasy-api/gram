@@ -214,7 +214,7 @@ func TestIsReservedVariableHeaderName(t *testing.T) {
 		{name: "param-region", want: true},
 		{name: "Protocol Version", want: true},
 		{name: "PROTOCOL_VERSION", want: true},
-		{name: " Name ", want: true},
+		{name: " Name ", want: false},
 		{name: "PARAM_", want: false},
 		{name: "PARAMS_REGION", want: false},
 		{name: "NAMESPACE", want: false},
@@ -235,5 +235,7 @@ func TestVariableHeaderName(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, "MCP-PARAM-REGION", httpheaders.VariableHeaderName("PARAM_REGION"))
-	require.Equal(t, "MCP-Param-Region", httpheaders.VariableHeaderName(" Param Region "))
+	require.Equal(t, "MCP-Param-Region", httpheaders.VariableHeaderName("Param Region"))
+	// Edge spaces become dashes, exactly as the hosted runtime maps them.
+	require.Equal(t, "MCP--Name-", httpheaders.VariableHeaderName(" Name "))
 }

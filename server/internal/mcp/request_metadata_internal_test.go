@@ -246,12 +246,25 @@ func TestValidateRequestMetadata_SkipsRevisionsBefore20260728(t *testing.T) {
 	require.NoError(t, validateRequestMetadata(http.Header{}, req, resolution))
 }
 
-func TestValidateRequestMetadata_SkipsNotifications(t *testing.T) {
+func TestValidateRequestMetadata_NotificationRequiresMcpMethod(t *testing.T) {
 	t.Parallel()
 
 	req := &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.ID{}, Method: mcpversions.MethodNotificationsCancelled, Params: nil}
 
-	require.NoError(t, validateRequestMetadata(http.Header{}, req, resolution20260728))
+	err := validateRequestMetadata(metadataTestHeader("MCP-Protocol-Version", "2026-07-28"), req, resolution20260728)
+	var mcpErr *oops.MCPError
+	require.ErrorAs(t, err, &mcpErr)
+	require.Equal(t, oops.MCPCodeHeaderMismatch, mcpErr.Code)
+}
+
+func TestValidateRequestMetadata_NotificationNeedsNoMeta(t *testing.T) {
+	t.Parallel()
+
+	// `_meta` is optional on notifications.
+	req := &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.ID{}, Method: mcpversions.MethodNotificationsCancelled, Params: json.RawMessage(`{"requestId":1}`)}
+	header := metadataTestHeader("MCP-Protocol-Version", "2026-07-28", "Mcp-Method", "notifications/cancelled")
+
+	require.NoError(t, validateRequestMetadata(header, req, resolution20260728))
 }
 
 func TestValidateRequestMetadata_DoesNotEchoHeaderValues(t *testing.T) {
