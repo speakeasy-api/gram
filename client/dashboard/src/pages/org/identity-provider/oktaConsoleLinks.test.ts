@@ -120,6 +120,53 @@ describe("normalizeOktaOrgUrl", () => {
     );
   });
 
+  it.each(["okta.com", "oktapreview.com", "okta-emea.com", "okta.mil"])(
+    "resolves an admin console URL on %s to its org",
+    (suffix) => {
+      const org = `https://acme.${suffix}`;
+      expect(normalizeOktaOrgUrl(`https://acme-admin.${suffix}`)).toBe(org);
+      expect(normalizeOktaOrgUrl(`https://Acme-Admin.${suffix}/admin`)).toBe(
+        org,
+      );
+      expect(
+        normalizeOktaOrgUrl(`https://acme-admin.${suffix}/admin/apps/active`),
+      ).toBe(org);
+    },
+  );
+
+  it("leaves orgs that merely contain admin untouched", () => {
+    expect(normalizeOktaOrgUrl("https://myadmin-co.okta.com")).toBe(
+      "https://myadmin-co.okta.com",
+    );
+    expect(normalizeOktaOrgUrl("https://admin-team.okta.com")).toBe(
+      "https://admin-team.okta.com",
+    );
+    expect(normalizeOktaOrgUrl("https://sub.acme-admin.okta.com")).toBe(
+      "https://sub.acme-admin.okta.com",
+    );
+  });
+
+  it("keeps refusing other paths, even on an admin host", () => {
+    expect(
+      normalizeOktaOrgUrl("https://acme-admin.okta.com/app/UserHome"),
+    ).toBeUndefined();
+    expect(
+      normalizeOktaOrgUrl("https://acme-admin.okta.com/administrator"),
+    ).toBeUndefined();
+    expect(
+      normalizeOktaOrgUrl("https://acme-admin.okta.com/admin/home?x=1"),
+    ).toBeUndefined();
+    expect(normalizeOktaOrgUrl("https://-admin.okta.com")).toBeUndefined();
+    expect(
+      normalizeOktaOrgUrl("https://acme-admin-admin.okta.com"),
+    ).toBeUndefined();
+    for (const path of ["/%61dmin", "/admin%2Fx", "/admin/%zz", "//admin"]) {
+      expect(
+        normalizeOktaOrgUrl(`https://acme-admin.okta.com${path}`),
+      ).toBeUndefined();
+    }
+  });
+
   it("rejects paths, queries, fragments, http, and foreign hosts", () => {
     expect(
       normalizeOktaOrgUrl("https://example.okta.com/admin"),

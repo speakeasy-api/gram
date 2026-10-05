@@ -43,7 +43,7 @@ describe("CreateConnectionForm", () => {
     expect(mutation.mutate).not.toHaveBeenCalled();
     fireEvent.change(input, { target: { value: "http://example.okta.com" } });
     expect(screen.getByRole("alert").textContent).toContain(
-      "Enter an HTTPS Okta organization URL",
+      "Enter an HTTPS Okta organization or Admin Console URL",
     );
     fireEvent.keyDown(input, { key: "Enter" });
     expect(mutation.mutate).not.toHaveBeenCalled();
@@ -83,6 +83,18 @@ describe("CreateConnectionForm", () => {
         },
       },
     });
+  });
+
+  it("shows the org URL for a pasted admin console URL", () => {
+    render(<CreateConnectionForm />, { wrapper: Wrapper });
+    const input = screen.getByLabelText<HTMLInputElement>(
+      "Okta organization URL",
+    );
+    fireEvent.change(input, {
+      target: { value: "https://example-admin.okta.com/admin/home" },
+    });
+    fireEvent.blur(input);
+    expect(input.value).toBe("https://example.okta.com");
   });
 
   it("disables the button for a non-Okta URL and while pending", () => {

@@ -35,7 +35,10 @@ import {
   oktaViewHref,
   READINESS_SECTION_ID,
 } from "../../tabs";
-import { useClearedConfirmations } from "./useClearedConfirmations";
+import {
+  sharedConfirmationKey,
+  useClearedConfirmations,
+} from "./useClearedConfirmations";
 import { useXaaConfirm } from "./useXaaConfirm";
 import { XaaBulkConfirmBar } from "./XaaBulkConfirmBar";
 import type { XaaConfirmValues } from "./XaaConfirmFields";
@@ -46,6 +49,7 @@ import {
   hasConfirmation,
   isConfirmable,
   type AppInstanceOption,
+  normalizeAudience,
 } from "./xaaView";
 
 type ReadinessFilter = "pending" | "all";
@@ -217,11 +221,19 @@ function ReadinessChecklist({
   const openReview = (row: OktaResourceConnectionServer) => {
     if (locked) return;
     const saved = cleared.snapshotFor(row.mcpServerId) ?? row;
+    // A sibling's cleared confirmation may hold a different audience to undo to.
+    const siblingCleared = cleared.snapshots.some(
+      (snapshot) =>
+        sharedConfirmationKey(snapshot) === sharedConfirmationKey(row),
+    );
+    const suggested = siblingCleared
+      ? undefined
+      : normalizeAudience(row.authorizationServerIssuer ?? "");
     resetInteraction();
     setReviewTarget({
       row,
       initialValues: {
-        audience: saved.audience,
+        audience: saved.audience ?? suggested,
         oktaApplicationId: saved.oktaApplicationId,
       },
     });

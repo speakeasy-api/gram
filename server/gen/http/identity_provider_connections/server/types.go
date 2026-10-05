@@ -15,8 +15,8 @@ import (
 // CreateRequestBody is the type of the "identityProviderConnections" service
 // "create" endpoint HTTP request body.
 type CreateRequestBody struct {
-	// Okta org URL, for example https://example.okta.com. Must be https with no
-	// path; the host must be an Okta-owned domain.
+	// Okta org URL, for example https://example.okta.com. Must be https on an
+	// Okta-owned domain; an Admin Console URL resolves to its org.
 	OrgURL *string `form:"org_url,omitempty" json:"org_url,omitempty" xml:"org_url,omitempty"`
 	// Checklist template. Defaults to custom_app.
 	ListingMode *string `form:"listing_mode,omitempty" json:"listing_mode,omitempty" xml:"listing_mode,omitempty"`
