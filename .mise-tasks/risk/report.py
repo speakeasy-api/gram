@@ -99,6 +99,9 @@ def print_report(payload: dict[str, Any], metrics_file: Path) -> None:
 
     if summary.get("total") == 0:
         print("No cases in this scope; accuracy metrics are unavailable.")
+        if diagnostics := summary.get("diagnostics"):
+            print_report({**payload, "summary": diagnostics}, metrics_file)
+        return
 
     modes = summary.get("modes") or []
     if modes:
