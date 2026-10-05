@@ -11,6 +11,10 @@ NC='\033[0m' # No Color
 # Global variables
 tmp_dir=""
 
+# Printed by `speakeasy --control-plane-cli`. The Speakeasy SDK generator CLI
+# also installs a `speakeasy` binary and rejects that flag.
+CONTROL_PLANE_MARKER="speakeasy-ai-control-plane-cli"
+
 # Utility functions
 info() {
     printf "${BLUE}==>${NC} %s\n" "$1" >&2
@@ -116,6 +120,43 @@ download() {
     fi
 }
 
+# Download a release asset. Returns 0 on success and 2 when the server answers
+# 404. Any other failure stops the script with the real error.
+download_asset() {
+    local url="$1"
+    local output="$2"
+    local status
+
+    if command_exists curl; then
+        status=$(curl -sSL -w '%{http_code}' -o "$output" "$url") || error "Failed to download $url"
+    elif command_exists wget; then
+        if wget -q "$url" -O "$output"; then
+            status=200
+        else
+            status=$(wget --spider --server-response "$url" 2>&1 | awk '/^  HTTP\//{code=$2} END{print code}')
+        fi
+    else
+        error "curl or wget is required"
+    fi
+
+    case "$status" in
+        200) return 0 ;;
+        404) return 2 ;;
+        *) error "Failed to download $url (HTTP ${status:-unknown})" ;;
+    esac
+}
+
+# Report whether the binary at $1 is the Speakeasy AI Control Plane CLI.
+is_control_plane_cli() {
+    "$1" --control-plane-cli 2>/dev/null | grep -qx "$CONTROL_PLANE_MARKER"
+}
+
+# Report whether the binary at $1 is a build of this CLI from before the
+# rename. Those builds have no marker flag and print "gram version ...".
+is_legacy_cli() {
+    "$1" --version 2>/dev/null | grep -q '^gram version '
+}
+
 # Verify checksum
 verify_checksum() {
     local file="$1"
@@ -198,8 +239,27 @@ main() {
     tag_name=$(get_latest_tag)
     info "Latest version: $tag_name"
 
+    # Determine install location. INSTALL_DIR overrides the default.
+    local install_dir
+    local install_name
+    if [ "$os" = "windows" ]; then
+        install_dir="${INSTALL_DIR:-${PROGRAMFILES:-C:\\Program Files}\\speakeasy}"
+        install_name="speakeasy.exe"
+    else
+        install_dir="${INSTALL_DIR:-/usr/local/bin}"
+        install_name="speakeasy"
+    fi
+    local install_path="$install_dir/$install_name"
+
+    # Never overwrite the Speakeasy SDK generator CLI, which installs a binary
+    # with the same name.
+    if [ -e "$install_path" ] && ! is_control_plane_cli "$install_path" && ! is_legacy_cli "$install_path"; then
+        error "$install_path already exists and is not the Speakeasy AI Control Plane CLI. It looks like the Speakeasy SDK CLI, which also installs a 'speakeasy' binary. Install to another directory by setting INSTALL_DIR, for example: curl -fsSL https://go.getgram.ai/cli.sh | INSTALL_DIR=\"\$HOME/.local/bin\" bash"
+    fi
+
     # Construct download URLs. Releases made before the CLI was renamed only
-    # publish gram archives, so fall back to those.
+    # publish gram archives, so fall back to those when the speakeasy archive
+    # does not exist.
     local release_url="https://github.com/speakeasy-api/gram/releases/download/${tag_name}"
     local archive_name="speakeasy"
     local filename="${archive_name}_${os}_${arch}.zip"
@@ -211,11 +271,17 @@ main() {
 
     # Download binary archive
     info "Downloading: ${release_url}/${filename}"
-    if ! download "${release_url}/${filename}" "$tmp_dir/$filename" 2>/dev/null; then
+    local status=0
+    download_asset "${release_url}/${filename}" "$tmp_dir/$filename" || status=$?
+    if [ "$status" -eq 2 ]; then
         archive_name="gram"
         filename="${archive_name}_${os}_${arch}.zip"
-        info "Downloading: ${release_url}/${filename}"
-        download "${release_url}/${filename}" "$tmp_dir/$filename"
+        info "No speakeasy archive in ${tag_name}. Downloading: ${release_url}/${filename}"
+        status=0
+        download_asset "${release_url}/${filename}" "$tmp_dir/$filename" || status=$?
+        if [ "$status" -ne 0 ]; then
+            error "No CLI archive for ${os}/${arch} in ${tag_name}"
+        fi
     fi
 
     # Download checksums
@@ -233,29 +299,31 @@ main() {
 
     unzip -q "$tmp_dir/$filename" -d "$tmp_dir"
 
-    # Determine install location
-    local install_dir
+    local binary_name="${archive_name}"
     if [ "$os" = "windows" ]; then
-        install_dir="${PROGRAMFILES:-C:\\Program Files}\\speakeasy"
-        local binary_name="${archive_name}.exe"
-        local install_name="speakeasy.exe"
-    else
-        install_dir="/usr/local/bin"
-        local binary_name="${archive_name}"
-        local install_name="speakeasy"
+        binary_name="${archive_name}.exe"
     fi
 
     # Install binary
     install_binary "$tmp_dir/$binary_name" "$install_dir" "$install_name"
 
-    # Verify installation
-    if command_exists speakeasy; then
-        speakeasy --version
-        printf "\n${GREEN}Success!${NC} The speakeasy CLI has been installed.\n"
-        printf "Run 'speakeasy --help' to get started.\n"
+    # Verify the binary just installed, not whichever speakeasy is first on
+    # PATH. Builds from before the rename have no marker flag.
+    "$install_path" --version
+    if [ "$archive_name" = "speakeasy" ] && ! is_control_plane_cli "$install_path"; then
+        error "$install_path did not identify as the Speakeasy AI Control Plane CLI"
+    fi
+    printf "\n%bSuccess!%b The speakeasy CLI has been installed to %s.\n" "$GREEN" "$NC" "$install_path"
+
+    local on_path
+    on_path=$(command -v speakeasy 2>/dev/null || true)
+    if [ -z "$on_path" ]; then
+        printf "\n%bNote:%b You may need to add %s to your PATH\n" "$YELLOW" "$NC" "$install_dir"
+        printf "Run 'export PATH=\$PATH:%s' or add it to your shell profile.\n" "$install_dir"
+    elif [ "$on_path" != "$install_path" ]; then
+        warn "'speakeasy' on your PATH resolves to $on_path, not $install_path. That may be the Speakeasy SDK CLI. Put $install_dir earlier on your PATH or run $install_path directly."
     else
-        printf "\n${YELLOW}Note:${NC} You may need to add $install_dir to your PATH\n"
-        printf "Run 'export PATH=\$PATH:$install_dir' or add it to your shell profile.\n"
+        printf "Run 'speakeasy --help' to get started.\n"
     fi
 }
 
