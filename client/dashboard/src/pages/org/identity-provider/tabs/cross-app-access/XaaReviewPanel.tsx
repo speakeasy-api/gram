@@ -46,7 +46,9 @@ export function XaaReviewPanel({
       <Text muted small>
         Check for an existing agent connection in Okta first. Reuse it if it
         exists; create a connection only if it is missing. This saves your
-        confirmation in Speakeasy; it does not change or verify Okta.
+        confirmation in Speakeasy; it does not change or verify Okta. Servers
+        that use the same Okta connection share this confirmation and update
+        together.
       </Text>
       <div className="flex flex-wrap items-center gap-2">
         {connectionsUrl && (

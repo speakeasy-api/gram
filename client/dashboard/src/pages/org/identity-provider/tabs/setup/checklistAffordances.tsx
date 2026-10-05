@@ -5,6 +5,7 @@ import { connectionStep, type LiveConnection } from "../../connectionView";
 import { CopyableValue } from "./OktaConnectionDetails";
 import { AgentSetupForm, ClientIdForm } from "./OktaConnectionForms";
 import { oktaAdminConsoleUrl } from "../../oktaConsoleLinks";
+import { READINESS_SECTION_ID } from "../../tabs";
 
 function adminConsoleLink(connection: LiveConnection): JSX.Element {
   return (
@@ -43,7 +44,7 @@ export const STEP_AFFORDANCES: StepAffordances = {
   first_resource_connection: () => (
     <div>
       <Button asChild variant="secondary">
-        <a href="#readiness">Review server readiness below</a>
+        <a href={`#${READINESS_SECTION_ID}`}>Go to Server connections</a>
       </Button>
     </div>
   ),
