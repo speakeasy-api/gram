@@ -9,7 +9,6 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -268,30 +267,53 @@ func TestBuildAuthorizationUrl_ConcurrentRestartsFallBackOnce(t *testing.T) {
 
 	const restarts = 16
 	var wg sync.WaitGroup
-	resources := make(chan string, restarts)
-	for range restarts {
+	authURLs := make([]string, restarts)
+	errs := make([]error, restarts)
+	for i := range restarts {
 		wg.Go(func() {
-			authURL, err := f.mgr.BuildAuthorizationUrl(t.Context(), f.parent, f.client)
-			if !assert.NoError(t, err) {
-				return
-			}
-			parsed, err := url.Parse(authURL)
-			if !assert.NoError(t, err) {
-				return
-			}
-			resources <- parsed.Query().Get("resource")
+			authURLs[i], errs[i] = f.mgr.BuildAuthorizationUrl(t.Context(), f.parent, f.client)
 		})
 	}
 	wg.Wait()
-	close(resources)
 
 	fallbacks := 0
-	for resource := range resources {
-		if resource == "" {
+	for i, authURL := range authURLs {
+		require.NoError(t, errs[i])
+		parsed, err := url.Parse(authURL)
+		require.NoError(t, err)
+		if parsed.Query().Get("resource") == "" {
 			fallbacks++
 		}
 	}
 	require.Equal(t, 1, fallbacks, "exactly one restart takes the window's resource-less leg")
+}
+
+// A restart that read no marker but records its leg late cannot reset a
+// window another restart has since spent. B and C both start against no
+// marker; B records first, A then takes the fallback, and C records last.
+func TestBuildAuthorizationUrl_LateRecordCannotResetSpentWindow(t *testing.T) {
+	t.Parallel()
+	f := newStrandedFixture(t)
+	ctx := t.Context()
+
+	decideAndMint := func() (strandedLegDecision, string) {
+		decision := f.mgr.decideStrandedLeg(ctx, f.parent, f.client)
+		require.False(t, decision.fallback)
+		_, stateID, err := f.mgr.mintAuthorization(ctx, f.parent, f.client, false)
+		require.NoError(t, err)
+		return decision, stateID
+	}
+	decisionB, stateB := decideAndMint()
+	decisionC, stateC := decideAndMint()
+	f.mgr.recordLeg(ctx, f.client, decisionB, stateB)
+
+	resource, _ := f.start(t)
+	require.Empty(t, resource, "A takes the window's fallback after B's unanswered leg")
+
+	f.mgr.recordLeg(ctx, f.client, decisionC, stateC)
+
+	resource, _ = f.start(t)
+	require.Equal(t, strandedTestResource, resource, "C's late record did not reset the spent window")
 }
 
 // Once the window expires a new one starts, with its own single fallback.

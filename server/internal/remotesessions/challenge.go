@@ -888,18 +888,7 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	if err != nil {
 		return "", err
 	}
-	if decision.record != nil {
-		decision.record.StateID = stateID
-		if decision.record.TTL() > 0 {
-			if err := m.pendingLegs.Store(ctx, *decision.record); err != nil {
-				m.logger.WarnContext(ctx, "record remote login leg",
-					attr.SlogOAuthIssuer(client.IssuerURL),
-					attr.SlogRemoteSessionClientID(client.ID.String()),
-					attr.SlogError(err),
-				)
-			}
-		}
-	}
+	m.recordLeg(ctx, client, decision, stateID)
 	return authURL, nil
 }
 

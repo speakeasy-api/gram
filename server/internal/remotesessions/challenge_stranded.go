@@ -18,9 +18,9 @@ import (
 // the leg's state has expired, so whether the issuer answered is unknowable.
 const strandedLegWindow = 10 * time.Minute
 
-// pendingResourceLeg remembers the last resource-bearing authorize leg one
-// subject started for one client, issuer, and resource, so a restart can tell
-// whether the issuer ever redirected back.
+// pendingResourceLeg remembers the last resource-bearing authorize leg for one
+// pendingResourceLegKey binding, so a restart can tell whether the issuer ever
+// redirected back.
 //
 // Some issuers answer a resource they refuse with their own error page instead
 // of an invalid_target redirect, so retryWithoutResource never runs and the
@@ -29,9 +29,11 @@ const strandedLegWindow = 10 * time.Minute
 //
 // The fallback is once per window: FallbackTaken stays set until ExpiresAt,
 // which is anchored to the first leg and never extended, so a window holds at
-// most one resource-less leg and no resource/no-resource oscillation.
+// most one resource-less leg and no resource/no-resource oscillation. Every
+// write is conditional on the marker the writer read, so a concurrent restart
+// cannot reset a window another restart has spent.
 type pendingResourceLeg struct {
-	// Key is the hashed subject, client, issuer, and resource binding.
+	// Key is the pendingResourceLegKey hash.
 	Key string `json:"key"`
 
 	// StateID is the RemoteLoginState the leg was minted with. The callback
@@ -96,6 +98,11 @@ type strandedLegDecision struct {
 	// record is the marker to store, with the minted leg's state, once the
 	// leg is minted; nil stores none.
 	record *pendingResourceLeg
+
+	// expected is the marker record replaces, compared and swapped so a
+	// marker another restart wrote meanwhile wins; nil means there was none,
+	// and record is stored only if that is still so.
+	expected *pendingResourceLeg
 }
 
 // decideStrandedLeg inspects the subject's prior leg for this binding. It
@@ -104,7 +111,7 @@ type strandedLegDecision struct {
 // window's fallback is unspent.
 func (m *ChallengeManager) decideStrandedLeg(ctx context.Context, parent ParentChallenge, client Client) strandedLegDecision {
 	if !sendsResource(parent, client) {
-		return strandedLegDecision{fallback: false, record: nil}
+		return strandedLegDecision{fallback: false, record: nil, expected: nil}
 	}
 	logger := m.logger.With(
 		attr.SlogOAuthIssuer(client.IssuerURL),
@@ -118,12 +125,12 @@ func (m *ChallengeManager) decideStrandedLeg(ctx context.Context, parent ParentC
 	prior, err := m.pendingLegs.Get(ctx, pendingResourceLeg{Key: key, StateID: "", FallbackTaken: false, ExpiresAt: time.Time{}}.CacheKey())
 	switch {
 	case errors.Is(err, redisCache.ErrCacheMiss):
-		return strandedLegDecision{fallback: false, record: fresh}
+		return strandedLegDecision{fallback: false, record: fresh, expected: nil}
 	case err != nil:
 		// Recording nothing keeps a marker the read could not see, so a
 		// transient failure cannot reset a spent fallback.
 		logger.WarnContext(ctx, "read prior remote login leg", attr.SlogError(err))
-		return strandedLegDecision{fallback: false, record: nil}
+		return strandedLegDecision{fallback: false, record: nil, expected: nil}
 	}
 
 	pending := m.legPending(ctx, logger, prior.StateID)
@@ -137,10 +144,10 @@ func (m *ChallengeManager) decideStrandedLeg(ctx context.Context, parent ParentC
 		if pending {
 			logger.WarnContext(ctx, "identity provider never answered a login and this window's resource-less retry is spent; sending the resource")
 		}
-		return strandedLegDecision{fallback: false, record: &prior}
+		return strandedLegDecision{fallback: false, record: &prior, expected: &prior}
 	}
 	if !pending {
-		return strandedLegDecision{fallback: false, record: fresh}
+		return strandedLegDecision{fallback: false, record: fresh, expected: &prior}
 	}
 
 	// Claim the fallback atomically so concurrent restarts that all read the
@@ -151,13 +158,40 @@ func (m *ChallengeManager) decideStrandedLeg(ctx context.Context, parent ParentC
 	swapped, err := m.pendingLegs.CompareAndSwap(ctx, prior, claimed)
 	if err != nil {
 		logger.WarnContext(ctx, "claim resource-less remote login retry", attr.SlogError(err))
-		return strandedLegDecision{fallback: false, record: nil}
 	}
-	if !swapped {
-		return strandedLegDecision{fallback: false, record: nil}
+	if err != nil || !swapped {
+		return strandedLegDecision{fallback: false, record: nil, expected: nil}
 	}
 	logger.WarnContext(ctx, "identity provider never answered a login that sent the RFC 8707 resource parameter; retrying the login without it",
 		attr.SlogOAuthResource(parent.Resource),
 	)
-	return strandedLegDecision{fallback: true, record: &claimed}
+	return strandedLegDecision{fallback: true, record: &claimed, expected: &claimed}
+}
+
+// recordLeg stores decision's marker for the leg minted with stateID, only if
+// the marker decideStrandedLeg read is still the one cached. A lost write
+// leaves the other restart's marker, and this leg sent the resource unless it
+// is the fallback, whose claim already spent the window.
+func (m *ChallengeManager) recordLeg(ctx context.Context, client Client, decision strandedLegDecision, stateID string) {
+	if decision.record == nil {
+		return
+	}
+	record := *decision.record
+	record.StateID = stateID
+	if record.TTL() <= 0 {
+		return
+	}
+	var err error
+	if decision.expected == nil {
+		_, err = m.pendingLegs.StoreIfAbsent(ctx, record)
+	} else {
+		_, err = m.pendingLegs.CompareAndSwap(ctx, *decision.expected, record)
+	}
+	if err != nil {
+		m.logger.WarnContext(ctx, "record remote login leg",
+			attr.SlogOAuthIssuer(client.IssuerURL),
+			attr.SlogRemoteSessionClientID(client.ID.String()),
+			attr.SlogError(err),
+		)
+	}
 }
