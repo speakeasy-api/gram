@@ -545,9 +545,10 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	// there, landing on the same destination. Impersonation sessions stay on
 	// the host that started them.
 	if idpUser.ImpersonatorEmail() == "" {
-		if move, ok := s.organizationHostMove(ctx, orgMetadata.DefaultHost); ok {
+		destination, movable := s.organizationDestination(payload, orgMetadata.Slug)
+		if move, ok := s.organizationHostMove(ctx, orgMetadata.DefaultHost); ok && movable {
 			return &gen.CallbackResult{
-				Location:      move.loginURL(s.organizationDestination(payload, orgMetadata.Slug)),
+				Location:      move.loginURL(destination),
 				SessionToken:  session.SessionID,
 				SessionCookie: session.SessionID,
 			}, nil
@@ -563,15 +564,24 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 
 // organizationDestination is the post-login destination to carry to another
 // host for the organization with slug orgSlug: the sanitized destination from
-// state when it already names that organization, and the organization's root
-// otherwise. Naming the organization makes the second login select the same
-// one, so it does not move the browser again.
-func (s *Service) organizationDestination(payload *gen.CallbackPayload, orgSlug string) string {
+// state when it names that organization, and the organization's root when
+// there is none. Naming the organization makes the second login select the
+// same one, so it does not move the browser again.
+//
+// ok is false for any other destination, and the login stays on this host.
+// Those are hand-offs that must finish where they started, such as the CLI
+// login ("/?from_cli=true&cli_callback_url=…") or pages that keep a token in
+// this host's session storage, and destinations naming an organization the
+// login did not select. The dashboard moves the browser later if it needs to.
+func (s *Service) organizationDestination(payload *gen.CallbackPayload, orgSlug string) (string, bool) {
 	destination := s.destinationFromState(payload)
-	if destination == "" || s.organizationSlugFromDestinationURL(destination) != orgSlug {
-		return "/" + url.PathEscape(orgSlug)
+	if destination == "" {
+		return "/" + url.PathEscape(orgSlug), true
 	}
-	return destination
+	if s.organizationSlugFromDestinationURL(destination) != orgSlug {
+		return "", false
+	}
+	return destination, true
 }
 
 func (s *Service) acceptPendingInvitationForMember(ctx context.Context, organizationID, inviteeEmail, gramUserID, workosUserID string) error {

@@ -90,6 +90,20 @@ func TestService_Callback_OrganizationHost(t *testing.T) {
 			want:        "http://localhost:3000/dashboard",
 		},
 		{
+			name:        "CLI login hand-off stays",
+			defaultHost: new(extraHost),
+			origin:      serverOrigin,
+			destination: "/?from_cli=true&cli_callback_url=http%3A%2F%2Flocalhost%3A1234",
+			want:        "/?from_cli=true&cli_callback_url=http%3A%2F%2Flocalhost%3A1234",
+		},
+		{
+			name:        "token hand-off page stays",
+			defaultHost: new(extraHost),
+			origin:      serverOrigin,
+			destination: "/shadow-mcp/request",
+			want:        "/shadow-mcp/request",
+		},
+		{
 			name:        "already on the organization's host",
 			defaultHost: new(extraHost),
 			origin:      originAt(requestorigin.SurfacePlatform, extraHost),
@@ -143,9 +157,9 @@ func TestService_Callback_OrganizationHost(t *testing.T) {
 	}
 }
 
-// A destination that cannot select the organization is replaced by the
-// organization's root, so the login on the other host selects the same
-// organization and does not move the browser again.
+// A login without a usable destination moves to the organization's root, so
+// the login on the other host selects the same organization and does not move
+// the browser again.
 func TestService_Callback_OrganizationHostNamesTheOrganization(t *testing.T) {
 	t.Parallel()
 
@@ -163,7 +177,7 @@ func TestService_Callback_OrganizationHostNamesTheOrganization(t *testing.T) {
 		ID:          "speakeasy-team-123",
 	}))
 
-	for _, destination := range []string{"", "/not-a-member/mcp", "//evil.example.net/x"} {
+	for _, destination := range []string{"", "//evil.example.net/x"} {
 		ctx := requestorigin.WithContext(ctx, originAt(requestorigin.SurfacePlatform, testServerURL.String()))
 		ctx, stateParam := instance.stateWithNonce(ctx, t, destination)
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
