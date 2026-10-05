@@ -8,8 +8,9 @@ package aivendors
 // no recourse. Be generous — an extra document costs a string comparison.
 //
 // Verify every document live before it lands (HTTP 200, valid JSON, client_id
-// equal to URL, token_endpoint_auth_method "none") and record the date above
-// the product. Every product with Signatures is also a scan target.
+// equal to URL, token_endpoint_auth_method "none" OR "private_key_jwt" with
+// exactly one of jwks or jwks_uri) and record the date above the product.
+// Every product with Signatures is also a scan target.
 //
 // Declaration order is load-bearing: wildcards match in order, so reordering
 // can change which entry a client_id is attributed to.
@@ -489,6 +490,29 @@ var registry = []Product{
 		Documents: []Document{{
 			URL:         "https://api.conductor.build/oauth/client-metadata.json",
 			DisplayName: "Conductor",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-10-05: HTTP 200, self-referential client_id,
+	// token_endpoint_auth_method "private_key_jwt" with jwks_uri. This is a
+	// wildcard: Vercel Connect mints one document per connector, with
+	// server-generated IDs (scl_...). Sibling paths return 404 (/connectors,
+	// /connectors/a/b), so the namespace is bounded. The single redirect_uri
+	// is Vercel's own /callback. client_name is user-chosen (the connector
+	// owner's chosen name), so the catalog DisplayName ("Vercel Connect") is
+	// what attributes the client on consent screens and in the dashboard.
+	{
+		ID:              "vercel-connect",
+		VendorKey:       "vercel",
+		DisplayName:     "Vercel Connect",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Documents: []Document{{
+			URL:         "https://connect.vercel.com/connectors/*",
+			DisplayName: "Vercel Connect (connectors)",
 			Enabled:     true,
 		}},
 	},
