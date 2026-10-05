@@ -14,10 +14,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 )
 
-// enqueueMessages publishes creation events in the insertion transaction.
+// enqueueMessageEvents publishes creation events in the insertion transaction.
 // Callers exclude correlated promotions and conflict no-ops. Consumers resolve
 // message content from storage; publication never reads or uploads body assets.
-func (w *ChatMessageWriter) enqueueMessages(ctx context.Context, tx repo.DBTX, organizationID string, projectID uuid.UUID, writes []MessageWrite, occurredAt time.Time) error {
+func (w *ChatMessageWriter) enqueueMessageEvents(ctx context.Context, tx repo.DBTX, organizationID string, projectID uuid.UUID, writes []MessageWrite, occurredAt time.Time) error {
 	if len(writes) == 0 {
 		return nil
 	}

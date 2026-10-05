@@ -499,7 +499,7 @@ func (w *ChatMessageWriter) writeMessages(ctx context.Context, projectID uuid.UU
 	if err := metering.Enqueue(ctx, tx, readings); err != nil {
 		return 0, nil, fmt.Errorf("enqueue chat message readings: %w", err)
 	}
-	if err := w.enqueueMessages(ctx, tx, organizationID, projectID, writes, occurredAt); err != nil {
+	if err := w.enqueueMessageEvents(ctx, tx, organizationID, projectID, writes, occurredAt); err != nil {
 		return 0, nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -611,7 +611,7 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		if err := metering.Enqueue(ctx, tx, readings); err != nil {
 			return 0, fmt.Errorf("enqueue correlated chat message reading: %w", err)
 		}
-		if err := w.enqueueMessages(ctx, tx, organizationID, projectID, writes, occurredAt); err != nil {
+		if err := w.enqueueMessageEvents(ctx, tx, organizationID, projectID, writes, occurredAt); err != nil {
 			return 0, err
 		}
 	}
@@ -745,7 +745,7 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 			}.Build(), PublicID: uuid.Nil, Attributes: nil}); err != nil {
 				return false, fmt.Errorf("enqueue imported session observation: %w", err)
 			}
-			if err := w.enqueueMessages(ctx, tx, organizationID, projectID, publicationWrites, occurredAt); err != nil {
+			if err := w.enqueueMessageEvents(ctx, tx, organizationID, projectID, publicationWrites, occurredAt); err != nil {
 				return false, err
 			}
 			if err := tx.Commit(ctx); err != nil {
@@ -798,7 +798,7 @@ func (w *ChatMessageWriter) WriteInTx(ctx context.Context, tx repo.DBTX, writes 
 	if err := metering.Enqueue(ctx, tx, readings); err != nil {
 		return 0, fmt.Errorf("enqueue chat message readings: %w", err)
 	}
-	if err := w.enqueueMessages(ctx, tx, organizationID, projectID, writes, occurredAt); err != nil {
+	if err := w.enqueueMessageEvents(ctx, tx, organizationID, projectID, writes, occurredAt); err != nil {
 		return 0, err
 	}
 	return n, nil
@@ -873,7 +873,7 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	if err := metering.Enqueue(ctx, tx, readings); err != nil {
 		return fmt.Errorf("enqueue chat turn readings: %w", err)
 	}
-	if err := w.enqueueMessages(ctx, tx, organizationID, projectID, writes, occurredAt); err != nil {
+	if err := w.enqueueMessageEvents(ctx, tx, organizationID, projectID, writes, occurredAt); err != nil {
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
