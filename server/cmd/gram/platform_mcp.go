@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/setupcorpus"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -88,7 +89,11 @@ type platformMCPConfig struct {
 	NetworkAccessAdmission networkaccess.EligibilityChecker
 	PublicationRequests    plugins.PublicationRequests
 	TemporalEnv            *tenv.Environment
-	Skills                 platformmcp.SkillsManagement
+	// ProjectCore is the projects management API's create and rename path,
+	// shared so create_project and rename_project make exactly the projects
+	// the dashboard makes. Nil keeps both tools visible as unavailable.
+	ProjectCore *projects.Core
+	Skills      platformmcp.SkillsManagement
 	// CallbackOrigin is the origin of the redirect_uri a remote session client
 	// created now registers. The setup guides show that URL.
 	CallbackOrigin *url.URL
@@ -462,7 +467,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
-		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore))
+		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
+		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
 	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
 	attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
@@ -740,6 +746,28 @@ func newPlatformMCPToolExposure(config platformMCPConfig, authorizer platformmcp
 	})
 }
 
+// newPlatformMCPProjectLifecycle composes create_project and rename_project
+// over the projects management API's own core. A composition failure leaves
+// the tools registered as stable refusals rather than removing them from the
+// catalogue.
+func newPlatformMCPProjectLifecycle(config platformMCPConfig, authorizer platformmcp.Authorizer, limitStore ratelimit.Store) *platformmcp.ProjectLifecycleService {
+	if config.ProjectCore == nil {
+		return nil
+	}
+	service, err := platformmcp.NewProjectLifecycleService(
+		config.Logger, config.DB, config.ProjectCore, config.Authz, authorizer,
+		platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.ProjectMutationConnectionLimitName, ratelimit.PerMinute(platformmcp.ProjectMutationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.ProjectMutationOrganizationLimitName, ratelimit.PerMinute(platformmcp.ProjectMutationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
+	)
+	if err != nil {
+		config.Logger.WarnContext(context.Background(), "Platform MCP project lifecycle unavailable", attr.SlogError(err))
+		return nil
+	}
+	return service
+}
+
 func newPlatformMCPConnectionMutations(config platformMCPConfig) *platformmcp.MCPConnectionMutationService {
 	service, err := platformmcp.NewMCPConnectionMutationService(
 		config.DB,
@@ -1001,7 +1029,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
-		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore))
+		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
+		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
 	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
 	if shadowErr != nil {
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(shadowErr))

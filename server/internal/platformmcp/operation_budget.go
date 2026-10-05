@@ -51,6 +51,8 @@ const (
 	DataExportToggleOrganizationLimitName         = "platform-mcp-data-export-toggle-organization"
 	PluginRepublishConnectionLimitName            = "platform-mcp-plugin-republish-connection"
 	PluginRepublishOrganizationLimitName          = "platform-mcp-plugin-republish-organization"
+	ProjectMutationConnectionLimitName            = "platform-mcp-project-mutation-connection"
+	ProjectMutationOrganizationLimitName          = "platform-mcp-project-mutation-organization"
 )
 
 const (
@@ -155,6 +157,14 @@ const (
 	// like the other package-affecting writes rather than like a read.
 	PluginRepublishesPerConnectionPerMinute   = 5
 	PluginRepublishesPerOrganizationPerMinute = 50
+
+	// ProjectMutationsPer* bound creating and renaming projects on their own
+	// allowance, shared by both tools so alternating between them cannot
+	// multiply the write rate. A person sets up a handful of projects at a
+	// time; a loop creating them by the dozen is a runaway agent, and every
+	// created project is a row an administrator has to delete by hand.
+	ProjectMutationsPerConnectionPerMinute   = 5
+	ProjectMutationsPerOrganizationPerMinute = 50
 
 	// DrilldownRowsPerConnectionPerWindow and
 	// DrilldownMetricQueriesPerConnectionPerWindow are the second cap the

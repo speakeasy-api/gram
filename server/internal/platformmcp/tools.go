@@ -214,7 +214,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"Keep the words that collide apart. \"Connect\" is linking an MCP server to its OAuth provider; \"add to a plugin\" is plugin membership; do not call either one attaching. Say an MCP server was \"added to the project\" rather than \"registered\", so it is not mistaken for OAuth dynamic client registration. When a diagnosis blames the calling MCP client, say \"the app making the calls\", never bare \"client\".",
 			"# Rules",
 			"Risk policy audiences are positive user/role grants, not exclusions. Read the exact policy and obtain confirmation before changing its audience. Self-removal and effective exclusion are unavailable pending organization-scoped coordination of audience grants; remove_self_from_risk_policy always refuses before database transactions or receipt replay. Never infer a human from managed-assistant attribution. For self-removal requests, do not bypass the refusal with an audience replacement, policy disablement, role change, or risk exclusion. For approved incremental user/ROLE audience changes, external organization admins can use change_risk_policy_audience with confirmed bounded add_principals/remove_principals, a fresh expected_version and a stable idempotency_key. It refuses Everyone deltas and empty resulting audiences and only changes exact positive grants; it does not prove effective exclusion. Managed assistants cannot invoke it or read exact audiences. General audience replacements require confirmation of the complete desired audience and must not be presented as Everyone-except-one or role exceptions. Re-read the policy after a write; receipt replay is historical evidence, not proof of current state.",
-			"Use this server to inspect the selected organization and manage reviewed MCP servers in an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately.",
+			"Use this server to inspect the selected organization and manage reviewed MCP servers in an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. When no listed project fits, or there is none yet, an organization administrator can create one here instead of leaving for the dashboard: ask for the exact name, confirm it, and create the project, which starts empty. Its slug is derived from the name and cannot be chosen; a rename changes only the display name and keeps the slug. Renaming a project needs only write access to that project, as in the dashboard, not organization administrator access. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately.",
 			"Use get_mcp_readiness with the returned registration ID to inspect persisted readiness. If readiness says an upstream identity provider is missing, ask the user to explicitly confirm and then call attach_platform_mcp_identity_provider; the server derives the provider from the persisted reviewed MCP source and returns its non-secret provider_url plus an Inspect authorization_url for the user to use Connect or Authorize. Immediately present authorization_url as the exact clickable link—never say a link is above or ask the user to confirm an unspecified authorization action.",
 			"Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization.",
 			"Setup also decides which MCP clients may sign in to the new server: read get_mcp_client_admission, explain in plain words which apps that lets in, and only change it with set_mcp_client_admission after the user explicitly confirms.",
@@ -268,6 +268,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		}
 		registerToolExposureTools(reg, postgresReader.toolExposure, reader)
 		registerCreateMCPFromFunctionsTool(reg, postgresReader.toolExposure)
+		registerProjectLifecycleTools(reg, postgresReader.projectLifecycle)
 		if postgresReader.reviewRequests == nil {
 			registerUnavailableReviewRequestTools(reg)
 		} else {
@@ -311,6 +312,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerUnavailableNetworkIngressTool(reg)
 		registerToolExposureTools(reg, nil, reader)
 		registerCreateMCPFromFunctionsTool(reg, nil)
+		registerProjectLifecycleTools(reg, nil)
 		registerUnavailableReviewRequestTools(reg)
 		registerRiskAnalysisStatusTool(reg, nil)
 		registerRiskFindingsTool(reg, nil)

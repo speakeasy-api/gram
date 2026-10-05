@@ -3202,6 +3202,73 @@ func TestGeneratePlatformMCPPackageGatesRemoteURLProviderAttachment(t *testing.T
 	require.NotContains(t, workflow, "when inspection reported `authentication_required`, ask for explicit confirmation")
 }
 
+// A first-run conversation has no project to choose from, so the onboarding
+// workflows must offer to create one through the Platform MCP instead of
+// stopping. The offer is gated on the tool being present, because a managed
+// project assistant does not have it, and the creation happens only after
+// inspection, so a rejected candidate leaves no empty project behind.
+func TestGeneratePlatformMCPOnboardingWorkflowsOfferProjectCreation(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	const (
+		keyPhrase     = "choose one idempotency key for this create; pass that same key on the preview and on the confirmed call"
+		previewPhrase = "that key, and `confirmed: false` to preview it"
+		confirmPhrase = "After the user confirms the name and slug"
+		createPhrase  = "call `create_project` again with the same name, the same key, and `confirmed: true`"
+	)
+	for path, extra := range map[string][]string{
+		"skills/add-mcp-from-catalog/SKILL.md": {
+			"do not create it yet",
+			"still wants this candidate after inspection",
+		},
+		"skills/add-mcp-from-remote-url/SKILL.md": {
+			"Confirming the new project's name is not consent to register",
+			"confirm this exact URL in that exact new project",
+		},
+	} {
+		content := files["speakeasy/"+path]
+		require.NotEmpty(t, content, path)
+		require.Equal(t, content, files["agent-plugins/speakeasy/"+path], path)
+		workflow := string(content)
+		for _, required := range append([]string{
+			"Only when `create_project` is in your tool list",
+			"A managed project assistant has no `create_project` tool and always registers in its own project, so never offer it there",
+			// The slug is derived, never chosen, and permanent. The tool's
+			// unconfirmed preview is the only source of it, so the workflow
+			// must not describe the derivation in its own words.
+			// One key covers the preview and the confirmed call, because the
+			// key is a required input on both and the preview records
+			// nothing under it.
+			keyPhrase,
+			"Use a fresh key only for a new attempt after a refusal",
+			previewPhrase,
+			"Do not work the slug out yourself",
+			confirmPhrase,
+			createPhrase,
+			"A `conflict` refusal means a project already holds that slug and nothing was created",
+			"organization administrator access",
+			"say so rather than choosing another project",
+		}, extra...) {
+			require.Contains(t, workflow, required, path)
+		}
+		require.NotContains(t, workflow, "punctuation dropped", "%s must not hand-derive the slug", path)
+		listAt := strings.Index(workflow, "`list_projects`")
+		inspectAt := strings.Index(workflow, "Call `inspect_mcp_candidate`")
+		previewAt := strings.Index(workflow, previewPhrase)
+		confirmAt := strings.Index(workflow, confirmPhrase)
+		createAt := strings.Index(workflow, createPhrase)
+		for name, at := range map[string]int{"list_projects": listAt, "inspection": inspectAt, "preview": previewAt, "confirmation": confirmAt, "confirmed create": createAt} {
+			require.GreaterOrEqual(t, at, 0, "%s is missing the %s step", path, name)
+		}
+		require.Less(t, listAt, createAt, "%s must list the existing projects before creating one", path)
+		require.Less(t, inspectAt, previewAt, "%s must inspect before starting project creation", path)
+		require.Less(t, strings.Index(workflow, keyPhrase), previewAt, "%s must choose the key before the preview uses it", path)
+		require.Less(t, previewAt, confirmAt, "%s must preview the slug before asking for confirmation", path)
+		require.Less(t, confirmAt, createAt, "%s must get the user's confirmation before the confirmed create", path)
+	}
+}
+
 // The catalogue workflow also runs in managed project assistants, which do not
 // have create_plugin. Offering a new plugin there would send the assistant to
 // a tool it cannot call, so the offer is gated on the tool being present and
