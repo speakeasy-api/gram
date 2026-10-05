@@ -26,7 +26,7 @@ export default function Login(): JSX.Element {
         window.location.href = buildLoginRedirectURL(redirectTo);
         return;
       }
-      if (redirectTo && /^\/mcp\/[^/?#]+\/install(\?|$)/.test(redirectTo)) {
+      if (redirectTo && /^\/mcp\/[^/?#]+\/install([?#]|$)/.test(redirectTo)) {
         // Server-rendered install page, not a dashboard route.
         window.location.replace(redirectTo);
       } else if (redirectTo) {
