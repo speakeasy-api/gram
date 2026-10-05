@@ -3,19 +3,28 @@ package assistants
 import (
 	"context"
 	"errors"
+
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
 
+const (
+	identityAdmissionIssued           = "issued"
+	identityAdmissionDenied           = "denied"
+	identityAdmissionRetryableError   = "retryable_error"
+	identityAdmissionModeThreadScoped = "THREAD_SCOPED"
+	identityAdmissionModeUnknown      = "UNKNOWN"
+)
+
 func identityAdmissionResult(err error) string {
 	switch {
 	case err == nil:
-		return "issued"
+		return identityAdmissionIssued
 	case errors.Is(err, assistantidentity.ErrActorIneligible), errors.Is(err, assistantidentity.ErrInvalidIdentity), errors.Is(err, assistantidentity.ErrExecutionAdmissionRequired):
-		return "denied"
+		return identityAdmissionDenied
 	default:
-		return "retryable_error"
+		return identityAdmissionRetryableError
 	}
 }
 
@@ -23,9 +32,9 @@ func (s *ServiceCore) recordIdentityAdmission(ctx context.Context, e *assistanti
 	if s.identityAdmission == nil {
 		return
 	}
-	mode, fallback := "LEGACY", false
+	mode, fallback := identityAdmissionModeThreadScoped, false
 	if e != nil {
-		mode = "UNKNOWN"
+		mode = identityAdmissionModeUnknown
 		if e.Mode == assistantidentity.ExecutionWorkload || e.Mode == assistantidentity.ExecutionWorkloadHuman {
 			mode = string(e.Mode)
 		}

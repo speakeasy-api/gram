@@ -176,7 +176,7 @@ func TestIdentityCreationManagedLegacyAndCanonicalDashboard(t *testing.T) {
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	canonical, err := core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, legacy.ID, legacy.Name)
 	require.NoError(t, err)
-	_, err = core.UpgradeAssistantIdentity(t.Context(), "org-test", project, legacy.ID, "user-2")
+	_, err = core.UpgradeAssistantIdentityWithAgent(t.Context(), "org-test", project, legacy.ID, "user-2", assistantidentity.AgentSelection{})
 	require.NoError(t, err)
 	reused, err := core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, legacy.ID, legacy.Name)
 	require.NoError(t, err)
@@ -331,7 +331,7 @@ func TestIdentityUpgradeConcurrentOutcomes(t *testing.T) {
 	var group errgroup.Group
 	for i := range outcomes {
 		group.Go(func() error {
-			record, err := svc.core.UpgradeAssistantIdentity(ctx, "org-test", project, legacy.ID, "user-1")
+			record, err := svc.core.UpgradeAssistantIdentityWithAgent(ctx, "org-test", project, legacy.ID, "user-1", assistantidentity.AgentSelection{})
 			if err == nil {
 				outcomes[i] = *record.IdentityUpgradeOutcome
 			}
@@ -345,7 +345,7 @@ func TestIdentityUpgradeConcurrentOutcomes(t *testing.T) {
 	var repairs errgroup.Group
 	for i := range outcomes {
 		repairs.Go(func() error {
-			record, err := svc.core.UpgradeAssistantIdentity(ctx, "org-test", project, legacy.ID, "user-1")
+			record, err := svc.core.UpgradeAssistantIdentityWithAgent(ctx, "org-test", project, legacy.ID, "user-1", assistantidentity.AgentSelection{})
 			if err == nil {
 				outcomes[i] = *record.IdentityUpgradeOutcome
 			}

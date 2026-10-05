@@ -26,7 +26,7 @@ func TestIdentityDiagnosticsAndProvisioningFeatureGate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "legacy", view.Health)
 	flags.SetFlag(feature.FlagAgentIdentityCredentials, "org-test", true)
-	bound, err := core.UpgradeAssistantIdentity(t.Context(), "org-test", project, legacy.ID, "user-1")
+	bound, err := core.UpgradeAssistantIdentityWithAgent(t.Context(), "org-test", project, legacy.ID, "user-1", assistantidentity.AgentSelection{})
 	require.NoError(t, err)
 	require.Equal(t, "upgraded", *bound.IdentityUpgradeOutcome)
 	view, err = core.identityDiagnostics(t.Context(), bound)
@@ -43,7 +43,7 @@ func TestIdentityDiagnosticsAndProvisioningFeatureGate(t *testing.T) {
 		states[b.TriggerID] = b.State
 	}
 	require.Equal(t, "missing", states[root.String()])
-	again, err := core.UpgradeAssistantIdentity(t.Context(), "org-test", project, legacy.ID, "user-1")
+	again, err := core.UpgradeAssistantIdentityWithAgent(t.Context(), "org-test", project, legacy.ID, "user-1", assistantidentity.AgentSelection{})
 	require.NoError(t, err)
 	require.Equal(t, "repaired", *again.IdentityUpgradeOutcome)
 	require.Equal(t, bound.AgentID, again.AgentID)

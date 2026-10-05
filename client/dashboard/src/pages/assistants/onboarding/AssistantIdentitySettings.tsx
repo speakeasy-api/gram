@@ -68,21 +68,23 @@ export function AssistantIdentitySettings({
       );
     },
   });
-  const legacy = assistant.identityState === "NEVER_CONFIGURED";
+  const agentIdentityIsNotConfigured =
+    assistant.identityState === "NEVER_CONFIGURED";
   const canUpgrade =
     hasScope("project:write", assistant.projectId) &&
     identityFlag.status === "enabled" &&
-    legacy;
+    agentIdentityIsNotConfigured;
 
   if (identityFlag.status !== "enabled") return null;
 
-  if (!legacy) return <ConfiguredIdentity assistant={assistant} />;
+  if (!agentIdentityIsNotConfigured)
+    return <ConfiguredIdentity assistant={assistant} />;
 
   return (
     <div className="space-y-4">
       <Text small muted>
-        This assistant uses legacy authentication bindings. Actions are
-        attributed to the owner.
+        This assistant has no agent identity configured. Actions are attributed
+        to the owner.
       </Text>
       {canUpgrade && (
         <Button size="sm" onClick={() => setConfirming(true)}>

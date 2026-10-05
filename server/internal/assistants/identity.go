@@ -55,12 +55,8 @@ func (s *ServiceCore) hydrateAssistantIdentityState(ctx context.Context, project
 	return nil
 }
 
-// UpgradeAssistantIdentity is opt-in for a legacy assistant. Its creator is
-// retained; the authenticated actor only authorizes provisioning now.
-func (s *ServiceCore) UpgradeAssistantIdentity(ctx context.Context, organizationID string, projectID, assistantID uuid.UUID, actorUserID string) (assistantRecord, error) {
-	return s.UpgradeAssistantIdentityWithAgent(ctx, organizationID, projectID, assistantID, actorUserID, assistantidentity.AgentSelection{AgentID: uuid.Nil, Name: ""})
-}
-
+// UpgradeAssistantIdentityWithAgent configures an agent identity for an assistant.
+// Its creator is retained; the authenticated actor authorizes provisioning.
 func (s *ServiceCore) UpgradeAssistantIdentityWithAgent(ctx context.Context, organizationID string, projectID, assistantID uuid.UUID, actorUserID string, selection assistantidentity.AgentSelection) (assistantRecord, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
