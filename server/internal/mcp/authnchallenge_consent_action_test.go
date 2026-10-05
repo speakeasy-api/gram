@@ -538,8 +538,10 @@ func TestServeConsentAction_ConnectSendsTheUpstreamsResourceSpelling(t *testing.
 			t.Parallel()
 
 			ctx, ti := newTestMCPService(t)
+			var probes atomic.Int64
 			if tc.published != "" {
 				ti.service.SetProtectedResourceFetcher(func(_ context.Context, resourceURL string) (wellknown.OAuthProtectedResourceMetadata, error) {
+					probes.Add(1)
 					if resourceURL != tc.registered {
 						return wellknown.OAuthProtectedResourceMetadata{}, fmt.Errorf("unexpected probe of %s", resourceURL)
 					}
@@ -576,6 +578,9 @@ func TestServeConsentAction_ConnectSendsTheUpstreamsResourceSpelling(t *testing.
 
 			loc := postConnectAction(t, fx, clientID)
 			require.Equal(t, tc.want, loc.Query().Get("resource"), "authorize leg")
+			if tc.published != "" {
+				require.Equal(t, int64(1), probes.Load(), "the upstream's metadata was read")
+			}
 
 			completeRemoteLogin(t, newConsentCallbackManager(t, ti), loc)
 			require.Equal(t, consentExchangeCapture{HasResource: true, Resource: tc.want}, posted.Load(), "token leg")
