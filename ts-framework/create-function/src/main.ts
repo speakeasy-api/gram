@@ -249,7 +249,12 @@ async function init(argv: string[]): Promise<void> {
 
   if (installCli) {
     tlog.message("Installing Gram CLI");
-    await $`which speakeasy || (curl -fsSL https://go.getgram.ai/cli.sh | bash; speakeasy auth)`;
+    // A `speakeasy` on PATH may be the Speakeasy SDK generator CLI, which
+    // shares the name, so only skip the installer when the binary prints the
+    // AI Control Plane CLI marker. The installer puts the CLI in
+    // /usr/local/bin, so authenticate with that path rather than whatever
+    // `speakeasy` comes first on PATH.
+    await $`speakeasy --control-plane-cli 2>/dev/null | grep -qx speakeasy-ai-control-plane-cli || (curl -fsSL https://go.getgram.ai/cli.sh | bash && /usr/local/bin/speakeasy auth)`;
   }
 
   let successMessage = `All done! Run \`cd ${dir} && ${packageManager} run build\` to build your first Gram Function.`;
