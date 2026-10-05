@@ -27,7 +27,12 @@ const HOST_MOVE_EXEMPT_PATHS = [
  * to a local callback and must finish on the host the CLI opened.
  */
 function isCliHandoff(current: CurrentLocation): boolean {
-  return new URLSearchParams(current.search).get("from_cli") === "true";
+  const params = new URLSearchParams(current.search);
+  return (
+    current.pathname === "/" &&
+    params.get("from_cli") === "true" &&
+    Boolean(params.get("cli_callback_url"))
+  );
 }
 
 function isExempt(current: CurrentLocation): boolean {

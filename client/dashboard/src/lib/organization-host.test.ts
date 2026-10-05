@@ -70,6 +70,20 @@ describe("organizationHostRedirectTarget", () => {
     ).toBe(undefined);
   });
 
+  it.each([
+    ["without a callback URL", "/", "?from_cli=true"],
+    ["on a deep link", "/acme/mcp", "?from_cli=true&cli_callback_url=x"],
+  ])("still moves a from_cli page %s", (_name, pathname, search) => {
+    expect(
+      organizationHostRedirectTarget("https://ai.example.com", {
+        ...current,
+        pathname,
+        search,
+        hash: "",
+      }),
+    ).toBe(`https://ai.example.com${pathname}${search}`);
+  });
+
   it("still moves a page below a hand-off path's name", () => {
     expect(
       organizationHostRedirectTarget("https://ai.example.com", {
