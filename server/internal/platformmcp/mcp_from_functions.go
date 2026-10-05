@@ -304,7 +304,12 @@ func (s *MCPToolExposureService) finishMCPFromFunctions(ctx context.Context, pri
 		PublicationRequest:   stored.Publication, PublishSignal: "not_requested", IndexSignal: "not_required",
 		Receipt: riskMutationToolReceipt(receipt),
 	}
-	if stored.AddedToDefaultPlugin && stored.Publication != string(plugins.ProjectPublicationNotConfigured) && stored.Publication != string(plugins.ProjectPublicationEnqueued) {
+	// Signalled for every outcome but enqueued, which is the one case
+	// SignalPluginPublishAfterRequest itself skips. not_configured in
+	// particular still needs it: with emission enabled it means the project
+	// has no marketplace connection yet, and the publish can create that first
+	// repository, exactly as the dashboard's first-server path does.
+	if stored.AddedToDefaultPlugin && stored.Publication != string(plugins.ProjectPublicationEnqueued) {
 		if s.publisher == nil {
 			output.PublishSignal = "unavailable"
 		} else if err := plugins.SignalPluginPublishAfterRequest(ctx, s.publisher, plugins.ProjectPublicationRequestOutcome(stored.Publication), project.ID, principal.UserID); err != nil {

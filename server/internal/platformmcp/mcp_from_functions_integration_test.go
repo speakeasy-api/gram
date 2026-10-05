@@ -347,6 +347,37 @@ func TestCreateMCPFromFunctionsReportsTheFirstServerJoiningTheDefaultPlugin(t *t
 	require.Equal(t, "not_requested", second.PublicationRequest)
 }
 
+type recordingPublishSignaler struct{ projects []uuid.UUID }
+
+func (r *recordingPublishSignaler) SignalPluginPublish(_ context.Context, projectID uuid.UUID, _ string) error {
+	r.projects = append(r.projects, projectID)
+	return nil
+}
+
+// With publication enabled but no marketplace connection yet, the request is
+// recorded as not_configured. The publish can still create that first
+// repository, so the first server must request it promptly, as the dashboard
+// does, rather than wait for the periodic sweep.
+func TestCreateMCPFromFunctionsRequestsTheFirstPublishWithoutAMarketplaceConnection(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_create_from_functions_first_publish")
+	ctx = fixture.createFromFunctionsContext(ctx)
+	require.NoError(t, toolsetsrepo.New(fixture.conn).SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{
+		McpEnabled: false, ID: fixture.toolsetID, ProjectID: fixture.project.ID,
+	}))
+	signaler := &recordingPublishSignaler{}
+	fixture.service.publication = plugins.PublicationRequests{Enabled: true}
+	fixture.service.publisher = signaler
+
+	created, err := fixture.service.CreateMCPFromFunctions(ctx, fixture.principal, fixture.createInput("First Desk", fixture.tools[0]))
+	require.NoError(t, err)
+	require.True(t, created.AddedToDefaultPlugin)
+	require.Equal(t, string(plugins.ProjectPublicationNotConfigured), created.PublicationRequest, "the project has no marketplace connection yet")
+	require.Equal(t, []uuid.UUID{fixture.project.ID}, signaler.projects, "the initial publish was requested for the project")
+	require.Equal(t, "best_effort_requested", created.PublishSignal)
+	require.True(t, created.PublicationRequested)
+}
+
 // Nothing downstream rewrites an unrecognised tool error, so a database
 // failure on any path must reach the caller as the generic unavailable
 // refusal, with the real cause kept in the server log.
