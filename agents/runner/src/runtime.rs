@@ -933,9 +933,53 @@ mod tests {
 
     #[tokio::test]
     async fn queued_messages_rotate_existing_bearer_only_between_turns() {
+        // Exercise the real terminal compactor and its awaited persistence,
+        // gating the HTTP response rather than relying on a timing window.
+        let (persist_tx, mut persisted) = mpsc::unbounded_channel();
+        let persist_finish = Arc::new(tokio::sync::Semaphore::new(0));
+        let release_persist = persist_finish.clone();
+        let app = axum::Router::new().route(
+            "/rpc/assistants.recordCompactedGeneration",
+            axum::routing::post(move |headers: http::HeaderMap| {
+                let seen = persist_tx.clone();
+                let release = release_persist.clone();
+                async move {
+                    seen.send(
+                        headers
+                            .get("authorization")
+                            .unwrap()
+                            .to_str()
+                            .unwrap()
+                            .to_string(),
+                    )
+                    .unwrap();
+                    release.acquire().await.unwrap().forget();
+                    http::StatusCode::NO_CONTENT
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let persist_server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
         let tokens = TokenRegistry::new("initial");
         let (seen, mut observations) = mpsc::unbounded_channel();
         let finish = Arc::new(tokio::sync::Semaphore::new(0));
+        let terminal = PersistingCompactor::new(
+            agentkit_compaction::StrategyCompactor::builder()
+                .trigger(|_, _| None)
+                .strategy(agentkit_compaction::DropReasoningStrategy::new())
+                .build()
+                .unwrap(),
+            GramBootstrapClient::new(
+                format!("http://{addr}"),
+                build_bootstrap_client(reqwest::Client::new()),
+            ),
+            tokens.clone(),
+            "shared-thread".into(),
+            None,
+        );
         let driver = Agent::builder()
             .model(QueueTestModel {
                 tokens: tokens.clone(),
@@ -968,7 +1012,7 @@ mod tests {
             driver,
             (rx, notices, tokens.clone(), Some(cmd_tx)),
             Arc::new(Mutex::new(None)),
-            None,
+            Some(terminal),
             "shared-thread".into(),
         ));
         tx.send(QueuedTurn {
@@ -1002,6 +1046,13 @@ mod tests {
             "queued config must not reach the actor during the preceding turn"
         );
         finish.add_permits(1);
+        assert_eq!(persisted.recv().await.unwrap(), "Bearer token-a");
+        assert_eq!(tokens.current().unwrap(), "token-a");
+        assert!(
+            boundaries.try_recv().is_err(),
+            "the next boundary must wait for preceding compaction persistence"
+        );
+        persist_finish.add_permits(1);
         let next_boundary = boundaries.recv().await.unwrap();
         assert_eq!(next_boundary.0, "token-b");
         assert_eq!(next_boundary.1.unwrap()[0].id, "next-turn-only");
@@ -1011,6 +1062,8 @@ mod tests {
             .unwrap();
         assert_eq!(b, ("token-b".into(), vec!["Alice".into(), "Bob".into()]));
         finish.add_permits(1);
+        assert_eq!(persisted.recv().await.unwrap(), "Bearer token-b");
+        persist_finish.add_permits(1);
         drop(tx);
         assert_eq!(
             tokio::time::timeout(Duration::from_secs(5), task)
@@ -1020,6 +1073,49 @@ mod tests {
                 .unwrap(),
             "inbox closed"
         );
+        persist_server.abort();
+    }
+
+    #[tokio::test]
+    async fn failed_boundary_ack_does_not_submit_input() {
+        let tokens = TokenRegistry::new("prior");
+        let (seen, mut observations) = mpsc::unbounded_channel();
+        let driver = Agent::builder()
+            .model(QueueTestModel {
+                tokens: tokens.clone(),
+                seen,
+                finish: Arc::new(tokio::sync::Semaphore::new(0)),
+            })
+            .build()
+            .unwrap()
+            .start(SessionConfig::new("T"))
+            .await
+            .unwrap();
+        let (tx, rx) = mpsc::unbounded_channel();
+        let (_notice_tx, notices) = mpsc::unbounded_channel();
+        let (cmd, mut commands) = mpsc::channel(1);
+        let task = tokio::spawn(run_loop(
+            driver,
+            (rx, notices, tokens.clone(), Some(cmd)),
+            Arc::new(Mutex::new(None)),
+            None,
+            "T".into(),
+        ));
+        tx.send(QueuedTurn {
+            input: RunnerContent::Text("must not run".into()),
+            token: "next".into(),
+            mcp_servers: None,
+        })
+        .unwrap();
+        let McpCmd::TurnBoundary { reply, .. } = commands.recv().await.unwrap() else {
+            panic!("expected boundary");
+        };
+        reply
+            .send(Err(RunnerError::Loop("invalid MCP header".into())))
+            .unwrap();
+        assert!(task.await.unwrap().is_err());
+        assert!(observations.try_recv().is_err());
+        assert_eq!(tokens.current().unwrap(), "prior");
     }
 
     fn empty_host() -> Arc<RuntimeHost> {
