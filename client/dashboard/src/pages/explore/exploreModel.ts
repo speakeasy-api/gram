@@ -289,7 +289,7 @@ export function isFilterOperator(value: unknown): value is FilterOperator {
   );
 }
 
-export function isWindowPreset(value: unknown): value is WindowPreset {
+function isWindowPreset(value: unknown): value is WindowPreset {
   return WINDOW_PRESETS.some((preset) => preset === value);
 }
 

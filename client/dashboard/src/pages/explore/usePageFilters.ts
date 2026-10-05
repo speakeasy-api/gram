@@ -15,7 +15,7 @@ import type { PageContext } from "./pageContext";
 import { dimensionValuesQuery } from "./useDimensionValues";
 
 /** A catalog dimension a page lets people filter its widgets by. */
-export interface PageFilterField {
+interface PageFilterField {
   /** The catalog dimension, as the widgets' datasets name it. */
   field: string;
   /** How the filter bar labels it. */
