@@ -348,6 +348,26 @@ type Client struct {
 	// setStripeSubscription endpoint.
 	SetStripeSubscriptionDoer goahttp.Doer
 
+	// GetHooksRollout Doer is the HTTP client used to make requests to the
+	// getHooksRollout endpoint.
+	GetHooksRolloutDoer goahttp.Doer
+
+	// SetHooksRolloutDefault Doer is the HTTP client used to make requests to the
+	// setHooksRolloutDefault endpoint.
+	SetHooksRolloutDefaultDoer goahttp.Doer
+
+	// GetOrganizationHooksRollout Doer is the HTTP client used to make requests to
+	// the getOrganizationHooksRollout endpoint.
+	GetOrganizationHooksRolloutDoer goahttp.Doer
+
+	// SetOrganizationHooksRollout Doer is the HTTP client used to make requests to
+	// the setOrganizationHooksRollout endpoint.
+	SetOrganizationHooksRolloutDoer goahttp.Doer
+
+	// ClearOrganizationHooksRollout Doer is the HTTP client used to make requests
+	// to the clearOrganizationHooksRollout endpoint.
+	ClearOrganizationHooksRolloutDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -451,6 +471,11 @@ func NewClient(
 		AssignOrganizationOnboardingPlaybookDoer:  doer,
 		GetStripeSubscriptionCandidateDoer:        doer,
 		SetStripeSubscriptionDoer:                 doer,
+		GetHooksRolloutDoer:                       doer,
+		SetHooksRolloutDefaultDoer:                doer,
+		GetOrganizationHooksRolloutDoer:           doer,
+		SetOrganizationHooksRolloutDoer:           doer,
+		ClearOrganizationHooksRolloutDoer:         doer,
 		RestoreResponseBody:                       restoreBody,
 		scheme:                                    scheme,
 		host:                                      host,
@@ -2451,6 +2476,126 @@ func (c *Client) SetStripeSubscription() goa.Endpoint {
 		resp, err := c.SetStripeSubscriptionDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "setStripeSubscription", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetHooksRollout returns an endpoint that makes HTTP requests to the admin
+// service getHooksRollout server.
+func (c *Client) GetHooksRollout() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetHooksRolloutRequest(c.encoder)
+		decodeResponse = DecodeGetHooksRolloutResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetHooksRolloutRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetHooksRolloutDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getHooksRollout", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetHooksRolloutDefault returns an endpoint that makes HTTP requests to the
+// admin service setHooksRolloutDefault server.
+func (c *Client) SetHooksRolloutDefault() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetHooksRolloutDefaultRequest(c.encoder)
+		decodeResponse = DecodeSetHooksRolloutDefaultResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetHooksRolloutDefaultRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetHooksRolloutDefaultDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setHooksRolloutDefault", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetOrganizationHooksRollout returns an endpoint that makes HTTP requests to
+// the admin service getOrganizationHooksRollout server.
+func (c *Client) GetOrganizationHooksRollout() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetOrganizationHooksRolloutRequest(c.encoder)
+		decodeResponse = DecodeGetOrganizationHooksRolloutResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetOrganizationHooksRolloutRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetOrganizationHooksRolloutDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getOrganizationHooksRollout", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetOrganizationHooksRollout returns an endpoint that makes HTTP requests to
+// the admin service setOrganizationHooksRollout server.
+func (c *Client) SetOrganizationHooksRollout() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetOrganizationHooksRolloutRequest(c.encoder)
+		decodeResponse = DecodeSetOrganizationHooksRolloutResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetOrganizationHooksRolloutRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetOrganizationHooksRolloutDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setOrganizationHooksRollout", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ClearOrganizationHooksRollout returns an endpoint that makes HTTP requests
+// to the admin service clearOrganizationHooksRollout server.
+func (c *Client) ClearOrganizationHooksRollout() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeClearOrganizationHooksRolloutRequest(c.encoder)
+		decodeResponse = DecodeClearOrganizationHooksRolloutResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildClearOrganizationHooksRolloutRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ClearOrganizationHooksRolloutDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "clearOrganizationHooksRollout", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -694,6 +694,107 @@ export function setOrganizationChatAnalysisSetting(input: {
   );
 }
 
+export type AdminHooksRolloutPin = {
+  version: number;
+  set_by: string;
+  set_at: string;
+};
+
+export type AdminHooksRolloutOverride = {
+  organization_id: string;
+  organization_name: string;
+  organization_slug: string;
+  pin: AdminHooksRolloutPin;
+};
+
+export type AdminHooksRolloutChange = {
+  organization_id?: string;
+  organization_slug?: string;
+  version?: number;
+  set_by: string;
+  set_at: string;
+};
+
+export type AdminHooksRollout = {
+  current_version: number;
+  default_pin?: AdminHooksRolloutPin;
+  canary_organization_slugs: string[];
+  overrides: AdminHooksRolloutOverride[];
+  recent_changes: AdminHooksRolloutChange[];
+};
+
+export type AdminHooksRolloutSource =
+  | "canary"
+  | "organization"
+  | "default"
+  | "legacy_flag";
+
+export type AdminOrganizationHooksRollout = {
+  organization_id: string;
+  current_version: number;
+  override?: AdminHooksRolloutPin;
+  default_pin?: AdminHooksRolloutPin;
+  source: AdminHooksRolloutSource;
+  effective_version?: number;
+  eligible?: boolean;
+};
+
+export function getHooksRollout(): Promise<AdminHooksRollout> {
+  return gramAdminFetch<AdminHooksRollout>("/admin/hooksRollout.get");
+}
+
+export function setHooksRolloutDefault(
+  version: number,
+): Promise<AdminHooksRollout> {
+  return gramAdminMutation<AdminHooksRollout>(
+    "/admin/hooksRollout.setDefault",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ version }),
+    },
+  );
+}
+
+export function getOrganizationHooksRollout(
+  organizationID: string,
+): Promise<AdminOrganizationHooksRollout> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminOrganizationHooksRollout>(
+    `/admin/organization.hooksRollout?${qs}`,
+  );
+}
+
+export function setOrganizationHooksRollout(input: {
+  organizationID: string;
+  version: number;
+}): Promise<AdminOrganizationHooksRollout> {
+  return gramAdminMutation<AdminOrganizationHooksRollout>(
+    "/admin/organization.setHooksRollout",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: input.organizationID,
+        version: input.version,
+      }),
+    },
+  );
+}
+
+export function clearOrganizationHooksRollout(
+  organizationID: string,
+): Promise<AdminOrganizationHooksRollout> {
+  return gramAdminMutation<AdminOrganizationHooksRollout>(
+    "/admin/organization.clearHooksRollout",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id: organizationID }),
+    },
+  );
+}
+
 export async function getInferenceKeys(
   organizationID: string,
 ): Promise<AdminInferenceKey[]> {

@@ -421,3 +421,28 @@ func GetStripeSubscriptionCandidateAdminPath() string {
 func SetStripeSubscriptionAdminPath() string {
 	return "/admin/organization.setStripeSubscription"
 }
+
+// GetHooksRolloutAdminPath returns the URL path to the admin service getHooksRollout HTTP endpoint.
+func GetHooksRolloutAdminPath() string {
+	return "/admin/hooksRollout.get"
+}
+
+// SetHooksRolloutDefaultAdminPath returns the URL path to the admin service setHooksRolloutDefault HTTP endpoint.
+func SetHooksRolloutDefaultAdminPath() string {
+	return "/admin/hooksRollout.setDefault"
+}
+
+// GetOrganizationHooksRolloutAdminPath returns the URL path to the admin service getOrganizationHooksRollout HTTP endpoint.
+func GetOrganizationHooksRolloutAdminPath() string {
+	return "/admin/organization.hooksRollout"
+}
+
+// SetOrganizationHooksRolloutAdminPath returns the URL path to the admin service setOrganizationHooksRollout HTTP endpoint.
+func SetOrganizationHooksRolloutAdminPath() string {
+	return "/admin/organization.setHooksRollout"
+}
+
+// ClearOrganizationHooksRolloutAdminPath returns the URL path to the admin service clearOrganizationHooksRollout HTTP endpoint.
+func ClearOrganizationHooksRolloutAdminPath() string {
+	return "/admin/organization.clearHooksRollout"
+}

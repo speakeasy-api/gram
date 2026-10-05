@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   getOrganizationChatAnalysisSettings: vi.fn(),
   setOrganizationChatAnalysisSetting: vi.fn(),
   triggerOrganizationChatAnalysis: vi.fn(),
+  getOrganizationHooksRollout: vi.fn(),
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
@@ -27,6 +28,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     setOrganizationChatAnalysisSetting:
       mocks.setOrganizationChatAnalysisSetting,
     triggerOrganizationChatAnalysis: mocks.triggerOrganizationChatAnalysis,
+    getOrganizationHooksRollout: mocks.getOrganizationHooksRollout,
   };
 });
 
@@ -200,6 +202,11 @@ beforeEach(() => {
   mocks.setOrganizationChatAnalysisSetting.mockResolvedValue(CHAT_ANALYSIS);
   mocks.triggerOrganizationChatAnalysis.mockResolvedValue({
     projects_signaled: 2,
+  });
+  mocks.getOrganizationHooksRollout.mockResolvedValue({
+    organization_id: ORG.id,
+    current_version: 46,
+    source: "legacy_flag",
   });
 });
 

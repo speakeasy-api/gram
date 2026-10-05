@@ -10,8 +10,10 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 import {
+  getHooksRollout,
   getOrganization,
   getOrganizationChatAnalysisSettings,
+  getOrganizationHooksRollout,
   getOrganizationStats,
   getInferenceKeys,
   getInferenceSpendHistory,
@@ -30,6 +32,7 @@ import {
   type AdminInferenceSpendMonth,
   type AdminOrganization,
   type AdminOrganizationChatAnalysisSettings,
+  type AdminOrganizationHooksRollout,
   type AdminProjectDetail,
   type AdminPaygBillingSummary,
   type AdminStripeSubscription,
@@ -120,6 +123,32 @@ export function organizationChatAnalysisSettingsQuery(
     ] as const,
     queryFn: () => getOrganizationChatAnalysisSettings(organizationID),
   });
+}
+
+// The platform-wide state, and every organization's state, change together
+// when the default pin moves, so a write invalidates both prefixes.
+export const hooksRolloutQuery = queryOptions({
+  queryKey: ["gram-admin-hooks-rollout"] as const,
+  queryFn: getHooksRollout,
+});
+
+const ORGANIZATION_HOOKS_ROLLOUT_KEY = "gram-admin-organization-hooks-rollout";
+
+export function organizationHooksRolloutQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminOrganizationHooksRollout,
+  readonly ["gram-admin-organization-hooks-rollout", string]
+> {
+  return queryOptions({
+    queryKey: [ORGANIZATION_HOOKS_ROLLOUT_KEY, organizationID] as const,
+    queryFn: () => getOrganizationHooksRollout(organizationID),
+  });
+}
+
+export function invalidateHooksRollout(qc: QueryClient): void {
+  void qc.invalidateQueries({ queryKey: hooksRolloutQuery.queryKey });
+  void qc.invalidateQueries({ queryKey: [ORGANIZATION_HOOKS_ROLLOUT_KEY] });
 }
 
 export function organizationProjectsQuery(

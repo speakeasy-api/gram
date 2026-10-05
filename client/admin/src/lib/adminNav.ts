@@ -18,6 +18,7 @@ import {
   KeyRoundIcon,
   PlugZapIcon,
   ListChecksIcon,
+  RocketIcon,
 } from "lucide-react";
 
 import { McpIcon } from "@/components/ui/mcp-icon";
@@ -81,6 +82,12 @@ export const ADMIN_NAV_GROUPS = [
         label: "Use Cases & Playbooks",
         keywords: "onboarding use cases playbooks outcomes default",
         icon: BookOpenIcon,
+      },
+      {
+        to: "/hooks-rollout",
+        label: "Hooks rollout",
+        keywords: "hooks observability plugin version release pin posthog",
+        icon: RocketIcon,
       },
       {
         to: "/remote-session-issuers",
