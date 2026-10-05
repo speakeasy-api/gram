@@ -13,8 +13,10 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import BookDemo from "@/pages/demo/BookDemo";
 import SwitchOrg from "@/pages/demo/SwitchOrg";
+import { useOrganizationHostMove } from "@/hooks/useOrganizationHostMove";
 import { useTrialNow } from "@/hooks/useTrialNow";
 import { getTrialLifecycleFromDates } from "@/lib/trial-status";
+import { organizationHostRedirectTarget } from "@/lib/organization-host";
 import { isGramSessionUnauthorizedError } from "@/lib/route-errors";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -195,6 +197,36 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     }
   }, [session?.session, isImpersonating]);
 
+  // An organization that lives on another platform host is used there, on the
+  // same page. auth.info names that host only for an ordinary session whose
+  // active organization belongs elsewhere; session cookies are host-only, so
+  // the user signs in once on the new host.
+  // A URL naming another of the user's organizations switches scope first;
+  // the move then follows the organization the switch selects.
+  const urlNamesOtherOrganization = Boolean(
+    session?.organizations.some(
+      (organization) =>
+        organization.slug === orgSlug &&
+        organization.id !== session.activeOrganizationId,
+    ),
+  );
+  const sessionAuthorized =
+    Boolean(session?.session) && !isGramSessionUnauthorizedError(error);
+  const organizationHostTarget =
+    sessionAuthorized &&
+    session?.activeOrganizationId &&
+    !isImpersonating &&
+    !urlNamesOtherOrganization
+      ? organizationHostRedirectTarget(
+          session.activeOrganizationDashboardUrl,
+          window.location,
+        )
+      : undefined;
+  const movingHost = useOrganizationHostMove(
+    session?.activeOrganizationId,
+    organizationHostTarget,
+  );
+
   // you need something like this so you don't redirect with empty session too soon
   // isLoading is not synchronized with the session data actually being populated, so we need to wait for the session to actually finish loading
   // !! Very important that auth.info returns an error if there's no session
@@ -231,6 +263,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
         {children}
       </SessionContext.Provider>
     );
+  }
+
+  if (movingHost) {
+    return <AuthPendingScreen />;
   }
 
   // Show book demo page if organization is not whitelisted

@@ -619,6 +619,50 @@ func (q *Queries) OtelDestinationHasActiveRoutes(ctx context.Context, arg OtelDe
 	return exists, err
 }
 
+const setDataExportRouteEnabled = `-- name: SetDataExportRouteEnabled :one
+UPDATE data_export_routes
+SET enabled = $1,
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND project_id = $3
+  AND id = $4
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, data_source, enabled, otel_destination_id, created_at, updated_at, deleted_at, deleted
+`
+
+type SetDataExportRouteEnabledParams struct {
+	Enabled        bool
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ID             uuid.UUID
+}
+
+// Flip only a locked route's enabled flag. Pausing and resuming carry no
+// configuration, so the data source and destination are deliberately absent
+// from the SET list and can never be overwritten by this statement.
+func (q *Queries) SetDataExportRouteEnabled(ctx context.Context, arg SetDataExportRouteEnabledParams) (DataExportRoute, error) {
+	row := q.db.QueryRow(ctx, setDataExportRouteEnabled,
+		arg.Enabled,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ID,
+	)
+	var i DataExportRoute
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.DataSource,
+		&i.Enabled,
+		&i.OtelDestinationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const softDeleteDataExportRoute = `-- name: SoftDeleteDataExportRoute :one
 UPDATE data_export_routes
 SET deleted_at = clock_timestamp(),

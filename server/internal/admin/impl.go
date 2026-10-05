@@ -82,6 +82,10 @@ type Service struct {
 	// workosEnvironmentID scopes WorkOS dashboard links. Empty leaves them out.
 	workosEnvironmentID string
 
+	// newOrganizationDefaultHost is recorded as the default host of
+	// organizations staff create. Null records none.
+	newOrganizationDefaultHost pgtype.Text
+
 	// workos creates organizations in the identity provider. Deployments with
 	// no WorkOS configuration get orgprovision.Unavailable, whose failure
 	// CreateOrganization reports rather than working around.
@@ -227,14 +231,15 @@ func NewService(
 	)
 
 	return &Service{remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", registry: registry,
-		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
-		logger:         logger,
-		db:             db,
-		oidc:           oidcClient,
-		sessions:       sessionStore,
-		verifier:       NewVerifier(logger, sessionStore, oidcClient, adminCache),
-		allowedOrigins: allowedOrigins,
-		dashboardURL:   dashboardURL,
+		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
+		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
+		logger:                     logger,
+		db:                         db,
+		oidc:                       oidcClient,
+		sessions:                   sessionStore,
+		verifier:                   NewVerifier(logger, sessionStore, oidcClient, adminCache),
+		allowedOrigins:             allowedOrigins,
+		dashboardURL:               dashboardURL,
 		supportHandoffIssuer: supporthandoff.NewIssuer(
 			supporthandoff.NewStore(adminCache),
 		),
@@ -255,6 +260,12 @@ func NewService(
 		supportCoverage: supportCoverage,
 		mcpServerHealth: mcpServerHealth,
 	}
+}
+
+// SetNewOrganizationDefaultHost sets the default host recorded on
+// organizations staff create. Unset records none.
+func (s *Service) SetNewOrganizationDefaultHost(host pgtype.Text) {
+	s.newOrganizationDefaultHost = host
 }
 
 func (s *Service) GetSession(ctx context.Context, _ *gen.GetSessionPayload) (*gen.AdminSession, error) {
@@ -1588,6 +1599,7 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		// and that path records no source, so writing it here is what makes the
 		// two orderings agree.
 		CreationSource: conv.ToPGText(orgprovision.SourcePlatformAdmin),
+		DefaultHost:    s.newOrganizationDefaultHost,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create organization metadata: %w", err), organizationCreationUncertain).LogError(ctx, logger)

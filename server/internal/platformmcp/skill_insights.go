@@ -212,11 +212,9 @@ type SkillEfficacyMetrics struct {
 // WithInsights attaches the ClickHouse read behind the insight tools and the
 // rate limit they answer under.
 //
-// They are limited with the other telemetry reads — 60 calls a minute per
-// connection — rather than with skill authoring and distribution, which get 5,
-// because the work being limited here is a ClickHouse scan and an administrator
-// reading through a project's skills would otherwise exhaust the allowance
-// writing a skill needs.
+// They are limited with the other telemetry reads rather than with skill
+// authoring and distribution because the work being limited is a ClickHouse
+// scan. Reading insights must not spend the allowance needed to write a skill.
 //
 // A nil reader leaves both tools registered as stubs.
 func (s *SkillsService) WithInsights(insights SkillInsightsReader, budget OperationBudget) *SkillsService {

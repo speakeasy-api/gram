@@ -398,8 +398,7 @@ func TestDemoteExpiredTrials_ProductionOpenRouterPatchesOnlyChangedKeys(t *testi
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	production := openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, ti.conn, "test", "provisioning_key_placeholder",
-		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, ti.conn, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
 	)
 	ti.activity = activities.NewDemoteExpiredTrials(
 		testenv.NewLogger(t), ti.conn, production, audit.NewLogger(), ti.notifier, ti.productFeatures, nil,

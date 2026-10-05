@@ -19,17 +19,20 @@ type GenerateChatTitleParams struct {
 	ProjectID string
 }
 
-// ChatTitleGenerator schedules async chat title generation.
-type ChatTitleGenerator interface {
-	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID string) error
-}
+// chatTitleStartTimeout bounds the workflow start. Callers schedule from
+// request paths, and without a deadline the SDK retries a degraded frontend
+// for a minute.
+const chatTitleStartTimeout = 2 * time.Second
 
-// TemporalChatTitleGenerator implements ChatTitleGenerator using Temporal.
+// TemporalChatTitleGenerator starts the title workflow. Each caller declares
+// the ChatTitleGenerator interface it consumes.
 type TemporalChatTitleGenerator struct {
 	TemporalEnv *tenv.Environment
 }
 
 func (t *TemporalChatTitleGenerator) ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error {
+	ctx, cancel := context.WithTimeout(ctx, chatTitleStartTimeout)
+	defer cancel()
 	_, err := ExecuteGenerateChatTitleWorkflow(ctx, t.TemporalEnv, GenerateChatTitleParams{
 		ChatID:    chatID,
 		OrgID:     orgID,

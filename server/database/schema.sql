@@ -68,8 +68,10 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
 
   creation_source TEXT, -- which flow created the organization; NULL where nothing recorded one
   -- Platform host the org's rendered URLs (emails, Slack messages, background
-  -- jobs) use. NULL means the canonical host. Validated in application code and
-  -- re-checked on read.
+  -- jobs) use. NULL means the legacy default host (GRAM_LEGACY_DEFAULT_HOST,
+  -- app.getgram.ai in prod), so existing orgs keep it when the canonical host
+  -- changes. New orgs store GRAM_NEW_ORG_DEFAULT_HOST. Validated in application
+  -- code and re-checked on read.
   default_host TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -7453,6 +7455,25 @@ CREATE TABLE IF NOT EXISTS risk_finding_evidence (
 
 CREATE INDEX IF NOT EXISTS risk_finding_evidence_expires_at_idx
 ON risk_finding_evidence (expires_at, organization_id, project_id, finding_id);
+
+-- Encrypted scanned payload of one MCP execution phase, so findings can be
+-- shown in context. Positions of the phase's findings index into it.
+CREATE TABLE IF NOT EXISTS risk_execution_evidence (
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  execution_id TEXT NOT NULL,
+  phase TEXT NOT NULL,
+  payload_encrypted TEXT NOT NULL,
+  created_at timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  expires_at timestamptz NOT NULL,
+
+  CONSTRAINT risk_execution_evidence_pkey PRIMARY KEY (organization_id, project_id, execution_id, phase),
+  CONSTRAINT risk_execution_evidence_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects(organization_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS risk_execution_evidence_expires_at_idx
+ON risk_execution_evidence (expires_at, organization_id, project_id, execution_id, phase);
 
 -- risk_policy_eval_reviews is the durable "regression set" for a prompt-based
 -- risk policy: a reviewer's ground-truth verdict on whether a given chat session

@@ -367,6 +367,7 @@ type PostgresReader struct {
 	chatMetadata              *ChatMetadataService
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
+	dataExportRouteToggle     *DataExportRouteToggleService
 	recentToolCalls           *RecentToolCallReadService
 	networkTraffic            MCPNetworkTrafficReader
 	networkTrafficLogsEnabled FeatureChecker
@@ -379,6 +380,7 @@ type PostgresReader struct {
 	reviewRequests            MCPReviewRequestService
 	reviewRequestBudget       OperationBudget
 	toolExposure              *MCPToolExposureService
+	projectLifecycle          *ProjectLifecycleService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool, management AssistantIdentityManagement) *PostgresReader {
@@ -397,6 +399,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool, management Assista
 		chatMetadata:              nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
+		dataExportRouteToggle:     nil,
 		recentToolCalls:           nil,
 		networkTraffic:            nil,
 		networkTrafficLogsEnabled: nil,
@@ -410,6 +413,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool, management Assista
 		reviewRequests:            nil,
 		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
 		toolExposure:              nil,
+		projectLifecycle:          nil,
 	}
 	if management != nil {
 		r.assistantIdentity = &assistantIdentityService{management: management, resolveProject: r.resolveInventoryProject}
@@ -430,6 +434,15 @@ func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader
 func (r *PostgresReader) WithToolExposure(service *MCPToolExposureService) *PostgresReader {
 	if r != nil {
 		r.toolExposure = service
+	}
+	return r
+}
+
+// WithProjectLifecycle composes project creation and renaming. Without it the
+// tools stay in the catalogue as stable refusals rather than disappearing.
+func (r *PostgresReader) WithProjectLifecycle(service *ProjectLifecycleService) *PostgresReader {
+	if r != nil {
+		r.projectLifecycle = service
 	}
 	return r
 }
