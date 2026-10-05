@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/charmbracelet/lipgloss"
@@ -43,8 +44,31 @@ const (
 	installMethodHomebrew installMethod = "homebrew"
 	installMethodAqua     installMethod = "aqua"
 	installMethodNPM      installMethod = "npm"
-	installMethodManual   installMethod = "manual"
+	installMethodPNPM     installMethod = "pnpm"
+	installMethodYarn     installMethod = "yarn"
+
+	// installMethodNodeModules is a node_modules directory that is not a
+	// known global root, such as a project dependency or an npx cache.
+	installMethodNodeModules installMethod = "node_modules"
+	installMethodManual      installMethod = "manual"
 )
+
+// nodeGlobalRootTimeout bounds each package manager query for its global
+// root. They answer in well under a second; a hung shim must not block update.
+const nodeGlobalRootTimeout = 10 * time.Second
+
+// nodeGlobalRoots holds the global package directories that npm, pnpm and
+// yarn report. An empty field means that manager is missing or failed.
+type nodeGlobalRoots struct {
+	// NPM is the output of `npm root -g`.
+	NPM string
+
+	// PNPM is the output of `pnpm root -g`.
+	PNPM string
+
+	// Yarn is the output of `yarn global dir`.
+	Yarn string
+}
 
 type githubRelease struct {
 	TagName string `json:"tag_name"`
@@ -66,6 +90,7 @@ This command supports multiple installation methods:
   - Homebrew (macOS/Linux): Automatically runs 'brew upgrade speakeasy-api/tap/cli'
     ('brew upgrade speakeasy-api/tap/gram' when run as the legacy gram command)
   - npm: Automatically runs 'npm install -g @speakeasy-api/cli@latest'
+  - pnpm or yarn global installs: Prints the command to run
   - Aqua: Automatically runs 'aqua upgrade speakeasy-api/gram/gram'
   - Manual installation: Downloads and replaces the current binary
 
@@ -146,6 +171,9 @@ func doUpdate(c *cli.Context) error {
 		return updateViaHomebrew(ctx, logger)
 	case installMethodNPM:
 		return updateViaNPM(ctx, logger)
+	case installMethodPNPM, installMethodYarn, installMethodNodeModules:
+		fmt.Println(nodePackageManagerHint(method))
+		return nil
 	case installMethodAqua:
 		return updateViaAqua(ctx, logger)
 	case installMethodManual:
@@ -207,21 +235,73 @@ func detectInstallMethod(logger *slog.Logger, ctx context.Context) installMethod
 		return installMethodManual
 	}
 
-	method := installMethodForPath(realPath)
+	var roots nodeGlobalRoots
+	if strings.Contains(normalizePath(realPath), "/node_modules/") {
+		roots = nodeGlobalRoots{
+			NPM:  commandPath(ctx, "npm", "root", "-g"),
+			PNPM: commandPath(ctx, "pnpm", "root", "-g"),
+			Yarn: commandPath(ctx, "yarn", "global", "dir"),
+		}
+	}
+
+	method := installMethodForPath(realPath, roots)
 	logger.DebugContext(ctx, "resolved executable path", slog.String("path", realPath), slog.String("method", string(method)))
 	return method
 }
 
-// installMethodForPath infers how the CLI was installed from the resolved path
-// of its executable.
-func installMethodForPath(realPath string) installMethod {
-	p := strings.ReplaceAll(realPath, `\`, "/")
+// commandPath runs a package manager query and returns the directory it
+// prints, with symlinks resolved. It returns "" when the command fails.
+func commandPath(ctx context.Context, name string, args ...string) string {
+	ctx, cancel := context.WithTimeout(ctx, nodeGlobalRootTimeout)
+	defer cancel()
 
-	// npm installs into a node_modules directory. Check it before Homebrew,
-	// because a Homebrew-installed Node keeps its global packages under the
-	// Homebrew prefix.
-	if strings.Contains(p, "/node_modules/") {
+	out, err := exec.CommandContext(ctx, name, args...).Output() //nolint:gosec // callers pass fixed package manager commands
+	if err != nil {
+		return ""
+	}
+
+	dir := strings.TrimSpace(string(out))
+	if dir == "" {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		return resolved
+	}
+	return dir
+}
+
+// normalizePath uses forward slashes so path checks work on every OS.
+func normalizePath(path string) string {
+	return strings.ReplaceAll(path, `\`, "/")
+}
+
+// isUnder reports whether path is inside dir. Windows paths are not case
+// sensitive, so the comparison ignores case.
+func isUnder(path, dir string) bool {
+	if dir == "" {
+		return false
+	}
+	prefix := strings.TrimSuffix(normalizePath(dir), "/") + "/"
+	return len(path) > len(prefix) && strings.EqualFold(path[:len(prefix)], prefix)
+}
+
+// installMethodForPath infers how the CLI was installed from the resolved path
+// of its executable and the global roots of the Node package managers.
+func installMethodForPath(realPath string, roots nodeGlobalRoots) installMethod {
+	p := normalizePath(realPath)
+
+	// Check the Node package managers before Homebrew, because a
+	// Homebrew-installed Node keeps its global packages under the Homebrew
+	// prefix.
+	switch {
+	case isUnder(p, roots.NPM):
 		return installMethodNPM
+	case isUnder(p, roots.PNPM):
+		return installMethodPNPM
+	case isUnder(p, roots.Yarn):
+		return installMethodYarn
+	case strings.Contains(p, "/node_modules/"):
+		return installMethodNodeModules
 	}
 
 	// Homebrew typically installs to /usr/local/Cellar, /opt/homebrew/Cellar, or /home/linuxbrew
@@ -237,6 +317,22 @@ func installMethodForPath(realPath string) installMethod {
 	}
 
 	return installMethodManual
+}
+
+// nodePackageManagerHint tells the user how to update an install that a Node
+// package manager owns but this command does not update itself.
+func nodePackageManagerHint(method installMethod) string {
+	switch method {
+	case installMethodPNPM:
+		return fmt.Sprintf("Installed with pnpm. Update with: pnpm add -g %s@latest", npmPackage)
+	case installMethodYarn:
+		return fmt.Sprintf("Installed with yarn. Update with: yarn global add %s@latest", npmPackage)
+	case installMethodNodeModules:
+		return fmt.Sprintf("Installed inside a node_modules directory that is not a global npm, pnpm or yarn root. Update %s with the package manager that installed it.", npmPackage)
+	case installMethodHomebrew, installMethodAqua, installMethodNPM, installMethodManual:
+		return ""
+	}
+	return ""
 }
 
 // homebrewFormulaFor returns the formula that installed the CLI, based on the
