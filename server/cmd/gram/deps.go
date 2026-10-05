@@ -453,6 +453,7 @@ func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, 
 	inv.Require("temporal client",
 		"address is set", opts.address != "",
 		"namespace is set", opts.namespace != "",
+		"client certificate and key are set together", (len(opts.certPEMBlock) > 0) == (len(opts.keyPEMBlock) > 0),
 	)
 
 	var connOpts client.ConnectionOptions
@@ -892,7 +893,7 @@ func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *w
 }
 
 // newIDPUserManagementClient creates a WorkOS user-management SDK client
-// scoped to the IDP application key. Returns nil when the key is unset, which
+// scoped to the IDP application key. It panics when the key is unset, which
 // is both an empty value and the "unset" sentinel mise defaults it to — a
 // checkout that never configured a key would otherwise look configured.
 // Under the local backend any other non-empty string works, because the

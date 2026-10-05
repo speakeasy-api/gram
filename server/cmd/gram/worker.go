@@ -698,6 +698,7 @@ func newWorkerCommand() *cli.Command {
 			}
 			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, catalogValidator)), featureFlags)
 
+			inv.Require("worker", "jwt-signing-key is set", c.String(usersessions.JWTSigningKeyFlag) != "")
 			serverURL, err := url.Parse(c.String("server-url"))
 			if err != nil {
 				return fmt.Errorf("failed to parse server url: %w", err)

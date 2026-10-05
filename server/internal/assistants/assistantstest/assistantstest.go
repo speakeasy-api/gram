@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/chattest"
 	"github.com/speakeasy-api/gram/server/internal/environments"
@@ -101,7 +102,8 @@ func NewServiceCore(t *testing.T, env *testenv.Environment, conn *pgxpool.Pool) 
 		},
 	})
 
-	return assistants.NewServiceCore(
+	slackClient := slackclient.NewSlackClient(guardianPolicy)
+	core := assistants.NewServiceCore(
 		logger,
 		tracerProvider,
 		testenv.NewMeterProvider(t),
@@ -109,7 +111,7 @@ func NewServiceCore(t *testing.T, env *testenv.Environment, conn *pgxpool.Pool) 
 		guardianPolicy,
 		enc,
 		runtime,
-		slackclient.NewSlackClient(guardianPolicy),
+		slackClient,
 		assistanttokens.New(signingKey, conn, authzEngine),
 		serverURL,
 		telemetry.NewStub(logger),
@@ -122,4 +124,21 @@ func NewServiceCore(t *testing.T, env *testenv.Environment, conn *pgxpool.Pool) 
 		slackapi.NewClient("", guardianPolicy.PooledClient()),
 		&feature.InMemory{},
 	)
+	temporalEnv, _ := env.NewTemporalEnv(t)
+	triggerApp := bgtriggers.NewApp(
+		logger,
+		conn,
+		temporalEnv,
+		envEntries,
+		bgtriggers.NewTriggerDeliveryLogger(func(context.Context, bgtriggers.TriggerDeliveryLog) {}),
+		audit.NewLogger(),
+		serverURL,
+		nil,
+		nil,
+		slackClient,
+		testenv.NewMemoryCache(),
+	)
+	core.SetWakeCanceller(triggerApp)
+	core.SetDashboardIngestor(triggerApp)
+	return core
 }

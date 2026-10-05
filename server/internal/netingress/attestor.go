@@ -65,6 +65,7 @@ func NewAttestorHandler(config AttestorConfig) http.Handler {
 		"upstream has no userinfo, path, query, or fragment", upstream.User == nil && upstream.Path == "" && upstream.RawPath == "" && upstream.RawQuery == "" && !upstream.ForceQuery && upstream.Fragment == "",
 		"expected host is valid", expectedHostErr,
 		"projected token path is set", config.TokenPath != "",
+		"CA-pinned transport is set", config.Transport != nil,
 	)
 
 	proxy := &httputil.ReverseProxy{

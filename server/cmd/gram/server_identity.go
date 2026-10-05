@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -53,6 +54,7 @@ func parseSiteURL(raw string) (*url.URL, error) {
 }
 
 func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, redisClient *redis.Client, guardianPolicy *guardian.Policy) (*serverIdentity, error) {
+	inv.Require("server identity", "jwt-signing-key is set", c.String(usersessions.JWTSigningKeyFlag) != "")
 	siteURL, err := parseSiteURL(c.String("site-url"))
 	if err != nil {
 		return nil, err

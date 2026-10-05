@@ -4,7 +4,9 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
@@ -25,6 +27,7 @@ func TestShadowMCPApprovalRequestURLUsesFragmentToken(t *testing.T) {
 		logger:       testenv.NewLogger(t),
 		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		orgHosts:     orghost.New(orghost.Config{ServerURL: nil, SiteURL: siteURL, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
+		orgHostCache: legacyHostCache("org_test"),
 		jwtSecret:    "test-jwt-secret",
 		cache:        cache.NoopCache,
 	}
@@ -73,6 +76,7 @@ func TestShadowMCPApprovalRequestURLRequiresEvidence(t *testing.T) {
 		logger:       testenv.NewLogger(t),
 		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		orgHosts:     orghost.New(orghost.Config{ServerURL: nil, SiteURL: siteURL, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
+		orgHostCache: legacyHostCache("org_test"),
 		jwtSecret:    "test-jwt-secret",
 		cache:        cache.NoopCache,
 	}
@@ -97,6 +101,7 @@ func TestShadowMCPApprovalRequestURLAllowsServerIdentityEvidence(t *testing.T) {
 		logger:       testenv.NewLogger(t),
 		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		orgHosts:     orghost.New(orghost.Config{ServerURL: nil, SiteURL: siteURL, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
+		orgHostCache: legacyHostCache("org_test"),
 		jwtSecret:    "test-jwt-secret",
 		cache:        cache.NoopCache,
 	}
@@ -156,6 +161,7 @@ func TestShadowMCPApprovalRequestURLRedactsServerURL(t *testing.T) {
 		logger:       testenv.NewLogger(t),
 		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		orgHosts:     orghost.New(orghost.Config{ServerURL: nil, SiteURL: siteURL, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
+		orgHostCache: legacyHostCache("org_test"),
 		jwtSecret:    "test-jwt-secret",
 		cache:        cache.NoopCache,
 	}
@@ -177,4 +183,12 @@ func TestShadowMCPApprovalRequestURLRedactsServerURL(t *testing.T) {
 	require.Equal(t, "https://mcp.example.com/sse", link.ServerURL)
 	require.NotContains(t, link.ServerURL, "hunter2")
 	require.NotContains(t, link.ServerURL, "api_key")
+}
+
+// legacyHostCache records the organization as having no stored default host,
+// so link building resolves the legacy host without reading the database.
+func legacyHostCache(organizationID string) *orgDefaultHostCache {
+	hostCache := newOrgDefaultHostCache()
+	hostCache.put(organizationID, pgtype.Text{String: "", Valid: false}, time.Now())
+	return hostCache
 }
