@@ -64,7 +64,7 @@ func TestSlackExecutionIngressSharesConversation(t *testing.T) {
 	require.Equal(t, assistantidentity.ExecutionWorkload, fallback.Mode)
 	require.Empty(t, fallback.HumanUserID)
 	// Even with a mapping, bot provenance cannot delegate a human.
-	bot, err := core.captureExecution(t.Context(), assistant, sourceKindSlack, b.ThreadID, uuid.NullUUID{UUID: root, Valid: true}, "bot", []byte(`{"team_id":"TEXAMPLE","user_id":"UEXAMPLE","bot_id":"BEXAMPLE"}`), &bgtriggers.SlackExecutionSelection{FallbackReason: "slack_non_user_event"})
+	bot, err := core.captureExecution(t.Context(), assistant, sourceKindSlack, b.ThreadID, uuid.NullUUID{UUID: root, Valid: true}, "bot", []byte(`{"team_id":"TEXAMPLE","user_id":"UEXAMPLE","bot_id":"BEXAMPLE"}`), &bgtriggers.SlackExecutionSelection{FallbackReason: bgtriggers.SlackExecutionFallbackNonUserEvent})
 	require.NoError(t, err)
 	envelope, err := decodeExecution(bot)
 	require.NoError(t, err)
@@ -173,7 +173,7 @@ func TestSlackExecutionSelectionCannotBeReplacedAtPersistence(t *testing.T) {
 	}
 }
 
-func TestSlackExecutionLegacyBypassesIngressSelection(t *testing.T) {
+func TestSlackExecutionNeverConfiguredBypassesIngressSelection(t *testing.T) {
 	t.Parallel()
 	db, err := assistantsInfra.CloneTestDatabase(t, "slack_ingress_legacy")
 	require.NoError(t, err)

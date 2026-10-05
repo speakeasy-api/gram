@@ -140,7 +140,6 @@ func TestExecutionCapturePersistsSelectionAndGatesDispatch(t *testing.T) {
 	admitted, err := manager.ValidateExecution(t.Context(), token, target)
 	require.NoError(t, err)
 	require.Equal(t, *execution, *admitted)
-	require.NoError(t, manager.AuthorizeExecution(t.Context(), token, target))
 	_, err = manager.Validate(token)
 	require.Error(t, err, "execution token must not enter legacy UserID authorization")
 	wrongTarget := target

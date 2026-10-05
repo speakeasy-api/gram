@@ -38,8 +38,8 @@ func classifyExecutionDispatchError(err error) error {
 }
 
 // captureExecution runs only after ingress normalization. Never copy a caller's
-// reserved metadata, including on legacy paths. An insertion retry cannot replace
-// the original event because InsertAssistantThreadEvent is DO NOTHING.
+// reserved metadata, including when the binding is NeverConfigured. An insertion
+// retry cannot replace the original event because InsertAssistantThreadEvent is DO NOTHING.
 func (s *ServiceCore) captureExecution(ctx context.Context, assistant assistantRecord, source string, threadID uuid.UUID, trigger uuid.NullUUID, eventID string, raw []byte, selection *bgtriggers.SlackExecutionSelection) ([]byte, error) {
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &payload); err != nil || payload == nil {

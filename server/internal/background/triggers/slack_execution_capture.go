@@ -9,9 +9,18 @@ import (
 	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 )
 
+// Slack execution fallback reasons are persisted with the execution envelope.
+const (
+	SlackExecutionFallbackNonUserEvent       = "slack_non_user_event"
+	SlackExecutionFallbackSenderAbsent       = "slack_sender_absent"
+	SlackExecutionFallbackMappingAbsent      = "slack_mapping_absent"
+	SlackExecutionFallbackMappingUnavailable = "slack_mapping_unavailable"
+)
+
 // SlackExecutionSelection is trusted ingress state carried through task retries.
-// Denial is deferred to configured execution capture so never-configured legacy
-// assistants retain their existing behavior. It never permits actor reselection.
+// Denial is deferred to configured execution capture so assistants with a
+// NeverConfigured binding retain their existing behavior. It never permits
+// actor reselection.
 type SlackExecutionSelection struct {
 	HumanUserID    string
 	FallbackReason string
@@ -36,20 +45,16 @@ type slackExecutionMappings interface {
 	SlackExecutionWorkspaceDisconnected(context.Context, identityrepo.SlackExecutionWorkspaceDisconnectedParams) (bool, error)
 }
 
-func captureSlackExecution(ctx context.Context, db identityrepo.DBTX, org string, event any) *SlackExecutionSelection {
-	return selectSlackExecution(ctx, identityrepo.New(db), org, event)
-}
-
 func selectSlackExecution(ctx context.Context, mappings slackExecutionMappings, org string, event any) *SlackExecutionSelection {
 	slack, ok := event.(slackTriggerEvent)
 	if !ok {
 		return &SlackExecutionSelection{HumanUserID: "", FallbackReason: "", Denied: true, Delegation: nil}
 	}
 	if !slackExecutionHasActor(slack) || slack.BotID != "" || (slack.AppID != "" && slack.EventType != "block_actions") || slack.Subtype == "bot_message" {
-		return &SlackExecutionSelection{HumanUserID: "", FallbackReason: "slack_non_user_event", Denied: false, Delegation: nil}
+		return &SlackExecutionSelection{HumanUserID: "", FallbackReason: SlackExecutionFallbackNonUserEvent, Denied: false, Delegation: nil}
 	}
 	if slack.TeamID == "" || slack.UserID == "" {
-		return &SlackExecutionSelection{HumanUserID: "", FallbackReason: "slack_sender_absent", Denied: false, Delegation: nil}
+		return &SlackExecutionSelection{HumanUserID: "", FallbackReason: SlackExecutionFallbackSenderAbsent, Denied: false, Delegation: nil}
 	}
 	row, err := mappings.GetSlackExecutionMapping(ctx, identityrepo.GetSlackExecutionMappingParams{OrganizationID: org, SlackTeamID: slack.TeamID, SlackUserID: slack.UserID})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -59,12 +64,12 @@ func selectSlackExecution(ctx context.Context, mappings slackExecutionMappings, 
 			return &SlackExecutionSelection{HumanUserID: "", FallbackReason: "", Denied: true, Delegation: nil}
 		}
 		if lookupErr != nil && !errors.Is(lookupErr, pgx.ErrNoRows) {
-			return &SlackExecutionSelection{HumanUserID: "", FallbackReason: "slack_mapping_unavailable", Denied: false, Delegation: nil}
+			return &SlackExecutionSelection{HumanUserID: "", FallbackReason: SlackExecutionFallbackMappingUnavailable, Denied: false, Delegation: nil}
 		}
-		return &SlackExecutionSelection{HumanUserID: "", FallbackReason: "slack_mapping_absent", Denied: false, Delegation: nil}
+		return &SlackExecutionSelection{HumanUserID: "", FallbackReason: SlackExecutionFallbackMappingAbsent, Denied: false, Delegation: nil}
 	}
 	if err != nil {
-		return &SlackExecutionSelection{HumanUserID: "", FallbackReason: "slack_mapping_unavailable", Denied: false, Delegation: nil}
+		return &SlackExecutionSelection{HumanUserID: "", FallbackReason: SlackExecutionFallbackMappingUnavailable, Denied: false, Delegation: nil}
 	}
 	if !row.Eligible {
 		return &SlackExecutionSelection{HumanUserID: "", FallbackReason: "", Denied: true, Delegation: nil}

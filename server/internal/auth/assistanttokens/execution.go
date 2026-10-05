@@ -123,12 +123,6 @@ func (m *Manager) validateExecutionAuthority(ctx context.Context, e assistantide
 	return nil
 }
 
-// AuthorizeExecution validates the credential's routing pins and live authority.
-func (m *Manager) AuthorizeExecution(ctx context.Context, raw string, target ExecutionTarget) error {
-	_, err := m.ValidateExecution(ctx, raw, target)
-	return err
-}
-
 func (m *Manager) ValidateExecutionEnvelope(ctx context.Context, e assistantidentity.Execution, target ExecutionTarget) error {
 	if e.Identity.OrganizationID != target.OrganizationID || e.Identity.ProjectID != target.ProjectID || e.Identity.AssistantID != target.AssistantID || e.ThreadID != target.ThreadID || e.InvocationEventID() != target.EventID {
 		return assistantidentity.ErrInvalidIdentity
