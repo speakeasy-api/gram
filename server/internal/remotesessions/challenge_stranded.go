@@ -49,13 +49,15 @@ type pendingResourceLeg struct {
 func (p pendingResourceLeg) CacheKey() string   { return "remoteLoginPendingResource:" + p.Key }
 func (p pendingResourceLeg) TTL() time.Duration { return time.Until(p.ExpiresAt) }
 
-// pendingResourceLegKey binds a leg to the subject, client, user session
-// issuer, and resource. It is hashed so no subject identifier is stored in a
-// cache key. The resource is part of the key so an issuer refusing one
-// resource does not drop the resource from logins for another.
+// pendingResourceLegKey binds a leg to the organization, project, subject,
+// client, user session issuer, and resource. It is hashed so no subject
+// identifier is stored in a cache key. The tenancy parts keep an
+// organization-level client or issuer from sharing one project's marker with
+// another, and the resource keeps an issuer refusing one resource from
+// dropping the resource from logins for another.
 func pendingResourceLegKey(parent ParentChallenge, client Client) string {
 	h := sha256.New()
-	for _, part := range []string{parent.Subject.String(), client.ID.String(), parent.UserSessionIssuerID.String(), parent.Resource} {
+	for _, part := range []string{parent.OrganizationID, parent.ProjectID.String(), parent.Subject.String(), client.ID.String(), parent.UserSessionIssuerID.String(), parent.Resource} {
 		_, _ = h.Write([]byte(part))
 		_, _ = h.Write([]byte{0})
 	}
@@ -140,9 +142,22 @@ func (m *ChallengeManager) decideStrandedLeg(ctx context.Context, parent ParentC
 	if !pending {
 		return strandedLegDecision{fallback: false, record: fresh}
 	}
+
+	// Claim the fallback atomically so concurrent restarts that all read the
+	// unspent marker mint one resource-less leg between them. A loser, or a
+	// failed claim, sends the resource and records nothing.
+	claimed := prior
+	claimed.FallbackTaken = true
+	swapped, err := m.pendingLegs.CompareAndSwap(ctx, prior, claimed)
+	if err != nil {
+		logger.WarnContext(ctx, "claim resource-less remote login retry", attr.SlogError(err))
+		return strandedLegDecision{fallback: false, record: nil}
+	}
+	if !swapped {
+		return strandedLegDecision{fallback: false, record: nil}
+	}
 	logger.WarnContext(ctx, "identity provider never answered a login that sent the RFC 8707 resource parameter; retrying the login without it",
 		attr.SlogOAuthResource(parent.Resource),
 	)
-	prior.FallbackTaken = true
-	return strandedLegDecision{fallback: true, record: &prior}
+	return strandedLegDecision{fallback: true, record: &claimed}
 }

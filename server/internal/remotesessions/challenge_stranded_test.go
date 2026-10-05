@@ -2,12 +2,14 @@ package remotesessions
 
 import (
 	"net/url"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -241,6 +243,55 @@ func TestBuildAuthorizationUrl_FallbackIsScopedToTheSubject(t *testing.T) {
 	f.parent.Subject = &other
 	resource, _ := f.start(t)
 	require.Equal(t, strandedTestResource, resource)
+}
+
+// The marker is scoped to one project, so an organization-level client and
+// issuer shared by two projects do not share one project's fallback.
+func TestBuildAuthorizationUrl_FallbackIsScopedToTheProject(t *testing.T) {
+	t.Parallel()
+	f := newStrandedFixture(t)
+
+	f.start(t)
+	f.parent.ProjectID = uuid.New()
+	resource, state := f.start(t)
+	require.Equal(t, strandedTestResource, resource)
+	require.False(t, state.ResourceRetried)
+}
+
+// Concurrent restarts that all see the unspent marker, such as two tabs or a
+// double-clicked connect, mint one resource-less leg between them.
+func TestBuildAuthorizationUrl_ConcurrentRestartsFallBackOnce(t *testing.T) {
+	t.Parallel()
+	f := newStrandedFixture(t)
+
+	f.start(t)
+
+	const restarts = 16
+	var wg sync.WaitGroup
+	resources := make(chan string, restarts)
+	for range restarts {
+		wg.Go(func() {
+			authURL, err := f.mgr.BuildAuthorizationUrl(t.Context(), f.parent, f.client)
+			if !assert.NoError(t, err) {
+				return
+			}
+			parsed, err := url.Parse(authURL)
+			if !assert.NoError(t, err) {
+				return
+			}
+			resources <- parsed.Query().Get("resource")
+		})
+	}
+	wg.Wait()
+	close(resources)
+
+	fallbacks := 0
+	for resource := range resources {
+		if resource == "" {
+			fallbacks++
+		}
+	}
+	require.Equal(t, 1, fallbacks, "exactly one restart takes the window's resource-less leg")
 }
 
 // Once the window expires a new one starts, with its own single fallback.
