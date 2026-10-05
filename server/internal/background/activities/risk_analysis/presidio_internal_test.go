@@ -966,7 +966,7 @@ func TestRemapPresidioOffsets_IndexesSourceText(t *testing.T) {
 	assert.Equal(t, 0, findings[3].StartPos, "a match spanning an escape has no source span")
 	assert.Equal(t, 0, findings[3].EndPos)
 
-	// Keys sort as a, z, but the source has z first.
+	// Keys a and z would sort the other way; the rewrite keeps source order.
 	source = `{"z":"x@y.io","a":"x@y.io"}`
 	scanned = reformatJSONAsYAML(source)
 	start := strings.Index(scanned, "a: ") + len("a: ")
