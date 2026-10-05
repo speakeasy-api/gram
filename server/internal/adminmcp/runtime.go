@@ -116,8 +116,9 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	billingDetailReader, _ := reader.(BillingDetailReader)
 	registryReader, _ := reader.(RegistryReader)
 	serverHealthReader, _ := reader.(MCPServerHealthReader)
+	hooksRolloutReader, _ := reader.(HooksRolloutReader)
 	runtime := &Runtime{authenticator: authenticator, server: server, resourceURL: resourceURL}
-	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, usageReader != nil, coverageReader != nil, issuerReader != nil, matrixReader != nil, onboardingReader != nil, projectMCPReader != nil, billingDiagnosticsReader != nil, organizationStatsReader != nil, organizationMemberReader != nil, billingDetailReader != nil, registryReader != nil, projectReader != nil && serverHealthReader != nil, runtime)
+	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, usageReader != nil, coverageReader != nil, issuerReader != nil, matrixReader != nil, onboardingReader != nil, projectMCPReader != nil, billingDiagnosticsReader != nil, organizationStatsReader != nil, organizationMemberReader != nil, billingDetailReader != nil, registryReader != nil, projectReader != nil && serverHealthReader != nil, hooksRolloutReader != nil, runtime)
 	registerOrganizationTools(server, reader)
 	registerUserTools(server, userReader)
 	registerProjectTools(server, reader, projectReader)
@@ -134,6 +135,7 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	registerBillingDetailTools(server, reader, billingDetailReader)
 	registerRegistryTools(server, registryReader)
 	registerServerHealthTools(server, reader, projectReader, serverHealthReader)
+	registerHooksRolloutTools(server, reader, hooksRolloutReader)
 	return runtime
 }
 

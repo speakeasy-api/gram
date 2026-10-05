@@ -100,6 +100,11 @@ type Endpoints struct {
 	AssignOrganizationOnboardingPlaybook  goa.Endpoint
 	GetStripeSubscriptionCandidate        goa.Endpoint
 	SetStripeSubscription                 goa.Endpoint
+	GetHooksRollout                       goa.Endpoint
+	SetHooksRolloutDefault                goa.Endpoint
+	GetOrganizationHooksRollout           goa.Endpoint
+	SetOrganizationHooksRollout           goa.Endpoint
+	ClearOrganizationHooksRollout         goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -208,6 +213,11 @@ func NewEndpoints(s Service) *Endpoints {
 		AssignOrganizationOnboardingPlaybook:  NewAssignOrganizationOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
 		GetStripeSubscriptionCandidate:        NewGetStripeSubscriptionCandidateEndpoint(s, a.APIKeyAuth),
 		SetStripeSubscription:                 NewSetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		GetHooksRollout:                       NewGetHooksRolloutEndpoint(s, a.APIKeyAuth),
+		SetHooksRolloutDefault:                NewSetHooksRolloutDefaultEndpoint(s, a.APIKeyAuth),
+		GetOrganizationHooksRollout:           NewGetOrganizationHooksRolloutEndpoint(s, a.APIKeyAuth),
+		SetOrganizationHooksRollout:           NewSetOrganizationHooksRolloutEndpoint(s, a.APIKeyAuth),
+		ClearOrganizationHooksRollout:         NewClearOrganizationHooksRolloutEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -296,6 +306,11 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.AssignOrganizationOnboardingPlaybook = m(e.AssignOrganizationOnboardingPlaybook)
 	e.GetStripeSubscriptionCandidate = m(e.GetStripeSubscriptionCandidate)
 	e.SetStripeSubscription = m(e.SetStripeSubscription)
+	e.GetHooksRollout = m(e.GetHooksRollout)
+	e.SetHooksRolloutDefault = m(e.SetHooksRolloutDefault)
+	e.GetOrganizationHooksRollout = m(e.GetOrganizationHooksRollout)
+	e.SetOrganizationHooksRollout = m(e.SetOrganizationHooksRollout)
+	e.ClearOrganizationHooksRollout = m(e.ClearOrganizationHooksRollout)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -2166,5 +2181,120 @@ func NewSetStripeSubscriptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return s.SetStripeSubscription(ctx, p)
+	}
+}
+
+// NewGetHooksRolloutEndpoint returns an endpoint function that calls the
+// method "getHooksRollout" of service "admin".
+func NewGetHooksRolloutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetHooksRolloutPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetHooksRollout(ctx, p)
+	}
+}
+
+// NewSetHooksRolloutDefaultEndpoint returns an endpoint function that calls
+// the method "setHooksRolloutDefault" of service "admin".
+func NewSetHooksRolloutDefaultEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetHooksRolloutDefaultPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetHooksRolloutDefault(ctx, p)
+	}
+}
+
+// NewGetOrganizationHooksRolloutEndpoint returns an endpoint function that
+// calls the method "getOrganizationHooksRollout" of service "admin".
+func NewGetOrganizationHooksRolloutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrganizationHooksRolloutPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOrganizationHooksRollout(ctx, p)
+	}
+}
+
+// NewSetOrganizationHooksRolloutEndpoint returns an endpoint function that
+// calls the method "setOrganizationHooksRollout" of service "admin".
+func NewSetOrganizationHooksRolloutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetOrganizationHooksRolloutPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetOrganizationHooksRollout(ctx, p)
+	}
+}
+
+// NewClearOrganizationHooksRolloutEndpoint returns an endpoint function that
+// calls the method "clearOrganizationHooksRollout" of service "admin".
+func NewClearOrganizationHooksRolloutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ClearOrganizationHooksRolloutPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ClearOrganizationHooksRollout(ctx, p)
 	}
 }

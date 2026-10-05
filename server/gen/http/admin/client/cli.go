@@ -2828,3 +2828,132 @@ func BuildSetStripeSubscriptionPayload(adminSetStripeSubscriptionBody string, ad
 
 	return v, nil
 }
+
+// BuildGetHooksRolloutPayload builds the payload for the admin getHooksRollout
+// endpoint from CLI flags.
+func BuildGetHooksRolloutPayload(adminGetHooksRolloutAdminSessionToken string) (*admin.GetHooksRolloutPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminGetHooksRolloutAdminSessionToken != "" {
+			adminSessionToken = &adminGetHooksRolloutAdminSessionToken
+		}
+	}
+	v := &admin.GetHooksRolloutPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildSetHooksRolloutDefaultPayload builds the payload for the admin
+// setHooksRolloutDefault endpoint from CLI flags.
+func BuildSetHooksRolloutDefaultPayload(adminSetHooksRolloutDefaultBody string, adminSetHooksRolloutDefaultAdminSessionToken string) (*admin.SetHooksRolloutDefaultPayload, error) {
+	var err error
+	var body SetHooksRolloutDefaultRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetHooksRolloutDefaultBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"version\": 2\n   }'")
+		}
+		if body.Version < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.version", body.Version, 1, true))
+		}
+		if body.Version > 100000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.version", body.Version, 100000, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetHooksRolloutDefaultAdminSessionToken != "" {
+			adminSessionToken = &adminSetHooksRolloutDefaultAdminSessionToken
+		}
+	}
+	v := &admin.SetHooksRolloutDefaultPayload{
+		Version: body.Version,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetOrganizationHooksRolloutPayload builds the payload for the admin
+// getOrganizationHooksRollout endpoint from CLI flags.
+func BuildGetOrganizationHooksRolloutPayload(adminGetOrganizationHooksRolloutOrganizationID string, adminGetOrganizationHooksRolloutAdminSessionToken string) (*admin.GetOrganizationHooksRolloutPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetOrganizationHooksRolloutOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetOrganizationHooksRolloutAdminSessionToken != "" {
+			adminSessionToken = &adminGetOrganizationHooksRolloutAdminSessionToken
+		}
+	}
+	v := &admin.GetOrganizationHooksRolloutPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildSetOrganizationHooksRolloutPayload builds the payload for the admin
+// setOrganizationHooksRollout endpoint from CLI flags.
+func BuildSetOrganizationHooksRolloutPayload(adminSetOrganizationHooksRolloutBody string, adminSetOrganizationHooksRolloutAdminSessionToken string) (*admin.SetOrganizationHooksRolloutPayload, error) {
+	var err error
+	var body SetOrganizationHooksRolloutRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetOrganizationHooksRolloutBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\",\n      \"version\": 2\n   }'")
+		}
+		if body.Version < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.version", body.Version, 1, true))
+		}
+		if body.Version > 100000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.version", body.Version, 100000, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetOrganizationHooksRolloutAdminSessionToken != "" {
+			adminSessionToken = &adminSetOrganizationHooksRolloutAdminSessionToken
+		}
+	}
+	v := &admin.SetOrganizationHooksRolloutPayload{
+		OrganizationID: body.OrganizationID,
+		Version:        body.Version,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildClearOrganizationHooksRolloutPayload builds the payload for the admin
+// clearOrganizationHooksRollout endpoint from CLI flags.
+func BuildClearOrganizationHooksRolloutPayload(adminClearOrganizationHooksRolloutBody string, adminClearOrganizationHooksRolloutAdminSessionToken string) (*admin.ClearOrganizationHooksRolloutPayload, error) {
+	var err error
+	var body ClearOrganizationHooksRolloutRequestBody
+	{
+		err = json.Unmarshal([]byte(adminClearOrganizationHooksRolloutBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminClearOrganizationHooksRolloutAdminSessionToken != "" {
+			adminSessionToken = &adminClearOrganizationHooksRolloutAdminSessionToken
+		}
+	}
+	v := &admin.ClearOrganizationHooksRolloutPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

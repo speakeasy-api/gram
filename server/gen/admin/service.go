@@ -292,6 +292,23 @@ type Service interface {
 	// subscription ID is empty, after verifying the subscription belongs to the
 	// organization's Stripe customer.
 	SetStripeSubscription(context.Context, *SetStripeSubscriptionPayload) (res *AdminOrganization, err error)
+	// Returns the platform-wide hooks version rollout state: the version this
+	// build publishes, the default pin, canary organizations, organization
+	// overrides and recent changes.
+	GetHooksRollout(context.Context, *GetHooksRolloutPayload) (res *AdminHooksRollout, err error)
+	// Moves the default hooks rollout pin for every organization without an
+	// override. Customer organizations receive a hooks version on the next rollout
+	// sweep once the pin reaches it. Lowering the pin holds back later versions;
+	// it never downgrades a published hooks plugin.
+	SetHooksRolloutDefault(context.Context, *SetHooksRolloutDefaultPayload) (res *AdminHooksRollout, err error)
+	// Returns the hooks version rollout state for one organization.
+	GetOrganizationHooksRollout(context.Context, *GetOrganizationHooksRolloutPayload) (res *AdminOrganizationHooksRollout, err error)
+	// Pins one organization to its own hooks version, regardless of the default
+	// pin.
+	SetOrganizationHooksRollout(context.Context, *SetOrganizationHooksRolloutPayload) (res *AdminOrganizationHooksRollout, err error)
+	// Removes an organization's hooks version override so it follows the default
+	// pin again.
+	ClearOrganizationHooksRollout(context.Context, *ClearOrganizationHooksRolloutPayload) (res *AdminOrganizationHooksRollout, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -314,7 +331,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [83]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "getStripeSubscriptionCandidate", "setStripeSubscription"}
+var MethodNames = [88]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "getStripeSubscriptionCandidate", "setStripeSubscription", "getHooksRollout", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -349,6 +366,57 @@ type AdminChatAnalysisTriggerResult struct {
 type AdminDashboardRedirect struct {
 	Location     string
 	CacheControl string
+}
+
+// AdminHooksRollout is the result type of the admin service getHooksRollout
+// method.
+type AdminHooksRollout struct {
+	// The hooks generator version this server build publishes to an organization
+	// once its pin reaches it.
+	CurrentVersion int
+	// The pin for every organization without an override. Absent until one is set;
+	// until then those organizations follow the legacy hooks-rollout PostHog flag.
+	DefaultPin *AdminHooksRolloutPin
+	// Organizations that always receive current_version and ignore pins.
+	CanaryOrganizationSlugs []string
+	// Organizations with an override, by slug.
+	Overrides []*AdminHooksRolloutOverride
+	// The most recent pin changes, newest first.
+	RecentChanges []*AdminHooksRolloutChange
+}
+
+// One change to a hooks rollout pin.
+type AdminHooksRolloutChange struct {
+	// Organization whose override changed. Absent for a change to the default pin.
+	OrganizationID *string
+	// Slug of organization_id. Absent for a change to the default pin.
+	OrganizationSlug *string
+	// Version the change set. Absent when the change cleared an organization
+	// override.
+	Version *int
+	// Email of the staff operator who made the change.
+	SetBy string
+	// When the change was made.
+	SetAt string
+}
+
+// An organization pinned to its own hooks version instead of the default pin.
+type AdminHooksRolloutOverride struct {
+	OrganizationID   string
+	OrganizationName string
+	OrganizationSlug string
+	Pin              *AdminHooksRolloutPin
+}
+
+// A hooks version rollout pin: the highest hooks generator version its scope
+// is cleared to receive.
+type AdminHooksRolloutPin struct {
+	// Highest hooks generator version the pin clears.
+	Version int
+	// Email of the staff operator who set the pin.
+	SetBy string
+	// When the pin was set.
+	SetAt string
 }
 
 // Current usage and configured state for one materialized platform-managed
@@ -870,6 +938,29 @@ type AdminOrganization struct {
 	UpdatedAt string
 }
 
+// AdminOrganizationHooksRollout is the result type of the admin service
+// getOrganizationHooksRollout method.
+type AdminOrganizationHooksRollout struct {
+	OrganizationID string
+	// The hooks generator version this server build publishes to an organization
+	// once its pin reaches it.
+	CurrentVersion int
+	// The organization's own pin. Absent when it follows the default pin.
+	Override *AdminHooksRolloutPin
+	// The platform-wide default pin. Absent until one is set.
+	DefaultPin *AdminHooksRolloutPin
+	// What decides the organization's hooks version: canary organizations always
+	// get current_version, organization and default name the pin that applies, and
+	// legacy_flag means no pin applies yet and the hooks-rollout PostHog flag
+	// decides.
+	Source string
+	// Version of the pin that applies. Absent for canary and legacy_flag.
+	EffectiveVersion *int
+	// Whether the organization's next publish moves its hooks plugin to
+	// current_version. Absent for legacy_flag, which the admin server cannot read.
+	Eligible *bool
+}
+
 // Organization member surfaced to admin operators.
 type AdminOrganizationMember struct {
 	// User ID.
@@ -1232,6 +1323,13 @@ type ChangeTrialEndDatePayload struct {
 	EndsAt string
 }
 
+// ClearOrganizationHooksRolloutPayload is the payload type of the admin
+// service clearOrganizationHooksRollout method.
+type ClearOrganizationHooksRolloutPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
 // CloneOnboardingPlaybookPayload is the payload type of the admin service
 // cloneOnboardingPlaybook method.
 type CloneOnboardingPlaybookPayload struct {
@@ -1487,6 +1585,12 @@ type GetGlobalIssuerPayload struct {
 	AdminSessionToken *string
 }
 
+// GetHooksRolloutPayload is the payload type of the admin service
+// getHooksRollout method.
+type GetHooksRolloutPayload struct {
+	AdminSessionToken *string
+}
+
 // GetInferenceKeysPayload is the payload type of the admin service
 // getInferenceKeys method.
 type GetInferenceKeysPayload struct {
@@ -1547,6 +1651,13 @@ type GetOrganizationChatAnalysisSettingsPayload struct {
 // GetOrganizationFeaturesPayload is the payload type of the admin service
 // getOrganizationFeatures method.
 type GetOrganizationFeaturesPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+// GetOrganizationHooksRolloutPayload is the payload type of the admin service
+// getOrganizationHooksRollout method.
+type GetOrganizationHooksRolloutPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
 }
@@ -2138,6 +2249,15 @@ type ServeImageResult struct {
 	CrossOriginResourcePolicy string
 }
 
+// SetHooksRolloutDefaultPayload is the payload type of the admin service
+// setHooksRolloutDefault method.
+type SetHooksRolloutDefaultPayload struct {
+	AdminSessionToken *string
+	// Highest hooks generator version to clear. Must not exceed the version this
+	// build publishes.
+	Version int
+}
+
 // SetInferenceKeyMonthlyLimitPayload is the payload type of the admin service
 // setInferenceKeyMonthlyLimit method.
 type SetInferenceKeyMonthlyLimitPayload struct {
@@ -2164,6 +2284,16 @@ type SetOrganizationFeaturePayload struct {
 	OrganizationID    string
 	FeatureName       ProductFeatureName
 	Enabled           bool
+}
+
+// SetOrganizationHooksRolloutPayload is the payload type of the admin service
+// setOrganizationHooksRollout method.
+type SetOrganizationHooksRolloutPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	// Highest hooks generator version to clear for the organization. Must not
+	// exceed the version this build publishes.
+	Version int
 }
 
 // SetOrganizationOnboardingStackPayload is the payload type of the admin
