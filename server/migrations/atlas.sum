@@ -1,4 +1,4 @@
-h1:7o8l9Ojdf9pfErNHTP/a+4Njr60qM9nmnRAhrgad/fI=
+h1:1TG93+AR29f/ICrodOdrgTzujANp/dEZjGxZGxOTNLU=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -454,3 +454,4 @@ h1:7o8l9Ojdf9pfErNHTP/a+4Njr60qM9nmnRAhrgad/fI=
 20261002160117_inference-conversation-adoption.sql h1:srTsjRNcord/S5c6jWJIIHpyjmdsixgH6kY+pQo7JV0=
 20261002211059_assistant_identity_bindings.sql h1:v0pdMZYDkEw62HrMC1qGF2TgLkKJcYSnrvGG8epPUt4=
 20261005153853_risk-execution-evidence.sql h1:KrzAQmFOY8N2X1l5QHdjWuZ4ZDV8c0i6V8K9025RWbA=
+20261005182830_claude_tag_session_metadata.sql h1:9pp9jaqIhWH/xHeZbXOCLDKY3UGYaNZ/d//hJQWlP2E=
