@@ -18,10 +18,13 @@ export type WizardStepState = "done" | "current" | "todo";
 export function WizardStepper({
   steps,
   current,
+  forward = false,
   onJump,
 }: {
   steps: string[];
   current: number;
+  /** Whether a step ahead of the current one can be jumped to. */
+  forward?: boolean;
   onJump: (index: number) => void;
 }): JSX.Element {
   return (
@@ -37,20 +40,24 @@ export function WizardStepper({
             <button
               type="button"
               aria-current={state === "current" ? "step" : undefined}
-              // Only a completed step is a destination: jumping forward would
-              // skip the choices the later steps are built from.
-              disabled={state !== "done"}
+              // A step ahead is a destination only where nothing later is
+              // built from a choice not yet made.
+              disabled={state === "current" || (state === "todo" && !forward)}
               onClick={() => onJump(index)}
               className={cn(
                 "flex w-full items-center gap-3 px-4 py-3 text-left",
-                state === "current" && "border-primary border-t-2",
+                state === "current" && "border-information-default border-t-2",
                 state === "todo" && "text-muted-foreground",
+                // A step that cannot be reached must not read as a control.
+                state === "current" || (state === "todo" && !forward)
+                  ? "cursor-default"
+                  : "hover:bg-muted/40",
               )}
             >
               <span
                 className={cn(
                   "flex size-6 shrink-0 items-center justify-center font-mono text-xs",
-                  state === "current" && "bg-primary text-primary-foreground",
+                  state === "current" && "bg-information-default text-white",
                   state === "done" && "text-foreground",
                   state === "todo" && "border-border border",
                 )}
@@ -100,7 +107,18 @@ export function WizardSummary({
   servers: { id: string; name: string; detail: string }[];
 }): JSX.Element {
   return (
-    <aside className="border-border border-t-primary sticky top-4 border border-t-2">
+    <aside className="border-border bg-card sticky top-4 border shadow-sm">
+      {/* The brand's spectrum hairline, used once on the page: it marks the
+          rail as the thing carrying the decisions without borrowing the blue
+          that means "the step you are on". */}
+      <div
+        aria-hidden="true"
+        className="h-0.5 w-full"
+        style={{
+          background:
+            "linear-gradient(90deg,#320F1E 0%,#C83228 13%,#FB873F 25%,#D2DC91 38%,#5A8250 50%,#002314 62%,#00143C 74%,#2873D7 86%,#9BC3FF 100%)",
+        }}
+      />
       <div className="space-y-4 p-4">
         <div className="flex items-baseline justify-between gap-3">
           <span className="text-muted-foreground font-mono text-[10px] tracking-[0.08em] uppercase">

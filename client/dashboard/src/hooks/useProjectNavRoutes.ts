@@ -66,10 +66,10 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     return [
       { route: routes.home, scope: read },
       { route: routes.chat, scope: read },
+      // Identities is the index for everyone the platform knows about,
+      // people and agents alike. An agent's own pages are reached from a row
+      // there rather than from a second list in the sidebar.
       { route: routes.identities, scope: observe },
-      ...(agentManagementFlag.status === "enabled"
-        ? [{ route: routes.agents, scope: [] }]
-        : []),
       ...(userSessionsFlag.status === "enabled"
         ? [
             {

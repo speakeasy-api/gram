@@ -792,6 +792,17 @@ function IdentitiesIndexContent(): JSX.Element {
               />
             </Page.Toolbar.Actions>
           </Page.Toolbar>
+          {/* Where each kind of row comes from. One screen for people and
+              agents hid the thing that separates them: a person arrives from
+              the identity provider and cannot be created here, while an agent
+              is registered here and issued its key here. */}
+          <Text muted small>
+            {kindKey === "person"
+              ? "People arrive from your identity provider. Gram does not create them."
+              : kindKey === "agent"
+                ? "Agents are registered here, and are issued their keys here."
+                : "People arrive from your identity provider; agents are registered here."}
+          </Text>
           <Table
             columns={IDENTITY_COLUMNS}
             data={sortedRows.slice(0, visibleCount)}

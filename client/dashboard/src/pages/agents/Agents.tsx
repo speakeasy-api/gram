@@ -329,11 +329,14 @@ function AgentSettings({
     });
   };
 
+  // The same five steps as a new agent, because the work is the same work:
+  // which servers, which credential, hand it to the runtime, watch it call.
+  // Only the identity is already settled, so its steps are all reachable.
   if (searchParams.get("credential") === "new")
     return (
       <FormPage
-        title="Issue a key"
-        description={`Choose what ${agentQuery.data.name} can access.`}
+        title="Provision agent"
+        description={`Issue ${agentQuery.data.name} a key and connect it to its runtime.`}
         width="wide"
         primaryAction={
           <Button
@@ -345,9 +348,8 @@ function AgentSettings({
           </Button>
         }
       >
-        <AgentAPIKeys
+        <ProvisionWizard
           agent={agentQuery.data}
-          creation
           onBusy={setCredentialBusy}
           onDone={() => setSearchParams({ id: agentID })}
         />

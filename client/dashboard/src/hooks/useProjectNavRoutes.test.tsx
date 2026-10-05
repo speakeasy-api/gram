@@ -117,13 +117,15 @@ describe("useProjectNavRoutes", () => {
     );
   });
 
-  it("includes Agent Identity for owners without requiring role grants", () => {
+  it("keeps agents out of the sidebar: Identities is their index", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
-    const agents = result.current.find(
-      (entry) => entry.route === routes.agents,
-    );
 
-    expect(agents?.scope).toEqual([]);
+    expect(
+      result.current.find((entry) => entry.route === routes.agents),
+    ).toBeUndefined();
+    expect(
+      result.current.find((entry) => entry.route === routes.identities)?.scope,
+    ).toEqual(["project:read"]);
   });
 
   it("uses the selected project's read grant for MCP Sessions", () => {
@@ -140,9 +142,8 @@ describe("useProjectNavRoutes", () => {
   it("lists Identity before MCP Gateway, Security and Policy, and Observability", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
     const navRoutes = result.current.map((entry) => entry.route);
-    expect(navRoutes.slice(2, 6)).toEqual([
+    expect(navRoutes.slice(2, 5)).toEqual([
       routes.identities,
-      routes.agents,
       routes.mcpSessions,
       routes.remoteIdentityProviders,
     ]);

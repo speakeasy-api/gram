@@ -57,6 +57,21 @@ vi.mock("./AgentAPIKeys", () => ({
       </div>
     ),
 }));
+vi.mock("./provision/ProvisionWizard", () => ({
+  ProvisionWizard: ({
+    onDone,
+    onBusy,
+  }: {
+    onDone: (id?: string) => void;
+    onBusy?: (busy: boolean) => void;
+  }) => (
+    <>
+      <button onClick={() => onDone("agent_example")}>Wizard done</button>
+      <button onClick={() => onBusy?.(true)}>Start issuing</button>
+      <button onClick={() => onBusy?.(false)}>Finish issuing</button>
+    </>
+  ),
+}));
 vi.mock("./ManagedAgentSessions", () => ({
   ManagedAgentSessions: () => <div>Sessions</div>,
 }));
@@ -409,9 +424,13 @@ describe("Agent owner access", () => {
       credential: "new",
     });
     view.rerenderPage();
-    expect(screen.getByRole("heading", { name: "Issue a key" })).toBeTruthy();
     expect(
-      screen.getByText("Choose what Example agent can access."),
+      screen.getByRole("heading", { name: "Provision agent" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Issue Example agent a key and connect it to its runtime.",
+      ),
     ).toBeTruthy();
     expect(screen.queryByText("Identity")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Wizard done" }));

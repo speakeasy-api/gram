@@ -6,6 +6,7 @@ import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type JSX } from "react";
@@ -53,9 +54,16 @@ const KEY_LIFETIME_DAYS = 90;
 type Scope = "project" | "organization";
 
 export function ProvisionWizard({
+  agent,
   onDone,
   onBusy,
 }: {
+  /**
+   * The agent being provisioned again. While creating one there is no agent:
+   * the identity does not exist until the choices are made, so every step
+   * ahead is still a draft and none of them can be revisited.
+   */
+  agent?: ManagedAgent;
   /** Leaves the wizard for the agent it created, or the list if it made none. */
   onDone: (agentID?: string) => void;
   onBusy?: (busy: boolean) => void;
@@ -67,8 +75,14 @@ export function ProvisionWizard({
   const queryClient = useQueryClient();
   const inventory = useServerInventory();
 
+  // Provisioning an agent that already exists: its name and scope are settled,
+  // so the flow is only about which servers this key reaches and how the key
+  // is delivered. Every step is a destination because none of them creates
+  // anything until the key is issued.
+  const existing = agent !== undefined;
+
   const [step, setStep] = useState(0);
-  const [name, setName] = useState("");
+  const [name, setName] = useState(agent?.name ?? "");
   const [scope, setScope] = useState<Scope>("project");
   const [selected, setSelected] = useState<ServerSelection[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -76,7 +90,7 @@ export function ProvisionWizard({
 
   // What provisioning produced. The secret is held only while this page is
   // open; nothing writes it to storage or to the query cache.
-  const [agentID, setAgentID] = useState<string | null>(null);
+  const [agentID, setAgentID] = useState<string | null>(agent?.id ?? null);
   const [secret, setSecret] = useState<string | null>(null);
   const [command, setCommand] = useState<string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
@@ -156,28 +170,34 @@ export function ProvisionWizard({
           projectId: entry.server.projectId,
         })),
       };
-      const agent = await sdk.agents.create({
-        createAgentForm: {
-          name: name.trim(),
-          ...(scopedProjectID ? { projectId: scopedProjectID } : {}),
-          policyGrants: agentPolicyGrantsFromDraft(draft),
-        },
-      });
-      setAgentID(agent.id);
-      void invalidateAgentPolicy(
-        queryClient,
-        organization.id,
-        user.id,
-        agent.id,
-      );
-      void queryClient.invalidateQueries({
-        queryKey: ["managed-agents", organization.id],
-      });
+      // An agent that exists keeps its stored ceiling: this flow issues a key
+      // against it rather than rewriting what the agent may ever be delegated.
+      const target =
+        agent ??
+        (await sdk.agents.create({
+          createAgentForm: {
+            name: name.trim(),
+            ...(scopedProjectID ? { projectId: scopedProjectID } : {}),
+            policyGrants: agentPolicyGrantsFromDraft(draft),
+          },
+        }));
+      setAgentID(target.id);
+      if (!agent) {
+        void invalidateAgentPolicy(
+          queryClient,
+          organization.id,
+          user.id,
+          target.id,
+        );
+        void queryClient.invalidateQueries({
+          queryKey: ["managed-agents", organization.id],
+        });
+      }
 
       const controller = new AbortController();
       const delegable = await discoverKeyServerGrants(
         sdk.agents,
-        agent.id,
+        target.id,
         selected.map((entry) => ({
           resourceId: entry.server.resourceId,
           projectId: entry.server.projectId,
@@ -190,15 +210,17 @@ export function ProvisionWizard({
       );
       if (requestedGrants.length === 0) {
         throw new Error(
-          "The agent was created, but nothing on these servers could be delegated to it. Open the agent to review its permissions.",
+          existing
+            ? "Nothing on these servers can be delegated to this agent. Check its permissions, or choose other servers."
+            : "The agent was created, but nothing on these servers could be delegated to it. Open the agent to review its permissions.",
         );
       }
 
       const expiresAt = new Date(Date.now() + KEY_LIFETIME_DAYS * 86_400_000);
       const issued = await sdk.keys.create({
         createKeyForm: {
-          agentId: agent.id,
-          name: `${name.trim()} key`,
+          agentId: target.id,
+          name: `${name.trim()} key ${new Date().toISOString().slice(0, 10)}`,
           expiresAt,
           delegatedGrantsVersion: 2,
           requestedGrants,
@@ -208,7 +230,7 @@ export function ProvisionWizard({
       keyID.current = issued.id;
       setSecret(issued.key ?? null);
       setStep(3);
-      if (issued.key) regenerate(issued.key, agentGatewayURL(agent.id));
+      if (issued.key) regenerate(issued.key, agentGatewayURL(target.id));
     } catch (failure) {
       const conflict =
         failure instanceof GramError && failure.statusCode === 409
@@ -267,34 +289,44 @@ export function ProvisionWizard({
                 onChange={setName}
                 placeholder="Release Bot"
                 maxLength={120}
-                autoFocus
+                // An existing agent's name and scope are its own; this flow
+                // issues it a key and does not rewrite its identity.
+                disabled={existing}
+                autoFocus={!existing}
               />
               <Text muted small>
-                Shown in audit logs and session lists. You can rename it later.
+                {existing
+                  ? "Rename this agent from its own page."
+                  : "Shown in audit logs and session lists. You can rename it later."}
               </Text>
             </div>
             {
               <div className="space-y-2">
                 <Label>Scope</Label>
                 <Text muted small>
-                  Scope decides whether this agent can reach servers in every
-                  project or only this one. You narrow the list itself in the
-                  next step.
+                  {existing
+                    ? "Set when the agent was created. Which of its servers this key reaches is the next step."
+                    : "Scope decides whether this agent can reach servers in every project or only this one. You narrow the list itself in the next step."}
                 </Text>
                 <RadioCardGroup
                   value={scope}
                   onValueChange={(value) => setScope(value as Scope)}
+                  disabled={existing}
                   className="sm:grid-cols-2"
                 >
-                  <RadioCard value="project" title="Project">
+                  {/* One line each: the choice is a scope, not a paragraph. */}
+                  <RadioCard value="project" title="Project" className="p-3">
                     <Text muted small>
-                      {project.name} only. Reaches servers in this project.
+                      Servers in {project.name}.
                     </Text>
                   </RadioCard>
-                  <RadioCard value="organization" title="Organization">
+                  <RadioCard
+                    value="organization"
+                    title="Organization"
+                    className="p-3"
+                  >
                     <Text muted small>
-                      All projects in {organization.name}. Reaches servers
-                      across projects.
+                      Servers in every {organization.name} project.
                     </Text>
                   </RadioCard>
                 </RadioCardGroup>
@@ -328,18 +360,19 @@ export function ProvisionWizard({
               onValueChange={() => undefined}
               className="sm:grid-cols-2"
             >
-              <RadioCard value="api-key" title="API key">
+              <RadioCard value="api-key" title="API key" className="p-3">
                 <Text muted small>
                   A scoped key, delivered by a one-line setup script or copied
-                  manually. Works in any runtime.
+                  by hand. Works in any runtime.
                 </Text>
-                <span className="text-muted-foreground mt-2 block font-mono text-xs">
+                <span className="text-muted-foreground mt-1 block font-mono text-xs">
                   Long-lived · revocable
                 </span>
               </RadioCard>
               <RadioCard
                 value="workload"
                 disabled
+                className="p-3"
                 title={
                   <span className="flex items-center gap-2">
                     Workload identity
@@ -353,7 +386,7 @@ export function ProvisionWizard({
                   Federate a token the platform already issues — GitHub Actions,
                   Kubernetes, SPIFFE, GCP. No Gram secret is created.
                 </Text>
-                <span className="text-muted-foreground mt-2 block font-mono text-xs">
+                <span className="text-muted-foreground mt-1 block font-mono text-xs">
                   Short-lived tokens · no refresh token
                 </span>
               </RadioCard>
@@ -401,11 +434,21 @@ export function ProvisionWizard({
       case 2:
         return (
           <WizardFooter
-            note="Creating the agent is recorded in the organization audit log."
+            note={
+              existing
+                ? "Issuing a key is recorded in the organization audit log."
+                : "Creating the agent is recorded in the organization audit log."
+            }
             onBack={() => setStep(1)}
             primary={
               <Button disabled={provisioning} onClick={() => void provision()}>
-                {provisioning ? "Creating…" : "Create agent"}
+                {provisioning
+                  ? existing
+                    ? "Issuing…"
+                    : "Creating…"
+                  : existing
+                    ? "Issue key"
+                    : "Create agent"}
               </Button>
             }
           />
@@ -443,7 +486,9 @@ export function ProvisionWizard({
             note={
               blocked ??
               (step === 0
-                ? "Name and scope can be changed later."
+                ? existing
+                  ? "This agent's identity is settled; this flow issues it a key."
+                  : "Name and scope can be changed later."
                 : `${selected.length} of ${inventory.servers.length} servers selected.`)
             }
             onBack={step > 0 ? () => setStep(step - 1) : undefined}
@@ -462,11 +507,12 @@ export function ProvisionWizard({
       <WizardStepper
         steps={STEPS}
         current={step}
-        // Once the agent exists its choices are made; going back would offer
-        // edits this screen can no longer apply.
-        onJump={(index) => {
-          if (!agentID) setStep(index);
-        }}
+        // While creating, only a step already completed is a destination: the
+        // ones ahead are built from choices not yet made. Provisioning an
+        // existing agent has no such order, so every step is reachable until
+        // the key is issued.
+        forward={existing && !secret}
+        onJump={setStep}
       />
       {error && (
         <p
@@ -476,7 +522,7 @@ export function ProvisionWizard({
           {error}
         </p>
       )}
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-16">
         <div>{body()}</div>
         <div className="lg:order-last">{summary}</div>
       </div>
