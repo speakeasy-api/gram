@@ -384,7 +384,7 @@ func TestProxyManager_ChallengeScopesLatestWins(t *testing.T) {
 }
 
 // A challenge for a resource without a row records nothing and does not
-// fail the relay.
+// fail the relay, but retries once the on-use probe creates the row.
 func TestProxyManager_ChallengeScopesWithoutRowIsNoop(t *testing.T) {
 	t.Parallel()
 
@@ -420,6 +420,20 @@ func TestProxyManager_ChallengeScopesWithoutRowIsNoop(t *testing.T) {
 
 	close(release)
 	<-probed
+	before := loadProtectedResource(t, ctx, ti, upstream.URL)
+	require.Nil(t, before.ChallengeScopes)
+
+	postInitialize(t, ctx, manager, server)
+	<-written
+	first := loadProtectedResource(t, ctx, ti, upstream.URL)
+	require.Equal(t, []string{"a"}, first.ChallengeScopes)
+	require.True(t, first.ChallengeScopesSeenAt.Valid)
+
+	postInitialize(t, ctx, manager, server)
+	<-written
+	repeat := loadProtectedResource(t, ctx, ti, upstream.URL)
+	require.Equal(t, first.ChallengeScopesSeenAt.Time, repeat.ChallengeScopesSeenAt.Time, "identical scopes are not rewritten")
+	require.Equal(t, first.UpdatedAt.Time, repeat.UpdatedAt.Time)
 }
 
 // probedUpstream rejects MCP traffic with a bare 401 and serves body at the
@@ -583,7 +597,7 @@ func TestProxyManager_ProtectedResourceProbeRecordsAnotherResourceAsError(t *tes
 	require.EqualValues(t, 1, hits.Load())
 
 	row := loadProtectedResource(t, ctx, ti, upstream.URL)
-	require.Equal(t, "The metadata document names a different resource.", row.MetadataLastError.String)
+	require.Equal(t, "The metadata document resource or location does not match the requested resource.", row.MetadataLastError.String)
 	require.True(t, row.MetadataLastErrorAt.Valid)
 	require.False(t, row.MetadataFetchedAt.Valid)
 	require.Nil(t, row.AuthorizationServers)

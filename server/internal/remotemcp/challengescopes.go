@@ -119,31 +119,37 @@ func (f *ProxyManager) observeChallengeScopes(ctx context.Context, logger *slog.
 		}
 		ctx, cancel := context.WithTimeout(detached, challengeScopesWriteBudget)
 		defer cancel()
-		if err := recordChallengeScopes(ctx, f.db, projectID, resourceURL, scopes); err != nil {
+		recorded, err := recordChallengeScopes(ctx, f.db, projectID, resourceURL, scopes)
+		if !recorded {
 			f.challengeScopes.seen.CompareAndDelete(key, obs)
+		}
+		if err != nil {
 			logger.ErrorContext(ctx, "record protected resource challenge scopes", attr.SlogError(err))
 		}
 		f.challengeScopes.sweep(time.Now())
 	}()
 }
 
-func recordChallengeScopes(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID, resourceURL string, scopes []string) error {
+// recordChallengeScopes reports whether the scopes are persisted, including when
+// they already match. A missing row is a no-op, but must not debounce a retry.
+func recordChallengeScopes(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID, resourceURL string, scopes []string) (bool, error) {
 	q := repo.New(db)
 	existing, err := q.GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: projectID, ResourceIdentifier: resourceURL})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil
+		return false, nil
 	case err != nil:
-		return fmt.Errorf("get remote protected resource: %w", err)
+		return false, fmt.Errorf("get remote protected resource: %w", err)
 	case slices.Equal(existing.ChallengeScopes, scopes):
-		return nil
+		return true, nil
 	}
-	if _, err := q.RecordRemoteProtectedResourceChallengeScopes(ctx, repo.RecordRemoteProtectedResourceChallengeScopesParams{
+	rows, err := q.RecordRemoteProtectedResourceChallengeScopes(ctx, repo.RecordRemoteProtectedResourceChallengeScopesParams{
 		ChallengeScopes:    scopes,
 		ProjectID:          projectID,
 		ResourceIdentifier: resourceURL,
-	}); err != nil {
-		return fmt.Errorf("record remote protected resource challenge scopes: %w", err)
+	})
+	if err != nil {
+		return false, fmt.Errorf("record remote protected resource challenge scopes: %w", err)
 	}
-	return nil
+	return rows > 0, nil
 }

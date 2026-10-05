@@ -74,12 +74,10 @@ func (s *Service) DiscoverProtectedResourceMetadata(ctx context.Context, payload
 		return nil, oops.E(oops.CodeUnexpected, probeErr, "discover protected resource metadata").LogError(ctx, logger)
 	}
 
-	// A document read from the origin-style path may describe a sibling
-	// resource; only one that names this URL is recorded for it.
-	if doc.IdentifiesResource(server.Url) {
-		if err := recordProtectedResource(ctx, s.db, *authCtx.ProjectID, authCtx.ActiveOrganizationID, server.Url, doc); err != nil {
-			logger.ErrorContext(ctx, "record protected resource", attr.SlogError(err))
-		}
+	// Keep the diagnostic response even for invalid metadata, but record the
+	// failed validation rather than refreshing the last successful fetch.
+	if err := recordProtectedResource(ctx, s.db, *authCtx.ProjectID, authCtx.ActiveOrganizationID, server.Url, doc); err != nil {
+		logger.ErrorContext(ctx, "record protected resource", attr.SlogError(err))
 	}
 
 	return &gen.ProtectedResourceMetadataDiscovery{

@@ -1,7 +1,6 @@
 package remotemcp
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -90,7 +89,7 @@ func TestParseChallengeScopes(t *testing.T) {
 	}
 }
 
-func TestRecordProtectedResourceRejectsMismatchedIdentifier(t *testing.T) {
+func TestProtectedResourceRejectsMismatchedIdentifier(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -107,9 +106,8 @@ func TestRecordProtectedResourceRejectsMismatchedIdentifier(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			// A nil database proves rejected documents never reach persistence.
 			doc := wellknown.OAuthProtectedResourceMetadata{Resource: tc.resource}
-			require.NoError(t, recordProtectedResource(context.Background(), nil, uuid.Nil, "", tc.probed, doc))
+			require.False(t, doc.ValidForResource(tc.probed))
 		})
 	}
 }

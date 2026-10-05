@@ -69,12 +69,23 @@ func compareScopes(resource, issuer []string) scopeOutcome {
 }
 
 // recordProtectedResource stores the document read for resourceURL. The
-// resource identifier must exactly match the document's resource member.
+// resource identifier and canonical metadata location must both match. A
+// mismatch records a failed fetch without replacing the last good document.
 func recordProtectedResource(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resourceURL string, doc wellknown.OAuthProtectedResourceMetadata) error {
 	// RFC 9728 §§3.3 and 6 require exact equality, not URL equivalence.
 	// Keep this check at the write boundary so every discovery path rejects
 	// mismatches, including identifiers differing only by a trailing slash.
-	if doc.Resource == "" || doc.Resource != resourceURL {
+	if !doc.ValidForResource(resourceURL) {
+		_, err := repo.New(db).RecordRemoteProtectedResourceFetchError(ctx, repo.RecordRemoteProtectedResourceFetchErrorParams{
+			ProjectID:          projectID,
+			OrganizationID:     orgID,
+			ResourceIdentifier: resourceURL,
+			MetadataUrl:        doc.MetadataURL,
+			MetadataLastError:  protectedResourceMismatchMessage,
+		})
+		if err != nil {
+			return fmt.Errorf("record remote protected resource mismatch: %w", err)
+		}
 		return nil
 	}
 

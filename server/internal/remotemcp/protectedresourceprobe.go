@@ -39,8 +39,8 @@ const (
 )
 
 // protectedResourceMismatchMessage is recorded when the document's resource
-// member is not the server's URL.
-const protectedResourceMismatchMessage = "The metadata document names a different resource."
+// member or metadata location does not match the server's URL.
+const protectedResourceMismatchMessage = "The metadata document resource or location does not match the requested resource."
 
 type protectedResourceCheck struct {
 	at time.Time
@@ -138,23 +138,9 @@ func refreshProtectedResource(ctx context.Context, db *pgxpool.Pool, policy *gua
 	}
 
 	doc, _, err := wellknown.DiscoverProtectedResourceMetadata(ctx, policy, resourceURL)
-	switch {
-	case err != nil:
+	if err != nil {
 		if typed, ok := errors.AsType[*wellknown.ProtectedResourceDiscoveryError](err); ok {
 			return recordProtectedResourceFetchError(ctx, db, projectID, organizationID, resourceURL, typed)
-		}
-		return nil
-	case doc.Resource != resourceURL:
-		// Unusable (RFC 9728 §3.3), but recorded so the server is not re-probed hourly and the mismatch is visible.
-		_, err := repo.New(db).RecordRemoteProtectedResourceFetchError(ctx, repo.RecordRemoteProtectedResourceFetchErrorParams{
-			ProjectID:          projectID,
-			OrganizationID:     organizationID,
-			ResourceIdentifier: resourceURL,
-			MetadataUrl:        doc.MetadataURL,
-			MetadataLastError:  protectedResourceMismatchMessage,
-		})
-		if err != nil {
-			return fmt.Errorf("record remote protected resource mismatch: %w", err)
 		}
 		return nil
 	}
