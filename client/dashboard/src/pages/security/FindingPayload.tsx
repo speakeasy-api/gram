@@ -94,7 +94,7 @@ function PayloadCode({
       ),
     [result, siblings],
   );
-  const { ranges, complete } = useMemo(
+  const { ranges, complete, truncatedIds } = useMemo(
     () => buildSpanRanges(payload, samePhase.flatMap(findingByteSpans)),
     [payload, samePhase],
   );
@@ -107,42 +107,58 @@ function PayloadCode({
     [samePhase],
   );
 
+  const cutNote = truncatedIds.includes(result.id) && (
+    <span className="text-muted-foreground text-xs">
+      The stored payload stops at 64 KB; this match is past the cut.
+    </span>
+  );
+
   // Masking needs every finding's span; without them, stay on the match view.
   if (!revealed && !(complete && siblingsComplete)) {
-    return <MatchFallback result={result} />;
+    return (
+      <>
+        <MatchFallback result={result} />
+        {cutNote}
+      </>
+    );
   }
 
   return (
-    <div className="bg-foreground dark:bg-card overflow-x-auto py-3.5 font-mono text-xs leading-[1.7]">
-      {/* Scopes the code-syntax palette to its dark values on this always-dark
+    <>
+      <div className="bg-foreground dark:bg-card overflow-x-auto py-3.5 font-mono text-xs leading-[1.7]">
+        {/* Scopes the code-syntax palette to its dark values on this always-dark
           block. */}
-      <div className="dark">
-        {lines.map((line, i) => (
-          <div key={i} className="grid grid-cols-[40px_minmax(0,1fr)] pr-4">
-            <span className="pr-3.5 text-right text-[var(--ch-1)] opacity-70 select-none">
-              {i + 1}
-            </span>
-            <span className="break-all whitespace-pre-wrap">
-              {line.length === 0
-                ? " "
-                : line.map((seg, k) => (
-                    <PayloadSegmentView
-                      key={k}
-                      seg={seg}
-                      range={
-                        seg.range === undefined ? undefined : ranges[seg.range]
-                      }
-                      currentId={result.id}
-                      revealed={revealed}
-                      fingerprintFor={fingerprintFor}
-                      onSelect={onSelect}
-                    />
-                  ))}
-            </span>
-          </div>
-        ))}
+        <div className="dark">
+          {lines.map((line, i) => (
+            <div key={i} className="grid grid-cols-[40px_minmax(0,1fr)] pr-4">
+              <span className="pr-3.5 text-right text-[var(--ch-1)] opacity-70 select-none">
+                {i + 1}
+              </span>
+              <span className="break-all whitespace-pre-wrap">
+                {line.length === 0
+                  ? " "
+                  : line.map((seg, k) => (
+                      <PayloadSegmentView
+                        key={k}
+                        seg={seg}
+                        range={
+                          seg.range === undefined
+                            ? undefined
+                            : ranges[seg.range]
+                        }
+                        currentId={result.id}
+                        revealed={revealed}
+                        fingerprintFor={fingerprintFor}
+                        onSelect={onSelect}
+                      />
+                    ))}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
+      {cutNote}
+    </>
   );
 }
 
@@ -173,8 +189,9 @@ function EvidenceNotStoredBlock({
     <div className="bg-card flex flex-col gap-2.5 border p-5">
       <span className="text-sm font-normal">Evidence not stored</span>
       <p className="text-muted-foreground text-[13px] text-pretty">
-        This finding was recorded before MCP evidence storage, or its 90-day
-        retention window has passed. Only the redacted fingerprint remains.
+        This finding was recorded before MCP evidence storage, while Record Tool
+        I/O was off, or its 90-day retention window has passed. Only the
+        redacted fingerprint remains.
       </p>
       {fingerprint && (
         <span className="self-start border px-1.5 py-0.5 font-mono text-xs">

@@ -5,6 +5,7 @@ import {
   byteOffsetsToIndices,
   findingByteSpans,
   layoutPayload,
+  STORED_PAYLOAD_MAX_BYTES,
 } from "./payload-spans";
 
 const bytes = (s: string) => new TextEncoder().encode(s).length;
@@ -63,6 +64,26 @@ describe("buildSpanRanges", () => {
     ]);
     expect(ranges).toEqual([{ start: 0, end: 2, ids: ["c"] }]);
     expect(complete).toBe(false);
+  });
+
+  it("reports spans past a payload stored at the cap as truncated", () => {
+    // é straddled the cap, so the server cut one byte short of it.
+    const payload = "a".repeat(STORED_PAYLOAD_MAX_BYTES - 1);
+    const { ranges, complete, truncatedIds } = buildSpanRanges(payload, [
+      { id: "past", startByte: 10, endByte: STORED_PAYLOAD_MAX_BYTES + 5 },
+      { id: "inside", startByte: 0, endByte: 4 },
+    ]);
+    expect(truncatedIds).toEqual(["past"]);
+    expect(complete).toBe(false);
+    expect(ranges).toEqual([{ start: 0, end: 4, ids: ["inside"] }]);
+  });
+
+  it("does not report truncation for a payload under the cap", () => {
+    const { complete, truncatedIds } = buildSpanRanges("short", [
+      { id: "a", startByte: 2, endByte: 40 },
+    ]);
+    expect(complete).toBe(false);
+    expect(truncatedIds).toEqual([]);
   });
 
   it("stays complete when only empty spans are dropped", () => {

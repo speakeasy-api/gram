@@ -60,21 +60,32 @@ export function findingByteSpans(result: RiskResult): ByteSpan[] {
   ];
 }
 
+/** Mirrors MaxMCPExecutionPayloadBytes: the server stores at most this much. */
+export const STORED_PAYLOAD_MAX_BYTES = 64 * 1024;
+
+// The server cuts at a rune boundary, so a capped payload can be up to three
+// bytes short of the cap.
+const MAX_RUNE_BACKOFF_BYTES = 3;
+
 /**
  * Converts byte spans to merged string-index ranges over `payload`. Spans that
  * fall outside the payload are dropped and reported through `complete`: some
  * sources index a different string than the one stored, so a masked view must
- * not trust the payload once a span is lost. Empty spans are dropped silently.
+ * not trust the payload once a span is lost. A lost span that ends past a
+ * payload stored at the size cap is listed in `truncatedIds`. Empty spans are
+ * dropped silently.
  */
 export function buildSpanRanges(
   payload: string,
   spans: readonly ByteSpan[],
-): { ranges: SpanRange[]; complete: boolean } {
+): { ranges: SpanRange[]; complete: boolean; truncatedIds: string[] } {
   const index = byteOffsetsToIndices(
     payload,
     spans.flatMap((s) => [s.startByte, s.endByte]),
   );
   let complete = true;
+  let payloadBytes: number | undefined;
+  const truncatedIds: string[] = [];
   const mapped: SpanRange[] = [];
   for (const span of spans) {
     if (span.endByte === span.startByte) continue;
@@ -82,6 +93,10 @@ export function buildSpanRanges(
     const end = index.get(span.endByte);
     if (start === undefined || end === undefined || end <= start) {
       complete = false;
+      payloadBytes ??= new TextEncoder().encode(payload).length;
+      const capped =
+        payloadBytes >= STORED_PAYLOAD_MAX_BYTES - MAX_RUNE_BACKOFF_BYTES;
+      if (capped && span.endByte > payloadBytes) truncatedIds.push(span.id);
       continue;
     }
     mapped.push({ start, end, ids: [span.id] });
@@ -100,7 +115,7 @@ export function buildSpanRanges(
       merged.push({ ...range, ids: [...range.ids] });
     }
   }
-  return { ranges: merged, complete };
+  return { ranges: merged, complete, truncatedIds };
 }
 
 export type PayloadTokenKind = "key" | "str" | "num" | "punc" | "text";
