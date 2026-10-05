@@ -36,7 +36,11 @@ type InfoResponseBody struct {
 	// Fixed expiration of the organization support session.
 	OrganizationOverrideExpiresAt *string `form:"organization_override_expires_at,omitempty" json:"organization_override_expires_at,omitempty" xml:"organization_override_expires_at,omitempty"`
 	ActiveOrganizationID          string  `form:"active_organization_id" json:"active_organization_id" xml:"active_organization_id"`
-	GramAccountType               string  `form:"gram_account_type" json:"gram_account_type" xml:"gram_account_type"`
+	// Dashboard base URL of the platform host the active organization lives on.
+	// Set only for an ordinary session whose request arrived on a different
+	// platform host; the dashboard moves there.
+	ActiveOrganizationDashboardURL *string `form:"active_organization_dashboard_url,omitempty" json:"active_organization_dashboard_url,omitempty" xml:"active_organization_dashboard_url,omitempty"`
+	GramAccountType                string  `form:"gram_account_type" json:"gram_account_type" xml:"gram_account_type"`
 	// Whether the organization has an active billing subscription
 	HasActiveSubscription bool `form:"has_active_subscription" json:"has_active_subscription" xml:"has_active_subscription"`
 	// Whether the organization is whitelisted to access the platform
@@ -1341,19 +1345,20 @@ type ProjectEntryResponseBody struct {
 // "info" endpoint of the "auth" service.
 func NewInfoResponseBody(res *auth.InfoResult) *InfoResponseBody {
 	body := &InfoResponseBody{
-		UserID:                        res.UserID,
-		UserEmail:                     res.UserEmail,
-		UserSignature:                 res.UserSignature,
-		UserDisplayName:               res.UserDisplayName,
-		UserPhotoURL:                  res.UserPhotoURL,
-		IsAdmin:                       res.IsAdmin,
-		ImpersonatorEmail:             res.ImpersonatorEmail,
-		OrganizationOverride:          res.OrganizationOverride,
-		OrganizationOverrideExpiresAt: res.OrganizationOverrideExpiresAt,
-		ActiveOrganizationID:          res.ActiveOrganizationID,
-		GramAccountType:               res.GramAccountType,
-		HasActiveSubscription:         res.HasActiveSubscription,
-		Whitelisted:                   res.Whitelisted,
+		UserID:                         res.UserID,
+		UserEmail:                      res.UserEmail,
+		UserSignature:                  res.UserSignature,
+		UserDisplayName:                res.UserDisplayName,
+		UserPhotoURL:                   res.UserPhotoURL,
+		IsAdmin:                        res.IsAdmin,
+		ImpersonatorEmail:              res.ImpersonatorEmail,
+		OrganizationOverride:           res.OrganizationOverride,
+		OrganizationOverrideExpiresAt:  res.OrganizationOverrideExpiresAt,
+		ActiveOrganizationID:           res.ActiveOrganizationID,
+		ActiveOrganizationDashboardURL: res.ActiveOrganizationDashboardURL,
+		GramAccountType:                res.GramAccountType,
+		HasActiveSubscription:          res.HasActiveSubscription,
+		Whitelisted:                    res.Whitelisted,
 	}
 	if res.Trial != nil {
 		body.Trial = marshalAuthTrialToTrialResponseBody(res.Trial)

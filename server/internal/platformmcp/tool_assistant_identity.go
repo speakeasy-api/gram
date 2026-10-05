@@ -27,7 +27,7 @@ type UpgradeAssistantIdentityInput struct {
 	AgentID     *string `json:"agent_id,omitempty" jsonschema:"Existing agent identity to assign; mutually exclusive with agent_name"`
 	AgentName   *string `json:"agent_name,omitempty" jsonschema:"Name for a new agent identity; mutually exclusive with agent_id"`
 	ProjectID   string  `json:"project_id" jsonschema:"exact project UUID owning the assistant; never inferred"`
-	AssistantID string  `json:"assistant_id" jsonschema:"exact assistant UUID for an explicitly requested legacy upgrade or missing-active-root repair"`
+	AssistantID string  `json:"assistant_id" jsonschema:"exact assistant UUID for an explicitly requested identity setup for an assistant in NEVER_CONFIGURED state or missing-active-root repair"`
 	Confirmed   bool    `json:"confirmed" jsonschema:"true only after the user explicitly confirms upgrading or repairing missing active trigger roots for this exact assistant in this exact project"`
 }
 
@@ -95,7 +95,7 @@ func registerAssistantIdentityTool(reg *Registrar, service *assistantIdentitySer
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Name:        upgradeAssistantIdentityToolName,
 		Title:       "Upgrade Assistant Workload Identity",
-		Description: "Explicitly upgrade one legacy assistant, or repair missing live trigger roots for an active identity, in an exact project. Ask the user to confirm the exact project and assistant before setting confirmed: true. Requires organization administrator access and the same project:write and ordinary actor authorization as the dashboard. Repeating an already active upgrade is safe and does not widen permissions; suspended or revoked authority must be managed through existing agent/workload controls; tombstoned identities cannot be restored. Returns safe identity state and bounded diagnostics, never credentials, instructions, or policy contents. ACTIVE does not prove execution permission or runtime readiness.",
+		Description: "Explicitly configure workload identity for one assistant without configured workload identity (NEVER_CONFIGURED), or repair missing live trigger roots for an active identity, in an exact project. Ask the user to confirm the exact project and assistant before setting confirmed: true. Requires organization administrator access and the same project:write and ordinary actor authorization as the dashboard. Repeating an already active upgrade is safe and does not widen permissions; suspended or revoked authority must be managed through existing agent/workload controls; tombstoned identities cannot be restored. Returns safe identity state and bounded diagnostics, never credentials, instructions, or policy contents. ACTIVE does not prove execution permission or runtime readiness.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: nil, ReadOnlyHint: false, Title: ""},
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: nil}, func(ctx context.Context, _ *mcp.CallToolRequest, input UpgradeAssistantIdentityInput) (*mcp.CallToolResult, UpgradeAssistantIdentityOutput, error) {
 		return principalToolCall(ctx, assistantIdentityToolResult, func(principal Principal) (UpgradeAssistantIdentityOutput, error) {

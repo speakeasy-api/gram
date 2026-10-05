@@ -64,6 +64,7 @@ import { SharedSkillPage } from "./pages/skills/SharedSkillPage";
 import SwitchOrg from "./pages/demo/SwitchOrg";
 import TrialEnded from "./pages/demo/TrialEnded";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
+import { isCliAuthFlowLocation } from "@/lib/cli-auth-flow";
 
 // Logout may have navigated here after Clear-Site-Data emptied localStorage.
 // theme-init.ts already restores when it can; this covers the module path
@@ -572,7 +573,6 @@ function useCliAuthFlow(): LocalAuthFlow | null {
   const [searchParams] = useSearchParams();
   const location = useLocation();
 
-  const fromCli = searchParams.get("from_cli") === "true";
   const cliCallbackUrl = searchParams.get("cli_callback_url");
   const keyScope = searchParams.get("key_scope");
   const projectSlug = searchParams.get("project");
@@ -581,7 +581,10 @@ function useCliAuthFlow(): LocalAuthFlow | null {
   const codeChallengeMethod = searchParams.get("code_challenge_method");
   const callbackMethod = searchParams.get("callback_method");
 
-  if (location.pathname === "/" && fromCli && cliCallbackUrl) {
+  if (
+    cliCallbackUrl &&
+    isCliAuthFlowLocation(location.pathname, location.search)
+  ) {
     return {
       cliCallbackUrl,
       keyScope: keyScope === "hooks" ? "hooks" : "producer",

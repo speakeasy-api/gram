@@ -120,7 +120,6 @@ func (p *rearmProvisioner) PrepareEnterpriseTrialConversionKeyWithDB(ctx context
 		return openrouter.EnterpriseTrialConversionKeyChange{}, fmt.Errorf("prepare enterprise conversion key: %w", err)
 	}
 	return change, nil
-
 }
 
 func (p *rearmProvisioner) ReconcileAPIKeyDisabled(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
@@ -397,8 +396,7 @@ func newProductionRearmService(t *testing.T) (context.Context, *Service, *pgxpoo
 	option, err := openrouter.WithTestBaseURL(server.URL)
 	require.NoError(t, err)
 	svc.openRouter = openrouter.New(
-		testenv.NewLogger(t), testenv.NewTracerProvider(t), policy, conn, "test", "provisioning-key",
-		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), testenv.NewTracerProvider(t), policy, conn, "test", "provisioning-key", nil, nil, testenv.NewEncryptionClient(t), option,
 	)
 
 	return ctx, svc, conn, upstream

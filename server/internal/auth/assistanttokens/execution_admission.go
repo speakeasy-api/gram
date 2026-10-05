@@ -21,7 +21,8 @@ import (
 )
 
 // IsExecutionToken selects a validator, not authority. Once selected, an
-// invalid or denied credential cannot retry through legacy owner admission.
+// invalid or denied credential cannot retry through owner-scoped runtime-token
+// admission.
 func IsExecutionToken(raw string) bool {
 	token, _, err := jwt.NewParser().ParseUnverified(executionBearer(raw), new(mcpauthz.AssistantExecutionClaims))
 	if err != nil {

@@ -14179,7 +14179,7 @@ func assistantsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-assistants: List assistants for the current project.`)
 	fmt.Fprintln(os.Stderr, `    get-assistant: Get an assistant by ID.`)
 	fmt.Fprintln(os.Stderr, `    create-assistant: Create an assistant.`)
-	fmt.Fprintln(os.Stderr, `    upgrade-assistant-identity: Explicitly upgrade one legacy assistant or repair missing live trigger bindings for its existing identity. Requires authorized project write access and enabled provisioning. Idempotent; never widens existing policy or restores revoked identities. Existing assistants are never upgraded implicitly.`)
+	fmt.Fprintln(os.Stderr, `    upgrade-assistant-identity: Explicitly upgrade one assistant in NEVER_CONFIGURED state or repair missing live trigger bindings for its existing identity. Requires authorized project write access and enabled provisioning. Idempotent; never widens existing policy or restores revoked identities. Existing assistants are never upgraded implicitly.`)
 	fmt.Fprintln(os.Stderr, `    update-assistant: Update an assistant.`)
 	fmt.Fprintln(os.Stderr, `    delete-assistant: Delete an assistant.`)
 	fmt.Fprintln(os.Stderr, `    send-message: Send a message from the dashboard to an assistant as the calling user. Continue an existing conversation by passing its chat_id (from listChats), or omit chat_id to start a new conversation — the server mints and returns a fresh chat id. The reply is delivered asynchronously; poll the chat service (loadChat) to read it.`)
@@ -14264,7 +14264,7 @@ func assistantsUpgradeAssistantIdentityUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Explicitly upgrade one legacy assistant or repair missing live trigger bindings for its existing identity. Requires authorized project write access and enabled provisioning. Idempotent; never widens existing policy or restores revoked identities. Existing assistants are never upgraded implicitly.`)
+	fmt.Fprintln(os.Stderr, `Explicitly upgrade one assistant in NEVER_CONFIGURED state or repair missing live trigger bindings for its existing identity. Requires authorized project write access and enabled provisioning. Idempotent; never widens existing policy or restores revoked identities. Existing assistants are never upgraded implicitly.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

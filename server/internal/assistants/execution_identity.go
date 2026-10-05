@@ -38,8 +38,8 @@ func classifyExecutionDispatchError(err error) error {
 }
 
 // captureExecution runs only after ingress normalization. Never copy a caller's
-// reserved metadata, including on legacy paths. An insertion retry cannot replace
-// the original event because InsertAssistantThreadEvent is DO NOTHING.
+// reserved metadata, including when the binding is NeverConfigured. An insertion
+// retry cannot replace the original event because InsertAssistantThreadEvent is DO NOTHING.
 func (s *ServiceCore) captureExecution(ctx context.Context, assistant assistantRecord, source string, threadID uuid.UUID, trigger uuid.NullUUID, eventID string, raw []byte, selection *bgtriggers.SlackExecutionSelection) ([]byte, error) {
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &payload); err != nil || payload == nil {
@@ -194,9 +194,9 @@ func (s *ServiceCore) checkExecutionDispatch(ctx context.Context, assistant assi
 		return fmt.Errorf("assistant execution payload: %w: %w", assistantidentity.ErrInvalidIdentity, err)
 	}
 	if execution == nil {
-		// A persisted legacy event cannot bypass a binding added since capture.
-		// History includes suspended/revoked bindings; only true absence permits
-		// the legacy credential path.
+		// A persisted event without execution metadata cannot bypass a binding
+		// added since capture. History includes suspended/revoked bindings; only an
+		// assistant without binding history permits owner-scoped runtime-token admission.
 		_, err := identityrepo.New(s.db).GetAssistantBinding(ctx, identityrepo.GetAssistantBindingParams{
 			CaptureSuspended: false, OrganizationID: assistant.OrganizationID,
 			ProjectID: assistant.ProjectID, AssistantID: assistant.ID,
@@ -208,9 +208,9 @@ func (s *ServiceCore) checkExecutionDispatch(ctx context.Context, assistant assi
 			return fmt.Errorf("read legacy assistant binding: %w", err)
 		}
 
-		// Legacy envelopes do not have live identity validation. Re-read the
-		// lifecycle here: an already admitted turn may outlive a pause, and
-		// the assistant record passed by the processing loop can be stale.
+		// Events without execution metadata do not have live identity validation.
+		// Re-read the lifecycle here: an already admitted turn may outlive a pause,
+		// and the assistant record passed by the processing loop can be stale.
 		current, err := assistantrepo.New(s.db).GetAssistant(ctx, assistantrepo.GetAssistantParams{AssistantID: assistant.ID, ProjectID: assistant.ProjectID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return assistantidentity.ErrInvalidIdentity

@@ -45,12 +45,12 @@ func TestSlackExecutionSelectionAtIngress(t *testing.T) {
 		{name: "human", event: slackTriggerEvent{EventType: "message", TeamID: "TEXAMPLE", UserID: "UEXAMPLE"}, mapped: true},
 		{name: "human action", event: slackTriggerEvent{EventType: "message", TeamID: "TEXAMPLE", UserID: "UEXAMPLE", Subtype: "me_message"}, mapped: true},
 		{name: "button", event: slackTriggerEvent{EventType: "block_actions", TeamID: "TEXAMPLE", UserID: "UEXAMPLE", AppID: "AEXAMPLE"}, mapped: true},
-		{name: "bot", event: slackTriggerEvent{EventType: "message", TeamID: "TEXAMPLE", UserID: "UEXAMPLE", BotID: "BEXAMPLE"}, fallback: "slack_non_user_event"},
-		{name: "app", event: slackTriggerEvent{EventType: "message", TeamID: "TEXAMPLE", UserID: "UEXAMPLE", AppID: "AEXAMPLE"}, fallback: "slack_non_user_event"},
-		{name: "bot subtype", event: slackTriggerEvent{EventType: "message", TeamID: "TEXAMPLE", UserID: "UEXAMPLE", Subtype: "bot_message"}, fallback: "slack_non_user_event"},
-		{name: "bot button", event: slackTriggerEvent{EventType: "block_actions", TeamID: "TEXAMPLE", UserID: "UEXAMPLE", BotID: "BEXAMPLE"}, fallback: "slack_non_user_event"},
-		{name: "sender absent", event: slackTriggerEvent{EventType: "message", TeamID: "TEXAMPLE"}, fallback: "slack_sender_absent"},
-		{name: "workspace absent", event: slackTriggerEvent{EventType: "message", UserID: "UEXAMPLE"}, fallback: "slack_sender_absent"},
+		{name: "bot", event: slackTriggerEvent{EventType: "message", TeamID: "TEXAMPLE", UserID: "UEXAMPLE", BotID: "BEXAMPLE"}, fallback: SlackExecutionFallbackNonUserEvent},
+		{name: "app", event: slackTriggerEvent{EventType: "message", TeamID: "TEXAMPLE", UserID: "UEXAMPLE", AppID: "AEXAMPLE"}, fallback: SlackExecutionFallbackNonUserEvent},
+		{name: "bot subtype", event: slackTriggerEvent{EventType: "message", TeamID: "TEXAMPLE", UserID: "UEXAMPLE", Subtype: "bot_message"}, fallback: SlackExecutionFallbackNonUserEvent},
+		{name: "bot button", event: slackTriggerEvent{EventType: "block_actions", TeamID: "TEXAMPLE", UserID: "UEXAMPLE", BotID: "BEXAMPLE"}, fallback: SlackExecutionFallbackNonUserEvent},
+		{name: "sender absent", event: slackTriggerEvent{EventType: "message", TeamID: "TEXAMPLE"}, fallback: SlackExecutionFallbackSenderAbsent},
+		{name: "workspace absent", event: slackTriggerEvent{EventType: "message", UserID: "UEXAMPLE"}, fallback: SlackExecutionFallbackSenderAbsent},
 		{name: "caller object", event: map[string]any{"team_id": "TEXAMPLE", "user_id": "UEXAMPLE", "SlackExecution": map[string]any{"HumanUserID": "forged"}}, denied: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -87,10 +87,10 @@ func TestSlackExecutionIngressMappingFailures(t *testing.T) {
 		fallback string
 		denied   bool
 	}{
-		{name: "absent", query: fakeSlackExecutionMappings{err: pgx.ErrNoRows}, fallback: "slack_mapping_absent"},
-		{name: "workspace absent", query: fakeSlackExecutionMappings{err: pgx.ErrNoRows, disconnectErr: pgx.ErrNoRows}, fallback: "slack_mapping_absent"},
-		{name: "unavailable", query: fakeSlackExecutionMappings{err: errors.New("offline")}, fallback: "slack_mapping_unavailable"},
-		{name: "tombstone unavailable", query: fakeSlackExecutionMappings{err: pgx.ErrNoRows, disconnectErr: errors.New("offline")}, fallback: "slack_mapping_unavailable"},
+		{name: "absent", query: fakeSlackExecutionMappings{err: pgx.ErrNoRows}, fallback: SlackExecutionFallbackMappingAbsent},
+		{name: "workspace absent", query: fakeSlackExecutionMappings{err: pgx.ErrNoRows, disconnectErr: pgx.ErrNoRows}, fallback: SlackExecutionFallbackMappingAbsent},
+		{name: "unavailable", query: fakeSlackExecutionMappings{err: errors.New("offline")}, fallback: SlackExecutionFallbackMappingUnavailable},
+		{name: "tombstone unavailable", query: fakeSlackExecutionMappings{err: pgx.ErrNoRows, disconnectErr: errors.New("offline")}, fallback: SlackExecutionFallbackMappingUnavailable},
 		{name: "known ineligible", query: fakeSlackExecutionMappings{}, denied: true},
 		{name: "disconnected", query: fakeSlackExecutionMappings{err: pgx.ErrNoRows, disconnected: true}, denied: true},
 	} {
@@ -121,7 +121,7 @@ func TestProcessEventCapturesSlackSelectionFromTrustedEvent(t *testing.T) {
 	task, err := app.ProcessEvent(t.Context(), instance, EventEnvelope{EventID: "event", CorrelationID: "thread", Event: slackTriggerEvent{EventType: "message", TeamID: "TEXAMPLE", UserID: "UEXAMPLE", BotID: "BEXAMPLE"}, RawPayload: []byte(`{"user_id":"forged","_gram_execution":{"human_user_id":"forged"}}`)})
 	require.NoError(t, err)
 	require.NotNil(t, task)
-	require.Equal(t, &SlackExecutionSelection{FallbackReason: "slack_non_user_event"}, task.SlackExecution)
+	require.Equal(t, &SlackExecutionSelection{FallbackReason: SlackExecutionFallbackNonUserEvent}, task.SlackExecution)
 }
 
 func TestSlackExecutionDoesNotDelegateAffectedAccounts(t *testing.T) {
@@ -150,7 +150,7 @@ func TestSlackExecutionDoesNotDelegateAffectedAccounts(t *testing.T) {
 			q := &fakeSlackExecutionMappings{row: identityrepo.GetSlackExecutionMappingRow{UserID: "mapped-affected-human", Eligible: true}}
 			selection := selectSlackExecution(t.Context(), q, "org-example", normalized.Event.Event)
 			require.Zero(t, q.calls, "affected account must never enter human mapping lookup")
-			require.Equal(t, &SlackExecutionSelection{FallbackReason: "slack_non_user_event"}, selection)
+			require.Equal(t, &SlackExecutionSelection{FallbackReason: SlackExecutionFallbackNonUserEvent}, selection)
 		})
 	}
 }
@@ -173,7 +173,7 @@ func TestSlackExecutionActorEventAllowlist(t *testing.T) {
 				require.Equal(t, "mapped-human", selection.HumanUserID)
 			} else {
 				require.Zero(t, q.calls)
-				require.Equal(t, "slack_non_user_event", selection.FallbackReason)
+				require.Equal(t, SlackExecutionFallbackNonUserEvent, selection.FallbackReason)
 				require.Nil(t, selection.Delegation)
 			}
 		})

@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * upgradeAssistantIdentity assistants
  *
  * @remarks
- * Explicitly upgrade one legacy assistant or repair missing live trigger bindings for its existing identity. Requires authorized project write access and enabled provisioning. Idempotent; never widens existing policy or restores revoked identities. Existing assistants are never upgraded implicitly.
+ * Explicitly upgrade one assistant in NEVER_CONFIGURED state or repair missing live trigger bindings for its existing identity. Requires authorized project write access and enabled provisioning. Idempotent; never widens existing policy or restores revoked identities. Existing assistants are never upgraded implicitly.
  */
 export function assistantsUpgradeIdentity(
   client: GramCore,

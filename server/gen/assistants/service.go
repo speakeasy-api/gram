@@ -23,11 +23,11 @@ type Service interface {
 	GetAssistant(context.Context, *GetAssistantPayload) (res *types.Assistant, err error)
 	// Create an assistant.
 	CreateAssistant(context.Context, *CreateAssistantPayload) (res *types.Assistant, err error)
-	// Explicitly upgrade one legacy assistant or repair missing live trigger
-	// bindings for its existing identity. Requires authorized project write access
-	// and enabled provisioning. Idempotent; never widens existing policy or
-	// restores revoked identities. Existing assistants are never upgraded
-	// implicitly.
+	// Explicitly upgrade one assistant in NEVER_CONFIGURED state or repair missing
+	// live trigger bindings for its existing identity. Requires authorized project
+	// write access and enabled provisioning. Idempotent; never widens existing
+	// policy or restores revoked identities. Existing assistants are never
+	// upgraded implicitly.
 	UpgradeAssistantIdentity(context.Context, *UpgradeAssistantIdentityPayload) (res *types.Assistant, err error)
 	// Update an assistant.
 	UpdateAssistant(context.Context, *UpdateAssistantPayload) (res *types.Assistant, err error)

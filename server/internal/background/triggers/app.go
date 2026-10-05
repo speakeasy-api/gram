@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 
+	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -1048,7 +1049,7 @@ func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInst
 		SlackExecution:    nil,
 	}
 	if instance.DefinitionSlug == DefinitionSlugSlack && instance.TargetKind == TargetKindAssistant {
-		task.SlackExecution = captureSlackExecution(ctx, a.db, instance.OrganizationID, envelope.Event)
+		task.SlackExecution = selectSlackExecution(ctx, identityrepo.New(a.db), instance.OrganizationID, envelope.Event)
 	}
 	if envelope.Event != nil {
 		eventJSON, err := json.Marshal(envelope.Event)

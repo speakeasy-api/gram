@@ -19376,7 +19376,7 @@ paths:
             x-speakeasy-name-override: update
     /rpc/assistants.upgradeIdentity:
         post:
-            description: Explicitly upgrade one legacy assistant or repair missing live trigger bindings for its existing identity. Requires authorized project write access and enabled provisioning. Idempotent; never widens existing policy or restores revoked identities. Existing assistants are never upgraded implicitly.
+            description: Explicitly upgrade one assistant in NEVER_CONFIGURED state or repair missing live trigger bindings for its existing identity. Requires authorized project write access and enabled provisioning. Idempotent; never widens existing policy or restores revoked identities. Existing assistants are never upgraded implicitly.
             operationId: upgradeAssistantIdentity
             parameters:
                 - allowEmptyValue: true
@@ -94222,6 +94222,10 @@ components:
         InfoResponseBody:
             type: object
             properties:
+                active_organization_dashboard_url:
+                    type: string
+                    description: Dashboard base URL of the platform host the active organization lives on. Set only for an ordinary session whose request arrived on a different platform host; the dashboard moves there.
+                    format: uri
                 active_organization_id:
                     type: string
                 gram_account_type:

@@ -46,7 +46,7 @@ func TestLookupAPIKey_NoRowDoesNotProvision(t *testing.T) {
 	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 
-	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, nil, testenv.NewEncryptionClient(t))
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, testenv.NewEncryptionClient(t))
 	provisioner.baseURL = upstream.URL
 
 	key, ok, err := provisioner.LookupAPIKey(ctx, orgID, KeyTypeInternal)
@@ -96,7 +96,7 @@ func TestLookupAPIKey_ExistingRow(t *testing.T) {
 
 	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, nil, enc)
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, enc)
 
 	key, ok, err := provisioner.LookupAPIKey(ctx, orgID, KeyTypeInternal)
 	require.NoError(t, err)
@@ -149,7 +149,7 @@ func TestLookupAPIKey_EmptyKeyReadsAsNotProvisioned(t *testing.T) {
 
 	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, nil, enc)
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, enc)
 
 	key, ok, err := provisioner.LookupAPIKey(ctx, orgID, KeyTypeInternal)
 	require.NoError(t, err)

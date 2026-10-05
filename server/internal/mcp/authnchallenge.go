@@ -362,6 +362,10 @@ const (
 	// but a required upstream token could not be refreshed because the issuer
 	// or client configuration is broken, which only an administrator repairs.
 	issuerGateReasonRemoteSessionMisconfigured = "remote_session_misconfigured"
+
+	// issuerGateReasonExecutionPolicyDenied: an execution credential was
+	// rejected by execution admission policy.
+	issuerGateReasonExecutionPolicyDenied = "execution_policy_denied"
 )
 
 // The texts the issuer gate returns when the bearer token was accepted but a
@@ -887,7 +891,7 @@ func (s *Service) authenticateIssuerGate(
 			reason := issuerGateFailureReason(err)
 			var denied *oops.ShareableError
 			if errors.As(err, &denied) && denied.Code == oops.CodeForbidden {
-				reason = "execution_policy_denied"
+				reason = issuerGateReasonExecutionPolicyDenied
 			}
 			s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, surface)
 			endpoint.LogWith(s.logger).WarnContext(ctx, "mcp issuer gate rejected execution credential", attr.SlogOAuthFailureReason(reason), attr.SlogError(err))
