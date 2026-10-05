@@ -1,11 +1,15 @@
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
-import { Skeleton } from "@/components/ui/Skeleton";
 import type { Widget } from "@gram/client/models/components/widget.js";
 import { Page } from "@/components/page-layout";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
+import type { ChartType } from "./exploreModel";
 import { usePageFilters, type PageFilterField } from "./usePageFilters";
-import { WidgetView, type OpenInExplore } from "./WidgetView";
+import {
+  WidgetPlaceholder,
+  WidgetView,
+  type OpenInExplore,
+} from "./WidgetView";
 
 // The fields the cards' filter bar may offer, in order: the dimensions most
 // questions about agent activity are cut by. The bar shows only those a
@@ -71,7 +75,10 @@ export function WidgetCards({
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
           {widgets.map((widget) => (
-            <OnceVisible key={widget.id}>
+            <OnceVisible
+              key={widget.id}
+              chartType={widget.visualization.type as ChartType}
+            >
               <WidgetView
                 widget={widget}
                 page={page.context}
@@ -96,9 +103,16 @@ export function WidgetCards({
  * Mounts a card once it first scrolls near the viewport, and keeps it. Each
  * card scans its dataset across its whole window, so a long list asks only
  * the questions someone scrolls to rather than all of them at once. Without
- * an IntersectionObserver, cards mount straight away.
+ * an IntersectionObserver, cards mount straight away. Until then it holds
+ * the card's place at the size the card will draw at.
  */
-function OnceVisible({ children }: { children: JSX.Element }): JSX.Element {
+function OnceVisible({
+  chartType,
+  children,
+}: {
+  chartType: ChartType;
+  children: JSX.Element;
+}): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(
     () => typeof IntersectionObserver === "undefined",
@@ -116,8 +130,8 @@ function OnceVisible({ children }: { children: JSX.Element }): JSX.Element {
   }, [visible]);
   if (visible) return children;
   return (
-    <div ref={ref} aria-busy="true">
-      <Skeleton className="h-64 w-full" />
+    <div ref={ref} className="h-full">
+      <WidgetPlaceholder chartType={chartType} className="h-full" />
     </div>
   );
 }

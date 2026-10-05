@@ -10,6 +10,9 @@ vi.mock("./WidgetView", () => ({
   WidgetView: ({ widget }: { widget: { name: string } }) => (
     <section aria-label={widget.name} />
   ),
+  WidgetPlaceholder: ({ chartType }: { chartType: string }) => (
+    <div data-testid="placeholder" data-chart-type={chartType} />
+  ),
 }));
 
 // The filter bar is the shared one, tested with usePageFilters; here it
@@ -48,13 +51,13 @@ class ManualObserver {
 }
 vi.stubGlobal("IntersectionObserver", ManualObserver);
 
-function widget(id: string, name: string): Widget {
+function widget(id: string, name: string, chartType = "number"): Widget {
   return {
     id,
     name,
     dataset: "sessions",
     query: {},
-    visualization: { type: "number" },
+    visualization: { type: chartType },
     projectId: "project",
     organizationId: "org",
     createdAt: new Date(),
@@ -105,5 +108,21 @@ describe("WidgetCards", () => {
       />,
     );
     expect(screen.getByText("No widgets match these filters.")).toBeTruthy();
+  });
+
+  it("holds each card's place at the size its chart type draws at", () => {
+    render(
+      <WidgetCards
+        widgets={[widget("w-1", "Tile"), widget("w-2", "Chart", "line")]}
+        datasets={["sessions"]}
+        actionsFor={() => []}
+        onOpen={() => {}}
+      />,
+    );
+    expect(
+      screen
+        .getAllByTestId("placeholder")
+        .map((placeholder) => placeholder.dataset.chartType),
+    ).toEqual(["number", "line"]);
   });
 });

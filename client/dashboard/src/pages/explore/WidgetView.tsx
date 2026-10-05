@@ -43,6 +43,10 @@ function widgetBodyHeight(chartType: ChartType): number {
   return chartType === "number" ? 72 : 240;
 }
 
+/** The card's frame, shared with its placeholder so the two match. */
+const CARD_CLASSES =
+  "border-border bg-card flex min-w-0 flex-col gap-3 border p-4";
+
 /**
  * One widget drawn on its own, anywhere: a product page or, later, a
  * dashboard. It runs its own query and owns every state the card can be in,
@@ -141,13 +145,7 @@ export function WidgetView({
   }
 
   return (
-    <section
-      aria-label={widget.name}
-      className={cn(
-        "border-border bg-card flex min-w-0 flex-col gap-3 border p-4",
-        className,
-      )}
-    >
+    <section aria-label={widget.name} className={cn(CARD_CLASSES, className)}>
       <WidgetHeader
         name={widget.name}
         spec={headerSpec}
@@ -177,6 +175,28 @@ export type OpenInExplore = (
 
 const OPEN_CLASSES =
   "text-muted-foreground hover:text-foreground inline-flex shrink-0 items-center gap-1 text-xs no-underline hover:underline";
+
+/**
+ * A card not drawn yet, at the size it will be: the card's frame, a header
+ * row as tall as its actions, and the body at its chart type's height, so a
+ * grid of cards does not reflow as they mount.
+ */
+export function WidgetPlaceholder({
+  chartType,
+  className,
+}: {
+  chartType: ChartType;
+  className?: string;
+}): JSX.Element {
+  return (
+    <div aria-busy="true" className={cn(CARD_CLASSES, className)}>
+      <Skeleton className="h-8 w-1/3" />
+      <div style={{ height: widgetBodyHeight(chartType) }}>
+        <Skeleton className="h-full w-full" />
+      </div>
+    </div>
+  );
+}
 
 function WidgetHeader({
   name,

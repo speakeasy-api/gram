@@ -7,7 +7,11 @@ import { specForDataset, type ExploreSpec } from "./exploreModel";
 import { decodeSpec, parseSpec, QUERY_PARAM, WIDGET_PARAM } from "./exploreUrl";
 import type { PageContext } from "./pageContext";
 import { widgetFromSpec } from "./widgetSpec";
-import { WidgetView, type ViewableWidget } from "./WidgetView";
+import {
+  WidgetPlaceholder,
+  WidgetView,
+  type ViewableWidget,
+} from "./WidgetView";
 
 const testState = vi.hoisted(() => ({
   datasets: undefined as unknown[] | undefined,
@@ -322,5 +326,20 @@ describe("WidgetView", () => {
       window: { preset: "1d", customRange: null, customLabel: null },
     });
     expect(explored().widgetId).toBe("widget-1");
+  });
+});
+
+describe("WidgetPlaceholder", () => {
+  afterEach(cleanup);
+
+  it("holds a card's body at the height its chart type draws at", () => {
+    const heights = (["number", "line", "table"] as const).map((chartType) => {
+      const { container } = render(<WidgetPlaceholder chartType={chartType} />);
+      const body = container.querySelector("[style]") as HTMLElement;
+      const height = body.style.height;
+      cleanup();
+      return height;
+    });
+    expect(heights).toEqual(["72px", "240px", "240px"]);
   });
 });
