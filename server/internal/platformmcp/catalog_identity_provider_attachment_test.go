@@ -116,6 +116,36 @@ func TestDiscoverSupportedIssuerMetadataSkipsUnusableDynamicRegistration(t *test
 	require.Equal(t, cimd.URL, metadata.Issuer)
 }
 
+// A provider offering only public-client dynamic registration is reported as
+// automatic by the inspector, because the dashboard's automatic setup can
+// register a public client there, but attachment skips it: it requires a
+// client_secret_basic client and must not leave a refused client upstream.
+func TestPublicClientOnlyDynamicRegistrationInspectorVersusAttachment(t *testing.T) {
+	t.Parallel()
+
+	metadata := map[string]any{"registration_endpoint": "https://issuer.example.com/register", "token_endpoint_auth_methods_supported": []any{"none"}}
+	require.Equal(t, oauthDiscoveryAvailableDCR, directRemoteAutomaticRegistration(metadata))
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		document := map[string]any{
+			"issuer":                 server.URL,
+			"authorization_endpoint": server.URL + "/authorize",
+			"token_endpoint":         server.URL + "/token",
+		}
+		maps.Copy(document, metadata)
+		w.Header().Set("Content-Type", "application/json")
+		assert.NoError(t, json.NewEncoder(w).Encode(document))
+	}))
+	defer server.Close()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	service := &CatalogIdentityProviderAttachmentService{policy: policy}
+
+	_, err = service.discoverSupportedIssuerMetadata(t.Context(), []string{server.URL})
+	require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
+}
+
 func TestSupportsAutomaticClientRegistration(t *testing.T) {
 	t.Parallel()
 
