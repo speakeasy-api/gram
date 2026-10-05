@@ -1,4 +1,35 @@
-# Gram CLI
+# Speakeasy AI Control Plane CLI
+
+The `speakeasy` command line interface for the Speakeasy AI Control Plane.
+
+## Install
+
+```bash
+# Homebrew (macOS and Linux)
+brew install speakeasy-api/tap/cli
+
+# npm
+npm i -g @speakeasy-api/cli
+```
+
+Then authenticate and check your setup:
+
+```bash
+speakeasy auth
+speakeasy whoami
+```
+
+The Homebrew `cli` formula conflicts with the Speakeasy SDK generator formula
+(`speakeasy-api/tap/speakeasy`), because both install a binary named
+`speakeasy`. Install one or the other with Homebrew.
+
+### Migrating from `gram`
+
+This CLI was previously named `gram`. The `speakeasy-api/tap/gram` Homebrew
+formula still installs it under the `gram` name for now, and running it as
+`gram` prints a deprecation notice. Switch to the `speakeasy` command.
+Profiles stay in `~/.gram/profile.json`, so you do not need to authenticate
+again.
 
 ## Local Development
 

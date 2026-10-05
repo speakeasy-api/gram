@@ -3,8 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/urfave/cli/v2"
 
@@ -23,8 +26,8 @@ func newApp() *cli.App {
 	defaultProfilePath, _ := profile.DefaultProfilePath()
 
 	return &cli.App{
-		Name:    "gram",
-		Usage:   "A command line interface for the Gram platform. Get started at https://docs.getgram.ai/",
+		Name:    commandName,
+		Usage:   "A command line interface for the Speakeasy AI Control Plane. Get started at https://ai.speakeasy.com",
 		Version: fmt.Sprintf("%s (%s)", Version, shortSha),
 		Commands: []*cli.Command{
 			newAuthCommand(),
@@ -110,7 +113,41 @@ func newApp() *cli.App {
 	}
 }
 
+const (
+	// commandName is the name the CLI is installed and documented under.
+	commandName = "speakeasy"
+
+	// legacyCommandName is the name the CLI shipped under before it became
+	// speakeasy. The gram Homebrew formulas still install the binary under
+	// this name so existing scripts keep working for one release cycle.
+	legacyCommandName = "gram"
+
+	// legacyCommandNotice is printed to stderr when the CLI runs as gram.
+	legacyCommandNotice = "Warning: the gram command is deprecated and will be removed in a future release. " +
+		"Install the speakeasy command with 'brew install speakeasy-api/tap/cli' or 'npm i -g @speakeasy-api/cli', " +
+		"then run 'speakeasy' instead of 'gram'."
+)
+
+// invokedAs returns the command name the CLI was run as, derived from argv[0]
+// without its directory or Windows .exe suffix.
+func invokedAs(arg0 string) string {
+	name := filepath.Base(strings.ReplaceAll(arg0, `\`, "/"))
+	return strings.TrimSuffix(strings.ToLower(name), ".exe")
+}
+
+// writeLegacyCommandNotice writes the deprecation notice to w when the CLI was
+// run as the legacy gram command.
+func writeLegacyCommandNotice(w io.Writer, arg0 string) {
+	if invokedAs(arg0) == legacyCommandName {
+		_, _ = fmt.Fprintln(w, legacyCommandNotice)
+	}
+}
+
 func Execute(ctx context.Context, osArgs []string) {
+	if len(osArgs) > 0 {
+		writeLegacyCommandNotice(os.Stderr, osArgs[0])
+	}
+
 	if err := newApp().RunContext(ctx, osArgs); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

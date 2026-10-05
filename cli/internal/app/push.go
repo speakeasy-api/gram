@@ -258,7 +258,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 
 			if err != nil {
 				if result != nil && result.DeploymentID != "" {
-					statusCommand := fmt.Sprintf("gram status --id %s", result.DeploymentID)
+					statusCommand := fmt.Sprintf("speakeasy status --id %s", result.DeploymentID)
 					logger.WarnContext(
 						ctx,
 						"Deployment issue",

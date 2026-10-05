@@ -111,7 +111,7 @@ If no profile is configured, the command will indicate that no profile is set up
 				APIURL:  c.String("api-url"),
 			})
 			if err != nil {
-				return fmt.Errorf("no profile configured, please set up a profile in $home/.gram/profile.json: %w", err)
+				return fmt.Errorf("no profile configured, run 'speakeasy auth' to set up a profile in $home/.gram/profile.json: %w", err)
 			}
 
 			if c.Bool("json") {

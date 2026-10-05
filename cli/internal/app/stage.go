@@ -180,7 +180,7 @@ func newStageCommand() *cli.Command {
 		Usage: "Stage an artifact for deployment to Gram",
 		Description: `
 The stage command will gradually build a deployment config that can later be
-passed to "gram push". It is used to add Gram Functions zip files and OpenAPI
+passed to "speakeasy push". It is used to add Gram Functions zip files and OpenAPI
 YAML/JSON documents.
 `[1:],
 		Flags: []cli.Flag{

@@ -141,7 +141,7 @@ func newAuthSwitchCommand() *cli.Command {
 Switch the default project for the current profile.
 
 The project slug must be one of the projects available in your current profile.
-Use 'gram status' to see your current project.`,
+Use 'speakeasy status' to see your current project.`,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:     "project",
@@ -175,7 +175,7 @@ func newAuthClearCommand() *cli.Command {
 Clear all authentication profiles from the profile configuration file.
 
 This will remove all stored API keys and profile information.
-You will need to run 'gram auth' again to authenticate.`,
+You will need to run 'speakeasy auth' again to authenticate.`,
 		Action: func(c *cli.Context) error {
 			profilePath, err := profile.DefaultProfilePath()
 			if err != nil {

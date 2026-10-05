@@ -21,7 +21,7 @@ func newUploadCommand() *cli.Command {
 		Usage: "Upload an asset to Gram",
 		Description: `
 Example:
-  gram upload --type openapiv3 \
+  speakeasy upload --type openapiv3 \
     --location https://raw.githubusercontent.com/my/spec.yaml \
     --name "My API" \
     --slug my-api`[1:],
