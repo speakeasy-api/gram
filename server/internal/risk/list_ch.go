@@ -20,13 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
-// listResultsByProjectFromClickHouse serves the project-wide (non-chat-scoped)
-// ListRiskResults page from the ClickHouse risk_findings table, the only store
-// holding MCP-seam findings. Rows come back pre-redacted (the store never
-// holds raw match content), so Match and Spans are always nil and
-// MatchRedacted carries the ingest-time display string.
-// Chat titles and tool-call block ids are enriched from Postgres per page
-// because both mutate after ingest.
 // CanonicalExecutionID trims an execution_id filter and lowercases it when it
 // is a UUID, the form findings store, since the filter is an exact match.
 func CanonicalExecutionID(id string) string {
@@ -37,6 +30,13 @@ func CanonicalExecutionID(id string) string {
 	return id
 }
 
+// listResultsByProjectFromClickHouse serves the project-wide (non-chat-scoped)
+// ListRiskResults page from the ClickHouse risk_findings table, the only store
+// holding MCP-seam findings. Rows come back pre-redacted (the store never
+// holds raw match content), so Match and Spans are always nil and
+// MatchRedacted carries the ingest-time display string.
+// Chat titles and tool-call block ids are enriched from Postgres per page
+// because both mutate after ingest.
 func (s *Service) listResultsByProjectFromClickHouse(
 	ctx context.Context,
 	authCtx *contextvalues.AuthContext,
