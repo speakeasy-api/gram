@@ -4,7 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { specForDataset, type ExploreSpec } from "./exploreModel";
-import { decodeSpec, QUERY_PARAM, WIDGET_PARAM } from "./exploreUrl";
+import { decodeSpec, parseSpec, QUERY_PARAM, WIDGET_PARAM } from "./exploreUrl";
 import type { PageContext } from "./pageContext";
 import { widgetFromSpec } from "./widgetSpec";
 import { WidgetView, type ViewableWidget } from "./WidgetView";
@@ -105,12 +105,17 @@ function renderView(view: ViewableWidget, page?: PageContext) {
   );
 }
 
+/**
+ * Where the widget's link opens Explore: the saved widget it names and the
+ * query it carries, read whether or not the catalog can still answer it, so
+ * a link to a broken widget still shows what it asks.
+ */
 function explored(): { widgetId: string | null; spec: ExploreSpec | null } {
   const link = screen.getByRole("link", { name: /Open in Explore/ });
   const url = new URL(link.getAttribute("href") ?? "", "https://x.invalid");
   return {
     widgetId: url.searchParams.get(WIDGET_PARAM),
-    spec: decodeSpec(url.searchParams.get(QUERY_PARAM), [sessions]),
+    spec: parseSpec(url.searchParams.get(QUERY_PARAM)),
   };
 }
 
@@ -223,7 +228,10 @@ describe("WidgetView", () => {
     });
     const opened = explored();
     expect(opened.widgetId).toBe("widget-1");
-    expect(opened.spec?.window).not.toBe("30d");
+    // The link carries the saved question, not the page's: its own 1d
+    // window and the dimension the catalog no longer has.
+    expect(opened.spec?.window).toBe("1d");
+    expect(opened.spec?.dimensions).toEqual(["team"]);
   });
 
   it("opens a saved widget while the catalog loads", () => {
