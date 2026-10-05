@@ -193,7 +193,10 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 	if legacyReplay != nil {
 		proposedIntent = legacyReplay.intent
 	} else if proposedIntent.trialEnd != nil && proposedIntent.trialEnd.Sub(now) < minimumStripeCheckoutTrialLead {
-		return "", oops.E(oops.CodeConflict, nil, "the active trial ends too soon to start self-serve billing").LogWarn(ctx, s.logger)
+		proposedIntent, _ = withStripeCheckoutReturnBase(
+			newStripeCheckoutIntentForTrial(authCtx.ActiveOrganizationID, now, nil, expectedTrial),
+			returnBaseURL,
+		)
 	}
 
 	identity, identityErr := s.stripeOrganizationIdentity(ctx, authCtx.ActiveOrganizationID, billingMetadata)

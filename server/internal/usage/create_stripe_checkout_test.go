@@ -1256,7 +1256,7 @@ func TestCreateStripeCheckoutStartsImmediatelyWhenTrialDemoted(t *testing.T) {
 	require.Nil(t, checkouts[0].TrialEnd)
 }
 
-func TestCreateStripeCheckoutRejectsTrialUnderStripeMinimum(t *testing.T) {
+func TestCreateStripeCheckoutStartsPaygWhenTrialUnderStripeMinimum(t *testing.T) {
 	t.Parallel()
 
 	ti := newStripeCheckoutTestInstance(t)
@@ -1267,11 +1267,10 @@ func TestCreateStripeCheckoutRejectsTrialUnderStripeMinimum(t *testing.T) {
 	}))
 
 	_, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
-	require.Error(t, err)
-	requireOopsCode(t, err, oops.CodeConflict)
-	uniqueCustomers, _, checkouts := ti.stripe.snapshot()
-	require.Zero(t, uniqueCustomers)
-	require.Empty(t, checkouts)
+	require.NoError(t, err)
+	_, _, checkouts := ti.stripe.snapshot()
+	require.Len(t, checkouts, 1)
+	require.Nil(t, checkouts[0].TrialEnd)
 }
 
 func TestCreateStripeCheckoutReusesStoredCustomer(t *testing.T) {
