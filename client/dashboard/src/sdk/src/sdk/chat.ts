@@ -11,6 +11,7 @@ import { chatList } from "../funcs/chatList.js";
 import { chatListSessionLinks } from "../funcs/chatListSessionLinks.js";
 import { chatListSources } from "../funcs/chatListSources.js";
 import { chatLoad } from "../funcs/chatLoad.js";
+import { chatLoadOverview } from "../funcs/chatLoadOverview.js";
 import { chatSetPinned } from "../funcs/chatSetPinned.js";
 import { chatSubmitFeedback } from "../funcs/chatSubmitFeedback.js";
 import { chatSummarize } from "../funcs/chatSummarize.js";
@@ -19,6 +20,7 @@ import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AssistantSessionSummary } from "../models/components/assistantsessionsummary.js";
 import { CaptureEventResult } from "../models/components/captureeventresult.js";
 import { Chat as Chat$Model } from "../models/components/chat.js";
+import { ChatOverview } from "../models/components/chatoverview.js";
 import { CreditUsageResponseBody } from "../models/components/creditusageresponsebody.js";
 import { GenerateTitleResponseBody } from "../models/components/generatetitleresponsebody.js";
 import { ListChatsResult } from "../models/components/listchatsresult.js";
@@ -63,6 +65,10 @@ import {
   LoadChatRequest,
   LoadChatSecurity,
 } from "../models/operations/loadchat.js";
+import {
+  LoadChatOverviewRequest,
+  LoadChatOverviewSecurity,
+} from "../models/operations/loadchatoverview.js";
 import {
   SetChatPinnedRequest,
   SetChatPinnedSecurity,
@@ -246,6 +252,25 @@ export class Chat extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Chat$Model> {
     return unwrapAsync(chatLoad(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * loadChatOverview chat
+   *
+   * @remarks
+   * Load authorized chat overview metadata by exact ID without reading messages or recording a transcript-open audit event.
+   */
+  async loadOverview(
+    request: LoadChatOverviewRequest,
+    security?: LoadChatOverviewSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ChatOverview> {
+    return unwrapAsync(chatLoadOverview(
       this,
       request,
       security,
