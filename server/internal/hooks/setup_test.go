@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
@@ -230,6 +231,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		authzEngine,
 		audit.NewLogger(),
 		nil,
+		&feature.InMemory{},
 		nil,
 		nil,
 		nil,

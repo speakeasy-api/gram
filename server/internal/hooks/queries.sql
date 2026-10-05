@@ -461,3 +461,16 @@ WHERE organization_id = sqlc.arg(organization_id)
   AND created_at >= sqlc.arg(from_time)
   AND created_at <= sqlc.arg(to_time)
 GROUP BY provider, chat_id;
+
+-- name: OrganizationEverEnabledObservabilityMode :one
+-- Whether the organization ever turned on the retired observability mode.
+-- Soft-deleted rows count on purpose: turning the mode off, and its retirement
+-- in favour of hooks_fail_open, only soft-deleted the row, while hook plugins
+-- generated under the mode keep running every Claude event async on devices
+-- that never updated.
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_features
+  WHERE organization_id = @organization_id
+    AND feature_name = 'observability_mode'
+)::boolean;

@@ -244,6 +244,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, riskScanned.Load(), time.Since(start))
 	}()
 
+	pluginAuthed := false
 	if hasPluginAuth {
 		// Auth is optional. Returning a 401 on failure deadlocks the client:
 		// send_hook.sh maps any non-2xx to "block all tool calls", but
@@ -269,6 +270,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 			)
 		} else {
 			ctx = authedCtx
+			pluginAuthed = true
 			logger = s.withAuthContext(ctx, logger)
 			logger.InfoContext(ctx, "plugin auth ok on claude hook",
 				attr.SlogEvent("claude_hook_auth_ok"),
@@ -327,7 +329,11 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 	if answeredFromPosture {
 		outcome = hookMetricOutcomeBudgetExceeded
 	}
-	return result, err
+	if err != nil {
+		return result, err
+	}
+	s.maybeAttachLegacyNotice(ctx, logger, payload, result, pluginAuthed)
+	return result, nil
 }
 
 // dispatchClaudeHookEvent routes a normalized Claude hook event to its handler.

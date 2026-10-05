@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	keysservice "github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
@@ -156,6 +157,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		authzEngine,
 		audit.NewLogger(),
 		captureEnabledFeatures{},
+		&feature.InMemory{},
 		nil,
 		scanner,
 		nil,

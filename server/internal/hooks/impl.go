@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -82,6 +83,9 @@ type Service struct {
 	spendGate       *spendrules.Gate
 	shadowMCPClient *shadowmcp.Client
 	writer          *chat.ChatMessageWriter
+	// features evaluates PostHog rollout flags, such as the legacy hooks
+	// out-of-date notice. Optional: when nil, every flag reads as off.
+	features feature.Provider
 	// efficacySignaler is optional: when nil, hook paths record exactly as
 	// before and emit no wakes.
 	efficacySignaler efficacy.Signaler
@@ -273,6 +277,7 @@ func NewService(
 	authz *authz.Engine,
 	auditLogger *audit.Logger,
 	pfClient ProductFeaturesClient,
+	features feature.Provider,
 	chatTitleGenerator ChatTitleGenerator,
 	riskScanner risk.RiskScanner,
 	piScanner *promptinjection.Scanner,
@@ -303,6 +308,7 @@ func NewService(
 		temporalEnv:          temporalEnv,
 		repo:                 repo.New(db),
 		productFeatures:      pfClient,
+		features:             features,
 		chatTitleGenerator:   chatTitleGenerator,
 		riskScanner:          riskScanner,
 		piScanner:            piScanner,

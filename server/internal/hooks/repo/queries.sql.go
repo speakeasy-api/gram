@@ -778,6 +778,27 @@ func (q *Queries) ListUserAccountsByUsers(ctx context.Context, arg ListUserAccou
 	return items, nil
 }
 
+const organizationEverEnabledObservabilityMode = `-- name: OrganizationEverEnabledObservabilityMode :one
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_features
+  WHERE organization_id = $1
+    AND feature_name = 'observability_mode'
+)::boolean
+`
+
+// Whether the organization ever turned on the retired observability mode.
+// Soft-deleted rows count on purpose: turning the mode off, and its retirement
+// in favour of hooks_fail_open, only soft-deleted the row, while hook plugins
+// generated under the mode keep running every Claude event async on devices
+// that never updated.
+func (q *Queries) OrganizationEverEnabledObservabilityMode(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, organizationEverEnabledObservabilityMode, organizationID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const rememberKnownSkillRawHash = `-- name: RememberKnownSkillRawHash :one
 WITH existing_alias AS (
   SELECT srh.canonical_sha256
