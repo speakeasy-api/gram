@@ -197,6 +197,38 @@ type RiskDetectionScope struct {
 	MessageTypes []string `json:"message_types"`
 }
 
+// RiskPolicyMCPScope is present when a policy is limited to MCP tool calls
+// through chosen servers and checked at the gateway before the tool runs.
+// Absent means the policy applies to agent sessions instead.
+type RiskPolicyMCPScope struct {
+	AllServers      bool                       `json:"all_servers"`
+	ToolAnnotations []string                   `json:"tool_annotations"`
+	Servers         []RiskPolicyMCPServerScope `json:"servers"`
+}
+
+// RiskPolicyMCPServerScope selects one server. Tools is absent when the
+// server follows the policy's tool_annotations rule, and ["*"] when every
+// tool on it is in scope.
+type RiskPolicyMCPServerScope struct {
+	MCPServerID string   `json:"mcp_server_id"`
+	Tools       []string `json:"tools,omitempty"`
+}
+
+func riskPolicyMCPScopeView(scope *policycore.MCPScope) *RiskPolicyMCPScope {
+	if scope == nil {
+		return nil
+	}
+	view := &RiskPolicyMCPScope{
+		AllServers:      scope.AllServers,
+		ToolAnnotations: append([]string{}, scope.ToolAnnotations...),
+		Servers:         make([]RiskPolicyMCPServerScope, 0, len(scope.Servers)),
+	}
+	for _, server := range scope.Servers {
+		view.Servers = append(view.Servers, RiskPolicyMCPServerScope{MCPServerID: server.MCPServerID.String(), Tools: slices.Clone(server.Tools)})
+	}
+	return view
+}
+
 type RiskPolicyDetail struct {
 	Audience *RiskPolicyAudience `json:"audience,omitempty"`
 	RiskPolicySummary
@@ -206,6 +238,7 @@ type RiskPolicyDetail struct {
 	ApprovedEmailDomains   []string             `json:"approved_email_domains"`
 	DisabledRules          []string             `json:"disabled_rules"`
 	DetectionScopes        []RiskDetectionScope `json:"detection_scopes"`
+	MCPScope               *RiskPolicyMCPScope  `json:"mcp_scope,omitempty"`
 	UserMessage            *string              `json:"user_message,omitempty"`
 	Prompt                 *string              `json:"prompt,omitempty"`
 	PendingMessages        *int64               `json:"pending_messages,omitempty"`
@@ -435,6 +468,7 @@ func (s *RiskReadService) policyDetail(policy policycore.Policy, shadowDecisions
 		ApprovedEmailDomains:   append([]string{}, policy.ApprovedEmailDomains...),
 		DisabledRules:          allowlisted(policy.DisabledRules, s.catalog.DisabledRules),
 		DetectionScopes:        detectionScopes,
+		MCPScope:               riskPolicyMCPScopeView(policy.MCPScope),
 		UserMessage:            policy.UserMessage,
 		Prompt:                 nil,
 		PendingMessages:        policy.PendingMessages,

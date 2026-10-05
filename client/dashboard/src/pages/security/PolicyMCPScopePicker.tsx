@@ -380,14 +380,14 @@ export function PolicyMCPScopePicker({
       <div className="flex flex-nowrap items-center justify-between gap-4">
         <Text small muted className="min-w-0 flex-1 text-pretty">
           {value.mode === "everywhere"
-            ? "Every chat session and MCP tool call in this project."
+            ? "Agent sessions this project observes, checked in the agent. Clients that call an MCP server without one aren't checked."
             : "Only tool calls through the servers below, checked at the gateway before the tool runs."}
         </Text>
         <SegmentedControl
           value={value.mode}
           onChange={(mode) => onChange({ ...value, mode })}
           options={[
-            { value: "everywhere", label: "Everywhere" },
+            { value: "everywhere", label: "Agent sessions" },
             { value: "mcp", label: "Selected MCP servers" },
           ]}
           className="h-9"

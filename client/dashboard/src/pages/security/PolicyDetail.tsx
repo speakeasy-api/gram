@@ -26,11 +26,14 @@ import {
 import { Switch } from "@/components/ui/Switch";
 import { TextArea } from "@/components/ui/Textarea";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { Text } from "@/components/ui/Text";
 import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { useProject } from "@/contexts/Auth";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
@@ -61,7 +64,9 @@ import {
   Code,
   Info,
   Loader2,
+  MessagesSquare,
   Pencil,
+  Server,
   Shield,
   Sparkles,
   ThumbsDown,
@@ -89,6 +94,9 @@ import {
   draftFromPreset,
   draftFromSuggestion,
   draftKind,
+  draftMCPScopeValue,
+  matchMCPServers,
+  sessionOnlyReason,
   type PolicyDraft,
   readPolicyDraft,
 } from "./policy-draft";
@@ -419,27 +427,83 @@ function PolicyStartChooser(): JSX.Element {
   const promptPoliciesEnabled =
     telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
   const [, setKind] = useQueryState("kind");
+  const gramProject = useProjectSlugForRequests();
   const [description, setDescription] = useState("");
   const { data, isLoading, isError, refetch } = useRiskPresets();
   const presets = (data?.presets ?? []).filter(
     (preset) => promptPoliciesEnabled || preset.policyType !== "prompt_based",
   );
 
+  // Limiting a policy to MCP servers only makes sense where the scope step
+  // offers it and the project has a server to pick.
+  const mcpScopeFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
+  const serversQuery = useMcpServers({ gramProject }, undefined, {
+    throwOnError: false,
+  });
+  const mcpServers =
+    mcpScopeFlag.status === "enabled"
+      ? (serversQuery.data?.mcpServers ?? [])
+      : [];
+  const canScopeToMcp = mcpServers.length > 0;
+  const [pending, setPending] = useState<PendingDraft | null>(null);
+
   const openDraft = (draft: PolicyDraft) => {
-    if (draft.policyType === "prompt_based" && !promptPoliciesEnabled) {
-      toast.error(
-        "Prompt-based policies aren't switched on for this project yet. Start from a built-in preset instead.",
-      );
-      return;
-    }
     void navigate(
       { pathname: location.pathname, search: `?kind=${draftKind(draft)}` },
       { state: { draft } },
     );
   };
 
+  // A draft that blocks, or whose description names a server, stops here
+  // first: an unscoped policy is enforced in agent sessions and does not stop
+  // a call at an MCP server, which is not what "Blocks" suggests on its own.
+  const chooseDraft = (draft: PolicyDraft, description = "") => {
+    if (draft.policyType === "prompt_based" && !promptPoliciesEnabled) {
+      toast.error(
+        "Prompt-based policies aren't switched on for this project yet. Start from a built-in preset instead.",
+      );
+      return;
+    }
+    if (!canScopeToMcp || sessionOnlyReason(draft.sources)) {
+      openDraft(draft);
+      return;
+    }
+    const matched = matchMCPServers(description, mcpServers).map((server) => ({
+      id: server.id,
+      name: server.name ?? server.slug ?? server.id,
+    }));
+    if (matched.length === 0 && draft.action !== "block") {
+      openDraft(draft);
+      return;
+    }
+    setPending({
+      draft,
+      matched,
+      where: matched.length > 0 ? "servers" : "sessions",
+    });
+  };
+
+  const continuePending = () => {
+    if (!pending) return;
+    openDraft(
+      pending.where === "servers"
+        ? {
+            ...pending.draft,
+            mcpScope: {
+              serverIds: pending.matched.map((server) => server.id),
+              matchedNames: pending.matched.map((server) => server.name),
+            },
+          }
+        : pending.draft,
+    );
+  };
+
   const suggest = useRiskSuggestPolicyMutation({
-    onSuccess: (result) => openDraft(draftFromSuggestion(result)),
+    onSuccess: (result, variables) =>
+      chooseDraft(
+        draftFromSuggestion(result),
+        variables.request.suggestRiskPolicyRequestBody.prompt,
+      ),
     onError: () =>
       toast.error(
         "Couldn't draft a policy from that description. Try again, or start from a preset.",
@@ -483,7 +547,9 @@ function PolicyStartChooser(): JSX.Element {
             />
             <div className="flex items-center justify-between gap-3">
               <Text small muted>
-                The draft is yours to review before anything is created.
+                {canScopeToMcp
+                  ? "Name an MCP server to limit the policy to it. Nothing is created until you save."
+                  : "The draft is yours to review before anything is created."}
               </Text>
               <Button
                 type="button"
@@ -530,12 +596,23 @@ function PolicyStartChooser(): JSX.Element {
                   <PresetStartCard
                     key={preset.id}
                     preset={preset}
-                    onSelect={() => openDraft(draftFromPreset(preset))}
+                    showWhere={canScopeToMcp}
+                    selected={pending?.draft.presetId === preset.id}
+                    onSelect={() => chooseDraft(draftFromPreset(preset))}
                   />
                 ))
               )}
             </div>
           </Stack>
+
+          {pending ? (
+            <PendingDraftScope
+              pending={pending}
+              onChange={setPending}
+              onContinue={continuePending}
+              onCancel={() => setPending(null)}
+            />
+          ) : null}
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <Text small muted>
@@ -566,23 +643,106 @@ function PolicyStartChooser(): JSX.Element {
   );
 }
 
+type PendingDraft = {
+  draft: PolicyDraft;
+  /** Servers the description named; empty when a preset was picked. */
+  matched: { id: string; name: string }[];
+  where: "sessions" | "servers";
+};
+
+// Asked before the editor opens, in the scope step's own words, so the choice
+// is recognizable there.
+function PendingDraftScope({
+  pending,
+  onChange,
+  onContinue,
+  onCancel,
+}: {
+  pending: PendingDraft;
+  onChange: (next: PendingDraft) => void;
+  onContinue: () => void;
+  onCancel: () => void;
+}): JSX.Element {
+  const blocks = pending.draft.action === "block";
+  const names = pending.matched.map((server) => server.name).join(", ");
+  const question = blocks ? "Where should it block?" : "Where should it apply?";
+  return (
+    <Stack gap={3} className="border p-4">
+      <Stack gap={1}>
+        <Label>{question}</Label>
+        <Text small muted>
+          {names
+            ? `${pending.draft.name}. Your description names ${names}.`
+            : pending.draft.name}
+        </Text>
+      </Stack>
+      <RadioCardGroup
+        aria-label={question}
+        size="sm"
+        value={pending.where}
+        onValueChange={(where) =>
+          onChange({ ...pending, where: where as PendingDraft["where"] })
+        }
+      >
+        <RadioCard
+          value="sessions"
+          title="Agent sessions"
+          leading={<MessagesSquare className="size-4" />}
+        >
+          {blocks
+            ? "Blocks in agent sessions this project observes. Clients that call an MCP server without one aren't checked."
+            : "Checks agent sessions in this project."}
+        </RadioCard>
+        <RadioCard
+          value="servers"
+          title="Selected MCP servers"
+          leading={<Server className="size-4" />}
+        >
+          {`${blocks ? "Blocks at the gateway before the tool runs, whoever calls. " : ""}Only checks calls through ${names || "the servers you choose"}.`}
+        </RadioCard>
+      </RadioCardGroup>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" onClick={onContinue}>
+          {pending.where === "servers" && pending.matched.length === 0
+            ? "Choose servers"
+            : "Continue"}
+        </Button>
+        <Button type="button" variant="tertiary" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </Stack>
+  );
+}
+
 function PresetStartCard({
   preset,
+  showWhere,
+  selected,
   onSelect,
 }: {
   preset: RiskPreset;
+  /** Say where the preset applies; only useful when MCP scoping is on offer. */
+  showWhere: boolean;
+  selected: boolean;
   onSelect: () => void;
 }): JSX.Element {
   const Icon = preset.policyType === "prompt_based" ? Sparkles : Shield;
+  const sessionOnly = sessionOnlyReason(preset.sources);
   return (
-    <button type="button" onClick={onSelect} className={startCardClass}>
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={cn(startCardClass, selected && "border-primary")}
+    >
       <Icon className="text-muted-foreground mb-3 h-5 w-5" />
       <Text className="font-medium">{preset.label}</Text>
       <Text small muted className="mt-1">
         {preset.description}
       </Text>
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Badge variant={preset.action === "flag" ? "neutral" : "warning"}>
+        <Badge variant={preset.action === "flag" ? "neutral" : "destructive"}>
           {PRESET_ACTION_LABEL[preset.action] ?? preset.action}
         </Badge>
         <Badge variant="neutral">
@@ -591,6 +751,28 @@ function PresetStartCard({
             : "Built-in detectors"}
         </Badge>
       </div>
+      {showWhere ? (
+        <div className="text-muted-foreground mt-3 flex items-start gap-1.5 text-sm">
+          <MessagesSquare className="mt-0.5 size-3.5 shrink-0" />
+          {sessionOnly ? (
+            <>
+              <span>Agent sessions only</span>
+              <SimpleTooltip tooltip={sessionOnly}>
+                <Info
+                  aria-label={sessionOnly}
+                  className="mt-0.5 size-3.5 shrink-0"
+                />
+              </SimpleTooltip>
+            </>
+          ) : (
+            <span>
+              {preset.action === "block"
+                ? "Blocks in observed agent sessions. Choose MCP servers to block at the gateway for every caller."
+                : "Agent sessions, or limit it to chosen MCP servers."}
+            </span>
+          )}
+        </div>
+      ) : null}
     </button>
   );
 }
@@ -938,8 +1120,13 @@ function PromptPolicyEditor({
   const [scopeOverrides, setScopeOverrides] = useState<
     Map<string, ScopeOverride>
   >(() => scopeOverridesFromPolicy(policy?.detectionScopes));
-  const [mcpScope, setMcpScope] = useState<PolicyMCPScopeValue>(() =>
-    policyMCPScopeValue(policy?.mcpScope),
+  const [mcpScope, setMcpScope] = useState<PolicyMCPScopeValue>(
+    () =>
+      (policy ? null : draftMCPScopeValue(draft)) ??
+      policyMCPScopeValue(policy?.mcpScope),
+  );
+  const [draftScopeNames, setDraftScopeNames] = useState<string[]>(
+    policy ? [] : (draft?.mcpScope?.matchedNames ?? []),
   );
   const [action, setAction] = useState<PolicyAction>(() => {
     const initial = policy?.action ?? draft?.action ?? "flag";
@@ -1173,6 +1360,11 @@ function PromptPolicyEditor({
           setMcpScope={updateMCPScope}
           action={action}
           hasStoredMcpScope={!!policy?.mcpScope}
+          draftScopeNames={draftScopeNames}
+          onClearDraftScope={() => {
+            setDraftScopeNames([]);
+            updateMCPScope(policyMCPScopeValue(null));
+          }}
         />
       )}
 
@@ -1342,6 +1534,8 @@ function ScopeStep({
   setMcpScope,
   action,
   hasStoredMcpScope,
+  draftScopeNames,
+  onClearDraftScope,
 }: {
   selectedCategories: Set<RuleCategory>;
   scopeOverrides: Map<string, ScopeOverride>;
@@ -1350,6 +1544,10 @@ function ScopeStep({
   setMcpScope: (next: PolicyMCPScopeValue) => void;
   action: PolicyAction;
   hasStoredMcpScope: boolean;
+  /** Server names a description-based draft pre-selected, shown so the
+   *  administrator can see why the scope is already set. */
+  draftScopeNames: string[];
+  onClearDraftScope: () => void;
 }): JSX.Element {
   const mcpScopeFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
   const mcpScoped = mcpScope.mode === "mcp";
@@ -1361,6 +1559,22 @@ function ScopeStep({
   return (
     <Card>
       <Stack gap={6}>
+        {showMcpScopePicker && mcpScoped && draftScopeNames.length > 0 ? (
+          <div className="flex items-center justify-between gap-4 border px-4 py-3 text-sm">
+            <span>
+              Set from your description, which names{" "}
+              {draftScopeNames.join(", ")}.
+            </span>
+            <Button
+              type="button"
+              size="xs"
+              variant="tertiary"
+              onClick={onClearDraftScope}
+            >
+              Clear
+            </Button>
+          </div>
+        ) : null}
         {showMcpScopePicker ? (
           <PolicyMCPScopePicker
             value={mcpScope}
@@ -3786,7 +4000,11 @@ export function StandardPolicyEditor({
           toolAnnotations: [],
           servers: seed.mcpServerIds.map((mcpServerId) => ({ mcpServerId })),
         }
-      : policyMCPScopeValue(policy?.mcpScope),
+      : ((policy ? null : draftMCPScopeValue(draft)) ??
+        policyMCPScopeValue(policy?.mcpScope)),
+  );
+  const [draftScopeNames, setDraftScopeNames] = useState<string[]>(
+    policy ? [] : (draft?.mcpScope?.matchedNames ?? []),
   );
   const [selectedCustomRuleIds, setSelectedCustomRuleIds] = useState<
     Set<string>
@@ -4313,6 +4531,11 @@ export function StandardPolicyEditor({
             setMcpScope={updateMCPScope}
             action={action}
             hasStoredMcpScope={!!policy?.mcpScope}
+            draftScopeNames={draftScopeNames}
+            onClearDraftScope={() => {
+              setDraftScopeNames([]);
+              updateMCPScope(policyMCPScopeValue(null));
+            }}
           />
         )}
 

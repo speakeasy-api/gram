@@ -111,6 +111,8 @@ func TestCreateRiskPolicySchemaAcceptsPresetBranch(t *testing.T) {
 		"preset with sources":       `{"project_slug":"project","preset":"secrets_and_credentials","sources":["gitleaks"],"idempotency_key":"key"}`,
 		"standard without sources":  `{"project_slug":"project","policy_type":"standard","name":"policy","enabled":true,"idempotency_key":"key"}`,
 		"standard without policy":   `{"project_slug":"project","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key"}`,
+		"scope with unknown field":  `{"project_slug":"project","preset":"secrets_and_credentials","mcp_scope":{"server":"github"},"idempotency_key":"key"}`,
+		"scope with bad annotation": `{"project_slug":"project","preset":"secrets_and_credentials","mcp_scope":{"all_servers":true,"tool_annotations":["dangerous"]},"idempotency_key":"key"}`,
 		"prompt branch with preset": `{"project_slug":"project","policy_type":"prompt_based","name":"policy","enabled":true,"prompt":"instruction","preset":"prompt_injection","idempotency_key":"key"}`,
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -158,6 +160,13 @@ func TestCreateRiskPolicySchemaAcceptsPresetBranch(t *testing.T) {
 	require.Contains(t, preset["preset"].Description, "secrets_and_credentials: Secrets and credentials")
 	require.Len(t, preset["preset"].Enum, len(presets.IDs()))
 	require.NotContains(t, preset, "policy_type")
+	for _, branch := range []map[string]property{standard, prompt, preset} {
+		require.Contains(t, branch["mcp_scope"].Description, "before the tool runs")
+	}
+
+	_, err = create.Invoke(ctx, json.RawMessage(`{"project_slug":"project","preset":"secrets_and_credentials","mcp_scope":{"servers":[{"mcp_server_id":"11111111-1111-4111-8111-111111111111","tools":["delete_repository"]}],"tool_annotations":["destructiveHint"]},"idempotency_key":"key"}`))
+	require.ErrorAs(t, err, &refusal, "a scoped request passes schema validation and reaches the handler")
+	require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`)
 }
 
 func TestRiskPresetToolsAnswerWithoutServices(t *testing.T) {
@@ -179,6 +188,8 @@ func TestRiskPresetToolsAnswerWithoutServices(t *testing.T) {
 	for _, preset := range presetsOut.Presets {
 		require.NotNil(t, preset.Sources)
 		require.NotNil(t, preset.PresidioEntities)
+		sessionOnly := preset.ID == "unapproved_mcp_servers" || preset.ID == "non_corporate_accounts"
+		require.Equal(t, !sessionOnly, preset.CanScopeToMCP, preset.ID)
 	}
 	_, err = list.Invoke(ctx, json.RawMessage(`{"project_slug":"project"}`))
 	require.ErrorContains(t, err, "arguments do not match the tool schema")
@@ -195,6 +206,7 @@ func TestRiskPresetToolsAnswerWithoutServices(t *testing.T) {
 	require.Equal(t, "block", suggestion.Draft.Action)
 	require.True(t, suggestion.Draft.Enabled, "the draft carries the enabled default the create branches require")
 	require.True(t, suggestion.RequiresPromptPolicies)
+	require.True(t, suggestion.CanScopeToMCP)
 	require.NotEmpty(t, suggestion.Draft.Prompt)
 	require.Greater(t, suggestion.Confidence, 0.0)
 	require.Contains(t, suggestion.NextStep, "create_risk_policy")

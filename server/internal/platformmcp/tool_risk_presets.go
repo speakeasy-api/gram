@@ -10,6 +10,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/risk/presets"
 )
 
@@ -28,6 +29,7 @@ type RiskPresetSummary struct {
 	UserMessage                  string   `json:"user_message,omitempty"`
 	RequiresApprovedEmailDomains bool     `json:"requires_approved_email_domains"`
 	RequiresPromptPolicies       bool     `json:"requires_prompt_policies"`
+	CanScopeToMCP                bool     `json:"can_scope_to_mcp"`
 }
 
 type ListRiskPresetsOutput struct {
@@ -63,6 +65,7 @@ type SuggestRiskPolicyOutput struct {
 	Rationale              string                  `json:"rationale"`
 	Draft                  RiskPolicyDraft         `json:"draft"`
 	RequiresPromptPolicies bool                    `json:"requires_prompt_policies"`
+	CanScopeToMCP          bool                    `json:"can_scope_to_mcp"`
 	Alternatives           []RiskPresetAlternative `json:"alternatives"`
 	NextStep               string                  `json:"next_step"`
 }
@@ -78,7 +81,7 @@ func registerRiskPresetTools(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_risk_presets",
 		Title:       "List Risk Policy Presets",
-		Description: "List the use-case presets a risk policy can start from, with what each one detects, its policy type, default action and severity. Use a preset id with create_risk_policy to create the policy without choosing detectors by hand. Presets marked requires_prompt_policies only work in projects where prompt policies are switched on.",
+		Description: "List the use-case presets a risk policy can start from, with what each one detects, its policy type, default action and severity. Use a preset id with create_risk_policy to create the policy without choosing detectors by hand. can_scope_to_mcp says whether the preset can be limited to chosen MCP servers with create_risk_policy's mcp_scope. Presets marked requires_prompt_policies only work in projects where prompt policies are switched on.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: closedObject(map[string]*jsonschema.Schema{}, nil),
 	}, meta, func(_ context.Context, _ *mcp.CallToolRequest, _ ListRiskPresetsInput) (*mcp.CallToolResult, ListRiskPresetsOutput, error) {
@@ -91,6 +94,7 @@ func registerRiskPresetTools(reg *Registrar) {
 				Action: preset.Action, Score: preset.Score, Prompt: preset.Prompt, UserMessage: preset.UserMessage,
 				RequiresApprovedEmailDomains: preset.RequiresApprovedEmailDomains,
 				RequiresPromptPolicies:       preset.PolicyType == presets.PolicyTypePromptBased,
+				CanScopeToMCP:                riskSourcesCanScopeToMCP(preset.Sources),
 			})
 		}
 		return nil, out, nil
@@ -99,7 +103,7 @@ func registerRiskPresetTools(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "suggest_risk_policy",
 		Title:       "Suggest Risk Policy",
-		Description: "Turn a plain-language description of a risk into a policy draft without creating anything: the closest preset with its detectors, action and severity, or a bespoke prompt-based guardrail carrying the description as its instruction when no preset fits. The match is a deterministic keyword mapping over the preset catalog; you are the model, so refine the draft with the administrator before creating it. Returns the draft in create_risk_policy's shape plus the runner-up presets.",
+		Description: "Turn a plain-language description of a risk into a policy draft without creating anything: the closest preset with its detectors, action and severity, or a bespoke prompt-based guardrail carrying the description as its instruction when no preset fits. The match is a deterministic keyword mapping over the preset catalog; you are the model, so refine the draft with the administrator before creating it. Returns the draft in create_risk_policy's shape plus the runner-up presets. The draft carries no mcp_scope, so as returned it applies to the agent sessions the project observes and is not enforced at an MCP server for other callers; can_scope_to_mcp says whether create_risk_policy accepts an mcp_scope for it.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: closedObject(map[string]*jsonschema.Schema{
 			"description": stringSchema("What the policy should catch or prevent, in the administrator's own words.", suggestRiskPolicyMinDescriptionRunes, 500),
@@ -121,6 +125,7 @@ func registerRiskPresetTools(reg *Registrar) {
 				Prompt: suggestion.Draft.Prompt, UserMessage: suggestion.Draft.UserMessage,
 			},
 			RequiresPromptPolicies: suggestion.Draft.PolicyType == presets.PolicyTypePromptBased,
+			CanScopeToMCP:          riskSourcesCanScopeToMCP(suggestion.Draft.Sources),
 			Alternatives:           make([]RiskPresetAlternative, 0, len(suggestion.Alternatives)),
 			NextStep:               suggestRiskPolicyNextStep,
 		}
@@ -138,6 +143,13 @@ func riskPresetRefusal(code, message string) (*mcp.CallToolResult, SuggestRiskPo
 		return nil, zero, fmt.Errorf("encode risk preset refusal: %w", err)
 	}
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(payload)}}, IsError: true}, zero, nil
+}
+
+// riskSourcesCanScopeToMCP reports whether a policy with these sources may
+// carry an mcp_scope. Session-level detectors cannot be evaluated per call.
+func riskSourcesCanScopeToMCP(sources []string) bool {
+	probe := &policycore.MCPScope{AllServers: true, ToolAnnotations: nil, Servers: nil}
+	return policycore.ValidateMCPScopeSources(probe, sources) == nil
 }
 
 func emptyIfNil(values []string) []string {

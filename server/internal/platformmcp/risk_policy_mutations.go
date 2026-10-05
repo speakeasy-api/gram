@@ -67,7 +67,22 @@ type createRiskPolicyInput struct {
 	ApprovedEmailDomains   []string             `json:"approved_email_domains,omitempty"`
 	DetectionScopes        []riskDetectionScope `json:"detection_scopes,omitempty"`
 	Prompt                 string               `json:"prompt,omitempty"`
+	MCPScope               *riskPolicyMCPScope  `json:"mcp_scope,omitempty"`
 	IdempotencyKey         string               `json:"idempotency_key"`
+}
+
+// riskPolicyMCPScope limits a new policy to MCP tool calls through chosen
+// servers, checked at the gateway before the tool runs. It mirrors the
+// management API's scope so both surfaces store the same shape.
+type riskPolicyMCPScope struct {
+	AllServers      bool                       `json:"all_servers,omitempty"`
+	ToolAnnotations []string                   `json:"tool_annotations,omitempty"`
+	Servers         []riskPolicyMCPServerScope `json:"servers,omitempty"`
+}
+
+type riskPolicyMCPServerScope struct {
+	MCPServerID string   `json:"mcp_server_id"`
+	Tools       []string `json:"tools,omitempty"`
 }
 
 type updateRiskPolicyInput struct {
@@ -99,6 +114,7 @@ type normalizedCreateRiskPolicy struct {
 	ApprovedEmailDomains   []string             `json:"approved_email_domains"`
 	DetectionScopes        []riskDetectionScope `json:"detection_scopes"`
 	PromptDigest           string               `json:"prompt_digest,omitempty"`
+	MCPScope               *policycore.MCPScope `json:"mcp_scope,omitempty"`
 }
 
 type preparedRiskPolicyCreate struct {
@@ -549,12 +565,62 @@ func (s *riskPolicyMutationService) prepareCreate(ctx context.Context, principal
 	default:
 		return preparedRiskPolicyCreate{}, invalidRiskPolicyRequest()
 	}
+	mcpScope, rawMCPScope, err := s.prepareMCPScope(ctx, project, input.MCPScope, params.Sources, action)
+	if err != nil {
+		return preparedRiskPolicyCreate{}, err
+	}
+	normalized.MCPScope, params.McpScope = mcpScope, rawMCPScope
 	id, err := uuid.NewV7()
 	if err != nil {
 		return preparedRiskPolicyCreate{}, riskMutationUnavailableWithCause(err)
 	}
 	params.ID = id
 	return preparedRiskPolicyCreate{normalized: normalized, params: params}, nil
+}
+
+// prepareMCPScope canonicalizes a requested scope and applies the same rules
+// as the management API: every server belongs to the project, the sources can
+// be evaluated per MCP call, and the action is one the gateway can enforce.
+// Platform toolsets are not selectable here; the dashboard remains the place
+// to scope a policy to them.
+func (s *riskPolicyMutationService) prepareMCPScope(ctx context.Context, project ResolvedProject, input *riskPolicyMCPScope, sources []string, action string) (*policycore.MCPScope, []byte, error) {
+	if input == nil {
+		return nil, nil, nil
+	}
+	coreInput := &policycore.MCPScopeInput{
+		AllServers:      input.AllServers,
+		ToolAnnotations: input.ToolAnnotations,
+		Servers:         make([]*policycore.MCPServerScopeInput, 0, len(input.Servers)),
+	}
+	for _, server := range input.Servers {
+		coreInput.Servers = append(coreInput.Servers, &policycore.MCPServerScopeInput{MCPServerID: server.MCPServerID, Tools: server.Tools})
+	}
+	scope, err := policycore.NormalizeMCPScope(coreInput)
+	if err != nil {
+		return nil, nil, invalidRiskPolicyMCPScope(err)
+	}
+	if scope == nil {
+		return nil, nil, nil
+	}
+	serverIDs := make([]uuid.UUID, 0, len(scope.Servers))
+	for _, server := range scope.Servers {
+		serverIDs = append(serverIDs, server.MCPServerID)
+	}
+	owned, err := riskrepo.New(s.db).ListRiskPolicyMCPScopeServerIDs(ctx, riskrepo.ListRiskPolicyMCPScopeServerIDsParams{ProjectID: project.ID, McpServerIds: serverIDs})
+	if err != nil {
+		return nil, nil, riskMutationUnavailableWithCause(err)
+	}
+	if err := policycore.ValidateMCPScopeOwnership(scope, owned, nil); err != nil {
+		return nil, nil, invalidRiskPolicyMCPScope(err)
+	}
+	if err := policycore.ValidateMCPScope(scope, sources, action); err != nil {
+		return nil, nil, invalidRiskPolicyMCPScope(err)
+	}
+	raw, err := json.Marshal(scope)
+	if err != nil {
+		return nil, nil, riskMutationUnavailableWithCause(err)
+	}
+	return scope, raw, nil
 }
 
 func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, principal Principal, project ResolvedProject, current riskrepo.RiskPolicy, input updateRiskPolicyInput) (policycore.UpdateMutation, map[string]any, error) {
@@ -987,6 +1053,13 @@ func mapRiskPolicyMutationError(err error) error {
 
 func invalidRiskPolicyRequest() error {
 	return &RiskMutationError{Code: "invalid_request", Message: "The risk policy mutation request is invalid.", Cause: ErrRiskMutationInvalid}
+}
+
+// invalidRiskPolicyMCPScope keeps the validation reason: it names only values
+// the caller sent, and "use flag or block" is what lets an agent correct the
+// request instead of abandoning the scope.
+func invalidRiskPolicyMCPScope(cause error) error {
+	return &RiskMutationError{Code: "invalid_request", Message: "The MCP scope is invalid: " + cause.Error() + ".", Cause: ErrRiskMutationInvalid}
 }
 func riskPolicyNotFound() error {
 	return &RiskMutationError{Code: "not_found", Message: "The requested risk policy is not available in this project.", Cause: ErrRiskMutationNotFound}

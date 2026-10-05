@@ -506,7 +506,27 @@ func riskPolicyCreateCommonProperties(catalog policycatalog.Catalog) map[string]
 		"score":           {Type: "number", Minimum: new(0.1), Maximum: new(float64(10)), Description: "CVSS-style severity shown on findings (0.1-10); default 5. Does not change what is detected."},
 		"user_message":    stringSchema("Optional user-facing enforcement message.", 0, 500),
 		"idempotency_key": stringSchema("Caller key retained for 24-hour replay safety.", 1, 128),
+		"mcp_scope":       riskPolicyMCPScopeSchema(),
 	}
+}
+
+func riskPolicyMCPScopeSchema() *jsonschema.Schema {
+	annotations := arraySchema(&jsonschema.Schema{Type: "string", Enum: []any{"destructiveHint", "readOnlyHint", "idempotentHint", "openWorldHint"}}, 0, true)
+	annotations.Description = "Limit the policy to tools carrying any of these annotations. Tools without annotations never match. Omit to cover every tool."
+	tools := boundedArraySchema(stringSchema("Exact tool name on this server.", 1, 200), 0, 200, true)
+	tools.Description = "Exact tools on this server to cover instead of following tool_annotations. Omit to follow tool_annotations."
+	servers := boundedArraySchema(closedObject(map[string]*jsonschema.Schema{
+		"mcp_server_id": uuidSchema("ID of an MCP server in this project, as returned by find_mcp or get_mcp."),
+		"tools":         tools,
+	}, []string{"mcp_server_id"}), 0, 100, false)
+	servers.Description = "MCP servers the policy covers. Required unless all_servers is true."
+	schema := closedObject(map[string]*jsonschema.Schema{
+		"all_servers":      {Type: "boolean", Description: "Cover every MCP server in the project, including servers added later."},
+		"tool_annotations": annotations,
+		"servers":          servers,
+	}, nil)
+	schema.Description = "Limit the policy to MCP tool calls through chosen servers, checked at the gateway before the tool runs. Omit to apply the policy to agent sessions instead; an unscoped policy is enforced inside observed agent sessions, including their tool calls, but not at an MCP server for callers outside one. A scoped policy only checks calls through its servers, supports only the flag and block actions, and cannot use the shadow_mcp or account_identity sources."
+	return schema
 }
 func riskPolicyActionSchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 	const mcpNote = "MCP-scoped policies support flag and block only."

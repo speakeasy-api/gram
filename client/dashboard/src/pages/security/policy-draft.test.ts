@@ -3,7 +3,10 @@ import {
   draftFromPreset,
   draftFromSuggestion,
   draftKind,
+  draftMCPScopeValue,
+  matchMCPServers,
   readPolicyDraft,
+  sessionOnlyReason,
 } from "./policy-draft";
 
 const secretsPreset = {
@@ -81,5 +84,65 @@ describe("policy drafts", () => {
       prompt: "",
       userMessage: "",
     });
+  });
+});
+
+describe("policy draft MCP scope", () => {
+  const servers = [
+    { id: "srv-github", name: "GitHub", slug: "github" },
+    { id: "srv-pg", name: "Postgres (prod)", slug: "postgres-prod" },
+    { id: "srv-hub", name: "Hub" },
+  ];
+
+  it("matches servers a description names on word boundaries", () => {
+    expect(
+      matchMCPServers("Block deletes on our GitHub server", servers).map(
+        (server) => server.id,
+      ),
+    ).toEqual(["srv-github"]);
+    expect(
+      matchMCPServers("flag writes to postgres prod", servers).map(
+        (server) => server.id,
+      ),
+    ).toEqual(["srv-pg"]);
+    expect(matchMCPServers("stop deletes in production", servers)).toEqual([]);
+  });
+
+  it("marks session-level detectors as not scopable", () => {
+    expect(sessionOnlyReason(["gitleaks"])).toBeNull();
+    expect(sessionOnlyReason(["shadow_mcp"])).toContain("approved list");
+    expect(sessionOnlyReason(["account_identity"])).toContain("signed in");
+  });
+
+  it("opens the scope step on the chosen servers", () => {
+    const draft = {
+      ...draftFromPreset(secretsPreset),
+      mcpScope: { serverIds: ["srv-github"], matchedNames: ["GitHub"] },
+    };
+    expect(draftMCPScopeValue(draft)).toEqual({
+      mode: "mcp",
+      allServers: false,
+      toolAnnotations: [],
+      servers: [{ mcpServerId: "srv-github" }],
+    });
+    expect(draftMCPScopeValue(draftFromPreset(secretsPreset))).toBeNull();
+    expect(
+      draftMCPScopeValue({ ...draft, sources: ["shadow_mcp"] }),
+    ).toBeNull();
+  });
+
+  it("keeps the scope through router state and drops malformed values", () => {
+    const draft = {
+      ...draftFromPreset(secretsPreset),
+      mcpScope: { serverIds: ["srv-github"], matchedNames: ["GitHub"] },
+    };
+    expect(readPolicyDraft({ draft })?.mcpScope).toEqual(draft.mcpScope);
+    expect(
+      readPolicyDraft({ draft: { ...draft, mcpScope: { serverIds: [1] } } })
+        ?.mcpScope,
+    ).toEqual({ serverIds: [], matchedNames: [] });
+    expect(
+      readPolicyDraft({ draft: draftFromPreset(secretsPreset) })?.mcpScope,
+    ).toBeUndefined();
   });
 });
