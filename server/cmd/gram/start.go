@@ -73,6 +73,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
+	"github.com/speakeasy-api/gram/server/internal/hooksacting"
 	"github.com/speakeasy-api/gram/server/internal/identityapi"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/instances"
@@ -82,6 +83,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/killswitchapi"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/launcher"
 	"github.com/speakeasy-api/gram/server/internal/litellm"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
@@ -1420,6 +1422,22 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create spend gate: %w", err)
 			}
+			hookActingSigner, err := hooksacting.NewSigner(c.String("jwt-signing-key"))
+			if err != nil {
+				return fmt.Errorf("create hooks acting-user signer: %w", err)
+			}
+			killswitchRegistry, err := mcptoolexecution.NewRegistry(db)
+			if err != nil {
+				return fmt.Errorf("create hooks kill-switch registry: %w", err)
+			}
+			killswitchEvaluator, err := killswitches.NewEvaluator(db, killswitchRegistry, hooks.AIAccessEvaluationTimeout, meterProvider, logger)
+			if err != nil {
+				return fmt.Errorf("create hooks kill-switch evaluator: %w", err)
+			}
+			hookAIAccess, err := hooks.NewHookAIAccessCheckpoint(killswitchRegistry, killswitchEvaluator, hookActingSigner)
+			if err != nil {
+				return fmt.Errorf("create hooks ai_access checkpoint: %w", err)
+			}
 
 			about.Attach(mux, about.NewService(logger, tracerProvider, guardianPolicy))
 			platformslack.NewFileProxy(logger, encryptionClient, guardianPolicy.PooledClient()).Attach(mux)
@@ -1471,6 +1489,7 @@ func newStartCommand() *cli.Command {
 				hookPIScanner,
 				policyBypass,
 				spendGate,
+				hookAIAccess,
 				shadowMCPClient,
 				chatWriter,
 				efficacySignaler,
@@ -1668,7 +1687,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("registry validator: %w", err)
 			}
 			oktaserversuggestions.Attach(mux, oktaserversuggestions.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, featureFlags, registryValidator))
-			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
+			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, hookActingSigner, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
 

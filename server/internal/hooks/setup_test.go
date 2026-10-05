@@ -235,6 +235,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		nil,
 		policyBypass,
 		spendGate,
+		nil,
 		shadowMCPClient,
 		chatWriter,
 		efficacySignals,

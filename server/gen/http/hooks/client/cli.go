@@ -250,7 +250,7 @@ func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hook
 
 // BuildIngestPayload builds the payload for the hooks ingest endpoint from CLI
 // flags.
-func BuildIngestPayload(hooksIngestBody string, hooksIngestApikeyToken string, hooksIngestProjectSlugInput string, hooksIngestIdempotencyKey string, hooksIngestReplayed string) (*hooks.IngestPayload, error) {
+func BuildIngestPayload(hooksIngestBody string, hooksIngestApikeyToken string, hooksIngestProjectSlugInput string, hooksIngestIdempotencyKey string, hooksIngestReplayed string, hooksIngestBackfilled string, hooksIngestActingUserAssertion string, hooksIngestActingUserContractVersion string) (*hooks.IngestPayload, error) {
 	var err error
 	var body IngestRequestBody
 	{
@@ -307,6 +307,29 @@ func BuildIngestPayload(hooksIngestBody string, hooksIngestApikeyToken string, h
 			}
 		}
 	}
+	var backfilled *bool
+	{
+		if hooksIngestBackfilled != "" {
+			var val bool
+			val, err = strconv.ParseBool(hooksIngestBackfilled)
+			backfilled = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for backfilled, must be BOOL")
+			}
+		}
+	}
+	var actingUserAssertion *string
+	{
+		if hooksIngestActingUserAssertion != "" {
+			actingUserAssertion = &hooksIngestActingUserAssertion
+		}
+	}
+	var actingUserContractVersion *string
+	{
+		if hooksIngestActingUserContractVersion != "" {
+			actingUserContractVersion = &hooksIngestActingUserContractVersion
+		}
+	}
 	v := &hooks.IngestPayload{
 		SchemaVersion: body.SchemaVersion,
 		Raw:           body.Raw,
@@ -327,6 +350,9 @@ func BuildIngestPayload(hooksIngestBody string, hooksIngestApikeyToken string, h
 	v.ProjectSlugInput = projectSlugInput
 	v.IdempotencyKey = idempotencyKey
 	v.Replayed = replayed
+	v.Backfilled = backfilled
+	v.ActingUserAssertion = actingUserAssertion
+	v.ActingUserContractVersion = actingUserContractVersion
 
 	return v, nil
 }

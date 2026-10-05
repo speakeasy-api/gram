@@ -64,7 +64,7 @@ func TestSpoolCapturesUnreachableSend(t *testing.T) {
 	require.Len(t, names, 1, "an unreachable send must spool exactly one entry")
 
 	entry := readSpoolEntry(t, names[0])
-	require.Equal(t, spoolEntryVersion, entry.V)
+	require.Equal(t, spoolEntryVersion, entry.V, "backfill-aware writers must use a version old drains skip")
 	require.NotEmpty(t, entry.IdempotencyKey, "replay needs the original send's idempotency key")
 	require.Equal(t, cfg.ServerURL, entry.ServerURL)
 	require.Equal(t, "org-1", entry.OrgID)
@@ -105,6 +105,7 @@ func TestSpoolSkipsWhenServerRejects4xx(t *testing.T) {
 func TestSpoolSkipsWithoutCredentials(t *testing.T) {
 	setSpoolStateHome(t)
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("GRAM_HOOKS_TEST_NO_PROOF", "1")
 	cfg := Config{ServerURL: closedPortURL(t), ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
@@ -271,7 +272,7 @@ func TestSpoolOversizeEntryShedsRawNotBacklog(t *testing.T) {
 		Raw:           json.RawMessage(`{"blob":"` + string(big) + `"}`),
 	}
 	NewRelay(Config{ServerURL: "https://gram.test", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}).
-		spoolUnsent(newIdempotencyToken(), payload)
+		spoolUnsent(newIdempotencyToken(), payload, false)
 
 	names := spoolFiles(t)
 	require.Len(t, names, 2, "the oversize entry must be stored (raw stripped) and the backlog preserved")

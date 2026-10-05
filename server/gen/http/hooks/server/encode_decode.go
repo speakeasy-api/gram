@@ -749,10 +749,13 @@ func DecodeIngestRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		}
 
 		var (
-			apikeyToken      *string
-			projectSlugInput *string
-			idempotencyKey   *string
-			replayed         *bool
+			apikeyToken               *string
+			projectSlugInput          *string
+			idempotencyKey            *string
+			replayed                  *bool
+			backfilled                *bool
+			actingUserAssertion       *string
+			actingUserContractVersion *string
 		)
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -776,10 +779,28 @@ func DecodeIngestRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 				replayed = &v
 			}
 		}
+		{
+			backfilledRaw := r.Header.Get("X-Gram-Backfilled")
+			if backfilledRaw != "" {
+				v, err2 := strconv.ParseBool(backfilledRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("backfilled", backfilledRaw, "boolean"))
+				}
+				backfilled = &v
+			}
+		}
+		actingUserAssertionRaw := r.Header.Get("X-Gram-Acting-User")
+		if actingUserAssertionRaw != "" {
+			actingUserAssertion = &actingUserAssertionRaw
+		}
+		actingUserContractVersionRaw := r.Header.Get("X-Gram-Acting-User-Contract")
+		if actingUserContractVersionRaw != "" {
+			actingUserContractVersion = &actingUserContractVersionRaw
+		}
 		if err != nil {
 			return payload, err
 		}
-		payload = NewIngestPayload(&body, apikeyToken, projectSlugInput, idempotencyKey, replayed)
+		payload = NewIngestPayload(&body, apikeyToken, projectSlugInput, idempotencyKey, replayed, backfilled, actingUserAssertion, actingUserContractVersion)
 
 		return payload, nil
 	}

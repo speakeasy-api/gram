@@ -17,6 +17,19 @@ export const CodeChallengeMethod = {
  */
 export type CodeChallengeMethod = ClosedEnum<typeof CodeChallengeMethod>;
 
+/**
+ * Required hooks acting-user contract version when proof_public_key is present.
+ */
+export const DelegationContractVersion = {
+  HooksActingUserV1: "hooks-acting-user.v1",
+} as const;
+/**
+ * Required hooks acting-user contract version when proof_public_key is present.
+ */
+export type DelegationContractVersion = ClosedEnum<
+  typeof DelegationContractVersion
+>;
+
 export type AuthorizeRequestBody = {
   /**
    * PKCE code challenge: base64url(sha256(code_verifier)).
@@ -27,9 +40,17 @@ export type AuthorizeRequestBody = {
    */
   codeChallengeMethod: CodeChallengeMethod;
   /**
+   * Required hooks acting-user contract version when proof_public_key is present.
+   */
+  delegationContractVersion?: DelegationContractVersion | undefined;
+  /**
    * Optional project slug to scope the minted key to. Defaults to the org's default (first) project when omitted.
    */
   projectSlug?: string | undefined;
+  /**
+   * Optional base64url Ed25519 public key. When present, redeem also returns a proof-bound hooks delegation refresh credential.
+   */
+  proofPublicKey?: string | undefined;
 };
 
 /** @internal */
@@ -38,10 +59,17 @@ export const CodeChallengeMethod$outboundSchema: z.ZodMiniEnum<
 > = z.enum(CodeChallengeMethod);
 
 /** @internal */
+export const DelegationContractVersion$outboundSchema: z.ZodMiniEnum<
+  typeof DelegationContractVersion
+> = z.enum(DelegationContractVersion);
+
+/** @internal */
 export type AuthorizeRequestBody$Outbound = {
   code_challenge: string;
   code_challenge_method: string;
+  delegation_contract_version?: string | undefined;
   project_slug?: string | undefined;
+  proof_public_key?: string | undefined;
 };
 
 /** @internal */
@@ -52,13 +80,19 @@ export const AuthorizeRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     codeChallenge: z.string(),
     codeChallengeMethod: CodeChallengeMethod$outboundSchema,
+    delegationContractVersion: z.optional(
+      DelegationContractVersion$outboundSchema,
+    ),
     projectSlug: z.optional(z.string()),
+    proofPublicKey: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       codeChallenge: "code_challenge",
       codeChallengeMethod: "code_challenge_method",
+      delegationContractVersion: "delegation_contract_version",
       projectSlug: "project_slug",
+      proofPublicKey: "proof_public_key",
     });
   }),
 );

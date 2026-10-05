@@ -1,12 +1,16 @@
 package relay
 
 import (
+	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -17,6 +21,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/oauth2"
+
+	"github.com/speakeasy-api/gram/hooks/delegation"
 )
 
 const (
@@ -66,13 +74,14 @@ func (l *loginFlow) Run(ctx context.Context, force bool) error {
 	if l.cfg.ConfigError != "" {
 		return fmt.Errorf("cannot read plugin config at %q (%s); reinstall the Speakeasy hooks plugin", l.cfg.ConfigPath, l.cfg.ConfigError)
 	}
-	if c, ok := resolveAuth(l.cfg); ok && !force && c.Source != credOrg {
-		return nil
-	}
-	// A key minted for a plaintext non-loopback server would be refused by
-	// every send; don't open a browser to it in the first place.
+	// Validate the destination before the already-configured fast path. An env
+	// key must not turn an insecure non-loopback deployment into a successful
+	// no-op when every send would refuse that destination.
 	if insecureServerURL(l.cfg.ServerURL) {
 		return fmt.Errorf("refusing insecure Gram server URL %q; use https:// (or an http://localhost dev server)", l.cfg.ServerURL)
+	}
+	if cached, ok := readCachedAuth(l.cfg); ok && !force && !reauthNeeded() && delegationReady(cached) {
+		return nil
 	}
 	if !l.cfg.BrowserLogin {
 		return errors.New("browser sign-in is disabled for this organization; set GRAM_HOOKS_API_KEY to a hooks-scoped key")
@@ -86,8 +95,9 @@ func (l *loginFlow) Run(ctx context.Context, force bool) error {
 	return l.run(ctx, true)
 }
 
-// run serves the localhost callback, opens the browser, and waits for the
-// dashboard to deliver the minted key.
+// run enrolls a fresh local Ed25519 key through the session-authenticated
+// PKCE flow. The dashboard returns only a one-time code; this process redeems
+// it and stores the proof-bound refresh credential beside the private key.
 func (l *loginFlow) run(ctx context.Context, force bool) error {
 	l.markAttempt()
 
@@ -103,7 +113,15 @@ func (l *loginFlow) run(ctx context.Context, force bool) error {
 		return fmt.Errorf("generate state token: %w", err)
 	}
 
-	resultCh := make(chan creds, 1)
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		_ = listener.Close()
+		return fmt.Errorf("generate proof key: %w", err)
+	}
+	verifier := oauth2.GenerateVerifier()
+	challenge := oauth2.S256ChallengeFromVerifier(verifier)
+
+	resultCh := make(chan string, 1)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/gram-probe", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -121,22 +139,15 @@ func (l *loginFlow) run(ctx context.Context, force bool) error {
 			http.Error(w, "invalid callback", http.StatusBadRequest)
 			return
 		}
-		apiKey := strings.TrimSpace(req.Form.Get("api_key"))
-		if apiKey == "" {
-			http.Error(w, "missing api_key", http.StatusBadRequest)
+		code := strings.TrimSpace(req.Form.Get("code"))
+		if code == "" {
+			http.Error(w, "missing code", http.StatusBadRequest)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write([]byte("<!doctype html><meta charset=utf-8><title>Speakeasy</title><body style=\"font-family:sans-serif\">Speakeasy hooks are connected. You can close this tab.<script>window.close()</script></body>"))
+		_, _ = w.Write([]byte("<!doctype html><meta charset=utf-8><title>Speakeasy</title><body style=\"font-family:sans-serif\">Speakeasy hooks are completing sign-in. You can close this tab.<script>window.close()</script></body>"))
 		select {
-		case resultCh <- creds{
-			ServerURL: l.cfg.ServerURL,
-			APIKey:    apiKey,
-			Project:   firstNonEmpty(req.Form.Get("project"), l.cfg.ProjectSlug),
-			Email:     req.Form.Get("email"),
-			Org:       firstNonEmpty(req.Form.Get("organization_id"), l.cfg.OrgID),
-			Source:    credCache,
-		}:
+		case resultCh <- code:
 		default:
 		}
 	})
@@ -149,7 +160,7 @@ func (l *loginFlow) run(ctx context.Context, force bool) error {
 		_ = server.Shutdown(shutdownCtx)
 	}()
 
-	authURL := l.dashboardURL(port, state)
+	authURL := l.dashboardURL(port, state, challenge, delegation.EncodePublicKey(publicKey))
 	cleanupRedirect := openLoginURL(authURL)
 	defer cleanupRedirect()
 	fmt.Fprintf(os.Stderr, "Speakeasy hooks: complete sign-in in your browser.\nIf it did not open, visit:\n  %s\n", authURL)
@@ -157,7 +168,21 @@ func (l *loginFlow) run(ctx context.Context, force bool) error {
 	waitCtx, cancel := context.WithTimeout(ctx, l.timeout)
 	defer cancel()
 	select {
-	case c := <-resultCh:
+	case code := <-resultCh:
+		redeemed, err := l.redeemPKCE(waitCtx, code, verifier)
+		if err != nil {
+			return err
+		}
+		c := creds{
+			ServerURL: l.cfg.ServerURL, APIKey: redeemed.AccessToken,
+			Project: firstNonEmpty(redeemed.ProjectSlug, l.cfg.ProjectSlug),
+			Email:   redeemed.UserEmail, Org: firstNonEmpty(redeemed.OrganizationID, l.cfg.OrgID),
+			RefreshToken: redeemed.RefreshToken, ProofPrivateKey: delegation.EncodePrivateKey(privateKey),
+			ContractVersion: delegation.ContractVersion, Source: credCache,
+		}
+		if c.RefreshToken == "" || c.Org == "" {
+			return errors.New("server did not return a proof-bound hooks credential")
+		}
 		if err := writeAuth(c); err != nil {
 			return fmt.Errorf("cache credentials: %w", err)
 		}
@@ -170,13 +195,17 @@ func (l *loginFlow) run(ctx context.Context, force bool) error {
 }
 
 // dashboardURL builds the Gram sign-in URL pointed at the localhost callback.
-func (l *loginFlow) dashboardURL(port int, state string) string {
+func (l *loginFlow) dashboardURL(port int, state, challenge, publicKey string) string {
 	callback := fmt.Sprintf("http://127.0.0.1:%d/callback?state=%s", port, url.QueryEscape(state))
 	q := url.Values{}
 	q.Set("from_cli", "true")
 	q.Set("cli_callback_url", callback)
 	q.Set("key_scope", "hooks")
 	q.Set("callback_method", "post")
+	q.Set("code_challenge", challenge)
+	q.Set("code_challenge_method", "S256")
+	q.Set("proof_public_key", publicKey)
+	q.Set("delegation_contract_version", delegation.ContractVersion)
 	if l.cfg.ProjectSlug != "" {
 		q.Set("project", l.cfg.ProjectSlug)
 	}
@@ -188,6 +217,41 @@ func (l *loginFlow) dashboardURL(port int, state string) string {
 		base = l.cfg.ServerURL
 	}
 	return strings.TrimRight(base, "/") + "/?" + q.Encode()
+}
+
+func (l *loginFlow) redeemPKCE(ctx context.Context, code, verifier string) (delegation.RedeemResponse, error) {
+	if insecureServerURL(l.cfg.ServerURL) {
+		return delegation.RedeemResponse{}, fmt.Errorf("refusing insecure Gram server URL %q", l.cfg.ServerURL)
+	}
+	body, err := json.Marshal(struct {
+		Code     string `json:"code"`
+		Verifier string `json:"code_verifier"`
+	}{Code: code, Verifier: verifier})
+	if err != nil {
+		return delegation.RedeemResponse{}, fmt.Errorf("encode PKCE redemption: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(l.cfg.ServerURL, "/")+"/rpc/cliAuth.redeem", bytes.NewReader(body))
+	if err != nil {
+		return delegation.RedeemResponse{}, fmt.Errorf("build PKCE redemption: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	response, err := newRelayHTTPClient(perAttemptTime).Do(req)
+	if err != nil {
+		return delegation.RedeemResponse{}, fmt.Errorf("redeem one-time code: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
+		return delegation.RedeemResponse{}, fmt.Errorf("redeem one-time code: server returned HTTP %d", response.StatusCode)
+	}
+	var result delegation.RedeemResponse
+	if err := json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&result); err != nil {
+		return delegation.RedeemResponse{}, fmt.Errorf("decode PKCE redemption: %w", err)
+	}
+	if result.AccessToken == "" {
+		return delegation.RedeemResponse{}, errors.New("redeem one-time code: missing access token")
+	}
+	return result, nil
 }
 
 // cooldownElapsed reports whether enough time has passed since the last sign-in

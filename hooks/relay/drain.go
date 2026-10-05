@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,8 +16,11 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/speakeasy-api/gram/hooks/delegation"
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
+
+const assertionExpirySafetyMargin = 5 * time.Second
 
 // Draining the offline payload spool (DNO-498, part 2 of the capture in
 // spool.go). Entries replay oldest-first — global chronological order, which
@@ -123,7 +127,7 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			s.Skipped++
 			continue
 		}
-		if entry.V != spoolEntryVersion {
+		if entry.V != spoolEntryV1 && entry.V != spoolEntryVersion {
 			// A newer binary wrote it — not this one's to interpret or delete.
 			s.Skipped++
 			continue
@@ -139,24 +143,55 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			cl = newReplayClient(entry.ServerURL)
 			clients[entry.ServerURL] = cl
 		}
-		res := cl.send(ctx, a.c, entry.Envelope, entry.IdempotencyKey)
+		assertion := ""
+		assertionLifetime := time.Duration(0)
+		binding, governed := governedReplayBinding(entry)
+		if governed {
+			assertion, assertionLifetime, err = mintActingUserAssertionWithExpiry(ctx, entry.ServerURL, a.proof, binding, entry.IdempotencyKey)
+			if err != nil {
+				if errors.Is(err, errProofBoundEnrollmentRequired) {
+					s.Skipped++
+					continue
+				}
+				if errors.Is(err, errDelegationReauthRequired) {
+					forgetAuth()
+					markReauthNeeded()
+				}
+				// Transient mint failures are not event failures. Preserve this
+				// entry and chronological ordering for a later drain.
+				s.Aborted = true
+				break
+			}
+		}
 		replayCreds := a.c
+		sendCtx := ctx
+		cancelSend := func() {}
+		if governed {
+			replayCreds = a.proof
+			if assertionLifetime <= assertionExpirySafetyMargin {
+				s.Aborted = true
+				break
+			}
+			sendCtx, cancelSend = context.WithTimeout(ctx, assertionLifetime-assertionExpirySafetyMargin)
+		}
+		res := cl.sendWithAssertion(sendCtx, replayCreds, entry.Envelope, entry.IdempotencyKey, assertion, entry.Backfilled)
+		cancelSend()
 		if res.authRejected {
 			// A rejected credential is machine state, not event state — the
 			// backlog would deliver fine after a re-login or key rotation.
 			// Mirror the live path's one fallback (a rejected cached key
 			// retries through the config's shared org key), then skip the
 			// deployment's remaining entries. Never delete on auth rejection.
-			if a.c.Source == credCache && a.orgKey != "" {
+			if !governed && replayCreds.Source == credCache && a.orgKey != "" {
 				org := creds{ServerURL: entry.ServerURL, APIKey: a.orgKey, Project: entry.ProjectSlug, Email: "", Org: entry.OrgID, Source: credOrg}
-				res = cl.send(ctx, org, entry.Envelope, entry.IdempotencyKey)
+				res = cl.sendWithAssertion(ctx, org, entry.Envelope, entry.IdempotencyKey, assertion, entry.Backfilled)
 				if !res.authRejected {
 					replayCreds = org
-					auths[key] = drainAuth{c: org, ok: true, orgKey: a.orgKey}
+					auths[key] = drainAuth{c: org, proof: a.proof, ok: true, orgKey: a.orgKey}
 				}
 			}
 			if res.authRejected {
-				auths[key] = drainAuth{c: creds{ServerURL: "", APIKey: "", Project: "", Email: "", Org: "", Source: credEnv}, ok: false, orgKey: ""}
+				auths[key] = drainAuth{c: creds{ServerURL: "", APIKey: "", Project: "", Email: "", Org: "", Source: credEnv}, proof: creds{}, ok: false, orgKey: ""}
 				s.Skipped++
 				continue
 			}
@@ -190,6 +225,29 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 	}
 	s.Remaining = len(listSpoolEntries(dir))
 	return s
+}
+
+func governedReplayBinding(entry spoolEntry) (governedBinding, bool) {
+	provider := strings.ToLower(strings.TrimSpace(entry.Envelope.Source.Adapter))
+	if entry.Envelope.Source.RawEventName == nil || entry.Envelope.Session == nil || entry.Envelope.Session.ID == nil {
+		return governedBinding{}, false
+	}
+	event := strings.TrimSpace(*entry.Envelope.Source.RawEventName)
+	sessionID := strings.TrimSpace(*entry.Envelope.Session.ID)
+	skillName, toolName := "", ""
+	if entry.Envelope.Data != nil {
+		if entry.Envelope.Data.Skill != nil {
+			skillName = entry.Envelope.Data.Skill.Name
+		}
+		if entry.Envelope.Data.ToolCall != nil && entry.Envelope.Data.ToolCall.Name != nil {
+			toolName = *entry.Envelope.Data.ToolCall.Name
+		}
+	}
+	validShape := delegation.ValidGovernedShape(event, string(entry.Envelope.Event.Type), skillName, toolName)
+	if sessionID == "" || !validShape || !delegation.Approved(provider, event) {
+		return governedBinding{}, false
+	}
+	return governedBinding{provider: provider, event: event, sessionID: sessionID, observational: true}, true
 }
 
 func replayedSkill(entry spoolEntry) *resolvedSkill {
@@ -324,8 +382,9 @@ func rawPresent(m json.RawMessage) bool {
 }
 
 type drainAuth struct {
-	c  creds
-	ok bool
+	c     creds
+	proof creds
+	ok    bool
 	// orgKey is the config file's shared key, kept aside for the
 	// auth-rejection fallback (mirroring deliver's org retry).
 	orgKey string
@@ -349,7 +408,7 @@ func resolveDrainAuth(entry spoolEntry, key string, memo map[string]drainAuth) d
 	if a, ok := memo[key]; ok {
 		return a
 	}
-	a := drainAuth{c: creds{ServerURL: "", APIKey: "", Project: "", Email: "", Org: "", Source: credEnv}, ok: false, orgKey: ""}
+	a := drainAuth{c: creds{ServerURL: "", APIKey: "", Project: "", Email: "", Org: "", Source: credEnv}, proof: creds{}, ok: false, orgKey: ""}
 	if !insecureServerURL(entry.ServerURL) {
 		cfg := Config{ServerURL: entry.ServerURL, SiteURL: "", ProjectSlug: entry.ProjectSlug, OrgID: entry.OrgID, HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: entry.ConfigPath, ConfigError: ""}
 		if entry.ConfigPath != "" {
@@ -360,12 +419,15 @@ func resolveDrainAuth(entry spoolEntry, key string, memo map[string]drainAuth) d
 		}
 		a.orgKey = cfg.HooksAPIKey
 		a.c, a.ok = resolveAuth(cfg)
+		if cached, cachedOK := readCachedAuth(cfg); cachedOK && delegationReady(cached) {
+			a.proof = cached
+		}
 		if a.ok && a.c.Source == credEnv {
 			if envURL := strings.TrimRight(strings.TrimSpace(os.Getenv("GRAM_HOOKS_SERVER_URL")), "/"); envURL != "" && envURL != entry.ServerURL {
 				// The env key belongs to the env-named deployment; resolve
 				// this entry from the cache or org key instead.
 				if cached, ok := readCachedAuth(cfg); ok {
-					a.c, a.ok = cached, true
+					a.c, a.proof, a.ok = cached, cached, true
 				} else if cfg.HooksAPIKey != "" {
 					a.c, a.ok = creds{ServerURL: cfg.ServerURL, APIKey: cfg.HooksAPIKey, Project: cfg.ProjectSlug, Email: "", Org: cfg.OrgID, Source: credOrg}, true
 				} else {
@@ -463,10 +525,10 @@ func (r *Relay) maybeSpawnDrain() {
 // finishExchange runs the spool bookkeeping for a final exchange result: an
 // unsent payload is kept for replay; a healthy exchange flushes any backlog
 // via a detached drain.
-func (r *Relay) finishExchange(idemKey string, payload components.IngestRequestBody, res ingestResult) {
+func (r *Relay) finishExchange(idemKey string, payload components.IngestRequestBody, backfilled bool, res ingestResult) {
 	switch {
 	case res.unsent():
-		r.spoolUnsent(idemKey, payload)
+		r.spoolUnsent(idemKey, payload, backfilled)
 	case res.accepted():
 		r.maybeSpawnDrain()
 	}

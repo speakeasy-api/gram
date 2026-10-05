@@ -24,6 +24,10 @@ type Client struct {
 	// Redeem Doer is the HTTP client used to make requests to the redeem endpoint.
 	RedeemDoer goahttp.Doer
 
+	// DelegateHooksActingUser Doer is the HTTP client used to make requests to the
+	// delegateHooksActingUser endpoint.
+	DelegateHooksActingUserDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -44,13 +48,14 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		AuthorizeDoer:       doer,
-		RedeemDoer:          doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		AuthorizeDoer:               doer,
+		RedeemDoer:                  doer,
+		DelegateHooksActingUserDoer: doer,
+		RestoreResponseBody:         restoreBody,
+		scheme:                      scheme,
+		host:                        host,
+		decoder:                     dec,
+		encoder:                     enc,
 	}
 }
 
@@ -97,6 +102,30 @@ func (c *Client) Redeem() goa.Endpoint {
 		resp, err := c.RedeemDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("cliAuth", "redeem", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DelegateHooksActingUser returns an endpoint that makes HTTP requests to the
+// cliAuth service delegateHooksActingUser server.
+func (c *Client) DelegateHooksActingUser() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDelegateHooksActingUserRequest(c.encoder)
+		decodeResponse = DecodeDelegateHooksActingUserResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDelegateHooksActingUserRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DelegateHooksActingUserDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("cliAuth", "delegateHooksActingUser", err)
 		}
 		return decodeResponse(resp)
 	}

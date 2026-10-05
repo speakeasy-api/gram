@@ -15,15 +15,17 @@ import (
 
 // Client is the "cliAuth" service client.
 type Client struct {
-	AuthorizeEndpoint goa.Endpoint
-	RedeemEndpoint    goa.Endpoint
+	AuthorizeEndpoint               goa.Endpoint
+	RedeemEndpoint                  goa.Endpoint
+	DelegateHooksActingUserEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "cliAuth" service client given the endpoints.
-func NewClient(authorize, redeem goa.Endpoint) *Client {
+func NewClient(authorize, redeem, delegateHooksActingUser goa.Endpoint) *Client {
 	return &Client{
-		AuthorizeEndpoint: authorize,
-		RedeemEndpoint:    redeem,
+		AuthorizeEndpoint:               authorize,
+		RedeemEndpoint:                  redeem,
+		DelegateHooksActingUserEndpoint: delegateHooksActingUser,
 	}
 }
 
@@ -69,4 +71,27 @@ func (c *Client) Redeem(ctx context.Context, p *RedeemPayload) (res *RedeemResul
 		return
 	}
 	return ires.(*RedeemResult), nil
+}
+
+// DelegateHooksActingUser calls the "delegateHooksActingUser" endpoint of the
+// "cliAuth" service.
+// DelegateHooksActingUser may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DelegateHooksActingUser(ctx context.Context, p *DelegateHooksActingUserPayload) (res *DelegateHooksActingUserResult, err error) {
+	var ires any
+	ires, err = c.DelegateHooksActingUserEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*DelegateHooksActingUserResult), nil
 }
