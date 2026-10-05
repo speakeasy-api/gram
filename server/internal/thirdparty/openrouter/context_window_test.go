@@ -3,11 +3,13 @@ package openrouter
 import (
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -109,6 +111,32 @@ func TestContextWindowResolver_FetchMinErrorsOnInvalidModelID(t *testing.T) {
 		_, err := r.fetchMin(t.Context(), bad)
 		require.Error(t, err, "id=%q", bad)
 	}
+}
+
+func TestContextWindowResolver_GovernedRetryRechecksBeforeEveryAttempt(t *testing.T) {
+	t.Parallel()
+
+	var providerRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		providerRequests.Add(1)
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	t.Cleanup(server.Close)
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	denial := &typedCheckpointDenialError{}
+	checkpoint := &scriptedInferenceCheckpoint{errors: []error{nil, denial}}
+	resolver := NewContextWindowResolver(testenv.NewLogger(t), policy, cache.NoopCache, checkpoint)
+	resolver.baseURL = server.URL
+
+	_, err = resolver.ResolveGoverned(t.Context(), "org", "openai/gpt-5.4")
+	var typedDenial *typedCheckpointDenialError
+	require.ErrorAs(t, err, &typedDenial)
+	require.Equal(t, int32(1), providerRequests.Load(), "the denied retry must not egress")
+	checkpoint.mu.Lock()
+	require.Equal(t, 2, checkpoint.calls, "initial attempt allowed, retry denied")
+	checkpoint.mu.Unlock()
 }
 
 func TestContextWindowResolver_ResolveStoresInCacheOnFetch(t *testing.T) {

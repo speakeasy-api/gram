@@ -18,6 +18,14 @@ type IdentityContractKey string
 // PrincipalKind identifies a canonical principal namespace.
 type PrincipalKind string
 
+// Shared identifiers used by every ai_access enforcement surface. Keeping
+// these values at the dependency-light contract layer prevents registry and
+// checkpoint implementations from defining divergent security identities.
+const (
+	DefinitionKeyAIAccess DefinitionKey = "ai_access"
+	PrincipalKindUser     PrincipalKind = "user"
+)
+
 // PrincipalKey identifies a principal within a principal namespace.
 type PrincipalKey string
 

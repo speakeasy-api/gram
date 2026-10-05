@@ -2008,8 +2008,10 @@ func EncodeSummarizeRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 // summarize endpoint. restoreBody controls whether the response body should be
 // restored after having been read.
 // DecodeSummarizeResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "ai_access_denied" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -2049,6 +2051,55 @@ func DecodeSummarizeResponse(decoder func(*http.Response) goahttp.Decoder, resto
 			}
 			res := NewSummarizeChatResultOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body SummarizeUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "summarize", err)
+			}
+			err = ValidateSummarizeUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "summarize", err)
+			}
+			return nil, NewSummarizeUnavailable(&body)
+		case http.StatusForbidden:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "ai_access_denied":
+				var (
+					body SummarizeAiAccessDeniedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "summarize", err)
+				}
+				err = ValidateSummarizeAiAccessDeniedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "summarize", err)
+				}
+				return nil, NewSummarizeAiAccessDenied(&body)
+			case "forbidden":
+				var (
+					body SummarizeForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "summarize", err)
+				}
+				err = ValidateSummarizeForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "summarize", err)
+				}
+				return nil, NewSummarizeForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("chat", "summarize", resp.StatusCode, string(body))
+			}
 		case http.StatusUnauthorized:
 			var (
 				body SummarizeUnauthorizedResponseBody
@@ -2063,20 +2114,6 @@ func DecodeSummarizeResponse(decoder func(*http.Response) goahttp.Decoder, resto
 				return nil, goahttp.ErrValidationError("chat", "summarize", err)
 			}
 			return nil, NewSummarizeUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body SummarizeForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "summarize", err)
-			}
-			err = ValidateSummarizeForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "summarize", err)
-			}
-			return nil, NewSummarizeForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body SummarizeBadRequestResponseBody
@@ -2246,8 +2283,10 @@ func EncodeSummarizeToolCallRequest(encoder func(*http.Request) goahttp.Encoder)
 // the chat summarizeToolCall endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeSummarizeToolCallResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "ai_access_denied" (type *goa.ServiceError): http.StatusForbidden
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
 //   - "conflict" (type *goa.ServiceError): http.StatusConflict
@@ -2287,6 +2326,55 @@ func DecodeSummarizeToolCallResponse(decoder func(*http.Response) goahttp.Decode
 			}
 			res := NewSummarizeToolCallResultOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body SummarizeToolCallUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "summarizeToolCall", err)
+			}
+			err = ValidateSummarizeToolCallUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "summarizeToolCall", err)
+			}
+			return nil, NewSummarizeToolCallUnavailable(&body)
+		case http.StatusForbidden:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "ai_access_denied":
+				var (
+					body SummarizeToolCallAiAccessDeniedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "summarizeToolCall", err)
+				}
+				err = ValidateSummarizeToolCallAiAccessDeniedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "summarizeToolCall", err)
+				}
+				return nil, NewSummarizeToolCallAiAccessDenied(&body)
+			case "forbidden":
+				var (
+					body SummarizeToolCallForbiddenResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "summarizeToolCall", err)
+				}
+				err = ValidateSummarizeToolCallForbiddenResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "summarizeToolCall", err)
+				}
+				return nil, NewSummarizeToolCallForbidden(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("chat", "summarizeToolCall", resp.StatusCode, string(body))
+			}
 		case http.StatusUnauthorized:
 			var (
 				body SummarizeToolCallUnauthorizedResponseBody
@@ -2301,20 +2389,6 @@ func DecodeSummarizeToolCallResponse(decoder func(*http.Response) goahttp.Decode
 				return nil, goahttp.ErrValidationError("chat", "summarizeToolCall", err)
 			}
 			return nil, NewSummarizeToolCallUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body SummarizeToolCallForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("chat", "summarizeToolCall", err)
-			}
-			err = ValidateSummarizeToolCallForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("chat", "summarizeToolCall", err)
-			}
-			return nil, NewSummarizeToolCallForbidden(&body)
 		case http.StatusBadRequest:
 			var (
 				body SummarizeToolCallBadRequestResponseBody

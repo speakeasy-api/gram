@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -150,6 +151,10 @@ type JudgeResult struct {
 // so the caller can tell an answer it should charge the model for from one it
 // should simply retry.
 func (j *Judge) Judge(ctx context.Context, in JudgeInput) (JudgeResult, error) {
+	ctx, classifyErr := hostedinference.WithBackground(ctx, hostedinference.CallCategorySkillJudge)
+	if classifyErr != nil {
+		return JudgeResult{}, fmt.Errorf("classify skill-efficacy inference: %w", classifyErr)
+	}
 	ctx, span := j.tracer.Start(ctx, "skill.efficacy.judge", trace.WithAttributes(
 		attr.OrganizationID(in.OrgID),
 		attr.ProjectID(in.ProjectID),
@@ -209,7 +214,6 @@ func (j *Judge) call(ctx context.Context, in JudgeInput) (JudgeResult, error) {
 
 	callCtx, cancel := context.WithTimeout(ctx, judgeTimeout)
 	defer cancel()
-
 	response, err := j.client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
 		MaxTokens:    nil,
 		OrgID:        in.OrgID,

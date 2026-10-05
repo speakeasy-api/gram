@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/businessmemory/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -205,6 +206,10 @@ func (s *Service) SearchBusinessMemories(ctx context.Context, payload *gen.Searc
 		return nil, oops.E(oops.CodeBadRequest, nil, "query is required")
 	}
 
+	ctx, err = hostedinference.WithGovernedUserOrUnsupported(ctx, hostedinference.CallCategoryBusinessMemorySearchEmbedding, hostedinference.CallCategoryAPIKeyBusinessMemorySearch, hostedinference.CallCategoryNonOrdinarySessionMemorySearch)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "classify business memory search inference").LogError(ctx, s.logger)
+	}
 	vectors, err := s.completions.CreateEmbeddings(
 		ctx,
 		authCtx.ActiveOrganizationID,
@@ -214,6 +219,10 @@ func (s *Service) SearchBusinessMemories(ctx context.Context, payload *gen.Searc
 		openrouter.WithEmbeddingKeyType(openrouter.KeyTypeInternal),
 	)
 	if err != nil {
+		//nolint:wrapcheck // The mapper returns a fully wrapped, telemetry-safe boundary error.
+		if mapped, ok := hostedinference.MapBoundaryError(ctx, s.logger, err); ok {
+			return nil, mapped
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create business memory search embedding").LogError(ctx, s.logger)
 	}
 	if len(vectors) != 1 {

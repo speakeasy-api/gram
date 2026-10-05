@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	authchatsessions "github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -25,6 +26,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -52,12 +54,13 @@ func TestMain(m *testing.M) {
 }
 
 type chatTestInstance struct {
-	service   *chat.Service
-	sessions  *sessions.Manager
-	conn      *pgxpool.Pool
-	projectID uuid.UUID
-	orgID     string
-	assets    assets.BlobStore
+	service      *chat.Service
+	sessions     *sessions.Manager
+	chatSessions *authchatsessions.Manager
+	conn         *pgxpool.Pool
+	projectID    uuid.UUID
+	orgID        string
+	assets       assets.BlobStore
 }
 
 // newTestChatService builds a chat service with RBAC enforcement.
@@ -110,14 +113,17 @@ func newTestChatServiceWithOptions(t *testing.T, completionClient openrouter.Com
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	assetStorage := assetstest.NewTestBlobStore(t)
-	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, completionClient, nil, nil, nil, assetStorage, authzEngine, nil, billingClient, audit.NewLogger())
+	chatSessions := authchatsessions.NewManager(logger, redisClient, "test-chat-session-secret")
+	posthogClient := posthog.New(ctx, logger, "", "", "")
+	svc := chat.NewService(logger, tp, conn, mgr, chatSessions, nil, completionClient, nil, posthogClient, nil, assetStorage, authzEngine, nil, billingClient, audit.NewLogger()).WithTurnStream(chat.NewTurnStream(redisClient))
 
 	return &chatTestInstance{
-		service:   svc,
-		sessions:  mgr,
-		conn:      conn,
-		projectID: project.ID,
-		orgID:     orgID,
-		assets:    assetStorage,
+		service:      svc,
+		sessions:     mgr,
+		chatSessions: chatSessions,
+		conn:         conn,
+		projectID:    project.ID,
+		orgID:        orgID,
+		assets:       assetStorage,
 	}
 }

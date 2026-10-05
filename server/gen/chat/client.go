@@ -221,6 +221,8 @@ func (c *Client) SetPinned(ctx context.Context, p *SetPinnedPayload) (err error)
 
 // Summarize calls the "summarize" endpoint of the "chat" service.
 // Summarize may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "ai_access_denied" (type *goa.ServiceError): AI access denied
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -244,6 +246,8 @@ func (c *Client) Summarize(ctx context.Context, p *SummarizePayload) (res *Summa
 // SummarizeToolCall calls the "summarizeToolCall" endpoint of the "chat"
 // service.
 // SummarizeToolCall may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "ai_access_denied" (type *goa.ServiceError): AI access denied
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
