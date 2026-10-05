@@ -17,12 +17,13 @@ import {
   explainedLevel,
   LEVEL_NAME,
   levelStatus,
-  ruleAccessLabel,
   ruleIsBlock,
   ruleReachLabel,
   whySentence,
+  groupRules,
   type AccessTone,
   type ExplainedLevel,
+  type RuleGroup,
   type ServerVisibility,
 } from "./explainAccess";
 import { PrincipalBadge } from "./PrincipalBadge";
@@ -186,33 +187,30 @@ function LevelWhy({
   showRules: boolean;
   onToggleRules: () => void;
 }): JSX.Element {
-  const ruleCount = level.rules.length;
-  const columns: Column<ExplainedAccessRule>[] = [
+  const groups = groupRules(level.rules, level.level);
+  const ruleCount = groups.length;
+  const columns: Column<RuleGroup>[] = [
     {
       key: "source",
       header: "Source",
       width: "280px",
-      render: (rule) => <RuleSource rule={rule} />,
+      render: (group) => <RuleSource rule={group.rule} />,
     },
     {
       key: "rule",
       header: "Rule",
       width: "1fr",
-      render: (rule) => (
-        <RuleDescription
-          rule={rule}
-          explained={level.level}
-          serverName={serverName}
-        />
+      render: (group) => (
+        <RuleDescription group={group} serverName={serverName} />
       ),
     },
     {
       key: "effect",
       header: "Effect",
       width: "300px",
-      render: (rule) => (
+      render: (group) => (
         <RuleEffect
-          rule={rule}
+          rule={group.rule}
           level={level}
           memberName={memberName}
           serverName={serverName}
@@ -251,12 +249,8 @@ function LevelWhy({
         <div className="border-t">
           <Table
             columns={columns}
-            data={level.rules}
-            // Two rules can read alike (one also confined to the project),
-            // so the position keeps each row's key unique.
-            rowKey={(rule) =>
-              `${level.rules.indexOf(rule)}:${rule.principalUrn}`
-            }
+            data={groups}
+            rowKey={(group) => group.key}
           />
         </div>
       )}
@@ -290,26 +284,32 @@ function RuleSource({ rule }: { rule: ExplainedAccessRule }): JSX.Element {
 }
 
 function RuleDescription({
-  rule,
-  explained,
+  group,
   serverName,
 }: {
-  rule: ExplainedAccessRule;
-  explained: ExplainedLevel;
+  group: RuleGroup;
   serverName: string;
 }): JSX.Element {
+  const { rule, labels } = group;
   const block = ruleIsBlock(rule);
   // A rule that lost still says what it would have done, struck through so
   // it is not read as access the person has.
   const lost = rule.effect === "blocked" || rule.effect === "overridden";
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-      <span className="text-eyebrow flex items-center gap-1.5">
+    <div className="flex flex-wrap items-start gap-x-2 gap-y-1 text-sm">
+      <span className="text-eyebrow flex items-center gap-1.5 pt-0.5">
         <ToneMark tone={block ? "blocked" : "allowed"} />
         {block ? "Blocks" : "Grants"}
       </span>
-      <span className={cn(lost && "text-muted-foreground line-through")}>
-        {ruleAccessLabel(rule, explained)}
+      <span
+        className={cn(
+          "flex flex-col",
+          lost && "text-muted-foreground line-through",
+        )}
+      >
+        {labels.map((label) => (
+          <span key={label}>{label}</span>
+        ))}
       </span>
       <span className="text-muted-foreground">on</span>
       <Badge variant="neutral" size="sm">

@@ -251,6 +251,59 @@ export function ruleAccessLabel(
   return `${access} · ${narrowing.charAt(0).toUpperCase()}${narrowing.slice(1)}`;
 }
 
+/** Narrowest access first, so a group reads Connect, then View, then Manage. */
+const RULE_LEVEL_RANK: Record<ExplainedAccessRule["level"], number> = {
+  use: 0,
+  blocked: 0,
+  view: 1,
+  blocked_view: 1,
+  manage: 2,
+  blocked_manage: 2,
+  all: 3,
+};
+
+/**
+ * Rules from one role or person that had the same effect on the access shown,
+ * with the same reach. A role usually holds several grants at once (Connect,
+ * View and Manage, say), and each one matching the level shown is its own
+ * rule; one row per group says the same thing once.
+ */
+export interface RuleGroup {
+  /** Stable row key. */
+  key: string;
+
+  /** The group's first rule, which carries its source, effect and reach. */
+  rule: ExplainedAccessRule;
+
+  /** What each grant in the group does, narrowest access first. */
+  labels: string[];
+}
+
+export function groupRules(
+  rules: ExplainedAccessRule[],
+  explained: ExplainedLevel,
+): RuleGroup[] {
+  const groups = new Map<string, ExplainedAccessRule[]>();
+  for (const rule of rules) {
+    const key = [
+      rule.principalUrn,
+      rule.effect,
+      rule.appliesTo,
+      rule.reason ?? "",
+    ].join("|");
+    groups.set(key, [...(groups.get(key) ?? []), rule]);
+  }
+  return [...groups.entries()].map(([key, members]) => {
+    const ordered = [...members].sort(
+      (a, b) => RULE_LEVEL_RANK[a.level] - RULE_LEVEL_RANK[b.level],
+    );
+    const labels = [
+      ...new Set(ordered.map((rule) => ruleAccessLabel(rule, explained))),
+    ];
+    return { key, rule: members[0]!, labels };
+  });
+}
+
 export function ruleIsBlock(rule: ExplainedAccessRule): boolean {
   return rule.level.startsWith("blocked");
 }

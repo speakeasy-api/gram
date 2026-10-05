@@ -6,6 +6,7 @@ import {
   accessDecision,
   directorySourceLabel,
   effectNote,
+  groupRules,
   levelStatus,
   ruleAccessLabel,
   whySentence,
@@ -347,5 +348,81 @@ describe("narrowed direct grants", () => {
     expect(whySentence(partial, "Mateo", "GitHub", "private")).toBe(
       "A grant made directly to Mateo on GitHub overrides blocks from roles and everyone, but only for the tools it names. Contractors still takes the other tools away.",
     );
+  });
+});
+
+describe("groupRules", () => {
+  it("merges one role's grants with the same effect and reach into one row", () => {
+    const groups = groupRules(
+      [
+        contractorsBlock,
+        rule({
+          displayName: "Engineer",
+          level: "manage",
+          appliesTo: "all_resources",
+          effect: "blocked",
+        }),
+        rule({
+          displayName: "Engineer",
+          level: "use",
+          appliesTo: "all_resources",
+          effect: "blocked",
+        }),
+        rule({
+          displayName: "Engineer",
+          level: "view",
+          appliesTo: "all_resources",
+          effect: "blocked",
+        }),
+      ],
+      "use",
+    );
+    expect(
+      groups.map((group) => [group.rule.displayName, group.labels]),
+    ).toEqual([
+      ["Contractors", ["Connect · All tools"]],
+      [
+        "Engineer",
+        [
+          "Connect · All tools",
+          "View · includes Connect",
+          "Manage · includes Connect",
+        ],
+      ],
+    ]);
+  });
+
+  it("keeps rules apart when their effect or reach differs", () => {
+    const groups = groupRules(
+      [
+        rule({ displayName: "Analyst", effect: "allows" }),
+        rule({
+          displayName: "Analyst",
+          level: "blocked",
+          dispositions: ["destructive"],
+          effect: "limits",
+        }),
+        rule({
+          displayName: "Analyst",
+          appliesTo: "all_resources",
+          effect: "allows",
+        }),
+      ],
+      "use",
+    );
+    expect(groups).toHaveLength(3);
+    expect(new Set(groups.map((group) => group.key)).size).toBe(3);
+  });
+
+  it("lists a label shared by two grants once", () => {
+    const groups = groupRules(
+      [
+        rule({ displayName: "Engineer", effect: "allows" }),
+        rule({ displayName: "Engineer", effect: "allows" }),
+      ],
+      "use",
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.labels).toEqual(["Connect · All tools"]);
   });
 });
