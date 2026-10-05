@@ -131,6 +131,11 @@ type UpdateRemoteSessionClientRequestBody struct {
 	// Replace the upstream OAuth audience sent for this client. Omit to leave
 	// unchanged.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Platform admins only. Set true to run the client in compatibility mode with
+	// the legacy callback URL, or false to migrate it to the current callback URL
+	// once that URL is registered with the identity provider. Omit to leave
+	// unchanged.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
 }
 
 // AttachUserSessionIssuerRequestBody is the type of the "remoteSessionClients"
@@ -281,9 +286,16 @@ type CreateRemoteSessionClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // CreateCimdResponseBody is the type of the "remoteSessionClients" service
@@ -333,9 +345,16 @@ type CreateCimdResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateRemoteSessionClientResponseBody is the type of the
@@ -386,9 +405,16 @@ type UpdateRemoteSessionClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // AttachUserSessionIssuerResponseBody is the type of the
@@ -439,9 +465,16 @@ type AttachUserSessionIssuerResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // DetachUserSessionIssuerResponseBody is the type of the
@@ -492,9 +525,16 @@ type DetachUserSessionIssuerResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // AttachKeySetResponseBody is the type of the "remoteSessionClients" service
@@ -544,9 +584,16 @@ type AttachKeySetResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // DetachKeySetResponseBody is the type of the "remoteSessionClients" service
@@ -596,9 +643,16 @@ type DetachKeySetResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListRemoteSessionClientsResponseBody is the type of the
@@ -608,6 +662,14 @@ type ListRemoteSessionClientsResponseBody struct {
 	Items []*RemoteSessionClientResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetNewClientCallbackURLResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body.
+type GetNewClientCallbackURLResponseBody struct {
+	// The redirect URI to register on the upstream provider's OAuth app.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
 }
 
 // GetRemoteSessionClientResponseBody is the type of the "remoteSessionClients"
@@ -657,9 +719,16 @@ type GetRemoteSessionClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // PrepareEMAUnauthorizedResponseBody is the type of the "remoteSessionClients"
@@ -2755,6 +2824,196 @@ type ListRemoteSessionClientsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetNewClientCallbackURLUnauthorizedResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "unauthorized" error.
+type GetNewClientCallbackURLUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetNewClientCallbackURLForbiddenResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "forbidden" error.
+type GetNewClientCallbackURLForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetNewClientCallbackURLBadRequestResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "bad_request" error.
+type GetNewClientCallbackURLBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetNewClientCallbackURLNotFoundResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "not_found" error.
+type GetNewClientCallbackURLNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetNewClientCallbackURLConflictResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "conflict" error.
+type GetNewClientCallbackURLConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetNewClientCallbackURLUnsupportedMediaResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "unsupported_media" error.
+type GetNewClientCallbackURLUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetNewClientCallbackURLInvalidResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "invalid" error.
+type GetNewClientCallbackURLInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetNewClientCallbackURLInvariantViolationResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "invariant_violation" error.
+type GetNewClientCallbackURLInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetNewClientCallbackURLUnexpectedResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "unexpected" error.
+type GetNewClientCallbackURLUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetNewClientCallbackURLGatewayErrorResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "gateway_error" error.
+type GetNewClientCallbackURLGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetRemoteSessionClientUnauthorizedResponseBody is the type of the
 // "remoteSessionClients" service "getRemoteSessionClient" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -3182,9 +3441,16 @@ type RemoteSessionClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // NewPrepareEMARequestBody builds the HTTP request body from the payload of
@@ -3320,6 +3586,7 @@ func NewUpdateRemoteSessionClientRequestBody(p *remotesessionclients.UpdateRemot
 		TokenEndpointAuthMethod:         p.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: p.TokenEndpointAuthAudienceFormat,
 		Audience:                        p.Audience,
+		LegacyCallbackURL:               p.LegacyCallbackURL,
 	}
 	if p.Scope != nil {
 		body.Scope = make([]string, len(p.Scope))
@@ -3920,6 +4187,8 @@ func NewCreateRemoteSessionClientRemoteSessionClientOK(body *CreateRemoteSession
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
+		CallbackURL:                     body.CallbackURL,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
@@ -4110,6 +4379,8 @@ func NewCreateCimdRemoteSessionClientOK(body *CreateCimdResponseBody) *types.Rem
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
+		CallbackURL:                     body.CallbackURL,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
@@ -4301,6 +4572,8 @@ func NewUpdateRemoteSessionClientRemoteSessionClientOK(body *UpdateRemoteSession
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
+		CallbackURL:                     body.CallbackURL,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
@@ -4492,6 +4765,8 @@ func NewAttachUserSessionIssuerRemoteSessionClientOK(body *AttachUserSessionIssu
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
+		CallbackURL:                     body.CallbackURL,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
@@ -4683,6 +4958,8 @@ func NewDetachUserSessionIssuerRemoteSessionClientOK(body *DetachUserSessionIssu
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
+		CallbackURL:                     body.CallbackURL,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
@@ -4873,6 +5150,8 @@ func NewAttachKeySetRemoteSessionClientOK(body *AttachKeySetResponseBody) *types
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
+		CallbackURL:                     body.CallbackURL,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
@@ -5078,6 +5357,8 @@ func NewDetachKeySetRemoteSessionClientOK(body *DetachKeySetResponseBody) *types
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
+		CallbackURL:                     body.CallbackURL,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
@@ -5434,6 +5715,167 @@ func NewListRemoteSessionClientsGatewayError(body *ListRemoteSessionClientsGatew
 	return v
 }
 
+// NewGetNewClientCallbackURLNewClientCallbackURLResultOK builds a
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint result
+// from a HTTP "OK" response.
+func NewGetNewClientCallbackURLNewClientCallbackURLResultOK(body *GetNewClientCallbackURLResponseBody) *remotesessionclients.NewClientCallbackURLResult {
+	v := &remotesessionclients.NewClientCallbackURLResult{
+		CallbackURL: *body.CallbackURL,
+	}
+
+	return v
+}
+
+// NewGetNewClientCallbackURLUnauthorized builds a remoteSessionClients service
+// getNewClientCallbackUrl endpoint unauthorized error.
+func NewGetNewClientCallbackURLUnauthorized(body *GetNewClientCallbackURLUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetNewClientCallbackURLForbidden builds a remoteSessionClients service
+// getNewClientCallbackUrl endpoint forbidden error.
+func NewGetNewClientCallbackURLForbidden(body *GetNewClientCallbackURLForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetNewClientCallbackURLBadRequest builds a remoteSessionClients service
+// getNewClientCallbackUrl endpoint bad_request error.
+func NewGetNewClientCallbackURLBadRequest(body *GetNewClientCallbackURLBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetNewClientCallbackURLNotFound builds a remoteSessionClients service
+// getNewClientCallbackUrl endpoint not_found error.
+func NewGetNewClientCallbackURLNotFound(body *GetNewClientCallbackURLNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetNewClientCallbackURLConflict builds a remoteSessionClients service
+// getNewClientCallbackUrl endpoint conflict error.
+func NewGetNewClientCallbackURLConflict(body *GetNewClientCallbackURLConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetNewClientCallbackURLUnsupportedMedia builds a remoteSessionClients
+// service getNewClientCallbackUrl endpoint unsupported_media error.
+func NewGetNewClientCallbackURLUnsupportedMedia(body *GetNewClientCallbackURLUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetNewClientCallbackURLInvalid builds a remoteSessionClients service
+// getNewClientCallbackUrl endpoint invalid error.
+func NewGetNewClientCallbackURLInvalid(body *GetNewClientCallbackURLInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetNewClientCallbackURLInvariantViolation builds a remoteSessionClients
+// service getNewClientCallbackUrl endpoint invariant_violation error.
+func NewGetNewClientCallbackURLInvariantViolation(body *GetNewClientCallbackURLInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetNewClientCallbackURLUnexpected builds a remoteSessionClients service
+// getNewClientCallbackUrl endpoint unexpected error.
+func NewGetNewClientCallbackURLUnexpected(body *GetNewClientCallbackURLUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetNewClientCallbackURLGatewayError builds a remoteSessionClients service
+// getNewClientCallbackUrl endpoint gateway_error error.
+func NewGetNewClientCallbackURLGatewayError(body *GetNewClientCallbackURLGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetRemoteSessionClientRemoteSessionClientOK builds a
 // "remoteSessionClients" service "getRemoteSessionClient" endpoint result from
 // a HTTP "OK" response.
@@ -5452,6 +5894,8 @@ func NewGetRemoteSessionClientRemoteSessionClientOK(body *GetRemoteSessionClient
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
+		CallbackURL:                     body.CallbackURL,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
@@ -5916,6 +6360,9 @@ func ValidateCreateRemoteSessionClientResponseBody(body *CreateRemoteSessionClie
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -5952,6 +6399,9 @@ func ValidateCreateRemoteSessionClientResponseBody(body *CreateRemoteSessionClie
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.CallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -5983,6 +6433,9 @@ func ValidateCreateCimdResponseBody(body *CreateCimdResponseBody) (err error) {
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -6019,6 +6472,9 @@ func ValidateCreateCimdResponseBody(body *CreateCimdResponseBody) (err error) {
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.CallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -6050,6 +6506,9 @@ func ValidateUpdateRemoteSessionClientResponseBody(body *UpdateRemoteSessionClie
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -6086,6 +6545,9 @@ func ValidateUpdateRemoteSessionClientResponseBody(body *UpdateRemoteSessionClie
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.CallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -6117,6 +6579,9 @@ func ValidateAttachUserSessionIssuerResponseBody(body *AttachUserSessionIssuerRe
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -6153,6 +6618,9 @@ func ValidateAttachUserSessionIssuerResponseBody(body *AttachUserSessionIssuerRe
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.CallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -6184,6 +6652,9 @@ func ValidateDetachUserSessionIssuerResponseBody(body *DetachUserSessionIssuerRe
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -6220,6 +6691,9 @@ func ValidateDetachUserSessionIssuerResponseBody(body *DetachUserSessionIssuerRe
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.CallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -6251,6 +6725,9 @@ func ValidateAttachKeySetResponseBody(body *AttachKeySetResponseBody) (err error
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -6287,6 +6764,9 @@ func ValidateAttachKeySetResponseBody(body *AttachKeySetResponseBody) (err error
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.CallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -6318,6 +6798,9 @@ func ValidateDetachKeySetResponseBody(body *DetachKeySetResponseBody) (err error
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -6354,6 +6837,9 @@ func ValidateDetachKeySetResponseBody(body *DetachKeySetResponseBody) (err error
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.CallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -6380,6 +6866,18 @@ func ValidateListRemoteSessionClientsResponseBody(body *ListRemoteSessionClients
 	return
 }
 
+// ValidateGetNewClientCallbackURLResponseBody runs the validations defined on
+// GetNewClientCallbackUrlResponseBody
+func ValidateGetNewClientCallbackURLResponseBody(body *GetNewClientCallbackURLResponseBody) (err error) {
+	if body.CallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("callback_url", "body"))
+	}
+	if body.CallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
+	}
+	return
+}
+
 // ValidateGetRemoteSessionClientResponseBody runs the validations defined on
 // GetRemoteSessionClientResponseBody
 func ValidateGetRemoteSessionClientResponseBody(body *GetRemoteSessionClientResponseBody) (err error) {
@@ -6400,6 +6898,9 @@ func ValidateGetRemoteSessionClientResponseBody(body *GetRemoteSessionClientResp
 	}
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -6437,6 +6938,9 @@ func ValidateGetRemoteSessionClientResponseBody(body *GetRemoteSessionClientResp
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.CallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -9145,6 +9649,248 @@ func ValidateListRemoteSessionClientsGatewayErrorResponseBody(body *ListRemoteSe
 	return
 }
 
+// ValidateGetNewClientCallbackURLUnauthorizedResponseBody runs the validations
+// defined on getNewClientCallbackUrl_unauthorized_response_body
+func ValidateGetNewClientCallbackURLUnauthorizedResponseBody(body *GetNewClientCallbackURLUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetNewClientCallbackURLForbiddenResponseBody runs the validations
+// defined on getNewClientCallbackUrl_forbidden_response_body
+func ValidateGetNewClientCallbackURLForbiddenResponseBody(body *GetNewClientCallbackURLForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetNewClientCallbackURLBadRequestResponseBody runs the validations
+// defined on getNewClientCallbackUrl_bad_request_response_body
+func ValidateGetNewClientCallbackURLBadRequestResponseBody(body *GetNewClientCallbackURLBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetNewClientCallbackURLNotFoundResponseBody runs the validations
+// defined on getNewClientCallbackUrl_not_found_response_body
+func ValidateGetNewClientCallbackURLNotFoundResponseBody(body *GetNewClientCallbackURLNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetNewClientCallbackURLConflictResponseBody runs the validations
+// defined on getNewClientCallbackUrl_conflict_response_body
+func ValidateGetNewClientCallbackURLConflictResponseBody(body *GetNewClientCallbackURLConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetNewClientCallbackURLUnsupportedMediaResponseBody runs the
+// validations defined on
+// getNewClientCallbackUrl_unsupported_media_response_body
+func ValidateGetNewClientCallbackURLUnsupportedMediaResponseBody(body *GetNewClientCallbackURLUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetNewClientCallbackURLInvalidResponseBody runs the validations
+// defined on getNewClientCallbackUrl_invalid_response_body
+func ValidateGetNewClientCallbackURLInvalidResponseBody(body *GetNewClientCallbackURLInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetNewClientCallbackURLInvariantViolationResponseBody runs the
+// validations defined on
+// getNewClientCallbackUrl_invariant_violation_response_body
+func ValidateGetNewClientCallbackURLInvariantViolationResponseBody(body *GetNewClientCallbackURLInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetNewClientCallbackURLUnexpectedResponseBody runs the validations
+// defined on getNewClientCallbackUrl_unexpected_response_body
+func ValidateGetNewClientCallbackURLUnexpectedResponseBody(body *GetNewClientCallbackURLUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetNewClientCallbackURLGatewayErrorResponseBody runs the validations
+// defined on getNewClientCallbackUrl_gateway_error_response_body
+func ValidateGetNewClientCallbackURLGatewayErrorResponseBody(body *GetNewClientCallbackURLGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetRemoteSessionClientUnauthorizedResponseBody runs the validations
 // defined on getRemoteSessionClient_unauthorized_response_body
 func ValidateGetRemoteSessionClientUnauthorizedResponseBody(body *GetRemoteSessionClientUnauthorizedResponseBody) (err error) {
@@ -9649,6 +10395,9 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -9685,6 +10434,9 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.CallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

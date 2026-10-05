@@ -3,8 +3,11 @@ package usage
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgerrcode"
@@ -32,6 +35,12 @@ const (
 	minimumStripeCheckoutSessionLifetime = 30 * time.Minute
 	maximumStripeCheckoutSessionLifetime = 24 * time.Hour
 	stripeCheckoutExpirySafetyMargin     = time.Minute
+
+	// stripeCheckoutReturnBasePrefix marks the intent key segment that records
+	// a Checkout return base URL other than the site URL.
+	stripeCheckoutReturnBasePrefix = "return-"
+	// maxStripeIdempotencyKeyLength is the longest idempotency key Stripe accepts.
+	maxStripeIdempotencyKeyLength = 255
 )
 
 type stripeCheckoutIntent struct {
@@ -155,6 +164,9 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 		return "", oops.E(oops.CodeUnexpected, err, "failed to check the trial lifecycle").LogError(ctx, s.logger)
 	}
 	proposedIntent := newStripeCheckoutIntentForTrial(authCtx.ActiveOrganizationID, now, productTrialEnd, expectedTrial)
+	if returnBaseURL := s.platformHostBaseURL(ctx, s.siteURL); returnBaseURL != s.siteURL.String() {
+		proposedIntent = withStripeCheckoutReturnBase(proposedIntent, returnBaseURL)
+	}
 
 	billingMetadata, err := repo.New(s.db).GetBillingMetadata(ctx, authCtx.ActiveOrganizationID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -208,8 +220,7 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 		}
 		customerID = customer.ID
 	}
-	billingURL := s.siteURL.JoinPath(authCtx.OrganizationSlug, "billing").String()
-	replaceLifecycleIntentKey, err := s.expireLifecycleStaleCheckoutSession(ctx, billingMetadata, customerID, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, billingURL, proposedIntent, now)
+	replaceLifecycleIntentKey, err := s.expireLifecycleStaleCheckoutSession(ctx, billingMetadata, customerID, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, proposedIntent, now)
 	if err != nil {
 		return "", err
 	}
@@ -224,6 +235,12 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 	}
 	if legacyReplay != nil && !preparedIntent.expiresAt.After(s.checkoutNow()) {
 		return "", oops.E(oops.CodeConflict, nil, "the previous Stripe Checkout session expired while it was being recovered").LogWarn(ctx, s.logger)
+	}
+	// A reused live intent keeps the return host it was created on, even when
+	// this request arrived on another host.
+	billingURL, err := stripeCheckoutBillingURL(preparedIntent.idempotencyKey, s.siteURL, authCtx.OrganizationSlug)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "stored Stripe Checkout intent is incomplete").LogError(ctx, s.logger)
 	}
 
 	checkout, err := s.stripeClient.CreateCheckoutSession(ctx, stripeclient.CreateCheckoutSessionInput{
@@ -375,7 +392,7 @@ func (s *Service) checkoutNow() time.Time {
 func (s *Service) expireLifecycleStaleCheckoutSession(
 	ctx context.Context,
 	metadata repo.BillingMetadatum,
-	customerID, organizationID, organizationSlug, billingURL string,
+	customerID, organizationID, organizationSlug string,
 	proposed stripeCheckoutIntent,
 	now time.Time,
 ) (pgtype.Text, error) {
@@ -394,6 +411,10 @@ func (s *Service) expireLifecycleStaleCheckoutSession(
 		sessionID = metadata.StripeCheckoutSessionID.String
 	} else {
 		// Same idempotency key as the original request, so the input must match it exactly.
+		billingURL, urlErr := stripeCheckoutBillingURL(staleIntent.idempotencyKey, s.siteURL, organizationSlug)
+		if urlErr != nil {
+			return pgtype.Text{}, oops.E(oops.CodeUnavailable, urlErr, "failed to recover the previous Stripe Checkout intent").LogWarn(ctx, s.logger)
+		}
 		stale, createErr := s.stripeClient.CreateCheckoutSession(ctx, stripeclient.CreateCheckoutSessionInput{
 			CustomerID: customerID, OrganizationID: organizationID, OrganizationSlug: organizationSlug,
 			SuccessURL: billingURL, CancelURL: billingURL, TrialEnd: staleIntent.trialEnd,
@@ -552,6 +573,46 @@ func checkoutIntentTrialFingerprint(idempotencyKey string) string {
 		}
 	}
 	return ""
+}
+
+// withStripeCheckoutReturnBase records a return base URL other than the site
+// URL in the intent key, just before the trial fingerprint, which stays the
+// last segment. Stripe replays a key only with byte-identical input, so every
+// replay of the intent derives its return URLs from the key rather than from
+// the host of the request that happens to replay it. The base URL is base64url
+// encoded because the key's segments are colon-separated. A base URL too long
+// to fit in Stripe's idempotency key limit is left out, so Checkout returns to
+// the site URL.
+func withStripeCheckoutReturnBase(intent stripeCheckoutIntent, returnBaseURL string) stripeCheckoutIntent {
+	separator := strings.LastIndexByte(intent.idempotencyKey, ':')
+	key := intent.idempotencyKey[:separator] + ":" + stripeCheckoutReturnBasePrefix +
+		base64.RawURLEncoding.EncodeToString([]byte(returnBaseURL)) + intent.idempotencyKey[separator:]
+	if len(key) > maxStripeIdempotencyKeyLength {
+		return intent
+	}
+	intent.idempotencyKey = key
+	return intent
+}
+
+// stripeCheckoutBillingURL returns the Checkout success and cancel URL for an
+// intent key: the billing page on the return base URL recorded in the key, or
+// on siteURL for a key that records none.
+func stripeCheckoutBillingURL(idempotencyKey string, siteURL *url.URL, organizationSlug string) (string, error) {
+	base := siteURL
+	segments := strings.Split(idempotencyKey, ":")
+	if len(segments) >= 2 {
+		if encoded, ok := strings.CutPrefix(segments[len(segments)-2], stripeCheckoutReturnBasePrefix); ok {
+			raw, err := base64.RawURLEncoding.DecodeString(encoded)
+			if err != nil {
+				return "", fmt.Errorf("decode Checkout return base URL: %w", err)
+			}
+			base, err = url.Parse(string(raw))
+			if err != nil {
+				return "", fmt.Errorf("parse Checkout return base URL: %w", err)
+			}
+		}
+	}
+	return base.JoinPath(organizationSlug, "billing").String(), nil
 }
 
 func checkoutOptionalTime(value pgtype.Timestamptz) *time.Time {

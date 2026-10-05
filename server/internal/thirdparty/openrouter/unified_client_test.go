@@ -1,6 +1,7 @@
 package openrouter
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -1888,4 +1889,83 @@ func TestChatClient_InitializeRequest_EmptyKeySlotFallsBackToUsageSource(t *test
 	require.NoError(t, err)
 	require.Equal(t, billing.ModelUsageSourceSlack, resolver.slot,
 		"trusted callers set UsageSource server-side; it doubles as the slot when KeySlot is unset")
+}
+
+// TestChatClient_GetCompletion_ForwardsMaxTokens pins the wire contract. The
+// key must be absent when nil: OpenRouter reserves max_tokens against the
+// key's remaining limit, so an uninvited value would refuse working calls.
+func TestChatClient_GetCompletion_ForwardsMaxTokens(t *testing.T) {
+	t.Parallel()
+
+	cap2048 := 2048
+	tests := []struct {
+		name      string
+		maxTokens *int
+		wantKey   bool
+		wantValue string
+	}{
+		{name: "set", maxTokens: &cap2048, wantKey: true, wantValue: "2048"},
+		{name: "unset", maxTokens: nil, wantKey: false, wantValue: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var rawBody []byte
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, err := io.ReadAll(r.Body)
+				if !assert.NoError(t, err) {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				rawBody = body
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{
+					"id": "msg_max_tokens",
+					"model": "openai/gpt-5.4-mini",
+					"choices": [{"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
+					"usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
+				}`))
+			}))
+			defer server.Close()
+
+			provisioner := &mockProvisioner{apiKey: "test-api-key"}
+			tracerProvider := testenv.NewTracerProvider(t)
+			guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+			require.NoError(t, err)
+
+			client := NewUnifiedClient(
+				testenv.NewLogger(t),
+				guardianPolicy,
+				provisioner,
+				&PlatformKeyResolver{Provisioner: provisioner},
+				&mockMessageCaptureStrategy{},
+				&mockUsageTrackingStrategy{},
+				&mockChatTitleGenerator{},
+				&mockTelemetryLogger{},
+			)
+			client.httpClient = &http.Client{Transport: &testTransport{server: server}}
+
+			_, err = client.GetCompletion(context.Background(), CompletionRequest{
+				OrgID:       "test-org",
+				ProjectID:   uuid.New().String(),
+				Messages:    []or.ChatMessages{CreateMessageUser("hello")},
+				MaxTokens:   tt.maxTokens,
+				UsageSource: billing.ModelUsageSourcePlayground,
+			})
+			require.NoError(t, err)
+
+			// UseNumber compares the integer exactly rather than by delta.
+			decoder := json.NewDecoder(bytes.NewReader(rawBody))
+			decoder.UseNumber()
+			var wire map[string]any
+			require.NoError(t, decoder.Decode(&wire))
+			value, present := wire["max_tokens"]
+			require.Equal(t, tt.wantKey, present, "max_tokens presence on the wire")
+			if tt.wantKey {
+				require.Equal(t, json.Number(tt.wantValue), value)
+			}
+		})
+	}
 }

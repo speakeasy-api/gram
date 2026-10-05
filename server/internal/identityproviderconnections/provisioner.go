@@ -92,7 +92,9 @@ type Config struct {
 	// credential may impersonate; a credential repointed elsewhere is refused.
 	SigningServiceAccount string
 
-	// ServerURL is the origin managed JWKS documents are served from.
+	// ServerURL is the origin managed JWKS documents are served from. It is the
+	// pinned outbound callback origin: counterparties register the JWKS URL, so
+	// it must not move when the server URL does.
 	ServerURL *url.URL
 }
 
@@ -323,6 +325,9 @@ func (p *Provisioner) provisionRows(ctx context.Context, params ProvisionClientP
 		LegacyCallbackUrl:               false,
 		JsonWebKeySetID:                 conv.ToNullUUID(set.ID),
 		IdentityProviderConnectionID:    marker,
+		// Connection clients authenticate with private_key_jwt and register no
+		// redirect_uri; their JWKS URL stays on the pinned outbound origin.
+		CallbackBaseUrl: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create managed remote session client: %w", err)

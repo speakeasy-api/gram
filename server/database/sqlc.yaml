@@ -101,7 +101,11 @@ sql:
         omit_unused_structs: false
 
   - schema: schema.sql
-    queries: ../internal/testenv/queries.sql
+    queries:
+      - ../internal/testenv/queries.sql
+      - ../internal/testenv/role_distribution_source_queries.sql
+      - ../internal/testenv/role_distribution_pipeline_queries.sql
+      - ../internal/testenv/role_deletion_queries.sql
     engine: postgresql
     gen:
       go:
@@ -160,12 +164,12 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
   - schema: schema.sql
-    queries: ../internal/explore/queries.sql
+    queries: ../internal/widgets/queries.sql
     engine: postgresql
     gen:
       go:
         package: "repo"
-        out: "../internal/explore/repo"
+        out: "../internal/widgets/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -276,6 +280,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/oktaresourceconnections/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/oktaserversuggestions/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/oktaserversuggestions/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -885,6 +899,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/admin/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/adminmcp/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/adminmcp/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 

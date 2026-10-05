@@ -130,7 +130,7 @@ func TestChangeTrialEndDateRechecksExpiryAfterLockWait(t *testing.T) {
 				_, err := svc.ChangeTrialEndDate(ctx, &gen.ChangeTrialEndDatePayload{ID: orgID, EndsAt: requested.Format(time.RFC3339)})
 				result <- err
 			}()
-			testenv.WaitForBlockedBackend(t, ctx, conn)
+			testenv.WaitForBackendsBlockedBy(t, ctx, conn, testenv.BackendPID(first), 1)
 			require.Eventually(t, func() bool {
 				clock, err := testrepo.New(conn).GetTransactionClockFixture(ctx)
 				return err == nil && clock.TransactionNow.Time.After(endsAt)

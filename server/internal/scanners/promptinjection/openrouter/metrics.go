@@ -25,6 +25,7 @@ const (
 	meterTypedCallDuration     = "risk.prompt_injection.typed_call_duration"
 	meterTypedDecisionDuration = "risk.prompt_injection.typed_decision_duration"
 	meterTypedFailOpen         = "risk.prompt_injection.typed_fail_open_samples"
+	meterTypedCompletionTokens = "risk.prompt_injection.typed_completion_tokens" //nolint:gosec // G101: a metric name, not a credential
 )
 
 type metrics struct {
@@ -40,6 +41,7 @@ type metrics struct {
 	callDuration     metric.Float64Histogram
 	decisionDuration metric.Float64Histogram
 	failOpen         metric.Int64Counter
+	completionTokens metric.Int64Histogram
 }
 
 func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metrics {
@@ -163,6 +165,18 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterTypedFailOpen), attr.SlogError(err))
 	}
 
+	completionTokens, err := meter.Int64Histogram(
+		meterTypedCompletionTokens,
+		metric.WithDescription("Tokens the typed prompt-injection judge generated, reasoning included, against its MaxVerdictTokens cap"),
+		metric.WithUnit("{token}"),
+		// Powers of two up to the cap: the top buckets show it about to
+		// truncate verdicts, the bottom ones that it can be tightened.
+		metric.WithExplicitBucketBoundaries(64, 128, 256, 512, 1024, 2048, 4096, MaxVerdictTokens),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterTypedCompletionTokens), attr.SlogError(err))
+	}
+
 	return &metrics{
 		classifications:  classifications,
 		duration:         duration,
@@ -176,6 +190,7 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		callDuration:     callDuration,
 		decisionDuration: decisionDuration,
 		failOpen:         failOpen,
+		completionTokens: completionTokens,
 	}
 }
 
@@ -277,6 +292,20 @@ func (m *metrics) RecordFailOpen(ctx context.Context, orgID, model, reasoning, r
 		attribute.String("model", model),
 		attribute.String("reasoning", reasoning),
 		attribute.String("reason", reason),
+	))
+}
+
+// RecordCompletionTokens records one judge call's generated tokens, including
+// a call truncated at the cap.
+func (m *metrics) RecordCompletionTokens(ctx context.Context, orgID, model, reasoning string, tokens int, truncated bool) {
+	if m.completionTokens == nil {
+		return
+	}
+	m.completionTokens.Record(ctx, int64(tokens), metric.WithAttributes(
+		attr.OrganizationID(orgID),
+		attribute.String("model", model),
+		attribute.String("reasoning", reasoning),
+		attribute.Bool("truncated", truncated),
 	))
 }
 

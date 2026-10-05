@@ -298,8 +298,7 @@ func TestAssistantDeletionSerializesWithOAuthRegistrationClaim(t *testing.T) {
 		claimDone <- claimResult{rows: rows, err: claimErr}
 	}()
 
-	require.Never(t, func() bool { return len(claimDone) > 0 }, 250*time.Millisecond, 25*time.Millisecond,
-		"registration claim did not wait for assistant deletion")
+	testenv.WaitForBackendsBlockedBy(t, t.Context(), conn, testenv.BackendPID(deleteTx), 1)
 	require.NoError(t, deleteQueries.RetireAssistantMCPOAuthClients(
 		t.Context(),
 		assistantrepo.RetireAssistantMCPOAuthClientsParams{AssistantID: assistantID, ProjectID: projectID},

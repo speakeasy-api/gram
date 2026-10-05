@@ -144,7 +144,7 @@ func BuildCreateIssuerPayload(organizationRemoteSessionIssuersCreateIssuerBody s
 
 // BuildListIssuersPayload builds the payload for the
 // organizationRemoteSessionIssuers listIssuers endpoint from CLI flags.
-func BuildListIssuersPayload(organizationRemoteSessionIssuersListIssuersCursor string, organizationRemoteSessionIssuersListIssuersLimit string, organizationRemoteSessionIssuersListIssuersSessionToken string, organizationRemoteSessionIssuersListIssuersApikeyToken string) (*organizationremotesessionissuers.ListIssuersPayload, error) {
+func BuildListIssuersPayload(organizationRemoteSessionIssuersListIssuersCursor string, organizationRemoteSessionIssuersListIssuersLimit string, organizationRemoteSessionIssuersListIssuersTier string, organizationRemoteSessionIssuersListIssuersSessionToken string, organizationRemoteSessionIssuersListIssuersApikeyToken string) (*organizationremotesessionissuers.ListIssuersPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -164,6 +164,18 @@ func BuildListIssuersPayload(organizationRemoteSessionIssuersListIssuersCursor s
 			}
 		}
 	}
+	var tier *string
+	{
+		if organizationRemoteSessionIssuersListIssuersTier != "" {
+			tier = &organizationRemoteSessionIssuersListIssuersTier
+			if !(*tier == "organization" || *tier == "project" || *tier == "platform") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("tier", *tier, []any{"organization", "project", "platform"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if organizationRemoteSessionIssuersListIssuersSessionToken != "" {
@@ -179,6 +191,7 @@ func BuildListIssuersPayload(organizationRemoteSessionIssuersListIssuersCursor s
 	v := &organizationremotesessionissuers.ListIssuersPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.Tier = tier
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 

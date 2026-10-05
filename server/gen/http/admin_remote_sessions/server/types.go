@@ -645,9 +645,16 @@ type CreateGlobalClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListGlobalClientsResponseBody is the type of the "adminRemoteSessions"
@@ -705,9 +712,16 @@ type GetGlobalClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateGlobalClientResponseBody is the type of the "adminRemoteSessions"
@@ -757,9 +771,16 @@ type UpdateGlobalClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListGlobalIssuerConvergenceCandidatesResponseBody is the type of the
@@ -4057,9 +4078,16 @@ type RemoteSessionClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // IssuerConvergenceCandidateResponseBody is used to define fields on response
@@ -4490,6 +4518,8 @@ func NewCreateGlobalClientResponseBody(res *types.RemoteSessionClient) *CreateGl
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CallbackURL:                     res.CallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
@@ -4555,6 +4585,8 @@ func NewGetGlobalClientResponseBody(res *types.RemoteSessionClient) *GetGlobalCl
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CallbackURL:                     res.CallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
@@ -4599,6 +4631,8 @@ func NewUpdateGlobalClientResponseBody(res *types.RemoteSessionClient) *UpdateGl
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CallbackURL:                     res.CallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}

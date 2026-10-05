@@ -11,6 +11,8 @@ export type RankedBarListItem = {
   // When the item names a person, the identity their label links to. Omitted
   // for non-person rankings (servers, tools, rules), which stay plain text.
   identifier?: IdentityRef | null;
+  // Makes the label a button. Ignored when the item links to a person.
+  onSelect?: () => void;
 };
 
 /**
@@ -50,6 +52,14 @@ export function RankedBarList({
               <IdentityLink identifier={item.identifier}>
                 {item.label}
               </IdentityLink>
+            ) : item.onSelect ? (
+              <button
+                type="button"
+                className="max-w-full truncate text-left hover:underline"
+                onClick={item.onSelect}
+              >
+                {item.label}
+              </button>
             ) : (
               item.label
             )}

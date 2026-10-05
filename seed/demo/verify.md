@@ -321,11 +321,16 @@ Connector` appears under **Inactive** with no connections. Its row menu's
 19. **Remote MCP identity settings** — open the settings page for each seeded
     Remote MCP server. Linear shows the **User** identity pill, the Example
     Workspace Identity provider, and the Session length / Client access controls
-    in Sessions. Slack shows **Agent** with the inert demo Authorization
-    credential managed under Identity. GitHub shows **None** with no provider or
-    static Authorization header. All three use the Display, Identity, Server URL,
-    Sessions, Tool Filtering, Danger Zone order, with Advanced Headers directly
-    after the Identity controls.
+    in Sessions. Slack shows **Service Account** with the inert demo
+    Authorization credential managed under Identity. GitHub shows **None** with
+    no provider or static Authorization header. All three use the Display,
+    Identity, Server URL, Sessions, Tool Filtering, Danger Zone order, with
+    Custom Headers directly after the Identity controls. In Postgres, only the
+    Linear row in `mcp_servers` has `remote_session_issuer_id` set, to the
+    Example Workspace Identity provider, and every client bound to Linear's
+    user session issuer (the identity client and the attachment fixture's
+    client) sits under that same provider, so the stamp matches what
+    `ResyncMCPServerRemoteSessionIssuers` would derive.
 
 20. **Billing meter usage** — select a custom trailing 14-day window. Storage
     shows s-tokens of stored content, bandwidth shows ingress and egress bytes,
@@ -447,18 +452,31 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       `[~]` to `[x]`; API-only checks and the separate synthetic consolidation
       blocker demo do not complete this fixture's display verification.
 
-25. **Workload Identities** — open `/<org>/projects/default/workload-identities`
-    (no sidebar entry yet; the page is pre-GA and reached by URL). Two trusted
-    issuers: `Acme Agent Platform` with Wildcards **ALLOWED**, and `Acme CI`
-    with **OFF** — the second must stay off, because its subjects encode a
-    branch ref where a wildcard would admit anyone able to push a branch. Four
-    admitted workloads, exactly one badged **WILDCARD**
-    (`wimse://agents.example.com/org/acme/agent/*`), each resolving to a named
-    agent with no row showing "None assigned". Open **Admit a workload**, pick
-    the agent platform, leave Match on _Exact_ and type a subject containing
-    `*`: the warning appears in destructive red and the submit is disabled.
-    Switching Match to _Wildcard_ clears it. Selecting `Acme CI` instead
-    disables the Wildcard option and says why.
+25. **Access Hub** — open `/<org>/access-hub` (organization sidebar, under
+    **Secure**; the old `/<org>/projects/default/access-hub` URL redirects
+    there) and click **Custom (2)**.
+    Two platform cards: `Acme Agent Platform` and `Acme CI`, each with tags
+    and sharing one. The page shows the organization tier only, so `Acme CI`
+    lists two machines (`Docs publish` and `Payments deploy (all projects)`);
+    the project-tier `Payments deploy` admission stays off this page. Open
+    `Acme Agent Platform`: its machines each resolve to
+    a named agent with no row showing "None assigned", and one is the wildcard
+    rule `wimse://agents.example.com/org/acme/agent/*`. `Acme CI` must keep
+    wildcard admission off, because its subjects encode a branch ref where a
+    wildcard would admit anyone able to push a branch. On `Acme CI`, open
+    **+ Allow a machine** and type a subject ending in `*`: the warning appears
+    in destructive red under the field and **Allow machine** stays disabled.
+
+26. **Explore widgets** — open `/<org>/projects/default/explore` and click
+    the **Widgets** tab, which shows a count of 5. Five widgets, most
+    recently updated first, starting with Amara Okafor's "Sessions by
+    surface" with its description beneath; Hana Sato's widget of the same
+    name sits further down with her name beside it. Each row shows its
+    dataset and chart type, and none carries the broken-widget warning.
+    Clicking "Slowest MCP tools" switches to the Explore tab with the
+    tool_calls dataset, a 7-day window and a table ordered by p95 duration,
+    runs it, and returns rows; the bar names the widget with Priya Raman as
+    its creator and **Save** stays disabled until something is edited.
 
 ## On failure
 

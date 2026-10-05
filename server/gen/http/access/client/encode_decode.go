@@ -7589,6 +7589,10 @@ func unmarshalAccessMemberResponseBodyToAccessAccessMember(v *AccessMemberRespon
 	for i, val := range v.RoleIds {
 		res.RoleIds[i] = val
 	}
+	res.DirectoryRoleIds = make([]string, len(v.DirectoryRoleIds))
+	for i, val := range v.DirectoryRoleIds {
+		res.DirectoryRoleIds[i] = val
+	}
 	if v.Groups != nil {
 		res.Groups = make([]string, len(v.Groups))
 		for i, val := range v.Groups {
@@ -7619,6 +7623,16 @@ func unmarshalListRoleGrantResponseBodyToAccessListRoleGrant(v *ListRoleGrantRes
 				continue
 			}
 			res.Selectors[i] = unmarshalSelectorResponseBodyToAccessSelector(val)
+		}
+	}
+	if v.DirectSelectors != nil {
+		res.DirectSelectors = make([]*access.Selector, len(v.DirectSelectors))
+		for i, val := range v.DirectSelectors {
+			if val == nil {
+				res.DirectSelectors[i] = nil
+				continue
+			}
+			res.DirectSelectors[i] = unmarshalSelectorResponseBodyToAccessSelector(val)
 		}
 	}
 

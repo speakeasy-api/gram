@@ -28,6 +28,7 @@ import (
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
+	"github.com/speakeasy-api/gram/server/internal/plugins/publishstatus"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
@@ -97,6 +98,7 @@ func TestListPluginsPagesAProjectsPluginsWithMembershipCounts(t *testing.T) {
 	})
 	require.NoError(t, err)
 	marketing := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Marketing Tools", "marketing")
+	require.NoError(t, pluginsrepo.New(conn).SetPluginAutoCreatedFixture(ctx, pluginsrepo.SetPluginAutoCreatedFixtureParams{ProjectID: project.ID, ID: marketing.ID, AutoCreated: true}))
 
 	_, err = pluginsrepo.New(conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
 		PluginID:       marketing.ID,
@@ -117,6 +119,20 @@ func TestListPluginsPagesAProjectsPluginsWithMembershipCounts(t *testing.T) {
 	}
 	require.True(t, byID[defaultPlugin.ID.String()].IsDefault)
 	require.False(t, byID[marketing.ID.String()].IsDefault)
+	for _, expected := range []struct {
+		id     uuid.UUID
+		marker string
+	}{{defaultPlugin.ID, `"auto_created":false`}, {marketing.ID, `"auto_created":true`}} {
+		encoded, err := json.Marshal(byID[expected.id.String()])
+		require.NoError(t, err)
+		require.Contains(t, string(encoded), expected.marker)
+		detail, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: expected.id.String()})
+		require.NoError(t, err)
+		encoded, err = json.Marshal(detail.Plugin)
+		require.NoError(t, err)
+		require.Contains(t, string(encoded), expected.marker)
+	}
+
 	require.NotNil(t, byID[marketing.ID.String()].Assignments)
 	require.True(t, byID[marketing.ID.String()].Assignments.AllMembers)
 	require.Zero(t, byID[marketing.ID.String()].Assignments.Users)
@@ -155,10 +171,12 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
 	prepared, err := NewLiveOrgAdminAuthorizer(conn, engine).PrepareExternalContext(ctx, principal)
 	require.NoError(t, err)
+	memberPublishStatus := &stubPluginPublishStatus{status: publishstatus.Status{State: publishstatus.StateFailed, FailureCategory: publishstatus.FailurePublishFailed}}
 	service := testPluginTargets(conn).WithAuthorization(engine).
 		WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{
 			PluginSlug: "direct-user", Packages: []plugindelivery.PublicationPackageAddress{{ServerName: "Assigned MCP", MCPURL: "https://private.example/mcp/member"}},
-		}}})
+		}}}).
+		WithPublishStatus(memberPublishStatus)
 
 	resolved, err := authz.ResolveUserPrincipals(prepared, conn, principal.OrganizationID, principal.UserID)
 	require.NoError(t, err)
@@ -195,6 +213,7 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 	for _, assignment := range assignments {
 		plugin := seedPlugin(t, prepared, conn, principal.OrganizationID, project.ID, assignment.slug, assignment.slug)
 		pluginsBySlug[assignment.slug] = plugin
+		require.NoError(t, pluginsrepo.New(conn).SetPluginAutoCreatedFixture(prepared, pluginsrepo.SetPluginAutoCreatedFixtureParams{ProjectID: project.ID, ID: plugin.ID, AutoCreated: assignment.slug == "member-role"}))
 		_, err = pluginsrepo.New(conn).AddPluginAssignment(prepared, pluginsrepo.AddPluginAssignmentParams{
 			PluginID: plugin.ID, OrganizationID: principal.OrganizationID, PrincipalUrn: assignment.principal,
 		})
@@ -233,6 +252,19 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 	slugs := make([]string, 0, len(result.Plugins))
 	for _, plugin := range result.Plugins {
 		slugs = append(slugs, plugin.Slug)
+		marker := `"auto_created":false`
+		if plugin.Slug == "member-role" {
+			marker = `"auto_created":true`
+		}
+		encoded, err := json.Marshal(plugin)
+		require.NoError(t, err)
+		require.Contains(t, string(encoded), marker)
+		detail, err := service.GetAssignedPlugin(prepared, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID})
+		require.NoError(t, err)
+		encoded, err = json.Marshal(detail.Plugin)
+		require.NoError(t, err)
+		require.Contains(t, string(encoded), marker)
+
 		require.Nil(t, plugin.Assignments)
 		require.Equal(t, PluginPublicationPublished, plugin.Publication)
 		if plugin.Slug == "direct-user" {
@@ -247,9 +279,10 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 	require.Len(t, detail.Servers, 1)
 	encoded, err := json.Marshal(detail)
 	require.NoError(t, err)
-	for _, forbidden := range []string{"secret-marketplace-token", "private-owner", "private-repository", `"assignments"`, "assignment_version", "principal_urn", "membership_id", "target_id", "publication_evidence", "private.example"} {
+	for _, forbidden := range []string{"secret-marketplace-token", "private-owner", "private-repository", `"assignments"`, "assignment_version", "principal_urn", "membership_id", "target_id", "publication_evidence", "last_publish", "failure_category", "private.example"} {
 		require.NotContains(t, string(encoded), forbidden)
 	}
+	require.Zero(t, memberPublishStatus.calls, "member reads never reach Temporal")
 	_, err = service.GetAssignedPlugin(prepared, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: unpublished.ID.String()})
 	require.ErrorIs(t, err, ErrPluginNotFound)
 
@@ -504,6 +537,7 @@ func TestGetPluginResolvesAnExactTargetAndReportsMembership(t *testing.T) {
 			Packages: []plugindelivery.PublicationPackageAddress{{ServerName: "MCP", MCPURL: "https://private.example/mcp/first"}},
 		}}})
 	marketing := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Marketing Tools", "marketing")
+	ctx = withOrganizationGrant(ctx, authz.ScopeOrgAdmin, principal.OrganizationID)
 
 	// Named by slug, by exact name, and by id: one plugin, three ways to say it.
 	for _, target := range []string{"marketing", "Marketing Tools", "MARKETING TOOLS", marketing.ID.String()} {
@@ -527,6 +561,7 @@ func TestGetPluginRetainsInventoryWhenPublicationEvidenceIsUnavailable(t *testin
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Existing MCPs", "existing-mcps")
+	ctx = withOrganizationGrant(ctx, authz.ScopeOrgAdmin, principal.OrganizationID)
 	service := testPluginTargets(conn)
 	for _, evidence := range []stubPluginPublicationEvidence{
 		{items: nil},
@@ -948,4 +983,16 @@ func seedPlugin(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizat
 	})
 	require.NoError(t, err)
 	return plugin
+}
+
+// The live registration must keep the same audience split as the unavailable
+// one: reads reach the assistant, mutations do not.
+func TestComposedPluginToolsKeepReadsForBothAudiencesAndMutationsExternal(t *testing.T) {
+	t.Parallel()
+
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_plugin_tool_audiences")
+	require.NoError(t, err)
+
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, testPluginTargets(conn), nil, CatalogDescriptor{})
+	requirePluginToolAudiences(t, registrar)
 }

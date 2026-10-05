@@ -17,6 +17,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 )
@@ -71,6 +73,11 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 		return nil, oops.E(oops.CodeNotImplemented, nil, "risk signals require the ClickHouse findings store").LogError(ctx, s.logger)
 	}
 
+	mcpServerID := ""
+	if payload.McpServerID != nil {
+		mcpServerID = *payload.McpServerID
+	}
+
 	organizationID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
 	wideFrom := from.Add(-to.Sub(from))
@@ -81,6 +88,7 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 		WideFrom:       wideFrom,
 		From:           from,
 		To:             to,
+		MCPServerID:    mcpServerID,
 	}
 
 	currentWindow := chrepo.RiskOverviewWindowParams{
@@ -88,6 +96,7 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 		ProjectID:      projectID,
 		From:           from,
 		To:             to,
+		MCPServerID:    mcpServerID,
 	}
 	// Ceiling division: rounding the width down would let an unaligned window
 	// straddle riskSignalSparkBuckets+2 buckets and silently drop findings
@@ -141,14 +150,25 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 		return nil, oops.E(oops.CodeUnexpected, err, "load risk signals from clickhouse").LogError(ctx, s.logger)
 	}
 
+	userIDs := make([]string, 0, len(userRows))
+	for _, row := range userRows {
+		if row.MCPFinding && row.UserID != "" {
+			userIDs = append(userIDs, row.UserID)
+		}
+	}
+	userEmails, err := s.riskUserEmailsByID(ctx, organizationID, userIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve risk signal MCP user emails").LogError(ctx, s.logger)
+	}
 	sparklines, sparkLen := signalSparklines(seriesRows, from, to, bucketSeconds)
 
-	topUsersByRule := signalTopUsersByRule(userRows)
+	topUsersByRule := signalTopUsersByRule(userRows, userEmails)
 
-	// Policy scores are configuration, not findings — the one deliberate
-	// Postgres read on this path. The operator's configured policy score is
-	// the base severity for every signal the policy matched; category
-	// defaults only cover findings with no policy attribution.
+	// Policy scores are configuration, not findings. MCP user display
+	// enrichment and policy scores are the two deliberate Postgres reads.
+	// The operator's configured policy score is the base severity for every
+	// signal the policy matched; category defaults only cover findings with no
+	// policy attribution.
 	policyScores, err := s.riskPolicyScores(ctx, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load risk policy scores").LogError(ctx, s.logger)
@@ -194,6 +214,8 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 			apps = []string{}
 		}
 		slices.Sort(apps)
+		mcpServerIDs := sortedNonNil(agg.MCPServerIDs)
+		toolNames := sortedNonNil(agg.ToolNames)
 
 		signals = append(signals, &gen.RiskSignal{
 			Key:              "rule:" + agg.RuleID,
@@ -202,6 +224,8 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 			Description:      agg.Description,
 			DetectionSources: sources,
 			Apps:             apps,
+			McpServerIds:     mcpServerIDs,
+			ToolNames:        toolNames,
 			Severity:         severityForScore(score),
 			RiskScore:        score,
 			Findings:         safeCount(agg.FindingsCur),
@@ -294,16 +318,16 @@ func signalSparklines(rows []chrepo.RiskSignalSeriesPoint, from, to time.Time, b
 	return out, length
 }
 
-// signalTopUsersByRule turns raw per-(rule, user) counts into display rows per
-// rule. Email precedence mirrors the overview's, but resolves entirely from
-// the denormalized ClickHouse columns: the ingest-stamped user_email, else an
-// @-containing external id, else "Unknown user". Raw groups that resolve to
-// the same display email merge — the external id is not part of the merge key
-// (several raw id spellings of one person collapse into one row) but the
-// first-seen non-empty id is kept as the row's representative id. Rows with
-// no resolvable email keep their raw id as identity so distinct unknown users
-// stay separate.
-func signalTopUsersByRule(rows []chrepo.RiskSignalUserCount) map[string][]*gen.RiskSignalTopUser {
+// signalTopUsersByRule turns raw per-(rule, user, attribution-kind) counts into
+// display rows per rule. MCP rows prefer the current organization user email,
+// then the ingest-stamped email. Chat rows retain the existing stamped email
+// behavior. Both fall back to an @-containing external id, then "Unknown user".
+// Raw groups that resolve to the same display email merge. The external id is
+// not part of the merge key because several raw id spellings of one person
+// should collapse into one row, but the first non-empty id stays as the row's
+// representative id. Rows with no resolvable email keep their raw id as
+// identity so distinct unknown users stay separate.
+func signalTopUsersByRule(rows []chrepo.RiskSignalUserCount, userEmails map[string]string) map[string][]*gen.RiskSignalTopUser {
 	// Exactly one of email/rawID is set, so an email identity can never
 	// collide with a raw id spelling of another user.
 	type userKey struct {
@@ -323,6 +347,9 @@ func signalTopUsersByRule(rows []chrepo.RiskSignalUserCount) map[string][]*gen.R
 			continue
 		}
 		email := row.Email
+		if row.MCPFinding {
+			email = cmp.Or(userEmails[row.UserID], row.Email)
+		}
 		if email == "" && strings.Contains(row.ExternalUserID, "@") {
 			email = row.ExternalUserID
 		}
@@ -431,4 +458,121 @@ func maxPolicyScore(policyIDs []string, scores map[string]float64) float64 {
 		}
 	}
 	return best
+}
+
+// sortedNonNil returns a sorted copy of values, never nil so the JSON field
+// serializes as an empty array.
+func sortedNonNil(values []string) []string {
+	out := slices.Clone(values)
+	if out == nil {
+		return []string{}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// riskMCPServerCountLimit caps the per-server counts returned; a project has
+// far fewer concrete servers in practice.
+const riskMCPServerCountLimit = 500
+
+// GetRiskMcpServerCounts serves the MCP server filter pickers: live finding
+// counts per concrete server over the window. ClickHouse-only, gated like
+// GetRiskSignals.
+func (s *Service) GetRiskMcpServerCounts(ctx context.Context, payload *gen.GetRiskMcpServerCountsPayload) (*gen.RiskMcpServerCountsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	from, to, err := resolveRiskOverviewWindow(payload.From, payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid window").LogError(ctx, s.logger)
+	}
+
+	if s.findingsCH == nil {
+		return nil, oops.E(oops.CodeNotImplemented, nil, "mcp server counts require the ClickHouse findings store").LogError(ctx, s.logger)
+	}
+
+	rows, err := s.findingsCH.ListRiskMCPServerCounts(ctx, chrepo.RiskOverviewWindowParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      authCtx.ProjectID.String(),
+		From:           from,
+		To:             to,
+		MCPServerID:    "",
+	}, riskMCPServerCountLimit)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server finding counts").LogError(ctx, s.logger)
+	}
+
+	rows, err = s.filterMCPServerCountsByRead(ctx, authCtx, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	servers := make([]*gen.RiskMcpServerCount, 0, len(rows))
+	for _, row := range rows {
+		servers = append(servers, &gen.RiskMcpServerCount{
+			McpServerID: row.MCPServerID,
+			Findings:    safeCount(row.Findings),
+		})
+	}
+
+	return &gen.RiskMcpServerCountsResult{Servers: servers}, nil
+}
+
+// filterMCPServerCountsByRead keeps only the servers the caller can read.
+// Counts reveal a server's id and finding volume, so they follow the same
+// per-server mcp:read rule as the MCP server list; org:admin alone does not
+// imply it under scoped grants. A server that no longer exists is dropped.
+func (s *Service) filterMCPServerCountsByRead(ctx context.Context, authCtx *contextvalues.AuthContext, rows []chrepo.RiskMCPServerCount) ([]chrepo.RiskMCPServerCount, error) {
+	if len(rows) == 0 {
+		return rows, nil
+	}
+
+	servers, err := readmodel.New(s.db).ListMCPServers(ctx, *authCtx.ProjectID, mcpserversrepo.ListMCPServersByProjectIDParams{
+		ProjectID:            uuid.Nil,
+		RemoteMcpServerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TunneledMcpServerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UnproxiedMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for finding counts").LogError(ctx, s.logger)
+	}
+
+	// Grants key on the toolset id for toolset-backed servers, else the server id.
+	grantIDByServer := make(map[string]string, len(servers))
+	checks := make([]authz.Check, 0, len(servers))
+	for _, server := range servers {
+		grantID := server.ID.String()
+		if server.ToolsetID.Valid {
+			grantID = server.ToolsetID.UUID.String()
+		}
+		grantIDByServer[server.ID.String()] = grantID
+		checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, grantID, authCtx.ProjectID.String()))
+	}
+	allowedIDs, err := s.authz.Filter(ctx, checks)
+	if err != nil {
+		return nil, err
+	}
+	allowed := make(map[string]struct{}, len(allowedIDs))
+	for _, id := range allowedIDs {
+		allowed[id] = struct{}{}
+	}
+
+	kept := make([]chrepo.RiskMCPServerCount, 0, len(rows))
+	for _, row := range rows {
+		grantID, known := grantIDByServer[row.MCPServerID]
+		if !known {
+			continue
+		}
+		if _, ok := allowed[grantID]; ok {
+			kept = append(kept, row)
+		}
+	}
+	return kept, nil
 }

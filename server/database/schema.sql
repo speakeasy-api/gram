@@ -67,6 +67,10 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   verified_domains TEXT[] DEFAULT '{}', -- WorkOS domains in a verified state; SSO only works for these, and setup requires at least one
 
   creation_source TEXT, -- which flow created the organization; NULL where nothing recorded one
+  -- Platform host the org's rendered URLs (emails, Slack messages, background
+  -- jobs) use. NULL means the canonical host. Validated in application code and
+  -- re-checked on read.
+  default_host TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -77,22 +81,6 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_workos_id_key
 ON organization_metadata (workos_id);
-
--- Onboarding state is organization-scoped, independent of any project.
--- Unlike retained records, this state has no lifetime beyond its owning organization.
-CREATE TABLE IF NOT EXISTS organization_onboarding (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
-  preset TEXT,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT organization_onboarding_pkey PRIMARY KEY (id),
-  CONSTRAINT organization_onboarding_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS organization_onboarding_organization_id_key
-ON organization_onboarding (organization_id);
 
 -- One enterprise-trial lifecycle per organization. Lifecycle operations update
 -- the row in place. Unrelated to organization_metadata.free_trial_*, another
@@ -879,6 +867,7 @@ CREATE TABLE IF NOT EXISTS plugins (
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
   description TEXT,
   is_default boolean DEFAULT false,
+  auto_created boolean NOT NULL DEFAULT false,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1640,6 +1629,9 @@ CREATE TABLE IF NOT EXISTS trigger_instances (
   CONSTRAINT trigger_instances_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT trigger_instances_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_organization_project_id_key
+ON trigger_instances (organization_id, project_id, id);
 
 CREATE INDEX IF NOT EXISTS trigger_instances_project_id_idx
 ON trigger_instances (project_id, created_at DESC)
@@ -2527,6 +2519,15 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- traffic on /oauth/callback drops to zero and they can be re-issued.
   legacy_callback_url boolean NOT NULL DEFAULT FALSE,
 
+  -- Origin of the /mcp/remote_login_callback redirect_uri this client was
+  -- registered with upstream, e.g. https://ai.speakeasy.com. Set when an
+  -- organization-owned registration is created, so new registrations carry the
+  -- current platform host. NULL for shared clients and every client registered
+  -- before this column existed: they keep the pinned outbound callback origin
+  -- (app.getgram.ai), because customer OAuth apps and vendor allowlists hold that
+  -- exact URL and cannot be changed from here.
+  callback_base_url TEXT,
+
   -- RFC 9728 display members of the one protected resource this client was
   -- registered for, read from that resource's metadata document. The issuer
   -- row keeps only authorization-server (RFC 8414) data; a shared issuer must
@@ -2804,6 +2805,15 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   -- Announces the deployment's authentication host, rather than the MCP host,
   -- as the OAuth issuer and endpoint origin for this issuer's servers.
   use_authentication_host boolean NOT NULL DEFAULT false,
+  -- One of ('endpoint', 'shared'); the database does not constrain it.
+  -- 'endpoint' gives every MCP server attached to this issuer its own OAuth
+  -- authorization server. 'shared' serves one authorization server for the
+  -- issuer, used by all of its MCP servers.
+  authorization_server_mode TEXT NOT NULL DEFAULT 'endpoint',
+  -- The OAuth issuer identifier of a 'shared' authorization server, fixed when
+  -- the issuer is created so it stays the same if the deployment's server URL
+  -- later changes. NULL in 'endpoint' mode, where each server derives its own.
+  pinned_issuer_url TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3047,6 +3057,11 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   -- reports credential maintenance rather than use. NULL means the session has
   -- not been used since the column was introduced.
   last_used_at timestamptz,
+  -- The MCP server this session's access token is bound to, as its RFC 8707
+  -- resource indicator. A 'shared' authorization server serves several MCP
+  -- servers, and a refreshed token must be issued for the same one. NULL for
+  -- sessions of an 'endpoint' authorization server, which serves only one.
+  resource TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3104,6 +3119,11 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
   -- with nothing to show. The issuer URL is the machine-readable identity.
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
 
+  -- What the platform is and what runs on it, in the operator's words. Optional
+  -- and shown in place of the issuer URL wherever the issuer is listed, since a
+  -- URL alone rarely tells an administrator which platform they are looking at.
+  description TEXT CHECK (CHAR_LENGTH(description) <= 500),
+
   -- Free-form labels for filtering a long list, following the convention the
   -- skills and memories tables already use. Flat strings, not key/value pairs.
   tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[] CHECK (array_length(tags, 1) <= 40),
@@ -3118,25 +3138,31 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
   jwks_uri TEXT NOT NULL,
 
   -- Whether this issuer's admissions and agent assignments may match a subject
-  -- by a trailing wildcard rather than in full. Off unless an operator turns it
-  -- on when the issuer is created.
+  -- by a trailing wildcard rather than in full. On by default, and not asked for
+  -- when an issuer is registered.
   --
-  -- The gate lives here, not on the admission, because whether a wildcard can
-  -- ever be safe is a property of the platform rather than of one row. It is
-  -- sound only where the varying part of sub is minted by the issuer and cannot
-  -- be forged by the caller: Claude Tag's agent id, or a SPIFFE path assigned by
-  -- a registration entry. It is unsound where the caller controls that part
-  -- (GitHub Actions puts the git ref in sub, so `repo:org/repo:*` admits every
-  -- branch and so everyone who can open a pull request) and meaningless where
-  -- sub is an opaque identifier (Entra's GUID, Google's numeric id), because a
-  -- leading portion of those is a truncation that collides with unrelated
-  -- principals.
+  -- Revised 2026-09-25. This began as a setup-time gate, on the reasoning that
+  -- whether a wildcard is sound is a property of the platform: it holds only
+  -- where the varying part of sub is assigned by the issuer and cannot be chosen
+  -- by the caller. That reasoning is unchanged and still worth knowing — a CI
+  -- provider that puts the git ref in sub turns `repo:org/repo:*` into "anyone
+  -- who can push a branch", and for an opaque sub a leading portion is a
+  -- truncation that collides with unrelated principals.
   --
-  -- A per-admission confirmation cannot make that judgement: it asks whoever is
-  -- admitting a subject to re-derive their platform's sub semantics every time.
-  -- Recorded once here, an issuer whose subjects are opaque or caller-influenced
-  -- simply cannot carry a wildcard rule, whatever a later operator ticks.
-  allow_wildcard_admission boolean NOT NULL DEFAULT false,
+  -- What changed is who should answer it and when. Asking at registration put a
+  -- question in front of an operator before they had a rule in mind, about a
+  -- platform whose sub semantics they may not know, and the answer is theirs to
+  -- make about their own system rather than ours to withhold. The dialog now
+  -- states the consequence at the point a wildcard is actually written — which
+  -- subjects it admits, and which agent they would inherit — where it is
+  -- concrete and actionable instead of abstract.
+  --
+  -- The column stays because it does a second job the gate obscured: it is
+  -- checked on every lookup, not at write time, so clearing it makes every
+  -- wildcard rule under that issuer inert immediately, with nothing withdrawn.
+  -- That is an incident control, not a configuration step, and it is deliberately
+  -- absent from the registration UI.
+  allow_wildcard_admission boolean NOT NULL DEFAULT true,
 
   -- The last discovery document captured for this issuer, verbatim. The typed
   -- columns above model only what Gram acts on; the rest of a document is kept
@@ -3163,6 +3189,10 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
 -- rather than a table constraint so Atlas builds it concurrently.
 CREATE UNIQUE INDEX IF NOT EXISTS workload_issuers_organization_id_id_key
 ON workload_issuers (organization_id, id);
+
+-- Project-scoped trigger bindings pin the issuer trust record to their tenant.
+CREATE UNIQUE INDEX IF NOT EXISTS workload_issuers_organization_project_id_key
+ON workload_issuers (organization_id, project_id, id);
 
 -- Admission resolves an assertion's iss by literal equality against a closed
 -- set of spellings, so this index is on the raw column. Any expression around
@@ -3269,6 +3299,10 @@ CREATE TABLE IF NOT EXISTS workload_identity_admissions (
   -- admit-from-a-rejected-attempt flow, whose point is that nobody transcribes
   -- a subject by hand.
   name TEXT CHECK (name IS NULL OR name <> ''),
+
+  -- Free-form labels for finding a machine in a long admitted set, following
+  -- the same convention and limits as workload_issuers.tags.
+  tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[] CHECK (array_length(tags, 1) <= 40),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3730,6 +3764,10 @@ CREATE TABLE IF NOT EXISTS chats (
   -- Versioned hashes of the last successfully evaluated inference frame.
   -- Archival alone must never advance this checkpoint.
   inference_accepted_checkpoint bytea,
+  -- Hash of (tenant, actor type, actor id) for Anthropic inference conversations.
+  -- Lets a transcript delivered without a session id be adopted by the chat
+  -- that already holds its prefix, scoped to the same actor.
+  inference_actor_key bytea,
 
   -- Personal-account tracking: the external AI account (user_accounts row) this
   -- session belongs to. Join to user_accounts for provider, account_type
@@ -3808,6 +3846,9 @@ ON assistants (project_id, name)
 WHERE deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_id_key ON assistants (project_id, id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistants_organization_project_id_key
+ON assistants (organization_id, project_id, id);
 
 CREATE TABLE IF NOT EXISTS skill_distributions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -4185,6 +4226,13 @@ WHERE project_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS chat_messages_chat_id_external_message_id_key
 ON chat_messages (chat_id, external_message_id)
 WHERE external_message_id IS NOT NULL;
+
+-- Cross-chat lookup of an Anthropic inference message identity (chain hash)
+-- so a transcript delivered without a session id can find the chat that
+-- already stores its prefix.
+CREATE INDEX IF NOT EXISTS chat_messages_inference_identity_idx
+ON chat_messages (project_id, external_message_id)
+WHERE origin = 'anthropic-inference' AND external_message_id IS NOT NULL;
 
 -- Partial index over unanalyzed messages only. Shrinks toward zero at steady
 -- state, making FetchUnanalyzedMessageIDs an index-only scan on a tiny set.
@@ -5053,6 +5101,9 @@ CREATE TABLE IF NOT EXISTS agents (
   CONSTRAINT agents_owner_reassignment_state_check CHECK ((owner_reassignment_required_at IS NULL) = (owner_reassignment_reason IS NULL))
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS agents_organization_project_id_key
+ON agents (organization_id, project_id, id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS agents_organization_id_id_key
 ON agents (organization_id, id);
 
@@ -5346,6 +5397,165 @@ CREATE INDEX IF NOT EXISTS workload_agent_assignments_workload_issuer_idx
 ON workload_agent_assignments (organization_id, workload_issuer_id);
 
 
+-- Binding history is retained even when live resources are hard-deleted. Original
+-- association keys and tenant keys are immutable in the service; nullable refs are
+-- only liveness signals. Missing refs must never select legacy authorization.
+-- Each FK owns a nullable tenant tuple: SET NULL clears that tuple without
+-- erasing provenance. All-or-none checks close the composite FK NULL loophole.
+-- Generations identify incarnations: lock the original resource before allocating
+-- above all retained generations, tombstone old incarnations, and never reuse them.
+CREATE TABLE IF NOT EXISTS assistant_agent_bindings (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  project_ref_organization_id TEXT,
+  project_ref_id uuid,
+  original_assistant_id uuid NOT NULL,
+  assistant_ref_organization_id TEXT,
+  assistant_ref_project_id uuid,
+  assistant_id uuid,
+  original_agent_id uuid NOT NULL,
+  agent_ref_organization_id TEXT,
+  agent_ref_project_id uuid,
+  agent_id uuid,
+  generation BIGINT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT assistant_agent_bindings_pkey PRIMARY KEY (id),
+  CONSTRAINT assistant_agent_bindings_generation_check CHECK (generation > 0),
+  CONSTRAINT assistant_agent_bindings_project_ref_check CHECK (
+    (project_ref_organization_id IS NULL AND project_ref_id IS NULL) OR
+    (project_ref_organization_id IS NOT NULL AND project_ref_id IS NOT NULL AND
+     project_ref_organization_id = organization_id AND project_ref_id = project_id)
+  ),
+  CONSTRAINT assistant_agent_bindings_assistant_ref_check CHECK (
+    (assistant_ref_organization_id IS NULL AND assistant_ref_project_id IS NULL AND assistant_id IS NULL) OR
+    (assistant_ref_organization_id IS NOT NULL AND assistant_ref_project_id IS NOT NULL AND assistant_id IS NOT NULL AND
+     assistant_ref_organization_id = organization_id AND assistant_ref_project_id = project_id AND assistant_id = original_assistant_id)
+  ),
+  CONSTRAINT assistant_agent_bindings_agent_ref_check CHECK (
+    (agent_ref_organization_id IS NULL AND agent_ref_project_id IS NULL AND agent_id IS NULL) OR
+    (agent_ref_organization_id IS NOT NULL AND agent_ref_project_id IS NOT NULL AND agent_id IS NOT NULL AND
+     agent_ref_organization_id = organization_id AND agent_ref_project_id = project_id AND agent_id = original_agent_id)
+  ),
+  CONSTRAINT assistant_agent_bindings_project_fkey FOREIGN KEY (project_ref_organization_id, project_ref_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL,
+  CONSTRAINT assistant_agent_bindings_assistant_fkey FOREIGN KEY (assistant_ref_organization_id, assistant_ref_project_id, assistant_id) REFERENCES assistants (organization_id, project_id, id) ON DELETE SET NULL,
+  CONSTRAINT assistant_agent_bindings_agent_fkey FOREIGN KEY (agent_ref_organization_id, agent_ref_project_id, agent_id) REFERENCES agents (organization_id, project_id, id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_agent_bindings_tenant_id_key
+ON assistant_agent_bindings (organization_id, project_id, id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_agent_bindings_assistant_generation_key
+ON assistant_agent_bindings (original_assistant_id, generation);
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_agent_bindings_live_assistant_key
+ON assistant_agent_bindings (original_assistant_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_agent_bindings_live_agent_key
+ON assistant_agent_bindings (original_agent_id)
+WHERE deleted IS FALSE;
+
+-- Unfiltered indexes also support foreign-key actions on historical rows.
+CREATE INDEX IF NOT EXISTS assistant_agent_bindings_project_ref_idx
+ON assistant_agent_bindings (project_ref_organization_id, project_ref_id);
+
+CREATE INDEX IF NOT EXISTS assistant_agent_bindings_assistant_ref_idx
+ON assistant_agent_bindings (assistant_ref_organization_id, assistant_ref_project_id, assistant_id);
+
+CREATE INDEX IF NOT EXISTS assistant_agent_bindings_agent_ref_idx
+ON assistant_agent_bindings (agent_ref_organization_id, agent_ref_project_id, agent_id);
+
+-- This is mapping history, not a workloads entity. Admissions and assignments
+-- remain authoritative. Subjects are exact and stable for the original durable
+-- trigger; continuations reuse that trigger rather than create event identities.
+CREATE TABLE IF NOT EXISTS trigger_workload_bindings (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  project_ref_organization_id TEXT,
+  project_ref_id uuid,
+  original_trigger_id uuid NOT NULL,
+  trigger_ref_organization_id TEXT,
+  trigger_ref_project_id uuid,
+  trigger_id uuid,
+  original_assistant_binding_id uuid NOT NULL,
+  assistant_binding_ref_organization_id TEXT,
+  assistant_binding_ref_project_id uuid,
+  assistant_binding_id uuid,
+  -- Captured incarnation, checked live by the service rather than constrained
+  -- by an FK that would prevent revoking the assistant binding independently.
+  assistant_binding_generation BIGINT NOT NULL,
+  -- Tenant-scoped trust record for the shared Gram issuer URL and real JWKS.
+  -- Admissions and assignments refer to this record, not directly to a URL.
+  original_workload_issuer_id uuid NOT NULL,
+  workload_issuer_ref_organization_id TEXT,
+  workload_issuer_ref_project_id uuid,
+  workload_issuer_id uuid,
+  subject TEXT NOT NULL CHECK (subject <> ''),
+  generation BIGINT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT trigger_workload_bindings_pkey PRIMARY KEY (id),
+  CONSTRAINT trigger_workload_bindings_generation_check CHECK (generation > 0 AND assistant_binding_generation > 0),
+  CONSTRAINT trigger_workload_bindings_project_ref_check CHECK (
+    (project_ref_organization_id IS NULL AND project_ref_id IS NULL) OR
+    (project_ref_organization_id IS NOT NULL AND project_ref_id IS NOT NULL AND
+     project_ref_organization_id = organization_id AND project_ref_id = project_id)
+  ),
+  CONSTRAINT trigger_workload_bindings_trigger_ref_check CHECK (
+    (trigger_ref_organization_id IS NULL AND trigger_ref_project_id IS NULL AND trigger_id IS NULL) OR
+    (trigger_ref_organization_id IS NOT NULL AND trigger_ref_project_id IS NOT NULL AND trigger_id IS NOT NULL AND
+     trigger_ref_organization_id = organization_id AND trigger_ref_project_id = project_id AND trigger_id = original_trigger_id)
+  ),
+  CONSTRAINT trigger_workload_bindings_assistant_ref_check CHECK (
+    (assistant_binding_ref_organization_id IS NULL AND assistant_binding_ref_project_id IS NULL AND assistant_binding_id IS NULL) OR
+    (assistant_binding_ref_organization_id IS NOT NULL AND assistant_binding_ref_project_id IS NOT NULL AND assistant_binding_id IS NOT NULL AND
+     assistant_binding_ref_organization_id = organization_id AND assistant_binding_ref_project_id = project_id AND assistant_binding_id = original_assistant_binding_id)
+  ),
+  CONSTRAINT trigger_workload_bindings_issuer_ref_check CHECK (
+    (workload_issuer_ref_organization_id IS NULL AND workload_issuer_ref_project_id IS NULL AND workload_issuer_id IS NULL) OR
+    (workload_issuer_ref_organization_id IS NOT NULL AND workload_issuer_ref_project_id IS NOT NULL AND workload_issuer_id IS NOT NULL AND
+     workload_issuer_ref_organization_id = organization_id AND workload_issuer_ref_project_id = project_id AND workload_issuer_id = original_workload_issuer_id)
+  ),
+  CONSTRAINT trigger_workload_bindings_project_fkey FOREIGN KEY (project_ref_organization_id, project_ref_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL,
+  CONSTRAINT trigger_workload_bindings_trigger_fkey FOREIGN KEY (trigger_ref_organization_id, trigger_ref_project_id, trigger_id) REFERENCES trigger_instances (organization_id, project_id, id) ON DELETE SET NULL,
+  CONSTRAINT trigger_workload_bindings_assistant_fkey FOREIGN KEY (assistant_binding_ref_organization_id, assistant_binding_ref_project_id, assistant_binding_id) REFERENCES assistant_agent_bindings (organization_id, project_id, id) ON DELETE SET NULL,
+  CONSTRAINT trigger_workload_bindings_issuer_fkey FOREIGN KEY (workload_issuer_ref_organization_id, workload_issuer_ref_project_id, workload_issuer_id) REFERENCES workload_issuers (organization_id, project_id, id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_workload_bindings_trigger_generation_key
+ON trigger_workload_bindings (original_trigger_id, generation);
+
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_workload_bindings_live_trigger_key
+ON trigger_workload_bindings (original_trigger_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_workload_bindings_live_subject_key
+ON trigger_workload_bindings (organization_id, original_workload_issuer_id, subject)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS trigger_workload_bindings_project_ref_idx
+ON trigger_workload_bindings (project_ref_organization_id, project_ref_id);
+
+CREATE INDEX IF NOT EXISTS trigger_workload_bindings_trigger_ref_idx
+ON trigger_workload_bindings (trigger_ref_organization_id, trigger_ref_project_id, trigger_id);
+
+CREATE INDEX IF NOT EXISTS trigger_workload_bindings_assistant_ref_idx
+ON trigger_workload_bindings (assistant_binding_ref_organization_id, assistant_binding_ref_project_id, assistant_binding_id);
+
+CREATE INDEX IF NOT EXISTS trigger_workload_bindings_issuer_ref_idx
+ON trigger_workload_bindings (workload_issuer_ref_organization_id, workload_issuer_ref_project_id, workload_issuer_id);
+
 CREATE TABLE IF NOT EXISTS oauth_proxy_client_info (
   mcp_slug TEXT NOT NULL CHECK (mcp_slug <> '' AND CHAR_LENGTH(mcp_slug) <= 60),
   client_id TEXT NOT NULL CHECK (client_id <> '' AND CHAR_LENGTH(client_id) <= 100),
@@ -5541,6 +5751,7 @@ CREATE TABLE IF NOT EXISTS mcp_registry_entries (
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
   data jsonb NOT NULL,
   published boolean NOT NULL DEFAULT true,
+  published_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
@@ -7226,6 +7437,23 @@ ON risk_results (chat_message_id);
 CREATE INDEX IF NOT EXISTS risk_results_chat_content_part_idx
 ON risk_results (chat_content_part_id);
 
+-- Encrypted raw matches for MCP findings, retained with ClickHouse findings.
+CREATE TABLE IF NOT EXISTS risk_finding_evidence (
+  finding_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  match_encrypted TEXT NOT NULL,
+  created_at timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  expires_at timestamptz NOT NULL,
+
+  CONSTRAINT risk_finding_evidence_pkey PRIMARY KEY (organization_id, project_id, finding_id),
+  CONSTRAINT risk_finding_evidence_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects(organization_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS risk_finding_evidence_expires_at_idx
+ON risk_finding_evidence (expires_at, organization_id, project_id, finding_id);
+
 -- risk_policy_eval_reviews is the durable "regression set" for a prompt-based
 -- risk policy: a reviewer's ground-truth verdict on whether a given chat session
 -- should be flagged by the policy. The policy-eval workbench replays the
@@ -8764,6 +8992,117 @@ CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_sessions_replaced_by_session_id_key
 ON admin_mcp_sessions (replaced_by_session_id)
 WHERE replaced_by_session_id IS NOT NULL;
 
+-- Staff Admin MCP write proposals. Each row binds one staff subject, client
+-- and connection generation to one exact target and change. The proposal ID is
+-- the execution idempotency key; the terminal result doubles as the receipt.
+-- Foreign keys cascade, matching the other admin_mcp tables: nulling
+-- organization_id on delete would make a tenant proposal look platform-global.
+CREATE TABLE IF NOT EXISTS admin_mcp_write_proposals (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  subject_urn TEXT NOT NULL,
+  oauth_client_id uuid NOT NULL,
+  connection_id uuid NOT NULL,
+  connection_generation uuid NOT NULL,
+  operation TEXT NOT NULL,
+  operation_schema_version INTEGER NOT NULL,
+  -- Global operations (issuers, support matrix) have no tenant target.
+  platform_global boolean NOT NULL,
+  organization_id TEXT,
+  project_id uuid,
+  resource_kind TEXT,
+  resource_id TEXT,
+  idempotency_key TEXT NOT NULL,
+  arguments JSONB NOT NULL,
+  expected_state_digest TEXT NOT NULL,
+  proposal_digest TEXT NOT NULL,
+  -- Safe, bounded before/after preview rendered by the approval UI.
+  preview JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending_approval',
+  expires_at timestamptz NOT NULL,
+  approved_by_subject_urn TEXT,
+  approved_at timestamptz,
+  rejected_at timestamptz,
+  invalidated_at timestamptz,
+  invalidation_reason TEXT,
+  executed_at timestamptz,
+  result_code TEXT,
+  result_payload JSONB,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT admin_mcp_write_proposals_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_write_proposals_target_scope_check CHECK (
+    (platform_global AND organization_id IS NULL AND project_id IS NULL)
+    OR (NOT platform_global AND organization_id IS NOT NULL)
+  ),
+  CONSTRAINT admin_mcp_write_proposals_resource_pair_check
+    CHECK ((resource_kind IS NULL) = (resource_id IS NULL)),
+  CONSTRAINT admin_mcp_write_proposals_subject_urn_check CHECK (subject_urn <> ''),
+  CONSTRAINT admin_mcp_write_proposals_operation_check CHECK (operation <> ''),
+  CONSTRAINT admin_mcp_write_proposals_idempotency_key_check CHECK (idempotency_key <> ''),
+  CONSTRAINT admin_mcp_write_proposals_expected_state_digest_check CHECK (expected_state_digest <> ''),
+  CONSTRAINT admin_mcp_write_proposals_proposal_digest_check CHECK (proposal_digest <> ''),
+  CONSTRAINT admin_mcp_write_proposals_status_check CHECK (status <> ''),
+  CONSTRAINT admin_mcp_write_proposals_connection_client_fkey
+    FOREIGN KEY (connection_id, oauth_client_id)
+    REFERENCES admin_mcp_connections (id, oauth_client_id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_write_proposals_organization_id_fkey
+    FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_write_proposals_organization_project_fkey
+    FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
+);
+
+-- Retry keys belong to the stable staff subject and client, not the
+-- connection generation, so reconsent cannot mint a second proposal.
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_write_proposals_idempotency_key
+ON admin_mcp_write_proposals (subject_urn, oauth_client_id, operation, idempotency_key);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_proposals_pending_idx
+ON admin_mcp_write_proposals (subject_urn, oauth_client_id)
+WHERE status = 'pending_approval';
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_proposals_expires_at_idx
+ON admin_mcp_write_proposals (expires_at);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_proposals_organization_id_idx
+ON admin_mcp_write_proposals (organization_id) WHERE organization_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_proposals_connection_idx
+ON admin_mcp_write_proposals (connection_id);
+
+-- Staff-only lifecycle and refusal trail. Survives rolled-back writes. Stores
+-- bounded reason codes only: no prompts, arguments, results or credentials.
+CREATE TABLE IF NOT EXISTS admin_mcp_write_events (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  proposal_id uuid,
+  subject_urn TEXT NOT NULL,
+  oauth_client_id uuid,
+  event TEXT NOT NULL,
+  reason_code TEXT,
+  request_id TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT admin_mcp_write_events_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_write_events_subject_urn_check CHECK (subject_urn <> ''),
+  CONSTRAINT admin_mcp_write_events_event_check CHECK (event <> ''),
+  CONSTRAINT admin_mcp_write_events_reason_code_check
+    CHECK (reason_code IS NULL OR reason_code ~ '^[a-z][a-z0-9_]{0,63}$'),
+  CONSTRAINT admin_mcp_write_events_proposal_id_fkey
+    FOREIGN KEY (proposal_id) REFERENCES admin_mcp_write_proposals (id) ON DELETE SET NULL,
+  CONSTRAINT admin_mcp_write_events_oauth_client_id_fkey
+    FOREIGN KEY (oauth_client_id) REFERENCES admin_mcp_oauth_clients (id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_events_proposal_id_idx
+ON admin_mcp_write_events (proposal_id);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_events_oauth_client_id_idx
+ON admin_mcp_write_events (oauth_client_id) WHERE oauth_client_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_events_subject_created_idx
+ON admin_mcp_write_events (subject_urn, created_at);
+
 -- Typed milestone rows are durable product evidence. Event names and allowed
 -- target fields are validated by the owning application contract, not SQL enums.
 CREATE TABLE IF NOT EXISTS platform_mcp_onboarding_milestones (
@@ -9572,9 +9911,14 @@ CREATE TABLE IF NOT EXISTS okta_resource_connections (
   resource TEXT NOT NULL,
   audience TEXT NOT NULL,
   okta_application_id TEXT,
+  -- What the latest identity chaining exchange for this upstream showed, and
+  -- when; set together, NULL until an exchange ran after confirmation.
+  observed_result TEXT,
+  observed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT okta_resource_connections_pkey PRIMARY KEY (id),
+  CONSTRAINT okta_resource_connections_observed_result_observed_at_check CHECK ((observed_result IS NULL) = (observed_at IS NULL)),
   CONSTRAINT okta_resource_connections_resource_check CHECK (btrim(resource) <> ''),
   CONSTRAINT okta_resource_connections_audience_check CHECK (btrim(audience) <> ''),
   CONSTRAINT okta_resource_connections_okta_application_id_check CHECK (okta_application_id IS NULL OR btrim(okta_application_id) <> ''),
@@ -9593,6 +9937,26 @@ CREATE TABLE IF NOT EXISTS okta_resource_connections (
 -- served by the unique key.
 CREATE INDEX IF NOT EXISTS okta_resource_connections_remote_session_issuer_idx
 ON okta_resource_connections (remote_session_issuer_id);
+
+-- An organization administrator dismissed the suggestion to add the MCP server
+-- a Gram-owned catalog entry describes, made because a synced Okta application
+-- maps to that entry. One row per organization x entry; restore deletes it, so
+-- created_at is when it was dismissed. Dismissals outlive the Okta connection:
+-- the decision was about the server, not the connection. Who dismissed or
+-- restored lives in the audit log.
+CREATE TABLE IF NOT EXISTS okta_server_suggestion_dismissals (
+  organization_id TEXT NOT NULL,
+  registry_entry_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT okta_server_suggestion_dismissals_pkey PRIMARY KEY (organization_id, registry_entry_id),
+  CONSTRAINT okta_server_suggestion_dismissals_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT okta_server_suggestion_dismissals_registry_entry_id_fkey FOREIGN KEY (registry_entry_id) REFERENCES mcp_registry_entries (id) ON DELETE CASCADE
+);
+
+-- Serves the cascade from mcp_registry_entries.
+CREATE INDEX IF NOT EXISTS okta_server_suggestion_dismissals_registry_entry_id_idx
+ON okta_server_suggestion_dismissals (registry_entry_id);
 
 CREATE TABLE IF NOT EXISTS remote_session_ema_bindings (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -9629,6 +9993,73 @@ CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_client_idx ON remote_sess
 CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_issuer_idx ON remote_session_ema_bindings (remote_session_issuer_id);
 CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_user_issuer_idx ON remote_session_ema_bindings (user_session_issuer_id);
 
+-- Downstream access credentials acquired by identity chaining, separate from
+-- interactive remote_sessions and their scheduled refresh/recheck selectors.
+-- Expand-only storage: no reader exists until the AIM-62 executor is deployed.
+-- Consumers require live tenant, issuer, client and delegation references;
+-- NULL required references or soft-deleted parents make a credential unusable.
+-- client_selection records the selection mode, not binding reference nullness:
+-- implicit selection needs no binding; binding selection requires a live binding
+-- with the recorded generation. Changed selection or requested scopes invalidate reuse.
+-- Writers must erase access_token_encrypted when soft-deleting. FK actions and
+-- deleted_at alone do not erase ciphertext; AIM-62 owns erasure and bounded cleanup.
+CREATE TABLE IF NOT EXISTS remote_session_ema_credentials (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT,
+  project_id uuid,
+  user_session_issuer_id uuid,
+  remote_session_issuer_id uuid,
+  remote_session_client_id uuid,
+  -- Canonical RFC 9728 resource; preserve its trailing slash.
+  resource TEXT NOT NULL,
+  -- Provisioned Gram human (user:<id>), never an agent, workload or external sub.
+  subject_urn TEXT NOT NULL,
+  -- binding or implicit, validated by the application.
+  client_selection TEXT NOT NULL,
+  remote_session_ema_binding_id uuid,
+  ema_binding_generation bigint,
+  trusted_issuer_session_id uuid,
+  requested_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  granted_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  access_token_encrypted TEXT,
+  -- Consumers cap or skip unknown provider expiry; never store indefinite access.
+  access_expires_at timestamptz NOT NULL,
+  -- Capability observation only; downstream refresh tokens and ID-JAGs are discarded.
+  downstream_refresh_token_observed boolean NOT NULL DEFAULT FALSE,
+  last_used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT remote_session_ema_credentials_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_session_ema_credentials_project_ref_check CHECK ((organization_id IS NULL) = (project_id IS NULL)),
+  CONSTRAINT remote_session_ema_credentials_client_ref_check CHECK ((remote_session_client_id IS NULL) = (remote_session_issuer_id IS NULL)),
+  CONSTRAINT remote_session_ema_credentials_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_remote_session_client_id_fkey FOREIGN KEY (remote_session_client_id, remote_session_issuer_id) REFERENCES remote_session_clients (id, remote_session_issuer_id) ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_binding_id_fkey FOREIGN KEY (remote_session_ema_binding_id) REFERENCES remote_session_ema_bindings (id) ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_trusted_issuer_session_id_fkey FOREIGN KEY (trusted_issuer_session_id) REFERENCES trusted_issuer_sessions (id) ON DELETE SET NULL
+);
+
+-- Selection mode does not create a second live slot; switching modes retires the old row.
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_credentials_subject_key
+ON remote_session_ema_credentials (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn)
+WHERE deleted IS FALSE;
+
+-- Non-partial indexes support FK actions on live and soft-deleted rows alike.
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_project_id_idx
+ON remote_session_ema_credentials (project_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_user_session_issuer_id_idx
+ON remote_session_ema_credentials (user_session_issuer_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_remote_session_client_id_idx
+ON remote_session_ema_credentials (remote_session_client_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_binding_id_idx
+ON remote_session_ema_credentials (remote_session_ema_binding_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_trusted_issuer_session_id_idx
+ON remote_session_ema_credentials (trusted_issuer_session_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_access_expires_at_idx
+ON remote_session_ema_credentials (access_expires_at, id);
+
 -- Global support matrix: admin catalog data, not project-owned configuration.
 -- Catalog identities are retained by soft deletion; required references prevent
 -- hard deletion while dependent records exist. Writers maintain updated_at.
@@ -9649,6 +10080,24 @@ CREATE TABLE IF NOT EXISTS support_matrix_platforms (
 );
 COMMENT ON TABLE support_matrix_platforms IS 'Global admin support catalog of upstream product surfaces, independent of customer installations.';
 CREATE UNIQUE INDEX IF NOT EXISTS support_matrix_platforms_slug_key ON support_matrix_platforms (slug);
+
+-- Plans a vendor sells, as the support matrix names them. Seeded from the
+-- catalog beside the platforms; an organization's stack records the plan it
+-- is on with each vendor.
+CREATE TABLE IF NOT EXISTS support_matrix_plans (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  slug TEXT NOT NULL,
+  vendor TEXT NOT NULL,
+  name TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  CONSTRAINT support_matrix_plans_pkey PRIMARY KEY (id)
+);
+COMMENT ON TABLE support_matrix_plans IS 'Plans each vendor sells, as the support matrix names them; an organization declares the one it is on per vendor.';
+CREATE UNIQUE INDEX IF NOT EXISTS support_matrix_plans_slug_key ON support_matrix_plans (slug);
+CREATE INDEX IF NOT EXISTS support_matrix_plans_vendor_idx ON support_matrix_plans (vendor);
 
 CREATE TABLE IF NOT EXISTS support_matrix_integration_methods (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -9751,30 +10200,182 @@ COMMENT ON COLUMN support_matrix_method_platforms.operating_systems IS 'NULL mea
 COMMENT ON COLUMN support_matrix_method_platforms.plan_types IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible plan types. Coverage restrictions supplement mapping restrictions.';
 COMMENT ON COLUMN support_matrix_coverage.operating_systems IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible operating systems. Coverage restrictions supplement mapping restrictions.';
 COMMENT ON COLUMN support_matrix_coverage.plan_types IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible plan types. Coverage restrictions supplement mapping restrictions.';
--- Queries are Explore's one server-side object: a named, saved question
--- against a catalog dataset, kept with the builder state it was built with.
--- Columns are what the server reasons about (scope, listing, impact checks);
--- everything only the client interprets lives in spec. dataset is hoisted out
--- of spec so a catalog change can be impact-checked without deserialising
+
+-- Onboarding steps are defined in application code and mirrored here so
+-- playbooks can reference them. Staff read them in the admin dashboard but
+-- never edit them: a step is a code integration. parent_step_id nests a step
+-- one level under a group; a group has no card of its own and is done when
+-- every child is.
+CREATE TABLE IF NOT EXISTS onboarding_steps (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  slug TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  parent_step_id uuid,
+  -- How the step completes: manual, fact or children. Values live in
+  -- application code.
+  completion TEXT NOT NULL DEFAULT 'manual',
+  hidden_by_default BOOLEAN NOT NULL DEFAULT true,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  CONSTRAINT onboarding_steps_pkey PRIMARY KEY (id),
+  CONSTRAINT onboarding_steps_parent_step_id_fkey FOREIGN KEY (parent_step_id) REFERENCES onboarding_steps (id) ON DELETE SET NULL
+);
+COMMENT ON TABLE onboarding_steps IS 'Onboarding steps mirrored from application code; deleted_at marks a step the code no longer defines.';
+CREATE UNIQUE INDEX IF NOT EXISTS onboarding_steps_slug_key ON onboarding_steps (slug);
+CREATE INDEX IF NOT EXISTS onboarding_steps_parent_step_id_idx ON onboarding_steps (parent_step_id) WHERE parent_step_id IS NOT NULL;
+
+-- The support matrix integration methods a step configures. A step applies to
+-- an organization's stack when any of its methods does; a step with none,
+-- such as identity, always applies.
+CREATE TABLE IF NOT EXISTS onboarding_step_methods (
+  step_id uuid NOT NULL,
+  integration_method_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT onboarding_step_methods_pkey PRIMARY KEY (step_id, integration_method_id),
+  CONSTRAINT onboarding_step_methods_step_id_fkey FOREIGN KEY (step_id) REFERENCES onboarding_steps (id) ON DELETE CASCADE,
+  CONSTRAINT onboarding_step_methods_integration_method_id_fkey FOREIGN KEY (integration_method_id) REFERENCES support_matrix_integration_methods (id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS onboarding_step_methods_integration_method_id_idx ON onboarding_step_methods (integration_method_id);
+
+-- Prerequisites: step_id cannot start until requires_step_id is done. Edges
+-- never cross a group's own line: a step neither requires its parent nor a
+-- child of its own, and never itself.
+CREATE TABLE IF NOT EXISTS onboarding_step_dependencies (
+  step_id uuid NOT NULL,
+  requires_step_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT onboarding_step_dependencies_pkey PRIMARY KEY (step_id, requires_step_id),
+  CONSTRAINT onboarding_step_dependencies_step_id_check CHECK (step_id <> requires_step_id),
+  CONSTRAINT onboarding_step_dependencies_step_id_fkey FOREIGN KEY (step_id) REFERENCES onboarding_steps (id) ON DELETE CASCADE,
+  CONSTRAINT onboarding_step_dependencies_requires_step_id_fkey FOREIGN KEY (requires_step_id) REFERENCES onboarding_steps (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS onboarding_step_dependencies_requires_step_id_idx ON onboarding_step_dependencies (requires_step_id);
+
+-- Use cases are the outcomes staff define for onboarding. They are created in
+-- the admin dashboard; nothing seeds them. The onboarding survey names one by
+-- slug and the organization starts from its default playbook.
+CREATE TABLE IF NOT EXISTS onboarding_use_cases (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  slug TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  CONSTRAINT onboarding_use_cases_pkey PRIMARY KEY (id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS onboarding_use_cases_slug_key ON onboarding_use_cases (slug) WHERE deleted_at IS NULL;
+
+-- A playbook is the ordered top-level steps that achieve an outcome. It belongs
+-- to a use case (shared; one per use case is marked is_default) or to one
+-- organization (custom, written for it), never both.
+CREATE TABLE IF NOT EXISTS onboarding_playbooks (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  use_case_id uuid,
+  organization_id TEXT,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  is_default BOOLEAN NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  CONSTRAINT onboarding_playbooks_pkey PRIMARY KEY (id),
+  CONSTRAINT onboarding_playbooks_use_case_id_fkey FOREIGN KEY (use_case_id) REFERENCES onboarding_use_cases (id) ON DELETE CASCADE,
+  CONSTRAINT onboarding_playbooks_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT onboarding_playbooks_owner_check CHECK ((use_case_id IS NULL) <> (organization_id IS NULL))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS onboarding_playbooks_default_key ON onboarding_playbooks (use_case_id) WHERE is_default AND organization_id IS NULL AND deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS onboarding_playbooks_use_case_id_idx ON onboarding_playbooks (use_case_id);
+CREATE INDEX IF NOT EXISTS onboarding_playbooks_organization_id_idx ON onboarding_playbooks (organization_id) WHERE organization_id IS NOT NULL;
+
+-- The top-level steps of a playbook in walking order. Cards under a group
+-- come with the group and are never listed on their own.
+CREATE TABLE IF NOT EXISTS onboarding_playbook_steps (
+  playbook_id uuid NOT NULL,
+  step_id uuid NOT NULL,
+  position INTEGER NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT onboarding_playbook_steps_pkey PRIMARY KEY (playbook_id, step_id),
+  CONSTRAINT onboarding_playbook_steps_playbook_id_fkey FOREIGN KEY (playbook_id) REFERENCES onboarding_playbooks (id) ON DELETE CASCADE,
+  CONSTRAINT onboarding_playbook_steps_step_id_fkey FOREIGN KEY (step_id) REFERENCES onboarding_steps (id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS onboarding_playbook_steps_position_key ON onboarding_playbook_steps (playbook_id, position);
+CREATE INDEX IF NOT EXISTS onboarding_playbook_steps_step_id_idx ON onboarding_playbook_steps (step_id);
+
+-- Onboarding state is organization-scoped, independent of any project.
+-- Unlike retained records, this state has no lifetime beyond its owning organization.
+CREATE TABLE IF NOT EXISTS organization_onboarding (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  preset TEXT,
+  -- Device management the organization uses: jamf, intune, iru, other or
+  -- none. NULL until staff record the stack. Values live in application code.
+  mdm_vendor TEXT,
+  -- The software's name when mdm_vendor is other, kept for our records only.
+  mdm_vendor_name TEXT,
+  -- The playbook the organization walks. NULL until staff assign one, in
+  -- which case the setup task selection decides what the wizard shows.
+  playbook_id uuid,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT organization_onboarding_pkey PRIMARY KEY (id),
+  CONSTRAINT organization_onboarding_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT organization_onboarding_playbook_id_fkey FOREIGN KEY (playbook_id) REFERENCES onboarding_playbooks (id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS organization_onboarding_organization_id_key
+ON organization_onboarding (organization_id);
+CREATE INDEX IF NOT EXISTS organization_onboarding_playbook_id_idx ON organization_onboarding (playbook_id) WHERE playbook_id IS NOT NULL;
+
+-- The AI vendors an organization uses, each with the plan it is on. Vendors
+-- and plans come from the support matrix catalog, and every product of a
+-- vendor is implied. plan_id is NULL for a vendor that sells no plans.
+CREATE TABLE IF NOT EXISTS organization_onboarding_vendors (
+  organization_id TEXT NOT NULL,
+  vendor TEXT NOT NULL,
+  plan_id uuid,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT organization_onboarding_vendors_pkey PRIMARY KEY (organization_id, vendor),
+  CONSTRAINT organization_onboarding_vendors_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_onboarding (organization_id) ON DELETE CASCADE,
+  CONSTRAINT organization_onboarding_vendors_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES support_matrix_plans (id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS organization_onboarding_vendors_plan_id_idx ON organization_onboarding_vendors (plan_id) WHERE plan_id IS NOT NULL;
+-- Widgets are Explore's saved objects: a named question against a catalog
+-- dataset together with how it is drawn, so they can later be placed on
+-- dashboards. They replaced Explore's saved queries.
+-- query is the semantic question the server plans against the catalog;
+-- visualization is the chart the client draws it with. dataset is hoisted out
+-- of query so a catalog change can be impact-checked without deserialising
 -- every row.
-CREATE TABLE IF NOT EXISTS queries (
+CREATE TABLE IF NOT EXISTS widgets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
   created_by_user_id TEXT,
 
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 200),
+  description TEXT CHECK (CHAR_LENGTH(description) <= 2000),
   dataset TEXT NOT NULL CHECK (dataset <> ''),
-  spec jsonb NOT NULL,
+  query jsonb NOT NULL,
+  visualization jsonb NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT queries_pkey PRIMARY KEY (id),
-  CONSTRAINT queries_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  CONSTRAINT widgets_pkey PRIMARY KEY (id),
+  CONSTRAINT widgets_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS queries_project_id_updated_at_idx
-ON queries (project_id, updated_at DESC) WHERE deleted IS FALSE;
+CREATE INDEX IF NOT EXISTS widgets_project_id_updated_at_idx
+ON widgets (project_id, updated_at DESC) WHERE deleted IS FALSE;

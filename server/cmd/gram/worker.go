@@ -34,11 +34,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -346,6 +348,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, assistantRuntimeFlags()...)
 	flags = append(flags, identityProviderConnectionFlags()...)
 	flags = append(flags, pluginsFlags()...)
+	flags = append(flags, pluginPublicationEmitFlag())
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, riskReconcileFlags()...)
 	flags = append(flags, riskLLMFlags()...)
@@ -692,6 +695,15 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create mcp registry client: %w", err)
 			}
 
+			if err := externalmcp.EnsureNativeCatalogSource(ctx, db); err != nil {
+				return fmt.Errorf("ensure native catalog source: %w", err)
+			}
+			catalogValidator, err := mcpregistry.LoadValidator()
+			if err != nil {
+				return fmt.Errorf("catalog validator: %w", err)
+			}
+			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, catalogValidator)), featureFlags)
+
 			serverURL, err := url.Parse(c.String("server-url"))
 			if err != nil {
 				return fmt.Errorf("failed to parse server url: %w", err)
@@ -732,7 +744,7 @@ func newWorkerCommand() *cli.Command {
 			// The worker never serves webhook ingress (ProcessWebhook lives in
 			// the HTTP server), so the dashboard site URL used for Slack link
 			// unfurls is not needed here.
-			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL, nil, slackClient)
+			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL, nil, nil, slackClient, cache.NewRedisCacheAdapter(redisClient))
 
 			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
 
@@ -852,6 +864,7 @@ func newWorkerCommand() *cli.Command {
 				FunctionsVersion:             runnerVersion,
 				RagService:                   ragService,
 				MCPRegistryClient:            mcpRegistryClient,
+				MCPCatalog:                   mcpCatalog,
 				TelemetryLogger:              telemetryLogger,
 				ClickhouseConn:               chDB,
 				MeterReadConn:                meterReadConn,
@@ -860,6 +873,7 @@ func newWorkerCommand() *cli.Command {
 				CacheAdapter:                 remoteSessionsCache,
 				IssuerMetadataRefresher:      issuerMetadataRefresher,
 				RemoteSessionAssertionSigner: clientAssertionSigner,
+				StartupSeeds:                 startupSeeds(logger, db),
 				AssistantsCore:               assistantsCore,
 				TemporalEnv:                  temporalEnv,
 				PIIScanner:                   piiScanner,
@@ -871,6 +885,7 @@ func newWorkerCommand() *cli.Command {
 				WorkOSClient:                 backgroundWorkOSClient,
 				ProductFeatures:              productFeatures,
 				PluginPublisher:              pluginPublisher,
+				PublicationRequests:          plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)},
 				Publishers:                   publishers,
 				TrialEmailsService:           trialEmailsService,
 				TrialFixtureHandler:          newTrialFixtureHandler(c.String("environment"), db, productFeatures),

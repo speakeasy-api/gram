@@ -1,7 +1,7 @@
 {
   "name": "admin",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.8.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,9 +14,11 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:browser:serve": "vite build --config test/vite.config.ts && vite preview --config test/vite.config.ts",
     "type-check": "tsc -b --noEmit"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
     "@tailwindcss/vite": "catalog:",
     "@tanstack/charts": "^0.18.0",
     "@tanstack/react-form": "^1.33.5",
@@ -27,7 +29,9 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "jsonc-parser": "^3.3.1",
     "lucide-react": "catalog:",
+    "monaco-editor": "^0.56.0",
     "radix-ui": "^1.6.7",
     "react": "^19.3.0",
     "react-day-picker": "^10.0.1",
@@ -49,8 +53,8 @@
     "@types/tr46": "^5.0.1",
     "@vitejs/plugin-react": "catalog:",
     "happy-dom": "^20.11.2",
-    "oxlint": "^1.83.0",
-    "oxlint-tsgolint": "^7.0.2001",
+    "oxlint": "^1.85.0",
+    "oxlint-tsgolint": "^7.0.2002",
     "react-grab": "^0.2.0",
     "typescript": "catalog:",
     "vite": "catalog:",

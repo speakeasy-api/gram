@@ -169,6 +169,33 @@ func lockUserSessionIssuers(
 	return nil
 }
 
+// GetNewClientCallbackURL returns the redirect URI a client created now in the
+// caller's project registers upstream. Every project client is
+// organization-owned, so it adopts the registration origin when one is set.
+func (s *Service) GetNewClientCallbackURL(ctx context.Context, _ *gen.GetNewClientCallbackURLPayload) (*gen.NewClientCallbackURLResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	return &gen.NewClientCallbackURLResult{CallbackURL: RemoteLoginCallbackURL(s.origins.ForNewClient(true))}, nil
+}
+
+// clientView renders a client for an API response, including the redirect
+// URI it registers upstream.
+func (s *Service) clientView(row repo.RemoteSessionClient, userSessionIssuerIDs []uuid.UUID) (*types.RemoteSessionClient, error) {
+	view, err := mv.BuildRemoteSessionClientView(row, userSessionIssuerIDs)
+	if err != nil {
+		return nil, fmt.Errorf("build remote session client view: %w", err)
+	}
+	view.CallbackURL = new(s.origins.ClientCallbackURL(row.CallbackBaseUrl))
+	return view, nil
+}
+
 func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.CreateRemoteSessionClientPayload) (*types.RemoteSessionClient, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -241,6 +268,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		LegacyCallbackUrl:               false,
 		JsonWebKeySetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CallbackBaseUrl:                 s.origins.NewClientBaseURL(true),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").LogError(ctx, logger)
@@ -304,15 +332,17 @@ func (s *Service) CreateCimd(ctx context.Context, payload *gen.CreateCimdPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "generate client id").LogError(ctx, logger)
 	}
 
+	callbackBaseURL := s.origins.NewClientBaseURL(true)
 	created, err := txRepo.CreateRemoteSessionClientCIMD(ctx, repo.CreateRemoteSessionClientCIMDParams{
 		ID:                    clientID,
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:        conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID: issuerID,
-		ClientIDMetadataUri:   ClientMetadataDocumentURL(s.serverURL, clientID),
+		ClientIDMetadataUri:   ClientMetadataDocumentURL(s.origins.ForClient(callbackBaseURL), clientID),
 		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
 		Scope:                 payload.Scope,
 		Audience:              conv.PtrToPGText(payload.Audience),
+		CallbackBaseUrl:       callbackBaseURL,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").LogError(ctx, logger)
@@ -430,7 +460,7 @@ func (s *Service) finalizeClientCreate(
 	// next binding change heals, not a failed create.
 	BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerIDs)
 
-	view, err := mv.BuildRemoteSessionClientView(created, userIssuerIDs)
+	view, err := s.clientView(created, userIssuerIDs)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 	}
@@ -453,6 +483,10 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 	clientID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
+	}
+
+	if payload.LegacyCallbackURL != nil && !authCtx.IsAdmin {
+		return nil, oops.E(oops.CodeForbidden, nil, "changing a client's legacy callback mode requires a platform admin").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -521,6 +555,7 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
 		Scope:                           payload.Scope,
 		Audience:                        conv.PtrToPGText(payload.Audience),
+		LegacyCallbackUrl:               conv.PtrToPGBool(payload.LegacyCallbackURL),
 		ID:                              clientID,
 		ProjectID:                       conv.ToNullUUID(*authCtx.ProjectID),
 	})
@@ -554,6 +589,8 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
+	// Set after the audit snapshot so it matches the snapshot before.
+	afterView.CallbackURL = new(s.origins.ClientCallbackURL(updated.CallbackBaseUrl))
 	return afterView, nil
 }
 
@@ -592,7 +629,7 @@ func (s *Service) ListRemoteSessionClients(ctx context.Context, payload *gen.Lis
 
 	items := make([]*types.RemoteSessionClient, 0, len(rows))
 	for _, row := range rows {
-		item, err := mv.BuildRemoteSessionClientView(row.Client, row.UserSessionIssuerIDs)
+		item, err := s.clientView(row.Client, row.UserSessionIssuerIDs)
 		if err != nil {
 			return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 		}
@@ -640,7 +677,7 @@ func (s *Service) GetRemoteSessionClient(ctx context.Context, payload *gen.GetRe
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote session client").LogError(ctx, logger)
 	}
 
-	view, err := mv.BuildRemoteSessionClientView(client.RemoteSessionClient, client.UserSessionIssuerIds)
+	view, err := s.clientView(client.RemoteSessionClient, client.UserSessionIssuerIds)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 	}
@@ -857,7 +894,7 @@ func (s *Service) commitClientAttachmentChange(
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote session client").LogError(ctx, logger)
 	}
 
-	afterView, err := mv.BuildRemoteSessionClientView(updated.RemoteSessionClient, updated.UserSessionIssuerIds)
+	afterView, err := s.clientView(updated.RemoteSessionClient, updated.UserSessionIssuerIds)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 	}

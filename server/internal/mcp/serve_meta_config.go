@@ -4,12 +4,12 @@ import "time"
 
 // MetaRuntimeConfig bounds per-upstream work; zero values mean the defaults.
 type MetaRuntimeConfig struct {
-	// MemberCallTimeout bounds one member call end to end, handshake and
-	// pagination included. Kept under the proxy's own 60s per-exchange
-	// timeouts so this deadline, not the proxy's, is what a slow member hits.
+	// MemberCallTimeout bounds member negotiation and calls, including all
+	// catalog pages. It stays below the proxy's 60s per-exchange timeouts.
+	// Legacy cleanup has a separate bounded deadline.
 	MemberCallTimeout time.Duration
 
-	// ValidationTimeout bounds a consent-page probe's handshake and session close.
+	// ValidationTimeout budgets consent verification, legacy cleanup, and the verdict write.
 	ValidationTimeout time.Duration
 
 	// AutoVerifyWait is how long a remote login callback holds its redirect for the probe a fresh grant starts, so a fast member's verdict is on the first render.

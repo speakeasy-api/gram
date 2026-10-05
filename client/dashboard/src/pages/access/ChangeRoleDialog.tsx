@@ -69,6 +69,10 @@ export function ChangeRoleDialog({
   };
 
   const unselectedRoles = getUnselectedRoles(roles, selectedRoleIds);
+  const directoryRoleNames = (member?.directoryRoleIds ?? [])
+    .map((id) => roleById.get(id)?.name)
+    .filter(Boolean)
+    .join(", ");
 
   const updateDisabled = isUpdateDisabled({
     isPending: updateMemberRoles.isPending,
@@ -193,6 +197,14 @@ export function ChangeRoleDialog({
                 </span>
               )}
             </div>
+
+            {directoryRoleNames && (
+              <Text variant="body" className="text-muted-foreground text-xs">
+                Also granted by directory role mappings: {directoryRoleNames}.
+                These follow the member's directory groups and attributes, so
+                they can't be removed here.
+              </Text>
+            )}
 
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="secondary" onClick={() => onOpenChange(false)}>

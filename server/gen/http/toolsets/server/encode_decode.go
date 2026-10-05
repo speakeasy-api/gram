@@ -1185,8 +1185,8 @@ func DecodeGetToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 			err = goa.MergeErrors(err, goa.MissingFieldError("slug", "query string"))
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
-		if utf8.RuneCountInString(slug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		if utf8.RuneCountInString(slug) > 60 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 60, false))
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {

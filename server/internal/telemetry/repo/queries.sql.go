@@ -80,15 +80,37 @@ func (u UserIdentity) IsEmpty() bool {
 // user_email is compared lowercased on both sides because ingest stores the
 // provider's casing verbatim while the directory emails callers resolve are
 // normalized.
+//
+// The two identity sources are a union, not a preference. The canonical fold
+// resolves an email to its owner through the identity_map; the literal set is
+// resolved by the caller from the rows themselves. Neither covers the other:
+// the map knows an employee's linked emails even on rows this window never
+// shows, while only the rows know the user ids an *unmapped* email co-occurs
+// with — and for an unmapped email the fold's joinGet yields ” and its
+// id-keyed arm matches nothing at all. Letting the fold replace a populated
+// literal set therefore reported no activity for exactly the people the
+// grouped search still finds, because the search's group key falls back to the
+// recorded email (canonicalEmailExpr) while this filter had no such fallback.
+// ORing the two is what makes the per-person read agree with the grouped
+// search that offered the person. Callers populating only one (the telemetry
+// service's resolveUserScope, every literal-mode caller) are unaffected.
 func withUserIdentityFilter(sb squirrel.SelectBuilder, identity UserIdentity, canonical CanonicalUserIdentity) squirrel.SelectBuilder {
-	// Canonical mode replaces the Postgres-expanded identity set with the
-	// ClickHouse identity_map fold; the literal path below is unchanged and
-	// remains the flag-off behavior.
+	match := literalUserIdentityMatch(identity)
 	if canonical.Enabled() {
-		return withCanonicalUserIdentityFilter(sb, canonical)
+		match = append(match, canonicalUserIdentityMatch(canonical)...)
 	}
-	if identity.IsEmpty() {
+	if len(match) == 0 {
 		return sb
+	}
+
+	return sb.Where(match)
+}
+
+// literalUserIdentityMatch is the caller-expanded identity set's arms, or nil
+// for an empty identity.
+func literalUserIdentityMatch(identity UserIdentity) squirrel.Or {
+	if identity.IsEmpty() {
+		return nil
 	}
 
 	var match squirrel.Or
@@ -102,7 +124,7 @@ func withUserIdentityFilter(sb squirrel.SelectBuilder, identity UserIdentity, ca
 		})
 	}
 
-	return sb.Where(match)
+	return match
 }
 
 // withAccountTypeFilter applies the shared account-type filter semantics:
@@ -2468,7 +2490,7 @@ type GetTimeSeriesMetricsParams struct {
 	TimeEnd             int64
 	IntervalSeconds     int64                 // Bucket interval in seconds
 	User                UserIdentity          // Optional filter - scopes to one employee across all their identities
-	CanonicalUser       CanonicalUserIdentity // When enabled, scopes via the identity_map fold instead of the expanded User set
+	CanonicalUser       CanonicalUserIdentity // When enabled, adds the identity_map fold to the scope, unioned with any User set
 	ExternalUserID      string                // Optional filter
 	APIKeyID            string                // Optional filter
 	ToolsetSlug         string                // Optional filter - filters by toolset/MCP server slug
@@ -2607,7 +2629,7 @@ type GetToolMetricsBreakdownParams struct {
 	TimeStart           int64
 	TimeEnd             int64
 	User                UserIdentity          // Optional filter - scopes to one employee across all their identities
-	CanonicalUser       CanonicalUserIdentity // When enabled, scopes via the identity_map fold instead of the expanded User set
+	CanonicalUser       CanonicalUserIdentity // When enabled, adds the identity_map fold to the scope, unioned with any User set
 	ExternalUserID      string                // Optional filter
 	APIKeyID            string                // Optional filter
 	ToolsetSlug         string                // Optional filter - filters by toolset/MCP server slug
@@ -2730,7 +2752,7 @@ type GetOverviewSummaryParams struct {
 	TimeStart           int64
 	TimeEnd             int64
 	User                UserIdentity          // Optional filter - scopes to one employee across all their identities
-	CanonicalUser       CanonicalUserIdentity // When enabled, scopes via the identity_map fold instead of the expanded User set
+	CanonicalUser       CanonicalUserIdentity // When enabled, adds the identity_map fold to the scope, unioned with any User set
 	ExternalUserID      string                // Optional filter
 	APIKeyID            string                // Optional filter
 	ToolsetSlug         string                // Optional filter - filters by toolset/MCP server slug
@@ -3387,9 +3409,23 @@ type SearchUsersParams struct {
 	ExternalOrgID       string // optional; scopes to a single account by provider org id
 	GroupBy             string // "user_id" or "external_user_id"
 	UserIDs             []string
-	SortOrder           string // "asc" or "desc"
-	Cursor              string // user identifier to paginate from
-	Limit               int
+	// IdentityContains keeps only summaries whose identity contains this text,
+	// compared case-insensitively: the group key, or under internal grouping
+	// any raw user id folded into the summary. It is applied after grouping so
+	// a matched summary keeps every row it aggregates. Empty applies no filter.
+	IdentityContains string
+	SortOrder        string // "asc" or "desc"
+	Cursor           string // user identifier to paginate from
+	// CursorLastSeenUnixNano is the last_seen_unix_nano the cursor's person was
+	// observed at on the page that minted the cursor. Supplied alongside Cursor,
+	// the page boundary is compared against it directly. Left zero, the boundary
+	// timestamp is looked up again from telemetry_logs by group key alone — a
+	// lookup that applies neither this query's time window nor its row filters,
+	// so a row this query excludes can hand back a later timestamp and return
+	// the cursor's person on the next page too. Any caller that can seal the
+	// timestamp it displayed into its cursor should set this.
+	CursorLastSeenUnixNano int64
+	Limit                  int
 	// MetricsDetail selects how many aggregates to compute: one of the
 	// MetricsDetail* constants. MetricsDetailBasic projects only identity,
 	// first/last activity, input/output token sums, and raw_user_ids — skipping
@@ -3560,8 +3596,29 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 
 	sb = sb.GroupBy(groupExpr)
 
-	// Cursor pagination using last_seen + group column for stable ordering
-	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, groupExpr, "max(time_unix_nano)", joinClause, joinArgs)
+	// Applied after grouping so a summary stays whole: filtering rows on a
+	// per-row column before aggregation would keep only the rows that carry the
+	// matched identifier and misreport the person's totals. The group key covers
+	// the email-first identity; raw_user_ids covers a person whose rows carry a
+	// user id beside their email, so a partial user id still finds them.
+	if arg.IdentityContains != "" {
+		keyMatch := "positionCaseInsensitive(" + groupExpr + ", ?) > 0"
+		if arg.GroupBy == "external_user_id" {
+			sb = sb.Having(keyMatch, arg.IdentityContains)
+		} else {
+			sb = sb.Having("("+keyMatch+" OR arrayExists(id -> positionCaseInsensitive(id, ?) > 0, raw_user_ids))", arg.IdentityContains, arg.IdentityContains)
+		}
+	}
+
+	// Cursor pagination using last_seen + group column for stable ordering.
+	// A caller that sealed the last_seen it was shown into its cursor gets that
+	// exact boundary; one that did not falls back to re-deriving it, which is
+	// only sound while no row filter or window can hide the deriving row.
+	if arg.CursorLastSeenUnixNano != 0 {
+		sb = withHavingTupleValuePagination(sb, arg.Cursor, arg.CursorLastSeenUnixNano, arg.SortOrder, groupExpr, "max(time_unix_nano)")
+	} else {
+		sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, groupExpr, "max(time_unix_nano)", joinClause, joinArgs)
+	}
 
 	// Order by last_seen with group column as tie-breaker
 	sb = withOrdering(sb, arg.SortOrder, "last_seen_unix_nano", "user_id")
@@ -3610,7 +3667,7 @@ type GetUserMetricsSummaryParams struct {
 	TimeStart           int64
 	TimeEnd             int64
 	User                UserIdentity          // the employee's identities (mutually exclusive with ExternalUserID)
-	CanonicalUser       CanonicalUserIdentity // when enabled, scopes via the identity_map fold instead of the expanded User set
+	CanonicalUser       CanonicalUserIdentity // when enabled, adds the identity_map fold to the scope, unioned with any User set
 	ExternalUserID      string                // external_user_id (mutually exclusive with User)
 	EventSource         string                // Optional filter - filters by event_source
 	HookSource          string                // Optional filter - filters by hook_source
@@ -3795,7 +3852,7 @@ type GetEmployeeDataFlowGraphParams struct {
 	TimeStart      int64
 	TimeEnd        int64
 	User           UserIdentity          // the employee's identities (mutually exclusive with ExternalUserID)
-	CanonicalUser  CanonicalUserIdentity // when enabled, scopes via the identity_map fold instead of the expanded User set
+	CanonicalUser  CanonicalUserIdentity // when enabled, adds the identity_map fold to the scope, unioned with any User set
 	ExternalUserID string                // external_user_id (mutually exclusive with User)
 	AccountType    string                // Optional filter - filters by account_type
 	ExternalOrgID  string                // Optional filter - scopes to a single account by provider org id
@@ -4102,6 +4159,7 @@ type HostedMCPMatcher struct {
 // servers receive their own target type.
 type MCPServerMatcher struct {
 	SourceID    string
+	MCPServerID string
 	TargetType  string
 	TargetID    string
 	TargetLabel string
@@ -4155,19 +4213,29 @@ type ListToolUsageTracesParams struct {
 	MetaMCPMatchers    []MetaMCPMatcher
 	TargetTypes        []string
 	HostedToolsetSlugs []string
+	// MCPServerTargetIDs narrows to configured remote or tunneled MCP servers by
+	// the target id their matcher folds calls onto (the server slug, or its id
+	// when it has none). Matched on both the hosted and tunneled target types,
+	// because a remote server is classified hosted and a tunneled one tunneled.
+	MCPServerTargetIDs []string
 	ShadowServerNames  []string
 	MetaMCPServerIDs   []string
 	UserFilters        []ToolUsageUserFilter
-	HookSources        []string
-	ClientKeys         []string // Optional filter - lowercased MCP client names; "unattributed" selects calls with no reported client
-	AccountType        string   // Optional filter - personal = exactly personal; team = not personal (includes unclassified)
-	Statuses           []string // Optional trace-outcome filter: error, success, blocked, pending. Empty means all.
-	Query              string
-	Filters            []AttributeFilter
-	SortOrder          string
-	CursorTimeUnixNano int64
-	CursorID           string
-	Limit              int
+	// CanonicalIdentityOrg, when set, folds the email user filter through the
+	// identity_map for that organization, so an identity produced by a folded
+	// list selects every linked address the person's calls are stored under.
+	// Empty keeps the literal comparison.
+	CanonicalIdentityOrg string
+	HookSources          []string
+	ClientKeys           []string // Optional filter - lowercased MCP client names; "unattributed" selects calls with no reported client
+	AccountType          string   // Optional filter - personal = exactly personal; team = not personal (includes unclassified)
+	Statuses             []string // Optional trace-outcome filter: error, success, blocked, pending. Empty means all.
+	Query                string
+	Filters              []AttributeFilter
+	SortOrder            string
+	CursorTimeUnixNano   int64
+	CursorID             string
+	Limit                int
 }
 
 // ToolUsageSummary contains bounded chart-ready tool usage aggregates.
@@ -4510,6 +4578,82 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 
 // ListToolUsageTraces retrieves target-aware trace rows for the unified Tool Logs page.
 //
+// toolUsageTraceTargetFilter narrows normalized traces to configured targets.
+// Each identity is matched together with the target type it is recorded under,
+// so a hosted toolset slug never matches a shadow server that happens to share
+// it. Selectors are OR-ed: a caller naming several targets sees all of them.
+// It returns nil when no selector is set.
+func toolUsageTraceTargetFilter(arg ListToolUsageTracesParams) squirrel.Sqlizer {
+	targetFilters := squirrel.Or{}
+	if len(arg.HostedToolsetSlugs) > 0 {
+		targetFilters = append(targetFilters, squirrel.And{
+			squirrel.Eq{"target_type": ToolUsageTargetTypeHostedMCP},
+			squirrel.Eq{"target_id": arg.HostedToolsetSlugs},
+		})
+	}
+	// A configured remote server is classified hosted and a tunneled one
+	// tunneled, and neither carries a toolset slug, so the configured server
+	// identities are matched across both types by the target id the matcher
+	// stamped (server slug, or server id when it has none).
+	if len(arg.MCPServerTargetIDs) > 0 {
+		targetFilters = append(targetFilters, squirrel.And{
+			squirrel.Eq{"target_type": []string{ToolUsageTargetTypeHostedMCP, ToolUsageTargetTypeTunneledMCP}},
+			squirrel.Eq{"target_id": arg.MCPServerTargetIDs},
+		})
+	}
+	if len(arg.ShadowServerNames) > 0 {
+		targetFilters = append(targetFilters, squirrel.And{
+			squirrel.Eq{"target_type": ToolUsageTargetTypeShadowMCP},
+			squirrel.Eq{"target_id": arg.ShadowServerNames},
+		})
+	}
+	// Dispatches to members (stamped meta_mcp_server_id) plus calls on the gateway itself.
+	if len(arg.MetaMCPServerIDs) > 0 {
+		targetFilters = append(targetFilters, squirrel.Eq{"meta_mcp_server_id": arg.MetaMCPServerIDs})
+		targetFilters = append(targetFilters, squirrel.And{
+			squirrel.Eq{"target_type": ToolUsageTargetTypeMetaMCP},
+			squirrel.Eq{"target_id": arg.MetaMCPServerIDs},
+		})
+	}
+	if len(targetFilters) == 0 {
+		return nil
+	}
+	return targetFilters
+}
+
+// toolUsageTraceUserFilter narrows normalized traces to the named identities.
+// Selectors are OR-ed, and each is matched together with the user kind it is
+// recorded under so an email can never match an id-keyed row.
+//
+// The email kind folds through the identity map when CanonicalIdentityOrg is
+// set, on both sides of the comparison. Without the fold this filter is a
+// literal user_key comparison, while the lists that hand callers an identity to
+// filter by (ListMCPUsageUsers, the attribute metrics summaries) fold theirs —
+// so a person whose calls are stored under a linked alias would be selected by
+// an address that appears on none of their rows and the filter would match
+// nothing, or only the part of their history spelled that one way. Folding here
+// keeps a filter consistent with the list that produced its identity.
+//
+// Ids never fold: the identity map is email-keyed and cannot resolve one.
+func toolUsageTraceUserFilter(arg ListToolUsageTracesParams) squirrel.Sqlizer {
+	if len(arg.UserFilters) == 0 {
+		return nil
+	}
+	orgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
+	userFilters := squirrel.Or{}
+	for _, filter := range arg.UserFilters {
+		key := squirrel.Sqlizer(squirrel.Eq{"user_key": filter.Key})
+		if orgLit != "" && filter.Kind == toolUsageUserKindEmail {
+			key = canonicalEmailPredicate(orgLit, "user_key", []string{filter.Key})
+		}
+		userFilters = append(userFilters, squirrel.And{
+			squirrel.Eq{"user_kind": filter.Kind},
+			key,
+		})
+	}
+	return userFilters
+}
+
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTracesParams) ([]ToolUsageTraceSummary, error) {
 	cteSQL, cteArgs, err := toolUsageTraceRowsCTE(arg)
@@ -4549,29 +4693,8 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 		sb = sb.Where(squirrel.Eq{"target_type": arg.TargetTypes})
 	}
 
-	if len(arg.HostedToolsetSlugs) > 0 || len(arg.ShadowServerNames) > 0 || len(arg.MetaMCPServerIDs) > 0 {
-		targetFilters := squirrel.Or{}
-		if len(arg.HostedToolsetSlugs) > 0 {
-			targetFilters = append(targetFilters, squirrel.And{
-				squirrel.Eq{"target_type": ToolUsageTargetTypeHostedMCP},
-				squirrel.Eq{"target_id": arg.HostedToolsetSlugs},
-			})
-		}
-		if len(arg.ShadowServerNames) > 0 {
-			targetFilters = append(targetFilters, squirrel.And{
-				squirrel.Eq{"target_type": ToolUsageTargetTypeShadowMCP},
-				squirrel.Eq{"target_id": arg.ShadowServerNames},
-			})
-		}
-		// Dispatches to members (stamped meta_mcp_server_id) plus calls on the gateway itself.
-		if len(arg.MetaMCPServerIDs) > 0 {
-			targetFilters = append(targetFilters, squirrel.Eq{"meta_mcp_server_id": arg.MetaMCPServerIDs})
-			targetFilters = append(targetFilters, squirrel.And{
-				squirrel.Eq{"target_type": ToolUsageTargetTypeMetaMCP},
-				squirrel.Eq{"target_id": arg.MetaMCPServerIDs},
-			})
-		}
-		sb = sb.Where(targetFilters)
+	if targetFilter := toolUsageTraceTargetFilter(arg); targetFilter != nil {
+		sb = sb.Where(targetFilter)
 	}
 
 	if len(arg.HookSources) > 0 {
@@ -4589,15 +4712,8 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 	// way.
 	sb = withAccountTypeFilter(sb, arg.AccountType)
 
-	if len(arg.UserFilters) > 0 {
-		userFilters := squirrel.Or{}
-		for _, filter := range arg.UserFilters {
-			userFilters = append(userFilters, squirrel.And{
-				squirrel.Eq{"user_kind": filter.Kind},
-				squirrel.Eq{"user_key": filter.Key},
-			})
-		}
-		sb = sb.Where(userFilters)
+	if userFilter := toolUsageTraceUserFilter(arg); userFilter != nil {
+		sb = sb.Where(userFilter)
 	}
 
 	// http.response.status_code filters are applied here, against the aggregated
@@ -4632,6 +4748,7 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 	}
 
 	sb = sb.Limit(uint64(arg.Limit)) //nolint:gosec // validated by service layer
+	sb = withCanonicalFoldSettings(sb, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 
 	query, queryArgs, err := sb.ToSql()
 	if err != nil {
@@ -6254,19 +6371,23 @@ func toolUsageRawNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []a
 		MetaMCPMatchers:    arg.MetaMCPMatchers,
 		TargetTypes:        nil,
 		HostedToolsetSlugs: nil,
+		MCPServerTargetIDs: nil,
 		ShadowServerNames:  nil,
 		MetaMCPServerIDs:   nil,
 		UserFilters:        nil,
-		HookSources:        nil,
-		ClientKeys:         nil,
-		AccountType:        "",
-		Statuses:           nil,
-		Query:              arg.Query,
-		Filters:            arg.Filters,
-		SortOrder:          "",
-		CursorTimeUnixNano: 0,
-		CursorID:           "",
-		Limit:              0,
+		// The CTE this builds carries no user filter, so there is nothing to
+		// fold; the summary path applies its own identity handling.
+		CanonicalIdentityOrg: "",
+		HookSources:          nil,
+		ClientKeys:           nil,
+		AccountType:          "",
+		Statuses:             nil,
+		Query:                arg.Query,
+		Filters:              arg.Filters,
+		SortOrder:            "",
+		CursorTimeUnixNano:   0,
+		CursorID:             "",
+		Limit:                0,
 		// Every other narrowing stays with toolUsageFilteredSelect, which
 		// applies it to the projection below. Passing it twice would filter the
 		// same rows in two places and drift the moment one changes.
@@ -7543,36 +7664,69 @@ func (q *Queries) GetTopUsers(ctx context.Context, arg GetTopUsersParams) ([]Top
 
 // GetTopServersParams contains parameters for getting top servers.
 type GetTopServersParams struct {
-	GramProjectID  string
-	TimeStart      int64
-	TimeEnd        int64
-	ExternalUserID string // Optional filter
-	APIKeyID       string // Optional filter
-	ToolsetSlug    string // Optional filter
-	Limit          int
+	GramProjectID     string
+	TimeStart         int64
+	TimeEnd           int64
+	HostedMCPMatchers []HostedMCPMatcher
+	MCPServerMatchers []MCPServerMatcher
+	MetaMCPMatchers   []MetaMCPMatcher
+	Limit             int
 }
 
-// GetTopServers retrieves top MCP servers by tool call count, excluding "local" tool calls.
+func projectOverviewServerFilter(arg GetTopServersParams) GetToolUsageSummaryParams {
+	return GetToolUsageSummaryParams{
+		GramProjectID:     arg.GramProjectID,
+		TimeStart:         arg.TimeStart,
+		TimeEnd:           arg.TimeEnd,
+		BucketSizeNs:      0,
+		HostedMCPMatchers: arg.HostedMCPMatchers,
+		MCPServerMatchers: arg.MCPServerMatchers,
+		MetaMCPMatchers:   arg.MetaMCPMatchers,
+		TargetTypes: []string{
+			ToolUsageTargetTypeHostedMCP,
+			ToolUsageTargetTypeTunneledMCP,
+			ToolUsageTargetTypeShadowMCP,
+			ToolUsageTargetTypeMetaMCP,
+		},
+		HostedToolsetSlugs: nil,
+		ShadowServerNames:  nil,
+		MetaMCPServerIDs:   nil,
+		UserFilters:        nil,
+		ClientKeys:         nil,
+		HookSources:        nil,
+		AccountType:        "",
+		TargetLimit:        0,
+		UserLimit:          0,
+		UsersByTargetLimit: 0,
+		TargetToolRowLimit: 0,
+		TimeSeriesRowLimit: 0,
+		UserSeriesRowLimit: 0,
+		ClientLimit:        0,
+		ClientToolRowLimit: 0,
+		Statuses:           nil,
+		Query:              "",
+		Filters:            nil,
+	}
+}
+
+// GetTopServers retrieves MCP servers by tool call count across hosted, proxied,
+// tunneled, and hook-observed traffic. Local tools and skills are excluded.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetTopServers(ctx context.Context, arg GetTopServersParams) ([]TopServer, error) {
-	sb := sq.Select(
-		"if(tool_source = '', 'local', tool_source) as server_name",
-		"count(*) as tool_call_count",
-	).
-		From("trace_summaries").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("event_source = 'hook'").
-		Where("tool_source != ''"). // Exclude "local" tool calls (empty tool_source)
-		Where("start_time_unix_nano >= ?", arg.TimeStart).
-		Where("start_time_unix_nano <= ?", arg.TimeEnd).
-		GroupBy("server_name").
-		OrderBy("tool_call_count DESC").
-		//nolint:gosec // Limit is bounded by API validation
-		Limit(uint64(arg.Limit))
-
-	// Note: trace_summaries doesn't have external_user_id/api_key_id, so we can't filter by those
-	// If filtering is needed, we'd have to query telemetry_logs instead
+	sb, err := toolUsageFilteredSelect(projectOverviewServerFilter(arg),
+		"target_label AS server_name",
+		"count() AS tool_call_count",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("building top servers source: %w", err)
+	}
+	sb = sb.
+		GroupBy("target_type", "target_id", "target_label").
+		OrderBy("tool_call_count DESC", "server_name ASC")
+	if arg.Limit > 0 {
+		sb = sb.Limit(uint64(arg.Limit))
+	}
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -7597,7 +7751,84 @@ func (q *Queries) GetTopServers(ctx context.Context, arg GetTopServersParams) ([
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
+	if err = rows.Close(); err != nil {
+		return nil, fmt.Errorf("closing top servers rows: %w", err)
+	}
 
+	// A proxied call always carries the stable fronting mcp_server_id, but
+	// older rows and tools with non-URN-safe names can lack tool_source. Those
+	// traces are intentionally absent from normalized_events, so fold this
+	// direct-only fallback in without double-counting rows already classified
+	// by tool_source or toolset_slug.
+	proxiedSB := sq.Select(
+		"mcp_server_id",
+		"count() AS tool_call_count",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where("event_source != 'hook'").
+		Where("startsWith(gram_urn, 'tools:')").
+		Where("mcp_server_id != ''").
+		Where("tool_source = ''").
+		Where("toolset_slug = ''").
+		GroupBy("mcp_server_id").
+		OrderBy("tool_call_count DESC")
+	if arg.Limit > 0 {
+		proxiedSB = proxiedSB.Limit(uint64(arg.Limit))
+	}
+	proxiedQuery, proxiedArgs, err := proxiedSB.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building proxied top servers query: %w", err)
+	}
+	proxiedRows, err := q.conn.Query(ctx, proxiedQuery, proxiedArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer proxiedRows.Close()
+
+	labelsByID := make(map[string]string, len(arg.MCPServerMatchers))
+	for _, matcher := range arg.MCPServerMatchers {
+		if matcher.MCPServerID != "" {
+			labelsByID[matcher.MCPServerID] = matcher.TargetLabel
+		}
+	}
+	for proxiedRows.Next() {
+		var serverID string
+		var callCount uint64
+		if err = proxiedRows.Scan(&serverID, &callCount); err != nil {
+			return nil, fmt.Errorf("scanning proxied top server row: %w", err)
+		}
+		label := labelsByID[serverID]
+		if label == "" {
+			label = serverID
+		}
+		merged := false
+		for i := range servers {
+			if servers[i].ServerName == label {
+				servers[i].ToolCallCount += callCount
+				merged = true
+				break
+			}
+		}
+		if !merged {
+			servers = append(servers, TopServer{ServerName: label, ToolCallCount: callCount})
+		}
+	}
+	if err = proxiedRows.Err(); err != nil {
+		return nil, err
+	}
+
+	sort.SliceStable(servers, func(i, j int) bool {
+		if servers[i].ToolCallCount != servers[j].ToolCallCount {
+			return servers[i].ToolCallCount > servers[j].ToolCallCount
+		}
+		return servers[i].ServerName < servers[j].ServerName
+	})
+	if arg.Limit > 0 && len(servers) > arg.Limit {
+		servers = servers[:arg.Limit]
+	}
 	return servers, nil
 }
 
@@ -7794,8 +8025,90 @@ func (q *Queries) GetActiveCounts(ctx context.Context, arg GetActiveCountsParams
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
+	if err = rows.Close(); err != nil {
+		return nil, fmt.Errorf("closing active counts rows: %w", err)
+	}
 
 	return &counts, nil
+}
+
+// GetUnifiedActiveServerCount counts distinct MCP server identities across the
+// same hosted, proxied, tunneled, gateway, and hook-observed attribution used
+// by GetTopServers without materializing the server list.
+func (q *Queries) GetUnifiedActiveServerCount(ctx context.Context, arg GetTopServersParams) (uint64, error) {
+	normalizedSB, err := toolUsageFilteredSelect(projectOverviewServerFilter(arg), "target_type", "target_id")
+	if err != nil {
+		return 0, fmt.Errorf("building active servers source: %w", err)
+	}
+	normalizedQuery, normalizedArgs, err := normalizedSB.ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("building active servers query: %w", err)
+	}
+
+	mcpServerIDs := make([]string, 0, len(arg.MCPServerMatchers))
+	targetTypes := make([]string, 0, len(arg.MCPServerMatchers))
+	targetIDs := make([]string, 0, len(arg.MCPServerMatchers))
+	for _, matcher := range arg.MCPServerMatchers {
+		if matcher.MCPServerID == "" {
+			continue
+		}
+		mcpServerIDs = append(mcpServerIDs, matcher.MCPServerID)
+		targetTypes = append(targetTypes, matcher.TargetType)
+		targetIDs = append(targetIDs, matcher.TargetID)
+	}
+
+	proxiedSB := sq.Select()
+	if len(mcpServerIDs) > 0 {
+		proxiedSB = proxiedSB.
+			Column("transform(mcp_server_id, ?, ?, ?) AS target_type", mcpServerIDs, targetTypes, ToolUsageTargetTypeHostedMCP).
+			Column("transform(mcp_server_id, ?, ?, mcp_server_id) AS target_id", mcpServerIDs, targetIDs)
+	} else {
+		proxiedSB = proxiedSB.
+			Column("? AS target_type", ToolUsageTargetTypeHostedMCP).
+			Column("mcp_server_id AS target_id")
+	}
+	proxiedSB = proxiedSB.
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where("event_source != 'hook'").
+		Where("startsWith(gram_urn, 'tools:')").
+		Where("mcp_server_id != ''").
+		Where("tool_source = ''").
+		Where("toolset_slug = ''").
+		GroupBy("target_type", "target_id")
+	proxiedQuery, proxiedArgs, err := proxiedSB.ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("building proxied active servers query: %w", err)
+	}
+
+	query := fmt.Sprintf(
+		"SELECT uniqExact(tuple(target_type, target_id)) AS active_servers_count FROM ((%s) UNION ALL (%s))",
+		normalizedQuery, proxiedQuery,
+	)
+	args := make([]any, 0, len(normalizedArgs)+len(proxiedArgs))
+	args = append(args, normalizedArgs...)
+	args = append(args, proxiedArgs...)
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("querying active server count: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		return 0, nil
+	}
+	var count uint64
+	if err = rows.Scan(&count); err != nil {
+		return 0, fmt.Errorf("scanning active server count: %w", err)
+	}
+	if err = rows.Err(); err != nil {
+		return 0, fmt.Errorf("reading active server count rows: %w", err)
+	}
+	if err = rows.Close(); err != nil {
+		return 0, fmt.Errorf("closing active server count rows: %w", err)
+	}
+	return count, nil
 }
 
 // ListRecentHookEventsForOnboardingParams contains the parameters for the

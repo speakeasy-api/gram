@@ -6,9 +6,11 @@ import type {
 import {
   BLOCK_LEVEL,
   complementTools,
+  effectiveForeignGrants,
   inheritedGrants,
-  foreignGrants,
   isUnnarrowed,
+  openedElsewhere,
+  outranksInheritedBlocks,
   reachableTools,
   SCOPE_ROWS,
   type AccessRow,
@@ -35,6 +37,10 @@ import { LEVEL_VERB, narrowingLabel } from "./serverAudience";
  * one server is a subtraction instead: a block naming this server, at the
  * level for the scope being taken away. The grant stays where it was, and
  * every other server is untouched.
+ *
+ * The reverse needs no block to lift: a person's own rule naming this server
+ * outranks a block reaching them through a role or everyone, so giving them
+ * access here is written as their own rule.
  */
 export interface AudienceWrite {
   entries: SetResourceAudienceEntry[];
@@ -147,15 +153,13 @@ export function allowWrite(
   scope: ScopeKey,
   resourceName?: string,
 ): AudienceWrite {
-  const cell = row.cells[scope];
   const base = withoutOwnBlock(direct, row, scope);
   // Something else may already open this whole. Lifting the block is then
   // the entire edit, and this row's own narrower rule goes with it: a grant
   // alongside an unnarrowed one takes nothing away and only muddies the line.
-  const openedElsewhere = cell.grants.some(
-    (grant) => grant !== cell.own && isUnnarrowed(grant),
-  );
-  const entries = openedElsewhere
+  // A grant a role's or everyone's block trims does not open it whole; this
+  // row's own rule, which outranks that block, has to.
+  const entries = openedElsewhere(row, scope)
     ? withoutRules(base, [
         ruleId({ principalUrn: row.principalUrn, level: scope }),
       ])
@@ -183,7 +187,6 @@ export function revokeScopeWrite(
   scope: ScopeKey,
   resourceName?: string,
 ): AudienceWrite {
-  const cell = row.cells[scope];
   const cleared = withoutRules(direct, [
     ruleId({ principalUrn: row.principalUrn, level: scope }),
   ]);
@@ -191,8 +194,9 @@ export function revokeScopeWrite(
   const said = `${row.displayName} can no longer ${LEVEL_VERB[scope]} ${server}.`;
 
   // Everything granting this line that dropping the row's own rule leaves
-  // standing. Without a block, the line would still be open.
-  const remaining = cell.grants.filter((grant) => grant !== cell.own);
+  // standing. Without a block, the line would still be open. A grant a role's
+  // or everyone's block already cancels needs no second block.
+  const remaining = effectiveForeignGrants(row, scope);
   if (remaining.length === 0) return { entries: cleared, message: said };
 
   return {
@@ -225,9 +229,8 @@ export function narrowWrite(
     return revokeScopeWrite(direct, row, "use", resourceName);
   }
 
-  // An annotation choice is always stored as a block on the annotations left
-  // out, never as a grant naming the ones kept. The two are not the same: a
-  // grant reaches only the tools carrying one of its annotations, so a tool
+  // An annotation choice subtracts the annotations left out. An allow
+  // naming annotations reaches only tools carrying one of them, so a tool
   // annotated with nothing at all would silently stop being reachable, while
   // the block leaves it alone. The block also keeps covering tools added
   // later, which is the reason to restrict by annotation rather than by name,
@@ -241,15 +244,31 @@ export function narrowWrite(
     if (blockedDispositions.length === 0) {
       return allowWrite(direct, row, "use", resourceName);
     }
+    // Restore the selected classes past inherited blocks without granting
+    // unannotated tools that the inherited policy still excludes.
+    const needsOverride =
+      outranksInheritedBlocks(row) &&
+      !row.cells.use.direct.some(isUnnarrowed) &&
+      row.cells.use.blocks.some(
+        (block) => block.principalUrn !== row.principalUrn,
+      );
+    const withChoice = needsOverride
+      ? withRule(base, row.principalUrn, "use", {
+          tools: [],
+          dispositions: DISPOSITIONS.filter((disposition) =>
+            next.dispositions.includes(disposition),
+          ),
+        })
+      : base;
     return {
-      entries: withRule(base, row.principalUrn, BLOCK_LEVEL.use, {
+      entries: withRule(withChoice, row.principalUrn, BLOCK_LEVEL.use, {
         dispositions: blockedDispositions,
       }),
       message: `${reachMessage(row, server, `call ${label} on`)} Other servers are unchanged.`,
     };
   }
 
-  if (foreignGrants(row, "use").length === 0) {
+  if (effectiveForeignGrants(row, "use").length === 0) {
     return {
       // A rule stores tools or annotations, never both — the endpoint refuses
       // the pair — and an annotation choice never reaches here, so this is
@@ -306,8 +325,23 @@ export function narrowWrite(
     return unchangedWrite(direct, server);
   }
 
+  // A block reaching this person through a role or everyone may be standing
+  // between them and some of the chosen tools. Their own rule naming those
+  // tools outranks it, so the choice is written as that rule, with the
+  // subtraction still trimming whatever the other grants open beyond it.
+  const cell = row.cells.use;
+  const reachesThroughBlock =
+    outranksInheritedBlocks(row) &&
+    cell.blocks.some((block) => block.principalUrn !== row.principalUrn);
+  const withChoice = reachesThroughBlock
+    ? withRule(base, row.principalUrn, "use", {
+        tools: next.tools,
+        dispositions: [],
+      })
+    : base;
+
   return {
-    entries: withRule(base, row.principalUrn, BLOCK_LEVEL.use, {
+    entries: withRule(withChoice, row.principalUrn, BLOCK_LEVEL.use, {
       tools: blocked,
     }),
     message: `${reachMessage(row, server, `call ${label} on`)} Other servers are unchanged.`,
@@ -424,12 +458,19 @@ export function narrowingSeed(
   // an inherited name list with nothing chosen, and saving that revoked it.
   // The names a block takes away come off, or saving an untouched dialog would
   // hand them straight back.
-  const blockedTools = new Set(
-    cell.blocks.flatMap((block) => block.tools ?? []),
-  );
-  const grantedTools = [
+  const namedTools = [
     ...new Set(cell.grants.flatMap((grant) => grant.tools ?? [])),
-  ].filter((tool) => !blockedTools.has(tool));
+  ];
+  // With no catalogue, resolve only the known dimension. Unknown annotations
+  // cannot remove a named tool; its stored annotation blocks survive the save.
+  const grantedTools =
+    reachableTools(
+      cell,
+      namedTools.map((name) => ({
+        name,
+        annotations: [],
+      })),
+    ) ?? [];
   if (grantedTools.length > 0) return { tools: grantedTools, dispositions: [] };
 
   // No catalogue to resolve against, so the seed is said in the vocabulary the
@@ -437,16 +478,13 @@ export function narrowingSeed(
   // block takes away. Reading the grant alone would open the dialog with
   // nothing chosen on a row whose line plainly reads "all tools except
   // destructive tools" — and saving that would revoke the line.
-  const blocked = new Set(
-    cell.blocks.flatMap((block) => block.dispositions ?? []),
-  );
   const granted = cell.grants.some(isUnnarrowed)
     ? DISPOSITIONS
     : [...new Set(cell.grants.flatMap((grant) => grant.dispositions ?? []))];
-  return {
-    tools: [],
-    dispositions: granted.filter(
-      (disposition) => !blocked.has(disposition),
-    ) as string[],
-  };
+  const dispositions = granted.filter(
+    (disposition) =>
+      (reachableTools(cell, [{ name: "", annotations: [disposition] }]) ?? [])
+        .length > 0,
+  );
+  return { tools: [], dispositions };
 }

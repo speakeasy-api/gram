@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import { ClientIdStep, CreateConnectionForm } from "./OktaConnectionForms";
+import { ClientIdForm, CreateConnectionForm } from "./OktaConnectionForms";
 import { makeConnection } from "./testFixtures";
 
 const mutation = vi.hoisted(() => ({
@@ -106,10 +106,10 @@ describe("CreateConnectionForm", () => {
   });
 });
 
-describe("ClientIdStep", () => {
+describe("ClientIdForm", () => {
   it("guards empty and pending client ID submissions", () => {
     const connection = makeConnection({ clientIdSubmitted: false });
-    const { rerender } = render(<ClientIdStep connection={connection} />, {
+    const { rerender } = render(<ClientIdForm connection={connection} />, {
       wrapper: Wrapper,
     });
     const input = screen.getByLabelText("Client ID");
@@ -135,7 +135,7 @@ describe("ClientIdStep", () => {
       }),
     );
     mutation.isPending = true;
-    rerender(<ClientIdStep connection={connection} />);
+    rerender(<ClientIdForm connection={connection} />);
     expect(input.hasAttribute("disabled")).toBe(true);
     fireEvent.keyDown(input, { key: "Enter" });
     expect(mutation.mutate).toHaveBeenCalledTimes(1);

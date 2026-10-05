@@ -12,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	apprepo "github.com/speakeasy-api/gram/server/internal/oktaapplications/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
 )
 
@@ -43,20 +42,7 @@ func TestApplicationsSync_WaitingApplyReadsCommittedWatermark(t *testing.T) {
 	// Observe the actual lock wait, not a sleep or merely goroutine startup.
 	// The watermark must still be old when the lock statement takes its
 	// snapshot; only then do we commit the newer watermark and release it.
-	require.Eventually(t, func() bool {
-		var waiting bool
-		err := si.conn.conn.QueryRow( //nolint:glint // notestingrawsql: pg_blocking_pids is a PostgreSQL test synchronization primitive unavailable to SQLc generation
-			ctx, `
-			SELECT EXISTS (
-				SELECT 1 FROM pg_stat_activity
-				WHERE datname = current_database()
-				  AND query LIKE '-- name: LockSyncConnection%'
-				  AND wait_event_type = 'Lock'
-				  AND $1::integer = ANY(pg_blocking_pids(pid))
-			)`, blockerPID).Scan(&waiting)
-		require.NoError(t, err)
-		return waiting
-	}, 5*time.Second, 10*time.Millisecond)
+	testenv.WaitForQueryBlockedBy(t, ctx, si.conn.conn, blockerPID, "-- name: LockSyncConnection :one\n%")
 
 	watermark := pgtype.Timestamptz{Time: time.Now().Add(time.Hour).UTC().Truncate(time.Microsecond), Valid: true}
 	changed, err := apprepo.New(newer).MarkApplicationsSynced(ctx, apprepo.MarkApplicationsSyncedParams{
@@ -87,18 +73,6 @@ func TestApplicationsSync_WaitingApplyReadsCommittedWatermark(t *testing.T) {
 	require.True(t, watermark.Time.Equal(got.Time), "the newer watermark must remain intact")
 }
 
-// waitForLockWait blocks until a session running the named query is waiting
-// on a row lock; the second waiter on a tuple reports the first as its
-// blocker, so the holder is not asserted.
-func waitForLockWait(t *testing.T, ctx context.Context, si *serviceInstance, queryName string) {
-	t.Helper()
-	require.Eventually(t, func() bool {
-		waiting, err := testrepo.New(si.conn.conn).IsQueryBlockedOnLockFixture(ctx, "-- name: "+queryName+" %")
-		require.NoError(t, err)
-		return waiting
-	}, 5*time.Second, 10*time.Millisecond)
-}
-
 func TestApplicationsSync_RevokeBetweenLoadAndRunCreationLeavesNoRun(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
@@ -124,11 +98,11 @@ func TestApplicationsSync_RevokeBetweenLoadAndRunCreationLeavesNoRun(t *testing.
 		view, err = si.svc.Revoke(ctx, &gen.RevokePayload{SessionToken: nil, ID: verified.ID})
 		revoked <- err
 	}()
-	waitForLockWait(t, ctx, si, "LockOktaIdentityProviderConnection")
+	testenv.WaitForQueryBlockedBy(t, ctx, si.conn.conn, testenv.BackendPID(holder), "-- name: LockOktaIdentityProviderConnection :one\n%")
 
 	ran := make(chan error, 1)
 	go func() { ran <- syncer.Run(ctx, id, false) }()
-	waitForLockWait(t, ctx, si, "LockSyncConnection")
+	testenv.WaitForQueryBlockedBy(t, ctx, si.conn.conn, testenv.BackendPID(holder), "-- name: LockSyncConnection :one\n%")
 
 	require.NoError(t, holder.Commit(ctx))
 	for _, done := range []chan error{revoked, ran} {

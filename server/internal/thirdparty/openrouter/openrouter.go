@@ -1570,12 +1570,20 @@ func (o *OpenRouter) GetModelUsage(ctx context.Context, generationID string, org
 	}, nil
 }
 
+// HasSignal reports whether the response carried a usage payload at all. The
+// zero Usage is indistinguishable from one the provider omitted, so a caller
+// that meters or measures tokens checks this before trusting a count.
+func (u Usage) HasSignal() bool {
+	return u.PromptTokens != 0 || u.CompletionTokens != 0 || u.TotalTokens != 0 ||
+		u.Cost != nil || u.CostDetails != nil || u.PromptTokensDetails != nil || u.CompletionTokensDetails != nil
+}
+
 // ToModelUsage projects the inline OpenRouter usage payload into the
 // billing-facing ModelUsage shape. Returns nil when the payload has no
 // signal (no tokens and no cost) — e.g. an aborted stream that never
 // reached the final usage chunk.
 func (u Usage) ToModelUsage(model string) *ModelUsage {
-	if u.PromptTokens == 0 && u.CompletionTokens == 0 && u.TotalTokens == 0 && u.Cost == nil && u.CostDetails == nil && u.PromptTokensDetails == nil && u.CompletionTokensDetails == nil {
+	if !u.HasSignal() {
 		return nil
 	}
 

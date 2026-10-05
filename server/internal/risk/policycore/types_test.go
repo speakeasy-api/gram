@@ -62,6 +62,23 @@ func TestMCPScopeAppliesToolRuleAndAllServersOverrides(t *testing.T) {
 	require.False(t, selected.Applies(serverID, "list", nil, nil))
 }
 
+func TestMCPScopeAppliesWildcardToolsIgnoresToolRule(t *testing.T) {
+	t.Parallel()
+
+	serverID := uuid.New()
+	scope := &MCPScope{
+		ToolAnnotations: []string{"readOnlyHint"},
+		Servers: []MCPServerScope{{
+			MCPServerID: serverID,
+			Tools:       []string{AllToolsWildcard},
+		}},
+	}
+
+	require.True(t, scope.Applies(serverID, "delete_everything", nil, nil),
+		"wildcard tools match unconditionally, bypassing the annotation rule")
+	require.True(t, scope.Applies(serverID, "anything", nil, nil))
+}
+
 func TestUnmarshalMCPScopeNormalizesEmptyAndFailsClosed(t *testing.T) {
 	t.Parallel()
 

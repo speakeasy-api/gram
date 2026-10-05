@@ -472,7 +472,7 @@ func (e *SessionEnricher) jwtAccessToken(ctx context.Context, target enrichmentT
 	var all map[string]json.RawMessage
 	header, err := verifyIssuerSignedJWTWithKeyPolicy(ctx, e.keys, target.jwksURI, target.issuerID.String(), transport, accessToken, jwks.AllowedSignatureAlgorithms(), validateJWTVerificationKeyStrength, &claims, &all)
 	if err != nil {
-		if ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || errors.Is(err, errJWTKeySetUnavailable) {
+		if ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || errors.Is(err, ErrJWTKeySetUnavailable) {
 			return out
 		}
 		out.ran = true
@@ -512,7 +512,10 @@ func (e *SessionEnricher) jwtAccessToken(ctx context.Context, target enrichmentT
 	}
 	// RFC 9068 §4: require the expected resource audience (Gram fallback above).
 	if expectedAudience == "" || !claims.Audience.Contains(expectedAudience) {
-		e.rejectJWTAccessToken(ctx, target, &out, "audience mismatch")
+		e.rejectJWTAccessToken(ctx, target, &out, "audience mismatch",
+			attr.SlogOAuthExpectedAudience(expectedAudience),
+			attr.SlogOAuthTokenAudience(claims.Audience),
+		)
 		return out
 	}
 	// RFC 9068 §4 requires the issuer identifier to match exactly.
@@ -581,9 +584,9 @@ func jwtAccessTokenType(header jose.Header) (typ string, present bool, err error
 	return typ, true, nil
 }
 
-func (e *SessionEnricher) rejectJWTAccessToken(ctx context.Context, target enrichmentTarget, out *jwtAccessTokenResult, reason string) {
+func (e *SessionEnricher) rejectJWTAccessToken(ctx context.Context, target enrichmentTarget, out *jwtAccessTokenResult, reason string, attrs ...slog.Attr) {
 	out.fail(reason)
-	logIdentityFailure(ctx, e.logger, "jwt access token rejected", errors.New(reason), attr.SlogOAuthIssuer(target.issuerURL))
+	logIdentityFailure(ctx, e.logger, "jwt access token rejected", errors.New(reason), append([]slog.Attr{attr.SlogOAuthIssuer(target.issuerURL)}, attrs...)...)
 }
 
 // rejectJWTForOtherSubject discards a verified token naming someone other than subject: it says nothing about this grant, its scope included.
@@ -697,7 +700,7 @@ func (e *SessionEnricher) decodeIntrospection(ctx context.Context, target enrich
 	if typ, _ := header.ExtraHeaders[jose.HeaderType].(string); !strings.EqualFold(strings.TrimPrefix(typ, "application/"), "token-introspection+jwt") {
 		return nil, errors.New("introspection jwt typ is not token-introspection+jwt")
 	}
-	if !issuerURLsEqual(claims.Issuer, target.issuerURL) {
+	if !IssuerURLsEqual(claims.Issuer, target.issuerURL) {
 		return nil, fmt.Errorf("introspection jwt issuer %q is not the grant's issuer", truncateForMessage(claims.Issuer))
 	}
 	now := time.Now()

@@ -63,6 +63,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
@@ -83,6 +84,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -106,6 +108,7 @@ type IdentityResolver interface {
 
 type Service struct {
 	federatedLoginConsumer    FederatedLoginConsumer
+	identityChainer           identityChainer
 	logger                    *slog.Logger
 	tracer                    trace.Tracer
 	metrics                   *mcpmetrics.Metrics
@@ -122,6 +125,11 @@ type Service struct {
 	auth                      *auth.Auth
 	env                       toolconfig.EnvironmentLoader
 	serverURL                 *url.URL
+	// callbackOrigins pin URLs that external systems store: the IdP callback
+	// sent to WorkOS and to federated customer IdPs, and assistants' CIMD
+	// client IDs. They stay fixed when the server URL moves. Set by
+	// SetCallbackOrigins; a nil Outbound falls back to the server URL.
+	callbackOrigins remotesessions.CallbackOrigins
 	// authenticationHostBaseURL is the authentication host's base URL, empty
 	// when none is configured. Set by AttachAuthenticationHost.
 	authenticationHostBaseURL string
@@ -177,7 +185,10 @@ type Service struct {
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
 	remoteLoginCache       cache.TypedCacheObject[remotesessions.RemoteLoginState]
-	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
+	// remoteLoginHopCache holds the single-use stops of the remote login
+	// browser hop onto a remote client's different callback host.
+	remoteLoginHopCache   cache.TypedCacheObject[remoteLoginHop]
+	userSessionGrantCache cache.TypedCacheObject[UserSessionGrant]
 	// userSessionRefreshReplayCache retains the encrypted rotation outcome.
 	userSessionRefreshReplayCache cache.TypedCacheObject[userSessionRefreshReplay]
 
@@ -346,6 +357,13 @@ type mcpInputs struct {
 	// a different member's toolset slug — keying by slug would never find the
 	// record the handshake wrote.
 	clientInfoScope string
+	// toolsetID is the described toolset's id when the builder loaded its
+	// row, so describing the server needs no second lookup by slug. Invalid
+	// for internal callers, which carry only the slug and never handshake.
+	toolsetID uuid.NullUUID
+	// toolsetIsPublic is the described toolset's own mcp_is_public flag,
+	// loaded with toolsetID. Nil reads as private.
+	toolsetIsPublic *bool
 	// tags is the parsed ?tags= filter. When non-empty, tools/list and
 	// tools/call expose only tools whose variation row carries one of these
 	// tags. Empty means no filtering.
@@ -404,6 +422,7 @@ func NewService(
 	tunnelRoutes route.Store,
 	tunnelForwardToken string,
 	tunnelGatewayCIDRs []string,
+	callerAssertions *mcpauthz.Issuer,
 	redisClient *redis.Client,
 	tunnelPublicConfig TunnelPublicConfig,
 	metaRuntimeConfig MetaRuntimeConfig,
@@ -434,6 +453,7 @@ func NewService(
 
 	service := &Service{
 		federatedLoginConsumer:    nil,
+		identityChainer:           nil,
 		consentBindings:           nil,
 		logger:                    logger,
 		tracer:                    tracer,
@@ -453,6 +473,7 @@ func NewService(
 		auth:                      auth.New(logger, db, sessions, authzEngine),
 		env:                       env,
 		serverURL:                 serverURL,
+		callbackOrigins:           remotesessions.CallbackOrigins{Outbound: nil, Registration: nil},
 		authenticationHostBaseURL: "",
 		siteURL:                   siteURL,
 		posthog:                   posthog,
@@ -495,7 +516,8 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		remoteLoginCache: cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger.With(attr.SlogCacheNamespace("remote_login")), cacheImpl, cache.SuffixNone),
+		remoteLoginCache:    cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger.With(attr.SlogCacheNamespace("remote_login")), cacheImpl, cache.SuffixNone),
+		remoteLoginHopCache: cache.NewTypedObjectCache[remoteLoginHop](logger.With(attr.SlogCacheNamespace("remote_login_hop")), cacheImpl, cache.SuffixNone),
 		userSessionGrantCache: cache.NewTypedObjectCache[UserSessionGrant](
 			logger.With(attr.SlogCacheNamespace("user_session_grant")),
 			cacheImpl,
@@ -527,11 +549,39 @@ func NewService(
 		autoVerifications:    newAutoVerifications(),
 		remoteSessionRecheck: newRemoteSessionRecheck(metaRuntimeConfig.withDefaults().RecheckInterval, redisClient, meterProvider),
 		remoteProxyManager:   remoteProxyManager,
-		tunnelManager:        newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
+		tunnelManager:        newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs, callerAssertions),
 		tunnelPublic:         newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:          metaRuntimeConfig.withDefaults(),
 	}
 	return service, nil
+}
+
+// SetCallbackOrigins pins the IdP callback URLs and assistants' CIMD client
+// IDs to the origins remote session clients are pinned to: origins.Outbound,
+// or a federated trusted client's recorded callback origin.
+func (s *Service) SetCallbackOrigins(origins remotesessions.CallbackOrigins) {
+	s.callbackOrigins = origins
+}
+
+// outboundOrigin is the pinned outbound origin of the WorkOS IdP callback and
+// of federated trusted clients with no recorded callback origin. It falls back
+// to the server URL. It pins only URLs Gram sends to external systems, never
+// an authorization server issuer: shared-mode issuers carry their own pinned
+// issuer (<host>/oauth/usi/{id}) and must not be routed through it.
+func (s *Service) outboundOrigin() *url.URL {
+	if s.callbackOrigins.Outbound != nil {
+		return s.callbackOrigins.Outbound
+	}
+	return s.serverURL
+}
+
+// federatedCallbackOrigin is the origin of the federated IdP callback for a
+// trusted client: its recorded callback_base_url, so it shares a host with
+// the client's remote_login_callback, or outboundOrigin when none is recorded.
+func (s *Service) federatedCallbackOrigin(provider *remotesessions.FederatedProvider) *url.URL {
+	origins := s.callbackOrigins
+	origins.Outbound = s.outboundOrigin()
+	return origins.ForClient(provider.CallbackBaseURL())
 }
 
 func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverName string) string {
@@ -540,7 +590,19 @@ func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverN
 		return ""
 	}
 
-	return mcpaccess.RequestAccessURL(s.siteURL, authCtx.OrganizationSlug, mcpaccess.RequestAccessURLParams{
+	// Link to the platform host the request arrived on: session cookies are
+	// host-only, so a user on an extra platform host would otherwise land on
+	// the canonical host logged out.
+	dashboardURL := s.siteURL
+	if s.serverURL != nil {
+		if base := requestorigin.PlatformHostBaseURL(ctx, s.serverURL.String(), ""); base != "" {
+			if u, err := url.Parse(base); err == nil {
+				dashboardURL = u
+			}
+		}
+	}
+
+	return mcpaccess.RequestAccessURL(dashboardURL, authCtx.OrganizationSlug, mcpaccess.RequestAccessURLParams{
 		Scope:        "mcp:connect",
 		ResourceID:   serverID,
 		ResourceName: serverName,
@@ -623,6 +685,9 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.ErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
+	// Both stops of the remote login browser hop: the bind stop on a remote
+	// client's callback host, and the confirm stop on the IdP callback host.
+	o11y.AttachHandler(mux, "GET", remoteLoginBindPath, oops.ErrHandle(service.logger, service.HandleRemoteLoginBind).ServeHTTP)
 	// Backwards-compat: remote_session_clients flagged LegacyCallbackUrl were
 	// registered upstream against the retired oauth_proxy_servers /oauth/callback.
 	// Keep it mounted so their responses forward into remote_login_callback.
@@ -758,24 +823,7 @@ func (s *Service) HandleOpenAIAppsChallenge(w http.ResponseWriter, r *http.Reque
 // SSE requests against toolset-backed servers, which never send
 // server-initiated messages — keeps the legacy 405.
 func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metadataService *mcpmetadata.Service) error {
-	var wantsHTML, wantsSSE bool
-	for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
-		mediatype, params, err := mime.ParseMediaType(mediaTypeFull)
-		if err != nil {
-			continue
-		}
-		// An explicit q=0 marks the media type as not acceptable (RFC 9110
-		// § 12.4.2) — never route toward a representation the client rejected.
-		if q, qErr := strconv.ParseFloat(params["q"], 64); qErr == nil && q == 0 {
-			continue
-		}
-		switch mediatype {
-		case "text/html", "application/xhtml+xml":
-			wantsHTML = true
-		case "text/event-stream":
-			wantsSSE = true
-		}
-	}
+	wantsHTML, wantsSSE := getServerAccept(r.Header.Get("Accept"))
 
 	if wantsHTML {
 		// Intentionally NOT gated by enforceCustomDomainLockdown: the
@@ -801,6 +849,39 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 	}
 
 	return oops.E(oops.CodeMethodNotAllowed, nil, "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication.")
+}
+
+// ServesInstallPage reports whether HandleGetServer answers r with the HTML
+// install page. HTML takes precedence over SSE there, so such a request can
+// never open the Streamable HTTP stream; MCPSecurity uses this to let browser
+// navigations from other sites reach the page.
+func ServesInstallPage(r *http.Request) bool {
+	if r.Method != http.MethodGet || !strings.HasPrefix(r.URL.Path, "/mcp/") {
+		return false
+	}
+	wantsHTML, _ := getServerAccept(r.Header.Get("Accept"))
+	return wantsHTML
+}
+
+func getServerAccept(accept string) (wantsHTML, wantsSSE bool) {
+	for mediaTypeFull := range strings.SplitSeq(accept, ",") {
+		mediatype, params, err := mime.ParseMediaType(mediaTypeFull)
+		if err != nil {
+			continue
+		}
+		// An explicit q=0 marks the media type as not acceptable (RFC 9110
+		// § 12.4.2) — never route toward a representation the client rejected.
+		if q, qErr := strconv.ParseFloat(params["q"], 64); qErr == nil && q == 0 {
+			continue
+		}
+		switch mediatype {
+		case "text/html", "application/xhtml+xml":
+			wantsHTML = true
+		case "text/event-stream":
+			wantsSSE = true
+		}
+	}
+	return wantsHTML, wantsSSE
 }
 
 // HandleDeleteServer handles DELETE requests to /mcp/{mcpSlug} — Streamable
@@ -1107,7 +1188,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		callerToolSelection = gateToolSelection
 	}
 
-	isHostedToolsCall := req.Method == "tools/call" && cfg.mcpServerID != nil
+	isHostedToolsCall := req.Method == mcpversions.MethodToolsCall && cfg.mcpServerID != nil
 	resolvePendingIssuerGate := func() error {
 		if pendingIssuerGate == nil {
 			return nil
@@ -1265,7 +1346,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	sessionID := parseMcpSessionID(r.Header)
-	if req.Method == "initialize" {
+	if initializeNegotiable(&req, protocolVersion) {
 		w.Header().Set("Mcp-Session-Id", sessionID)
 	}
 
@@ -1313,6 +1394,8 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		metaMcpServerID:          "",
 		clientInfoScope:          "",
 		skipProxyTools:           false,
+		toolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		toolsetIsPublic:          new(toolset.McpIsPublic),
 		tags:                     tags,
 		protocolVersion:          protocolVersion,
 		identityCoverageRecorded: hostedCoverageRecorded,
@@ -1681,30 +1764,37 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		}()
 	}
 
+	if !methodAvailable(req, payload.protocolVersion, mcpversions.SupportedHostedToolset()) {
+		return nil, unavailableMethod(req)
+	}
+
 	switch req.Method {
-	case "ping":
+	case mcpversions.MethodPing:
 		return handlePing(ctx, s.logger, req.ID, serverInfoHostedToolset)
-	case "initialize":
-		return handleInitialize(ctx, s.logger, s.metrics, req, payload, s.posthog, s.toolsetsRepo, s.mcpMetadataRepo, s.sessionClientInfo)
-	case "notifications/initialized", "notifications/cancelled":
+	case mcpversions.MethodServerDiscover:
+		description := describeHostedServer(ctx, s.logger, s.mcpMetadataRepo, payload)
+		return handleServerDiscover(ctx, s.logger, req.ID, description, mcpversions.SupportedHostedToolset())
+	case mcpversions.MethodInitialize:
+		return handleInitialize(ctx, s.logger, s.metrics, req, payload, s.posthog, s.mcpMetadataRepo, s.sessionClientInfo)
+	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
-	case "tools/list":
+	case mcpversions.MethodToolsList:
 		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
-	case "tools/call":
+	case mcpversions.MethodToolsCall:
 		recordToolsCallIdentityCoverage(ctx, s.identityCoverage, payload.organizationID, payload)
 		return handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
-	case "prompts/list":
+	case mcpversions.MethodPromptsList:
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
-	case "prompts/get":
+	case mcpversions.MethodPromptsGet:
 		return handlePromptsGet(ctx, s.logger, s.db, payload, req, s.scanEvaluator)
-	case "resources/list":
+	case mcpversions.MethodResourcesList:
 		return handleResourcesList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
-	case "resources/templates/list":
+	case mcpversions.MethodResourcesTemplatesList:
 		return handleResourcesTemplatesList(ctx, s.logger, req)
-	case "resources/read":
+	case mcpversions.MethodResourcesRead:
 		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras, s.scanEvaluator)
 	default:
-		return nil, oops.E(oops.CodeNotImplemented, nil, "%s: %s", req.Method, oops.MCPCodeMethodNotFound.Message())
+		return nil, unavailableMethod(req)
 	}
 }
 
@@ -1861,7 +1951,7 @@ func (s *Service) HandleToolsList(
 	req := &rawRequest{
 		JSONRPC: "2.0",
 		ID:      mcpjsonrpc.NumberID(1),
-		Method:  "tools/list",
+		Method:  mcpversions.MethodToolsList,
 		Params:  json.RawMessage("{}"),
 	}
 
@@ -1933,7 +2023,7 @@ func (s *Service) HandleToolsCall(
 	req := &rawRequest{
 		JSONRPC: "2.0",
 		ID:      mcpjsonrpc.NumberID(1),
-		Method:  "tools/call",
+		Method:  mcpversions.MethodToolsCall,
 		Params:  params,
 	}
 

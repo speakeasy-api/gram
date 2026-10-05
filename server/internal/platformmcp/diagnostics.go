@@ -13,6 +13,7 @@ import (
 
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	telemetryservice "github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -27,12 +28,6 @@ const maxDiagnosticClients = 10
 
 // maxOverviewServers bounds the top-server list on a project overview.
 const maxOverviewServers = 10
-
-// overviewServerFetchLimit bounds how many hook-reported server names the
-// overview reads before folding them onto configured servers. One configured
-// server can be reported under several names, so more rows are read than are
-// returned; the fold is what the cap applies to.
-const overviewServerFetchLimit = maxOverviewServers * 5
 
 // maxOverviewProjects bounds the organization-wide scope comparison. When an
 // organization has more projects than this, the comparison covers a subset and
@@ -61,6 +56,7 @@ type DiagnosticsTelemetryReader interface {
 	GetTelemetryWatermark(ctx context.Context, arg telemetryrepo.GetTelemetryWatermarkParams) (int64, error)
 	GetOverviewSummary(ctx context.Context, arg telemetryrepo.GetOverviewSummaryParams) (*telemetryrepo.OverviewSummary, error)
 	GetActiveCounts(ctx context.Context, arg telemetryrepo.GetActiveCountsParams) (*telemetryrepo.ActiveCounts, error)
+	GetUnifiedActiveServerCount(ctx context.Context, arg telemetryrepo.GetTopServersParams) (uint64, error)
 	GetTopServers(ctx context.Context, arg telemetryrepo.GetTopServersParams) ([]telemetryrepo.TopServer, error)
 	GetSkillsSummary(ctx context.Context, arg telemetryrepo.GetSkillsSummaryParams) ([]telemetryrepo.SkillSummaryRow, error)
 	GetSkillBreakdown(ctx context.Context, arg telemetryrepo.GetSkillBreakdownParams) ([]telemetryrepo.SkillBreakdownRow, error)
@@ -93,6 +89,9 @@ type DiagnosticsService struct {
 	db              *pgxpool.Pool
 	telemetry       DiagnosticsTelemetryReader
 	drilldown       DrilldownTelemetryReader
+	toolUsage       ToolUsageBreakdownReader
+	userSearch      UserSearchReader
+	search          ToolCallSearchReader
 	references      *subjectReferenceCodec
 	sensitiveBudget OperationBudget
 	volume          DrilldownVolumeBudget
@@ -255,24 +254,46 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 	if err != nil {
 		return GetProjectOverviewOutput{}, fmt.Errorf("read project overview summary: %w", err)
 	}
+	hostedMCPMatchers, mcpServerMatchers, err := telemetryservice.LoadToolUsageMatchers(ctx, s.db, projectUUID)
+	if err != nil {
+		return GetProjectOverviewOutput{}, fmt.Errorf("list project overview MCP servers: %w", err)
+	}
+	metaMCPMatchers, err := telemetryservice.LoadMetaMCPMatchers(ctx, s.db, projectUUID)
+	if err != nil {
+		return GetProjectOverviewOutput{}, fmt.Errorf("list project overview gateways: %w", err)
+	}
 	counts, err := s.telemetry.GetActiveCounts(ctx, telemetryrepo.GetActiveCountsParams{
 		GramProjectID: input.ProjectID,
 		TimeStart:     start,
 		TimeEnd:       end,
 		// SessionMode is deliberately left false. It switches only the
 		// active-user expression, and under session capture that value is
-		// replaced below by the PostgreSQL chat-participant count; the
-		// active-server count it does not affect at all.
+		// replaced below by the PostgreSQL chat-participant count.
 		SessionMode: false,
 	})
 	if err != nil {
 		return GetProjectOverviewOutput{}, fmt.Errorf("read project overview active counts: %w", err)
 	}
+	activeServerCount, err := s.telemetry.GetUnifiedActiveServerCount(ctx, telemetryrepo.GetTopServersParams{
+		GramProjectID:     input.ProjectID,
+		TimeStart:         start,
+		TimeEnd:           end,
+		HostedMCPMatchers: hostedMCPMatchers,
+		MCPServerMatchers: mcpServerMatchers,
+		MetaMCPMatchers:   metaMCPMatchers,
+		Limit:             0,
+	})
+	if err != nil {
+		return GetProjectOverviewOutput{}, fmt.Errorf("read project overview active server count: %w", err)
+	}
 	servers, err := s.telemetry.GetTopServers(ctx, telemetryrepo.GetTopServersParams{
-		GramProjectID: input.ProjectID,
-		TimeStart:     start,
-		TimeEnd:       end,
-		Limit:         overviewServerFetchLimit,
+		GramProjectID:     input.ProjectID,
+		TimeStart:         start,
+		TimeEnd:           end,
+		HostedMCPMatchers: hostedMCPMatchers,
+		MCPServerMatchers: mcpServerMatchers,
+		MetaMCPMatchers:   metaMCPMatchers,
+		Limit:             maxOverviewServers * 5,
 	})
 	if err != nil {
 		return GetProjectOverviewOutput{}, fmt.Errorf("read project overview top servers: %w", err)
@@ -291,6 +312,7 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 	}
 
 	topServers := attributeTopServers(servers, resolver, maxOverviewServers)
+	activeServers := boundedCount(activeServerCount)
 	var activeUsers int64
 	if counts != nil {
 		activeUsers = boundedCount(counts.ActiveUsersCount)
@@ -315,7 +337,7 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 		// A project overview is project-scoped, so the watermark and the result
 		// answer for the same scope; observation is still taken from the
 		// result rather than inferred from the watermark.
-		Envelope:    newDataEnvelope(now, watermarkTime(watermark), window, overviewObserved(summary, counts, topServers, activeUsers)),
+		Envelope:    newDataEnvelope(now, watermarkTime(watermark), window, overviewObserved(summary, activeServers, topServers, activeUsers)),
 		MetricsMode: metricsMode(sessionMode),
 		ActiveUsers: NewSubjectCount(activeUsers),
 		TopServers:  topServers,
@@ -324,28 +346,22 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 		output.ToolCalls = boundedCount(summary.TotalToolCalls)
 		output.FailedToolCalls = boundedCount(summary.FailedToolCalls)
 	}
-	if counts != nil {
-		output.ActiveServers = boundedCount(counts.ActiveServersCount)
-	}
+	output.ActiveServers = activeServers
 	return output, nil
 }
 
 // overviewObserved reports whether the window holds any observation the
 // overview goes on to report. The gateway summary counts proxied and hosted
-// calls; hook-observed servers reach the overview only through the active
-// server count and the top-server list; under session capture the active-user
-// count is chat participants, whom no tool-call read sees. activeUsers is the
-// count the overview reports, whichever source it came from. Any of them being
-// nonzero is an observation, so no_observations is never asserted beside a
-// nonzero metric.
-func overviewObserved(summary *telemetryrepo.OverviewSummary, counts *telemetryrepo.ActiveCounts, topServers []ProjectOverviewServer, activeUsers int64) bool {
+// calls; hook-observed servers reach the overview through the unified active
+// server count and top-server list; under session capture the active-user count
+// is chat participants, whom no tool-call read sees. The counts passed here are
+// exactly those the overview reports, so no_observations is never asserted
+// beside a nonzero metric.
+func overviewObserved(summary *telemetryrepo.OverviewSummary, activeServers int64, topServers []ProjectOverviewServer, activeUsers int64) bool {
 	if summary != nil && (summary.TotalToolCalls > 0 || summary.FailedToolCalls > 0) {
 		return true
 	}
-	if counts != nil && (counts.ActiveServersCount > 0 || counts.ActiveUsersCount > 0) {
-		return true
-	}
-	return activeUsers > 0 || len(topServers) > 0
+	return activeServers > 0 || activeUsers > 0 || len(topServers) > 0
 }
 
 // GetMCPDiagnosticsInput names one configured MCP, using the same identity

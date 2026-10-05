@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -67,7 +68,10 @@ func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool
 		enc,
 	)
 	tracerProvider := testenv.NewTracerProvider(t)
+	validator, err := mcpregistry.LoadValidator()
+	require.NoError(t, err)
 	svc := &Service{
+		registry:        mcpregistry.New(conn, validator),
 		tracer:          tracerProvider.Tracer("admin_test"),
 		logger:          logger,
 		db:              conn,

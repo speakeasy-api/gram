@@ -21,6 +21,8 @@ import {
 } from "@/hooks/usePrivateMcpServerUrls";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import {
   MCPServerAvailabilityToggle,
   MCPServerStatusDropdown,
@@ -56,6 +58,7 @@ import {
   LayoutDashboard,
   Plug,
   Settings as SettingsIcon,
+  ShieldCheck,
   Users,
   Wrench,
 } from "lucide-react";
@@ -82,7 +85,7 @@ function remoteIdentityLabel(mode: IdentityMode): string {
     case "user":
       return "User";
     case "agent":
-      return "Agent";
+      return "Service Account";
     case "none":
       return "None";
   }
@@ -118,7 +121,7 @@ export function RemoteIdentitySummary({
       "A legacy pass-through Authorization header is still configured. Remove it under Custom Headers so this server's identity is the only thing sending a credential.";
   } else if (authenticationRequired) {
     problem =
-      "This server answers with an authentication challenge, but no identity is configured. Requests will keep failing until User or Agent Identity is set up.";
+      "This server answers with an authentication challenge, but no identity is configured. Requests will keep failing until User Identity or a Service Account is set up.";
   }
 
   let status: React.JSX.Element;
@@ -217,48 +220,45 @@ export function SidebarUrlRow({
   const display = url.replace(/^https?:\/\//, "");
   return (
     <div className="flex flex-col gap-1">
-      <DetailSidebarInfoLabel>{label}</DetailSidebarInfoLabel>
-      <div className="flex items-start gap-1">
-        <div className="min-w-0 flex-1">
-          {/* No delay: this is a reveal of text already on screen, not a
-            disclosure of extra information. */}
-          <HoverCard openDelay={0}>
-            <HoverCardTrigger asChild>
-              {/* The padding belongs to the trigger, not the text inside it:
-                the card aligns to the trigger's box, and matching insets are
-                what land the two texts on each other. The negative margin
-                cancels the indent so the URL stays flush with its label. */}
-              <span className="-mx-2 block px-2 py-1">
-                <Text
-                  variant="small"
-                  muted
-                  data-slot="sidebar-url-line"
-                  className="block truncate font-mono text-xs"
-                >
-                  {display}
-                </Text>
-              </span>
-            </HoverCardTrigger>
-            {/* The card carries the same insets as the line, so aligning their
-              boxes aligns their text: pull up by exactly the trigger's height
-              and the two land on each other. */}
-            <HoverCardContent
-              align="start"
-              side="bottom"
-              sideOffset={-24}
-              data-slot="sidebar-url-full"
-              className="w-auto max-w-none px-2 py-1 font-mono text-xs whitespace-nowrap duration-75"
-            >
-              {display}
-            </HoverCardContent>
-          </HoverCard>
-        </div>
-        <CopyButton
-          text={url}
-          size="xs"
-          tooltip={copyTooltip}
-          className="mt-[-2px] shrink-0"
-        />
+      {/* The copy button sits beside the label, not the URL: the hover card
+        that reveals the full URL would otherwise cover it. */}
+      <div className="flex items-center gap-1">
+        <DetailSidebarInfoLabel>{label}</DetailSidebarInfoLabel>
+        <CopyButton text={url} size="xs" tooltip={copyTooltip} />
+      </div>
+      <div className="min-w-0">
+        {/* No delay: this is a reveal of text already on screen, not a
+          disclosure of extra information. */}
+        <HoverCard openDelay={0}>
+          <HoverCardTrigger asChild>
+            {/* The padding belongs to the trigger, not the text inside it:
+              the card aligns to the trigger's box, and matching insets are
+              what land the two texts on each other. The negative margin
+              cancels the indent so the URL stays flush with its label. */}
+            <span className="-mx-2 block px-2 py-1">
+              <Text
+                variant="small"
+                muted
+                data-slot="sidebar-url-line"
+                className="block truncate font-mono text-xs"
+              >
+                {display}
+              </Text>
+            </span>
+          </HoverCardTrigger>
+          {/* The card carries the same insets as the line, so aligning their
+            boxes aligns their text: pull up by exactly the trigger's height
+            and the two land on each other. */}
+          <HoverCardContent
+            align="start"
+            side="bottom"
+            sideOffset={-24}
+            data-slot="sidebar-url-full"
+            className="w-auto max-w-none px-2 py-1 font-mono text-xs whitespace-nowrap duration-75"
+          >
+            {display}
+          </HoverCardContent>
+        </HoverCard>
       </div>
     </div>
   );
@@ -281,42 +281,13 @@ export function McpServerCardStatus({
   );
 }
 
-function SidebarUrl({
-  label,
-  url,
-  copyTooltip,
-}: {
-  label: string;
-  url: string;
-  copyTooltip: string;
-}): React.JSX.Element {
-  return (
-    <div className="flex flex-col gap-1">
-      <DetailSidebarInfoLabel>{label}</DetailSidebarInfoLabel>
-      <div className="flex items-start gap-1">
-        <Text
-          variant="small"
-          muted
-          className="line-clamp-2 font-mono text-xs break-all"
-        >
-          {url.replace(/^https?:\/\//, "")}
-        </Text>
-        <CopyButton
-          text={url}
-          size="xs"
-          tooltip={copyTooltip}
-          className="mt-[-2px] shrink-0"
-        />
-      </div>
-    </div>
-  );
-}
-
 export function McpServerXSidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
   const location = useLocation();
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
   const { hasScope, hasAnyScope } = useRBAC();
+  const mcpScoped =
+    useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies).status === "enabled";
   const organization = useOrganization();
   const pluginScope = usePluginQueryScope();
   const canWritePlugins = usePluginWriteAccess();
@@ -367,7 +338,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const { data: remoteMcpServer } = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
-    { enabled: remoteMcpServerId !== "" },
+    { enabled: remoteMcpServerId !== "", throwOnError: false },
   );
   const unproxiedMcpServerId = mcpServer?.unproxiedMcpServerId ?? "";
   const { data: unproxiedMcpServer } = useGetUnproxiedMcpServer(
@@ -446,14 +417,37 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     hasScope("org:read", organization.id) &&
     hasScope("mcp:read", mcpServer.id);
 
+  // Guardrails police traffic that passes through Gram, so unproxied servers
+  // (which never do) have none. Admin-only, like the policies it manages.
+  const canViewGuardrails =
+    mcpScoped &&
+    !!mcpServer &&
+    !isUnproxied &&
+    hasScope("org:admin", organization.id) &&
+    hasScope("mcp:read", mcpServer.id);
+
+  // A Remote MCP server's identity is derived, so the readiness item reads the
+  // same answer the pill does. Judging it on a bound client alone reported
+  // every working Service Account as incomplete while the pill said Service Account.
+  const remoteIdentitySettled =
+    isRemoteBacked &&
+    !identityUnavailable &&
+    (remoteIdentityMode !== "none" || identityProbeStatus === "available");
+
   let authenticationDescription =
     "Attach a remote identity provider so users can access the upstream service.";
   if (isUnproxied) {
     authenticationDescription =
       "Not applicable — the customer connects directly using the vendor's own credentials.";
-  } else if (hasRemoteIdentityProvider) {
+  } else if (remoteIdentityMode === "user" && hasRemoteIdentityProvider) {
     authenticationDescription =
       "A remote identity provider is attached to this server.";
+  } else if (remoteIdentityMode === "agent" && isRemoteBacked) {
+    authenticationDescription =
+      "A shared credential is configured for the upstream service.";
+  } else if (remoteIdentitySettled) {
+    authenticationDescription =
+      "The upstream service accepts requests without credentials.";
   } else if (isTunneledBacked) {
     authenticationDescription =
       "Speakeasy authentication is configured; upstream identity providers are optional.";
@@ -502,6 +496,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           description: authenticationDescription,
           ready:
             isUnproxied ||
+            remoteIdentitySettled ||
             hasRemoteIdentityProvider ||
             (isTunneledBacked && !!userSessionIssuerId),
           href: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`,
@@ -561,6 +556,17 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
             Icon: Users,
             href: mcpServerTabHref(routes, idOrSlug, "team-access"),
             active: activeTab === "team-access",
+          },
+        ]
+      : []),
+    ...(canViewGuardrails
+      ? [
+          {
+            key: "guardrails",
+            title: "Guardrails",
+            Icon: ShieldCheck,
+            href: mcpServerTabHref(routes, idOrSlug, "guardrails"),
+            active: activeTab === "guardrails",
           },
         ]
       : []),
@@ -628,12 +634,8 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         />
       ) : null}
 
-      {mcpUrl ? (
-        <SidebarUrlRow label="URL" url={mcpUrl} copyTooltip="Copy URL" />
-      ) : null}
-
       {publicRoutesEnabled && mcpUrl && (
-        <SidebarUrl
+        <SidebarUrlRow
           label={privateRoutesEnabled ? "Public URL" : "URL"}
           url={mcpUrl}
           copyTooltip="Copy public URL"
@@ -642,7 +644,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
 
       {privateRoutesEnabled &&
         privateMcpUrls.map((url, index) => (
-          <SidebarUrl
+          <SidebarUrlRow
             key={url}
             label={index === 0 ? "Private URL" : "Private URL (additional)"}
             url={url}
@@ -665,18 +667,11 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         </div>
       )}
 
-      {upstreamUrl && (
-        <SidebarUrl
-          label="Upstream URL"
-          url={upstreamUrl}
-          copyTooltip="Copy upstream URL"
-        />
-      )}
       {upstreamUrl ? (
         <SidebarUrlRow
-          label="Upstream URL"
+          label="Remote URL"
           url={upstreamUrl}
-          copyTooltip="Copy upstream URL"
+          copyTooltip="Copy remote URL"
         />
       ) : null}
 

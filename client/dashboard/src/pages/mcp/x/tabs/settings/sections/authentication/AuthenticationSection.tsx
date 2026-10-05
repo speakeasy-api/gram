@@ -8,7 +8,6 @@ import {
 import { Text } from "@/components/ui/Text";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
-import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { useMemo, useState, type ReactNode } from "react";
 import { InlineEmptyState } from "@/components/inline-empty-state";
@@ -20,10 +19,13 @@ import { type AuthTarget, useMcpServerAuthTarget } from "./authTarget";
 import { DeleteRemoteIdentityProviderDialog } from "./DeleteRemoteIdentityProviderDialog";
 import { ModifyRemoteIdentityProviderSheet } from "./ModifyRemoteIdentityProviderSheet";
 import { RemoteIdentityProvidersField } from "./RemoteIdentityProvidersField";
-import { useEffectiveUserSessionIssuers } from "@/hooks/useEffectiveUserSessionIssuers";
 import { UserSessionIssuerField } from "./UserSessionIssuerField";
+import { useSelectableUserSessionIssuers } from "./useSelectableUserSessionIssuers";
 import { UserIdentitySessionControls } from "./UserIdentitySessionControls";
-import { useAllRemoteSessionClients } from "@/lib/remote-identity";
+import {
+  useAllRemoteSessionClients,
+  useRemoteSessionIssuersByIds,
+} from "@/lib/remote-identity";
 import { RemoteMcpIdentitySectionBody } from "./RemoteMcpIdentitySection";
 
 export const MCP_AUTHENTICATION_SECTION_ID = "authentication";
@@ -112,7 +114,15 @@ export function AuthenticationSectionBody({
   additionalSetupAction?: ReactNode;
 }): JSX.Element {
   if (target.kind === "remote-mcp") {
-    return <RemoteMcpIdentitySectionBody target={target} />;
+    // Keyed by server: the panel holds unsaved header and identity drafts,
+    // and navigating to another server must not carry them across for Save
+    // to write to the wrong remote. Every render site dispatches through here.
+    return (
+      <RemoteMcpIdentitySectionBody
+        key={`${target.permissionResourceId}:${target.remoteMcpServerId ?? ""}`}
+        target={target}
+      />
+    );
   }
 
   return (
@@ -132,9 +142,7 @@ function StandardAuthenticationSectionBody({
 }): JSX.Element {
   const userSessionIssuerId = target.userSessionIssuerId ?? undefined;
   const issuerConfigured = !!userSessionIssuerId;
-  const effectiveIssuersQuery = useEffectiveUserSessionIssuers({
-    mcpResourceId: target.permissionResourceId,
-  });
+  const effectiveIssuersQuery = useSelectableUserSessionIssuers(target);
 
   const {
     data: userSessionIssuer,
@@ -143,64 +151,33 @@ function StandardAuthenticationSectionBody({
   } = useUserSessionIssuer({ id: userSessionIssuerId }, undefined, {
     enabled: issuerConfigured,
   });
-  const effectiveUserSessionIssuers = useMemo(() => {
-    const supportedIssuers = target.supportsOrganizationIssuers
-      ? effectiveIssuersQuery.issuers
-      : effectiveIssuersQuery.issuers.filter(
-          (issuer) => issuer.projectId !== "",
-        );
-    if (
-      !userSessionIssuer ||
-      (!target.supportsOrganizationIssuers &&
-        userSessionIssuer.projectId === "") ||
-      supportedIssuers.some((issuer) => issuer.id === userSessionIssuer.id)
-    ) {
-      return supportedIssuers;
-    }
-    return [userSessionIssuer, ...supportedIssuers];
-  }, [
-    effectiveIssuersQuery.issuers,
-    target.supportsOrganizationIssuers,
-    userSessionIssuer,
-  ]);
 
-  // listRemoteSessionIssuers returns this project's own issuers, inherited
-  // organization-level ones (same org), and inherited platform issuers from the
-  // shared catalog, so the selectable list spans all three tiers. A client can
-  // be attached to any of them; only project-owned issuer metadata is editable
-  // here.
-  //
-  // Pinned to the maximum page size. The listing spans all three tiers ordered
-  // newest-first, so a large platform catalog fills the page and pushes this
-  // project's own issuers off it, which renders an attached provider as
-  // unconnected below. A stopgap: 100 is the server's ceiling, not headroom.
-  const { data: issuersResult, isLoading: isLoadingIssuers } =
-    useRemoteSessionIssuers({ limit: 100 });
-  const allIssuers = useMemo(
-    () => issuersResult?.result.items ?? [],
-    [issuersResult],
+  const {
+    items: allClients,
+    isLoading: isLoadingClients,
+    isError: isClientsError,
+  } = useAllRemoteSessionClients(
+    { userSessionIssuerId },
+    { enabled: issuerConfigured },
   );
 
-  const { items: allClients, isLoading: isLoadingClients } =
-    useAllRemoteSessionClients(
-      { userSessionIssuerId },
-      { enabled: issuerConfigured },
-    );
-
-  const associatedIssuerIds = useMemo(
-    () => new Set(allClients.map((client) => client.remoteSessionIssuerId)),
+  const attachedIssuerIds = useMemo(
+    () => [
+      ...new Set(allClients.map((client) => client.remoteSessionIssuerId)),
+    ],
     [allClients],
   );
 
-  const associatedIssuers = useMemo<RemoteSessionIssuer[]>(
-    () => allIssuers.filter((issuer) => associatedIssuerIds.has(issuer.id)),
-    [allIssuers, associatedIssuerIds],
-  );
-
-  const selectableIssuers = useMemo<RemoteSessionIssuer[]>(
-    () => allIssuers.filter((issuer) => !associatedIssuerIds.has(issuer.id)),
-    [allIssuers, associatedIssuerIds],
-  );
+  // Resolved by id, never by filtering the issuer listing: an attached issuer
+  // can fall past any listing page, and filtering would then render a working
+  // server as having no provider.
+  const {
+    items: associatedIssuers,
+    isLoading: isLoadingAssociatedIssuers,
+    isError: isAssociatedIssuersError,
+  } = useRemoteSessionIssuersByIds(attachedIssuerIds, {
+    enabled: issuerConfigured,
+  });
 
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -245,7 +222,8 @@ function StandardAuthenticationSectionBody({
           associatedIssuers={associatedIssuers}
           allowAdditionalProviders={!!target.multipleProviders}
           projectId={target.projectId}
-          isLoading={isLoadingIssuers || isLoadingClients}
+          isLoading={isLoadingClients || isLoadingAssociatedIssuers}
+          isError={isClientsError || isAssociatedIssuersError}
           onAdd={() => setSheetOpen(true)}
           onEdit={handleEdit}
           onDelete={handleDelete}
@@ -263,7 +241,7 @@ function StandardAuthenticationSectionBody({
         <div className="divide-y">
           <UserSessionIssuerField
             target={target}
-            issuers={effectiveUserSessionIssuers}
+            issuers={effectiveIssuersQuery.issuers}
             isLoading={effectiveIssuersQuery.isLoading}
             isError={effectiveIssuersQuery.isError}
           />
@@ -276,7 +254,7 @@ function StandardAuthenticationSectionBody({
         onOpenChange={setSheetOpen}
         target={target}
         userSessionIssuer={userSessionIssuer ?? null}
-        selectableIssuers={selectableIssuers}
+        excludedIssuerIds={attachedIssuerIds}
       />
 
       {deleteTarget && userSessionIssuerId && (

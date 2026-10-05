@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
 	sessionsgen "github.com/speakeasy-api/gram/server/gen/user_sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -17,6 +18,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -86,7 +88,7 @@ func TestMintUserSessionAllowsMCPConnect(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.False(t, row.UserSessionClientID.Valid)
-	require.True(t, strings.HasPrefix(row.RefreshTokenHash.String, "dashboard-mint:"))
+	require.True(t, strings.HasPrefix(row.RefreshTokenHash.String, sessiontokens.DashboardMintRefreshTokenHashPrefix+":"))
 
 	// No registered OAuth client backs this mint, so the claim names our own
 	// surface rather than going out empty — empty would be indistinguishable
@@ -94,6 +96,65 @@ func TestMintUserSessionAllowsMCPConnect(t *testing.T) {
 	require.Equal(t, usersessions.FirstPartyClientID, claims.ClientID)
 	require.NotContains(t, claims.ClientID, "://",
 		"a URL-shaped client id would be read as an OAuth Client ID Metadata Document")
+}
+
+func TestListUserSessionsNamesDashboardMint(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	toolset := createIssuerGatedMintToolset(t, ctx, ti, "mint-named")
+
+	mintCtx := withExactAuthzGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeMCPConnect, toolset.ID.String()),
+	)
+	toolsetID := toolset.ID.String()
+	minted, err := ti.service.MintUserSession(mintCtx, &sessionsgen.MintUserSessionPayload{
+		ToolsetID:        &toolsetID,
+		McpServerID:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(
+		minted.AccessToken,
+		urn.NewToolset(toolset.ID).String(),
+	)
+	require.NoError(t, err)
+
+	unlabeled, err := seedUserSession(t, ctx, ti.conn, toolset.UserSessionIssuerID.UUID, urn.NewUserSubject("other-principal"))
+	require.NoError(t, err)
+
+	listed, err := ti.service.ListUserSessions(ctx, &sessionsgen.ListUserSessionsPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		SubjectUrn:          nil,
+		UserSessionIssuerID: nil,
+		Status:              nil,
+		Cursor:              nil,
+		Limit:               nil,
+	})
+	require.NoError(t, err)
+
+	var named, plain *types.UserSession
+	for _, item := range listed.Items {
+		switch item.Jti {
+		case claims.ID:
+			named = item
+		case unlabeled.Jti:
+			plain = item
+		}
+	}
+
+	require.NotNil(t, named)
+	require.Nil(t, named.UserSessionClientID)
+	require.Nil(t, named.ClientCredentialKind)
+	require.NotNil(t, named.ClientName)
+	require.Equal(t, sessiontokens.FirstPartyClientName, *named.ClientName)
+
+	require.NotNil(t, plain)
+	require.Nil(t, plain.ClientName)
 }
 
 func TestMintUserSessionRequiresExactlyOneTarget(t *testing.T) {

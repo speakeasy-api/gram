@@ -236,15 +236,22 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	for _, name := range []string{
 		"get_platform_context", "list_projects", "find_mcp", "get_mcp",
 		"request_mcp_review", "get_my_mcp_review_request",
-		"get_project_overview", "get_mcp_diagnostics", "list_recent_tool_calls",
+		"get_project_overview", "get_mcp_diagnostics", "get_tool_usage_summary", "list_recent_tool_calls", "list_attribute_keys",
 		"search_gram_docs", "list_skills", "get_skill", "list_skill_versions",
 		"list_skill_feedback", "list_skill_suggestions", "list_skill_suggestion_feedback",
-		"create_skill", "add_skill_version", "update_skill_metadata",
+		"create_skill", "add_skill_version", "update_skill_metadata", "list_skill_distributions",
 		"list_my_sessions", "continue_session",
 	} {
 		require.Equal(t, ExternalAuthorizationMember, byName[name], name)
 	}
 	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["distribute_skill"])
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["undistribute_skill"])
+	for _, name := range []string{"list_skill_insights", "compare_skill_versions"} {
+		require.Equal(t, ExternalAuthorizationOrgAdmin, byName[name], "session cost is organization spend: %s", name)
+	}
+	// search_tool_calls returns masked identities and person references, so it
+	// stays admin-gated like the drill-downs that do the same.
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["search_tool_calls"])
 	for _, resource := range registrar.resources {
 		if resource.Meta.servesAudience(AudienceExternal) {
 			require.Equal(t, ExternalAuthorizationMember, resource.Meta.Authorization, resource.URI)
@@ -395,21 +402,30 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		admitted[descriptor.Name] = true
 	}
 
-	// Named-plugin distribution is intentionally unavailable until
-	// compatibility deployment. Session recall stays external-only because it
-	// contains user-personal cross-project transcripts. Data exports stay
-	// external-only because creation can send future project data off-platform.
+	// Named-plugin distribution and assignment changes are intentionally
+	// unavailable until compatibility deployment. Session recall stays
+	// external-only because it contains user-personal cross-project
+	// transcripts. Data exports stay external-only because creation can send
+	// future project data off-platform. Network ingress status stays with
+	// connection-scoped org administration. Unlike connection-scoped tools,
+	// get_xaa_readiness reads an org-wide snapshot under live member org-admin
+	// authority, which managed assistants do not have; it stays external-only.
 	for _, name := range []string{
+		"get_network_ingress",
+		"get_xaa_readiness",
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
-		"list_plugin_assignments",
-		"list_plugins",
-		"get_plugin",
 		operationSetPluginAssignments,
+		operationRepublishPlugin,
 		"list_my_sessions",
 		"continue_session",
 		"list_data_exports",
 		"create_data_export",
+		// Changing which tools a server exposes republishes every plugin that
+		// carries it to everyone holding one, so it stays on the surface an
+		// administrator drives directly, like the other distribution writes.
+		addToolsToMCPToolName,
+		removeToolsFromMCPToolName,
 	} {
 		require.False(t, admitted[name], "tool %q must not be admitted to the assistant", name)
 	}
@@ -417,14 +433,24 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	// The reads, registration paths, and persisted readiness projections are
 	// connection-less end to end. get_setup_handoff is admitted because the
 	// handoff only carries the caller to the dashboard, which completes setup
-	// under its own session.
+	// under its own session. Plugin reads are admitted so the assistant can
+	// resolve a plugin by name before distributing a skill to it.
 	for _, name := range []string{
 		"get_platform_context",
 		"list_projects",
 		"find_mcp",
 		"get_mcp",
+		"list_plugins",
+		"get_plugin",
+		"list_plugin_assignments",
 		"list_recent_tool_calls",
+		"get_tool_usage_summary",
 		"list_organization_events",
+		"list_chats",
+		"search_users",
+		"get_user_metrics_summary",
+		"search_tool_calls",
+		"list_attribute_keys",
 		"update_mcp_metadata",
 		"register_catalog_mcp",
 		"register_remote_mcp",
@@ -444,10 +470,17 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"list_risk_exclusions",
 		"get_risk_analysis_status",
 		"list_watchdog_findings",
+		"list_risk_findings",
+		"list_risk_findings_by_chat",
+		"get_risk_rule_breakdown",
 		"create_risk_policy",
 		"update_risk_policy",
 		"create_risk_exclusion",
 		"update_risk_exclusion",
+		"list_access_members",
+		"mark_risk_findings_false_positive",
+		"unmark_risk_findings_false_positive",
+		listProjectToolsToolName,
 	} {
 		require.True(t, admitted[name], "tool %q works without a connection and should serve the assistant", name)
 	}

@@ -23,6 +23,7 @@ import {
 
 const mocks = vi.hoisted(() => ({
   flagResult: vi.fn(),
+  step: "scope",
 }));
 
 vi.mock("@/hooks/useFeatureFlag", () => ({
@@ -62,7 +63,7 @@ vi.mock("@/routes", () => ({
 
 vi.mock("nuqs", () => ({
   useQueryState: (name: string) =>
-    name === "step" ? ["scope", vi.fn()] : [null, vi.fn()],
+    name === "step" ? [mocks.step, vi.fn()] : [null, vi.fn()],
 }));
 
 vi.mock("@/components/shadow-mcp/ShadowMCPPolicyServerSelector", () => ({
@@ -77,10 +78,44 @@ vi.mock("@gram/client/react-query/riskPoliciesUpdate.js", () => ({
   useRiskPoliciesUpdateMutation: () => ({ isPending: false, mutate: vi.fn() }),
 }));
 
+vi.mock("@gram/client/react-query/riskListMcpPlatformToolsets.js", () => ({
+  useRiskListMcpPlatformToolsets: () => ({
+    data: {
+      toolsets: [
+        {
+          id: "33333333-3333-4333-8333-333333333333",
+          name: "Gram assistant tools",
+          slug: "assistants",
+          tools: [
+            {
+              annotations: { destructiveHint: true },
+              name: "forgetMemory",
+            },
+            {
+              annotations: { readOnlyHint: true },
+              name: "recallMemory",
+            },
+          ],
+        },
+      ],
+    },
+    isLoading: false,
+    isError: false,
+  }),
+}));
 vi.mock("@gram/client/react-query/mcpServers.js", () => ({
   useMcpServers: () => ({
     data: {
       mcpServers: [
+        // Listed before "Support MCP" and has no tools, so a focus-tracking
+        // regression (falling back to the first server in the list instead
+        // of staying on the one just deselected) lands here and is visible
+        // as an empty tool list rather than silently matching by luck.
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          name: "Billing MCP",
+          toolsetId: "toolset-2",
+        },
         {
           id: "11111111-1111-4111-8111-111111111111",
           name: "Support MCP",
@@ -124,6 +159,11 @@ vi.mock("@gram/client/react-query/listToolsets.js", () => ({
   useListToolsets: () => ({
     data: {
       toolsets: [
+        {
+          id: "toolset-2",
+          name: "Billing tools",
+          tools: [],
+        },
         {
           id: "toolset-1",
           name: "Support tools",
@@ -181,7 +221,9 @@ vi.mock("./use-cel-engine", () => ({
 }));
 
 vi.mock("./PolicyCenter", () => ({
-  ActionPicker: () => null,
+  ActionPicker: ({ formAction }: { formAction: string }) => (
+    <output data-testid="selected-policy-action">{formAction}</output>
+  ),
   CustomizeRulesSheet: () => null,
   PolicyAudiencePicker: () => null,
   RuleSelectList: () => null,
@@ -301,6 +343,7 @@ describe("StandardPolicyEditor scope rows", () => {
 
   beforeEach(() => {
     mocks.flagResult.mockReturnValue({ status: "enabled" });
+    mocks.step = "scope";
     vi.mocked(useSdkClient).mockReturnValue({
       access: { listShadowMCPInventory: vi.fn() },
     } as unknown as ReturnType<typeof useSdkClient>);
@@ -381,6 +424,22 @@ describe("StandardPolicyEditor scope rows", () => {
       ).toBe("true");
     });
   });
+  it("coerces warn to block when switching to MCP scope", () => {
+    renderEditor(
+      policy({
+        action: "warn",
+        sources: ["gitleaks"],
+        mcpScope: undefined,
+      }),
+    );
+
+    mocks.step = "action";
+    fireEvent.click(screen.getByText("Selected MCP servers"));
+
+    expect(screen.getByTestId("selected-policy-action").textContent).toBe(
+      "block",
+    );
+  });
 
   it("renders one inspect row for every enabled detector", () => {
     renderEditor(policy());
@@ -448,6 +507,165 @@ describe("StandardPolicyEditor scope rows", () => {
     expect(
       screen.queryByRole("checkbox", { name: /^Account identity:/ }),
     ).toBeNull();
+  });
+
+  it("keeps a server in scope as a wildcard when its last tool is unchecked", async () => {
+    renderEditor(policy({ sources: ["gitleaks"] }));
+
+    fireEvent.click(screen.getByText("Selected MCP servers"));
+    const server = screen.getByRole("checkbox", { name: "Support MCP" });
+    fireEvent.click(server);
+    await waitFor(() => {
+      expect(server.getAttribute("aria-checked")).toBe("true");
+    });
+
+    // "Support MCP" has two tools in the fixture: unchecking both empties
+    // the tool list, which must not drop the server from scope.
+    fireEvent.click(screen.getByRole("checkbox", { name: "deleteTicket" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "listTickets" }));
+
+    expect(server.getAttribute("aria-checked")).toBe("true");
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("checkbox", { name: "deleteTicket" })
+          .getAttribute("aria-checked"),
+      ).toBe("true");
+      expect(
+        screen
+          .getByRole("checkbox", { name: "listTickets" })
+          .getAttribute("aria-checked"),
+      ).toBe("true");
+    });
+    expect(screen.getByText(/All tools, unconditionally/)).toBeTruthy();
+  });
+
+  it("drops a rule-mode server when its sole rule-matching tool is unchecked, instead of wildcarding", async () => {
+    renderEditor(policy({ sources: ["gitleaks"] }));
+
+    fireEvent.click(screen.getByText("Selected MCP servers"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Tool rule: All tools" }),
+    );
+    // Defaults the rule to destructiveHint, which in this fixture matches
+    // only "deleteTicket" — genuinely narrower than "every tool".
+    fireEvent.click(screen.getByText("Tools with MCP annotations"));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    const server = screen.getByRole("checkbox", { name: "Support MCP" });
+    fireEvent.click(server);
+    await waitFor(() => {
+      expect(server.getAttribute("aria-checked")).toBe("true");
+    });
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("checkbox", { name: "deleteTicket" })
+          .getAttribute("aria-checked"),
+      ).toBe("true");
+    });
+    expect(
+      screen
+        .getByRole("checkbox", { name: "listTickets" })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "deleteTicket" }));
+
+    await waitFor(() => {
+      expect(server.getAttribute("aria-checked")).toBe("false");
+    });
+  });
+
+  it("drops a custom-selection server when its last tool is unchecked while a top-level rule is set, instead of saving a tool list the backend rejects", async () => {
+    renderEditor(policy({ sources: ["gitleaks"] }));
+
+    fireEvent.click(screen.getByText("Selected MCP servers"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Tool rule: All tools" }),
+    );
+    fireEvent.click(screen.getByText("Tools with MCP annotations"));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    // Pick a tool the rule (destructiveHint) does NOT match, so this stays a
+    // "custom" selection instead of being recognized as tracking the rule.
+    fireEvent.click(screen.getByRole("button", { name: /Support MCP/ }));
+    const tool = screen.getByRole("checkbox", { name: "listTickets" });
+    fireEvent.click(tool);
+    await waitFor(() => {
+      expect(tool.getAttribute("aria-checked")).toBe("true");
+    });
+
+    // NormalizeMCPScope rejects an empty tool list on a server when the
+    // scope has a top-level rule, so wildcarding here (as a plain custom
+    // selection normally would) would only fail at save time.
+    fireEvent.click(tool);
+
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("checkbox", { name: "Support MCP" })
+          .getAttribute("aria-checked"),
+      ).toBe("false");
+    });
+  });
+
+  it("renders a stored ['*'] tool list as the wildcard, not a custom selection with a phantom tool", () => {
+    renderEditor(
+      policy({
+        sources: ["gitleaks"],
+        mcpScope: {
+          allServers: false,
+          toolAnnotations: [],
+          servers: [
+            {
+              mcpServerId: "11111111-1111-4111-8111-111111111111",
+              tools: ["*"],
+            },
+          ],
+        },
+      }),
+    );
+
+    fireEvent.click(screen.getByText("Selected MCP servers"));
+
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Support MCP" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(screen.getByText(/All tools, unconditionally/)).toBeTruthy();
+    expect(screen.queryByText(/^Custom ·/)).toBeNull();
+  });
+
+  it("keeps the pane on the deselected server so its tools stay pickable", async () => {
+    renderEditor(policy({ sources: ["gitleaks"] }));
+
+    fireEvent.click(screen.getByText("Selected MCP servers"));
+    const server = screen.getByRole("checkbox", { name: "Support MCP" });
+    fireEvent.click(server);
+    await waitFor(() => {
+      expect(server.getAttribute("aria-checked")).toBe("true");
+    });
+
+    // Deselect via the server's own checkbox, the same interaction reported
+    // as broken: without focus tracking, the pane falls back to the first
+    // server in the list ("Billing MCP", which has no tools) instead of
+    // staying on "Support MCP", stranding its tools out of view.
+    fireEvent.click(server);
+    await waitFor(() => {
+      expect(server.getAttribute("aria-checked")).toBe("false");
+    });
+    expect(
+      screen.queryByText("No tools are available for this server."),
+    ).toBeNull();
+
+    const tool = screen.getByRole("checkbox", { name: "deleteTicket" });
+    fireEvent.click(tool);
+    await waitFor(() => {
+      expect(tool.getAttribute("aria-checked")).toBe("true");
+    });
+    expect(server.getAttribute("aria-checked")).not.toBe("false");
   });
 
   it("preserves server selection across mode switches", async () => {
@@ -543,6 +761,10 @@ describe("PolicyMCPScopePicker all-server selection", () => {
   it("cherry-picks a tool on a server that is not yet in scope", () => {
     render(<ScopePickerHarness />);
 
+    // Focus the server row (not its checkbox, which would select it) before
+    // picking a tool — the pane otherwise defaults to the first server in
+    // the list, which is not this one.
+    fireEvent.click(screen.getByRole("button", { name: /Support MCP/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: "listTickets" }));
 
     expect(
@@ -556,6 +778,47 @@ describe("PolicyMCPScopePicker all-server selection", () => {
           tools: ["listTickets"],
         },
       ],
+    });
+  });
+
+  it("selects individual Platform MCP tools", () => {
+    render(<ScopePickerHarness />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Gram assistant tools/ }),
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "recallMemory" }));
+
+    expect(
+      JSON.parse(screen.getByTestId("mcp-scope-payload").textContent ?? "null"),
+    ).toEqual({
+      allServers: false,
+      toolAnnotations: [],
+      servers: [
+        {
+          mcpServerId: "33333333-3333-4333-8333-333333333333",
+          tools: ["recallMemory"],
+        },
+      ],
+    });
+  });
+
+  it("includes Platform MCP toolsets in all-server selection", () => {
+    render(<ScopePickerHarness />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "All MCP servers" }));
+
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Gram assistant tools" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(
+      JSON.parse(screen.getByTestId("mcp-scope-payload").textContent ?? "null"),
+    ).toEqual({
+      allServers: true,
+      toolAnnotations: [],
+      servers: [],
     });
   });
 

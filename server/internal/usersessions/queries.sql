@@ -1344,6 +1344,12 @@ SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, 
        s.created_at, s.updated_at, s.deleted_at, s.deleted,
        iss.slug AS issuer_slug,
        c.client_name AS client_name,
+       -- A dashboard mint stores no user_session_clients row. The refresh-token
+       -- sentinel (sessiontokens.DashboardMintRefreshTokenHashPrefix) is the
+       -- only mark, and the view turns it into FirstPartyClientName. Real
+       -- refresh hashes are base64url and cannot contain ':', so the prefix
+       -- cannot match one of those.
+       COALESCE(s.refresh_token_hash LIKE 'dashboard-mint:%', false)::boolean AS dashboard_mint,
        c.client_id_metadata_uri AS client_id_metadata_uri,
        c.token_endpoint_auth_method AS client_token_endpoint_auth_method,
        -- Whether the client stores a secret, never the hash itself: the

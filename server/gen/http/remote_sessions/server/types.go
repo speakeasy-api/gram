@@ -47,6 +47,10 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	ExistingClientID *string `form:"existing_client_id,omitempty" json:"existing_client_id,omitempty" xml:"existing_client_id,omitempty"`
 	// Client settings for auto or manual mode. Forbidden for existing mode.
 	ClientConfiguration *ServerIdentityClientConfigurationRequestBody `form:"client_configuration,omitempty" json:"client_configuration,omitempty" xml:"client_configuration,omitempty"`
+	// Auto mode only. cimd (the default) prefers a Client ID Metadata Document
+	// when the provider supports one and falls back to dynamic client
+	// registration; dcr always uses dynamic client registration.
+	RegistrationMethod *string `form:"registration_method,omitempty" json:"registration_method,omitempty" xml:"registration_method,omitempty"`
 }
 
 // ListBindingsResponseBody is the type of the "remoteSessions" service
@@ -105,6 +109,13 @@ type ListRemoteSessionsResponseBody struct {
 	Items []*RemoteSessionResponseBody `form:"items" json:"items" xml:"items"`
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// CountRemoteSessionsResponseBody is the type of the "remoteSessions" service
+// "countRemoteSessions" endpoint HTTP response body.
+type CountRemoteSessionsResponseBody struct {
+	// Distinct user subjects with a live remote_session through the client.
+	Subjects int64 `form:"subjects" json:"subjects" xml:"subjects"`
 }
 
 // ListBindingsUnauthorizedResponseBody is the type of the "remoteSessions"
@@ -1049,6 +1060,196 @@ type ListRemoteSessionsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CountRemoteSessionsUnauthorizedResponseBody is the type of the
+// "remoteSessions" service "countRemoteSessions" endpoint HTTP response body
+// for the "unauthorized" error.
+type CountRemoteSessionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CountRemoteSessionsForbiddenResponseBody is the type of the "remoteSessions"
+// service "countRemoteSessions" endpoint HTTP response body for the
+// "forbidden" error.
+type CountRemoteSessionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CountRemoteSessionsBadRequestResponseBody is the type of the
+// "remoteSessions" service "countRemoteSessions" endpoint HTTP response body
+// for the "bad_request" error.
+type CountRemoteSessionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CountRemoteSessionsNotFoundResponseBody is the type of the "remoteSessions"
+// service "countRemoteSessions" endpoint HTTP response body for the
+// "not_found" error.
+type CountRemoteSessionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CountRemoteSessionsConflictResponseBody is the type of the "remoteSessions"
+// service "countRemoteSessions" endpoint HTTP response body for the "conflict"
+// error.
+type CountRemoteSessionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CountRemoteSessionsUnsupportedMediaResponseBody is the type of the
+// "remoteSessions" service "countRemoteSessions" endpoint HTTP response body
+// for the "unsupported_media" error.
+type CountRemoteSessionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CountRemoteSessionsInvalidResponseBody is the type of the "remoteSessions"
+// service "countRemoteSessions" endpoint HTTP response body for the "invalid"
+// error.
+type CountRemoteSessionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CountRemoteSessionsInvariantViolationResponseBody is the type of the
+// "remoteSessions" service "countRemoteSessions" endpoint HTTP response body
+// for the "invariant_violation" error.
+type CountRemoteSessionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CountRemoteSessionsUnexpectedResponseBody is the type of the
+// "remoteSessions" service "countRemoteSessions" endpoint HTTP response body
+// for the "unexpected" error.
+type CountRemoteSessionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CountRemoteSessionsGatewayErrorResponseBody is the type of the
+// "remoteSessions" service "countRemoteSessions" endpoint HTTP response body
+// for the "gateway_error" error.
+type CountRemoteSessionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RevokeRemoteSessionUnauthorizedResponseBody is the type of the
 // "remoteSessions" service "revokeRemoteSession" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -1442,9 +1643,16 @@ type RemoteSessionClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ServerIdentityRegistrationFailureResponseBody is used to define fields on
@@ -1651,6 +1859,15 @@ func NewListRemoteSessionsResponseBody(res *remotesessions.ListRemoteSessionsRes
 		}
 	} else {
 		body.Items = []*RemoteSessionResponseBody{}
+	}
+	return body
+}
+
+// NewCountRemoteSessionsResponseBody builds the HTTP response body from the
+// result of the "countRemoteSessions" endpoint of the "remoteSessions" service.
+func NewCountRemoteSessionsResponseBody(res *remotesessions.CountRemoteSessionsResult) *CountRemoteSessionsResponseBody {
+	body := &CountRemoteSessionsResponseBody{
+		Subjects: res.Subjects,
 	}
 	return body
 }
@@ -2381,6 +2598,156 @@ func NewListRemoteSessionsGatewayErrorResponseBody(res *goa.ServiceError) *ListR
 	return body
 }
 
+// NewCountRemoteSessionsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "countRemoteSessions" endpoint of the
+// "remoteSessions" service.
+func NewCountRemoteSessionsUnauthorizedResponseBody(res *goa.ServiceError) *CountRemoteSessionsUnauthorizedResponseBody {
+	body := &CountRemoteSessionsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCountRemoteSessionsForbiddenResponseBody builds the HTTP response body
+// from the result of the "countRemoteSessions" endpoint of the
+// "remoteSessions" service.
+func NewCountRemoteSessionsForbiddenResponseBody(res *goa.ServiceError) *CountRemoteSessionsForbiddenResponseBody {
+	body := &CountRemoteSessionsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCountRemoteSessionsBadRequestResponseBody builds the HTTP response body
+// from the result of the "countRemoteSessions" endpoint of the
+// "remoteSessions" service.
+func NewCountRemoteSessionsBadRequestResponseBody(res *goa.ServiceError) *CountRemoteSessionsBadRequestResponseBody {
+	body := &CountRemoteSessionsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCountRemoteSessionsNotFoundResponseBody builds the HTTP response body
+// from the result of the "countRemoteSessions" endpoint of the
+// "remoteSessions" service.
+func NewCountRemoteSessionsNotFoundResponseBody(res *goa.ServiceError) *CountRemoteSessionsNotFoundResponseBody {
+	body := &CountRemoteSessionsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCountRemoteSessionsConflictResponseBody builds the HTTP response body
+// from the result of the "countRemoteSessions" endpoint of the
+// "remoteSessions" service.
+func NewCountRemoteSessionsConflictResponseBody(res *goa.ServiceError) *CountRemoteSessionsConflictResponseBody {
+	body := &CountRemoteSessionsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCountRemoteSessionsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "countRemoteSessions" endpoint of the
+// "remoteSessions" service.
+func NewCountRemoteSessionsUnsupportedMediaResponseBody(res *goa.ServiceError) *CountRemoteSessionsUnsupportedMediaResponseBody {
+	body := &CountRemoteSessionsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCountRemoteSessionsInvalidResponseBody builds the HTTP response body from
+// the result of the "countRemoteSessions" endpoint of the "remoteSessions"
+// service.
+func NewCountRemoteSessionsInvalidResponseBody(res *goa.ServiceError) *CountRemoteSessionsInvalidResponseBody {
+	body := &CountRemoteSessionsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCountRemoteSessionsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "countRemoteSessions" endpoint of the
+// "remoteSessions" service.
+func NewCountRemoteSessionsInvariantViolationResponseBody(res *goa.ServiceError) *CountRemoteSessionsInvariantViolationResponseBody {
+	body := &CountRemoteSessionsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCountRemoteSessionsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "countRemoteSessions" endpoint of the
+// "remoteSessions" service.
+func NewCountRemoteSessionsUnexpectedResponseBody(res *goa.ServiceError) *CountRemoteSessionsUnexpectedResponseBody {
+	body := &CountRemoteSessionsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCountRemoteSessionsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "countRemoteSessions" endpoint of the
+// "remoteSessions" service.
+func NewCountRemoteSessionsGatewayErrorResponseBody(res *goa.ServiceError) *CountRemoteSessionsGatewayErrorResponseBody {
+	body := &CountRemoteSessionsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewRevokeRemoteSessionUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "revokeRemoteSession" endpoint of the
 // "remoteSessions" service.
@@ -2575,10 +2942,11 @@ func NewDetachBindingPayload(body *DetachBindingRequestBody, sessionToken *strin
 // commitServerIdentityConfiguration endpoint payload.
 func NewCommitServerIdentityConfigurationPayload(body *CommitServerIdentityConfigurationRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.CommitServerIdentityConfigurationPayload {
 	v := &remotesessions.CommitServerIdentityConfigurationPayload{
-		McpServerID:      *body.McpServerID,
-		ProviderID:       body.ProviderID,
-		ClientMode:       *body.ClientMode,
-		ExistingClientID: body.ExistingClientID,
+		McpServerID:        *body.McpServerID,
+		ProviderID:         body.ProviderID,
+		ClientMode:         *body.ClientMode,
+		ExistingClientID:   body.ExistingClientID,
+		RegistrationMethod: body.RegistrationMethod,
 	}
 	if body.CreateProvider != nil {
 		v.CreateProvider = unmarshalCreateRemoteSessionIssuerFormRequestBodyToRemotesessionsCreateRemoteSessionIssuerForm(body.CreateProvider)
@@ -2603,6 +2971,18 @@ func NewListRemoteSessionsPayload(principalID *string, userSessionIssuerID *stri
 	v.RemoteSessionClientID = remoteSessionClientID
 	v.Cursor = cursor
 	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewCountRemoteSessionsPayload builds a remoteSessions service
+// countRemoteSessions endpoint payload.
+func NewCountRemoteSessionsPayload(remoteSessionClientID string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.CountRemoteSessionsPayload {
+	v := &remotesessions.CountRemoteSessionsPayload{}
+	v.RemoteSessionClientID = remoteSessionClientID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -2701,6 +3081,11 @@ func ValidateCommitServerIdentityConfigurationRequestBody(body *CommitServerIden
 	if body.ClientConfiguration != nil {
 		if err2 := ValidateServerIdentityClientConfigurationRequestBody(body.ClientConfiguration); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.RegistrationMethod != nil {
+		if !(*body.RegistrationMethod == "cimd" || *body.RegistrationMethod == "dcr") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.registration_method", *body.RegistrationMethod, []any{"cimd", "dcr"}))
 		}
 	}
 	return

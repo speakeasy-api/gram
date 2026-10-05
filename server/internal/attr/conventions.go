@@ -12,6 +12,11 @@ import (
 type Key = attribute.Key
 
 const (
+	RegistryEntryIDKey               = attribute.Key("gram.registry.entry.id")
+	RegistryUpdatedAtKey             = attribute.Key("gram.registry.entry.updated_at")
+	RegistryInvalidPathsKey          = attribute.Key("gram.registry.entry.invalid_paths") // JSON Pointers to the record fields that failed validation
+	RegistryEntryNameKey             = attribute.Key("gram.registry.entry.name")
+	RegistrySeedOutcomeKey           = attribute.Key("gram.registry.seed.outcome")
 	AdminOIDCSubjectKey              = attribute.Key("gram.admin.oidc_subject")
 	AuthSourceKey                    = attribute.Key("gram.auth.source")
 	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
@@ -417,6 +422,18 @@ const (
 	// OAuthAssertionAudienceKey records which accepted audience form a verified client assertion carried.
 	OAuthAssertionAudienceKey = attribute.Key("gram.oauth.assertion_audience")
 
+	// OAuthExpectedAudienceKey records the audience Gram required of an upstream JWT access token.
+	OAuthExpectedAudienceKey = attribute.Key("gram.oauth.expected_audience")
+
+	// OAuthTokenAudienceKey records the aud values an upstream JWT access token carried.
+	OAuthTokenAudienceKey = attribute.Key("gram.oauth.token_audience")
+
+	// OAuthRefreshTokenRotatedKey records whether an upstream refresh grant returned a new refresh token.
+	OAuthRefreshTokenRotatedKey = attribute.Key("gram.oauth.refresh_token_rotated")
+
+	// OAuthRefreshTokenLifetimeKey records the refresh-token lifetime in seconds an upstream reported, when it reported one.
+	OAuthRefreshTokenLifetimeKey = attribute.Key("gram.oauth.refresh_token_lifetime_seconds")
+
 	// OAuthAssertionExpiresAtKey records a verified client assertion's expiry.
 	OAuthAssertionExpiresAtKey = attribute.Key("gram.oauth.assertion_expires_at")
 
@@ -738,6 +755,22 @@ const (
 	TelemetryCHRowCountKey         = attribute.Key("gram.telemetry.ch.row_count")
 	InferenceInputCountKey         = attribute.Key("gram.inference.input_count")
 	InferenceAcceptedMessagesKey   = attribute.Key("gram.inference.accepted_messages")
+	// InferenceConversationOutcomeKey records how an Anthropic inference frame
+	// was mapped to a stored conversation: "session" (the frame's session id
+	// named an existing chat), "adopted_prefix" (the chat already holding the
+	// transcript's prefix was reused) or "new".
+	InferenceConversationOutcomeKey = attribute.Key("gram.inference.conversation_outcome")
+	// InferenceApplicationKey is the product surface an Anthropic inference
+	// frame's advisory source.application maps to (claude-chat-web,
+	// claude-code-web, claude-design, anthropic-inference). Metrics fold any
+	// other value to "other"; logs carry the mapped value as stored.
+	InferenceApplicationKey = attribute.Key("gram.inference.application")
+	// InferenceHasSessionIDKey reports whether an Anthropic inference frame
+	// carried a session id.
+	InferenceHasSessionIDKey = attribute.Key("gram.inference.has_session_id")
+	// InferenceMessageCountKey is the number of conversation messages in an
+	// Anthropic inference frame.
+	InferenceMessageCountKey = attribute.Key("gram.inference.message_count")
 	// TelemetryLogIDKey carries the telemetry_logs row id on records relayed
 	// to a customer OTLP destination. Delivery is at-least-once, so this is
 	// the key a destination dedupes redeliveries on.
@@ -865,9 +898,11 @@ const (
 
 	GitHubUsernameKey = attribute.Key("gram.github.username")
 
-	AIIntegrationConfigIDKey           = attribute.Key("gram.ai_integration.config_id")
-	AIIntegrationSyncScheduleKey       = attribute.Key("gram.ai_integration.sync_schedule")
-	AIIntegrationUsagePollNextAfterKey = attribute.Key("gram.ai_integration.usage_poll.next_after")
+	AIIntegrationConfigIDKey                = attribute.Key("gram.ai_integration.config_id")
+	AIIntegrationSyncScheduleKey            = attribute.Key("gram.ai_integration.sync_schedule")
+	AIIntegrationUsagePollNextAfterKey      = attribute.Key("gram.ai_integration.usage_poll.next_after")
+	AIIntegrationPollProviderRejectedKey    = attribute.Key("gram.ai_integration.poll.provider_rejected")
+	AIIntegrationPollProviderUnavailableKey = attribute.Key("gram.ai_integration.poll.provider_unavailable")
 
 	ResilienceBreakerStateKey           = attribute.Key("gram.circuit_breaker.state")
 	ResilienceBreakerPreviousStateKey   = attribute.Key("gram.circuit_breaker.previous_state")
@@ -1875,6 +1910,22 @@ func SlogOAuthDeclaredAuthMethod(v string) slog.Attr {
 
 func SlogOAuthAssertionAudience(v string) slog.Attr {
 	return slog.String(string(OAuthAssertionAudienceKey), v)
+}
+
+func SlogOAuthExpectedAudience(v string) slog.Attr {
+	return slog.String(string(OAuthExpectedAudienceKey), v)
+}
+
+func SlogOAuthTokenAudience(v []string) slog.Attr {
+	return slog.Any(string(OAuthTokenAudienceKey), v)
+}
+
+func SlogOAuthRefreshTokenRotated(v bool) slog.Attr {
+	return slog.Bool(string(OAuthRefreshTokenRotatedKey), v)
+}
+
+func SlogOAuthRefreshTokenLifetime(seconds int64) slog.Attr {
+	return slog.Int64(string(OAuthRefreshTokenLifetimeKey), seconds)
 }
 
 func SlogOAuthAssertionExpiresAt(v time.Time) slog.Attr {
@@ -3071,6 +3122,20 @@ func SlogAIIntegrationSyncSchedule(v string) slog.Attr {
 	return slog.String(string(AIIntegrationSyncScheduleKey), v)
 }
 
+func AIIntegrationPollProviderRejected(v bool) attribute.KeyValue {
+	return AIIntegrationPollProviderRejectedKey.Bool(v)
+}
+func SlogAIIntegrationPollProviderRejected(v bool) slog.Attr {
+	return slog.Bool(string(AIIntegrationPollProviderRejectedKey), v)
+}
+
+func AIIntegrationPollProviderUnavailable(v bool) attribute.KeyValue {
+	return AIIntegrationPollProviderUnavailableKey.Bool(v)
+}
+func SlogAIIntegrationPollProviderUnavailable(v bool) slog.Attr {
+	return slog.Bool(string(AIIntegrationPollProviderUnavailableKey), v)
+}
+
 func AIIntegrationUsagePollNextAfter(v time.Time) attribute.KeyValue {
 	return AIIntegrationUsagePollNextAfterKey.String(v.Format(time.RFC3339))
 }
@@ -3148,4 +3213,36 @@ func SlogInferenceInputCount(v int) slog.Attr {
 
 func SlogInferenceAcceptedMessages(v int) slog.Attr {
 	return slog.Int(string(InferenceAcceptedMessagesKey), v)
+}
+
+func InferenceConversationOutcome(v string) attribute.KeyValue {
+	return InferenceConversationOutcomeKey.String(v)
+}
+
+func SlogInferenceConversationOutcome(v string) slog.Attr {
+	return slog.String(string(InferenceConversationOutcomeKey), v)
+}
+
+func InferenceApplication(v string) attribute.KeyValue { return InferenceApplicationKey.String(v) }
+func SlogInferenceApplication(v string) slog.Attr {
+	return slog.String(string(InferenceApplicationKey), v)
+}
+
+func InferenceHasSessionID(v bool) attribute.KeyValue { return InferenceHasSessionIDKey.Bool(v) }
+func SlogInferenceHasSessionID(v bool) slog.Attr {
+	return slog.Bool(string(InferenceHasSessionIDKey), v)
+}
+
+func SlogInferenceMessageCount(v int) slog.Attr {
+	return slog.Int(string(InferenceMessageCountKey), v)
+}
+
+func SlogRegistryEntryID(v string) slog.Attr   { return slog.String(string(RegistryEntryIDKey), v) }
+func SlogRegistryUpdatedAt(v string) slog.Attr { return slog.String(string(RegistryUpdatedAtKey), v) }
+func SlogRegistryInvalidPaths(v []string) slog.Attr {
+	return slog.Any(string(RegistryInvalidPathsKey), v)
+}
+func SlogRegistryEntryName(v string) slog.Attr { return slog.String(string(RegistryEntryNameKey), v) }
+func SlogRegistrySeedOutcome(v string) slog.Attr {
+	return slog.String(string(RegistrySeedOutcomeKey), v)
 }

@@ -19,6 +19,11 @@ type ChallengeBrowserBinding struct {
 	CookieID     string `json:"cookie_id"`
 	OriginHash   string `json:"origin_hash"`
 	CallbackHash string `json:"callback_hash"`
+	// CallbackOrigin is the origin of the federated IdP callback this challenge
+	// was minted with, which holds the callback cookie. It outlives the
+	// Federation state so the remote login hop can find that host. Empty on
+	// challenges minted before it was recorded.
+	CallbackOrigin string `json:"callback_origin,omitempty"`
 }
 
 func validateChallengeBrowser(r *http.Request, state AuthnChallengeState, callback bool) error {
@@ -115,6 +120,11 @@ func (s *Service) validateRemoteLoginBrowser(r *http.Request) error {
 	}
 	if parent.Subject == nil || remote.Subject == nil || parent.Subject.String() != remote.Subject.String() || parent.UserSessionIssuerID != remote.UserSessionIssuerID {
 		return errors.New("remote login parent mismatch")
+	}
+	// A login on another callback host carries its own browser binding, set
+	// there by the bind stop of the remote login browser hop.
+	if remote.BrowserHash != "" {
+		return s.validateRemoteLoginHopBrowser(r, parent, remote)
 	}
 	return validateChallengeBrowser(r, parent, true)
 }

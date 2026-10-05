@@ -13,6 +13,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const acquireTestLockFixture = `-- name: AcquireTestLockFixture :exec
+SELECT pg_advisory_xact_lock($1::bigint)
+`
+
+// Transaction-scoped advisory locks for testing the synchronization helpers themselves.
+func (q *Queries) AcquireTestLockFixture(ctx context.Context, key int64) error {
+	_, err := q.db.Exec(ctx, acquireTestLockFixture, key)
+	return err
+}
+
 const addAttachmentReplacementOwnerMembershipFixture = `-- name: AddAttachmentReplacementOwnerMembershipFixture :execrows
 INSERT INTO organization_user_relationships (organization_id, user_id) VALUES ($1, 'replacement-owner')
 `
@@ -73,6 +83,18 @@ func (q *Queries) AttachmentSourceWasUsedFixture(ctx context.Context, id uuid.UU
 	var used bool
 	err := row.Scan(&used)
 	return used, err
+}
+
+const backendPIDFixture = `-- name: BackendPIDFixture :one
+SELECT pg_backend_pid()
+`
+
+// Identify a holder exposed only through a transaction-enlisted query interface.
+func (q *Queries) BackendPIDFixture(ctx context.Context) (int32, error) {
+	row := q.db.QueryRow(ctx, backendPIDFixture)
+	var pg_backend_pid int32
+	err := row.Scan(&pg_backend_pid)
+	return pg_backend_pid, err
 }
 
 const clearAttachmentRefreshClaimFixture = `-- name: ClearAttachmentRefreshClaimFixture :execrows
@@ -196,6 +218,26 @@ SELECT count(*) FROM user_sessions WHERE subject_urn = $1
 
 func (q *Queries) CountAttachmentHumanSessionsFixture(ctx context.Context, subjectUrn urn.SessionSubject) (int64, error) {
 	row := q.db.QueryRow(ctx, countAttachmentHumanSessionsFixture, subjectUrn)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countBackendsBlockedByFixture = `-- name: CountBackendsBlockedByFixture :one
+WITH RECURSIVE blocked(pid) AS (
+    SELECT pid FROM pg_catalog.pg_stat_activity
+    WHERE datname = current_database() AND $1::integer = ANY(pg_blocking_pids(pid))
+    UNION
+    SELECT activity.pid FROM pg_catalog.pg_stat_activity AS activity
+    JOIN blocked AS blocker ON blocker.pid = ANY(pg_blocking_pids(activity.pid))
+    WHERE activity.datname = current_database()
+)
+SELECT count(*) FROM blocked
+`
+
+// Follow queued row-lock waiters as well as the direct holder; UNION deduplicates paths.
+func (q *Queries) CountBackendsBlockedByFixture(ctx context.Context, holderPid int32) (int64, error) {
+	row := q.db.QueryRow(ctx, countBackendsBlockedByFixture, holderPid)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -422,6 +464,23 @@ SELECT COUNT(*) FROM publish_outbox
 
 func (q *Queries) CountPublishOutboxRows(ctx context.Context) (int64, error) {
 	row := q.db.QueryRow(ctx, countPublishOutboxRows)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPublishOutboxRowsByTopic = `-- name: CountPublishOutboxRowsByTopic :one
+SELECT COUNT(*) FROM publish_outbox
+WHERE organization_id = $1 AND topic = $2
+`
+
+type CountPublishOutboxRowsByTopicParams struct {
+	OrganizationID string
+	Topic          string
+}
+
+func (q *Queries) CountPublishOutboxRowsByTopic(ctx context.Context, arg CountPublishOutboxRowsByTopicParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPublishOutboxRowsByTopic, arg.OrganizationID, arg.Topic)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -913,6 +972,15 @@ func (q *Queries) DeleteOrganizationUserRelationshipFixture(ctx context.Context,
 	return err
 }
 
+const deleteRetainedCatalogSourcesFixture = `-- name: DeleteRetainedCatalogSourcesFixture :exec
+DELETE FROM mcp_registries
+`
+
+func (q *Queries) DeleteRetainedCatalogSourcesFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteRetainedCatalogSourcesFixture)
+	return err
+}
+
 const detachRemoteSessionClientFromUserSessionIssuer = `-- name: DetachRemoteSessionClientFromUserSessionIssuer :execrows
 DELETE FROM remote_session_client_user_session_issuers
 WHERE remote_session_client_id = $1
@@ -1107,11 +1175,9 @@ type ForceRemoteSessionClientAuthMethodFixtureParams struct {
 	ProjectID               uuid.NullUUID
 }
 
-// TEST FIXTURE ONLY. Writes a token_endpoint_auth_method the Goa enum does not
-// accept, which no production path can produce. private_key_jwt arrives with
-// AIM-156; until then planting the value directly is the only way to exercise
-// requireDetachableKeySet and requirePrivateKeyJWTKeySet, the rules that guard
-// it.
+// TEST FIXTURE ONLY. Plants a token_endpoint_auth_method directly, bypassing
+// the management API's key-set checks, so tests can build states those checks
+// (requireDetachableKeySet, requirePrivateKeyJWTKeySet) must then refuse.
 func (q *Queries) ForceRemoteSessionClientAuthMethodFixture(ctx context.Context, arg ForceRemoteSessionClientAuthMethodFixtureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, forceRemoteSessionClientAuthMethodFixture, arg.TokenEndpointAuthMethod, arg.ID, arg.ProjectID)
 	if err != nil {
@@ -1384,6 +1450,23 @@ type ForceSoftDeleteUserSessionIssuerParams struct {
 func (q *Queries) ForceSoftDeleteUserSessionIssuer(ctx context.Context, arg ForceSoftDeleteUserSessionIssuerParams) error {
 	_, err := q.db.Exec(ctx, forceSoftDeleteUserSessionIssuer, arg.ID, arg.ProjectID)
 	return err
+}
+
+const getAdvisoryLockHolderFixture = `-- name: GetAdvisoryLockHolderFixture :one
+SELECT locks.pid::integer FROM pg_catalog.pg_locks AS locks
+WHERE locks.locktype = 'advisory' AND locks.granted
+  AND locks.database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database())
+  AND locks.classid = ((hashtextextended($1::text, 0) >> 32) & 4294967295)::oid
+  AND locks.objid = (hashtextextended($1::text, 0) & 4294967295)::oid
+  AND locks.objsubid = 1
+`
+
+// Resolve a service-owned session lock by its exact application key.
+func (q *Queries) GetAdvisoryLockHolderFixture(ctx context.Context, key string) (int32, error) {
+	row := q.db.QueryRow(ctx, getAdvisoryLockHolderFixture, key)
+	var locks_pid int32
+	err := row.Scan(&locks_pid)
+	return locks_pid, err
 }
 
 const getAttachmentSourceIDFixture = `-- name: GetAttachmentSourceIDFixture :one
@@ -2141,6 +2224,35 @@ func (q *Queries) InsertChatMessage(ctx context.Context, arg InsertChatMessagePa
 	return id, err
 }
 
+const insertCompletedDeploymentFixture = `-- name: InsertCompletedDeploymentFixture :exec
+WITH created AS (
+  INSERT INTO deployments (id, user_id, project_id, organization_id, idempotency_key)
+  VALUES ($1, $2, $3, $4, $5)
+  RETURNING id
+)
+INSERT INTO deployment_statuses (deployment_id, status)
+SELECT id, 'completed' FROM created
+`
+
+type InsertCompletedDeploymentFixtureParams struct {
+	ID             uuid.UUID
+	UserID         string
+	ProjectID      uuid.UUID
+	OrganizationID string
+	IdempotencyKey string
+}
+
+func (q *Queries) InsertCompletedDeploymentFixture(ctx context.Context, arg InsertCompletedDeploymentFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertCompletedDeploymentFixture,
+		arg.ID,
+		arg.UserID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.IdempotencyKey,
+	)
+	return err
+}
+
 const insertContentPartRiskResultFixture = `-- name: InsertContentPartRiskResultFixture :exec
 INSERT INTO risk_results (
   id, project_id, organization_id, risk_policy_id, risk_policy_version,
@@ -2204,6 +2316,62 @@ func (q *Queries) InsertDemoSeedPrincipalGrantFixture(ctx context.Context, arg I
 	return grant_json, err
 }
 
+const insertDeploymentAssetFixture = `-- name: InsertDeploymentAssetFixture :exec
+INSERT INTO assets (id, project_id, organization_id, name, url, kind, content_type, content_length, sha256)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8)
+`
+
+type InsertDeploymentAssetFixtureParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
+	Name           string
+	Url            string
+	Kind           string
+	ContentType    string
+	Sha256         string
+}
+
+func (q *Queries) InsertDeploymentAssetFixture(ctx context.Context, arg InsertDeploymentAssetFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertDeploymentAssetFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Name,
+		arg.Url,
+		arg.Kind,
+		arg.ContentType,
+		arg.Sha256,
+	)
+	return err
+}
+
+const insertDeploymentFunctionFixture = `-- name: InsertDeploymentFunctionFixture :exec
+INSERT INTO deployments_functions (id, deployment_id, asset_id, name, slug, runtime)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertDeploymentFunctionFixtureParams struct {
+	ID           uuid.UUID
+	DeploymentID uuid.UUID
+	AssetID      uuid.UUID
+	Name         string
+	Slug         string
+	Runtime      string
+}
+
+func (q *Queries) InsertDeploymentFunctionFixture(ctx context.Context, arg InsertDeploymentFunctionFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertDeploymentFunctionFixture,
+		arg.ID,
+		arg.DeploymentID,
+		arg.AssetID,
+		arg.Name,
+		arg.Slug,
+		arg.Runtime,
+	)
+	return err
+}
+
 const insertDeviceAgentDeviceSyncFixture = `-- name: InsertDeviceAgentDeviceSyncFixture :exec
 INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname, first_seen_at, last_seen_at)
 VALUES ($1, $2, $3, NULLIF($4::text, ''), $5, $5)
@@ -2241,6 +2409,34 @@ type InsertDeviceAgentSyncFixtureParams struct {
 
 func (q *Queries) InsertDeviceAgentSyncFixture(ctx context.Context, arg InsertDeviceAgentSyncFixtureParams) error {
 	_, err := q.db.Exec(ctx, insertDeviceAgentSyncFixture, arg.OrganizationID, arg.Email, arg.SeenAt)
+	return err
+}
+
+const insertFunctionToolDefinitionFixture = `-- name: InsertFunctionToolDefinitionFixture :exec
+INSERT INTO function_tool_definitions (tool_urn, project_id, deployment_id, function_id, runtime, name, description)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+`
+
+type InsertFunctionToolDefinitionFixtureParams struct {
+	ToolUrn      urn.Tool
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+	FunctionID   uuid.UUID
+	Runtime      string
+	Name         string
+	Description  string
+}
+
+func (q *Queries) InsertFunctionToolDefinitionFixture(ctx context.Context, arg InsertFunctionToolDefinitionFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertFunctionToolDefinitionFixture,
+		arg.ToolUrn,
+		arg.ProjectID,
+		arg.DeploymentID,
+		arg.FunctionID,
+		arg.Runtime,
+		arg.Name,
+		arg.Description,
+	)
 	return err
 }
 
@@ -2550,6 +2746,47 @@ func (q *Queries) InsertRemoteSessionEMABindingFixture(ctx context.Context, arg 
 	return id, err
 }
 
+const insertRetainedLegacyCatalogSourceFixture = `-- name: InsertRetainedLegacyCatalogSourceFixture :exec
+INSERT INTO mcp_registries (id,name,url,source_type,auth_profile,enabled,certification_state,source_key) VALUES ($1,'Legacy catalog','https://legacy.example.test','pulse_v0_1','pulse_server_credentials',true,'certified','pulse')
+`
+
+func (q *Queries) InsertRetainedLegacyCatalogSourceFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, insertRetainedLegacyCatalogSourceFixture, id)
+	return err
+}
+
+const insertToolsetVersionFixture = `-- name: InsertToolsetVersionFixture :exec
+INSERT INTO toolset_versions (toolset_id, version, tool_urns)
+SELECT t.id, $1, $2::TEXT[]
+FROM toolsets t
+WHERE t.id = $3
+  AND t.project_id = $4
+  AND t.organization_id = $5
+  AND t.deleted IS FALSE
+`
+
+type InsertToolsetVersionFixtureParams struct {
+	Version        int64
+	ToolUrns       []string
+	ToolsetID      uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Tenant-scoped on purpose: the insert only lands when the named toolset
+// really belongs to the named project and organization, so a fixture cannot
+// reach across tenants the way a bare toolset id would let it.
+func (q *Queries) InsertToolsetVersionFixture(ctx context.Context, arg InsertToolsetVersionFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertToolsetVersionFixture,
+		arg.Version,
+		arg.ToolUrns,
+		arg.ToolsetID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	return err
+}
+
 const insertUserFixture = `-- name: InsertUserFixture :exec
 INSERT INTO users (id, email, display_name)
 VALUES ($1, $2, $3)
@@ -2615,20 +2852,30 @@ func (q *Queries) IsLifecycleBackendBlockedFixture(ctx context.Context, pid int3
 	return blocked, err
 }
 
-const isQueryBlockedOnLockFixture = `-- name: IsQueryBlockedOnLockFixture :one
+const isQueryBlockedByFixture = `-- name: IsQueryBlockedByFixture :one
+WITH RECURSIVE blocked(pid) AS (
+    SELECT pid FROM pg_catalog.pg_stat_activity
+    WHERE datname = current_database() AND $2::integer = ANY(pg_blocking_pids(pid))
+    UNION
+    SELECT activity.pid FROM pg_catalog.pg_stat_activity AS activity
+    JOIN blocked AS blocker ON blocker.pid = ANY(pg_blocking_pids(activity.pid))
+    WHERE activity.datname = current_database()
+)
 SELECT EXISTS (
-    SELECT 1
-    FROM pg_catalog.pg_stat_activity
-    WHERE datname = current_database()
-      AND state = 'active'
-      AND wait_event_type = 'Lock'
-      AND query LIKE $1::text
+    SELECT 1 FROM pg_catalog.pg_stat_activity AS activity
+    JOIN blocked USING (pid)
+    WHERE activity.state = 'active' AND activity.wait_event_type = 'Lock'
+      AND activity.query LIKE $1::text
 )
 `
 
-// Test-only synchronization: reports whether a matching active query is waiting on a lock.
-func (q *Queries) IsQueryBlockedOnLockFixture(ctx context.Context, queryPattern string) (bool, error) {
-	row := q.db.QueryRow(ctx, isQueryBlockedOnLockFixture, queryPattern)
+type IsQueryBlockedByFixtureParams struct {
+	QueryPattern string
+	HolderPid    int32
+}
+
+func (q *Queries) IsQueryBlockedByFixture(ctx context.Context, arg IsQueryBlockedByFixtureParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isQueryBlockedByFixture, arg.QueryPattern, arg.HolderPid)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -3104,6 +3351,61 @@ func (q *Queries) ListRiskResultsAll(ctx context.Context, arg ListRiskResultsAll
 	return items, nil
 }
 
+const lockExternalOAuthMetadataNowaitFixture = `-- name: LockExternalOAuthMetadataNowaitFixture :one
+SELECT id FROM external_oauth_server_metadata WHERE id = $1 AND project_id = $2 FOR UPDATE NOWAIT
+`
+
+type LockExternalOAuthMetadataNowaitFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) LockExternalOAuthMetadataNowaitFixture(ctx context.Context, arg LockExternalOAuthMetadataNowaitFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockExternalOAuthMetadataNowaitFixture, arg.ID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockMCPServerRowFixture = `-- name: LockMCPServerRowFixture :one
+SELECT id FROM mcp_servers WHERE id = $1 AND project_id = $2 AND deleted IS FALSE FOR UPDATE
+`
+
+type LockMCPServerRowFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Holds the row lock a dashboard edit of this MCP server would take, so a test
+// can prove a writer pins the server-to-toolset binding before deciding what
+// to change.
+func (q *Queries) LockMCPServerRowFixture(ctx context.Context, arg LockMCPServerRowFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockMCPServerRowFixture, arg.ID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockMCPServerRowNowaitFixture = `-- name: LockMCPServerRowNowaitFixture :one
+SELECT id FROM mcp_servers WHERE id = $1 AND project_id = $2 AND deleted IS FALSE FOR UPDATE NOWAIT
+`
+
+type LockMCPServerRowNowaitFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Probes whether anyone currently holds the MCP server row lock, without
+// waiting. Used to assert lock ORDER: a writer parked on the toolset row must
+// not already be holding this one, or the two rows are taken in opposite
+// orders by different paths and the pair can deadlock.
+func (q *Queries) LockMCPServerRowNowaitFixture(ctx context.Context, arg LockMCPServerRowNowaitFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockMCPServerRowNowaitFixture, arg.ID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockOpenRouterAPIKeyForUpdateFixture = `-- name: LockOpenRouterAPIKeyForUpdateFixture :one
 SELECT 1
 FROM openrouter_api_keys
@@ -3151,6 +3453,63 @@ type LockPreparationFixtureIssuerParams struct {
 
 func (q *Queries) LockPreparationFixtureIssuer(ctx context.Context, arg LockPreparationFixtureIssuerParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockPreparationFixtureIssuer, arg.ID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockPublishOutboxRowFixture = `-- name: LockPublishOutboxRowFixture :one
+SELECT id FROM publish_outbox WHERE id = $1 AND organization_id = $2 FOR UPDATE
+`
+
+type LockPublishOutboxRowFixtureParams struct {
+	ID             int64
+	OrganizationID string
+}
+
+func (q *Queries) LockPublishOutboxRowFixture(ctx context.Context, arg LockPublishOutboxRowFixtureParams) (int64, error) {
+	row := q.db.QueryRow(ctx, lockPublishOutboxRowFixture, arg.ID, arg.OrganizationID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockToolsetNoKeyUpdateFixture = `-- name: LockToolsetNoKeyUpdateFixture :one
+SELECT id FROM toolsets WHERE project_id = $1 AND slug = $2 AND deleted IS FALSE FOR NO KEY UPDATE NOWAIT
+`
+
+type LockToolsetNoKeyUpdateFixtureParams struct {
+	ProjectID uuid.UUID
+	Slug      string
+}
+
+// Parks a writer that wants the toolset row's FOR UPDATE lock while still
+// allowing rows that reference the toolset to be inserted.
+//
+// FOR UPDATE is the wrong tool for that: it conflicts with the FOR KEY SHARE
+// lock PostgreSQL takes on the referenced row for a foreign key, so holding it
+// also blocks attaching an mcp_servers row to this toolset — and a test that
+// needs to do exactly that while a writer waits deadlocks itself. FOR NO KEY
+// UPDATE conflicts with FOR UPDATE but not with FOR KEY SHARE, which is the
+// combination an interleaving test needs.
+func (q *Queries) LockToolsetNoKeyUpdateFixture(ctx context.Context, arg LockToolsetNoKeyUpdateFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockToolsetNoKeyUpdateFixture, arg.ProjectID, arg.Slug)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockToolsetNowaitFixture = `-- name: LockToolsetNowaitFixture :one
+SELECT id FROM toolsets WHERE project_id = $1 AND slug = $2 AND deleted IS FALSE FOR UPDATE NOWAIT
+`
+
+type LockToolsetNowaitFixtureParams struct {
+	ProjectID uuid.UUID
+	Slug      string
+}
+
+func (q *Queries) LockToolsetNowaitFixture(ctx context.Context, arg LockToolsetNowaitFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockToolsetNowaitFixture, arg.ProjectID, arg.Slug)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -3740,6 +4099,66 @@ ALTER TABLE publish_outbox ADD CONSTRAINT reject_publish_outbox_writes_fixture C
 func (q *Queries) RejectPublishOutboxWritesFixture(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, rejectPublishOutboxWritesFixture)
 	return err
+}
+
+const repointMCPServerToolsetFixture = `-- name: RepointMCPServerToolsetFixture :one
+UPDATE mcp_servers AS m
+SET toolset_id = (
+        SELECT t.id
+        FROM toolsets AS t
+        JOIN projects AS p
+          ON p.id = t.project_id
+         AND p.organization_id = t.organization_id
+         AND p.deleted IS FALSE
+        WHERE t.id = $1
+          AND t.project_id = $2
+          AND t.organization_id = $3
+          AND t.deleted IS FALSE
+    ),
+    updated_at = clock_timestamp()
+WHERE m.id = $4
+  AND m.project_id = $2
+  AND m.deleted IS FALSE
+  -- Refuses rather than nulling the backend when the target does not resolve
+  -- in this tenancy: the exclusivity CHECK requires exactly one backend, so a
+  -- fixture that silently cleared it would fail far from the real cause.
+  AND EXISTS (
+      SELECT 1 FROM toolsets AS t
+      WHERE t.id = $1
+        AND t.project_id = $2
+        AND t.organization_id = $3
+        AND t.deleted IS FALSE
+  )
+RETURNING m.id
+`
+
+type RepointMCPServerToolsetFixtureParams struct {
+	ToolsetID      uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+// Moves an MCP server onto a different backing toolset, which is what
+// UpdateMCPServer does to toolset_id. Used to stage the race where the target
+// of a tool-exposure change moves after it was read.
+//
+// The target toolset is resolved through toolsets scoped to the same project
+// and organization, not taken on trust from the caller. mcp_servers.toolset_id
+// has no composite constraint pairing it with project_id, so an unscoped
+// version of this fixture could manufacture exactly the cross-project and
+// cross-organization binding this workflow exists to refuse — and a test
+// fixture that can build an impossible state makes the suite prove nothing.
+func (q *Queries) RepointMCPServerToolsetFixture(ctx context.Context, arg RepointMCPServerToolsetFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, repointMCPServerToolsetFixture,
+		arg.ToolsetID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const restoreAgentAttachmentsFixture = `-- name: RestoreAgentAttachmentsFixture :execrows
@@ -4372,6 +4791,24 @@ func (q *Queries) SeedUserAccountFixture(ctx context.Context, arg SeedUserAccoun
 	return id, err
 }
 
+const setAPIKeyExpiresAtFixture = `-- name: SetAPIKeyExpiresAtFixture :exec
+UPDATE api_keys
+SET expires_at = $1
+WHERE key_hash = $2
+`
+
+type SetAPIKeyExpiresAtFixtureParams struct {
+	ExpiresAt pgtype.Timestamptz
+	KeyHash   string
+}
+
+// Fast-forwards or rewinds an API key's expiry so tests can observe the
+// authentication boundary a credential rotation's grace window creates.
+func (q *Queries) SetAPIKeyExpiresAtFixture(ctx context.Context, arg SetAPIKeyExpiresAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setAPIKeyExpiresAtFixture, arg.ExpiresAt, arg.KeyHash)
+	return err
+}
+
 const setAgentInvalidLifecycleFixture = `-- name: SetAgentInvalidLifecycleFixture :exec
 UPDATE agents
 SET suspended_at = clock_timestamp(), revoked_at = clock_timestamp()
@@ -4576,6 +5013,17 @@ type SetFunctionToolVariablesParams struct {
 func (q *Queries) SetFunctionToolVariables(ctx context.Context, arg SetFunctionToolVariablesParams) error {
 	_, err := q.db.Exec(ctx, setFunctionToolVariables, arg.Variables, arg.ID, arg.ProjectID)
 	return err
+}
+
+const setLocalLockTimeoutFixture = `-- name: SetLocalLockTimeoutFixture :one
+SELECT set_config('lock_timeout', $1::text, true)
+`
+
+func (q *Queries) SetLocalLockTimeoutFixture(ctx context.Context, timeout string) (string, error) {
+	row := q.db.QueryRow(ctx, setLocalLockTimeoutFixture, timeout)
+	var set_config string
+	err := row.Scan(&set_config)
+	return set_config, err
 }
 
 const setMCPServerNetworkAccessModeFixture = `-- name: SetMCPServerNetworkAccessModeFixture :execrows
@@ -5044,6 +5492,34 @@ func (q *Queries) SetRemoteSessionValidationTrackingFixture(ctx context.Context,
 		arg.CreatedAt,
 		arg.ID,
 		arg.ProjectID,
+	)
+	return err
+}
+
+const setUserLifecycleFixture = `-- name: SetUserLifecycleFixture :exec
+UPDATE users
+SET deleted_at = $1::timestamptz,
+    workos_deleted_at = $2::timestamptz,
+    last_login = $3::timestamptz
+WHERE id = $4
+`
+
+type SetUserLifecycleFixtureParams struct {
+	DeletedAt       pgtype.Timestamptz
+	WorkosDeletedAt pgtype.Timestamptz
+	LastLogin       pgtype.Timestamptz
+	ID              string
+}
+
+// Test-only fixture: independently controls local/provider deletion and login
+// timestamps, including restoring local state without clearing provider deletion.
+// Users are global identities and have no project_id.
+func (q *Queries) SetUserLifecycleFixture(ctx context.Context, arg SetUserLifecycleFixtureParams) error {
+	_, err := q.db.Exec(ctx, setUserLifecycleFixture,
+		arg.DeletedAt,
+		arg.WorkosDeletedAt,
+		arg.LastLogin,
+		arg.ID,
 	)
 	return err
 }

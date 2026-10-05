@@ -1,13 +1,10 @@
-import { Link } from "react-router";
-
 import { Button } from "@/components/ui/Button";
 
 import type { StepAffordances } from "./ConnectionChecklist";
-import type { LiveConnection } from "../../connectionView";
+import { connectionStep, type LiveConnection } from "../../connectionView";
 import { CopyableValue } from "./OktaConnectionDetails";
-import { AgentSetupForm } from "./OktaConnectionForms";
+import { AgentSetupForm, ClientIdForm } from "./OktaConnectionForms";
 import { oktaAdminConsoleUrl } from "../../oktaConsoleLinks";
-import { oktaViewHref } from "../../tabs";
 
 function adminConsoleLink(connection: LiveConnection): JSX.Element {
   return (
@@ -33,6 +30,10 @@ export const STEP_AFFORDANCES: StepAffordances = {
       />
     </span>
   ),
+  submit_client_id: (connection) =>
+    connectionStep(connection) === "submit_client_id" ? (
+      <ClientIdForm key={connection.id} connection={connection} />
+    ) : null,
   record_ai_agent: (connection) => (
     <AgentSetupForm
       key={`${connection.agentId ?? ""}|${connection.agentAppId ?? ""}`}
@@ -42,9 +43,7 @@ export const STEP_AFFORDANCES: StepAffordances = {
   first_resource_connection: () => (
     <div>
       <Button asChild variant="secondary">
-        <Link to={oktaViewHref("cross-app-access")}>
-          Configure Cross App Access
-        </Link>
+        <a href="#readiness">Review server readiness below</a>
       </Button>
     </div>
   ),
