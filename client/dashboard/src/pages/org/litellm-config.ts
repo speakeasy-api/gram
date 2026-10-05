@@ -1,5 +1,3 @@
-import type { LiteLLMInstanceFailurePosture } from "@gram/client/models/components/litellminstance.js";
-
 function apiBase(serverURL: string): string {
   const url = new URL(serverURL);
   const ipv4Parts = url.hostname.split(".");
@@ -15,10 +13,7 @@ function apiBase(serverURL: string): string {
   return url.toString().replace(/\/$/, "");
 }
 
-export function buildLiteLLMGuardrailConfig(
-  serverURL: string,
-  failurePosture: LiteLLMInstanceFailurePosture,
-): string {
+export function buildLiteLLMGuardrailConfig(serverURL: string): string {
   return `guardrails:
   - guardrail_name: gram-risk
     litellm_params:
@@ -29,6 +24,9 @@ export function buildLiteLLMGuardrailConfig(
         Gram-Key: os.environ/GRAM_LITELLM_INGEST_KEY
         Gram-Project: os.environ/GRAM_PROJECT_SLUG
       extra_headers:
+        - x-gram-acting-principal
+        - x-gram-acting-principal-contract
+        - x-gram-inference-invocation-id
         - x-gram-session-id
         - x-claude-code-session-id
         - session-id
@@ -43,7 +41,7 @@ export function buildLiteLLMGuardrailConfig(
       default_on: true
       streaming_end_of_stream_only: true
       fail_on_error: true
-      unreachable_fallback: ${failurePosture}`;
+      unreachable_fallback: fail_closed`;
 }
 
 export function buildLiteLLMEnvironment(
@@ -62,13 +60,19 @@ export LITELLM_OTEL_INTEGRATION_ENABLE_METRICS=true
 export LITELLM_OTEL_LEGACY_COMPAT=false`;
 }
 
+function liteLLMVerificationCommand(content: string): string {
+  return `curl "\${LITELLM_PROXY_URL:-http://localhost:4000}/v1/chat/completions" \\
+  --header "Authorization: Bearer $LITELLM_VIRTUAL_KEY" \\
+  --header "X-Gram-Acting-Principal: $GRAM_LITELLM_ACTING_PRINCIPAL" \\
+  --header "X-Gram-Acting-Principal-Contract: litellm-acting-principal.v1" \\
+  --header "X-Gram-Inference-Invocation-ID: $GRAM_LITELLM_INVOCATION_ID" \\
+  --header "Content-Type: application/json" \\
+  --data '{"model":"'"$LITELLM_MODEL"'","messages":[{"role":"user","content":"${content}"}]}'`;
+}
+
 export const liteLLMVerificationCommands = {
-  safe: `curl "\${LITELLM_PROXY_URL:-http://localhost:4000}/v1/chat/completions" \\
-  --header "Authorization: Bearer $LITELLM_VIRTUAL_KEY" \\
-  --header "Content-Type: application/json" \\
-  --data '{"model":"'"$LITELLM_MODEL"'","messages":[{"role":"user","content":"Reply with OK."}]}'`,
-  blocked: `curl "\${LITELLM_PROXY_URL:-http://localhost:4000}/v1/chat/completions" \\
-  --header "Authorization: Bearer $LITELLM_VIRTUAL_KEY" \\
-  --header "Content-Type: application/json" \\
-  --data '{"model":"'"$LITELLM_MODEL"'","messages":[{"role":"user","content":"token=ghp_R2D2C3POLuk3Skywalker1234567890ab"}]}'`,
+  safe: liteLLMVerificationCommand("Reply with OK."),
+  blocked: liteLLMVerificationCommand(
+    "token=ghp_R2D2C3POLuk3Skywalker1234567890ab",
+  ),
 } as const;

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	hooksgen "github.com/speakeasy-api/gram/server/gen/hooks"
 	gen "github.com/speakeasy-api/gram/server/gen/litellm"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
@@ -92,6 +94,18 @@ func (f fixedAuthorizer) Authorize(ctx context.Context, _ string, _ *security.AP
 	return contextvalues.SetAuthContext(ctx, f.authCtx), nil
 }
 
+type allowLiteLLMAIAccess struct{}
+
+func (allowLiteLLMAIAccess) Evaluate(context.Context, *gen.IngestPayload, *contextvalues.AuthContext) liteLLMAIAccessDecision {
+	return liteLLMAIAccessDecision{}
+}
+
+type fixedLiteLLMAIAccess string
+
+func (f fixedLiteLLMAIAccess) Evaluate(context.Context, *gen.IngestPayload, *contextvalues.AuthContext) liteLLMAIAccessDecision {
+	return liteLLMAIAccessDecision{blocked: false, reason: "", message: "", userID: string(f)}
+}
+
 func testPayload() *gen.IngestPayload {
 	return &gen.IngestPayload{
 		ApikeyToken:      nil,
@@ -138,29 +152,42 @@ func testAuthContext() *contextvalues.AuthContext {
 		HasActiveSubscription: true,
 		Whitelisted:           false,
 		ProjectSlug:           new("project-test"),
-		APIKeyScopes:          []string{"hooks"},
+		APIKeyScopes:          []string{"hooks", auth.APIKeyScopeLiteLLMActingPrincipal.String()},
 		IsAdmin:               false,
 	}
+}
+
+// governedIngestContext marks the callback key as an instance that adopted the
+// acting-principal contract, so ingest enforces ai_access.
+func governedIngestContext(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	governed := *authCtx
+	governed.APIKeyScopes = append(slices.Clone(authCtx.APIKeyScopes), auth.APIKeyScopeLiteLLMActingPrincipal.String())
+	return contextvalues.SetAuthContext(ctx, &governed)
 }
 
 func unitService(t *testing.T, ingester HookIngester, authCtx *contextvalues.AuthContext) *Service {
 	t.Helper()
 	tracerProvider := testenv.NewTracerProvider(t)
 	return &Service{
-		tracer:    tracerProvider.Tracer("test"),
-		logger:    testenv.NewLogger(t),
-		auth:      fixedAuthorizer{authCtx: authCtx},
-		hooks:     ingester,
-		calls:     callcache.New(newMemoryCache()),
-		traces:    newTraceProcessor(testenv.NewLogger(t), testenv.NewMeterProvider(t), telemetry.NewStub(testenv.NewLogger(t)).LogBulk, traceProcessorWorkers, traceProcessorQueueSize),
-		metrics:   nil,
-		health:    newDisabledHealthProcessor(t),
-		db:        nil,
-		telemetry: nil,
-		instances: NewInstanceResolver(testenv.NewLogger(t), nil),
-		authz:     nil,
-		audit:     nil,
-		keyPrefix: "",
+		tracer:       tracerProvider.Tracer("test"),
+		logger:       testenv.NewLogger(t),
+		auth:         fixedAuthorizer{authCtx: authCtx},
+		hooks:        ingester,
+		calls:        callcache.New(newMemoryCache()),
+		traces:       newTraceProcessor(testenv.NewLogger(t), testenv.NewMeterProvider(t), telemetry.NewStub(testenv.NewLogger(t)).LogBulk, traceProcessorWorkers, traceProcessorQueueSize),
+		metrics:      nil,
+		health:       newDisabledHealthProcessor(t),
+		db:           nil,
+		telemetry:    nil,
+		instances:    NewInstanceResolver(testenv.NewLogger(t), nil),
+		authz:        nil,
+		audit:        nil,
+		keyPrefix:    "",
+		actingSigner: nil,
+		aiAccess:     allowLiteLLMAIAccess{},
 	}
 }
 
@@ -169,6 +196,7 @@ func TestIngestTranslatesLatestStructuredUserMessage(t *testing.T) {
 	authCtx := testAuthContext()
 	ingester := &captureIngester{result: allowResult(hooks.ResolvedActor{UserID: "resolved-user", Email: "member@example.test"}), err: nil, calls: nil}
 	service := unitService(t, ingester, authCtx)
+	service.aiAccess = fixedLiteLLMAIAccess("asserted-user")
 	payload := testPayload()
 	payload.StructuredMessages = []*gen.LiteLLMStructuredMessage{
 		{Role: "user", Content: "older prompt"},
@@ -208,12 +236,12 @@ func TestIngestTranslatesLatestStructuredUserMessage(t *testing.T) {
 	require.Nil(t, call.payload.Raw)
 	require.Equal(t, "litellm", call.payload.Source.Adapter)
 	require.Equal(t, "1.94.0", *call.payload.Source.AdapterVersion)
-	require.Equal(t, "member@example.test", *call.payload.Source.UserEmail)
+	require.Nil(t, call.payload.Source.UserEmail)
 	require.Equal(t, "session-from-header", *call.payload.Session.ID)
 	require.Equal(t, "agent-turn:v1:opencode:message-1", *call.payload.Session.TurnID)
 	require.Equal(t, "model-1", *call.payload.Session.Model)
 	require.Equal(t, "litellm:call-1:request", *call.payload.IdempotencyKey)
-	require.Empty(t, call.auth.UserID)
+	require.Equal(t, "asserted-user", call.auth.UserID)
 	require.Nil(t, call.auth.Email)
 	require.Empty(t, call.auth.ExternalUserID)
 	require.False(t, call.auth.OrgWidePluginHooksKey)
@@ -398,12 +426,12 @@ func TestIngestResponseUsesCachedActorAndSession(t *testing.T) {
 	require.Equal(t, "cached-user", call.auth.UserID)
 	require.Equal(t, "cached@example.test", *call.auth.Email)
 	require.False(t, call.auth.OrgWidePluginHooksKey)
-	require.Equal(t, "cached@example.test", *call.payload.Source.UserEmail)
+	require.Nil(t, call.payload.Source.UserEmail)
 	require.Equal(t, payload.ToolCalls, call.options.OutputToolCalls)
 	require.Equal(t, "codex", call.options.OriginatingClient)
 }
 
-func TestIngestResponseCacheMissUsesTrustedEmailWithoutKeyOwner(t *testing.T) {
+func TestIngestResponseCacheMissIgnoresUntrustedLiteLLMEmail(t *testing.T) {
 	t.Parallel()
 	authCtx := testAuthContext()
 	ingester := &captureIngester{result: allowResult(hooks.ResolvedActor{UserID: "", Email: "member@example.test"}), err: nil, calls: nil}
@@ -424,7 +452,7 @@ func TestIngestResponseCacheMissUsesTrustedEmailWithoutKeyOwner(t *testing.T) {
 	require.Nil(t, call.auth.Email)
 	require.Empty(t, call.auth.ExternalUserID)
 	require.False(t, call.auth.OrgWidePluginHooksKey)
-	require.Equal(t, "member@example.test", *call.payload.Source.UserEmail)
+	require.Nil(t, call.payload.Source.UserEmail)
 	require.Equal(t, "response-trace", *call.payload.Session.ID)
 }
 
@@ -568,7 +596,7 @@ func TestHTTPRouteRequiresKeyAndExplicitProject(t *testing.T) {
 	require.Len(t, ingester.calls, 1)
 	call := ingester.calls[0]
 	require.Equal(t, "http prompt", *call.payload.Data.Prompt.Text)
-	require.Equal(t, "wire.member@example.test", *call.payload.Source.UserEmail)
+	require.Nil(t, call.payload.Source.UserEmail)
 	require.Equal(t, "wire-user-id", call.options.SourceAttributes[attr.LiteLLMUserIDKey])
 	require.Equal(t, "wire-team-id", call.options.SourceAttributes[attr.LiteLLMTeamIDKey])
 	require.Equal(t, "wire-team-alias", call.options.SourceAttributes[attr.LiteLLMTeamAliasKey])

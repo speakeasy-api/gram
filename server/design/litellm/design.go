@@ -36,6 +36,11 @@ var FailurePosture = Type("LiteLLMFailurePosture", String, func() {
 	Enum("fail_closed", "fail_open")
 })
 
+var CreateFailurePosture = Type("LiteLLMCreateFailurePosture", String, func() {
+	Description("The supported fail-closed posture for a new managed LiteLLM integration.")
+	Enum("fail_closed")
+})
+
 var InstanceHealthStatus = Type("LiteLLMInstanceHealthStatus", String, func() {
 	Description("Derived health of a LiteLLM integration's latest ingest activity.")
 	Enum("pending", "success", "failed")
@@ -89,6 +94,15 @@ var InstanceKeyResult = ResultType("application/vnd.litellm.instance-key-result"
 	Required("instance", "key")
 })
 
+var ActingPrincipalResult = ResultType("application/vnd.litellm.acting-principal-result", func() {
+	Description("A short-lived Gram-signed acting-principal assertion for one managed LiteLLM inference invocation.")
+	Attribute("assertion", String)
+	Attribute("contract_version", String, func() { Enum("litellm-acting-principal.v1") })
+	Attribute("invocation_id", String, func() { Format(FormatUUID) })
+	Attribute("expires_in", Int)
+	Required("assertion", "contract_version", "invocation_id", "expires_in")
+})
+
 var IngestResult = ResultType("application/vnd.litellm.ingest-result", func() {
 	Description("LiteLLM Generic Guardrail decision.")
 	Attribute("action", GuardrailAction)
@@ -111,7 +125,7 @@ var _ = Service("litellm", func() {
 			security.SessionPayload()
 			security.ProjectPayload()
 			Attribute("name", String, func() { MaxLength(255) })
-			Attribute("failure_posture", FailurePosture, func() { Default("fail_closed") })
+			Attribute("failure_posture", CreateFailurePosture, func() { Default("fail_closed") })
 			Required("name")
 		})
 		Result(InstanceKeyResult)
@@ -146,6 +160,32 @@ var _ = Service("litellm", func() {
 		Meta("openapi:operationId", "listLiteLLMInstances")
 		Meta("openapi:extension:x-speakeasy-name-override", "listInstances")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "LiteLLMInstances"}`)
+	})
+
+	Method("mintActingPrincipal", func() {
+		Description("Mint a short-lived acting-principal assertion from an authoritative Gram user session for one active managed LiteLLM inference invocation. The caller must forward the assertion and invocation ID as original request headers to LiteLLM.")
+		Security(security.Session, security.ProjectSlug)
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("instance_id", String, func() { Format(FormatUUID) })
+			Attribute("invocation_id", String, "Fresh canonical UUIDv7 identifying exactly one inference attempt.", func() {
+				Format(FormatUUID)
+				Pattern(`^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+				Example("0198a1b2-c3d4-7000-8000-0123456789ab")
+			})
+			Required("instance_id", "invocation_id")
+		})
+		Result(ActingPrincipalResult)
+		HTTP(func() {
+			POST("/rpc/litellm.mintActingPrincipal")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusCreated)
+		})
+		Meta("openapi:operationId", "mintLiteLLMActingPrincipal")
+		Meta("openapi:extension:x-speakeasy-name-override", "mintActingPrincipal")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
 	})
 
 	Method("rotateInstanceKey", func() {

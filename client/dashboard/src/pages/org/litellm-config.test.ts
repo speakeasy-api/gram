@@ -7,16 +7,16 @@ import {
 
 describe("LiteLLM configuration", () => {
   it("references the secret from the environment and preserves fail-closed defaults", () => {
-    const config = buildLiteLLMGuardrailConfig(
-      "https://api.getgram.ai/",
-      "fail_closed",
-    );
+    const config = buildLiteLLMGuardrailConfig("https://api.getgram.ai/");
 
     expect(config).toContain(
       "api_base: https://api.getgram.ai/rpc/litellm.ingest",
     );
     expect(config).toContain("Gram-Key: os.environ/GRAM_LITELLM_INGEST_KEY");
     expect(config).toContain(`      extra_headers:
+        - x-gram-acting-principal
+        - x-gram-acting-principal-contract
+        - x-gram-inference-invocation-id
         - x-gram-session-id
         - x-claude-code-session-id
         - session-id
@@ -32,10 +32,10 @@ describe("LiteLLM configuration", () => {
     expect(config).toContain("unreachable_fallback: fail_closed");
   });
 
-  it("renders the explicit fail-open posture", () => {
-    expect(
-      buildLiteLLMGuardrailConfig("https://api.getgram.ai", "fail_open"),
-    ).toContain("unreachable_fallback: fail_open");
+  it("always emits the canonical fail-closed posture", () => {
+    const config = buildLiteLLMGuardrailConfig("https://api.getgram.ai");
+    expect(config).toContain("unreachable_fallback: fail_closed");
+    expect(config).not.toContain("unreachable_fallback: fail_open");
   });
 
   it("builds project-bound OTel environment variables", () => {

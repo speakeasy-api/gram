@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -46,6 +47,9 @@ func (s *Service) CreateInstance(ctx context.Context, payload *gen.CreateInstanc
 	if failurePosture == "" {
 		failurePosture = "fail_closed"
 	}
+	if failurePosture != "fail_closed" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "new managed LiteLLM integrations must fail closed")
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -63,7 +67,7 @@ func (s *Service) CreateInstance(ctx context.Context, payload *gen.CreateInstanc
 	}
 
 	instanceID := uuid.New()
-	key, plaintext, err := s.mintInstanceKey(ctx, keysrepo.New(dbtx), authCtx.ActiveOrganizationID, projectID, authCtx.UserID, instanceID)
+	key, plaintext, err := s.mintInstanceKey(ctx, keysrepo.New(dbtx), authCtx.ActiveOrganizationID, projectID, authCtx.UserID, instanceID, true)
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +184,14 @@ func (s *Service) RotateInstanceKey(ctx context.Context, payload *gen.RotateInst
 		return nil, oops.E(oops.CodeUnexpected, err, "validate LiteLLM project").LogError(ctx, s.logger)
 	}
 	keyQueries := keysrepo.New(dbtx)
-	newKey, plaintext, err := s.mintInstanceKey(ctx, keyQueries, authCtx.ActiveOrganizationID, projectID, authCtx.UserID, instance.ID)
+	currentKey, err := keyQueries.GetAPIKeyByID(ctx, keysrepo.GetAPIKeyByIDParams{ID: instance.ApiKeyID, OrganizationID: authCtx.ActiveOrganizationID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get current LiteLLM API key").LogError(ctx, s.logger)
+	}
+	// Rotation keeps the instance's enforcement contract; legacy instances opt
+	// in by being re-created, never by rotating.
+	actingPrincipal := slices.Contains(currentKey.Scopes, auth.APIKeyScopeLiteLLMActingPrincipal.String())
+	newKey, plaintext, err := s.mintInstanceKey(ctx, keyQueries, authCtx.ActiveOrganizationID, projectID, authCtx.UserID, instance.ID, actingPrincipal)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +296,11 @@ func (s *Service) requireInstanceAdmin(ctx context.Context) (*contextvalues.Auth
 	return authCtx, *authCtx.ProjectID, nil
 }
 
-func (s *Service) mintInstanceKey(ctx context.Context, queries *keysrepo.Queries, organizationID string, projectID uuid.UUID, userID string, instanceID uuid.UUID) (keysrepo.ApiKey, string, error) {
+func (s *Service) mintInstanceKey(ctx context.Context, queries *keysrepo.Queries, organizationID string, projectID uuid.UUID, userID string, instanceID uuid.UUID, actingPrincipal bool) (keysrepo.ApiKey, string, error) {
+	scopes := []string{auth.APIKeyScopeHooks.String()}
+	if actingPrincipal {
+		scopes = append(scopes, auth.APIKeyScopeLiteLLMActingPrincipal.String())
+	}
 	plaintext, hash, displayPrefix, err := auth.GenerateAPIKeyMaterial(s.keyPrefix)
 	if err != nil {
 		return keysrepo.ApiKey{}, "", oops.E(oops.CodeUnexpected, err, "generate LiteLLM API key").LogError(ctx, s.logger)
@@ -293,7 +308,7 @@ func (s *Service) mintInstanceKey(ctx context.Context, queries *keysrepo.Queries
 	key, err := queries.CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
 		OrganizationID: organizationID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, CreatedByUserID: userID,
 		Name:      fmt.Sprintf("%s%s-%d-%s", auth.LiteLLMAPIKeyNamePrefix, strings.ReplaceAll(instanceID.String(), "-", ""), time.Now().UTC().UnixMilli(), uuid.NewString()[:8]),
-		KeyPrefix: displayPrefix, KeyHash: hash, Scopes: []string{auth.APIKeyScopeHooks.String()},
+		KeyPrefix: displayPrefix, KeyHash: hash, Scopes: scopes,
 	})
 	if err != nil {
 		return keysrepo.ApiKey{}, "", oops.E(oops.CodeUnexpected, err, "create LiteLLM API key").LogError(ctx, s.logger)

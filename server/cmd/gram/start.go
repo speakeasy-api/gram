@@ -87,6 +87,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/launcher"
 	"github.com/speakeasy-api/gram/server/internal/litellm"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
+	"github.com/speakeasy-api/gram/server/internal/litellmacting"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
@@ -1438,6 +1439,14 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create hooks ai_access checkpoint: %w", err)
 			}
+			litellmActingSigner, err := litellmacting.NewSigner(c.String("jwt-signing-key"))
+			if err != nil {
+				return fmt.Errorf("create LiteLLM acting-principal signer: %w", err)
+			}
+			litellmAIAccess, err := litellm.NewLiteLLMAIAccessCheckpoint(killswitchRegistry, killswitchEvaluator, litellmActingSigner)
+			if err != nil {
+				return fmt.Errorf("create LiteLLM ai_access checkpoint: %w", err)
+			}
 
 			about.Attach(mux, about.NewService(logger, tracerProvider, guardianPolicy))
 			platformslack.NewFileProxy(logger, encryptionClient, guardianPolicy.PooledClient()).Attach(mux)
@@ -1502,7 +1511,7 @@ func newStartCommand() *cli.Command {
 			)
 			hooks.Attach(mux, hooksService)
 			anthropicinference.Attach(mux, logger, anthropicinference.NewService(logger, meterProvider, db, chatWriter, riskScanner, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}), aiintegrations.NewAnthropicInferenceResolver(db, encryptionClient))
-			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, auditLogger, c.String("environment"))
+			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, auditLogger, litellmActingSigner, litellmAIAccess, c.String("environment"))
 			litellm.Attach(mux, litellmService)
 			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
 

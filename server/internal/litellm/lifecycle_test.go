@@ -42,6 +42,7 @@ func TestInstanceLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	managedKey, err := keysrepo.New(ti.conn).GetAPIKeyByKeyHash(ctx, oldHash)
 	require.NoError(t, err)
+	require.Contains(t, managedKey.Scopes, auth.APIKeyScopeLiteLLMActingPrincipal.String(), "new instances adopt the acting-principal contract")
 	instanceID, err := uuid.Parse(first.Instance.ID)
 	require.NoError(t, err)
 	encodedInstanceID, ok := auth.LiteLLMInstanceIDFromAPIKeyName(managedKey.Name)
@@ -53,9 +54,11 @@ func TestInstanceLifecycle(t *testing.T) {
 	err = ti.keys.RevokeKey(ctx, &keysgen.RevokeKeyPayload{ID: managedKey.ID.String()})
 	requireOops(t, err, oops.CodeConflict)
 
-	second, err := ti.service.CreateInstance(ctx, &gen.CreateInstancePayload{Name: "staging", FailurePosture: "fail_open"})
+	_, err = ti.service.CreateInstance(ctx, &gen.CreateInstancePayload{Name: "unsupported", FailurePosture: "fail_open"})
+	requireOops(t, err, oops.CodeBadRequest)
+	second, err := ti.service.CreateInstance(ctx, &gen.CreateInstancePayload{Name: "staging", FailurePosture: "fail_closed"})
 	require.NoError(t, err)
-	require.Equal(t, gen.LiteLLMFailurePosture("fail_open"), second.Instance.FailurePosture)
+	require.Equal(t, gen.LiteLLMFailurePosture("fail_closed"), second.Instance.FailurePosture)
 
 	listed, err := ti.service.ListInstances(ctx, &gen.ListInstancesPayload{})
 	require.NoError(t, err)
@@ -79,6 +82,7 @@ func TestInstanceLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	rotatedKey, err := keysrepo.New(ti.conn).GetAPIKeyByKeyHash(ctx, newHash)
 	require.NoError(t, err)
+	require.Contains(t, rotatedKey.Scopes, auth.APIKeyScopeLiteLLMActingPrincipal.String(), "rotation keeps the instance's enforcement contract")
 
 	require.NoError(t, ti.service.RevokeInstance(ctx, &gen.RevokeInstancePayload{ID: first.Instance.ID}))
 	resolvedID, managed = ti.service.instances.Resolve(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), rotatedKey.ID.String())

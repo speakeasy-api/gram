@@ -47,6 +47,10 @@ const (
 	// CLI auth. It is intentionally absent from APIKeyScopes so public key
 	// creation cannot mint the trusted approved-client discriminator.
 	APIKeyScopeHooksActingUser APIKeyScope = iota
+	// APIKeyScopeLiteLLMActingPrincipal marks managed LiteLLM instance keys that
+	// adopted the acting-principal guardrail contract. Only those instances
+	// enforce ai_access; it is likewise absent from APIKeyScopes.
+	APIKeyScopeLiteLLMActingPrincipal APIKeyScope = iota
 )
 
 // PluginAPIKeyNamePrefix is reserved for keys minted by plugin distribution
@@ -215,6 +219,8 @@ func (scope APIKeyScope) String() string {
 		return "agent_user"
 	case APIKeyScopeHooksActingUser:
 		return "hooks_acting_user"
+	case APIKeyScopeLiteLLMActingPrincipal:
+		return "litellm_acting_principal"
 	default:
 		return "invalid"
 	}

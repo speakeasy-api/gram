@@ -24,14 +24,14 @@ func BuildCreateInstancePayload(litellmCreateInstanceBody string, litellmCreateI
 	{
 		err = json.Unmarshal([]byte(litellmCreateInstanceBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"failure_posture\": \"fail_open\",\n      \"name\": \"aaa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"failure_posture\": \"fail_closed\",\n      \"name\": \"aaa\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) > 255 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 255, false))
 		}
 		if body.FailurePosture != nil {
-			if !(*body.FailurePosture == "fail_closed" || *body.FailurePosture == "fail_open") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.failure_posture", *body.FailurePosture, []any{"fail_closed", "fail_open"}))
+			if !(*body.FailurePosture == "fail_closed") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.failure_posture", *body.FailurePosture, []any{"fail_closed"}))
 			}
 		}
 		if err != nil {
@@ -54,7 +54,7 @@ func BuildCreateInstancePayload(litellmCreateInstanceBody string, litellmCreateI
 		Name: body.Name,
 	}
 	if body.FailurePosture != nil {
-		v.FailurePosture = litellm.LiteLLMFailurePosture(*body.FailurePosture)
+		v.FailurePosture = litellm.LiteLLMCreateFailurePosture(*body.FailurePosture)
 	}
 	if body.FailurePosture == nil {
 		v.FailurePosture = "fail_closed"
@@ -81,6 +81,45 @@ func BuildListInstancesPayload(litellmListInstancesSessionToken string, litellmL
 		}
 	}
 	v := &litellm.ListInstancesPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildMintActingPrincipalPayload builds the payload for the litellm
+// mintActingPrincipal endpoint from CLI flags.
+func BuildMintActingPrincipalPayload(litellmMintActingPrincipalBody string, litellmMintActingPrincipalSessionToken string, litellmMintActingPrincipalProjectSlugInput string) (*litellm.MintActingPrincipalPayload, error) {
+	var err error
+	var body MintActingPrincipalRequestBody
+	{
+		err = json.Unmarshal([]byte(litellmMintActingPrincipalBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"instance_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"invocation_id\": \"0198a1b2-c3d4-7000-8000-0123456789ab\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.instance_id", body.InstanceID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.invocation_id", body.InvocationID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.invocation_id", body.InvocationID, "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if litellmMintActingPrincipalSessionToken != "" {
+			sessionToken = &litellmMintActingPrincipalSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if litellmMintActingPrincipalProjectSlugInput != "" {
+			projectSlugInput = &litellmMintActingPrincipalProjectSlugInput
+		}
+	}
+	v := &litellm.MintActingPrincipalPayload{
+		InstanceID:   body.InstanceID,
+		InvocationID: body.InvocationID,
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

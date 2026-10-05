@@ -22,6 +22,15 @@ type LitellmInstanceKeyResult struct {
 	View string
 }
 
+// LitellmActingPrincipalResult is the viewed result type that is projected
+// based on a view.
+type LitellmActingPrincipalResult struct {
+	// Type to project
+	Projected *LitellmActingPrincipalResultView
+	// View to render
+	View string
+}
+
 // LitellmIngestResult is the viewed result type that is projected based on a
 // view.
 type LitellmIngestResult struct {
@@ -96,6 +105,15 @@ type LiteLLMInstanceHealthStatusView string
 // type.
 type LiteLLMInstanceErrorKindView string
 
+// LitellmActingPrincipalResultView is a type that runs validations on a
+// projected type.
+type LitellmActingPrincipalResultView struct {
+	Assertion       *string
+	ContractVersion *string
+	InvocationID    *string
+	ExpiresIn       *int
+}
+
 // LitellmIngestResultView is a type that runs validations on a projected type.
 type LitellmIngestResultView struct {
 	Action              *LiteLLMGuardrailActionView
@@ -119,6 +137,16 @@ var (
 			"key",
 		},
 	}
+	// LitellmActingPrincipalResultMap is a map indexing the attribute names of
+	// LitellmActingPrincipalResult by view name.
+	LitellmActingPrincipalResultMap = map[string][]string{
+		"default": {
+			"assertion",
+			"contract_version",
+			"invocation_id",
+			"expires_in",
+		},
+	}
 	// LitellmIngestResultMap is a map indexing the attribute names of
 	// LitellmIngestResult by view name.
 	LitellmIngestResultMap = map[string][]string{
@@ -139,6 +167,18 @@ func ValidateLitellmInstanceKeyResult(result *LitellmInstanceKeyResult) (err err
 	switch result.View {
 	case "default", "":
 		err = ValidateLitellmInstanceKeyResultView(result.Projected)
+	default:
+		err = goa.InvalidEnumValueError("view", result.View, []any{"default"})
+	}
+	return
+}
+
+// ValidateLitellmActingPrincipalResult runs the validations defined on the
+// viewed result type LitellmActingPrincipalResult.
+func ValidateLitellmActingPrincipalResult(result *LitellmActingPrincipalResult) (err error) {
+	switch result.View {
+	case "default", "":
+		err = ValidateLitellmActingPrincipalResultView(result.Projected)
 	default:
 		err = goa.InvalidEnumValueError("view", result.View, []any{"default"})
 	}
@@ -347,6 +387,32 @@ func ValidateLiteLLMInstanceHealthStatusView(result LiteLLMInstanceHealthStatusV
 func ValidateLiteLLMInstanceErrorKindView(result LiteLLMInstanceErrorKindView) (err error) {
 	if !(string(result) == "auth_failure" || string(result) == "decode_failure" || string(result) == "limit_exceeded") {
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError("result", string(result), []any{"auth_failure", "decode_failure", "limit_exceeded"}))
+	}
+	return
+}
+
+// ValidateLitellmActingPrincipalResultView runs the validations defined on
+// LitellmActingPrincipalResultView using the "default" view.
+func ValidateLitellmActingPrincipalResultView(result *LitellmActingPrincipalResultView) (err error) {
+	if result.Assertion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assertion", "result"))
+	}
+	if result.ContractVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("contract_version", "result"))
+	}
+	if result.InvocationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("invocation_id", "result"))
+	}
+	if result.ExpiresIn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expires_in", "result"))
+	}
+	if result.ContractVersion != nil {
+		if !(*result.ContractVersion == "litellm-acting-principal.v1") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("result.contract_version", *result.ContractVersion, []any{"litellm-acting-principal.v1"}))
+		}
+	}
+	if result.InvocationID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("result.invocation_id", *result.InvocationID, goa.FormatUUID))
 	}
 	return
 }

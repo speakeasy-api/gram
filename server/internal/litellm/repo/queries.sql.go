@@ -77,12 +77,21 @@ func (q *Queries) CreateLiteLLMInstance(ctx context.Context, arg CreateLiteLLMIn
 }
 
 const getActiveLiteLLMInstanceIDByAPIKey = `-- name: GetActiveLiteLLMInstanceIDByAPIKey :one
-SELECT id
-FROM litellm_instances
-WHERE organization_id = $1
-  AND project_id = $2
-  AND api_key_id = $3
-  AND deleted IS FALSE
+SELECT li.id
+FROM litellm_instances li
+JOIN projects p
+  ON p.id = li.project_id
+ AND p.organization_id = li.organization_id
+ AND p.deleted IS FALSE
+JOIN api_keys ak
+  ON ak.id = li.api_key_id
+ AND ak.project_id = li.project_id
+ AND ak.organization_id = li.organization_id
+ AND ak.deleted IS FALSE
+WHERE li.organization_id = $1
+  AND li.project_id = $2
+  AND li.api_key_id = $3
+  AND li.deleted IS FALSE
 `
 
 type GetActiveLiteLLMInstanceIDByAPIKeyParams struct {
@@ -96,6 +105,64 @@ func (q *Queries) GetActiveLiteLLMInstanceIDByAPIKey(ctx context.Context, arg Ge
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const getLiteLLMActingPrincipalMintContext = `-- name: GetLiteLLMActingPrincipalMintContext :one
+SELECT EXISTS(
+    SELECT 1
+    FROM users u
+    JOIN organization_user_relationships our
+      ON our.user_id = u.id
+     AND our.organization_id = $1
+     AND our.deleted_at IS NULL
+    WHERE u.id = $2
+      AND u.deleted_at IS NULL
+  ) AS active_member
+  , COALESCE(li.id, '00000000-0000-0000-0000-000000000000'::uuid) AS id
+  , COALESCE(li.api_key_id, '00000000-0000-0000-0000-000000000000'::uuid) AS api_key_id
+FROM (SELECT 1) AS request
+LEFT JOIN LATERAL (
+  SELECT candidate.id, candidate.api_key_id
+  FROM litellm_instances candidate
+  JOIN projects p
+    ON p.id = candidate.project_id
+   AND p.organization_id = candidate.organization_id
+   AND p.deleted IS FALSE
+  JOIN api_keys ak
+    ON ak.id = candidate.api_key_id
+   AND ak.project_id = candidate.project_id
+   AND ak.organization_id = candidate.organization_id
+   AND ak.deleted IS FALSE
+  WHERE candidate.id = $3
+    AND candidate.organization_id = $1
+    AND candidate.project_id = $4
+    AND candidate.deleted IS FALSE
+) li ON TRUE
+`
+
+type GetLiteLLMActingPrincipalMintContextParams struct {
+	OrganizationID string
+	UserID         string
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+type GetLiteLLMActingPrincipalMintContextRow struct {
+	ActiveMember bool
+	ID           uuid.UUID
+	ApiKeyID     uuid.UUID
+}
+
+func (q *Queries) GetLiteLLMActingPrincipalMintContext(ctx context.Context, arg GetLiteLLMActingPrincipalMintContextParams) (GetLiteLLMActingPrincipalMintContextRow, error) {
+	row := q.db.QueryRow(ctx, getLiteLLMActingPrincipalMintContext,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i GetLiteLLMActingPrincipalMintContextRow
+	err := row.Scan(&i.ActiveMember, &i.ID, &i.ApiKeyID)
+	return i, err
 }
 
 const getLiteLLMInstanceForUpdate = `-- name: GetLiteLLMInstanceForUpdate :one
@@ -137,6 +204,37 @@ func (q *Queries) GetLiteLLMInstanceForUpdate(ctx context.Context, arg GetLiteLL
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const isActiveLiteLLMInstanceInOrganization = `-- name: IsActiveLiteLLMInstanceInOrganization :one
+SELECT EXISTS(
+  SELECT 1
+  FROM litellm_instances li
+  JOIN projects p
+    ON p.id = li.project_id
+   AND p.organization_id = li.organization_id
+   AND p.deleted IS FALSE
+  JOIN api_keys ak
+    ON ak.id = li.api_key_id
+   AND ak.project_id = li.project_id
+   AND ak.organization_id = li.organization_id
+   AND ak.deleted IS FALSE
+  WHERE li.id = $1
+    AND li.organization_id = $2
+    AND li.deleted IS FALSE
+)
+`
+
+type IsActiveLiteLLMInstanceInOrganizationParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) IsActiveLiteLLMInstanceInOrganization(ctx context.Context, arg IsActiveLiteLLMInstanceInOrganizationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isActiveLiteLLMInstanceInOrganization, arg.ID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listLiteLLMInstances = `-- name: ListLiteLLMInstances :many
@@ -233,6 +331,50 @@ func (q *Queries) ListLiteLLMInstances(ctx context.Context, arg ListLiteLLMInsta
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockActiveLiteLLMInstancesInOrganization = `-- name: LockActiveLiteLLMInstancesInOrganization :many
+SELECT li.id
+FROM litellm_instances li
+JOIN projects p
+  ON p.id = li.project_id
+ AND p.organization_id = li.organization_id
+JOIN api_keys ak
+  ON ak.id = li.api_key_id
+ AND ak.project_id = li.project_id
+ AND ak.organization_id = li.organization_id
+WHERE li.id = ANY($1::uuid[])
+  AND li.organization_id = $2
+  AND li.deleted IS FALSE
+  AND p.deleted IS FALSE
+  AND ak.deleted IS FALSE
+ORDER BY li.id
+FOR SHARE OF li, p, ak
+`
+
+type LockActiveLiteLLMInstancesInOrganizationParams struct {
+	Ids            []uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockActiveLiteLLMInstancesInOrganization(ctx context.Context, arg LockActiveLiteLLMInstancesInOrganizationParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockActiveLiteLLMInstancesInOrganization, arg.Ids, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

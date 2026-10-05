@@ -24,6 +24,11 @@ type Service interface {
 	// List active and revoked LiteLLM integrations for a project. Plaintext keys
 	// are never returned. Requires org:admin.
 	ListInstances(context.Context, *ListInstancesPayload) (res *ListInstancesResult, err error)
+	// Mint a short-lived acting-principal assertion from an authoritative Gram
+	// user session for one active managed LiteLLM inference invocation. The caller
+	// must forward the assertion and invocation ID as original request headers to
+	// LiteLLM.
+	MintActingPrincipal(context.Context, *MintActingPrincipalPayload) (res *LitellmActingPrincipalResult, err error)
 	// Atomically replace a LiteLLM integration key and return the new plaintext
 	// value once. Requires org:admin.
 	RotateInstanceKey(context.Context, *RotateInstanceKeyPayload) (res *LitellmInstanceKeyResult, err error)
@@ -60,7 +65,7 @@ const ServiceName = "litellm"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"createInstance", "listInstances", "rotateInstanceKey", "revokeInstance", "ingest", "traces"}
+var MethodNames = [7]string{"createInstance", "listInstances", "mintActingPrincipal", "rotateInstanceKey", "revokeInstance", "ingest", "traces"}
 
 // CreateInstancePayload is the payload type of the litellm service
 // createInstance method.
@@ -68,7 +73,7 @@ type CreateInstancePayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 	Name             string
-	FailurePosture   LiteLLMFailurePosture
+	FailurePosture   LiteLLMCreateFailurePosture
 }
 
 // IngestPayload is the payload type of the litellm service ingest method.
@@ -102,6 +107,9 @@ type ListInstancesPayload struct {
 type ListInstancesResult struct {
 	Instances []*LiteLLMInstance
 }
+
+// The supported fail-closed posture for a new managed LiteLLM integration.
+type LiteLLMCreateFailurePosture string
 
 // How LiteLLM behaves when Gram cannot evaluate a request.
 type LiteLLMFailurePosture string
@@ -166,6 +174,15 @@ type LiteLLMStructuredMessage struct {
 	Content any
 }
 
+// LitellmActingPrincipalResult is the result type of the litellm service
+// mintActingPrincipal method.
+type LitellmActingPrincipalResult struct {
+	Assertion       string
+	ContractVersion string
+	InvocationID    string
+	ExpiresIn       int
+}
+
 // LitellmIngestResult is the result type of the litellm service ingest method.
 type LitellmIngestResult struct {
 	Action              LiteLLMGuardrailAction
@@ -181,6 +198,16 @@ type LitellmIngestResult struct {
 type LitellmInstanceKeyResult struct {
 	Instance *LiteLLMInstance
 	Key      string
+}
+
+// MintActingPrincipalPayload is the payload type of the litellm service
+// mintActingPrincipal method.
+type MintActingPrincipalPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	InstanceID       string
+	// Fresh canonical UUIDv7 identifying exactly one inference attempt.
+	InvocationID string
 }
 
 type ProjectEntry struct {
@@ -287,6 +314,21 @@ func NewViewedLitellmInstanceKeyResult(res *LitellmInstanceKeyResult, view strin
 	return &litellmviews.LitellmInstanceKeyResult{Projected: p, View: "default"}
 }
 
+// NewLitellmActingPrincipalResult initializes result type
+// LitellmActingPrincipalResult from viewed result type
+// LitellmActingPrincipalResult.
+func NewLitellmActingPrincipalResult(vres *litellmviews.LitellmActingPrincipalResult) *LitellmActingPrincipalResult {
+	return newLitellmActingPrincipalResult(vres.Projected)
+}
+
+// NewViewedLitellmActingPrincipalResult initializes viewed result type
+// LitellmActingPrincipalResult from result type LitellmActingPrincipalResult
+// using the given view.
+func NewViewedLitellmActingPrincipalResult(res *LitellmActingPrincipalResult, view string) *litellmviews.LitellmActingPrincipalResult {
+	p := newLitellmActingPrincipalResultView(res)
+	return &litellmviews.LitellmActingPrincipalResult{Projected: p, View: "default"}
+}
+
 // NewLitellmIngestResult initializes result type LitellmIngestResult from
 // viewed result type LitellmIngestResult.
 func NewLitellmIngestResult(vres *litellmviews.LitellmIngestResult) *LitellmIngestResult {
@@ -323,6 +365,38 @@ func newLitellmInstanceKeyResultView(res *LitellmInstanceKeyResult) *litellmview
 	}
 	if res.Instance != nil {
 		vres.Instance = transformLiteLLMInstanceToLitellmviewsLiteLLMInstanceView(res.Instance)
+	}
+	return vres
+}
+
+// newLitellmActingPrincipalResult converts projected type
+// LitellmActingPrincipalResult to service type LitellmActingPrincipalResult.
+func newLitellmActingPrincipalResult(vres *litellmviews.LitellmActingPrincipalResultView) *LitellmActingPrincipalResult {
+	res := &LitellmActingPrincipalResult{}
+	if vres.Assertion != nil {
+		res.Assertion = *vres.Assertion
+	}
+	if vres.ContractVersion != nil {
+		res.ContractVersion = *vres.ContractVersion
+	}
+	if vres.InvocationID != nil {
+		res.InvocationID = *vres.InvocationID
+	}
+	if vres.ExpiresIn != nil {
+		res.ExpiresIn = *vres.ExpiresIn
+	}
+	return res
+}
+
+// newLitellmActingPrincipalResultView projects result type
+// LitellmActingPrincipalResult to projected type
+// LitellmActingPrincipalResultView using the "default" view.
+func newLitellmActingPrincipalResultView(res *LitellmActingPrincipalResult) *litellmviews.LitellmActingPrincipalResultView {
+	vres := &litellmviews.LitellmActingPrincipalResultView{
+		Assertion:       &res.Assertion,
+		ContractVersion: &res.ContractVersion,
+		InvocationID:    &res.InvocationID,
+		ExpiresIn:       &res.ExpiresIn,
 	}
 	return vres
 }

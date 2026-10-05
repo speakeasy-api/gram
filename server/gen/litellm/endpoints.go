@@ -16,12 +16,13 @@ import (
 
 // Endpoints wraps the "litellm" service endpoints.
 type Endpoints struct {
-	CreateInstance    goa.Endpoint
-	ListInstances     goa.Endpoint
-	RotateInstanceKey goa.Endpoint
-	RevokeInstance    goa.Endpoint
-	Ingest            goa.Endpoint
-	Traces            goa.Endpoint
+	CreateInstance      goa.Endpoint
+	ListInstances       goa.Endpoint
+	MintActingPrincipal goa.Endpoint
+	RotateInstanceKey   goa.Endpoint
+	RevokeInstance      goa.Endpoint
+	Ingest              goa.Endpoint
+	Traces              goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "litellm" service with endpoints.
@@ -29,12 +30,13 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateInstance:    NewCreateInstanceEndpoint(s, a.APIKeyAuth),
-		ListInstances:     NewListInstancesEndpoint(s, a.APIKeyAuth),
-		RotateInstanceKey: NewRotateInstanceKeyEndpoint(s, a.APIKeyAuth),
-		RevokeInstance:    NewRevokeInstanceEndpoint(s, a.APIKeyAuth),
-		Ingest:            NewIngestEndpoint(s, a.APIKeyAuth),
-		Traces:            NewTracesEndpoint(s, a.APIKeyAuth),
+		CreateInstance:      NewCreateInstanceEndpoint(s, a.APIKeyAuth),
+		ListInstances:       NewListInstancesEndpoint(s, a.APIKeyAuth),
+		MintActingPrincipal: NewMintActingPrincipalEndpoint(s, a.APIKeyAuth),
+		RotateInstanceKey:   NewRotateInstanceKeyEndpoint(s, a.APIKeyAuth),
+		RevokeInstance:      NewRevokeInstanceEndpoint(s, a.APIKeyAuth),
+		Ingest:              NewIngestEndpoint(s, a.APIKeyAuth),
+		Traces:              NewTracesEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -42,6 +44,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateInstance = m(e.CreateInstance)
 	e.ListInstances = m(e.ListInstances)
+	e.MintActingPrincipal = m(e.MintActingPrincipal)
 	e.RotateInstanceKey = m(e.RotateInstanceKey)
 	e.RevokeInstance = m(e.RevokeInstance)
 	e.Ingest = m(e.Ingest)
@@ -120,6 +123,46 @@ func NewListInstancesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 			return nil, err
 		}
 		return s.ListInstances(ctx, p)
+	}
+}
+
+// NewMintActingPrincipalEndpoint returns an endpoint function that calls the
+// method "mintActingPrincipal" of service "litellm".
+func NewMintActingPrincipalEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MintActingPrincipalPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		res, err := s.MintActingPrincipal(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		vres := NewViewedLitellmActingPrincipalResult(res, "default")
+		return vres, nil
 	}
 }
 

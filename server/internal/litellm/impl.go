@@ -27,9 +27,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
+	"github.com/speakeasy-api/gram/server/internal/litellmacting"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 const (
@@ -47,20 +49,22 @@ type authorizer interface {
 }
 
 type Service struct {
-	tracer    trace.Tracer
-	logger    *slog.Logger
-	auth      authorizer
-	hooks     HookIngester
-	calls     *callcache.Cache
-	traces    *TraceProcessor
-	metrics   *MetricProcessor
-	health    *HealthProcessor
-	db        *pgxpool.Pool
-	telemetry telemetryrepo.CHTX
-	instances *InstanceResolver
-	authz     *authz.Engine
-	audit     *audit.Logger
-	keyPrefix string
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	auth         authorizer
+	hooks        HookIngester
+	calls        *callcache.Cache
+	traces       *TraceProcessor
+	metrics      *MetricProcessor
+	health       *HealthProcessor
+	db           *pgxpool.Pool
+	telemetry    telemetryrepo.CHTX
+	instances    *InstanceResolver
+	authz        *authz.Engine
+	audit        *audit.Logger
+	keyPrefix    string
+	actingSigner *litellmacting.Signer
+	aiAccess     liteLLMAIAccessCheckpointer
 }
 
 var (
@@ -68,22 +72,24 @@ var (
 	_ gen.Auther  = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, telemetryDB telemetryrepo.CHTX, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor, health *HealthProcessor, instances *InstanceResolver, auditLogger *audit.Logger, environment string) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, telemetryDB telemetryrepo.CHTX, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor, health *HealthProcessor, instances *InstanceResolver, auditLogger *audit.Logger, actingSigner *litellmacting.Signer, aiAccess liteLLMAIAccessCheckpointer, environment string) *Service {
 	return &Service{
-		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
-		logger:    logger.With(attr.SlogComponent("litellm")),
-		auth:      auth.New(logger, db, sessionsManager, authzEngine),
-		hooks:     hookIngester,
-		calls:     calls,
-		traces:    traces,
-		metrics:   metrics,
-		health:    health,
-		db:        db,
-		telemetry: telemetryDB,
-		instances: instances,
-		authz:     authzEngine,
-		audit:     auditLogger,
-		keyPrefix: auth.APIKeyPrefix(environment),
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
+		logger:       logger.With(attr.SlogComponent("litellm")),
+		auth:         auth.New(logger, db, sessionsManager, authzEngine),
+		hooks:        hookIngester,
+		calls:        calls,
+		traces:       traces,
+		metrics:      metrics,
+		health:       health,
+		db:           db,
+		telemetry:    telemetryDB,
+		instances:    instances,
+		authz:        authzEngine,
+		audit:        auditLogger,
+		keyPrefix:    auth.APIKeyPrefix(environment),
+		actingSigner: actingSigner,
+		aiAccess:     aiAccess,
 	}
 }
 
@@ -149,6 +155,24 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (resul
 }
 
 func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload, callID string) (*gen.LitellmIngestResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+	}
+	// Only instances that adopted the acting-principal contract enforce
+	// ai_access. Legacy instances keep callback-reported attribution.
+	governed := slices.Contains(authCtx.APIKeyScopes, auth.APIKeyScopeLiteLLMActingPrincipal.String())
+	var aiAccess liteLLMAIAccessDecision
+	if governed {
+		if s.aiAccess == nil {
+			return liteLLMIdentityFailureDecision().result(), nil
+		}
+		aiAccess = s.aiAccess.Evaluate(ctx, payload, authCtx)
+		if aiAccess.blocked {
+			return aiAccess.result(), nil
+		}
+	}
+
 	prompt := latestUserPrompt(payload.StructuredMessages)
 	if prompt == "" {
 		prompt = lastText(payload.Texts)
@@ -157,11 +181,14 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 		return noneResult(), nil
 	}
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized")
-	}
 	authCopy := strippedAuthContext(authCtx)
+	email := conv.NormalizeEmail(conv.PtrValOr(payload.RequestData.UserAPIKeyUserEmail, ""))
+	if governed {
+		// The verified identity is authoritative; the callback email is not.
+		authCopy.UserID = aiAccess.userID
+		authCopy.Email = conv.PtrEmpty(s.verifiedUserEmail(ctx, aiAccess.userID))
+		email = ""
+	}
 
 	traceID := strings.TrimSpace(conv.PtrValOr(payload.LitellmTraceID, ""))
 	attribution := agentAttributionFromHeaders(payload.RequestHeaders)
@@ -171,7 +198,6 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 	}
 	model := strings.TrimSpace(conv.PtrValOr(payload.Model, ""))
 	version := strings.TrimSpace(conv.PtrValOr(payload.LitellmVersion, ""))
-	email := conv.NormalizeEmail(conv.PtrValOr(payload.RequestData.UserAPIKeyUserEmail, ""))
 	idempotencyKey := "litellm:" + callID + ":request"
 	turnID := callID
 	if attribution.TurnID != "" {
@@ -279,7 +305,13 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 	traceID := strings.TrimSpace(conv.PtrValOr(payload.LitellmTraceID, ""))
 	sessionID := conv.Default(traceID, callID)
 	originatingClient := ""
-	email := conv.NormalizeEmail(conv.PtrValOr(payload.RequestData.UserAPIKeyUserEmail, ""))
+	// Legacy instances keep callback-reported attribution; governed instances
+	// attribute only through the verified actor cached on the request leg.
+	governed := slices.Contains(authCtx.APIKeyScopes, auth.APIKeyScopeLiteLLMActingPrincipal.String())
+	email := ""
+	if !governed {
+		email = conv.NormalizeEmail(conv.PtrValOr(payload.RequestData.UserAPIKeyUserEmail, ""))
+	}
 
 	cacheCtx, cancel := context.WithTimeout(ctx, callCacheTimeout)
 	cached, err := s.calls.Get(cacheCtx, *authCtx.ProjectID, callID)
@@ -288,7 +320,9 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 		sessionID = cached.SessionID
 		authCopy.UserID = cached.UserID
 		authCopy.Email = conv.PtrEmpty(cached.Email)
-		email = cached.Email
+		if !governed {
+			email = cached.Email
+		}
 		if cached.OriginatingClient != "" {
 			originatingClient = cached.OriginatingClient
 		} else {
@@ -363,6 +397,20 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 		return nil, fmt.Errorf("ingest LiteLLM hook: %w", err)
 	}
 	return noneResult(), nil
+}
+
+// verifiedUserEmail resolves attribution for an assertion-verified user. A
+// lookup failure only loses the email, never the enforcement decision.
+func (s *Service) verifiedUserEmail(ctx context.Context, userID string) string {
+	if s.db == nil || userID == "" {
+		return ""
+	}
+	user, err := usersrepo.New(s.db).GetUser(ctx, userID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to load verified LiteLLM user email", attr.SlogError(err))
+		return ""
+	}
+	return user.Email
 }
 
 func strippedAuthContext(authCtx *contextvalues.AuthContext) contextvalues.AuthContext {
