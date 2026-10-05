@@ -5,6 +5,7 @@ import {
   type ExploreSpec,
   type FilterDraft,
   type MeasureDraft,
+  type TimeRange,
   isChartType,
   isFilterOperator,
   isMeasureOp,
@@ -44,6 +45,10 @@ export function encodeSpec(spec: ExploreSpec): string {
     orderBy: spec.orderBy,
     limit: spec.limit,
     window: spec.window,
+    // Only present when set, so a link with no range reads as it always did.
+    ...(spec.range
+      ? { range: { from: spec.range.from, to: spec.range.to } }
+      : {}),
     chartType: spec.chartType,
   });
 }
@@ -88,6 +93,7 @@ function specFromValue(value: unknown): ExploreSpec | null {
     orderBy,
     limit,
     window,
+    range,
     chartType,
   } = value;
   if (typeof dataset !== "string" || dataset === "") return null;
@@ -103,6 +109,8 @@ function specFromValue(value: unknown): ExploreSpec | null {
     return null;
   }
   if (!Array.isArray(measures) || !Array.isArray(filters)) return null;
+  const timeRange = range === undefined ? undefined : rangeFromValue(range);
+  if (timeRange === null) return null;
 
   const measureDrafts: MeasureDraft[] = [];
   for (const measure of measures) {
@@ -130,8 +138,25 @@ function specFromValue(value: unknown): ExploreSpec | null {
     orderBy,
     limit,
     window,
+    ...(timeRange ? { range: timeRange } : {}),
     chartType,
   };
+}
+
+/** An absolute range: two whole milliseconds, from before to. */
+function rangeFromValue(value: unknown): TimeRange | null {
+  if (!isRecord(value)) return null;
+  const { from, to } = value;
+  if (
+    typeof from !== "number" ||
+    typeof to !== "number" ||
+    !Number.isSafeInteger(from) ||
+    !Number.isSafeInteger(to) ||
+    from >= to
+  ) {
+    return null;
+  }
+  return { from, to };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

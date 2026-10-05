@@ -30,6 +30,7 @@ import {
   measureAlias,
   measureLabel,
   parseLimit,
+  rangeLabel,
   specForDataset,
   WINDOW_OPTIONS,
   type ChartType,
@@ -39,6 +40,9 @@ import {
   type WindowPreset,
 } from "./exploreModel";
 import { FilterRow } from "./FilterRow";
+
+// The Window control's value while an absolute range stands in for a window.
+const CUSTOM_RANGE = "custom";
 import { MeasureRow } from "./MeasureRow";
 
 // Radix Select cannot carry "" as an item value, so the "keep group order"
@@ -254,16 +258,26 @@ export function QueryBuilder({
           />
         </BuilderField>
         <BuilderField label="Window">
+          {/* A range arrives from a page or a dragged chart; picking a
+              window drops it. */}
           <Select
-            value={spec.window}
+            value={spec.range ? CUSTOM_RANGE : spec.window}
             onValueChange={(window) =>
-              patch({ window: window as WindowPreset })
+              patch({ window: window as WindowPreset, range: undefined })
             }
           >
-            <SelectTrigger className="w-44" aria-label="Window">
+            <SelectTrigger
+              className={spec.range ? "w-auto min-w-44" : "w-44"}
+              aria-label="Window"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              {spec.range ? (
+                <SelectItem value={CUSTOM_RANGE} disabled>
+                  {rangeLabel(spec.range)}
+                </SelectItem>
+              ) : null}
               {WINDOW_OPTIONS.map((window) => (
                 <SelectItem key={window.value} value={window.value}>
                   {window.label}

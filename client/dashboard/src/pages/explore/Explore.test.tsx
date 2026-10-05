@@ -586,6 +586,21 @@ describe("Explore", () => {
       );
     });
 
+    it("runs a linked absolute range, and will not save it as a widget", () => {
+      const from = Date.UTC(2026, 8, 14, 10);
+      const to = Date.UTC(2026, 8, 14, 12);
+      renderExplore(linkTo({ ...toolCallsTable, range: { from, to } }));
+
+      const asked = testState.bodies.find((body) => body !== null);
+      expect(asked?.from.getTime()).toBe(from);
+      expect(asked?.to.getTime()).toBe(to);
+      expect(
+        screen.getByRole("combobox", { name: "Window" }).textContent,
+      ).not.toBe("Last 7 days");
+      const save = screen.getByRole("button", { name: "Save widget" });
+      expect((save as HTMLButtonElement).disabled).toBe(true);
+    });
+
     it("runs a linked query once a refreshed catalog can answer it", () => {
       testState.datasets = [sessions];
       const view = renderExplore(linkTo(toolCallsTable));
