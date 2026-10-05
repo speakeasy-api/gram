@@ -135,6 +135,13 @@ vi.mock("@gram/client/react-query/mcpServers.js", () => ({
           slug: "docs-mcp",
           remoteMcpServerId: "remote-1",
         },
+        // Tunneled: never records tool metadata, so it can't be discovered.
+        {
+          id: "55555555-5555-4555-8555-555555555555",
+          name: "Tunnel MCP",
+          slug: "tunnel-mcp",
+          tunneledMcpServerId: "tunnel-1",
+        },
       ],
     },
     isLoading: false,
@@ -915,8 +922,28 @@ describe("PolicyMCPScopePicker all-server selection", () => {
     fireEvent.click(screen.getByRole("button", { name: /Billing MCP/ }));
 
     expect(screen.getByText("This server has no tools yet.")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Selecting no tools puts every tool on this server in policy scope, including tools added later.",
+      ),
+    ).toBeTruthy();
     expect(screen.queryByText(/No tools discovered yet/)).toBeNull();
     expect(screen.queryByRole("link", { name: /Discover tools/ })).toBeNull();
+  });
+
+  it("does not point servers that never record tools at discovery", () => {
+    render(<ScopePickerHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Tunnel MCP/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Tunnel MCP" }));
+
+    expect(
+      screen.getByText(
+        "Tools on this server can't be listed, so they can't be picked individually.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /Discover tools/ })).toBeNull();
+    expect(screen.getByText("1 servers · 0 tools in scope")).toBeTruthy();
   });
 
   it("clears every server when All MCP servers is unchecked", () => {

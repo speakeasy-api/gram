@@ -44,10 +44,20 @@ type PickerServer = {
   memberCount?: number;
   tools: PickerTool[];
   toolsLoading: boolean;
-  /** Tools come from metadata recorded on the server's Inspect tab rather
-   *  than from a toolset, so an empty list means "not discovered yet". */
-  discoversTools: boolean;
+  /** Where the tool list comes from. "discovered" tools are recorded when the
+   *  server's Inspect tab lists them, so an empty list means "not discovered
+   *  yet". "unlisted" servers (tunneled, unproxied) never record their tools. */
+  toolSource: "toolset" | "discovered" | "unlisted";
 };
+
+function toolSourceFor(server: {
+  toolsetId?: string;
+  remoteMcpServerId?: string;
+}): PickerServer["toolSource"] {
+  if (server.toolsetId) return "toolset";
+  if (server.remoteMcpServerId) return "discovered";
+  return "unlisted";
+}
 
 type ServerSelection =
   | { kind: "off" }
@@ -151,7 +161,7 @@ export function PolicyMCPScopePicker({
         kind: "server",
         tools,
         toolsLoading: metadataQuery?.isLoading ?? false,
-        discoversTools: !toolset,
+        toolSource: toolSourceFor(server),
       };
     }),
     ...(platformToolsetsQuery.data?.toolsets ?? []).map(
@@ -169,7 +179,7 @@ export function PolicyMCPScopePicker({
           }))
           .sort((left, right) => left.name.localeCompare(right.name)),
         toolsLoading: false,
-        discoversTools: false,
+        toolSource: "toolset",
       }),
     ),
     ...(gatewaysQuery.data?.metaMcpServers ?? []).map(
@@ -180,7 +190,7 @@ export function PolicyMCPScopePicker({
         memberCount: gateway.memberCount,
         tools: [],
         toolsLoading: false,
-        discoversTools: false,
+        toolSource: "unlisted",
       }),
     ),
   ];
@@ -379,7 +389,7 @@ export function PolicyMCPScopePicker({
   // These servers cover every tool, but none have been discovered, so they
   // add nothing to toolsInScope even though their tools are all in scope.
   const undiscoveredServersInScope = pickerServers.filter((server) => {
-    if (!server.discoversTools || server.toolsLoading) return false;
+    if (server.toolSource !== "discovered" || server.toolsLoading) return false;
     if (server.tools.length > 0) return false;
     const selection = selectionFor(server);
     return (
@@ -916,6 +926,36 @@ function FocusedServerPane({
   );
 }
 
+function noToolsMessage(source: PickerServer["toolSource"]): string {
+  switch (source) {
+    case "discovered":
+      return "No tools discovered yet. MCP tools need to be discovered before you can pick them individually. They are discovered when someone who can edit this server opens its Inspect tab.";
+    case "unlisted":
+      return "Tools on this server can't be listed, so they can't be picked individually.";
+    case "toolset":
+      return "This server has no tools yet.";
+  }
+}
+
+function noToolsScopeNote(
+  source: PickerServer["toolSource"],
+  toolAnnotations: ToolAnnotation[],
+): string {
+  if (toolAnnotations.length === 0) {
+    return source === "discovered"
+      ? "Selecting no tools puts every tool on this server in policy scope, including tools discovered later."
+      : "Selecting no tools puts every tool on this server in policy scope, including tools added later.";
+  }
+  switch (source) {
+    case "discovered":
+      return "The tool rule matches tools by their discovered annotations, so it matches nothing on this server until its tools are discovered.";
+    case "unlisted":
+      return "The tool rule matches tools by their annotations, so it matches nothing on this server.";
+    case "toolset":
+      return "The tool rule matches nothing on this server until it has tools with matching annotations.";
+  }
+}
+
 function NoToolsNotice({
   server,
   toolAnnotations,
@@ -924,22 +964,17 @@ function NoToolsNotice({
   toolAnnotations: ToolAnnotation[];
 }): JSX.Element {
   const routes = useRoutes();
-  const scopeNote =
-    toolAnnotations.length === 0
-      ? "Selecting no tools puts every tool on this server in policy scope, including tools discovered later."
-      : "The tool rule matches tools by their discovered annotations, so it matches nothing on this server until its tools are discovered.";
+  const discovered = server.toolSource === "discovered";
 
   return (
     <div className="space-y-2 p-3">
       <Text small muted>
-        {server.discoversTools
-          ? "No tools discovered yet. MCP tools need to be discovered before you can pick them individually. They are discovered when someone who can edit this server opens its Inspect tab."
-          : "This server has no tools yet."}
+        {noToolsMessage(server.toolSource)}
       </Text>
       <Text small muted>
-        {scopeNote}
+        {noToolsScopeNote(server.toolSource, toolAnnotations)}
       </Text>
-      {server.discoversTools ? (
+      {discovered ? (
         <Link
           to={routes.mcp.x.inspect.href(server.slug ?? server.id)}
           target="_blank"
