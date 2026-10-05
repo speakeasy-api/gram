@@ -17,6 +17,11 @@ func ListInstancesLitellmPath() string {
 	return "/rpc/litellm.listInstances"
 }
 
+// MintActingPrincipalLitellmPath returns the URL path to the litellm service mintActingPrincipal HTTP endpoint.
+func MintActingPrincipalLitellmPath() string {
+	return "/rpc/litellm.mintActingPrincipal"
+}
+
 // RotateInstanceKeyLitellmPath returns the URL path to the litellm service rotateInstanceKey HTTP endpoint.
 func RotateInstanceKeyLitellmPath() string {
 	return "/rpc/litellm.rotateInstanceKey"

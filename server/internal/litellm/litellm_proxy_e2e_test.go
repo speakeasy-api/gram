@@ -6,8 +6,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -35,6 +33,7 @@ import (
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	gen "github.com/speakeasy-api/gram/server/gen/litellm"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	riskanalysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
@@ -44,6 +43,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/killswitches"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
+	"github.com/speakeasy-api/gram/server/internal/litellmacting"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -261,9 +263,16 @@ func (r *timeoutRelay) releaseFirst() {
 
 type proxyHarness struct {
 	t          *testing.T
+	ctx        context.Context
 	conn       *pgxpool.Pool
+	service    *Service
+	signer     *litellmacting.Signer
+	lifecycle  *killswitches.LifecycleService
 	projectID  uuid.UUID
 	orgID      string
+	userID     string
+	instanceID string
+	apiKeyID   string
 	policy     riskrepo.RiskPolicy
 	proxyURL   string
 	provider   *fixtureProvider
@@ -277,11 +286,24 @@ type proxyResponse struct {
 	Body   []byte
 }
 
+type proxyRequestOptions struct {
+	scenario          string
+	sessionHeader     string
+	sessionID         string
+	callID            string
+	guardrail         string
+	text              string
+	stream            bool
+	actingHeaders     map[string]string
+	additionalHeaders []map[string]string
+}
+
 func TestLiteLLMProxyE2E(t *testing.T) { //nolint:paralleltest // Scenarios intentionally share one proxy container.
 	test := newProxyHarness(t)
 	test.safeNonStreaming()
 	test.nativeSessionHeaders()
 	test.blockedNonStreaming()
+	test.aiAccessHeadersBlockBeforeProvider()
 	test.safeStreaming()
 	test.blockedStreaming()
 	test.failClosed()
@@ -346,7 +368,24 @@ func newProxyHarness(t *testing.T) *proxyHarness {
 		Selector:   nil,
 	}))
 
-	apiKey := createProxyAPIKey(t, ctx, instance.conn, authCtx)
+	signer, err := litellmacting.NewSigner("litellm-proxy-e2e-secret")
+	require.NoError(t, err)
+	registry, err := mcptoolexecution.NewRegistry(instance.conn)
+	require.NoError(t, err)
+	evaluator, err := killswitches.NewEvaluator(instance.conn, registry, liteLLMAIAccessTimeout, testenv.NewMeterProvider(t), testenv.NewLogger(t))
+	require.NoError(t, err)
+	checkpoint, err := NewLiteLLMAIAccessCheckpoint(registry, evaluator, signer)
+	require.NoError(t, err)
+	lifecycle, err := killswitches.NewLifecycleService(instance.conn, registry, mcptoolexecution.NewCustomerLifecycleValidator(), nil)
+	require.NoError(t, err)
+	managed, err := instance.service.CreateInstance(ctx, &gen.CreateInstancePayload{Name: "litellm-proxy-e2e", FailurePosture: "fail_closed"})
+	require.NoError(t, err)
+	keyHash, err := auth.GetAPIKeyHash(managed.Key)
+	require.NoError(t, err)
+	managedKey, err := keysrepo.New(instance.conn).GetAPIKeyByKeyHash(ctx, keyHash)
+	require.NoError(t, err)
+	instance.service.actingSigner = signer
+	instance.service.aiAccess = checkpoint
 	mux := goahttp.NewMuxer()
 	Attach(mux, instance.service)
 	gramServer := httptest.NewServer(mux)
@@ -367,7 +406,7 @@ func newProxyHarness(t *testing.T) *proxyHarness {
 	timeoutCallID := "e2e-timeout-call"
 	relay := &timeoutRelay{
 		gramURL:       gramServer.URL + "/rpc/litellm.ingest",
-		apiKey:        apiKey,
+		apiKey:        managed.Key,
 		projectSlug:   *authCtx.ProjectSlug,
 		timeoutCallID: timeoutCallID,
 		release:       make(chan struct{}),
@@ -408,7 +447,7 @@ func newProxyHarness(t *testing.T) *proxyHarness {
 			Reader: bytes.NewReader(configBytes), ContainerFilePath: "/app/e2e-config.yaml", FileMode: 0o644,
 		}),
 		testcontainers.WithEnv(map[string]string{
-			"GRAM_LITELLM_INGEST_KEY": apiKey,
+			"GRAM_LITELLM_INGEST_KEY": managed.Key,
 			"GRAM_PROJECT_SLUG":       *authCtx.ProjectSlug,
 			"REQUEST_TIMEOUT":         fmt.Sprintf("%d", proxyRequestTimeout/time.Second),
 		}),
@@ -433,30 +472,11 @@ func newProxyHarness(t *testing.T) *proxyHarness {
 	require.NoError(t, err)
 
 	return &proxyHarness{
-		t: t, conn: instance.conn, projectID: *authCtx.ProjectID, orgID: authCtx.ActiveOrganizationID,
-		policy: policy, proxyURL: proxyURL, provider: provider, relay: relay, httpClient: &http.Client{Timeout: 15 * time.Second},
+		t: t, ctx: ctx, conn: instance.conn, service: instance.service, signer: signer, lifecycle: lifecycle,
+		projectID: *authCtx.ProjectID, orgID: authCtx.ActiveOrganizationID, userID: authCtx.UserID,
+		instanceID: managed.Instance.ID, apiKeyID: managedKey.ID.String(), policy: policy, proxyURL: proxyURL,
+		provider: provider, relay: relay, httpClient: &http.Client{Timeout: 15 * time.Second},
 	}
-}
-
-func createProxyAPIKey(t *testing.T, ctx context.Context, conn *pgxpool.Pool, authCtx *contextvalues.AuthContext) string {
-	t.Helper()
-	raw := make([]byte, 24)
-	_, err := rand.Read(raw)
-	require.NoError(t, err)
-	key := "gram_test_" + hex.EncodeToString(raw)
-	hash, err := auth.GetAPIKeyHash(key)
-	require.NoError(t, err)
-	_, err = keysrepo.New(conn).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
-		OrganizationID:  authCtx.ActiveOrganizationID,
-		ProjectID:       uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-		CreatedByUserID: authCtx.UserID,
-		Name:            "litellm-e2e-hooks-key",
-		KeyPrefix:       key[:10],
-		KeyHash:         hash,
-		Scopes:          []string{auth.APIKeyScopeHooks.String()},
-	})
-	require.NoError(t, err)
-	return key
 }
 
 func buildProxyConfig(t *testing.T, providerURL, timeoutProviderURL, gramURL, failureURL, relayURL string) proxyConfig {
@@ -478,10 +498,15 @@ func buildProxyConfig(t *testing.T, providerURL, timeoutProviderURL, gramURL, fa
 	require.Equal(t, "gram", guardrail.Name)
 	require.Equal(t, "generic_guardrail_api", guardrail.Params["guardrail"])
 	require.Equal(t, true, guardrail.Params["default_on"])
+	require.Equal(t, true, guardrail.Params["fail_on_error"])
+	require.Equal(t, "fail_closed", guardrail.Params["unreachable_fallback"])
 	require.Equal(t, true, guardrail.Params["streaming_end_of_stream_only"])
 	require.NotEmpty(t, guardrail.Params["api_base"])
 	require.ElementsMatch(t, []any{"pre_call", "post_call"}, guardrail.Params["mode"])
 	require.Equal(t, []any{
+		"x-gram-acting-principal",
+		"x-gram-acting-principal-contract",
+		"x-gram-inference-invocation-id",
 		"x-gram-session-id",
 		"x-claude-code-session-id",
 		"session-id",
@@ -549,33 +574,57 @@ func serverPort(t *testing.T, rawURL string) int {
 
 func (h *proxyHarness) request(scenario, sessionHeader, sessionID, callID, guardrail, text string, stream bool, additionalSessionHeaders ...map[string]string) proxyResponse {
 	h.t.Helper()
-	prompt := h.prompt(scenario, sessionID, callID, text)
+	return h.requestWithOptions(proxyRequestOptions{
+		scenario: scenario, sessionHeader: sessionHeader, sessionID: sessionID, callID: callID, guardrail: guardrail, text: text, stream: stream,
+		actingHeaders: h.mintActingHeaders(), additionalHeaders: additionalSessionHeaders,
+	})
+}
+
+func (h *proxyHarness) requestWithOptions(options proxyRequestOptions) proxyResponse {
+	h.t.Helper()
+	prompt := h.prompt(options.scenario, options.sessionID, options.callID, options.text)
 	model := "fixture-openai"
-	if scenario == "timeout" {
+	if options.scenario == "timeout" {
 		model = "fixture-timeout"
 	}
 	body, err := json.Marshal(map[string]any{
 		"model": model, "messages": []any{map[string]any{"role": "user", "content": prompt}},
-		"guardrails": []string{guardrail}, "stream": stream,
+		"guardrails": []string{options.guardrail}, "stream": options.stream,
 	})
 	require.NoError(h.t, err)
 	req, err := http.NewRequestWithContext(h.t.Context(), http.MethodPost, h.proxyURL+"/v1/chat/completions", bytes.NewReader(body))
 	require.NoError(h.t, err)
 	req.Header.Set("Authorization", "Bearer "+proxyMasterKey)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(sessionHeader, sessionID)
-	for _, headers := range additionalSessionHeaders {
+	req.Header.Set(options.sessionHeader, options.sessionID)
+	for name, value := range options.actingHeaders {
+		req.Header.Set(name, value)
+	}
+	for _, headers := range options.additionalHeaders {
 		for name, value := range headers {
 			req.Header.Set(name, value)
 		}
 	}
-	req.Header.Set("x-litellm-call-id", callID)
+	req.Header.Set("x-litellm-call-id", options.callID)
 	response, err := h.httpClient.Do(req)
 	require.NoError(h.t, err)
 	responseBody, err := io.ReadAll(response.Body)
 	require.NoError(h.t, err)
 	require.NoError(h.t, response.Body.Close())
 	return proxyResponse{Status: response.StatusCode, Header: response.Header.Clone(), Body: responseBody}
+}
+
+func (h *proxyHarness) mintActingHeaders() map[string]string {
+	h.t.Helper()
+	invocationID, err := uuid.NewV7()
+	require.NoError(h.t, err)
+	minted, err := h.service.MintActingPrincipal(h.ctx, &gen.MintActingPrincipalPayload{
+		InstanceID: h.instanceID, InvocationID: invocationID.String(),
+	})
+	require.NoError(h.t, err)
+	return map[string]string{
+		actingPrincipalHeader: minted.Assertion, actingPrincipalContractHeader: minted.ContractVersion, inferenceInvocationHeader: minted.InvocationID,
+	}
 }
 
 func (h *proxyHarness) key(scenario, sessionID, callID string) providerCallKey {
@@ -628,13 +677,18 @@ func (h *proxyHarness) requireCompletion(body []byte) {
 
 func (h *proxyHarness) requireBlocked(body []byte) {
 	h.t.Helper()
+	require.Equal(h.t, policyBlockedReason, blockedMessage(h.t, body))
+}
+
+func blockedMessage(t *testing.T, body []byte) string {
+	t.Helper()
 	var response struct {
 		Error struct {
 			Message string `json:"message"`
 		} `json:"error"`
 	}
-	require.NoError(h.t, json.Unmarshal(body, &response))
-	require.Equal(h.t, policyBlockedReason, response.Error.Message)
+	require.NoError(t, json.Unmarshal(body, &response))
+	return response.Error.Message
 }
 
 func (h *proxyHarness) requireSSE(body []byte) {
@@ -727,6 +781,64 @@ func (h *proxyHarness) blockedNonStreaming() {
 	require.Equal(h.t, h.prompt(scenario, sessionID, callID, "token="+syntheticSecret), messages[0].Content)
 	require.Equal(h.t, "litellm", messages[0].Source.String)
 	h.materializeFinding(messages[0].ID)
+}
+
+func (h *proxyHarness) aiAccessHeadersBlockBeforeProvider() {
+	activation, err := h.lifecycle.ActivatePrescription(h.ctx, killswitches.ActivatePrescriptionRequest{
+		MutationContext: killswitches.MutationContext{
+			OrganizationID: killswitches.OrganizationID(h.orgID), ActorUserID: h.userID, ActorDisplayName: h.userID, OperationID: uuid.New(),
+		},
+		Definition: mcptoolexecution.DefinitionKeyAIAccess, PrincipalKind: mcptoolexecution.PrincipalKindUser, PrincipalInput: h.userID,
+		ResourceKind: mcptoolexecution.ResourceKindLiteLLMInstance,
+		Desired: killswitches.DesiredVersionInput{
+			ResourceScope: killswitches.ResourceScopeSelected, SelectedResourceInputs: []string{h.instanceID}, StartMode: killswitches.StartModeNow,
+			InternalNote: "LiteLLM proxy E2E", ExternalNote: "AI access selected note.",
+		},
+	})
+	require.NoError(h.t, err)
+	defer func() {
+		_, deactivateErr := h.lifecycle.DeactivatePrescription(h.ctx, killswitches.DeactivatePrescriptionRequest{
+			MutationContext: killswitches.MutationContext{
+				OrganizationID: killswitches.OrganizationID(h.orgID), ActorUserID: h.userID, ActorDisplayName: h.userID, OperationID: uuid.New(),
+			},
+			PrescriptionID: activation.PrescriptionID, ExpectedVersion: activation.Version,
+		})
+		assert.NoError(h.t, deactivateErr)
+	}()
+
+	scenario, sessionID, callID := "ai-access", "e2e-ai-access-session", "e2e-ai-access-call"
+	response := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e", "safe prompt", false)
+	require.GreaterOrEqual(h.t, response.Status, http.StatusBadRequest, string(response.Body))
+	require.Equal(h.t, "AI access selected note.", blockedMessage(h.t, response.Body))
+	require.Zero(h.t, h.provider.count(h.key(scenario, sessionID, callID)))
+	h.noMessages(sessionID)
+
+	invocationID, err := uuid.NewV7()
+	require.NoError(h.t, err)
+	crossTenantAssertion, err := h.signer.MintAssertion(h.userID, litellmacting.AssertionBinding{
+		OrganizationID: "org_other", ProjectID: h.projectID.String(), InstanceID: h.instanceID, APIKeyID: h.apiKeyID, InvocationID: invocationID.String(),
+	})
+	require.NoError(h.t, err)
+	crossScenario, crossSession, crossCall := "ai-access-cross-tenant", "e2e-ai-access-cross-tenant-session", "e2e-ai-access-cross-tenant-call"
+	crossTenant := h.requestWithOptions(proxyRequestOptions{
+		scenario: crossScenario, sessionHeader: "x-gram-session-id", sessionID: crossSession, callID: crossCall, guardrail: "gram-e2e", text: "safe prompt",
+		actingHeaders: map[string]string{
+			actingPrincipalHeader: crossTenantAssertion, actingPrincipalContractHeader: litellmacting.ContractVersion, inferenceInvocationHeader: invocationID.String(),
+		},
+	})
+	require.GreaterOrEqual(h.t, crossTenant.Status, http.StatusBadRequest, string(crossTenant.Body))
+	require.Equal(h.t, liteLLMIdentityFailureMessage, blockedMessage(h.t, crossTenant.Body))
+	require.Zero(h.t, h.provider.count(h.key(crossScenario, crossSession, crossCall)))
+	h.noMessages(crossSession)
+
+	missingScenario, missingSession, missingCall := "ai-access-missing", "e2e-ai-access-missing-session", "e2e-ai-access-missing-call"
+	missing := h.requestWithOptions(proxyRequestOptions{
+		scenario: missingScenario, sessionHeader: "x-gram-session-id", sessionID: missingSession, callID: missingCall, guardrail: "gram-e2e", text: "safe prompt",
+	})
+	require.GreaterOrEqual(h.t, missing.Status, http.StatusBadRequest, string(missing.Body))
+	require.Equal(h.t, liteLLMIdentityFailureMessage, blockedMessage(h.t, missing.Body))
+	require.Zero(h.t, h.provider.count(h.key(missingScenario, missingSession, missingCall)))
+	h.noMessages(missingSession)
 }
 
 func (h *proxyHarness) safeStreaming() {

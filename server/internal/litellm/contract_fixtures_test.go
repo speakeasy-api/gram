@@ -238,11 +238,7 @@ func TestContractFixtures(t *testing.T) {
 			require.Nil(t, call.payload.Raw, tc.name)
 			require.Equal(t, "litellm", call.payload.Source.Adapter, tc.name)
 			require.Equal(t, "1.94.0", *call.payload.Source.AdapterVersion, tc.name)
-			if tc.sourceEmail == "" {
-				require.Nil(t, call.payload.Source.UserEmail, tc.name)
-			} else {
-				require.Equal(t, tc.sourceEmail, *call.payload.Source.UserEmail, tc.name)
-			}
+			require.Nil(t, call.payload.Source.UserEmail, tc.name)
 			require.Equal(t, tc.sessionID, *call.payload.Session.ID, tc.name)
 			require.Equal(t, callback["litellm_call_id"], *call.payload.Session.TurnID, tc.name)
 			if tc.model == "" {

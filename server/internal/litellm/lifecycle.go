@@ -46,6 +46,9 @@ func (s *Service) CreateInstance(ctx context.Context, payload *gen.CreateInstanc
 	if failurePosture == "" {
 		failurePosture = "fail_closed"
 	}
+	if failurePosture != "fail_closed" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "new managed LiteLLM integrations must fail closed")
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {

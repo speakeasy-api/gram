@@ -5,10 +5,12 @@
 import { litellmCreateInstance } from "../funcs/litellmCreateInstance.js";
 import { litellmIngestGuardrail } from "../funcs/litellmIngestGuardrail.js";
 import { litellmListInstances } from "../funcs/litellmListInstances.js";
+import { litellmMintActingPrincipal } from "../funcs/litellmMintActingPrincipal.js";
 import { litellmRevokeInstance } from "../funcs/litellmRevokeInstance.js";
 import { litellmRotateInstanceKey } from "../funcs/litellmRotateInstanceKey.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListInstancesResponseBody } from "../models/components/listinstancesresponsebody.js";
+import { LitellmActingPrincipalResult } from "../models/components/litellmactingprincipalresult.js";
 import { LitellmIngestResult } from "../models/components/litellmingestresult.js";
 import { LitellmInstanceKeyResult } from "../models/components/litellminstancekeyresult.js";
 import {
@@ -23,6 +25,10 @@ import {
   ListLiteLLMInstancesRequest,
   ListLiteLLMInstancesSecurity,
 } from "../models/operations/listlitellminstances.js";
+import {
+  MintLiteLLMActingPrincipalRequest,
+  MintLiteLLMActingPrincipalSecurity,
+} from "../models/operations/mintlitellmactingprincipal.js";
 import {
   RevokeLiteLLMInstanceRequest,
   RevokeLiteLLMInstanceSecurity,
@@ -84,6 +90,25 @@ export class Litellm extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListInstancesResponseBody> {
     return unwrapAsync(litellmListInstances(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * mintActingPrincipal litellm
+   *
+   * @remarks
+   * Mint a short-lived acting-principal assertion from an authoritative Gram user session for one active managed LiteLLM inference invocation. The caller must forward the assertion and invocation ID as original request headers to LiteLLM.
+   */
+  async mintActingPrincipal(
+    request: MintLiteLLMActingPrincipalRequest,
+    security?: MintLiteLLMActingPrincipalSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<LitellmActingPrincipalResult> {
+    return unwrapAsync(litellmMintActingPrincipal(
       this,
       request,
       security,

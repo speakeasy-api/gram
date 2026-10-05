@@ -318,6 +318,7 @@ trackedFiles:
   src/funcs/litellmCreateInstance.ts: {}
   src/funcs/litellmIngestGuardrail.ts: {}
   src/funcs/litellmListInstances.ts: {}
+  src/funcs/litellmMintActingPrincipal.ts: {}
   src/funcs/litellmRevokeInstance.ts: {}
   src/funcs/litellmRotateInstanceKey.ts: {}
   src/funcs/mcpApprovalCreateRequest.ts: {}
@@ -1356,6 +1357,7 @@ trackedFiles:
   src/models/components/listvariationsresult.ts: {}
   src/models/components/listversionsresult.ts: {}
   src/models/components/listwidgetsresult.ts: {}
+  src/models/components/litellmactingprincipalresult.ts: {}
   src/models/components/litellmingestresult.ts: {}
   src/models/components/litellminstance.ts: {}
   src/models/components/litellminstancediagnostics.ts: {}
@@ -1397,6 +1399,7 @@ trackedFiles:
   src/models/components/migrateorganizationusersessionissuerresult.ts: {}
   src/models/components/migrateremotesessionissuerrequestbody.ts: {}
   src/models/components/migrateremotesessionissuerresult.ts: {}
+  src/models/components/mintactingprincipalrequestbody.ts: {}
   src/models/components/mintusersessionrequestbody.ts: {}
   src/models/components/mintusersessionresponsebody.ts: {}
   src/models/components/modelproviderkey.ts: {}
@@ -2432,6 +2435,7 @@ trackedFiles:
   src/models/operations/migrateorganizationremotesessionissuer.ts: {}
   src/models/operations/migrateorganizationusersessionissuer.ts: {}
   src/models/operations/migratetoglobalremotesessionissuer.ts: {}
+  src/models/operations/mintlitellmactingprincipal.ts: {}
   src/models/operations/mintusersession.ts: {}
   src/models/operations/moveorganizationremotesessionissuer.ts: {}
   src/models/operations/moveorganizationusersessionissuer.ts: {}
@@ -10056,6 +10060,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  mintLiteLLMActingPrincipal:
+    speakeasy-default-mint-lite-LLM-acting-principal:
+      requestBody:
+        application/json: {"instance_id": "eef113c1-7b2a-448d-950b-4d49ae9bab61", "invocation_id": "0198a1b2-c3d4-7000-8000-0123456789ab"}
+      responses:
+        "201":
+          application/json: {"assertion": "<value>", "contract_version": "litellm-acting-principal.v1", "expires_in": 769391, "invocation_id": "7788cd9f-f13d-4755-9808-f30c7519997c"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   mintUserSession:
     speakeasy-default-mint-user-session:
       requestBody:

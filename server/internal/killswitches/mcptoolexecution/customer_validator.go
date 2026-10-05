@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
+	litellmrepo "github.com/speakeasy-api/gram/server/internal/litellm/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
@@ -59,21 +60,32 @@ func (customerLifecycleValidator) ValidateCurrent(ctx context.Context, dbtx kill
 		}
 		return nil
 	}
-	if batch.Resources.Kind != ResourceKindMCPServer {
-		return fmt.Errorf("%w: unsupported server reference", killswitches.ErrInvalidReference)
-	}
 	ids, ok := canonicalResourceIDs(batch.Resources.Keys)
 	if !ok {
-		return fmt.Errorf("%w: server is not available", killswitches.ErrInvalidReference)
+		return fmt.Errorf("%w: resource is not available", killswitches.ErrInvalidReference)
 	}
-	locked, err := mcpserversrepo.New(dbtx).LockLiveMCPServersInOrganization(ctx, mcpserversrepo.LockLiveMCPServersInOrganizationParams{
-		Ids: ids, OrganizationID: string(batch.OrganizationID),
-	})
+	var locked []uuid.UUID
+	var err error
+	resourceName := ""
+	switch batch.Resources.Kind {
+	case ResourceKindLiteLLMInstance:
+		resourceName = "LiteLLM instances"
+		locked, err = litellmrepo.New(dbtx).LockActiveLiteLLMInstancesInOrganization(ctx, litellmrepo.LockActiveLiteLLMInstancesInOrganizationParams{
+			Ids: ids, OrganizationID: string(batch.OrganizationID),
+		})
+	case ResourceKindMCPServer:
+		resourceName = "servers"
+		locked, err = mcpserversrepo.New(dbtx).LockLiveMCPServersInOrganization(ctx, mcpserversrepo.LockLiveMCPServersInOrganizationParams{
+			Ids: ids, OrganizationID: string(batch.OrganizationID),
+		})
+	default:
+		return fmt.Errorf("%w: unsupported resource reference", killswitches.ErrInvalidReference)
+	}
 	if err != nil {
-		return fmt.Errorf("lock current organization servers: %w", err)
+		return fmt.Errorf("lock current organization %s: %w", resourceName, err)
 	}
 	if len(locked) != len(ids) {
-		return fmt.Errorf("%w: one or more servers are not available", killswitches.ErrInvalidReference)
+		return fmt.Errorf("%w: one or more %s are not available", killswitches.ErrInvalidReference, resourceName)
 	}
 	return nil
 }
