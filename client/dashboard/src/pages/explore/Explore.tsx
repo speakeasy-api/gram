@@ -153,9 +153,8 @@ function ExploreWorkbench({
     widgetProblem(spec, openWidget) ??
     (broken ? { unreadable: false, reason: broken.problem } : null);
   // The last answer belongs to the question being left, so it goes; a
-  // widget that still runs brings its own as it opens.
-  // A card opens the question it ran, which a page may have changed from
-  // the saved widget's.
+  // widget that still runs brings its own as it opens. A card opens the
+  // question it ran, which a page may have changed from the saved widget's.
   const openQuery = (next: ExploreSpec, widgetId: string | null) => {
     setSubmitted(null);
     url.open(next, widgetId);

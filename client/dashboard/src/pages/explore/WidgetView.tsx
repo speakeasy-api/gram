@@ -228,27 +228,39 @@ function WidgetHeader({
     if (widgetId) params.set(WIDGET_PARAM, widgetId);
     return `${routes.explore.href()}?${params.toString()}`;
   }, [spec, openable, widgetId, routes.explore]);
+  // A page that handles opening (to check for unsaved edits first) gets a
+  // button; anywhere else it is a plain link.
+  const label = (
+    <>
+      Open in Explore
+      <Icon name="arrow-up-right" className="size-3" />
+    </>
+  );
+  let openControl: JSX.Element | null = null;
+  if (href && spec && onOpen) {
+    openControl = (
+      <button
+        type="button"
+        onClick={() => onOpen(spec, widgetId)}
+        className={OPEN_CLASSES}
+      >
+        {label}
+      </button>
+    );
+  } else if (href) {
+    openControl = (
+      <Link to={href} className={OPEN_CLASSES}>
+        {label}
+      </Link>
+    );
+  }
   return (
     <header className="flex min-w-0 items-center justify-between gap-2">
       <h3 className="text-eyebrow truncate" title={name}>
         {name}
       </h3>
       <span className="flex shrink-0 items-center gap-1">
-        {href && spec && onOpen ? (
-          <button
-            type="button"
-            onClick={() => onOpen(spec, widgetId)}
-            className={OPEN_CLASSES}
-          >
-            Open in Explore
-            <Icon name="arrow-up-right" className="size-3" />
-          </button>
-        ) : href ? (
-          <Link to={href} className={OPEN_CLASSES}>
-            Open in Explore
-            <Icon name="arrow-up-right" className="size-3" />
-          </Link>
-        ) : null}
+        {openControl}
         {actions}
       </span>
     </header>
