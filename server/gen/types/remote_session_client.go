@@ -59,6 +59,9 @@ type RemoteSessionClient struct {
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
 	LegacyCallbackURL bool
-	CreatedAt         string
-	UpdatedAt         string
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string
+	CreatedAt   string
+	UpdatedAt   string
 }

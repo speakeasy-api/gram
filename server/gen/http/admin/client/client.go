@@ -244,6 +244,22 @@ type Client struct {
 	// getSupportCoverage endpoint.
 	GetSupportCoverageDoer goahttp.Doer
 
+	// DescribeMcpServerHealth Doer is the HTTP client used to make requests to the
+	// describeMcpServerHealth endpoint.
+	DescribeMcpServerHealthDoer goahttp.Doer
+
+	// GetMcpServerToolCalls Doer is the HTTP client used to make requests to the
+	// getMcpServerToolCalls endpoint.
+	GetMcpServerToolCallsDoer goahttp.Doer
+
+	// GetRegistryOktaCandidates Doer is the HTTP client used to make requests to
+	// the getRegistryOktaCandidates endpoint.
+	GetRegistryOktaCandidatesDoer goahttp.Doer
+
+	// ListRegistryOktaUnmapped Doer is the HTTP client used to make requests to
+	// the listRegistryOktaUnmapped endpoint.
+	ListRegistryOktaUnmappedDoer goahttp.Doer
+
 	// ListRegistryEntries Doer is the HTTP client used to make requests to the
 	// listRegistryEntries endpoint.
 	ListRegistryEntriesDoer goahttp.Doer
@@ -409,6 +425,10 @@ func NewClient(
 		GetSupportMatrixDoer:                      doer,
 		UpdateSupportMatrixDoer:                   doer,
 		GetSupportCoverageDoer:                    doer,
+		DescribeMcpServerHealthDoer:               doer,
+		GetMcpServerToolCallsDoer:                 doer,
+		GetRegistryOktaCandidatesDoer:             doer,
+		ListRegistryOktaUnmappedDoer:              doer,
 		ListRegistryEntriesDoer:                   doer,
 		GetRegistryEntryDoer:                      doer,
 		CreateRegistryEntryDoer:                   doer,
@@ -1807,6 +1827,102 @@ func (c *Client) GetSupportCoverage() goa.Endpoint {
 		resp, err := c.GetSupportCoverageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getSupportCoverage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DescribeMcpServerHealth returns an endpoint that makes HTTP requests to the
+// admin service describeMcpServerHealth server.
+func (c *Client) DescribeMcpServerHealth() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDescribeMcpServerHealthRequest(c.encoder)
+		decodeResponse = DecodeDescribeMcpServerHealthResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDescribeMcpServerHealthRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DescribeMcpServerHealthDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "describeMcpServerHealth", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMcpServerToolCalls returns an endpoint that makes HTTP requests to the
+// admin service getMcpServerToolCalls server.
+func (c *Client) GetMcpServerToolCalls() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMcpServerToolCallsRequest(c.encoder)
+		decodeResponse = DecodeGetMcpServerToolCallsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMcpServerToolCallsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMcpServerToolCallsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getMcpServerToolCalls", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetRegistryOktaCandidates returns an endpoint that makes HTTP requests to
+// the admin service getRegistryOktaCandidates server.
+func (c *Client) GetRegistryOktaCandidates() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRegistryOktaCandidatesRequest(c.encoder)
+		decodeResponse = DecodeGetRegistryOktaCandidatesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRegistryOktaCandidatesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetRegistryOktaCandidatesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getRegistryOktaCandidates", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListRegistryOktaUnmapped returns an endpoint that makes HTTP requests to the
+// admin service listRegistryOktaUnmapped server.
+func (c *Client) ListRegistryOktaUnmapped() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRegistryOktaUnmappedRequest(c.encoder)
+		decodeResponse = DecodeListRegistryOktaUnmappedResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRegistryOktaUnmappedRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRegistryOktaUnmappedDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listRegistryOktaUnmapped", err)
 		}
 		return decodeResponse(resp)
 	}

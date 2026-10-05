@@ -107,7 +107,7 @@ func TestPlatformHostVerificationChecklistPlatformMCP(t *testing.T) {
 			runtime := NewRuntime(testenv.NewLogger(t), authenticator, allowGate{}, allowAuthorizer{}, oauth.ProtectedResourceURL(), "platform-host-checklist-cursor", nil, nil, nil, nil, nil)
 
 			logger := testenv.NewLogger(t)
-			mcpSecurity, err := middleware.MCPSecurity(logger, append([]string{serverURL.String()}, slices.Sorted(maps.Values(platformHosts))...))
+			mcpSecurity, err := middleware.MCPSecurity(logger, append([]string{serverURL.String()}, slices.Sorted(maps.Values(platformHosts))...), nil)
 			require.NoError(t, err)
 			mux := goahttp.NewMuxer()
 			mux.Use(mcpSecurity)

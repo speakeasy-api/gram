@@ -13853,6 +13853,945 @@ func DecodeGetSupportCoverageResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildDescribeMcpServerHealthRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "describeMcpServerHealth"
+// endpoint
+func (c *Client) BuildDescribeMcpServerHealthRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DescribeMcpServerHealthAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "describeMcpServerHealth", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDescribeMcpServerHealthRequest returns an encoder for requests sent to
+// the admin describeMcpServerHealth server.
+func EncodeDescribeMcpServerHealthRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.DescribeMcpServerHealthPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "describeMcpServerHealth", "*admin.DescribeMcpServerHealthPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		values.Add("project_id", p.ProjectID)
+		values.Add("mcp_server_id", p.McpServerID)
+		values.Add("window_days", fmt.Sprintf("%v", p.WindowDays))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDescribeMcpServerHealthResponse returns a decoder for responses
+// returned by the admin describeMcpServerHealth endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeDescribeMcpServerHealthResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDescribeMcpServerHealthResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body DescribeMcpServerHealthResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "describeMcpServerHealth", err)
+			}
+			err = ValidateDescribeMcpServerHealthResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "describeMcpServerHealth", err)
+			}
+			res := NewDescribeMcpServerHealthAdminMcpServerHealthOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DescribeMcpServerHealthUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "describeMcpServerHealth", err)
+			}
+			err = ValidateDescribeMcpServerHealthUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "describeMcpServerHealth", err)
+			}
+			return nil, NewDescribeMcpServerHealthUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DescribeMcpServerHealthForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "describeMcpServerHealth", err)
+			}
+			err = ValidateDescribeMcpServerHealthForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "describeMcpServerHealth", err)
+			}
+			return nil, NewDescribeMcpServerHealthForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DescribeMcpServerHealthBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "describeMcpServerHealth", err)
+			}
+			err = ValidateDescribeMcpServerHealthBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "describeMcpServerHealth", err)
+			}
+			return nil, NewDescribeMcpServerHealthBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DescribeMcpServerHealthNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "describeMcpServerHealth", err)
+			}
+			err = ValidateDescribeMcpServerHealthNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "describeMcpServerHealth", err)
+			}
+			return nil, NewDescribeMcpServerHealthNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DescribeMcpServerHealthConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "describeMcpServerHealth", err)
+			}
+			err = ValidateDescribeMcpServerHealthConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "describeMcpServerHealth", err)
+			}
+			return nil, NewDescribeMcpServerHealthConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DescribeMcpServerHealthUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "describeMcpServerHealth", err)
+			}
+			err = ValidateDescribeMcpServerHealthUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "describeMcpServerHealth", err)
+			}
+			return nil, NewDescribeMcpServerHealthUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DescribeMcpServerHealthInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "describeMcpServerHealth", err)
+			}
+			err = ValidateDescribeMcpServerHealthInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "describeMcpServerHealth", err)
+			}
+			return nil, NewDescribeMcpServerHealthInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DescribeMcpServerHealthInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "describeMcpServerHealth", err)
+				}
+				err = ValidateDescribeMcpServerHealthInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "describeMcpServerHealth", err)
+				}
+				return nil, NewDescribeMcpServerHealthInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DescribeMcpServerHealthUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "describeMcpServerHealth", err)
+				}
+				err = ValidateDescribeMcpServerHealthUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "describeMcpServerHealth", err)
+				}
+				return nil, NewDescribeMcpServerHealthUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "describeMcpServerHealth", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DescribeMcpServerHealthGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "describeMcpServerHealth", err)
+			}
+			err = ValidateDescribeMcpServerHealthGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "describeMcpServerHealth", err)
+			}
+			return nil, NewDescribeMcpServerHealthGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "describeMcpServerHealth", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetMcpServerToolCallsRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "getMcpServerToolCalls"
+// endpoint
+func (c *Client) BuildGetMcpServerToolCallsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetMcpServerToolCallsAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getMcpServerToolCalls", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetMcpServerToolCallsRequest returns an encoder for requests sent to
+// the admin getMcpServerToolCalls server.
+func EncodeGetMcpServerToolCallsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetMcpServerToolCallsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getMcpServerToolCalls", "*admin.GetMcpServerToolCallsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		values.Add("project_id", p.ProjectID)
+		values.Add("mcp_server_id", p.McpServerID)
+		values.Add("window_days", fmt.Sprintf("%v", p.WindowDays))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetMcpServerToolCallsResponse returns a decoder for responses returned
+// by the admin getMcpServerToolCalls endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeGetMcpServerToolCallsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetMcpServerToolCallsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetMcpServerToolCallsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+			}
+			err = ValidateGetMcpServerToolCallsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+			}
+			res := NewGetMcpServerToolCallsAdminMcpServerToolCallsOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetMcpServerToolCallsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+			}
+			err = ValidateGetMcpServerToolCallsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+			}
+			return nil, NewGetMcpServerToolCallsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetMcpServerToolCallsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+			}
+			err = ValidateGetMcpServerToolCallsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+			}
+			return nil, NewGetMcpServerToolCallsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetMcpServerToolCallsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+			}
+			err = ValidateGetMcpServerToolCallsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+			}
+			return nil, NewGetMcpServerToolCallsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetMcpServerToolCallsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+			}
+			err = ValidateGetMcpServerToolCallsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+			}
+			return nil, NewGetMcpServerToolCallsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetMcpServerToolCallsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+			}
+			err = ValidateGetMcpServerToolCallsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+			}
+			return nil, NewGetMcpServerToolCallsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetMcpServerToolCallsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+			}
+			err = ValidateGetMcpServerToolCallsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+			}
+			return nil, NewGetMcpServerToolCallsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetMcpServerToolCallsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+			}
+			err = ValidateGetMcpServerToolCallsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+			}
+			return nil, NewGetMcpServerToolCallsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetMcpServerToolCallsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+				}
+				err = ValidateGetMcpServerToolCallsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+				}
+				return nil, NewGetMcpServerToolCallsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetMcpServerToolCallsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+				}
+				err = ValidateGetMcpServerToolCallsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+				}
+				return nil, NewGetMcpServerToolCallsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getMcpServerToolCalls", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetMcpServerToolCallsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+			}
+			err = ValidateGetMcpServerToolCallsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+			}
+			return nil, NewGetMcpServerToolCallsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getMcpServerToolCalls", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetRegistryOktaCandidatesRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "getRegistryOktaCandidates" endpoint
+func (c *Client) BuildGetRegistryOktaCandidatesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetRegistryOktaCandidatesAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getRegistryOktaCandidates", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetRegistryOktaCandidatesRequest returns an encoder for requests sent
+// to the admin getRegistryOktaCandidates server.
+func EncodeGetRegistryOktaCandidatesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetRegistryOktaCandidatesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getRegistryOktaCandidates", "*admin.GetRegistryOktaCandidatesPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetRegistryOktaCandidatesResponse returns a decoder for responses
+// returned by the admin getRegistryOktaCandidates endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetRegistryOktaCandidatesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetRegistryOktaCandidatesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetRegistryOktaCandidatesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+			}
+			err = ValidateGetRegistryOktaCandidatesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+			}
+			res := NewGetRegistryOktaCandidatesAdminRegistryOktaCandidatesOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetRegistryOktaCandidatesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+			}
+			err = ValidateGetRegistryOktaCandidatesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+			}
+			return nil, NewGetRegistryOktaCandidatesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetRegistryOktaCandidatesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+			}
+			err = ValidateGetRegistryOktaCandidatesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+			}
+			return nil, NewGetRegistryOktaCandidatesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetRegistryOktaCandidatesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+			}
+			err = ValidateGetRegistryOktaCandidatesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+			}
+			return nil, NewGetRegistryOktaCandidatesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetRegistryOktaCandidatesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+			}
+			err = ValidateGetRegistryOktaCandidatesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+			}
+			return nil, NewGetRegistryOktaCandidatesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetRegistryOktaCandidatesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+			}
+			err = ValidateGetRegistryOktaCandidatesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+			}
+			return nil, NewGetRegistryOktaCandidatesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetRegistryOktaCandidatesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+			}
+			err = ValidateGetRegistryOktaCandidatesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+			}
+			return nil, NewGetRegistryOktaCandidatesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetRegistryOktaCandidatesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+			}
+			err = ValidateGetRegistryOktaCandidatesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+			}
+			return nil, NewGetRegistryOktaCandidatesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetRegistryOktaCandidatesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+				}
+				err = ValidateGetRegistryOktaCandidatesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+				}
+				return nil, NewGetRegistryOktaCandidatesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetRegistryOktaCandidatesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+				}
+				err = ValidateGetRegistryOktaCandidatesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+				}
+				return nil, NewGetRegistryOktaCandidatesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getRegistryOktaCandidates", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetRegistryOktaCandidatesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+			}
+			err = ValidateGetRegistryOktaCandidatesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+			}
+			return nil, NewGetRegistryOktaCandidatesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getRegistryOktaCandidates", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListRegistryOktaUnmappedRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "listRegistryOktaUnmapped"
+// endpoint
+func (c *Client) BuildListRegistryOktaUnmappedRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListRegistryOktaUnmappedAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "listRegistryOktaUnmapped", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListRegistryOktaUnmappedRequest returns an encoder for requests sent
+// to the admin listRegistryOktaUnmapped server.
+func EncodeListRegistryOktaUnmappedRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ListRegistryOktaUnmappedPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "listRegistryOktaUnmapped", "*admin.ListRegistryOktaUnmappedPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListRegistryOktaUnmappedResponse returns a decoder for responses
+// returned by the admin listRegistryOktaUnmapped endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeListRegistryOktaUnmappedResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListRegistryOktaUnmappedResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListRegistryOktaUnmappedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+			}
+			err = ValidateListRegistryOktaUnmappedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+			}
+			res := NewListRegistryOktaUnmappedAdminRegistryOktaUnmappedOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListRegistryOktaUnmappedUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+			}
+			err = ValidateListRegistryOktaUnmappedUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+			}
+			return nil, NewListRegistryOktaUnmappedUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListRegistryOktaUnmappedForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+			}
+			err = ValidateListRegistryOktaUnmappedForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+			}
+			return nil, NewListRegistryOktaUnmappedForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListRegistryOktaUnmappedBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+			}
+			err = ValidateListRegistryOktaUnmappedBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+			}
+			return nil, NewListRegistryOktaUnmappedBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListRegistryOktaUnmappedNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+			}
+			err = ValidateListRegistryOktaUnmappedNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+			}
+			return nil, NewListRegistryOktaUnmappedNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListRegistryOktaUnmappedConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+			}
+			err = ValidateListRegistryOktaUnmappedConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+			}
+			return nil, NewListRegistryOktaUnmappedConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListRegistryOktaUnmappedUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+			}
+			err = ValidateListRegistryOktaUnmappedUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+			}
+			return nil, NewListRegistryOktaUnmappedUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListRegistryOktaUnmappedInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+			}
+			err = ValidateListRegistryOktaUnmappedInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+			}
+			return nil, NewListRegistryOktaUnmappedInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListRegistryOktaUnmappedInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+				}
+				err = ValidateListRegistryOktaUnmappedInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+				}
+				return nil, NewListRegistryOktaUnmappedInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListRegistryOktaUnmappedUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+				}
+				err = ValidateListRegistryOktaUnmappedUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+				}
+				return nil, NewListRegistryOktaUnmappedUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "listRegistryOktaUnmapped", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListRegistryOktaUnmappedGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+			}
+			err = ValidateListRegistryOktaUnmappedGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+			}
+			return nil, NewListRegistryOktaUnmappedGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "listRegistryOktaUnmapped", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListRegistryEntriesRequest instantiates a HTTP request object with
 // method and path set to call the "admin" service "listRegistryEntries"
 // endpoint
@@ -19767,6 +20706,267 @@ func unmarshalSupportCoverageUnmappedResponseBodyToAdminSupportCoverageUnmapped(
 	res := &admin.SupportCoverageUnmapped{
 		HookSource: *v.HookSource,
 		Sessions:   *v.Sessions,
+	}
+
+	return res
+}
+
+// unmarshalAdminMcpServerHealthServerResponseBodyToAdminAdminMcpServerHealthServer
+// builds a value of type *admin.AdminMcpServerHealthServer from a value of
+// type *AdminMcpServerHealthServerResponseBody.
+func unmarshalAdminMcpServerHealthServerResponseBodyToAdminAdminMcpServerHealthServer(v *AdminMcpServerHealthServerResponseBody) *admin.AdminMcpServerHealthServer {
+	res := &admin.AdminMcpServerHealthServer{
+		ID:         *v.ID,
+		Name:       *v.Name,
+		Source:     *v.Source,
+		Visibility: *v.Visibility,
+		CreatedAt:  *v.CreatedAt,
+	}
+
+	return res
+}
+
+// unmarshalAdminMcpServerHealthCorrelationResponseBodyToAdminAdminMcpServerHealthCorrelation
+// builds a value of type *admin.AdminMcpServerHealthCorrelation from a value
+// of type *AdminMcpServerHealthCorrelationResponseBody.
+func unmarshalAdminMcpServerHealthCorrelationResponseBodyToAdminAdminMcpServerHealthCorrelation(v *AdminMcpServerHealthCorrelationResponseBody) *admin.AdminMcpServerHealthCorrelation {
+	res := &admin.AdminMcpServerHealthCorrelation{
+		URLSlug:     v.URLSlug,
+		McpServerID: v.McpServerID,
+		ToolsetSlug: v.ToolsetSlug,
+	}
+
+	return res
+}
+
+// unmarshalAdminMcpServerHealthUserSessionIssuerResponseBodyToAdminAdminMcpServerHealthUserSessionIssuer
+// builds a value of type *admin.AdminMcpServerHealthUserSessionIssuer from a
+// value of type *AdminMcpServerHealthUserSessionIssuerResponseBody.
+func unmarshalAdminMcpServerHealthUserSessionIssuerResponseBodyToAdminAdminMcpServerHealthUserSessionIssuer(v *AdminMcpServerHealthUserSessionIssuerResponseBody) *admin.AdminMcpServerHealthUserSessionIssuer {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminMcpServerHealthUserSessionIssuer{
+		ID:                            *v.ID,
+		Slug:                          *v.Slug,
+		Classification:                *v.Classification,
+		AuthnChallengeMode:            *v.AuthnChallengeMode,
+		SessionDurationHours:          *v.SessionDurationHours,
+		AttachmentScope:               *v.AttachmentScope,
+		ClientIDMetadataAdmissionMode: v.ClientIDMetadataAdmissionMode,
+		UseAuthenticationHost:         *v.UseAuthenticationHost,
+		CreatedAt:                     *v.CreatedAt,
+	}
+	if v.TrustedRemoteSession != nil {
+		res.TrustedRemoteSession = unmarshalAdminMcpServerHealthTrustedRemoteSessionResponseBodyToAdminAdminMcpServerHealthTrustedRemoteSession(v.TrustedRemoteSession)
+	}
+	res.OtherServersUsingIssuer = make([]*admin.AdminMcpServerHealthServerRef, len(v.OtherServersUsingIssuer))
+	for i, val := range v.OtherServersUsingIssuer {
+		if val == nil {
+			res.OtherServersUsingIssuer[i] = nil
+			continue
+		}
+		res.OtherServersUsingIssuer[i] = unmarshalAdminMcpServerHealthServerRefResponseBodyToAdminAdminMcpServerHealthServerRef(val)
+	}
+	res.Sessions = unmarshalAdminMcpServerHealthUserSessionsResponseBodyToAdminAdminMcpServerHealthUserSessions(v.Sessions)
+	res.RemoteSessionClients = make([]*admin.AdminMcpServerHealthRemoteSessionClient, len(v.RemoteSessionClients))
+	for i, val := range v.RemoteSessionClients {
+		if val == nil {
+			res.RemoteSessionClients[i] = nil
+			continue
+		}
+		res.RemoteSessionClients[i] = unmarshalAdminMcpServerHealthRemoteSessionClientResponseBodyToAdminAdminMcpServerHealthRemoteSessionClient(val)
+	}
+
+	return res
+}
+
+// unmarshalAdminMcpServerHealthTrustedRemoteSessionResponseBodyToAdminAdminMcpServerHealthTrustedRemoteSession
+// builds a value of type *admin.AdminMcpServerHealthTrustedRemoteSession from
+// a value of type *AdminMcpServerHealthTrustedRemoteSessionResponseBody.
+func unmarshalAdminMcpServerHealthTrustedRemoteSessionResponseBodyToAdminAdminMcpServerHealthTrustedRemoteSession(v *AdminMcpServerHealthTrustedRemoteSessionResponseBody) *admin.AdminMcpServerHealthTrustedRemoteSession {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminMcpServerHealthTrustedRemoteSession{
+		IssuerID: *v.IssuerID,
+		ClientID: *v.ClientID,
+	}
+
+	return res
+}
+
+// unmarshalAdminMcpServerHealthServerRefResponseBodyToAdminAdminMcpServerHealthServerRef
+// builds a value of type *admin.AdminMcpServerHealthServerRef from a value of
+// type *AdminMcpServerHealthServerRefResponseBody.
+func unmarshalAdminMcpServerHealthServerRefResponseBodyToAdminAdminMcpServerHealthServerRef(v *AdminMcpServerHealthServerRefResponseBody) *admin.AdminMcpServerHealthServerRef {
+	res := &admin.AdminMcpServerHealthServerRef{
+		ID:   *v.ID,
+		Name: *v.Name,
+	}
+
+	return res
+}
+
+// unmarshalAdminMcpServerHealthUserSessionsResponseBodyToAdminAdminMcpServerHealthUserSessions
+// builds a value of type *admin.AdminMcpServerHealthUserSessions from a value
+// of type *AdminMcpServerHealthUserSessionsResponseBody.
+func unmarshalAdminMcpServerHealthUserSessionsResponseBodyToAdminAdminMcpServerHealthUserSessions(v *AdminMcpServerHealthUserSessionsResponseBody) *admin.AdminMcpServerHealthUserSessions {
+	res := &admin.AdminMcpServerHealthUserSessions{
+		DistinctSubjectsEver:     *v.DistinctSubjectsEver,
+		DistinctSubjectsInWindow: *v.DistinctSubjectsInWindow,
+		FirstIssuedAt:            v.FirstIssuedAt,
+		LastIssuedAt:             v.LastIssuedAt,
+		Live:                     *v.Live,
+	}
+
+	return res
+}
+
+// unmarshalAdminMcpServerHealthRemoteSessionClientResponseBodyToAdminAdminMcpServerHealthRemoteSessionClient
+// builds a value of type *admin.AdminMcpServerHealthRemoteSessionClient from a
+// value of type *AdminMcpServerHealthRemoteSessionClientResponseBody.
+func unmarshalAdminMcpServerHealthRemoteSessionClientResponseBodyToAdminAdminMcpServerHealthRemoteSessionClient(v *AdminMcpServerHealthRemoteSessionClientResponseBody) *admin.AdminMcpServerHealthRemoteSessionClient {
+	res := &admin.AdminMcpServerHealthRemoteSessionClient{
+		ID:                            *v.ID,
+		Registration:                  *v.Registration,
+		TokenEndpointAuthMethod:       v.TokenEndpointAuthMethod,
+		HasIdentityProviderConnection: *v.HasIdentityProviderConnection,
+		AttachmentScope:               *v.AttachmentScope,
+		UpstreamRejectedAt:            v.UpstreamRejectedAt,
+	}
+	res.Scope = make([]string, len(v.Scope))
+	for i, val := range v.Scope {
+		res.Scope[i] = val
+	}
+	res.GrantTypes = make([]string, len(v.GrantTypes))
+	for i, val := range v.GrantTypes {
+		res.GrantTypes[i] = val
+	}
+	res.Issuer = unmarshalAdminMcpServerHealthRemoteSessionIssuerResponseBodyToAdminAdminMcpServerHealthRemoteSessionIssuer(v.Issuer)
+	res.Sessions = unmarshalAdminMcpServerHealthRemoteSessionsResponseBodyToAdminAdminMcpServerHealthRemoteSessions(v.Sessions)
+
+	return res
+}
+
+// unmarshalAdminMcpServerHealthRemoteSessionIssuerResponseBodyToAdminAdminMcpServerHealthRemoteSessionIssuer
+// builds a value of type *admin.AdminMcpServerHealthRemoteSessionIssuer from a
+// value of type *AdminMcpServerHealthRemoteSessionIssuerResponseBody.
+func unmarshalAdminMcpServerHealthRemoteSessionIssuerResponseBodyToAdminAdminMcpServerHealthRemoteSessionIssuer(v *AdminMcpServerHealthRemoteSessionIssuerResponseBody) *admin.AdminMcpServerHealthRemoteSessionIssuer {
+	res := &admin.AdminMcpServerHealthRemoteSessionIssuer{
+		ID:                  *v.ID,
+		Slug:                *v.Slug,
+		Name:                v.Name,
+		Issuer:              *v.Issuer,
+		AttachmentScope:     *v.AttachmentScope,
+		Networking:          *v.Networking,
+		Oidc:                *v.Oidc,
+		Passthrough:         *v.Passthrough,
+		Pkce:                *v.Pkce,
+		CimdSupported:       *v.CimdSupported,
+		MetadataFetchedAt:   v.MetadataFetchedAt,
+		MetadataLastErrorAt: v.MetadataLastErrorAt,
+		JwksLastErrorAt:     v.JwksLastErrorAt,
+	}
+	if v.ScopeOverride != nil {
+		res.ScopeOverride = make([]string, len(v.ScopeOverride))
+		for i, val := range v.ScopeOverride {
+			res.ScopeOverride[i] = val
+		}
+	}
+
+	return res
+}
+
+// unmarshalAdminMcpServerHealthRemoteSessionsResponseBodyToAdminAdminMcpServerHealthRemoteSessions
+// builds a value of type *admin.AdminMcpServerHealthRemoteSessions from a
+// value of type *AdminMcpServerHealthRemoteSessionsResponseBody.
+func unmarshalAdminMcpServerHealthRemoteSessionsResponseBodyToAdminAdminMcpServerHealthRemoteSessions(v *AdminMcpServerHealthRemoteSessionsResponseBody) *admin.AdminMcpServerHealthRemoteSessions {
+	res := &admin.AdminMcpServerHealthRemoteSessions{
+		LinkedSubjects:   *v.LinkedSubjects,
+		Reauthorizations: *v.Reauthorizations,
+		FirstLinkedAt:    v.FirstLinkedAt,
+	}
+	res.ValidationStatusCounts = make(map[string]int64, len(v.ValidationStatusCounts))
+	for key, val := range v.ValidationStatusCounts {
+		tk := key
+		tv := val
+		res.ValidationStatusCounts[tk] = tv
+	}
+
+	return res
+}
+
+// unmarshalAdminMcpServerToolCallOutcomesResponseBodyToAdminAdminMcpServerToolCallOutcomes
+// builds a value of type *admin.AdminMcpServerToolCallOutcomes from a value of
+// type *AdminMcpServerToolCallOutcomesResponseBody.
+func unmarshalAdminMcpServerToolCallOutcomesResponseBodyToAdminAdminMcpServerToolCallOutcomes(v *AdminMcpServerToolCallOutcomesResponseBody) *admin.AdminMcpServerToolCallOutcomes {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminMcpServerToolCallOutcomes{
+		Success:      *v.Success,
+		Unauthorized: *v.Unauthorized,
+		ClientError:  *v.ClientError,
+		ServerError:  *v.ServerError,
+		Blocked:      *v.Blocked,
+		Failed:       *v.Failed,
+		Unknown:      *v.Unknown,
+	}
+
+	return res
+}
+
+// unmarshalAdminMcpServerToolCallBucketResponseBodyToAdminAdminMcpServerToolCallBucket
+// builds a value of type *admin.AdminMcpServerToolCallBucket from a value of
+// type *AdminMcpServerToolCallBucketResponseBody.
+func unmarshalAdminMcpServerToolCallBucketResponseBodyToAdminAdminMcpServerToolCallBucket(v *AdminMcpServerToolCallBucketResponseBody) *admin.AdminMcpServerToolCallBucket {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminMcpServerToolCallBucket{
+		BucketStart: *v.BucketStart,
+		Total:       *v.Total,
+		Failed:      *v.Failed,
+	}
+
+	return res
+}
+
+// unmarshalAdminRegistryOktaCandidateResponseBodyToAdminAdminRegistryOktaCandidate
+// builds a value of type *admin.AdminRegistryOktaCandidate from a value of
+// type *AdminRegistryOktaCandidateResponseBody.
+func unmarshalAdminRegistryOktaCandidateResponseBodyToAdminAdminRegistryOktaCandidate(v *AdminRegistryOktaCandidateResponseBody) *admin.AdminRegistryOktaCandidate {
+	res := &admin.AdminRegistryOktaCandidate{
+		OinName:       *v.OinName,
+		Organizations: *v.Organizations,
+		Reason:        *v.Reason,
+		Integrator:    *v.Integrator,
+		MappedBy:      v.MappedBy,
+	}
+	res.SignOnModes = make([]string, len(v.SignOnModes))
+	for i, val := range v.SignOnModes {
+		res.SignOnModes[i] = val
+	}
+
+	return res
+}
+
+// unmarshalAdminRegistryOktaUnmappedNameResponseBodyToAdminAdminRegistryOktaUnmappedName
+// builds a value of type *admin.AdminRegistryOktaUnmappedName from a value of
+// type *AdminRegistryOktaUnmappedNameResponseBody.
+func unmarshalAdminRegistryOktaUnmappedNameResponseBodyToAdminAdminRegistryOktaUnmappedName(v *AdminRegistryOktaUnmappedNameResponseBody) *admin.AdminRegistryOktaUnmappedName {
+	res := &admin.AdminRegistryOktaUnmappedName{
+		OinName:            *v.OinName,
+		Organizations:      *v.Organizations,
+		Integrator:         *v.Integrator,
+		SuggestedEntryID:   v.SuggestedEntryID,
+		SuggestedEntryName: v.SuggestedEntryName,
+		Reason:             v.Reason,
+	}
+	res.SignOnModes = make([]string, len(v.SignOnModes))
+	for i, val := range v.SignOnModes {
+		res.SignOnModes[i] = val
 	}
 
 	return res

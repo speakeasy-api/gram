@@ -2993,6 +2993,7 @@ SELECT
     p.name,
     p.slug,
     p.description,
+    p.auto_created,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -3055,6 +3056,7 @@ type GetPlatformMCPPluginInventoryItemRow struct {
 	Name                    string
 	Slug                    string
 	Description             pgtype.Text
+	AutoCreated             bool
 	IsDefault               bool
 	ServerCount             int64
 	SkillCount              int64
@@ -3073,6 +3075,7 @@ func (q *Queries) GetPlatformMCPPluginInventoryItem(ctx context.Context, arg Get
 		&i.Name,
 		&i.Slug,
 		&i.Description,
+		&i.AutoCreated,
 		&i.IsDefault,
 		&i.ServerCount,
 		&i.SkillCount,
@@ -3109,6 +3112,62 @@ func (q *Queries) GetPlatformMCPPluginMembershipVersion(ctx context.Context, arg
 	var membership_version string
 	err := row.Scan(&membership_version)
 	return membership_version, err
+}
+
+const getPlatformMCPProjectCreationReceipt = `-- name: GetPlatformMCPProjectCreationReceipt :one
+SELECT id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, result_payload, expires_at, created_at, updated_at
+FROM platform_mcp_operation_receipts
+WHERE organization_id = $1
+  AND user_id = $2
+  AND operation = $3
+  AND idempotency_key = $4
+  AND expires_at > clock_timestamp()
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+type GetPlatformMCPProjectCreationReceiptParams struct {
+	OrganizationID string
+	UserID         pgtype.Text
+	Operation      string
+	IdempotencyKey string
+}
+
+// An operation that creates its own project has no project to key a receipt
+// on before it runs, so its replay lookup spans the organization: the receipt
+// is written against the project the operation created, and a retry finds it
+// by user, operation and key alone. Callers hold the advisory lock taken by
+// LockPlatformMCPOperationReceipt with an empty project id. Expired receipts
+// are ignored rather than reclaimed: each is pinned to the project it made,
+// so a fresh run under the same key can never collide with it.
+func (q *Queries) GetPlatformMCPProjectCreationReceipt(ctx context.Context, arg GetPlatformMCPProjectCreationReceiptParams) (PlatformMcpOperationReceipt, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPProjectCreationReceipt,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.Operation,
+		arg.IdempotencyKey,
+	)
+	var i PlatformMcpOperationReceipt
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RegistrationID,
+		&i.ConnectionID,
+		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
+		&i.Operation,
+		&i.IdempotencyKey,
+		&i.InputHash,
+		&i.Status,
+		&i.ResultCode,
+		&i.ResultPayload,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getPlatformMCPReadiness = `-- name: GetPlatformMCPReadiness :one
@@ -3319,6 +3378,104 @@ func (q *Queries) GetPlatformMCPServer(ctx context.Context, arg GetPlatformMCPSe
 		&i.Name,
 		&i.Slug,
 		&i.Visibility,
+	)
+	return i, err
+}
+
+const getPlatformMCPServerToolExposure = `-- name: GetPlatformMCPServerToolExposure :one
+SELECT
+    t.id AS toolset_id,
+    t.slug AS toolset_slug,
+    COALESCE(latest.version, 0)::bigint AS toolset_version,
+    COALESCE(latest.tool_urns, ARRAY[]::TEXT[])::TEXT[] AS tool_urns,
+    -- Every live server in THIS project fronting this same toolset. The tool
+    -- list lives on the toolset, not on the server record, so these servers
+    -- are aliases for one list: a write authorized against only the named
+    -- server would move all of them. Nothing in the schema forbids the
+    -- sharing, so the caller authorizes each of these before applying the
+    -- change.
+    --
+    -- The project predicate is load-bearing, not tidiness. mcp_servers.
+    -- toolset_id has no composite constraint pairing it with project_id, so a
+    -- server in another project can front this toolset. Each id here is
+    -- authorized with authz.MCPCheck(ScopeMCPWrite, id, <this project>), and
+    -- that check injects the project as a selector dimension so a
+    -- project-scoped grant matches — which means a project-wide mcp:write in
+    -- THIS project would wave through a server id belonging to another one.
+    (
+        SELECT COALESCE(array_agg(fronting.id ORDER BY fronting.id), ARRAY[]::uuid[])
+        FROM mcp_servers AS fronting
+        WHERE fronting.toolset_id = t.id
+          AND fronting.project_id = m.project_id
+          AND fronting.deleted IS FALSE
+    )::uuid[] AS fronting_server_ids,
+    -- Scoping the list above makes the authorization sound but makes the
+    -- out-of-project alias invisible, and the write would still move it. This
+    -- counts them so the mutation can refuse instead: silently changing
+    -- another project's server is worse than refusing and naming the
+    -- dashboard, which can show the shared set and every server using it.
+    (
+        SELECT count(*)
+        FROM mcp_servers AS outside
+        WHERE outside.toolset_id = t.id
+          AND outside.project_id <> m.project_id
+          AND outside.deleted IS FALSE
+    )::bigint AS foreign_fronting_server_count
+FROM mcp_servers AS m
+JOIN projects AS p
+  ON p.id = m.project_id
+ AND p.organization_id = $1
+ AND p.deleted IS FALSE
+JOIN toolsets AS t
+  ON t.id = m.toolset_id
+ AND t.project_id = m.project_id
+ AND t.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT tv.version, tv.tool_urns
+    FROM toolset_versions AS tv
+    WHERE tv.toolset_id = t.id
+      AND tv.deleted IS FALSE
+    ORDER BY tv.version DESC
+    LIMIT 1
+) AS latest ON TRUE
+WHERE m.id = $2
+  AND m.project_id = $3
+  AND m.deleted IS FALSE
+  AND m.toolset_id IS NOT NULL
+`
+
+type GetPlatformMCPServerToolExposureParams struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+type GetPlatformMCPServerToolExposureRow struct {
+	ToolsetID                  uuid.UUID
+	ToolsetSlug                string
+	ToolsetVersion             int64
+	ToolUrns                   []string
+	FrontingServerIds          []uuid.UUID
+	ForeignFrontingServerCount int64
+}
+
+// The tool list one hosted MCP server exposes, read through its modern server
+// record. A server whose backend is not a Gram toolset, or a bare toolset with
+// no server record, deliberately returns no row: its tool list is not Gram's
+// to change from here.
+// The columns this returns are only the ones the caller cannot already supply:
+// the organization, project and MCP server ids are query inputs, so echoing
+// them back would just be a second source of truth for the same values.
+func (q *Queries) GetPlatformMCPServerToolExposure(ctx context.Context, arg GetPlatformMCPServerToolExposureParams) (GetPlatformMCPServerToolExposureRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPServerToolExposure, arg.OrganizationID, arg.McpServerID, arg.ProjectID)
+	var i GetPlatformMCPServerToolExposureRow
+	err := row.Scan(
+		&i.ToolsetID,
+		&i.ToolsetSlug,
+		&i.ToolsetVersion,
+		&i.ToolUrns,
+		&i.FrontingServerIds,
+		&i.ForeignFrontingServerCount,
 	)
 	return i, err
 }
@@ -4710,6 +4867,7 @@ SELECT
     p.name,
     p.slug,
     p.description,
+    p.auto_created,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -4765,6 +4923,7 @@ type ListPlatformMCPAssignedPluginInventoryRow struct {
 	Name                string
 	Slug                string
 	Description         pgtype.Text
+	AutoCreated         bool
 	IsDefault           bool
 	ServerCount         int64
 	SkillCount          int64
@@ -4797,6 +4956,7 @@ func (q *Queries) ListPlatformMCPAssignedPluginInventory(ctx context.Context, ar
 			&i.Name,
 			&i.Slug,
 			&i.Description,
+			&i.AutoCreated,
 			&i.IsDefault,
 			&i.ServerCount,
 			&i.SkillCount,
@@ -5522,6 +5682,7 @@ SELECT
     p.name,
     p.slug,
     p.description,
+    p.auto_created,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -5588,6 +5749,7 @@ type ListPlatformMCPPluginInventoryRow struct {
 	Name                    string
 	Slug                    string
 	Description             pgtype.Text
+	AutoCreated             bool
 	IsDefault               bool
 	ServerCount             int64
 	SkillCount              int64
@@ -5626,6 +5788,7 @@ func (q *Queries) ListPlatformMCPPluginInventory(ctx context.Context, arg ListPl
 			&i.Name,
 			&i.Slug,
 			&i.Description,
+			&i.AutoCreated,
 			&i.IsDefault,
 			&i.ServerCount,
 			&i.SkillCount,
@@ -6046,6 +6209,206 @@ func (q *Queries) ListPlatformMCPProjectPlugins(ctx context.Context, arg ListPla
 			&i.Name,
 			&i.Slug,
 			&i.IsDefault,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPProjectToolURNs = `-- name: ListPlatformMCPProjectToolURNs :many
+WITH deployment AS (
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    JOIN projects p ON p.id = d.project_id
+    WHERE d.project_id = $1
+      AND p.organization_id = $2
+      AND p.deleted IS FALSE
+      AND ds.status = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
+),
+all_deployment_ids AS (
+    SELECT id FROM deployment
+    UNION
+    SELECT DISTINCT pv.deployment_id
+    FROM deployment d
+    JOIN deployments_packages dp ON dp.deployment_id = d.id
+    JOIN package_versions pv ON dp.version_id = pv.id
+)
+SELECT ftd.tool_urn::TEXT AS tool_urn
+FROM function_tool_definitions ftd
+WHERE ftd.deployment_id = (SELECT id FROM deployment)
+  AND ftd.deleted IS FALSE
+  AND ftd.tool_urn = ANY($3::text[])
+UNION
+SELECT htd.tool_urn::TEXT AS tool_urn
+FROM http_tool_definitions htd
+WHERE htd.deployment_id IN (SELECT id FROM all_deployment_ids)
+  AND htd.deleted IS FALSE
+  AND htd.tool_urn = ANY($3::text[])
+`
+
+type ListPlatformMCPProjectToolURNsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	ToolUrns       []string
+}
+
+// Confirms that exactly the named tool URNs are generated by the project's
+// latest completed deployment. A URN missing from the result is named back to
+// the caller rather than silently skipped.
+//
+// The deployment and all_deployment_ids CTEs below are duplicated verbatim from
+// ListPlatformMCPProjectTools, because sqlc cannot share a CTE between
+// queries. The two MUST stay identical: that one decides what a caller is
+// offered and this one decides what the mutation accepts, so any divergence
+// refuses a tool the listing just advertised. Edit both together.
+func (q *Queries) ListPlatformMCPProjectToolURNs(ctx context.Context, arg ListPlatformMCPProjectToolURNsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPProjectToolURNs, arg.ProjectID, arg.OrganizationID, arg.ToolUrns)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var tool_urn string
+		if err := rows.Scan(&tool_urn); err != nil {
+			return nil, err
+		}
+		items = append(items, tool_urn)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPProjectTools = `-- name: ListPlatformMCPProjectTools :many
+WITH deployment AS (
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    JOIN projects p ON p.id = d.project_id
+    WHERE d.project_id = $5
+      AND p.organization_id = $6
+      AND p.deleted IS FALSE
+      AND ds.status = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
+),
+all_deployment_ids AS (
+    SELECT id FROM deployment
+    UNION
+    SELECT DISTINCT pv.deployment_id
+    FROM deployment d
+    JOIN deployments_packages dp ON dp.deployment_id = d.id
+    JOIN package_versions pv ON dp.version_id = pv.id
+),
+project_tools AS (
+    SELECT
+        ftd.tool_urn::TEXT AS tool_urn,
+        ftd.name::TEXT AS tool_name,
+        COALESCE(ftd.description, '')::TEXT AS summary,
+        'function'::TEXT AS source_kind,
+        COALESCE(df.slug, '')::TEXT AS source_slug,
+        COALESCE(df.name, '')::TEXT AS source_name
+    FROM function_tool_definitions ftd
+    LEFT JOIN deployments_functions df ON ftd.function_id = df.id
+    WHERE ftd.deployment_id = (SELECT id FROM deployment)
+      AND ftd.deleted IS FALSE
+    UNION ALL
+    SELECT
+        htd.tool_urn::TEXT AS tool_urn,
+        htd.name::TEXT AS tool_name,
+        COALESCE(NULLIF(htd.summary, ''), htd.description, '')::TEXT AS summary,
+        'openapi'::TEXT AS source_kind,
+        COALESCE(doa.slug, '')::TEXT AS source_slug,
+        COALESCE(doa.name, '')::TEXT AS source_name
+    FROM http_tool_definitions htd
+    LEFT JOIN deployments_openapiv3_assets doa ON htd.openapiv3_document_id = doa.id
+    WHERE htd.deployment_id IN (SELECT id FROM all_deployment_ids)
+      AND htd.deleted IS FALSE
+)
+SELECT
+    (SELECT id FROM deployment)::uuid AS deployment_id,
+    project_tools.tool_urn,
+    project_tools.tool_name,
+    project_tools.summary,
+    project_tools.source_kind,
+    project_tools.source_slug,
+    project_tools.source_name
+FROM project_tools
+WHERE ($1::text IS NULL OR project_tools.tool_urn > $1::text)
+  AND ($2::text IS NULL OR project_tools.source_kind = $2::text)
+  AND (
+      $3::text = ''
+      OR project_tools.tool_urn ILIKE '%' || $3::text || '%'
+      OR project_tools.tool_name ILIKE '%' || $3::text || '%'
+      OR project_tools.source_slug ILIKE '%' || $3::text || '%'
+  )
+ORDER BY project_tools.tool_urn ASC
+LIMIT $4
+`
+
+type ListPlatformMCPProjectToolsParams struct {
+	AfterToolUrn   pgtype.Text
+	SourceKind     pgtype.Text
+	QueryText      string
+	LimitValue     int32
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type ListPlatformMCPProjectToolsRow struct {
+	DeploymentID uuid.UUID
+	ToolUrn      string
+	ToolName     string
+	Summary      string
+	SourceKind   string
+	SourceSlug   string
+	SourceName   string
+}
+
+// The tools a project's latest completed deployment generated, with the source
+// that produced each one. This is the catalogue an agent picks from when it is
+// asked to expose a freshly pushed tool; it reports generated tool definitions
+// only and never reads an environment, a secret, or a runtime credential.
+//
+// The deployment and all_deployment_ids CTEs below are duplicated verbatim in
+// ListPlatformMCPProjectToolURNs, because sqlc cannot share a CTE between
+// queries. The two MUST stay identical: this one decides what a caller is
+// offered and that one decides what the mutation accepts, so any divergence
+// shows a tool here that the change then refuses by name. Edit both together.
+func (q *Queries) ListPlatformMCPProjectTools(ctx context.Context, arg ListPlatformMCPProjectToolsParams) ([]ListPlatformMCPProjectToolsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPProjectTools,
+		arg.AfterToolUrn,
+		arg.SourceKind,
+		arg.QueryText,
+		arg.LimitValue,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPProjectToolsRow
+	for rows.Next() {
+		var i ListPlatformMCPProjectToolsRow
+		if err := rows.Scan(
+			&i.DeploymentID,
+			&i.ToolUrn,
+			&i.ToolName,
+			&i.Summary,
+			&i.SourceKind,
+			&i.SourceSlug,
+			&i.SourceName,
 		); err != nil {
 			return nil, err
 		}
@@ -6627,6 +6990,53 @@ func (q *Queries) LockPlatformMCPRemoteIssuerAttachment(ctx context.Context, arg
 	return err
 }
 
+const lockPlatformMCPServerToolsetBinding = `-- name: LockPlatformMCPServerToolsetBinding :one
+SELECT m.id
+FROM mcp_servers AS m
+JOIN projects AS p
+  ON p.id = m.project_id
+ AND p.organization_id = $1
+ AND p.deleted IS FALSE
+WHERE m.id = $2
+  AND m.project_id = $3
+  AND m.deleted IS FALSE
+  AND m.toolset_id IS NOT NULL
+FOR UPDATE OF m
+`
+
+type LockPlatformMCPServerToolsetBindingParams struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+// Pins the named server's backing-toolset binding for the rest of the caller's
+// transaction, and must run before anything reads the exposure.
+//
+// GetPlatformMCPServerToolExposure takes no lock, so without this the whole
+// decision — which toolset to write, which servers that write moves, whether
+// any of them sit outside the project — is made against an unpinned snapshot
+// of mcp_servers. UpdateMCPServer assigns toolset_id, so a concurrent
+// dashboard edit can repoint this server between the read and the write; the
+// exposure version token covers toolset_versions only and would not notice.
+// The change would then land on a toolset the named server no longer fronts.
+//
+// FOR UPDATE OF m locks only the server row, which is what UpdateMCPServer and
+// DeleteMCPServer update by id, so both block until this transaction ends.
+//
+// This runs AFTER LockPlatformMCPToolsetForToolExposure, never before: see
+// that query for the lock-order cycle it would otherwise form with
+// UpdateToolset. Because the toolset id can only be learned by reading this
+// binding first, the caller peeks at it unlocked, locks the toolset, locks
+// this row, and then re-reads — so a repoint in between is detected rather
+// than acted on.
+func (q *Queries) LockPlatformMCPServerToolsetBinding(ctx context.Context, arg LockPlatformMCPServerToolsetBindingParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockPlatformMCPServerToolsetBinding, arg.OrganizationID, arg.McpServerID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockPlatformMCPSetupHandoff = `-- name: LockPlatformMCPSetupHandoff :exec
 SELECT pg_advisory_xact_lock(
     hashtextextended(
@@ -6651,6 +7061,42 @@ func (q *Queries) LockPlatformMCPSetupHandoff(ctx context.Context, arg LockPlatf
 		arg.Intent,
 	)
 	return err
+}
+
+const lockPlatformMCPToolsetForToolExposure = `-- name: LockPlatformMCPToolsetForToolExposure :one
+SELECT t.id
+FROM toolsets AS t
+JOIN projects AS p
+  ON p.id = t.project_id
+ AND p.organization_id = $1
+ AND p.deleted IS FALSE
+WHERE t.id = $2
+  AND t.project_id = $3
+  AND t.deleted IS FALSE
+FOR UPDATE OF t
+`
+
+type LockPlatformMCPToolsetForToolExposureParams struct {
+	OrganizationID string
+	ToolsetID      uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+// Takes the toolset row lock, and must run BEFORE the server row is locked.
+//
+// The order is the constraint, not the lock. toolsets.UpdateToolset holds this
+// same row (via GetToolsetForUpdate) and then, inside reconcileHostedNetworkAccess,
+// updates the hosted mcp_servers row — an exclusive row lock taken by a plain
+// UPDATE rather than an explicit FOR UPDATE. For a hosted server both ids are
+// the toolset id, so it is the same pair of rows this path touches. Locking the
+// server first here and the toolset first there is an ABBA cycle that
+// PostgreSQL resolves by aborting one side with deadlock_detected, so both
+// paths take toolsets before mcp_servers.
+func (q *Queries) LockPlatformMCPToolsetForToolExposure(ctx context.Context, arg LockPlatformMCPToolsetForToolExposureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockPlatformMCPToolsetForToolExposure, arg.OrganizationID, arg.ToolsetID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const markPlatformMCPConnectionReauthorizationRequired = `-- name: MarkPlatformMCPConnectionReauthorizationRequired :one
@@ -7199,6 +7645,7 @@ SELECT
     p.name,
     p.slug,
     p.description,
+    p.auto_created,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -7254,6 +7701,7 @@ type ResolvePlatformMCPAssignedPluginTargetRow struct {
 	Name        string
 	Slug        string
 	Description pgtype.Text
+	AutoCreated bool
 	IsDefault   bool
 	ServerCount int64
 	SkillCount  int64
@@ -7281,6 +7729,7 @@ func (q *Queries) ResolvePlatformMCPAssignedPluginTarget(ctx context.Context, ar
 			&i.Name,
 			&i.Slug,
 			&i.Description,
+			&i.AutoCreated,
 			&i.IsDefault,
 			&i.ServerCount,
 			&i.SkillCount,

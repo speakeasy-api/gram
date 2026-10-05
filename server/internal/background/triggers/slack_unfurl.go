@@ -20,10 +20,8 @@ const maxSlackUnfurlLinks = 10
 
 // unfurlSlackGramLinks answers a Slack link_shared event with a chat.unfurl
 // call for every shared link that points at the Gram dashboard, attaching the
-// Speakeasy logo (the dashboard favicon, so Slack shows the same mark as
-// browser tabs and crawler link previews) and a title derived from the URL
-// path. Best-effort, mirroring ackSlackThreadStatus: a failure here only
-// costs the link preview.
+// Speakeasy sticker and a title derived from the URL path. Best-effort,
+// mirroring ackSlackThreadStatus: a failure here only costs the link preview.
 //
 // Titles are computed purely from the URL (humanized path slugs) — never from
 // database lookups — so an unfurl reveals nothing beyond what the pasted URL
@@ -58,7 +56,11 @@ func (a *App) unfurlSlackGramLinks(ctx context.Context, instance triggerrepo.Tri
 	}
 
 	unfurls := make(map[string]any)
-	iconURL := a.siteURL.JoinPath("favicon.png").String()
+	// The sticker is the opaque Speakeasy mark already served for cross-site
+	// embedding. Slack's image proxy rejects favicon.svg, and favicon.png is a
+	// black glyph on transparency, so on Slack's dark theme the context image
+	// disappears and reads as a broken icon.
+	iconURL := a.siteURL.JoinPath("external", "sticker-logo.png").String()
 	for _, link := range linkEvent.Links {
 		if len(unfurls) >= maxSlackUnfurlLinks {
 			break

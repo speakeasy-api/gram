@@ -1,5 +1,6 @@
 import { useRiskUnmaskResultMutation } from "@gram/client/react-query/riskUnmaskResult.js";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useCallback, useState } from "react";
 
 // Revealing a flagged secret exposes the raw value captured from agent/chat
@@ -13,6 +14,19 @@ export const REVEAL_DENIED_REASON =
 // is missing, so the missing link or the sheet's 403 doesn't pass silently.
 export const TRANSCRIPT_DENIED_REASON =
   "You don't have access to view session transcripts. Contact your admin to request the chat:read scope.";
+
+/**
+ * Whether the viewer may read a finding's chat: its transcript, links and
+ * flagged message. Checked against that chat, since an unscoped check passes
+ * on a grant for any chat. No chat means nothing to read.
+ */
+export function useCanReadFindingChat(): (
+  chatId: string | undefined,
+) => chatId is string {
+  const { hasScope } = useRBAC();
+  return (chatId): chatId is string =>
+    !!chatId && hasScope(REVEAL_SCOPE, chatId);
+}
 
 // The server redacts an absent match to this exact sentinel (no sha segment,
 // unlike a real fingerprint). A prompt-based policy finding records the judge's

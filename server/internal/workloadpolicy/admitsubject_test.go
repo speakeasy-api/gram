@@ -162,6 +162,7 @@ func TestAdmitSubject_RequiresWorkloadWrite(t *testing.T) {
 func TestAdmitSubject_RefusesTwoIssuersSharingAURLAtOneTier(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
+	ctx = asAPIKey(t, ctx)
 
 	// The issuer column is not unique, and the per-tier name index lets two rows
 	// in one project carry the same URL under different names. Choosing between

@@ -77,6 +77,7 @@ type mcpServiceDependencies struct {
 	PlatformToolsets       map[string]platformtools.Toolset
 	Identity               mcp.IdentityResolver
 	Challenges             *remotesessions.ChallengeManager
+	CallbackOrigins        remotesessions.CallbackOrigins
 	CallerAssertions       *mcpauthz.Issuer
 }
 
@@ -102,6 +103,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 	if err != nil {
 		return nil, fmt.Errorf("initialize MCP service: %w", err)
 	}
+	service.SetCallbackOrigins(d.CallbackOrigins)
 	delegation := remotesessions.NewDelegationService(d.DB, d.Encryption, d.Challenges)
 	service.SetFederatedLoginConsumer(mcp.NewFederatedDelegationConsumer(delegation))
 	// Identity-assertion grants are verified against the trusted IdP's keys

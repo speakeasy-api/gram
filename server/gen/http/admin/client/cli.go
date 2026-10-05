@@ -140,8 +140,8 @@ func BuildSetOrganizationFeaturePayload(adminSetOrganizationFeatureBody string, 
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"feature_name\": \"aaa\",\n      \"organization_id\": \"abc123\"\n   }'")
 		}
-		if !(body.FeatureName == "logs" || body.FeatureName == "tool_io_logs" || body.FeatureName == "session_capture" || body.FeatureName == "authz_challenge_logging" || body.FeatureName == "sso" || body.FeatureName == "scim" || body.FeatureName == "hooks_browser_login" || body.FeatureName == "hooks_fail_open" || body.FeatureName == "custom_model_keys" || body.FeatureName == "skills" || body.FeatureName == "skill_capture_metadata_only" || body.FeatureName == "ai_platform_push_integrations" || body.FeatureName == "platform_mcp" || body.FeatureName == "customer_managed_encryption_keys" || body.FeatureName == "remote_session_auto_refresh" || body.FeatureName == "remote_session_auto_refresh_enforced" || body.FeatureName == "consent_tool_filtering" || body.FeatureName == "session_portability" || body.FeatureName == "network_ingress") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh", "remote_session_auto_refresh_enforced", "consent_tool_filtering", "session_portability", "network_ingress"}))
+		if !(body.FeatureName == "logs" || body.FeatureName == "tool_io_logs" || body.FeatureName == "session_capture" || body.FeatureName == "authz_challenge_logging" || body.FeatureName == "sso" || body.FeatureName == "scim" || body.FeatureName == "hooks_browser_login" || body.FeatureName == "hooks_fail_open" || body.FeatureName == "custom_model_keys" || body.FeatureName == "skills" || body.FeatureName == "skill_capture_metadata_only" || body.FeatureName == "ai_platform_push_integrations" || body.FeatureName == "platform_mcp" || body.FeatureName == "customer_managed_encryption_keys" || body.FeatureName == "remote_session_auto_refresh" || body.FeatureName == "remote_session_auto_refresh_enforced" || body.FeatureName == "consent_tool_filtering" || body.FeatureName == "session_portability" || body.FeatureName == "network_ingress" || body.FeatureName == "automatic-role-distribution") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh", "remote_session_auto_refresh_enforced", "consent_tool_filtering", "session_portability", "network_ingress", "automatic-role-distribution"}))
 		}
 		if utf8.RuneCountInString(body.FeatureName) > 60 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.feature_name", body.FeatureName, utf8.RuneCountInString(body.FeatureName), 60, false))
@@ -2034,6 +2034,160 @@ func BuildGetSupportCoveragePayload(adminGetSupportCoverageOrganizationID string
 	v := &admin.GetSupportCoveragePayload{}
 	v.OrganizationID = organizationID
 	v.WindowDays = windowDays
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildDescribeMcpServerHealthPayload builds the payload for the admin
+// describeMcpServerHealth endpoint from CLI flags.
+func BuildDescribeMcpServerHealthPayload(adminDescribeMcpServerHealthOrganizationID string, adminDescribeMcpServerHealthProjectID string, adminDescribeMcpServerHealthMcpServerID string, adminDescribeMcpServerHealthWindowDays string, adminDescribeMcpServerHealthAdminSessionToken string) (*admin.DescribeMcpServerHealthPayload, error) {
+	var err error
+	var organizationID string
+	{
+		organizationID = adminDescribeMcpServerHealthOrganizationID
+	}
+	var projectID string
+	{
+		projectID = adminDescribeMcpServerHealthProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var mcpServerID string
+	{
+		mcpServerID = adminDescribeMcpServerHealthMcpServerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var windowDays int
+	{
+		if adminDescribeMcpServerHealthWindowDays != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminDescribeMcpServerHealthWindowDays, 10, strconv.IntSize)
+			windowDays = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for windowDays, must be INT")
+			}
+			if !(windowDays == 14 || windowDays == 30 || windowDays == 90) {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("window_days", windowDays, []any{14, 30, 90}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminDescribeMcpServerHealthAdminSessionToken != "" {
+			adminSessionToken = &adminDescribeMcpServerHealthAdminSessionToken
+		}
+	}
+	v := &admin.DescribeMcpServerHealthPayload{}
+	v.OrganizationID = organizationID
+	v.ProjectID = projectID
+	v.McpServerID = mcpServerID
+	v.WindowDays = windowDays
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetMcpServerToolCallsPayload builds the payload for the admin
+// getMcpServerToolCalls endpoint from CLI flags.
+func BuildGetMcpServerToolCallsPayload(adminGetMcpServerToolCallsOrganizationID string, adminGetMcpServerToolCallsProjectID string, adminGetMcpServerToolCallsMcpServerID string, adminGetMcpServerToolCallsWindowDays string, adminGetMcpServerToolCallsAdminSessionToken string) (*admin.GetMcpServerToolCallsPayload, error) {
+	var err error
+	var organizationID string
+	{
+		organizationID = adminGetMcpServerToolCallsOrganizationID
+	}
+	var projectID string
+	{
+		projectID = adminGetMcpServerToolCallsProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var mcpServerID string
+	{
+		mcpServerID = adminGetMcpServerToolCallsMcpServerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var windowDays int
+	{
+		if adminGetMcpServerToolCallsWindowDays != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminGetMcpServerToolCallsWindowDays, 10, strconv.IntSize)
+			windowDays = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for windowDays, must be INT")
+			}
+			if !(windowDays == 14 || windowDays == 30 || windowDays == 90) {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("window_days", windowDays, []any{14, 30, 90}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetMcpServerToolCallsAdminSessionToken != "" {
+			adminSessionToken = &adminGetMcpServerToolCallsAdminSessionToken
+		}
+	}
+	v := &admin.GetMcpServerToolCallsPayload{}
+	v.OrganizationID = organizationID
+	v.ProjectID = projectID
+	v.McpServerID = mcpServerID
+	v.WindowDays = windowDays
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetRegistryOktaCandidatesPayload builds the payload for the admin
+// getRegistryOktaCandidates endpoint from CLI flags.
+func BuildGetRegistryOktaCandidatesPayload(adminGetRegistryOktaCandidatesID string, adminGetRegistryOktaCandidatesAdminSessionToken string) (*admin.GetRegistryOktaCandidatesPayload, error) {
+	var err error
+	var id string
+	{
+		id = adminGetRegistryOktaCandidatesID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetRegistryOktaCandidatesAdminSessionToken != "" {
+			adminSessionToken = &adminGetRegistryOktaCandidatesAdminSessionToken
+		}
+	}
+	v := &admin.GetRegistryOktaCandidatesPayload{}
+	v.ID = id
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListRegistryOktaUnmappedPayload builds the payload for the admin
+// listRegistryOktaUnmapped endpoint from CLI flags.
+func BuildListRegistryOktaUnmappedPayload(adminListRegistryOktaUnmappedAdminSessionToken string) (*admin.ListRegistryOktaUnmappedPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminListRegistryOktaUnmappedAdminSessionToken != "" {
+			adminSessionToken = &adminListRegistryOktaUnmappedAdminSessionToken
+		}
+	}
+	v := &admin.ListRegistryOktaUnmappedPayload{}
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

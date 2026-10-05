@@ -62,6 +62,8 @@ export const AUDIT_ACTIONS = [
   "custom_domains:update",
   "data_export_route:create",
   "data_export_route:delete",
+  "data_export_route:pause",
+  "data_export_route:resume",
   "data_export_route:update",
   "deployments:create",
   "deployments:evolve",
@@ -137,6 +139,7 @@ export const AUDIT_ACTIONS = [
   "organization:device_agent_configuration_updated",
   "organization:disabled",
   "organization:enabled",
+  "organization:whitelist_updated",
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_converted",
   "organization:enterprise_trial_demoted",
@@ -165,6 +168,8 @@ export const AUDIT_ACTIONS = [
   "okta-resource-connection:confirm",
   "okta-resource-connection:reset",
   "okta-resource-connection:observe",
+  "okta-server-suggestion:dismiss",
+  "okta-server-suggestion:restore",
   "otel_destination:update",
   "platform-mcp-diagnostics:attribution_read",
   "platform-mcp-diagnostics:user_status_read",
@@ -427,6 +432,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "reset the Cross App Access connection for";
     case "okta-resource-connection:observe":
       return "observed a Cross App Access exchange result for";
+    case "okta-server-suggestion:dismiss":
+      return "dismissed a suggestion for";
+    case "okta-server-suggestion:restore":
+      return "restored a suggestion for";
     case "json_web_key_set:create":
       return "created JSON Web Key Set";
     case "json_web_key_set:update":
@@ -478,6 +487,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated data export route";
     case "data_export_route:delete":
       return "deleted data export route";
+    case "data_export_route:pause":
+      return "paused data export route";
+    case "data_export_route:resume":
+      return "resumed data export route";
 
     case "network_ingress:create":
       return "created private network ingress";
@@ -599,6 +612,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "enabled organization access for";
     case "organization:disabled":
       return "disabled organization access for";
+    case "organization:whitelist_updated":
+      return "changed demo-access whitelisting for";
     case "organization:webhooks_enabled":
       return "enabled webhook delivery";
     case "organization:webhooks_disabled":

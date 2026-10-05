@@ -52,6 +52,13 @@ describe("AUDIT_ACTIONS", () => {
     );
   });
 
+  it("distinguishes demo-access whitelisting from disabling an organisation", () => {
+    expect(isAuditAction("organization:whitelist_updated")).toBe(true);
+    expect(staticActionPhrase("organization:whitelist_updated")).toBe(
+      "changed demo-access whitelisting for",
+    );
+  });
+
   it("describes changed trial end dates", () => {
     expect(
       staticActionPhrase("organization:enterprise_trial_end_changed"),
@@ -97,6 +104,8 @@ describe("AUDIT_ACTIONS", () => {
           "data_export_route:create",
           "data_export_route:update",
           "data_export_route:delete",
+          "data_export_route:pause",
+          "data_export_route:resume",
           "otel_destination:create",
           "otel_destination:update",
           "otel_destination:delete",
@@ -106,6 +115,8 @@ describe("AUDIT_ACTIONS", () => {
       "created data export route",
       "updated data export route",
       "deleted data export route",
+      "paused data export route",
+      "resumed data export route",
       "created OpenTelemetry destination",
       "updated OpenTelemetry destination",
       "deleted OpenTelemetry destination",

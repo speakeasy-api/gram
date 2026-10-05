@@ -377,6 +377,9 @@ trackedFiles:
   src/funcs/oktaResourceConnectionsConfirm.ts: {}
   src/funcs/oktaResourceConnectionsList.ts: {}
   src/funcs/oktaResourceConnectionsReset.ts: {}
+  src/funcs/oktaServerSuggestionsDismiss.ts: {}
+  src/funcs/oktaServerSuggestionsList.ts: {}
+  src/funcs/oktaServerSuggestionsRestore.ts: {}
   src/funcs/organizationAssetsUploadImage.ts: {}
   src/funcs/organizationRemoteSessionClientsAttachKeySet.ts: {}
   src/funcs/organizationRemoteSessionClientsCreate.ts: {}
@@ -519,6 +522,7 @@ trackedFiles:
   src/funcs/remoteSessionClientsDetachKeySet.ts: {}
   src/funcs/remoteSessionClientsDetachUserSessionIssuer.ts: {}
   src/funcs/remoteSessionClientsGet.ts: {}
+  src/funcs/remoteSessionClientsGetNewClientCallbackUrl.ts: {}
   src/funcs/remoteSessionClientsList.ts: {}
   src/funcs/remoteSessionClientsPrepareEMA.ts: {}
   src/funcs/remoteSessionClientsReadEMA.ts: {}
@@ -1017,6 +1021,7 @@ trackedFiles:
   src/models/components/disableopenrouterkeyrequestbody.ts: {}
   src/models/components/disconnectslackdirectoryconnectionrequestbody.ts: {}
   src/models/components/discoverprotectedresourcemetadatarequestbody.ts: {}
+  src/models/components/dismissoktaserversuggestionrequestbody.ts: {}
   src/models/components/dismissskillsuggestionrequestbody.ts: {}
   src/models/components/distributeonboardingcandidaterequestbody.ts: {}
   src/models/components/distributeskillrequestbody.ts: {}
@@ -1275,6 +1280,7 @@ trackedFiles:
   src/models/components/listmetamcpmembersresult.ts: {}
   src/models/components/listmetamcpserversresult.ts: {}
   src/models/components/listoktaresourceconnectionsresult.ts: {}
+  src/models/components/listoktaserversuggestionsresult.ts: {}
   src/models/components/listorganizationmcpserversresult.ts: {}
   src/models/components/listorganizationremotesessionclientsresult.ts: {}
   src/models/components/listorganizationremotesessionissuersresult.ts: {}
@@ -1400,12 +1406,17 @@ trackedFiles:
   src/models/components/networkingress.ts: {}
   src/models/components/networkingressdeleteimpact.ts: {}
   src/models/components/networkingressresult.ts: {}
+  src/models/components/newclientcallbackurlresult.ts: {}
   src/models/components/notmodified.ts: {}
   src/models/components/oauthenablementmetadata.ts: {}
   src/models/components/observabilitysummary.ts: {}
   src/models/components/oktaidentityproviderconnection.ts: {}
   src/models/components/oktaresourceconnectionconfirmation.ts: {}
   src/models/components/oktaresourceconnectionserver.ts: {}
+  src/models/components/oktaserversuggestion.ts: {}
+  src/models/components/oktaserversuggestionapplication.ts: {}
+  src/models/components/oktaserversuggestionremote.ts: {}
+  src/models/components/oktaserversuggestionremoteheader.ts: {}
   src/models/components/onboardinghookevent.ts: {}
   src/models/components/onboardingstatusresult.ts: {}
   src/models/components/openapiv3deploymentasset.ts: {}
@@ -1534,6 +1545,7 @@ trackedFiles:
   src/models/components/resourceaudienceresult.ts: {}
   src/models/components/resourceentry.ts: {}
   src/models/components/responsefilter.ts: {}
+  src/models/components/restoreoktaserversuggestionrequestbody.ts: {}
   src/models/components/restoreskillversionrequestbody.ts: {}
   src/models/components/retryschedulerequestbody.ts: {}
   src/models/components/revokeallremotesessionsresult.ts: {}
@@ -2084,6 +2096,7 @@ trackedFiles:
   src/models/operations/discoverservers.ts: {}
   src/models/operations/discoverversion.ts: {}
   src/models/operations/discoverversions.ts: {}
+  src/models/operations/dismissoktaserversuggestion.ts: {}
   src/models/operations/dismissplatformmcponboarding.ts: {}
   src/models/operations/dismissskillsuggestion.ts: {}
   src/models/operations/distributeplatformmcponboardingcandidate.ts: {}
@@ -2162,6 +2175,7 @@ trackedFiles:
   src/models/operations/getmeterusage.ts: {}
   src/models/operations/getnetworkingress.ts: {}
   src/models/operations/getnetworkingressdeleteimpact.ts: {}
+  src/models/operations/getnewremotesessionclientcallbackurl.ts: {}
   src/models/operations/getobservabilityoverview.ts: {}
   src/models/operations/getonboardingstatus.ts: {}
   src/models/operations/getorganization.ts: {}
@@ -2337,6 +2351,7 @@ trackedFiles:
   src/models/operations/listmetamcpservers.ts: {}
   src/models/operations/listmodelproviderkeys.ts: {}
   src/models/operations/listoktaresourceconnections.ts: {}
+  src/models/operations/listoktaserversuggestions.ts: {}
   src/models/operations/listorganizationremotesessionclientmcpservers.ts: {}
   src/models/operations/listorganizationremotesessionclients.ts: {}
   src/models/operations/listorganizationremotesessionclientsessions.ts: {}
@@ -2476,6 +2491,7 @@ trackedFiles:
   src/models/operations/resolvechallenge.ts: {}
   src/models/operations/resolveidentity.ts: {}
   src/models/operations/resolveshadowmcpinventoryrequest.ts: {}
+  src/models/operations/restoreoktaserversuggestion.ts: {}
   src/models/operations/restoreskillversion.ts: {}
   src/models/operations/resumeagent.ts: {}
   src/models/operations/resumestripesubscription.ts: {}
@@ -2891,6 +2907,7 @@ trackedFiles:
   src/react-query/disableWebhooks.ts: {}
   src/react-query/disconnectSlackDirectoryConnection.ts: {}
   src/react-query/discoverRemoteMcpProtectedResourceMetadata.ts: {}
+  src/react-query/dismissOktaServerSuggestion.ts: {}
   src/react-query/dismissPlatformMCPOnboarding.ts: {}
   src/react-query/dismissSkillSuggestion.ts: {}
   src/react-query/distributePlatformMCPOnboardingCandidate.ts: {}
@@ -3229,8 +3246,12 @@ trackedFiles:
   src/react-query/networkIngressDeleteIngress.ts: {}
   src/react-query/networkIngressGetDeleteImpact.core.ts: {}
   src/react-query/networkIngressGetDeleteImpact.ts: {}
+  src/react-query/newRemoteSessionClientCallbackUrl.core.ts: {}
+  src/react-query/newRemoteSessionClientCallbackUrl.ts: {}
   src/react-query/oktaResourceConnections.core.ts: {}
   src/react-query/oktaResourceConnections.ts: {}
+  src/react-query/oktaServerSuggestions.core.ts: {}
+  src/react-query/oktaServerSuggestions.ts: {}
   src/react-query/onboardingStatus.core.ts: {}
   src/react-query/onboardingStatus.ts: {}
   src/react-query/organization.core.ts: {}
@@ -3373,6 +3394,7 @@ trackedFiles:
   src/react-query/resolveShadowMCPInventoryRequest.ts: {}
   src/react-query/resourceAudience.core.ts: {}
   src/react-query/resourceAudience.ts: {}
+  src/react-query/restoreOktaServerSuggestion.ts: {}
   src/react-query/restoreSkillVersion.ts: {}
   src/react-query/resumeStripeSubscription.ts: {}
   src/react-query/resumeTrigger.ts: {}
@@ -3784,6 +3806,7 @@ trackedFiles:
   src/sdk/modelkeys.ts: {}
   src/sdk/networkingress.ts: {}
   src/sdk/oktaresourceconnections.ts: {}
+  src/sdk/oktaserversuggestions.ts: {}
   src/sdk/organizationassets.ts: {}
   src/sdk/organizationremotesessionclients.ts: {}
   src/sdk/organizationremotesessionissuers.ts: {}
@@ -4822,7 +4845,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "201":
-          application/json: {"agent_plugins_v1_compatible": true, "created_at": "2024-03-14T08:34:14.314Z", "id": "48e343e0-be10-4d97-b8ea-83f4c4424dd1", "name": "<value>", "slug": "<value>", "updated_at": "2024-04-03T03:53:36.214Z"}
+          application/json: {"agent_plugins_v1_compatible": true, "auto_created": true, "created_at": "2024-03-14T08:34:14.314Z", "id": "48e343e0-be10-4d97-b8ea-83f4c4424dd1", "name": "<value>", "slug": "<value>", "updated_at": "2024-04-03T03:53:36.214Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -5971,6 +5994,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  dismissOktaServerSuggestion:
+    speakeasy-default-dismiss-okta-server-suggestion:
+      requestBody:
+        application/json: {"registry_entry_id": "c7a44d8e-6ac8-4399-9ea4-ea62dc717471"}
+      responses:
+        "200":
+          application/json: {"description": "unique near consequently inure sonnet pish worriedly haversack omelet", "installed_urls": ["<value 1>", "<value 2>", "<value 3>"], "okta_applications": [{"group_assignments": 546554, "label": "<value>", "name": "<value>", "okta_app_id": "<id>", "sign_on_mode": "<value>", "user_assignments": 173146, "xaa_supported": false}], "registry_entry_id": "00ce000c-3283-4a12-8d40-b3374dd521b1", "remotes": [{"headers": [{"is_required": true, "is_secret": true, "name": "<value>"}], "type": "<value>", "url": "https://well-worn-brush.info/"}], "server_name": "<value>", "state": "dismissed", "supports_dcr": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   dismissPlatformMCPOnboarding:
     speakeasy-default-dismiss-platform-MCP-onboarding:
       responses:
@@ -6523,7 +6557,7 @@ examples:
           id: "6098023a-9459-4112-9fc6-70aaf112f6de"
       responses:
         "200":
-          application/json: {"id": "fdff237d-24ea-413d-8c74-6024052e853a", "is_default": true, "name": "<value>"}
+          application/json: {"auto_created": true, "id": "fdff237d-24ea-413d-8c74-6024052e853a", "is_default": true, "name": "<value>"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -6909,6 +6943,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getNewRemoteSessionClientCallbackUrl:
+    speakeasy-default-get-new-remote-session-client-callback-url:
+      responses:
+        "200":
+          application/json: {"callback_url": "https://giving-boyfriend.org"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getObservabilityOverview:
     speakeasy-default-get-observability-overview:
       requestBody:
@@ -7133,7 +7176,7 @@ examples:
           id: "2c3fdec1-236d-49ee-a524-9bb3bf5bbcec"
       responses:
         "200":
-          application/json: {"agent_plugins_v1_compatible": true, "created_at": "2025-09-14T20:16:24.036Z", "id": "f243a7e5-70a1-4090-8cb1-acae8dbc689f", "name": "<value>", "slug": "<value>", "updated_at": "2026-11-14T18:06:48.573Z"}
+          application/json: {"agent_plugins_v1_compatible": true, "auto_created": true, "created_at": "2025-09-14T20:16:24.036Z", "id": "f243a7e5-70a1-4090-8cb1-acae8dbc689f", "name": "<value>", "slug": "<value>", "updated_at": "2026-11-14T18:06:48.573Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -7145,7 +7188,7 @@ examples:
           organization_id: "<id>"
       responses:
         "200":
-          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "consent_tool_filtering_enabled": false, "custom_model_keys_enabled": false, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": false, "logs_enabled": false, "network_ingress_enabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "session_portability_enabled": false, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
+          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "automatic_role_distribution": false, "consent_tool_filtering_enabled": false, "custom_model_keys_enabled": false, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": false, "logs_enabled": false, "network_ingress_enabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "session_portability_enabled": false, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -8639,7 +8682,7 @@ examples:
           skill_id: "6ba91024-704b-4bd4-9fe9-0ea780d46701"
       responses:
         "200":
-          application/json: {"plugins": [{"id": "962fb057-c6e3-4552-ac38-37f3c976c853", "is_default": false, "name": "<value>"}]}
+          application/json: {"plugins": [{"auto_created": true, "id": "962fb057-c6e3-4552-ac38-37f3c976c853", "is_default": false, "name": "<value>"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -9024,6 +9067,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listOktaServerSuggestions:
+    speakeasy-default-list-okta-server-suggestions:
+      parameters:
+        query:
+          include_all: false
+      responses:
+        "200":
+          application/json: {"open_count": 835450, "suggestions": [], "total_count": 580140}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listOrganizationRemoteSessionClientMcpServers:
     speakeasy-default-list-organization-remote-session-client-mcp-servers:
       parameters:
@@ -10691,6 +10746,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  restoreOktaServerSuggestion:
+    speakeasy-default-restore-okta-server-suggestion:
+      requestBody:
+        application/json: {"registry_entry_id": "66799221-8c93-4e30-8c25-8e6fdac33d51"}
+      responses:
+        "200":
+          application/json: {"description": "closely actually turret indeed where scamper", "installed_urls": [], "okta_applications": [], "registry_entry_id": "03143ebd-f676-469c-a8fd-8f37a512a007", "remotes": [], "server_name": "<value>", "state": "installed", "supports_dcr": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   restoreSkillVersion:
     speakeasy-default-restore-skill-version:
       requestBody:
@@ -12192,7 +12258,7 @@ examples:
         application/json: {"id": "1c0290eb-9c44-4e10-bcbb-55a9ea8ae57f", "name": "<value>", "slug": "<value>"}
       responses:
         "200":
-          application/json: {"agent_plugins_v1_compatible": true, "created_at": "2024-07-31T05:16:06.164Z", "id": "e86c4107-85e9-41a5-97b4-77624099c31d", "name": "<value>", "slug": "<value>", "updated_at": "2026-12-30T01:18:18.622Z"}
+          application/json: {"agent_plugins_v1_compatible": true, "auto_created": true, "created_at": "2024-07-31T05:16:06.164Z", "id": "e86c4107-85e9-41a5-97b4-77624099c31d", "name": "<value>", "slug": "<value>", "updated_at": "2026-12-30T01:18:18.622Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

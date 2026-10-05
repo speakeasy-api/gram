@@ -47,7 +47,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -99,35 +101,39 @@ type WorkerOptions struct {
 	// lookups; empty falls back to GitHub's small unauthenticated budget.
 	GitHubEvidenceToken string
 	SiteURL             *url.URL
-	BillingTracker      billing.Tracker
-	BillingRepository   billing.Repository
-	StripeClient        stripeclient.Client
-	RedisClient         *redis.Client
-	CacheAdapter        cache.Cache
-	EmailService        *email.Service
-	PosthogClient       *posthog.Posthog
-	FunctionsDeployer   functions.Deployer
-	FunctionsVersion    functions.RunnerVersion
-	RagService          *rag.ToolsetVectorStore
-	MCPRegistryClient   *externalmcp.RegistryClient
-	TelemetryLogger     *telemetry.Logger
-	ClickhouseConn      clickhouse.Conn
+	// OrgHosts resolves the host of links sent to an organization by email.
+	OrgHosts          *orghost.Resolver
+	BillingTracker    billing.Tracker
+	BillingRepository billing.Repository
+	StripeClient      stripeclient.Client
+	RedisClient       *redis.Client
+	CacheAdapter      cache.Cache
+	EmailService      *email.Service
+	PosthogClient     *posthog.Posthog
+	FunctionsDeployer functions.Deployer
+	FunctionsVersion  functions.RunnerVersion
+	RagService        *rag.ToolsetVectorStore
+	MCPRegistryClient *externalmcp.RegistryClient
+	MCPCatalog        *externalmcp.CatalogService
+	TelemetryLogger   *telemetry.Logger
+	ClickhouseConn    clickhouse.Conn
 	// MeterReadConn uses the least-privilege ClickHouse reader for billing summaries.
-	MeterReadConn     clickhouse.Conn
-	TelemetryRepo     *telemetryrepo.Queries
-	TriggersApp       *bgtriggers.App
-	AssistantsCore    *assistants.ServiceCore
-	TemporalEnv       *tenv.Environment
-	PIIScanner        risk_analysis.PIIScanner
-	PIScanner         *promptinjection.Scanner
-	CustomRuleScanner *customruleanalyzer.Scanner
-	BuiltinPresets    *presetlib.Library
-	ShadowMCPClient   *shadowmcp.Client
-	AuditLogger       *audit.Logger
-	WorkOSClient      activitiespkg.WorkOSClient
-	ProductFeatures   *productfeatures.Client
-	PluginPublisher   *plugins.Service
-	Publishers        *Publishers
+	MeterReadConn       clickhouse.Conn
+	TelemetryRepo       *telemetryrepo.Queries
+	TriggersApp         *bgtriggers.App
+	AssistantsCore      *assistants.ServiceCore
+	TemporalEnv         *tenv.Environment
+	PIIScanner          risk_analysis.PIIScanner
+	PIScanner           *promptinjection.Scanner
+	CustomRuleScanner   *customruleanalyzer.Scanner
+	BuiltinPresets      *presetlib.Library
+	ShadowMCPClient     *shadowmcp.Client
+	AuditLogger         *audit.Logger
+	WorkOSClient        activitiespkg.WorkOSClient
+	ProductFeatures     *productfeatures.Client
+	PluginPublisher     *plugins.Service
+	PublicationRequests plugins.PublicationRequests
+	Publishers          *Publishers
 
 	// IssuerMetadataRefresher is optional. Share it with every in-process producer;
 	// the constructing caller owns it and must call Wait after those producers stop.
@@ -135,6 +141,10 @@ type WorkerOptions struct {
 	// RemoteSessionAssertionSigner enables scheduled refreshes for clients that
 	// authenticate with private_key_jwt.
 	RemoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner
+
+	// StartupSeeds is the reference data this worker keeps applied. The
+	// worker kicks one run per seed version when it starts.
+	StartupSeeds []activitiespkg.StartupSeed
 
 	// TrialEmailsService synchronizes trial lifecycle changes with Loops.
 	TrialEmailsService *trialemails.Service
@@ -180,7 +190,12 @@ func ForDeploymentProcessing(
 	mcpRegistryClient *externalmcp.RegistryClient,
 	auditLogger *audit.Logger,
 ) *WorkerOptions {
+	validator, err := mcpregistry.LoadValidator()
+	if err != nil {
+		panic(fmt.Errorf("load test worker catalog validator: %w", err))
+	}
 	return &WorkerOptions{
+		PublicationRequests:          plugins.PublicationRequests{Enabled: false},
 		DB:                           db,
 		GuardianPolicy:               guardianPolicy,
 		TunnelHTTPClient:             nil,
@@ -190,8 +205,10 @@ func ForDeploymentProcessing(
 		FunctionsDeployer:            deployer,
 		FunctionsVersion:             "local", // Test deployers don't use baked versions
 		MCPRegistryClient:            mcpRegistryClient,
+		MCPCatalog:                   externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, validator)), f),
 		AuditLogger:                  auditLogger,
 		RemoteSessionAssertionSigner: nil,
+		StartupSeeds:                 nil,
 		SlackClient:                  nil,
 		SlackDirectoryTokenRefresher: nil,
 		ChatMessageWriter:            nil,
@@ -203,6 +220,7 @@ func ForDeploymentProcessing(
 		ExpectedARecords:             nil,
 		GitHubEvidenceToken:          "",
 		SiteURL:                      nil,
+		OrgHosts:                     orghost.New(orghost.Config{ServerURL: nil, SiteURL: nil, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
 		BillingTracker:               nil,
 		BillingRepository:            nil,
 		StripeClient:                 nil,
@@ -275,6 +293,8 @@ func NewTemporalWorker(
 	options ...*WorkerOptions,
 ) *Workers {
 	opts := &WorkerOptions{
+		PublicationRequests:          plugins.PublicationRequests{Enabled: false},
+		MCPCatalog:                   nil,
 		GuardianPolicy:               nil,
 		TunnelHTTPClient:             nil,
 		DB:                           nil,
@@ -292,6 +312,7 @@ func NewTemporalWorker(
 		ExpectedARecords:             nil,
 		GitHubEvidenceToken:          "",
 		SiteURL:                      nil,
+		OrgHosts:                     orghost.New(orghost.Config{ServerURL: nil, SiteURL: nil, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
 		BillingTracker:               nil,
 		BillingRepository:            nil,
 		StripeClient:                 nil,
@@ -308,6 +329,7 @@ func NewTemporalWorker(
 		CacheAdapter:                 nil,
 		IssuerMetadataRefresher:      nil,
 		RemoteSessionAssertionSigner: nil,
+		StartupSeeds:                 nil,
 		EmailService:                 nil,
 		AssistantsCore:               nil,
 		TemporalEnv:                  env,
@@ -348,6 +370,7 @@ func NewTemporalWorker(
 			ExpectedARecords:             conv.DefaultSlice(o.ExpectedARecords, opts.ExpectedARecords),
 			GitHubEvidenceToken:          conv.Default(o.GitHubEvidenceToken, opts.GitHubEvidenceToken),
 			SiteURL:                      conv.Default(o.SiteURL, opts.SiteURL),
+			OrgHosts:                     conv.Default(o.OrgHosts, opts.OrgHosts),
 			BillingTracker:               conv.Default(o.BillingTracker, opts.BillingTracker),
 			BillingRepository:            conv.Default(o.BillingRepository, opts.BillingRepository),
 			StripeClient:                 conv.Default(o.StripeClient, opts.StripeClient),
@@ -357,6 +380,7 @@ func NewTemporalWorker(
 			FunctionsVersion:             conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
 			RagService:                   conv.Default(o.RagService, opts.RagService),
 			MCPRegistryClient:            conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
+			MCPCatalog:                   conv.Default(o.MCPCatalog, opts.MCPCatalog),
 			TelemetryLogger:              conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
 			MeterReadConn:                conv.Default(o.MeterReadConn, opts.MeterReadConn),
 			TelemetryRepo:                conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
@@ -364,6 +388,7 @@ func NewTemporalWorker(
 			CacheAdapter:                 conv.Default(o.CacheAdapter, opts.CacheAdapter),
 			IssuerMetadataRefresher:      conv.Default(o.IssuerMetadataRefresher, opts.IssuerMetadataRefresher),
 			RemoteSessionAssertionSigner: conv.Default(o.RemoteSessionAssertionSigner, opts.RemoteSessionAssertionSigner),
+			StartupSeeds:                 conv.DefaultSlice(o.StartupSeeds, opts.StartupSeeds),
 			EmailService:                 conv.Default(o.EmailService, opts.EmailService),
 			AssistantsCore:               conv.Default(o.AssistantsCore, opts.AssistantsCore),
 			TemporalEnv:                  conv.Default(o.TemporalEnv, opts.TemporalEnv),
@@ -377,6 +402,7 @@ func NewTemporalWorker(
 			ProductFeatures:              conv.Default(o.ProductFeatures, opts.ProductFeatures),
 			ClickhouseConn:               conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
 			PluginPublisher:              conv.Default(o.PluginPublisher, opts.PluginPublisher),
+			PublicationRequests:          conv.Default(o.PublicationRequests, opts.PublicationRequests),
 			Publishers:                   conv.Default(o.Publishers, opts.Publishers),
 			TrialEmailsService:           conv.Default(o.TrialEmailsService, opts.TrialEmailsService),
 			TrialFixtureHandler: func() func(context.Context, string) (bool, error) {
@@ -458,6 +484,7 @@ func NewTemporalWorker(
 		opts.ExpectedTargetCNAME,
 		opts.ExpectedARecords,
 		opts.SiteURL,
+		opts.OrgHosts,
 		opts.BillingTracker,
 		opts.BillingRepository,
 		opts.StripeClient,
@@ -466,6 +493,7 @@ func NewTemporalWorker(
 		opts.FunctionsVersion,
 		opts.RagService,
 		opts.MCPRegistryClient,
+		opts.MCPCatalog,
 		opts.TemporalEnv,
 		opts.TelemetryLogger,
 		opts.ClickhouseConn,
@@ -498,6 +526,7 @@ func NewTemporalWorker(
 		opts.IssuerMetadataRefresher,
 		remoteSessionEnricher,
 		opts.RemoteSessionAssertionSigner,
+		opts.StartupSeeds,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -571,6 +600,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ReapInactiveAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.ReapStoppedAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.RecycleAssistantRuntimeImages)
+	temporalWorker.RegisterActivity(activities.ApplyStartupSeed)
 	temporalWorker.RegisterActivity(activities.ReapSoftDeletedAssistantMemories)
 	temporalWorker.RegisterActivity(activities.SignalAssistantCoordinator)
 	temporalWorker.RegisterActivity(activities.SignalAssistantThread)
@@ -748,6 +778,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(RemoteSessionRefreshWorkflow)
 	// Trial expiry workflows
 	temporalWorker.RegisterWorkflow(DemoteExpiredTrialsWorkflow)
+	temporalWorker.RegisterWorkflow(StartupSeedWorkflow)
 	temporalWorker.RegisterWorkflow(TrialLifecycleEmailWorkflow)
 	temporalWorker.RegisterWorkflow(AccessPausedEmailWorkflow)
 	temporalWorker.RegisterWorkflow(PaygActivatedEmailWorkflow)
@@ -799,6 +830,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddIndexToolsetSweepSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add index toolset sweep schedule", attr.SlogError(err))
+	}
+
+	// Each queue seeds its own database, so PR previews get the reference
+	// data too. A run per seed version, not per start.
+	if err := KickStartupSeeds(ctx, env, opts.StartupSeeds); err != nil {
+		logger.ErrorContext(ctx, "failed to kick startup seeds", attr.SlogError(err))
 	}
 
 	// Everything below is registered under a fixed ID and belongs to the

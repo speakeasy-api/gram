@@ -90,7 +90,9 @@ export function redirectToLoginOnUnauthorized(): Promise<void> {
       if (response?.status !== 401) return;
 
       redirecting = true;
-      clearStorageForLogout();
+      // auth.info 401 is the proof this document is logged out, not an
+      // impersonation load that has not classified yet.
+      clearStorageForLogout(undefined, { confirmedLoggedOut: true });
       const target = safeRedirectPath(pathname + search + hash);
       if (!target) {
         window.location.assign("/login");

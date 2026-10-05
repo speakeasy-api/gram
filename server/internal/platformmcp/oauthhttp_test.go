@@ -550,3 +550,66 @@ func testEncryption(t *testing.T) *encryption.Client {
 	require.NoError(t, err)
 	return client
 }
+
+// callbackRecordingIdentity records the callback URL sent to the identity
+// provider.
+type callbackRecordingIdentity struct {
+	testIdentity
+	callbacks *[]string
+}
+
+func (i callbackRecordingIdentity) BuildAuthorizationURL(ctx context.Context, params identity.AuthorizationURLParams) (*url.URL, error) {
+	*i.callbacks = append(*i.callbacks, params.CallbackURL)
+	return i.testIdentity.BuildAuthorizationURL(ctx, params)
+}
+
+func TestOAuthHTTPPinsIDPCallbackToOutboundOrigin(t *testing.T) {
+	t.Parallel()
+
+	base, err := url.Parse("https://ai.example.test")
+	require.NoError(t, err)
+	outbound, err := url.Parse("https://app.example.test")
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name     string
+		pinned   *url.URL
+		callback string
+	}{
+		{name: "default", pinned: nil, callback: "https://ai.example.test/platform-mcp/idp_callback"},
+		{name: "pinned", pinned: outbound, callback: "https://app.example.test/platform-mcp/idp_callback"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var callbacks []string
+			service, err := NewOAuthHTTP(OAuthHTTPConfig{
+				BaseURL:            base,
+				IDPCallbackBaseURL: tc.pinned,
+				Cache:              &memoryCache{values: map[string]any{}},
+				Store:              platformoauth.NewInMemoryStore(),
+				Identity:           callbackRecordingIdentity{callbacks: &callbacks},
+				Gate:               allowGate{},
+				Authorizer:         allowAuthorizer{},
+				Organizations:      testOrganizationSelector{organizations: []OrganizationOption{{ID: "org-1", Name: "Organization one"}}},
+				Signer:             sessiontokens.NewSigner("test-key"),
+				Encryption:         testEncryption(t),
+			})
+			require.NoError(t, err)
+			require.NoError(t, testStore(t, service).RegisterClient(context.Background(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
+
+			authorize := httptest.NewRecorder()
+			service.AuthorizeHandler().ServeHTTP(authorize, httptest.NewRequest(http.MethodGet, "https://ai.example.test/platform-mcp/authorize?response_type=code&client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A3000%2Fcallback&code_challenge=challenge&code_challenge_method=S256", nil))
+			require.Equal(t, http.StatusFound, authorize.Code)
+			require.Equal(t, []string{tc.callback}, callbacks)
+			idpURL, err := url.Parse(authorize.Header().Get("Location"))
+			require.NoError(t, err)
+
+			// The callback host returns the browser to the origin it started on.
+			callback := httptest.NewRecorder()
+			service.IDPCallbackHandler().ServeHTTP(callback, httptest.NewRequest(http.MethodGet, tc.callback+"?state="+url.QueryEscape(idpURL.Query().Get("state"))+"&code=idp-code", nil))
+			require.Equal(t, http.StatusFound, callback.Code)
+			selection, err := url.Parse(callback.Header().Get("Location"))
+			require.NoError(t, err)
+			require.Equal(t, "ai.example.test", selection.Host)
+		})
+	}
+}

@@ -1,8 +1,10 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import {
   cleanup,
   fireEvent,
-  render,
+  render as testingRender,
+  act,
   screen,
   waitFor,
 } from "@testing-library/react";
@@ -31,6 +33,7 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
+  useProjectSlugForRequests: () => "default",
   useSdkClient: () => ({
     mcpRegistries: { getServerDetails: mocks.getServerDetails },
   }),
@@ -60,7 +63,7 @@ vi.mock("./useRemoteMcpInstallWorkflow", () => ({
     remoteUrl: string,
     headerName: string,
   ) => `${serverIndex}:${remoteUrl}:${headerName}`,
-  useRemoteMcpInstallWorkflow: () => mocks.workflow(),
+  useRemoteMcpInstallWorkflow: (options: unknown) => mocks.workflow(options),
 }));
 
 const server = {
@@ -80,6 +83,19 @@ const server = {
     },
   ],
 };
+
+function render(ui: React.ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const invalidate = vi.spyOn(client, "invalidateQueries");
+  return {
+    ...testingRender(
+      <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+    ),
+    invalidate,
+  };
+}
 
 function renderDialog(): void {
   render(
@@ -314,5 +330,88 @@ describe("AddServerDialog guardrails", () => {
     );
 
     expect(screen.getByText("Guardrail created")).toBeDefined();
+  });
+});
+
+describe("catalog admission", () => {
+  const catalogServer = { ...server, registryId: "old-source" };
+  function openCatalog() {
+    return render(
+      <TooltipProvider>
+        <AddServerDialog
+          servers={[catalogServer]}
+          open
+          onOpenChange={(open) => {
+            mocks.onOpenChange(open);
+          }}
+        />
+      </TooltipProvider>,
+    );
+  }
+  it.each(["Selected catalog changed", "Details unavailable"])(
+    "blocks before open: %s",
+    async (message) => {
+      mocks.getServerDetails.mockRejectedValue(new Error(message));
+      const { invalidate } = openCatalog();
+      await screen.findByText(message);
+      expect(invalidate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          queryKey: ["@gram/client", "mcpRegistries", "listCatalog"],
+        }),
+      );
+      expect(
+        screen.queryByRole("button", { name: "Add to Project" }),
+      ).toBeNull();
+      expect(mocks.startInstall).not.toHaveBeenCalled();
+    },
+  );
+  it("revalidates a source flip while open before accepting installation", async () => {
+    mocks.getServerDetails.mockResolvedValue({ remotes: server.remotes });
+    openCatalog();
+    await screen.findByRole("button", { name: "Add to Project" });
+    mocks.getServerDetails.mockRejectedValue(
+      new Error("Selected catalog changed"),
+    );
+    const options = mocks.workflow.mock.calls.at(-1)![0];
+    await act(async () => {
+      expect(await options.beforeInstall()).toBe(false);
+    });
+    await screen.findByText("Selected catalog changed");
+    expect(mocks.getServerDetails).toHaveBeenCalledTimes(2);
+  });
+  it("rejects cached endpoints absent from authoritative details", async () => {
+    mocks.getServerDetails.mockResolvedValue({ remotes: [] });
+    openCatalog();
+    await screen.findByText(/Catalog endpoints changed/);
+    expect(screen.queryByRole("button", { name: "Add to Project" })).toBeNull();
+  });
+
+  it("requires reselection when details change while open", async () => {
+    mocks.getServerDetails.mockResolvedValue({ remotes: server.remotes });
+    openCatalog();
+    await screen.findByRole("button", { name: "Add to Project" });
+    mocks.getServerDetails.mockResolvedValue({
+      remotes: [
+        {
+          ...server.remotes[0],
+          headers: [{ name: "X-Key", isRequired: true, isSecret: true }],
+        },
+      ],
+    });
+    const options = mocks.workflow.mock.calls.at(-1)![0];
+    await act(async () => {
+      expect(await options.beforeInstall()).toBe(false);
+    });
+    await screen.findByText(/Catalog details changed/);
+  });
+
+  it("does not admit manual URLs through the catalog", async () => {
+    renderDialog();
+    await screen.findByRole("button", { name: "Add to Project" });
+    const options = mocks.workflow.mock.calls.at(-1)![0];
+    await act(async () => {
+      expect(await options.beforeInstall()).toBe(true);
+    });
+    expect(mocks.getServerDetails).not.toHaveBeenCalled();
   });
 });

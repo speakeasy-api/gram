@@ -561,17 +561,22 @@ func (q *Queries) GetMcpEndpointByCustomDomainAndServer(ctx context.Context, arg
 	return i, err
 }
 
-const getOrganizationSlugForHealthNotification = `-- name: GetOrganizationSlugForHealthNotification :one
-SELECT slug
+const getOrganizationForHealthNotification = `-- name: GetOrganizationForHealthNotification :one
+SELECT slug, default_host
 FROM organization_metadata
 WHERE id = $1
 `
 
-func (q *Queries) GetOrganizationSlugForHealthNotification(ctx context.Context, organizationID string) (string, error) {
-	row := q.db.QueryRow(ctx, getOrganizationSlugForHealthNotification, organizationID)
-	var slug string
-	err := row.Scan(&slug)
-	return slug, err
+type GetOrganizationForHealthNotificationRow struct {
+	Slug        string
+	DefaultHost pgtype.Text
+}
+
+func (q *Queries) GetOrganizationForHealthNotification(ctx context.Context, organizationID string) (GetOrganizationForHealthNotificationRow, error) {
+	row := q.db.QueryRow(ctx, getOrganizationForHealthNotification, organizationID)
+	var i GetOrganizationForHealthNotificationRow
+	err := row.Scan(&i.Slug, &i.DefaultHost)
+	return i, err
 }
 
 const getPendingDeletedCustomDomainByOrganization = `-- name: GetPendingDeletedCustomDomainByOrganization :one

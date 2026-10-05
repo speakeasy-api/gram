@@ -17,4 +17,18 @@ set -euo pipefail
 # just run it. Everything it used to write back into mise.local.toml
 # (GRAM_API_KEY) is now a fixed value checked into mise.toml.
 cd server
-exec go run . demo-seed --local "$@"
+go run . demo-seed --local "$@"
+
+# Workers apply the startup seeds themselves, once per version. Apply them
+# here too, so a database reset under a running stack has them straight away.
+# Only the database override is shared with the demo seed; its other flags do
+# not apply here.
+catalog_args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --database-url) catalog_args+=("$1" "$2"); shift ;;
+    --database-url=*) catalog_args+=("$1") ;;
+  esac
+  shift
+done
+exec go run . app-seed ${catalog_args[@]+"${catalog_args[@]}"}

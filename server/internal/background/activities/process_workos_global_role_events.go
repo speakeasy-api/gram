@@ -13,12 +13,15 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const workosGlobalRoleEventsPageSize = 100
@@ -215,6 +218,15 @@ func deleteGlobalRole(ctx context.Context, dbtx database.DBTX, event events.Even
 		WorkosLastEventID: conv.ToPGText(event.ID),
 	}); err != nil {
 		return fmt.Errorf("mark global role %q deleted: %w", payload.Slug, err)
+	}
+	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+existing.ID.String())
+	if err := pluginassignments.RemoveDeletedRole(ctx, dbtx, audit.NewLogger(), pluginassignments.RoleDeletion{
+		OrganizationID:   "",
+		PrincipalURN:     rolePrincipal.String(),
+		Actor:            urn.NewSystemPrincipal("workos-role-sync"),
+		ActorDisplayName: nil,
+	}); err != nil {
+		return fmt.Errorf("delete plugin assignments for global role %q: %w", payload.Slug, err)
 	}
 	return nil
 }

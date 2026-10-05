@@ -147,6 +147,9 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		Distributions:    []MCPDistribution{},
 		Operations:       []string{"read"},
 		DashboardPath:    "",
+		// The inventory projection never reads a server's tool list: only the
+		// server detail does, and it fills this in after the read.
+		ToolExposure: nil,
 	}
 
 	// Every model can be carried by a plugin, so membership is attached before

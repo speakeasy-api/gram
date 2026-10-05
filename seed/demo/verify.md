@@ -452,10 +452,14 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       `[~]` to `[x]`; API-only checks and the separate synthetic consolidation
       blocker demo do not complete this fixture's display verification.
 
-25. **Access Hub** — open `/<org>/projects/default/access-hub` (no sidebar
-    entry yet; the page is pre-GA and reached by URL) and click **Custom (2)**.
+25. **Access Hub** — open `/<org>/access-hub` (organization sidebar, under
+    **Secure**; the old `/<org>/projects/default/access-hub` URL redirects
+    there) and click **Custom (2)**.
     Two platform cards: `Acme Agent Platform` and `Acme CI`, each with tags
-    and sharing one. Open `Acme Agent Platform`: its machines each resolve to
+    and sharing one. The page shows the organization tier only, so `Acme CI`
+    lists two machines (`Docs publish` and `Payments deploy (all projects)`);
+    the project-tier `Payments deploy` admission stays off this page. Open
+    `Acme Agent Platform`: its machines each resolve to
     a named agent with no row showing "None assigned", and one is the wildcard
     rule `wimse://agents.example.com/org/acme/agent/*`. `Acme CI` must keep
     wildcard admission off, because its subjects encode a branch ref where a

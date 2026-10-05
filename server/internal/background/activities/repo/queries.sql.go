@@ -2058,6 +2058,7 @@ SELECT
     om.id AS organization_id,
     om.name AS organization_name,
     om.slug AS organization_slug,
+    om.default_host,
     om.gram_account_type,
     bm.alert_email,
     bm.billing_cycle_anchor_day
@@ -2075,6 +2076,7 @@ type ListWeeklyUsageSummaryTargetsRow struct {
 	OrganizationID        string
 	OrganizationName      string
 	OrganizationSlug      string
+	DefaultHost           pgtype.Text
 	GramAccountType       string
 	AlertEmail            pgtype.Text
 	BillingCycleAnchorDay int32
@@ -2083,8 +2085,8 @@ type ListWeeklyUsageSummaryTargetsRow struct {
 // Organizations that receive the weekly metered usage summary email: enabled
 // enterprise organizations with an explicit billing alert email and enabled
 // PAYG organizations (whose fallback audience is resolved by the activity).
-// The anchor day determines the billing-cycle windows; the slug builds the
-// billing page link.
+// The anchor day determines the billing-cycle windows; the slug and default
+// host build the billing page link.
 func (q *Queries) ListWeeklyUsageSummaryTargets(ctx context.Context) ([]ListWeeklyUsageSummaryTargetsRow, error) {
 	rows, err := q.db.Query(ctx, listWeeklyUsageSummaryTargets)
 	if err != nil {
@@ -2098,6 +2100,7 @@ func (q *Queries) ListWeeklyUsageSummaryTargets(ctx context.Context) ([]ListWeek
 			&i.OrganizationID,
 			&i.OrganizationName,
 			&i.OrganizationSlug,
+			&i.DefaultHost,
 			&i.GramAccountType,
 			&i.AlertEmail,
 			&i.BillingCycleAnchorDay,

@@ -98,8 +98,11 @@ func (l *Logger) LogPlatformMcpDiagnosticsAttributionRead(ctx context.Context, d
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
 	typeOfSubject := subjectTypeMcpServer
-	if event.TargetKind == "skill" {
+	switch event.TargetKind {
+	case "skill":
 		typeOfSubject = subjectTypeSkill
+	case "project":
+		typeOfSubject = subjectTypeProject
 	}
 	entry := repo.InsertAuditLogParams{
 		OrganizationID:     event.OrganizationID,

@@ -89,7 +89,7 @@ func TestCreateStripeCheckoutReturnsToExtraPlatformHost(t *testing.T) {
 	require.Equal(t, "none", checkoutIntentTrialFingerprint(checkouts[0].IdempotencyKey))
 }
 
-func TestCreateStripeCheckoutKeepsCanonicalIdempotencyKeyOnSiteHost(t *testing.T) {
+func TestCreateStripeCheckoutRecordsSiteURLReturnBaseOnSiteHost(t *testing.T) {
 	t.Parallel()
 
 	ti := newStripeCheckoutTestInstance(t)
@@ -101,7 +101,45 @@ func TestCreateStripeCheckoutKeepsCanonicalIdempotencyKeyOnSiteHost(t *testing.T
 	_, _, checkouts := ti.stripe.snapshot()
 	require.Len(t, checkouts, 1)
 	require.Equal(t, "https://app.example.test/"+ti.orgSlug+"/billing", checkouts[0].SuccessURL)
-	require.NotContains(t, checkouts[0].IdempotencyKey, stripeCheckoutReturnBasePrefix)
+	require.Contains(t, checkouts[0].IdempotencyKey, ":"+stripeCheckoutReturnBasePrefix)
+	require.Equal(t, "none", checkoutIntentTrialFingerprint(checkouts[0].IdempotencyKey))
+}
+
+// A live intent created on the site host replays the original URLs after the
+// site URL changes; the fake Stripe client rejects the replay otherwise.
+func TestCreateStripeCheckoutReplaysSiteHostIntentAfterSiteURLChange(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+
+	first, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+
+	ti.service.siteURL = mustParseURL(t, "https://new-site.example.test")
+	second, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+
+	require.Equal(t, first, second)
+	_, _, checkouts := ti.stripe.snapshot()
+	require.Len(t, checkouts, 2)
+	require.Equal(t, checkouts[0], checkouts[1])
+	require.Equal(t, "https://app.example.test/"+ti.orgSlug+"/billing", checkouts[1].SuccessURL)
+	require.Empty(t, ti.stripe.expiredCheckoutIDs)
+}
+
+// Keys issued before every intent recorded a return base keep resolving to the
+// current site URL, as they always have.
+func TestStripeCheckoutLegacyKeyWithoutReturnBaseUsesSiteURL(t *testing.T) {
+	t.Parallel()
+
+	legacy := newStripeCheckoutIntent("<ORG_ID>", time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC), nil)
+	require.NotContains(t, legacy.idempotencyKey, stripeCheckoutReturnBasePrefix)
+
+	for _, site := range []string{"https://app.example.test", "https://new-site.example.test"} {
+		returned, err := stripeCheckoutBillingURL(legacy.idempotencyKey, mustParseURL(t, site), "acme")
+		require.NoError(t, err)
+		require.Equal(t, site+"/acme/billing", returned)
+	}
 }
 
 func TestCreateStripeCheckoutReplaysLiveIntentOnSameExtraHost(t *testing.T) {
@@ -207,7 +245,8 @@ func TestStripeCheckoutReturnBaseRoundTripsThroughIdempotencyKey(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "https://app.example.test/acme/billing", canonical)
 
-	withPort := withStripeCheckoutReturnBase(intent, "http://localhost:5173")
+	withPort, recorded := withStripeCheckoutReturnBase(intent, "http://localhost:5173")
+	require.True(t, recorded)
 	require.Equal(t, fingerprint, checkoutIntentTrialFingerprint(withPort.idempotencyKey))
 	returned, err := stripeCheckoutBillingURL(withPort.idempotencyKey, siteURL, "acme")
 	require.NoError(t, err)
@@ -221,14 +260,16 @@ func TestStripeCheckoutReturnBaseOmittedWhenKeyWouldExceedStripeLimit(t *testing
 	intent := newStripeCheckoutIntent("<ORG_ID>", time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC), nil)
 	longHost := "https://" + strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + ".example.test"
 
-	withLongHost := withStripeCheckoutReturnBase(intent, longHost)
+	withLongHost, recorded := withStripeCheckoutReturnBase(intent, longHost)
+	require.False(t, recorded)
 	require.LessOrEqual(t, len(withLongHost.idempotencyKey), maxStripeIdempotencyKeyLength)
 	require.Equal(t, intent.idempotencyKey, withLongHost.idempotencyKey)
 	returned, err := stripeCheckoutBillingURL(withLongHost.idempotencyKey, siteURL, "acme")
 	require.NoError(t, err)
 	require.Equal(t, "https://app.example.test/acme/billing", returned)
 
-	withExtraHost := withStripeCheckoutReturnBase(intent, extraPlatformHostURL)
+	withExtraHost, recorded := withStripeCheckoutReturnBase(intent, extraPlatformHostURL)
+	require.True(t, recorded)
 	require.LessOrEqual(t, len(withExtraHost.idempotencyKey), maxStripeIdempotencyKeyLength)
 	returned, err = stripeCheckoutBillingURL(withExtraHost.idempotencyKey, siteURL, "acme")
 	require.NoError(t, err)

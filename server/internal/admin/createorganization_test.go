@@ -23,6 +23,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -478,7 +479,10 @@ func TestCreateOrganization_FailureAfterTheUpsertLeavesNothing(t *testing.T) {
 	// is on a feature name the handler supplies as a constant. Each test holds
 	// its own database clone, dropped when the test ends, so this reaches
 	// nothing else.
-	testenv.RejectWritesTo(t, ctx, conn, "organization_features")
+	// The source upsert now seeds its onboarding gate. Allow that initial
+	// write so the injected failure still exercises the later entitlement step.
+	err := repo.New(conn).RejectOrganizationEntitlementsFixture(ctx)
+	require.NoError(t, err)
 
 	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "rollback.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 	require.Error(t, err, "a failure seeding default entitlements must fail the request")
@@ -730,4 +734,35 @@ func TestCreateOrganization_HTTPRequiresPlatformAdmin(t *testing.T) {
 		require.Equal(t, http.StatusUnauthorized, rec.Code)
 	}
 	require.Empty(t, fake.names())
+}
+
+func TestCreateOrganization_RecordsNewOrganizationDefaultHost(t *testing.T) {
+	t.Parallel()
+
+	const workosOrgID = "org_01HZADMINDEFAULTHOST"
+	fake := newFakeWorkOS(workosOrgID)
+	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
+	svc.SetNewOrganizationDefaultHost(conv.ToPGText("https://ai.example.test"))
+
+	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "https://example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
+	require.NoError(t, err)
+
+	row, err := orgrepo.New(conn).GetOrganizationMetadata(ctx, res.ID)
+	require.NoError(t, err)
+	require.Equal(t, conv.ToPGText("https://ai.example.test"), row.DefaultHost)
+}
+
+func TestCreateOrganization_WithoutNewOrganizationDefaultHostRecordsNone(t *testing.T) {
+	t.Parallel()
+
+	const workosOrgID = "org_01HZADMINNODEFAULTHOST"
+	fake := newFakeWorkOS(workosOrgID)
+	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
+
+	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "https://example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
+	require.NoError(t, err)
+
+	row, err := orgrepo.New(conn).GetOrganizationMetadata(ctx, res.ID)
+	require.NoError(t, err)
+	require.False(t, row.DefaultHost.Valid)
 }

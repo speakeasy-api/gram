@@ -51,6 +51,7 @@ import { MetaMcp } from "./metamcp.js";
 import { ModelKeys } from "./modelkeys.js";
 import { NetworkIngress } from "./networkingress.js";
 import { OktaResourceConnections } from "./oktaresourceconnections.js";
+import { OktaServerSuggestions } from "./oktaserversuggestions.js";
 import { OrganizationAssets } from "./organizationassets.js";
 import { OrganizationRemoteSessionClients } from "./organizationremotesessionclients.js";
 import { OrganizationRemoteSessionIssuers } from "./organizationremotesessionissuers.js";
@@ -340,6 +341,13 @@ export class Gram extends ClientSDK {
   private _oktaResourceConnections?: OktaResourceConnections;
   get oktaResourceConnections(): OktaResourceConnections {
     return (this._oktaResourceConnections ??= new OktaResourceConnections(
+      this._options,
+    ));
+  }
+
+  private _oktaServerSuggestions?: OktaServerSuggestions;
+  get oktaServerSuggestions(): OktaServerSuggestions {
+    return (this._oktaServerSuggestions ??= new OktaServerSuggestions(
       this._options,
     ));
   }

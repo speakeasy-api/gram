@@ -74,6 +74,10 @@ type Endpoints struct {
 	GetSupportMatrix                      goa.Endpoint
 	UpdateSupportMatrix                   goa.Endpoint
 	GetSupportCoverage                    goa.Endpoint
+	DescribeMcpServerHealth               goa.Endpoint
+	GetMcpServerToolCalls                 goa.Endpoint
+	GetRegistryOktaCandidates             goa.Endpoint
+	ListRegistryOktaUnmapped              goa.Endpoint
 	ListRegistryEntries                   goa.Endpoint
 	GetRegistryEntry                      goa.Endpoint
 	CreateRegistryEntry                   goa.Endpoint
@@ -178,6 +182,10 @@ func NewEndpoints(s Service) *Endpoints {
 		GetSupportMatrix:                      NewGetSupportMatrixEndpoint(s, a.APIKeyAuth),
 		UpdateSupportMatrix:                   NewUpdateSupportMatrixEndpoint(s, a.APIKeyAuth),
 		GetSupportCoverage:                    NewGetSupportCoverageEndpoint(s, a.APIKeyAuth),
+		DescribeMcpServerHealth:               NewDescribeMcpServerHealthEndpoint(s, a.APIKeyAuth),
+		GetMcpServerToolCalls:                 NewGetMcpServerToolCallsEndpoint(s, a.APIKeyAuth),
+		GetRegistryOktaCandidates:             NewGetRegistryOktaCandidatesEndpoint(s, a.APIKeyAuth),
+		ListRegistryOktaUnmapped:              NewListRegistryOktaUnmappedEndpoint(s, a.APIKeyAuth),
 		ListRegistryEntries:                   NewListRegistryEntriesEndpoint(s, a.APIKeyAuth),
 		GetRegistryEntry:                      NewGetRegistryEntryEndpoint(s, a.APIKeyAuth),
 		CreateRegistryEntry:                   NewCreateRegistryEntryEndpoint(s, a.APIKeyAuth),
@@ -262,6 +270,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetSupportMatrix = m(e.GetSupportMatrix)
 	e.UpdateSupportMatrix = m(e.UpdateSupportMatrix)
 	e.GetSupportCoverage = m(e.GetSupportCoverage)
+	e.DescribeMcpServerHealth = m(e.DescribeMcpServerHealth)
+	e.GetMcpServerToolCalls = m(e.GetMcpServerToolCalls)
+	e.GetRegistryOktaCandidates = m(e.GetRegistryOktaCandidates)
+	e.ListRegistryOktaUnmapped = m(e.ListRegistryOktaUnmapped)
 	e.ListRegistryEntries = m(e.ListRegistryEntries)
 	e.GetRegistryEntry = m(e.GetRegistryEntry)
 	e.CreateRegistryEntry = m(e.CreateRegistryEntry)
@@ -1555,6 +1567,98 @@ func NewGetSupportCoverageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return s.GetSupportCoverage(ctx, p)
+	}
+}
+
+// NewDescribeMcpServerHealthEndpoint returns an endpoint function that calls
+// the method "describeMcpServerHealth" of service "admin".
+func NewDescribeMcpServerHealthEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DescribeMcpServerHealthPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.DescribeMcpServerHealth(ctx, p)
+	}
+}
+
+// NewGetMcpServerToolCallsEndpoint returns an endpoint function that calls the
+// method "getMcpServerToolCalls" of service "admin".
+func NewGetMcpServerToolCallsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetMcpServerToolCallsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetMcpServerToolCalls(ctx, p)
+	}
+}
+
+// NewGetRegistryOktaCandidatesEndpoint returns an endpoint function that calls
+// the method "getRegistryOktaCandidates" of service "admin".
+func NewGetRegistryOktaCandidatesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetRegistryOktaCandidatesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetRegistryOktaCandidates(ctx, p)
+	}
+}
+
+// NewListRegistryOktaUnmappedEndpoint returns an endpoint function that calls
+// the method "listRegistryOktaUnmapped" of service "admin".
+func NewListRegistryOktaUnmappedEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListRegistryOktaUnmappedPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListRegistryOktaUnmapped(ctx, p)
 	}
 }
 

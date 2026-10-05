@@ -52,6 +52,17 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
   },
 }));
 
+vi.mock(
+  "@gram/client/react-query/newRemoteSessionClientCallbackUrl.js",
+  () => ({
+    useNewRemoteSessionClientCallbackUrl: () => ({
+      data: {
+        callbackUrl: "https://new.example.com/mcp/remote_login_callback",
+      },
+    }),
+  }),
+);
+
 vi.mock("@gram/client/react-query/remoteSessionIssuer.js", () => ({
   useRemoteSessionIssuer: (
     request: { id: string },

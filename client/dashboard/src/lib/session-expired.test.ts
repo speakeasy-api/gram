@@ -1,5 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+function createStorage(): Storage & { clear: ReturnType<typeof vi.fn> } {
+  const items = new Map<string, string>();
+  const storage = {
+    get length() {
+      return items.size;
+    },
+    clear: vi.fn(() => {
+      items.clear();
+    }),
+    getItem: (key: string) => items.get(key) ?? null,
+    key: (index: number) => Array.from(items.keys())[index] ?? null,
+    removeItem: (key: string) => {
+      items.delete(key);
+    },
+    setItem: (key: string, value: string) => {
+      items.set(key, value);
+    },
+  };
+  return storage;
+}
+
 async function loadModule(
   pathname: string,
   search = "",
@@ -9,18 +30,8 @@ async function loadModule(
   vi.resetModules();
   const assign = vi.fn();
   const fetch = vi.fn().mockResolvedValue({ status: sessionStatus });
-  const localStorage = {
-    clear: vi.fn(),
-    getItem: vi.fn(),
-    key: vi.fn(),
-    length: 0,
-    removeItem: vi.fn(),
-    setItem: vi.fn(),
-  };
-  const sessionStorage = {
-    ...localStorage,
-    clear: vi.fn(),
-  };
+  const localStorage = createStorage();
+  const sessionStorage = createStorage();
   vi.stubGlobal("fetch", fetch);
   vi.stubGlobal("window", {
     localStorage,
@@ -76,11 +87,21 @@ describe("redirectToLoginOnUnauthorized", () => {
       redirectToLoginOnUnauthorized,
       sessionStorage,
     } = await loadModule("/acme/projects/default/insights", "?range=7d");
+    localStorage.setItem("preferred-theme", "dark");
+    localStorage.setItem("gram:org-favorites:<ORG_ID>", '["<PROJECT_ID>"]');
+    localStorage.setItem("gram:recents:<USER_ID>", '["/recent-page"]');
+    localStorage.setItem("preferredProject", "project-slug");
 
     await redirectToLoginOnUnauthorized();
 
     expect(localStorage.clear).toHaveBeenCalledOnce();
     expect(sessionStorage.clear).toHaveBeenCalledOnce();
+    expect(localStorage.getItem("preferred-theme")).toBe("dark");
+    expect(localStorage.getItem("gram:org-favorites:<ORG_ID>")).toBe(
+      '["<PROJECT_ID>"]',
+    );
+    expect(localStorage.getItem("gram:recents:<USER_ID>")).toBeNull();
+    expect(localStorage.getItem("preferredProject")).toBeNull();
     expect(assign).toHaveBeenCalledWith(
       `/login?redirect=${encodeURIComponent("/acme/projects/default/insights?range=7d")}`,
     );
