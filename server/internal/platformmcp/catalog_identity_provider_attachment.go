@@ -269,17 +269,17 @@ func (s *CatalogIdentityProviderAttachmentService) reusableIssuer(ctx context.Co
 
 // attachmentIdentityPlan describes the attachment's identity write: the
 // discovered provider (or the reusable stored one) and a client this flow
-// registers itself. Dynamic registration stays the path for a provider that
-// offers it, so existing attachments are unchanged; a provider without it is
-// set up through a Client ID Metadata Document when it supports one, the same
-// path the dashboard's automatic setup takes. A provider offering neither
-// leaves the registration needing manual setup.
+// registers itself. Dynamic registration stays the path for a provider where
+// this flow can use it, so existing attachments are unchanged; otherwise a
+// provider is set up through a Client ID Metadata Document when it supports
+// one, the same path the dashboard's automatic setup takes. A provider offering
+// neither leaves the registration needing manual setup.
 func attachmentIdentityPlan(principal Principal, project ResolvedProject, registrationID, userSessionIssuerID uuid.UUID, metadata remotesessions.DiscoveredIssuerMetadata, existing remotesessionsrepo.RemoteSessionIssuer, reuse bool, resourceURL string, resourceMetadata wellknown.OAuthProtectedResourceMetadata) remotesessions.IdentityPlan {
 	provider := remotesessions.CreateProvider(discoveredIssuerParams(principal, project, registrationID, metadata))
-	allowCIMD := !validDynamicClientRegistrationEndpoint(metadata.RegistrationEndpoint)
+	allowCIMD := !attachmentCanUseDynamicRegistration(metadata.RegistrationEndpoint, metadata.TokenEndpointAuthMethodsSupported)
 	if reuse {
 		provider = remotesessions.UseProvider(existing.ID)
-		allowCIMD = !existing.RegistrationEndpoint.Valid || strings.TrimSpace(existing.RegistrationEndpoint.String) == ""
+		allowCIMD = !attachmentCanUseDynamicRegistration(existing.RegistrationEndpoint.String, existing.TokenEndpointAuthMethodsSupported)
 	}
 	return remotesessions.IdentityPlan{
 		Scope: remotesessions.IdentityScope{
@@ -394,6 +394,15 @@ func sameIssuerURL(a, b string) bool {
 // the dashboard's automatic setup uses.
 func supportsAutomaticClientRegistration(registrationEndpoint string, clientIDMetadataDocumentSupported bool, tokenEndpointAuthMethodsSupported []string) bool {
 	return validDynamicClientRegistrationEndpoint(registrationEndpoint) || remotesessions.SupportsClientIDMetadataDocument(clientIDMetadataDocumentSupported, tokenEndpointAuthMethodsSupported)
+}
+
+// attachmentCanUseDynamicRegistration reports whether dynamic registration can
+// give this flow the client it requires: a valid endpoint, and a token
+// endpoint that accepts client_secret_basic (an unlisted method set defaults
+// to it under RFC 8414). A provider that excludes it would only hand back a
+// client this flow refuses.
+func attachmentCanUseDynamicRegistration(registrationEndpoint string, tokenEndpointAuthMethodsSupported []string) bool {
+	return validDynamicClientRegistrationEndpoint(registrationEndpoint) && (len(tokenEndpointAuthMethodsSupported) == 0 || slices.Contains(tokenEndpointAuthMethodsSupported, browserCatalogDCRAuthMethod))
 }
 
 func validDynamicClientRegistrationEndpoint(raw string) bool {

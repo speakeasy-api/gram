@@ -93,6 +93,20 @@ func TestSupportsAutomaticClientRegistration(t *testing.T) {
 	require.False(t, supportsAutomaticClientRegistration("http://issuer.example.com/register", false, nil))
 }
 
+// Dynamic registration is chosen over a Client ID Metadata Document only when
+// it can produce the client_secret_basic client attachment requires.
+func TestAttachmentCanUseDynamicRegistration(t *testing.T) {
+	t.Parallel()
+
+	const endpoint = "https://issuer.example.com/register"
+	require.True(t, attachmentCanUseDynamicRegistration(endpoint, nil))
+	require.True(t, attachmentCanUseDynamicRegistration(endpoint, []string{"none", "client_secret_basic"}))
+	require.False(t, attachmentCanUseDynamicRegistration(endpoint, []string{"none"}))
+	require.False(t, attachmentCanUseDynamicRegistration(endpoint, []string{"client_secret_post"}))
+	require.False(t, attachmentCanUseDynamicRegistration("", nil))
+	require.False(t, attachmentCanUseDynamicRegistration("http://issuer.example.com/register", nil))
+}
+
 func TestIdentityProviderRegistrationErrorTreatsTimeoutAndRateLimitAsRetryable(t *testing.T) {
 	t.Parallel()
 
