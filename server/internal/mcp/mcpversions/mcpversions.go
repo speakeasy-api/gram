@@ -237,6 +237,15 @@ func All() []string {
 	return slices.Clone(all)
 }
 
+// Latest returns the newest protocol revision this package recognizes. Its
+// rules govern a response to a request that names no usable revision of its
+// own, such as one whose declarations are malformed or contradict each
+// other. It is a statement about the specification, not about what any
+// surface supports.
+func Latest() string {
+	return all[len(all)-1]
+}
+
 // Known reports whether v is a protocol revision this package recognizes.
 func Known(v string) bool {
 	return slices.Contains(all, v)

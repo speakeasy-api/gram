@@ -418,6 +418,7 @@ func TestCallerProfileLookupFailureIsOperational(t *testing.T) {
 	}
 	require.Len(t, points, 1)
 	require.Equal(t, int64(1), points[attribute.NewSet(
+		attr.McpRejectionReason(mcpmetrics.RequestRejectionReasonAuthentication),
 		attr.OAuthFailureReason("caller_profile_unavailable"),
 		attr.McpURL("/mcp/"+slug),
 		attr.McpSurface(string(mcpmetrics.SurfaceMeta)),

@@ -126,8 +126,8 @@ func TestInitializeDeclarationControlsVersionValidation(t *testing.T) {
 		{name: "unrecognized metadata", params: `{"protocolVersion":"2025-06-18","_meta":{"io.modelcontextprotocol/protocolVersion":"2025-12-01"}}`},
 		{name: "2026-07-28 header", declared: mcpversions.Version20260728, rejected: oops.MCPCodeUnsupportedProtocolVersion},
 		{name: "2026-07-28 metadata", params: `{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}`, declared: mcpversions.Version20260728, rejected: oops.MCPCodeUnsupportedProtocolVersion},
-		{name: "2025-11-25 header with 2026-07-28 metadata", params: `{"protocolVersion":"2025-11-25","_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}`, declared: mcpversions.Version20251125, rejected: oops.MCPCodeInvalidRequest},
-		{name: "2026-07-28 header with 2025-11-25 metadata", params: `{"protocolVersion":"2025-11-25","_meta":{"io.modelcontextprotocol/protocolVersion":"2025-11-25"}}`, declared: mcpversions.Version20260728, rejected: oops.MCPCodeInvalidRequest},
+		{name: "2025-11-25 header with 2026-07-28 metadata", params: `{"protocolVersion":"2025-11-25","_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}`, declared: mcpversions.Version20251125, rejected: oops.MCPCodeHeaderMismatch},
+		{name: "2026-07-28 header with 2025-11-25 metadata", params: `{"protocolVersion":"2025-11-25","_meta":{"io.modelcontextprotocol/protocolVersion":"2025-11-25"}}`, declared: mcpversions.Version20260728, rejected: oops.MCPCodeHeaderMismatch},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -195,7 +195,12 @@ func TestRequestDeclarationsMustAgreeBeforeDispatch(t *testing.T) {
 				}
 				var rpcErr *oops.MCPError
 				require.ErrorAs(t, err, &rpcErr)
-				require.Equal(t, oops.MCPCodeInvalidRequest, rpcErr.Code)
+				require.Equal(t, oops.MCPCodeHeaderMismatch, rpcErr.Code)
+				// The declarations name no single revision, so the
+				// response follows the latest specification's rules.
+				var declErr *declarationError
+				require.ErrorAs(t, err, &declErr)
+				require.Equal(t, mcpversions.Latest(), declErr.revision)
 			})
 		}
 	}

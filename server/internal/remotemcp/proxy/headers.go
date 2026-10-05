@@ -38,6 +38,12 @@ const (
 //
 // Authorization is end-to-end and is handled separately by
 // [Proxy.applyRequestHeaders] based on [Proxy.AuthorizationOverride].
+//
+// The MCP 2026-07-28 standard request headers (Mcp-Method, Mcp-Name, and the
+// Mcp-Param-{Name} family) must never be added here. The specification
+// requires an intermediary to forward them, including any Mcp-Param-{Name}
+// header it does not recognize, and the upstream validates them against the
+// body; stripping one would make a conforming request fail upstream.
 func isSkippedRequestHeader(name string) bool {
 	if mcpauthz.ReservedHeader(name) {
 		return true
