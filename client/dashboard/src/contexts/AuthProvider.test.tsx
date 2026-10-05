@@ -799,6 +799,28 @@ describe("AuthProvider organization host", () => {
     expect(replaceSpy).not.toHaveBeenCalled();
   });
 
+  it("switches to the organization named in the URL instead of moving", async () => {
+    mocks.switchScopes.mockResolvedValue({});
+    const otherPage = "/other-org/projects/other-project/mcp";
+    window.history.replaceState(null, "", otherPage);
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        organizations: [ORG, OTHER_ORG],
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+    );
+
+    renderGate(otherPage);
+
+    await waitFor(() => {
+      expect(mocks.switchScopes).toHaveBeenCalledWith({
+        organizationId: OTHER_ORG.id,
+      });
+    });
+    expect(replaceSpy).not.toHaveBeenCalledWith(`${ORG_HOST}${otherPage}`);
+  });
+
   it("stays when the dashboard URL is not absolute", () => {
     mocks.sessionData.mockReturnValue(
       gatedSession({

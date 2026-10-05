@@ -201,10 +201,22 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // same page. auth.info names that host only for an ordinary session whose
   // active organization belongs elsewhere; session cookies are host-only, so
   // the user signs in once on the new host.
+  // A URL naming another of the user's organizations switches scope first;
+  // the move then follows the organization the switch selects.
+  const urlNamesOtherOrganization = Boolean(
+    session?.organizations.some(
+      (organization) =>
+        organization.slug === orgSlug &&
+        organization.id !== session.activeOrganizationId,
+    ),
+  );
   const sessionAuthorized =
     Boolean(session?.session) && !isGramSessionUnauthorizedError(error);
   const organizationHostTarget =
-    sessionAuthorized && session?.activeOrganizationId && !isImpersonating
+    sessionAuthorized &&
+    session?.activeOrganizationId &&
+    !isImpersonating &&
+    !urlNamesOtherOrganization
       ? organizationHostRedirectTarget(
           session.activeOrganizationDashboardUrl,
           window.location,
