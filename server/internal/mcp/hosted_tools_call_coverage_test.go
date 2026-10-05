@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -28,6 +29,7 @@ func TestHostedMalformedToolsCall_RecordsCoverageAtMethodBoundary(t *testing.T) 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
+	ti.features.SetFlag(feature.FlagMCPKillswitchShadow, authCtx.ActiveOrganizationID, true)
 
 	ctx = stampHostedCoverageUser(t, ctx, authCtx.UserID)
 	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, "hosted-coverage-toolset-"+uuid.NewString()[:8])

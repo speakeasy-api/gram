@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	killswitchrepo "github.com/speakeasy-api/gram/server/internal/killswitches/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -137,6 +138,39 @@ func TestCustomerKillswitchLifecycleAndReadModels(t *testing.T) {
 	require.Equal(t, created.Version+1, lifted.Result.Version)
 	require.Empty(t, lifted.RemainingOverlaps)
 	require.False(t, lifted.Truncated)
+}
+
+func TestCustomerKillswitchRolloutGateBlocksActivationButAllowsLift(t *testing.T) {
+	t.Parallel()
+	service, _, orgID, userID, _ := newIntegrationService(t)
+	ctx := customerContext(t, orgID, userID)
+
+	payload := &gen.CreatePayload{
+		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+		Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: &gen.KillswitchSchedule{Start: "now", End: "until_lifted"},
+		ExternalNote: "Paused.", InternalNote: "Rollout gate test.",
+	}
+	created, err := service.Create(ctx, payload)
+	require.NoError(t, err)
+
+	flags, ok := service.features.(*feature.InMemory)
+	require.True(t, ok)
+	flags.SetFlag(feature.FlagMCPKillswitchEnforce, orgID, false)
+
+	replayed, err := service.Create(ctx, payload)
+	require.NoError(t, err)
+	require.True(t, replayed.Replayed)
+
+	_, err = service.Create(ctx, &gen.CreatePayload{
+		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+		Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: &gen.KillswitchSchedule{Start: "now", End: "until_lifted"},
+		ExternalNote: "Blocked.", InternalNote: "Must not activate while rollout is off.",
+	})
+	requireOops(t, err, oops.CodeUnavailable)
+
+	lifted, err := service.Lift(ctx, &gen.LiftPayload{OperationID: uuid.NewString(), ID: created.ID, ExpectedVersion: created.Version})
+	require.NoError(t, err)
+	require.Equal(t, created.Version+1, lifted.Result.Version)
 }
 
 func TestCustomerKillswitchOverlapResultsReportTruncation(t *testing.T) {

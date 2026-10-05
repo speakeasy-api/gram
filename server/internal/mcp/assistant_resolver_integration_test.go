@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -43,6 +44,7 @@ func TestServePublic_AssistantTokenResolvesOwnerRemoteSessionToUpstream(t *testi
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
+	ti.features.SetFlag(feature.FlagMCPKillswitchShadow, authCtx.ActiveOrganizationID, true)
 
 	mockTools := []testmcp.Tool{{
 		Name:        "ping",
