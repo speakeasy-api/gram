@@ -67,10 +67,6 @@ type ImageFileRef struct {
 // ResolveImageFile resolves a Slack file ID via files.info and validates its
 // size and private download URL without downloading the content.
 func (c *Client) ResolveImageFile(ctx context.Context, fileID string, token string) (*ImageFileRef, error) {
-	if c.httpClient == nil {
-		return nil, fmt.Errorf("slack HTTP client not configured")
-	}
-
 	body, err := c.CallWithToken(ctx, "files.info", map[string]any{"file": fileID}, token)
 	if err != nil {
 		return nil, err

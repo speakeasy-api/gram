@@ -7,6 +7,7 @@ import (
 	lru "github.com/hashicorp/golang-lru/v2"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 )
 
@@ -29,18 +30,14 @@ type evaluator struct {
 	compileFlight singleflight.Group
 }
 
-func newEvaluator(size int) (*evaluator, error) {
-	eng, err := celenv.New()
-	if err != nil {
-		return nil, fmt.Errorf("create cel engine: %w", err)
-	}
-
-	cache, err := lru.New[string, cel.Program](size)
-	if err != nil {
-		return nil, fmt.Errorf("create compile cache: %w", err)
-	}
-
-	return &evaluator{eng: eng, cache: cache, compileFlight: singleflight.Group{}}, nil
+func newEvaluator(size int) *evaluator {
+	eng, engErr := celenv.New()
+	cache, cacheErr := lru.New[string, cel.Program](size)
+	inv.Require("custom rule evaluator",
+		"cel engine builds", engErr,
+		"compile cache builds", cacheErr,
+	)
+	return &evaluator{eng: eng, cache: cache, compileFlight: singleflight.Group{}}
 }
 
 // program returns the compiled program for expr, compiling on a cache miss.

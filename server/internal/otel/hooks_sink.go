@@ -33,13 +33,8 @@ type HooksSink interface {
 	IngestOTLPMetrics(ctx context.Context, payload *hooksgen.MetricsPayload)
 }
 
-// SetHooksSink wires the hooks service in after construction.
-func (s *Service) SetHooksSink(sink HooksSink) {
-	s.hooksSink = sink
-}
-
 func (s *Service) forwardLogsToHooks(ctx context.Context, export *collectorlogsv1.ExportLogsServiceRequest) {
-	if s.hooksSink == nil || export == nil {
+	if export == nil {
 		return
 	}
 	payload, err := hooksLogsPayload(export)
@@ -51,7 +46,7 @@ func (s *Service) forwardLogsToHooks(ctx context.Context, export *collectorlogsv
 }
 
 func (s *Service) forwardMetricsToHooks(ctx context.Context, export *collectormetricsv1.ExportMetricsServiceRequest) {
-	if s.hooksSink == nil || export == nil {
+	if export == nil {
 		return
 	}
 	payload, err := hooksMetricsPayload(export)

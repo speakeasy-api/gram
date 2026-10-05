@@ -18,8 +18,8 @@ import (
 // an admin decides, and the decision is what changes enforcement.
 //
 // Implemented by the mcpapproval service and injected at wiring, so this
-// package never imports it. A nil intake, or an intake reporting the approval
-// feature is unavailable, falls back to the legacy bypass request.
+// package never imports it. An intake reporting the approval feature is
+// unavailable falls back to the legacy bypass request.
 type ShadowMCPApprovalIntake interface {
 	// AdmitBlockedServer records the ask and returns the id and current
 	// status of the review it landed on — a repeat ask for an

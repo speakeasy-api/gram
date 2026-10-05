@@ -49,10 +49,6 @@ func (s *LoadChat) Descriptor() core.ToolDescriptor {
 }
 
 func (s *LoadChat) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if s.chat == nil {
-		return fmt.Errorf("chat service not configured")
-	}
-
 	input := loadChatInput{ID: "", Generation: nil, Limit: nil, BeforeSeq: nil, AfterSeq: nil, RiskOnly: nil, Query: nil}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err

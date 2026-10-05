@@ -81,9 +81,7 @@ func (w *LogEventCHWriter) HandleBatch(ctx context.Context, messages []*otelv1.L
 				attr.SlogReason(skipReason),
 				attr.SlogValueString(message.GetRecordId()),
 			)
-			if w.recordsSkipped != nil {
-				w.recordsSkipped.Add(ctx, 1, metric.WithAttributes(attr.Reason(skipReason)))
-			}
+			w.recordsSkipped.Add(ctx, 1, metric.WithAttributes(attr.Reason(skipReason)))
 			continue
 		}
 		rows = append(rows, row)
@@ -94,9 +92,7 @@ func (w *LogEventCHWriter) HandleBatch(ctx context.Context, messages []*otelv1.L
 	}
 
 	err := w.inserter.InsertOTelLogs(ctx, rows)
-	if w.recordsInserted != nil {
-		w.recordsInserted.Add(ctx, int64(len(rows)), metric.WithAttributes(attr.Outcome(o11y.OutcomeFromError(err))))
-	}
+	w.recordsInserted.Add(ctx, int64(len(rows)), metric.WithAttributes(attr.Outcome(o11y.OutcomeFromError(err))))
 	if err != nil {
 		return fmt.Errorf("insert otel log events: %w", err)
 	}

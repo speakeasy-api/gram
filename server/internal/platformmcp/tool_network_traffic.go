@@ -46,17 +46,12 @@ type MCPNetworkTrafficOutput struct {
 }
 
 func (r *PostgresReader) WithMCPNetworkTraffic(reader MCPNetworkTrafficReader, logsEnabled FeatureChecker) *PostgresReader {
-	if r != nil && reader != nil && logsEnabled != nil {
-		r.networkTraffic = reader
-		r.networkTrafficLogsEnabled = logsEnabled
-	}
+	r.networkTraffic = reader
+	r.networkTrafficLogsEnabled = logsEnabled
 	return r
 }
 
 func (r *PostgresReader) GetMCPNetworkTraffic(ctx context.Context, principal Principal, input MCPNetworkTrafficInput) (MCPNetworkTrafficOutput, error) {
-	if r == nil || r.db == nil || r.authz == nil || r.networkTraffic == nil || r.networkTrafficLogsEnabled == nil {
-		return MCPNetworkTrafficOutput{}, ErrUnavailable
-	}
 	project, err := r.ResolveProjectRead(ctx, principal, FindMCPInput{ProjectID: input.ProjectID})
 	if err != nil {
 		return MCPNetworkTrafficOutput{}, err
@@ -157,15 +152,5 @@ func registerMCPNetworkTrafficTool(reg *Registrar, reader *PostgresReader) {
 		}
 		output, err := reader.GetMCPNetworkTraffic(ctx, principal, input)
 		return nil, output, err
-	})
-}
-
-func registerUnavailableMCPNetworkTrafficTool(reg *Registrar) {
-	addTool(reg, &mcp.Tool{
-		Name: mcpNetworkTrafficToolName, Title: "Check MCP Network Traffic",
-		Description: "Summarize observed public and private inbound requests for one MCP server or gateway. Traffic reporting is not available yet.",
-		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryMCPRead}, func(_ context.Context, _ *mcp.CallToolRequest, _ MCPNetworkTrafficInput) (*mcp.CallToolResult, MCPNetworkTrafficOutput, error) {
-		return nil, MCPNetworkTrafficOutput{}, &ToolRefusalError{Code: unavailableCode, Payload: "Traffic reporting is not available yet."}
 	})
 }

@@ -10,7 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/must"
+
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
@@ -163,11 +166,8 @@ func TestRiskFindingListValidation(t *testing.T) {
 	require.Zero(t, f.policyReader.calls)
 	require.Zero(t, f.clickhouse.calls())
 
-	var nilService *RiskFindingListService
-	_, err = nilService.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{})
-	require.ErrorIs(t, err, ErrUnavailable)
 	require.Panics(t, func() {
-		NewRiskFindingListService(nil, nil, "")
+		NewRiskFindingListService(&pgxpool.Pool{}, f.clickhouse, "")
 	})
 }
 
@@ -503,7 +503,7 @@ func TestRiskFindingListToolsMCPInProcess(t *testing.T) {
 	require.NotContains(t, string(encoded), "sk-l", "stored display samples never cross the MCP boundary")
 	require.NotContains(t, string(encoded), findingListEmail)
 	var out ListRiskFindingPageOutput
-	require.NoError(t, json.Unmarshal(must(json.Marshal(result.StructuredContent)), &out))
+	require.NoError(t, json.Unmarshal(must.Value(json.Marshal(result.StructuredContent)), &out))
 	require.Len(t, out.Findings, 2)
 	require.NotEmpty(t, out.NextCursor)
 
@@ -531,56 +531,6 @@ func TestRiskFindingListToolsMCPInProcess(t *testing.T) {
 	require.Equal(t, calls, f.clickhouse.calls(), "authorization denial must not reach storage")
 }
 
-func must(value []byte, err error) []byte {
-	if err != nil {
-		panic(err)
-	}
-	return value
-}
-
-func TestRiskFindingListToolsStub(t *testing.T) {
-	t.Parallel()
-
-	server := mcp.NewServer(&mcp.Implementation{Name: "finding-list-stub", Version: "1"}, nil)
-	reg := newRegistrar(server)
-	registerRiskFindingListTools(reg, nil)
-	for name, arguments := range map[string]string{riskFindingListToolName: `{}`, riskFindingByChatToolName: `{}`, riskRuleBreakdownToolName: `{"category":"secrets"}`} {
-		d := descriptorByName(t, reg, name)
-		require.Contains(t, d.Description, "unavailable in this deployment")
-		require.ElementsMatch(t, bothAudiences, d.Meta.Audiences)
-		_, err := d.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(arguments))
-		var refusal *ToolRefusalError
-		require.ErrorAs(t, err, &refusal)
-		require.Contains(t, refusal.Payload, unavailableCode)
-	}
-
-	// The whole-server composition serves the stubs without a Postgres reader
-	// and exactly once each.
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
-	names := map[string]int{}
-	for _, d := range registrar.Descriptors() {
-		names[d.Name]++
-	}
-	for _, name := range []string{riskFindingListToolName, riskFindingByChatToolName, riskRuleBreakdownToolName} {
-		require.Equal(t, 1, names[name], name)
-	}
-}
-
-func TestRiskFindingListReaderRequiresBudget(t *testing.T) {
-	t.Parallel()
-
-	f := newFindingListFixture(t)
-	reader := (&PostgresReader{}).WithRiskFindingList(f.service, allowBudget())
-	limited, ok := reader.riskFindingList.(*budgetedRiskFindingList)
-	require.True(t, ok, "production reader must attach a metered service")
-	require.Same(t, f.service, limited.service)
-	require.True(t, limited.valid())
-
-	reader.WithRiskFindingList(f.service, OperationBudget{})
-	require.False(t, reader.riskFindingList.valid(), "missing production budget must disable the tools")
-	require.Nil(t, (&PostgresReader{}).WithRiskFindingList(nil, allowBudget()).riskFindingList)
-}
-
 func TestRiskFindingListBudgetChargesBeforeEveryRead(t *testing.T) {
 	t.Parallel()
 
@@ -599,7 +549,6 @@ func TestRiskFindingListBudgetChargesBeforeEveryRead(t *testing.T) {
 		organization := &recordingOperationLimiter{result: ratelimit.Result{Allowed: tc.allowed}, err: tc.err}
 		f := newFindingListFixture(t)
 		limited := &budgetedRiskFindingList{service: f.service, budget: OperationBudget{Connection: connection, Organization: organization}}
-		require.True(t, limited.valid())
 
 		_, err := limited.List(t.Context(), principal, ListRiskFindingPageInput{})
 		require.ErrorIs(t, err, tc.wantErr, tc.name)
@@ -614,11 +563,6 @@ func TestRiskFindingListBudgetChargesBeforeEveryRead(t *testing.T) {
 		}
 		require.Equal(t, 3, f.policyReader.calls, tc.name)
 	}
-
-	limited := &budgetedRiskFindingList{service: newFindingListFixture(t).service, budget: OperationBudget{}}
-	require.False(t, limited.valid())
-	_, err := limited.List(t.Context(), principal, ListRiskFindingPageInput{})
-	require.ErrorIs(t, err, ErrOperationBudgetUnavailable)
 }
 
 func TestRiskFindingListBudgetPreservesServiceError(t *testing.T) {

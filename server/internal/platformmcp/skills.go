@@ -42,9 +42,8 @@ const maxSkillTargetCandidates = 20
 const maxSkillTargetLookup = 500
 
 var (
-	// ErrSkillsUnavailable is the kill switch and the missing-dependency path:
-	// the capability is off for this organization, or this deployment composed
-	// no skills service.
+	// ErrSkillsUnavailable is the kill switch: the capability is off for this
+	// organization.
 	ErrSkillsUnavailable = errors.New("platform mcp skills unavailable")
 	// ErrSkillTargetNotFound is an exact target that does not exist in the
 	// named project. It is never softened into the default plugin: distributing
@@ -187,7 +186,7 @@ type SkillsService struct {
 	budget   OperationBudget
 
 	// insights and insightsBudget back the skill insight tools. Both are attached by
-	// WithInsights; a nil reader keeps those tools registered as stubs.
+	// WithInsights.
 	insights       SkillInsightsReader
 	insightsBudget OperationBudget
 
@@ -208,10 +207,6 @@ func NewSkillsService(skills SkillsManagement, targets SkillTargetInventory, pro
 	}
 }
 
-func (s *SkillsService) valid() bool {
-	return s != nil && s.skills != nil && s.targets != nil && s.projects != nil && s.grants != nil && s.gate != nil && s.budget.valid()
-}
-
 // begin runs everything every skill call owes before it touches a skill: the
 // organization kill switch, the metered allowance, the project the caller
 // named, and the authorization context downstream RBAC is evaluated against.
@@ -228,9 +223,6 @@ func (s *SkillsService) begin(ctx context.Context, principal Principal, projectS
 // aggregate is charged to the observability lane instead, so neither workflow
 // can spend the other's allowance.
 func (s *SkillsService) beginWith(ctx context.Context, principal Principal, projectSlug string, budget OperationBudget) (context.Context, ResolvedProject, error) {
-	if !s.valid() {
-		return ctx, ResolvedProject{}, ErrSkillsUnavailable
-	}
 	if strings.TrimSpace(projectSlug) == "" {
 		return ctx, ResolvedProject{}, ErrRegistrationInvalid
 	}
@@ -1424,7 +1416,7 @@ func NewPostgresSkillTargets(db *pgxpool.Pool) *PostgresSkillTargets {
 }
 
 func (s *PostgresSkillTargets) SkillTargets(ctx context.Context, organizationID string, projectID uuid.UUID, limitPerKind int) ([]SkillTarget, error) {
-	if s == nil || s.db == nil || organizationID == "" || projectID == uuid.Nil {
+	if organizationID == "" || projectID == uuid.Nil {
 		return nil, ErrSkillsUnavailable
 	}
 	limit := limitPerKind

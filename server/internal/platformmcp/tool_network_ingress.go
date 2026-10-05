@@ -50,10 +50,8 @@ type NetworkIngressStatusService struct {
 // WithNetworkIngressStatus enables the read-only organization private network
 // ingress summary on this reader.
 func (r *PostgresReader) WithNetworkIngressStatus(dashboardURL *url.URL) *PostgresReader {
-	if r.db != nil && validDashboardURL(dashboardURL) {
-		copyURL := *dashboardURL
-		r.networkIngress = &NetworkIngressStatusService{logger: r.logger, queries: platformrepo.New(r.db), db: r.db, dashboardURL: &copyURL}
-	}
+	copyURL := *dashboardURL
+	r.networkIngress = &NetworkIngressStatusService{logger: r.logger, queries: platformrepo.New(r.db), db: r.db, dashboardURL: &copyURL}
 	return r
 }
 
@@ -87,7 +85,7 @@ type GetNetworkIngressOutput struct {
 }
 
 func (s *NetworkIngressStatusService) Get(ctx context.Context, principal Principal) (GetNetworkIngressOutput, error) {
-	if s == nil || s.queries == nil || principal.OrganizationID == "" {
+	if principal.OrganizationID == "" {
 		return GetNetworkIngressOutput{}, ErrUnavailable
 	}
 	organization, err := organizationsrepo.New(s.db).GetOrganizationMetadata(ctx, principal.OrganizationID)
@@ -179,25 +177,13 @@ func registerNetworkIngressTool(reg *Registrar, service *NetworkIngressStatusSer
 		if err != nil {
 			// Database and lookup failures stay server-side: the SDK would
 			// otherwise return the wrapped error text to the client.
-			if !errors.Is(err, ErrUnavailable) && service != nil && service.logger != nil {
+			if !errors.Is(err, ErrUnavailable) {
 				service.logger.ErrorContext(ctx, "get network ingress status", attr.SlogError(err))
 			}
 			result, marshalErr := networkIngressUnavailableResult("Private network ingress status is temporarily unavailable.")
 			return result, GetNetworkIngressOutput{}, marshalErr
 		}
 		return nil, output, nil
-	})
-}
-
-func registerUnavailableNetworkIngressTool(reg *Registrar) {
-	addTool(reg, &mcp.Tool{
-		Name:        getNetworkIngressToolName,
-		Title:       "Get Private Network Ingress",
-		Description: "Read the organization's private network (Tailscale) ingress status. Private network ingress status is unavailable on this server.",
-		Annotations: readOnlyAnnotations(),
-	}, networkIngressToolMeta(), func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, featureUnavailableResult, error) {
-		result, err := networkIngressUnavailableResult("Private network ingress status is unavailable on this server.")
-		return result, featureUnavailableResult{}, err
 	})
 }
 

@@ -51,9 +51,6 @@ func (t *UnsubscribeThread) Descriptor() core.ToolDescriptor {
 }
 
 func (t *UnsubscribeThread) Call(ctx context.Context, env toolconfig.ToolCallEnv, _ io.Reader, wr io.Writer) error {
-	if t.app == nil {
-		return fmt.Errorf("thread tools are not configured")
-	}
 	authCtx, err := requireProjectAuthContext(ctx)
 	if err != nil {
 		return err

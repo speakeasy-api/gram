@@ -11,26 +11,26 @@ import (
 	ktesting "k8s.io/client-go/testing"
 )
 
-func TestValidateNetworkIngressWorkerTemporalTLS(t *testing.T) {
+func TestRequireNetworkIngressWorkerTemporalTLS(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
 		name, environment, cert, key string
-		wantErr                      string
+		wantPanic                    bool
 	}{
 		{name: "local plaintext", environment: "local"},
 		{name: "dev mtls", environment: "dev", cert: "cert", key: "key"},
-		{name: "prod missing", environment: "prod", wantErr: "mTLS is required"},
-		{name: "cert only", environment: "local", cert: "cert", wantErr: "configured together"},
-		{name: "key only", environment: "local", key: "key", wantErr: "configured together"},
+		{name: "prod missing", environment: "prod", wantPanic: true},
+		{name: "cert only", environment: "local", cert: "cert", wantPanic: true},
+		{name: "key only", environment: "local", key: "key", wantPanic: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			err := validateNetworkIngressWorkerTemporalTLS(test.environment, test.cert, test.key)
-			if test.wantErr == "" {
-				require.NoError(t, err)
+			check := func() { requireNetworkIngressWorkerTemporalTLS(test.environment, test.cert, test.key) }
+			if test.wantPanic {
+				require.Panics(t, check)
 				return
 			}
-			require.ErrorContains(t, err, test.wantErr)
+			require.NotPanics(t, check)
 		})
 	}
 }

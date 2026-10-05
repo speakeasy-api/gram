@@ -15,8 +15,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
-const testIssuerID = "a3fe1d35-4855-4dd8-a863-a0f45806e817"
-const testSourceID = "b339d85d-6d0c-4b85-8a27-44b25998aaf4"
+const (
+	testIssuerID = "a3fe1d35-4855-4dd8-a863-a0f45806e817"
+	testSourceID = "b339d85d-6d0c-4b85-8a27-44b25998aaf4"
+)
 
 type recordingIssuerReader struct {
 	recordingOrganizationReader
@@ -36,14 +38,17 @@ func (r *recordingIssuerReader) ListGlobalIssuers(_ context.Context, input *gen.
 	r.pageInput = input
 	return r.page, nil
 }
+
 func (r *recordingIssuerReader) GetGlobalIssuer(_ context.Context, input *gen.GetGlobalIssuerPayload) (*gen.GlobalRemoteSessionIssuer, error) {
 	r.detailInput = input
 	return r.detail, nil
 }
+
 func (r *recordingIssuerReader) GetGlobalIssuerDuplicatePreflight(_ context.Context, input *gen.GetGlobalIssuerDuplicatePreflightPayload) (*types.RemoteSessionIssuerDuplicatePreflight, error) {
 	r.duplicate = input
 	return r.duplicates, nil
 }
+
 func (r *recordingIssuerReader) GetGlobalIssuerMigratePreflight(_ context.Context, input *gen.GetGlobalIssuerMigratePreflightPayload) (*gen.IssuerMigratePreflight, error) {
 	r.migration = input
 	return r.preflight, nil
@@ -55,7 +60,7 @@ func (r *recordingIssuerReader) ListGlobalIssuerConvergenceCandidates(_ context.
 }
 
 // issuerToolCall exercises the same runtime boundary as a real authenticated tool call.
-func issuerToolCall(t *testing.T, reads OrganizationReader, name, args string, verified bool) (string, json.RawMessage) {
+func issuerToolCall(t *testing.T, reads Reader, name, args string, verified bool) (string, json.RawMessage) {
 	t.Helper()
 	principal := staffPrincipal()
 	if verified {

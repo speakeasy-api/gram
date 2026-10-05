@@ -1,13 +1,11 @@
 package mcp
 
 import (
-	"context"
 	"log/slog"
 
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
@@ -43,33 +41,11 @@ func clientAssertionSigningAlgorithms() []string {
 }
 
 // newClientAssertionVerifier assembles the client assertion verifier over the
-// shared Redis client, or returns nil when there is none. The replay guard
-// cannot promise single use without a shared store, so a surface built
-// without Redis refuses assertion-authenticated clients rather than waving
-// them through; every consumer checks for nil before use. The only
-// construction errors are nil dependencies, which the checks above rule out,
-// so a failure here is logged and treated exactly like an absent Redis.
+// shared Redis client, whose replay guard enforces single use.
 func newClientAssertionVerifier(redisClient *redis.Client, policy *guardian.Policy, meterProvider metric.MeterProvider, logger *slog.Logger) *privatekeyjwt.Verifier {
-	if redisClient == nil {
-		return nil
-	}
 	store := ratelimit.NewRedisStore(redisClient)
 	refreshLimiter := ratelimit.New(store, "client_assertion_jwks_refresh", clientAssertionKeyRefreshRate)
 	fetchLimiter := ratelimit.New(store, "client_assertion_jwks_fetch", clientAssertionKeyFetchRate)
-	keys, err := jwks.NewKeyResolver(jwks.NewResolver(policy, meterProvider, logger), jwks.NewMemoryCache(), refreshLimiter, fetchLimiter, logger)
-	if err != nil {
-		logger.ErrorContext(context.Background(), "client assertion key resolver unavailable, assertion clients will be refused", attr.SlogError(err))
-		return nil
-	}
-	guard, err := replay.NewRedisGuard(redisClient, "client_assertion_jti", privatekeyjwt.DefaultMaxReplayHold)
-	if err != nil {
-		logger.ErrorContext(context.Background(), "client assertion replay guard unavailable, assertion clients will be refused", attr.SlogError(err))
-		return nil
-	}
-	verifier, err := privatekeyjwt.NewVerifier(keys, guard)
-	if err != nil {
-		logger.ErrorContext(context.Background(), "client assertion verifier unavailable, assertion clients will be refused", attr.SlogError(err))
-		return nil
-	}
-	return verifier
+	keys := jwks.NewKeyResolver(jwks.NewResolver(policy, meterProvider, logger), jwks.NewMemoryCache(), refreshLimiter, fetchLimiter, logger)
+	return privatekeyjwt.NewVerifier(keys, replay.NewRedisGuard(redisClient, "client_assertion_jti", privatekeyjwt.DefaultMaxReplayHold))
 }

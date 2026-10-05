@@ -41,10 +41,6 @@ func (s *GetDeploymentLogs) Descriptor() core.ToolDescriptor {
 }
 
 func (s *GetDeploymentLogs) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if s.deployments == nil {
-		return fmt.Errorf("deployments service not configured")
-	}
-
 	input := getDeploymentLogsInput{DeploymentID: "", Cursor: nil}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err

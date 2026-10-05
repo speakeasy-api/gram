@@ -1,40 +1,41 @@
-package deployments
+package deployments_test
 
 import (
+	"testing"
+
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestCatalogAdmissionPreservesOnlyPersistedIdentity(t *testing.T) {
 	t.Parallel()
+
+	ctx, ti := newTestDeploymentService(t, assetstest.NewTestBlobStore(t))
 	id := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	saved := []repo.ListDeploymentExternalMCPsRow{{RegistryID: id, Slug: "test", RegistryServerSpecifier: "example/server"}}
-	base := upsertExternalMCP{registryID: id, slug: "test", registryServerSpecifier: "example/server"}
-	// A missing catalog cannot admit new work, but must not gate accepted identity.
-	svc := &Service{}
+
+	// The catalog knows no registry with this id, so it cannot admit new work,
+	// but it must not gate an identity the deployment already accepted.
 	for _, tc := range []struct {
-		name     string
-		change   func(*upsertExternalMCP)
-		accepted bool
+		name       string
+		registryID uuid.NullUUID
+		slug       string
+		server     string
+		accepted   bool
 	}{
-		{"same identity after rollout change", func(*upsertExternalMCP) {}, true},
-		{"display name and remotes are mutable", func(v *upsertExternalMCP) {
-			v.name = "Renamed"
-			v.selectedRemotes = []string{"https://example.test/mcp"}
-		}, true},
-		{"same slug different registry", func(v *upsertExternalMCP) { v.registryID.UUID = uuid.New() }, false},
-		{"same slug different server", func(v *upsertExternalMCP) { v.registryServerSpecifier = "example/other" }, false},
-		{"new attachment slug", func(v *upsertExternalMCP) { v.slug = "other" }, false},
-		{"direct attachment", func(v *upsertExternalMCP) { v.registryID = uuid.NullUUID{} }, true},
+		{"same identity", id, "test", "example/server", true},
+		{"same slug different registry", uuid.NullUUID{UUID: uuid.New(), Valid: true}, "test", "example/server", false},
+		{"same slug different server", id, "test", "example/other", false},
+		{"new attachment slug", id, "other", "example/server", false},
+		{"direct attachment", uuid.NullUUID{}, "test", "example/server", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			candidate := base
-			tc.change(&candidate)
-			err := svc.admitExternalMCPSelections(t.Context(), "org-test", "test-org", []upsertExternalMCP{candidate}, saved, nil)
+			err := ti.service.AdmitExternalMCPSelection(ctx, "org-test", "test-org", tc.registryID, tc.slug, tc.server, saved, nil)
 			if tc.accepted {
 				require.NoError(t, err)
 			} else {
@@ -42,6 +43,5 @@ func TestCatalogAdmissionPreservesOnlyPersistedIdentity(t *testing.T) {
 			}
 		})
 	}
-	require.ErrorIs(t, svc.admitExternalMCPSelections(t.Context(), "org-test", "test-org", []upsertExternalMCP{base}, saved, []string{"test"}), externalmcp.ErrCatalogSourceNotFound)
-	require.NoError(t, svc.admitExternalMCPSelections(t.Context(), "org-test", "test-org", nil, saved, nil))
+	require.ErrorIs(t, ti.service.AdmitExternalMCPSelection(ctx, "org-test", "test-org", id, "test", "example/server", saved, []string{"test"}), externalmcp.ErrCatalogSourceNotFound)
 }

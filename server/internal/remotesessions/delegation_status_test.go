@@ -178,7 +178,6 @@ func TestGetClientDelegationStatusCurrentObservationsOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "configuration_failure", got.Status)
 	require.Empty(t, got.Observations)
-
 }
 
 func delegationTestTimestamp(v time.Time) pgtype.Timestamptz {

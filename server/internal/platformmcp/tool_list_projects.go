@@ -19,9 +19,6 @@ func registerListProjectsTool(reg *Registrar, reader Reader) {
 		if err != nil {
 			return nil, ListProjectsOutput{}, err
 		}
-		if reader == nil {
-			return nil, ListProjectsOutput{}, ErrUnavailable
-		}
 		input.Limit = boundedLimit(input.Limit)
 		output, err := reader.ListProjects(ctx, principal, input)
 		if err != nil {

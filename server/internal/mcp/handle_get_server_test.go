@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -34,7 +35,7 @@ func TestHandleGetServer_ContentNegotiation(t *testing.T) {
 		testInstance.cacheAdapter,
 		authz.NewEngine(testInstance.logger, testInstance.conn, nil, workos.NewStubClient()),
 		testInstance.audit,
-		nil,
+		func(context.Context, string) error { return errors.New("private network access disabled") },
 	)
 
 	tests := []struct {

@@ -9,7 +9,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/logs"
 	platformslack "github.com/speakeasy-api/gram/server/internal/platformtools/slack"
-	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
 	platformusersessions "github.com/speakeasy-api/gram/server/internal/platformtools/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -25,12 +24,6 @@ var registry = []toolFactory{
 	},
 	func(deps Dependencies) PlatformToolExecutor {
 		return platformusersessions.NewGetUserSessionTool(deps.DB)
-	},
-	func(deps Dependencies) PlatformToolExecutor {
-		return platformtriggers.NewListTriggersTool(deps.DB, deps.TriggerApp)
-	},
-	func(deps Dependencies) PlatformToolExecutor {
-		return platformtriggers.NewConfigureTriggerTool(deps.DB, deps.TriggerApp, deps.Audit)
 	},
 	func(deps Dependencies) PlatformToolExecutor {
 		return platformslack.NewReadChannelMessagesTool(deps.SlackHTTPClient)
@@ -54,11 +47,7 @@ var registry = []toolFactory{
 		return platformslack.NewScheduleMessageTool(deps.SlackHTTPClient)
 	},
 	func(deps Dependencies) PlatformToolExecutor {
-		var router platformslack.ThreadRouter
-		if deps.TriggerApp != nil {
-			router = deps.TriggerApp
-		}
-		return platformslack.NewSendMessageTool(deps.SlackHTTPClient, router)
+		return platformslack.NewSendMessageTool(deps.SlackHTTPClient, deps.ThreadRouter)
 	},
 	func(deps Dependencies) PlatformToolExecutor {
 		return platformslack.NewAddReactionTool(deps.SlackHTTPClient)
@@ -253,9 +242,6 @@ func BuildExecutors(deps Dependencies, extras ...ExternalTool) (map[string]Platf
 		executors[executor.Descriptor().ToolURN().String()] = executor
 	}
 	for _, extra := range extras {
-		if extra.Executor == nil {
-			continue
-		}
 		urnStr := extra.Executor.Descriptor().ToolURN().String()
 		executors[urnStr] = extra.Executor
 		if extra.RequiredFeature != "" {
@@ -273,7 +259,7 @@ func ListPlatformTools(extras ...ExternalTool) []ToolDescriptor {
 		Logger:           nil,
 		DB:               nil,
 		TelemetryService: nil,
-		TriggerApp:       nil,
+		ThreadRouter:     nil,
 		SlackHTTPClient:  nil,
 		Audit:            nil,
 		Encryption:       nil,
@@ -283,17 +269,13 @@ func ListPlatformTools(extras ...ExternalTool) []ToolDescriptor {
 		tools = append(tools, factory(deps).Descriptor())
 	}
 	for _, extra := range extras {
-		if extra.Executor == nil {
-			continue
-		}
 		tools = append(tools, extra.Executor.Descriptor())
 	}
 	return tools
 }
 
 // ListTypedTools enumerates platform tools available to organizationID,
-// excluding any whose required feature flag is disabled. A nil checker grants
-// access to every gated tool.
+// excluding any whose required feature flag is disabled.
 func ListTypedTools(
 	ctx context.Context,
 	organizationID string,
@@ -307,7 +289,7 @@ func ListTypedTools(
 		Logger:           nil,
 		DB:               nil,
 		TelemetryService: nil,
-		TriggerApp:       nil,
+		ThreadRouter:     nil,
 		SlackHTTPClient:  nil,
 		Audit:            nil,
 		Encryption:       nil,
@@ -321,13 +303,8 @@ func ListTypedTools(
 		tools = append(tools, descriptor.ToTool(projectID))
 	}
 	for _, extra := range extras {
-		if extra.Executor == nil {
+		if extra.RequiredFeature != "" && !checker(ctx, organizationID, extra.RequiredFeature) {
 			continue
-		}
-		if extra.RequiredFeature != "" && checker != nil {
-			if !checker(ctx, organizationID, extra.RequiredFeature) {
-				continue
-			}
 		}
 		descriptor := extra.Executor.Descriptor()
 		if urnPrefix != "" && !strings.HasPrefix(descriptor.ToolURN().String(), urnPrefix) {

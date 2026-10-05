@@ -4108,6 +4108,16 @@ func (q *Queries) RejectAgentPolicyGrantAuditWritesFixture(ctx context.Context) 
 	return err
 }
 
+const rejectAuditLogWritesFixture = `-- name: RejectAuditLogWritesFixture :exec
+ALTER TABLE audit_logs ADD CONSTRAINT reject_audit_log_writes_fixture CHECK (false) NOT VALID
+`
+
+// Test-only failure injection proving audit callers roll back when the audit write fails.
+func (q *Queries) RejectAuditLogWritesFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, rejectAuditLogWritesFixture)
+	return err
+}
+
 const rejectPublishOutboxWritesFixture = `-- name: RejectPublishOutboxWritesFixture :exec
 ALTER TABLE publish_outbox ADD CONSTRAINT reject_publish_outbox_writes_fixture CHECK (false) NOT VALID
 `

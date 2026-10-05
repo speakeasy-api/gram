@@ -12,8 +12,7 @@ import (
 func TestEvaluator_ReusesCompiledProgram(t *testing.T) {
 	t.Parallel()
 
-	e, err := newEvaluator(8)
-	require.NoError(t, err)
+	e := newEvaluator(8)
 
 	msg := celenv.Message{Content: "here is a secret value", Type: "user_message", Tools: nil}
 	const expr = `content.matchRegex("secret")`
@@ -41,8 +40,7 @@ func TestEvaluator_ReusesCompiledProgram(t *testing.T) {
 func TestEvaluator_ConcurrentMissesCompileOnce(t *testing.T) {
 	t.Parallel()
 
-	e, err := newEvaluator(8)
-	require.NoError(t, err)
+	e := newEvaluator(8)
 
 	msg := celenv.Message{Content: "here is a secret value", Type: "user_message", Tools: nil}
 	const expr = `content.matchRegex("secret")`
@@ -76,8 +74,7 @@ func TestEvaluator_ConcurrentMissesCompileOnce(t *testing.T) {
 func TestEvaluator_EvictsLeastRecentlyUsed(t *testing.T) {
 	t.Parallel()
 
-	e, err := newEvaluator(2)
-	require.NoError(t, err)
+	e := newEvaluator(2)
 
 	msg := celenv.Message{Content: "abc", Type: "user_message", Tools: nil}
 	for _, expr := range []string{
@@ -96,11 +93,10 @@ func TestEvaluator_EvictsLeastRecentlyUsed(t *testing.T) {
 func TestEvaluator_CompileErrorNotCached(t *testing.T) {
 	t.Parallel()
 
-	e, err := newEvaluator(8)
-	require.NoError(t, err)
+	e := newEvaluator(8)
 
 	msg := celenv.Message{Content: "abc", Type: "user_message", Tools: nil}
-	_, _, err = e.execute(`this is not valid cel !!!`, msg)
+	_, _, err := e.execute(`this is not valid cel !!!`, msg)
 	require.Error(t, err)
 	require.Equal(t, 0, e.cache.Len())
 }

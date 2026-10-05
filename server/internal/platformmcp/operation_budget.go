@@ -181,10 +181,6 @@ type OperationBudget struct {
 	Organization Limiter
 }
 
-func (b OperationBudget) valid() bool {
-	return b.Connection != nil && b.Organization != nil
-}
-
 func (b OperationBudget) Allow(ctx context.Context, principal Principal) error {
 	return b.allow(ctx, principal, false)
 }
@@ -197,7 +193,7 @@ func (b OperationBudget) AllowConnectionOrOrganization(ctx context.Context, prin
 }
 
 func (b OperationBudget) allow(ctx context.Context, principal Principal, organizationOnlyWithoutConnection bool) error {
-	if !b.valid() || principal.OrganizationID == "" {
+	if principal.OrganizationID == "" {
 		return ErrOperationBudgetUnavailable
 	}
 	if principal.HasConnection() || !organizationOnlyWithoutConnection {
@@ -312,10 +308,6 @@ type DrilldownVolumeBudget struct {
 	MetricQueries Limiter
 }
 
-func (b DrilldownVolumeBudget) valid() bool {
-	return b.Rows != nil && b.MetricQueries != nil
-}
-
 // AllowRows charges n rows or spans. A connection-less principal is not
 // metered here: it holds no connection key to charge, and the per-call
 // organization budget already bounds it.
@@ -329,7 +321,7 @@ func (b DrilldownVolumeBudget) AllowMetricQuery(ctx context.Context, principal P
 }
 
 func (b DrilldownVolumeBudget) allow(ctx context.Context, principal Principal, limiter Limiter, n int, what string) error {
-	if !b.valid() || principal.OrganizationID == "" {
+	if principal.OrganizationID == "" {
 		return ErrOperationBudgetUnavailable
 	}
 	if n <= 0 {
@@ -349,8 +341,4 @@ func (b DrilldownVolumeBudget) allow(ctx context.Context, principal Principal, l
 		return ErrOperationRateLimited
 	}
 	return nil
-}
-
-func (b OperationBudgets) Valid() bool {
-	return b.RiskFindings.valid() && b.Catalog.valid() && b.Registration.valid() && b.ReviewRequests.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Plugins.valid() && b.AccessReads.valid() && b.AccessRoleMutations.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.SensitiveSessionRecall.valid() && b.RiskMutations.valid() && b.DrilldownVolume.valid()
 }

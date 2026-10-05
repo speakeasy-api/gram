@@ -11,8 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
-	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattest"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -21,7 +20,7 @@ import (
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	environment, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true})
+	environment, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
 	if err != nil {
 		log.Fatalf("launch test infrastructure: %v", err)
 	}
@@ -44,7 +43,6 @@ func newTestStore(t *testing.T) (*postgresStore, *pgxpool.Pool, Config) {
 	require.NoError(t, err)
 	project, err := projectsrepo.New(db).CreateProject(t.Context(), projectsrepo.CreateProjectParams{Name: "Inference Example", Slug: "example", OrganizationID: orgID})
 	require.NoError(t, err)
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { require.NoError(t, shutdown(context.WithoutCancel(t.Context()))) })
-	return &postgresStore{db: db, writer: writer, logger: testenv.NewLogger(t)}, db, Config{ID: "example", OrganizationID: orgID, ProjectID: project.ID, TenantID: "tenant-example", SigningSecrets: nil}
+	writer := chattest.NewMessageWriter(t, infra, db)
+	return &postgresStore{db: db, writer: writer, titles: &recordingTitleGenerator{}, logger: testenv.NewLogger(t)}, db, Config{ID: "example", OrganizationID: orgID, ProjectID: project.ID, TenantID: "tenant-example", SigningSecrets: nil}
 }

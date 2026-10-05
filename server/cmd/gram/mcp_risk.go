@@ -103,11 +103,8 @@ func newMCPRiskEvaluator(
 	if err != nil {
 		return nil, nil, fmt.Errorf("create MCP risk CEL engine: %w", err)
 	}
-	customRulesScanner, err := customruleanalyzer.NewScanner(db)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create MCP custom rules scanner: %w", err)
-	}
-	scanner, err := risk.NewScannerWithEnforcementDispatcher(
+	customRulesScanner := customruleanalyzer.NewScanner(db)
+	scanner := risk.NewScannerWithEnforcementDispatcher(
 		logger,
 		tracerProvider,
 		meterProvider,
@@ -121,18 +118,15 @@ func newMCPRiskEvaluator(
 		enforcementDispatcher,
 		metering.NewRiskRecorder(publishers.MeterReadings),
 	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create MCP risk scanner: %w", err)
-	}
 	evaluator := mcpriskscan.NewPolicyEvaluator(
 		logger,
 		tracerProvider,
 		meterProvider,
-		policycore.NewWithToolAnnotations(db, mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))),
+		policycore.NewMCPPolicies(db, mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))),
 		risk.NewMCPPolicyScanner(scanner, shadowMCPClient),
 		publishers.RiskFindings,
+		risk.NewMCPFindingEvidenceStore(db, enc),
 		mcpriskscan.DefaultPolicyConfig,
-		mcpriskscan.WithMCPFindingEvidenceWriter(risk.NewMCPFindingEvidenceStore(db, enc)),
 	)
 	return evaluator, scanner, nil
 }

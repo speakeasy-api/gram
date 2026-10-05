@@ -71,28 +71,23 @@ func (c *orgDefaultHostCache) put(organizationID string, defaultHost pgtype.Text
 // to an organization's users: the block page, the policy acknowledgement and
 // the policy bypass request. It follows the organization's default host, and
 // an organization without one (or whose row cannot be read in time) gets the
-// legacy host. It returns nil when no dashboard links can be built.
+// legacy host.
 //
 // Deny responses must stay immediate, so the stored host is cached per
 // organization and a cache miss reads the row under a short timeout. A failed
 // read is not cached, so the next deny retries it.
 func (s *Service) orgSiteURL(ctx context.Context, organizationID string) *url.URL {
-	if s.orgHosts == nil {
-		return nil
-	}
 	return s.orgHosts.SiteURL(s.orgDefaultHost(ctx, organizationID))
 }
 
 func (s *Service) orgDefaultHost(ctx context.Context, organizationID string) pgtype.Text {
 	none := pgtype.Text{String: "", Valid: false}
-	if s.db == nil || organizationID == "" {
+	if organizationID == "" {
 		return none
 	}
 	now := time.Now()
-	if s.orgHostCache != nil {
-		if defaultHost, ok := s.orgHostCache.get(organizationID, now); ok {
-			return defaultHost
-		}
+	if defaultHost, ok := s.orgHostCache.get(organizationID, now); ok {
+		return defaultHost
 	}
 	lookupCtx, cancel := context.WithTimeout(ctx, orgDefaultHostLookupTimeout)
 	defer cancel()
@@ -104,8 +99,6 @@ func (s *Service) orgDefaultHost(ctx context.Context, organizationID string) pgt
 		)
 		return none
 	}
-	if s.orgHostCache != nil {
-		s.orgHostCache.put(organizationID, org.DefaultHost, now)
-	}
+	s.orgHostCache.put(organizationID, org.DefaultHost, now)
 	return org.DefaultHost
 }

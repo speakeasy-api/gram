@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -53,6 +54,7 @@ func parseSiteURL(raw string) (*url.URL, error) {
 }
 
 func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, redisClient *redis.Client, guardianPolicy *guardian.Policy) (*serverIdentity, error) {
+	inv.Require("server identity", "jwt-signing-key is set", c.String(usersessions.JWTSigningKeyFlag) != "")
 	siteURL, err := parseSiteURL(c.String("site-url"))
 	if err != nil {
 		return nil, err
@@ -66,23 +68,13 @@ func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger,
 	if c.String("environment") == "local" {
 		featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 	}
-	workosClient, available, err := newWorkOSClient(guardianPolicy, c)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create WorkOS client: %w", err)
-	}
+	workosClient, available := newWorkOSClient(guardianPolicy, c)
 	stripeClient, err := newStripeClient(ctx, logger, guardianPolicy, c)
 	if err != nil {
 		return nil, err
 	}
-	billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
-	if err != nil {
-		return nil, err
-	}
-	umClient := newIDPUserManagementClient(guardianPolicy, c.String("idp-client-secret"), c)
-	if umClient == nil {
-		return nil, fmt.Errorf("failed to create IDP user management client: idp-client-secret is required")
-	}
-	idpClient := identity.NewWorkOSAdapter(umClient)
+	billingRepo, billingTracker := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
+	idpClient := identity.NewWorkOSAdapter(newIDPUserManagementClient(guardianPolicy, c.String("idp-client-secret"), c))
 	productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 
 	growth := growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(db), siteURL)

@@ -92,7 +92,7 @@ const (
 //   - platformoauth.ErrNotFound / ErrRevoked: unknown or revoked client
 //   - anything else: infrastructure failure
 func (s *OAuthHTTP) resolveClient(ctx context.Context, clientID string, mode clientResolveMode) (platformoauth.Client, error) {
-	if mode != resolveClientCIMD || s.cimd == nil || !cimd.IsClientIDURL(clientID) {
+	if mode != resolveClientCIMD || !cimd.IsClientIDURL(clientID) {
 		client, err := s.store.GetClient(ctx, clientID)
 		if err != nil {
 			return platformoauth.Client{}, fmt.Errorf("lookup platform client: %w", err)

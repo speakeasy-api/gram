@@ -193,10 +193,10 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 }
 
 func (e *Executor) applyGate(ctx context.Context) string {
-	if e.enc == nil || e.options.Queue == "" || e.options.Image == "" || e.options.BackendService == "" || e.options.BackendPort <= 0 || e.options.BackendPort > 65535 {
+	if e.options.Queue == "" || e.options.Image == "" || e.options.BackendService == "" || e.options.BackendPort <= 0 || e.options.BackendPort > 65535 {
 		return "provider_configuration_unavailable"
 	}
-	if e.options.CanApply == nil || e.options.CanApply(ctx) != nil {
+	if e.options.CanApply(ctx) != nil {
 		return "provider_mutations_disabled"
 	}
 	return ""

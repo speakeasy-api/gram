@@ -32,12 +32,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -133,14 +133,16 @@ func newAdminCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_ENVIRONMENT"},
 		},
 		&cli.StringFlag{
-			Name:    "temporal-address",
-			Usage:   "Address of the Temporal server",
-			EnvVars: []string{"TEMPORAL_ADDRESS"},
+			Name:     "temporal-address",
+			Usage:    "Address of the Temporal server",
+			EnvVars:  []string{"TEMPORAL_ADDRESS"},
+			Required: true,
 		},
 		&cli.StringFlag{
-			Name:    "temporal-namespace",
-			Usage:   "Namespace of the Temporal server",
-			EnvVars: []string{"TEMPORAL_NAMESPACE"},
+			Name:     "temporal-namespace",
+			Usage:    "Namespace of the Temporal server",
+			EnvVars:  []string{"TEMPORAL_NAMESPACE"},
+			Required: true,
 		},
 		&cli.StringFlag{
 			Name:    "temporal-task-queue",
@@ -306,7 +308,7 @@ func newAdminCommand() *cli.Command {
 			Name:     "encryption-key",
 			Usage:    "Key for App level AES encryption/decryption",
 			EnvVars:  []string{"GRAM_ENCRYPTION_KEY"},
-			Required: false,
+			Required: true,
 		},
 		&cli.StringFlag{
 			Name:    "openrouter-provisioning-key",
@@ -384,15 +386,10 @@ func newAdminCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create temporal client: %w", err)
 			}
-			chatAnalysisSignaler := analysis.Signaler(admin.ChatAnalysisTriggerUnavailable{})
-			var openRouterSpendCap admin.OpenRouterSpendCapScheduler
-			temporalHealth := []*o11y.NamedResource[client.Client]{}
-			if temporalEnv != nil {
-				shutdownFuncs = append(shutdownFuncs, temporalShutdown)
-				chatAnalysisSignaler = &background.TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger}
-				openRouterSpendCap = &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}
-				temporalHealth = append(temporalHealth, &o11y.NamedResource[client.Client]{Name: "default", Resource: temporalEnv.Client()})
-			}
+			shutdownFuncs = append(shutdownFuncs, temporalShutdown)
+			chatAnalysisSignaler := &background.TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger}
+			openRouterSpendCap := &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}
+			temporalHealth := []*o11y.NamedResource[client.Client]{{Name: "default", Resource: temporalEnv.Client()}}
 
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
@@ -435,10 +432,12 @@ func newAdminCommand() *cli.Command {
 			}
 			defer o11y.LogDefer(ctx, logger, "failed to shut down clickhouse read client", func() error { return meterReadShutdown(ctx) })
 
-			adminEncryption, err := encryption.New(c.String("admin-encryption-key"))
-			if err != nil {
-				return fmt.Errorf("failed to create admin encryption client: %w", err)
-			}
+			adminEncryption, adminEncryptionErr := encryption.New(c.String("admin-encryption-key"))
+			encryptionClient, encryptionErr := encryption.New(c.String("encryption-key"))
+			inv.Require("admin encryption",
+				"admin-encryption-key is a valid AES-256 key", adminEncryptionErr,
+				"encryption-key is a valid AES-256 key", encryptionErr,
+			)
 
 			adminServerURL, err := url.Parse(c.String("admin-server-url"))
 			if err != nil {
@@ -481,7 +480,7 @@ func newAdminCommand() *cli.Command {
 			mux.Use(admin.SessionMiddleware)
 
 			adminWorkOSClient := newAdminWorkOSOrganizationCreator(ctx, logger, guardianPolicy, c)
-			adminOpenRouter := newAdminOpenRouter(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c)
+			adminOpenRouter := newAdminOpenRouter(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, encryptionClient, c)
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			mcpServerURL := siteURL
 			if raw := c.String("server-url"); raw != "" {
@@ -519,19 +518,9 @@ func newAdminCommand() *cli.Command {
 			if err := organizations.SyncOnboardingSteps(ctx, db); err != nil {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
-			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chDB), telemetry.NewMCPServerHealth(db, chDB), siteURL, registryService)
-			adminService.SetMCPServerURL(mcpServerURL)
+			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chDB), telemetry.NewMCPServerHealth(db, chDB), siteURL, mcpServerURL, registryService, remotesessions.NewGlobalIssuers(logger, meterProvider, db, guardianPolicy))
 			adminService.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 			adminService.SetWorkOSEnvironmentID(c.String("workos-environment-id"))
-			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
-			if err != nil {
-				return err
-			}
-			if applicationEncryption != nil {
-				adminService.SetRemoteSessionService(remotesessions.NewGlobalService(logger, tracerProvider, meterProvider, db, applicationEncryption, guardianPolicy))
-			} else {
-				logger.WarnContext(ctx, "Admin issuers unavailable; no application encryption key configured")
-			}
 			assetOptions, err := resolveAdminAssetStorage(c.String("assets-backend"), c.String("assets-uri"))
 			if err != nil {
 				logger.WarnContext(ctx, "Admin logos unavailable; continuing without asset storage", attr.SlogError(err))
@@ -546,19 +535,14 @@ func newAdminCommand() *cli.Command {
 			admin.Attach(mux, adminService)
 			if c.Bool("admin-mcp-enabled") {
 				key := c.String("admin-mcp-signing-key")
-				if err := validateAdminMCPSigningKey(key, c.String("admin-encryption-key"), c.String("encryption-key")); err != nil {
-					return err
-				}
+				requireAdminMCPSigningKey(key, c.String("admin-encryption-key"), c.String("encryption-key"))
 				writeOperations, err := adminmcp.ParseWriteOperations(c.String("admin-mcp-write-operations"))
 				if err != nil {
 					return fmt.Errorf("configure staff Admin MCP writes: %w", err)
 				}
 				writes := adminmcp.WriteConfig{Enabled: c.Bool("admin-mcp-writes-enabled"), Operations: writeOperations}
 				signer := sessiontokens.NewSigner(key)
-				staffOAuth, err := adminmcp.NewStaffOAuth(adminServerURL, db, cache.NewRedisCacheAdapter(redisClient), adminService.Verifier(), adminEncryption, signer, writes, logger)
-				if err != nil {
-					return fmt.Errorf("initialize staff Admin MCP OAuth: %w", err)
-				}
+				staffOAuth := adminmcp.NewStaffOAuth(adminServerURL, db, cache.NewRedisCacheAdapter(redisClient), adminService.Verifier(), adminEncryption, signer, writes, logger)
 				staffOAuth.Attach(mux)
 				staffAuth := adminmcp.NewStaffAuthenticator(signer, db, adminEncryption, adminService.Verifier(), staffOAuth.Issuer(), staffOAuth.Resource())
 				staffRuntime := adminmcp.NewRuntime(staffAuth, staffOAuth.ProtectedResourceURL(), adminService)
@@ -665,21 +649,10 @@ func newAdminCommand() *cli.Command {
 	}
 }
 
-func validateAdminMCPSigningKey(key, adminEncryptionKey, applicationEncryptionKey string) error {
-	if len(key) < 32 || key == adminEncryptionKey || key == applicationEncryptionKey {
-		return errors.New("staff Admin MCP requires an independent signing key of at least 32 bytes")
-	}
-	return nil
-}
-
-// newAdminIssuerEncryption preserves optional issuer setup without accepting a malformed configured key.
-func newAdminIssuerEncryption(key string) (*encryption.Client, error) {
-	if key == "" {
-		return nil, nil
-	}
-	client, err := encryption.New(key)
-	if err != nil {
-		return nil, fmt.Errorf("create remote session encryption client: %w", err)
-	}
-	return client, nil
+func requireAdminMCPSigningKey(key, adminEncryptionKey, applicationEncryptionKey string) {
+	inv.Require("staff Admin MCP signing key",
+		"is at least 32 bytes", len(key) >= 32,
+		"differs from the admin encryption key", key != adminEncryptionKey,
+		"differs from the application encryption key", key != applicationEncryptionKey,
+	)
 }

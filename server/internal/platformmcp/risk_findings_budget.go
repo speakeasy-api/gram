@@ -15,17 +15,12 @@ const (
 )
 
 type riskFindingsLister interface {
-	valid() bool
 	List(context.Context, Principal, ListRiskFindingsInput) (ListRiskFindingsOutput, error)
 }
 
 type budgetedRiskFindings struct {
 	service riskFindingsLister
 	budget  OperationBudget
-}
-
-func (s *budgetedRiskFindings) valid() bool {
-	return s != nil && s.service != nil && s.service.valid() && s.budget.valid()
 }
 
 func (s *budgetedRiskFindings) List(ctx context.Context, principal Principal, input ListRiskFindingsInput) (ListRiskFindingsOutput, error) {

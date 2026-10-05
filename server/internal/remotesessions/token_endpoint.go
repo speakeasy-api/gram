@@ -123,10 +123,7 @@ func (m *ChallengeManager) clientTokenEndpoint(client repo.GetRemoteSessionClien
 	if err != nil && method == TokenEndpointAuthMethodPrivateKeyJWT {
 		return nil, ErrTokenEndpointConfiguration
 	}
-	doer, err := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, client.TunneledMcpServerID)
-	if err != nil {
-		return nil, ErrTokenEndpointConfiguration
-	}
+	doer := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, client.TunneledMcpServerID)
 	return &TokenEndpoint{
 		endpoint: client.TokenEndpoint.String,
 		issuer:   client.IssuerUrl,

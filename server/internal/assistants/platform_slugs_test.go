@@ -59,7 +59,7 @@ func TestAssistantPlatformSlugsManagedPlatformMCPVariantReplacesLegacy(t *testin
 
 	flags := &feature.InMemory{}
 	flags.SetFlagVariant(feature.FlagAssistantPlatformMCP, "org-test", feature.VariantAssistantToolsPlatformMCP)
-	svc.core.SetFeatureProvider(flags)
+	svc.core.featureFlags = flags
 
 	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord)
 	require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestAssistantPlatformSlugsManagedLegacyVariantUnchanged(t *testing.T) {
 
 	flags := &feature.InMemory{}
 	flags.SetFlagVariant(feature.FlagAssistantPlatformMCP, "org-test", feature.VariantAssistantToolsLegacy)
-	svc.core.SetFeatureProvider(flags)
+	svc.core.featureFlags = flags
 
 	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord)
 	require.NoError(t, err)
@@ -95,7 +95,7 @@ func TestAssistantPlatformSlugsUnknownVariantFallsBackToLegacy(t *testing.T) {
 
 	flags := &feature.InMemory{}
 	flags.SetFlagVariant(feature.FlagAssistantPlatformMCP, "org-test", feature.Variant("control"))
-	svc.core.SetFeatureProvider(flags)
+	svc.core.featureFlags = flags
 
 	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord)
 	require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestAssistantPlatformSlugsNoVariantUnchanged(t *testing.T) {
 	t.Parallel()
 
 	svc, managedRecord, _ := platformSlugsFixture(t)
-	svc.core.SetFeatureProvider(&feature.InMemory{})
+	svc.core.featureFlags = &feature.InMemory{}
 
 	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord)
 	require.NoError(t, err)
@@ -139,7 +139,7 @@ func TestAssistantPlatformSlugsNonManagedNeverGetsPlatformToolset(t *testing.T) 
 
 	flags := &feature.InMemory{}
 	flags.SetFlagVariant(feature.FlagAssistantPlatformMCP, "org-test", feature.VariantAssistantToolsPlatformMCP)
-	svc.core.SetFeatureProvider(flags)
+	svc.core.featureFlags = flags
 
 	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), otherRecord)
 	require.NoError(t, err)

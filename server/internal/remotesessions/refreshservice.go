@@ -188,8 +188,6 @@ func WithRefreshTokenEndpointAssertionSigner(signer TokenEndpointAssertionSigner
 	return func(s *RefreshService) { s.assertions = signer }
 }
 
-// NewRefreshService builds the service; without a guardian policy no enricher
-// is wired and a refresh restates nothing from the access token.
 func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, locks cache.Cache, opts ...RefreshOption) *RefreshService {
 	s := &RefreshService{
 		logger:         logger.With(attr.SlogComponent("remotesessions_refresh")),
@@ -208,7 +206,7 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 	for _, opt := range opts {
 		opt(s)
 	}
-	if s.enricher == nil && policy != nil {
+	if s.enricher == nil {
 		s.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, tunnels, s.issuerMetadata)
 	}
 	return s

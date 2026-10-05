@@ -36,7 +36,8 @@ func registerSetupHandoffTool(reg *Registrar, registrations *RegistrationService
 		// The handoff carries the caller to the dashboard, which completes setup
 		// under its own session. A connection-less caller issues a handoff bound
 		// to its user rather than to a connection.
-		Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetSetupHandoffToolInput) (*mcp.CallToolResult, GetSetupHandoffToolOutput, error) {
+		Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit,
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetSetupHandoffToolInput) (*mcp.CallToolResult, GetSetupHandoffToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, GetSetupHandoffToolOutput{}, err

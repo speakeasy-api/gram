@@ -111,7 +111,7 @@ func newNetingressAttestorCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("configure private listener transport: %w", err)
 			}
-			handler, err := netingress.NewAttestorHandler(netingress.AttestorConfig{
+			handler := netingress.NewAttestorHandler(netingress.AttestorConfig{
 				Upstream:     upstream,
 				ExpectedHost: c.String("expected-host"),
 				TokenPath:    c.String("token-path"),
@@ -119,9 +119,6 @@ func newNetingressAttestorCommand() *cli.Command {
 				Logger:       logger,
 				Telemetry:    telemetry,
 			})
-			if err != nil {
-				return fmt.Errorf("configure private ingress attestor: %w", err)
-			}
 
 			trafficListener, err := net.Listen("tcp", c.String("address"))
 			if err != nil {

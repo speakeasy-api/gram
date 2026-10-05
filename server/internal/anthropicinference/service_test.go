@@ -114,7 +114,7 @@ func TestServicePersistsDeniedConversation(t *testing.T) {
 	result := new(risk.ScanResult)
 	result.Action = "block"
 	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: result, err: nil}
-	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanner}
+	service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: store, scanner: scanner}
 	verdict, err := service.Process(t.Context(), Config{ID: "example", OrganizationID: "org_example", ProjectID: uuid.New(), TenantID: "tenant-example", SigningSecrets: nil}, exampleFrame())
 	require.NoError(t, err)
 	require.Equal(t, "deny", verdict.Action)
@@ -126,7 +126,7 @@ func TestServicePropagatesScannerErrors(t *testing.T) {
 	t.Parallel()
 	store := &memoryStore{saved: nil, userID: "", err: nil}
 	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: nil, err: errors.New("scanner unavailable")}
-	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanner}
+	service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: store, scanner: scanner}
 	_, err := service.Process(t.Context(), Config{ID: "example", OrganizationID: "org_example", ProjectID: uuid.New(), TenantID: "tenant-example", SigningSecrets: nil}, exampleFrame())
 	require.ErrorContains(t, err, "evaluate inference policy")
 	require.Len(t, store.saved, 1)
@@ -136,7 +136,7 @@ func TestServicePropagatesStorageErrors(t *testing.T) {
 	t.Parallel()
 	store := &memoryStore{saved: nil, userID: "", err: errors.New("storage unavailable")}
 	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: nil, err: nil}
-	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanner}
+	service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: store, scanner: scanner}
 	_, err := service.Process(t.Context(), Config{ID: "example", OrganizationID: "org_example", ProjectID: uuid.New(), TenantID: "tenant-example", SigningSecrets: nil}, exampleFrame())
 	require.ErrorContains(t, err, "store inference transcript")
 	require.Empty(t, scanner.inputs)
@@ -186,7 +186,7 @@ func TestServiceDeniesWarnAndQuarantineMatches(t *testing.T) {
 			result := new(risk.ScanResult)
 			result.Action = action
 			scanner := &recordingScanner{inputs: nil, userIDs: nil, result: result, err: nil}
-			service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanner}
+			service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: store, scanner: scanner}
 			verdict, err := service.Process(t.Context(), Config{ID: "example", OrganizationID: "org_example", ProjectID: uuid.New(), TenantID: "tenant-example", SigningSecrets: nil}, exampleFrame())
 			require.NoError(t, err)
 			require.Equal(t, "deny", verdict.Action)
@@ -198,7 +198,7 @@ func TestServicePreservesRawToolInvocationIDs(t *testing.T) {
 	t.Parallel()
 	store := &memoryStore{saved: nil, userID: "user-example", err: nil}
 	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: nil, err: nil}
-	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanner}
+	service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: store, scanner: scanner}
 	frame := exampleFrame()
 	frame.Messages = []Message{
 		{Role: "assistant", Content: json.RawMessage(`[{"type":"tool_use","id":" call-1 ","tool_name":"read_file","input":{"path":"example.txt"}}]`)},
@@ -232,7 +232,7 @@ func TestServiceScansOnlyNewMessagesAndTheCurrentTurn(t *testing.T) {
 		textMessage("user", "new prompt"),
 	}
 	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: nil, err: nil}
-	service := &Service{logger: testenv.NewLogger(t), store: &deltaStore{memoryStore: memoryStore{accepted: transcriptHashes(frame.Messages[:4]), saved: nil, userID: "", err: nil}, newStart: 4}, scanner: scanner}
+	service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: &deltaStore{memoryStore: memoryStore{accepted: transcriptHashes(frame.Messages[:4]), saved: nil, userID: "", err: nil}, newStart: 4}, scanner: scanner}
 	_, err := service.Process(t.Context(), Config{}, frame)
 	require.NoError(t, err)
 	require.Len(t, scanner.inputs, 1)
@@ -257,7 +257,7 @@ func TestServiceStillDeniesRedeliveredCurrentTurn(t *testing.T) {
 	result.Action = "block"
 	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: result, err: nil}
 	// Everything in the frame is already stored and accepted, as after a redelivery.
-	service := &Service{logger: testenv.NewLogger(t), store: &deltaStore{memoryStore: memoryStore{accepted: transcriptHashes(frame.Messages), saved: nil, userID: "", err: nil}, newStart: 3}, scanner: scanner}
+	service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: &deltaStore{memoryStore: memoryStore{accepted: transcriptHashes(frame.Messages), saved: nil, userID: "", err: nil}, newStart: 3}, scanner: scanner}
 	verdict, err := service.Process(t.Context(), Config{}, frame)
 	require.NoError(t, err)
 	require.Equal(t, "deny", verdict.Action)
@@ -294,7 +294,7 @@ func TestServiceEvaluatesInputsConcurrently(t *testing.T) {
 			frame.Messages = append(frame.Messages, textMessage("user", fmt.Sprintf("prompt %d", i)))
 		}
 		store := &memoryStore{}
-		service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &stallingScanner{stallOn: ""}}
+		service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: store, scanner: &stallingScanner{stallOn: ""}}
 		start := time.Now()
 		verdict, err := service.Process(t.Context(), Config{}, frame)
 		require.NoError(t, err)
@@ -311,7 +311,7 @@ func TestServiceAcceptsCleanPrefixWhenBudgetExhausted(t *testing.T) {
 		frame.Messages = []Message{textMessage("user", "first"), textMessage("assistant", "reply"), textMessage("user", "stall"), textMessage("user", "last")}
 		store := &memoryStore{}
 		scanner := &stallingScanner{stallOn: "stall"}
-		service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanner}
+		service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: store, scanner: scanner}
 		start := time.Now()
 		verdict, err := service.Process(t.Context(), Config{}, frame)
 		require.NoError(t, err)
@@ -372,7 +372,7 @@ func TestServiceReservesCheckpointAndResponseHeadroom(t *testing.T) {
 				frame := exampleFrame()
 				frame.Messages = []Message{textMessage("user", "first"), textMessage("assistant", "reply"), textMessage("user", "stall")}
 				store := &checkpointHeadroomStore{t: t}
-				service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &stallingScanner{stallOn: "stall"}}
+				service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: store, scanner: &stallingScanner{stallOn: "stall"}}
 				start := time.Now()
 				verdict, err := service.Process(ctx, Config{}, frame)
 				require.NoError(t, err)

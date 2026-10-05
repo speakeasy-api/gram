@@ -51,17 +51,10 @@ type ToolUsageBreakdownReader interface {
 	GetToolUsageTargets(ctx context.Context, arg telemetryrepo.GetToolUsageSummaryParams) ([]telemetryrepo.ToolUsageTargetSummaryRow, error)
 }
 
-// WithToolUsageBreakdown attaches the per-target-type usage summary. A nil
-// reader keeps get_tool_usage_summary registered as its unavailable stub.
+// WithToolUsageBreakdown attaches the per-target-type usage summary.
 func (s *DiagnosticsService) WithToolUsageBreakdown(reader ToolUsageBreakdownReader) *DiagnosticsService {
-	if s != nil {
-		s.toolUsage = reader
-	}
+	s.toolUsage = reader
 	return s
-}
-
-func (s *DiagnosticsService) toolUsageValid() bool {
-	return s.valid() && s.toolUsage != nil
 }
 
 // GetToolUsageSummaryInput asks for one project's usage mix. It carries no
@@ -130,9 +123,6 @@ type GetToolUsageSummaryOutput struct {
 }
 
 func (s *DiagnosticsService) GetToolUsageSummary(ctx context.Context, principal Principal, input GetToolUsageSummaryInput) (GetToolUsageSummaryOutput, error) {
-	if !s.toolUsageValid() {
-		return GetToolUsageSummaryOutput{}, ErrUnavailable
-	}
 	if input.ProjectID == "" {
 		return GetToolUsageSummaryOutput{}, fmt.Errorf("project_id is required")
 	}

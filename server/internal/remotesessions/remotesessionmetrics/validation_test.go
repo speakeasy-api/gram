@@ -66,14 +66,3 @@ func TestValidationRecord_SeparatesOutcomes(t *testing.T) {
 	}
 	require.Equal(t, map[string]int64{"valid": 2, "unknown": 1}, counts)
 }
-
-// A nil receiver and a nil instrument both degrade to no-ops, per the package convention.
-func TestValidationRecord_NilSafe(t *testing.T) {
-	t.Parallel()
-
-	var m *Validation
-	m.Record(t.Context(), "https://idp.example.com", ValidationTriggerConnect, "valid")
-
-	empty := &Validation{probes: nil}
-	empty.Record(t.Context(), "https://idp.example.com", ValidationTriggerVerify, "valid")
-}

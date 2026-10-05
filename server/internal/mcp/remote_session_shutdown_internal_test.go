@@ -5,10 +5,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
+
+func newTestRemoteSessionRecheck(t *testing.T) *remoteSessionRecheck {
+	t.Helper()
+	client := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	return newRemoteSessionRecheck(time.Hour, client, testenv.NewMeterProvider(t))
+}
 
 func TestRemoteSessionRecheckLeaseCoversQueuedBatch(t *testing.T) {
 	t.Parallel()
@@ -19,7 +29,7 @@ func TestRemoteSessionRecheckLeaseCoversQueuedBatch(t *testing.T) {
 
 func TestRemoteSessionShutdownDoesNotAdmitCancelledProbe(t *testing.T) {
 	t.Parallel()
-	r := newRemoteSessionRecheck(time.Hour, nil, nil)
+	r := newTestRemoteSessionRecheck(t)
 	require.True(t, r.acquireSlot(t.Context()))
 	<-r.slots
 
@@ -31,7 +41,7 @@ func TestRemoteSessionShutdownDoesNotAdmitCancelledProbe(t *testing.T) {
 
 func TestRemoteSessionShutdownReleasesSlotCancelledAfterAcquisition(t *testing.T) {
 	t.Parallel()
-	r := newRemoteSessionRecheck(time.Hour, nil, nil)
+	r := newTestRemoteSessionRecheck(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
@@ -66,7 +76,7 @@ func TestRemoteSessionShutdownClosesBothAdmissionGatesBeforeDraining(t *testing.
 	t.Parallel()
 	s := new(Service)
 	s.autoVerifications = newAutoVerifications()
-	s.remoteSessionRecheck = newRemoteSessionRecheck(time.Hour, nil, nil)
+	s.remoteSessionRecheck = newTestRemoteSessionRecheck(t)
 	release := make(chan struct{})
 	t.Cleanup(func() {
 		close(release)

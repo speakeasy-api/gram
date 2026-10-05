@@ -82,12 +82,16 @@ func (s *Service) FailAIToolCatalogRead(err error) {
 func (s *Service) SetRemoteSessionRecheckPacing(rate ratelimit.Rate, batch int32) {
 	r := s.remoteSessionRecheck
 	r.batch = batch
-	if r.limiterStore != nil {
-		r.limiter = ratelimit.New(r.limiterStore, "remote_session_recheck_host", rate)
-	}
+	r.limiter = ratelimit.New(r.limiterStore, "remote_session_recheck_host", rate)
 }
 
 // SetRiskScanEvaluator replaces observation only in the test binary.
 func (s *Service) SetRiskScanEvaluator(evaluator *mcpriskscan.Evaluator) {
 	s.scanEvaluator = evaluator
+}
+
+// SetFederatedLoginConsumer swaps the credential handoff so a test can observe
+// or fail it.
+func (s *Service) SetFederatedLoginConsumer(consumer FederatedLoginConsumer) {
+	s.federatedLoginConsumer = consumer
 }

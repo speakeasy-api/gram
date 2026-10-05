@@ -127,7 +127,7 @@ func (s *Service) assistantCIMDAllowed(ctx context.Context, orgID, orgSlug strin
 	// plain HTTP stays on DCR rather than minting a client_id every
 	// authorization server rejects.
 	origin := s.core.mcpAuthOrigin()
-	if origin == nil || origin.Scheme != "https" || s.core.featureFlags == nil || orgID == "" {
+	if origin.Scheme != "https" || orgID == "" {
 		return false
 	}
 	on, err := s.core.featureFlags.IsFlagEnabled(ctx, feature.FlagAssistantOAuthCIMD, orgID, feature.OrgProjectGroups(orgSlug, ""))
@@ -163,10 +163,6 @@ func (s *Service) handleAssistantClientMetadataDocument(w http.ResponseWriter, r
 	assistantID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		return oops.E(oops.CodeNotFound, err, "client metadata document not found")
-	}
-
-	if s.core.mcpAuthOrigin() == nil {
-		return oops.E(oops.CodeNotFound, nil, "client metadata document not found")
 	}
 
 	row, err := assistantrepo.New(s.core.db).GetAssistantForClientMetadataDocument(ctx, assistantID)

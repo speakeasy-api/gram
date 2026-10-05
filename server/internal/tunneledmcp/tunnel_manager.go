@@ -88,10 +88,6 @@ func (m *tunnelManager) serverViewWithoutRuntime(server repo.TunneledMcpServer) 
 }
 
 func (m *tunnelManager) connectionsForServer(ctx context.Context, logger *slog.Logger, serverID uuid.UUID) []mv.TunneledMcpConnectionCache {
-	if m.runtime == nil {
-		return nil
-	}
-
 	connections, err := m.runtime.Connections(ctx, serverID.String())
 	if err != nil {
 		// Degrade to "no live connections" for the management view, but leave
@@ -105,9 +101,6 @@ func (m *tunnelManager) connectionsForServer(ctx context.Context, logger *slog.L
 }
 
 func (m *tunnelManager) deleteRuntimeState(ctx context.Context, logger *slog.Logger, serverID uuid.UUID) {
-	if m.runtime == nil {
-		return
-	}
 	// Runs after the DB commit: detach from request cancellation so a client
 	// disconnect cannot skip cache cleanup and leave stale route/connection
 	// entries pointing at a deleted or rotated source, but stay bounded.

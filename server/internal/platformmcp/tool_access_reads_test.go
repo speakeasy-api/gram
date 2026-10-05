@@ -15,7 +15,7 @@ import (
 func TestAccessReadToolsAreReadOnlyWithStableAudiences(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newTestServer(t)
 	requireAccessReadToolDescriptors(t, registrar)
 }
 
@@ -23,7 +23,7 @@ func TestAvailableAccessReadToolsAreReadOnlyWithStableAudiences(t *testing.T) {
 	t.Parallel()
 
 	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
-	registerAccessReadTools(registrar, nil)
+	registerAccessReadTools(registrar, newTestServices(t).AccessReads)
 	requireAccessReadToolDescriptors(t, registrar)
 }
 
@@ -70,7 +70,7 @@ func TestListAccessMembersDescriptionExplainsMaskingAndReferences(t *testing.T) 
 	t.Parallel()
 
 	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
-	registerAccessReadTools(registrar, nil)
+	registerAccessReadTools(registrar, newTestServices(t).AccessReads)
 	descriptor := descriptorByName(t, registrar, "list_access_members")
 	for _, fragment := range []string{
 		"three characters",
@@ -91,22 +91,6 @@ func TestListAccessMembersDescriptionExplainsMaskingAndReferences(t *testing.T) 
 	require.Contains(t, schema.Properties, "query")
 	require.Contains(t, schema.Properties, "role_reference")
 	require.NotContains(t, schema.Properties, "display_name", "identities stay masked; no unmasked field is exposed")
-}
-
-// The assistant advertises the descriptor's schema to a model. A stub with a
-// different schema would teach the model one contract and then enforce another
-// the moment the service is wired.
-func TestListAccessMembersStubAdvertisesLiveInputSchema(t *testing.T) {
-	t.Parallel()
-
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
-	registerAccessReadTools(live, nil)
-	stub := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
-	registerUnavailableAccessReadTools(stub)
-
-	liveSchema := descriptorByName(t, live, "list_access_members").InputSchema
-	stubSchema := descriptorByName(t, stub, "list_access_members").InputSchema
-	require.JSONEq(t, string(liveSchema), string(stubSchema))
 }
 
 func TestPrincipalToolCallRequiresPrincipal(t *testing.T) {

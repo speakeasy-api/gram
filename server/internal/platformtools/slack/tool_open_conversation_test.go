@@ -51,7 +51,7 @@ func TestOpenConversationTool_RejectsMissingAndBothInputs(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewOpenConversationTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callOpenConversation,
 	}
 

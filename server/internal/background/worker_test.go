@@ -70,19 +70,19 @@ func newSharedQueueTemporalEnv(t *testing.T) *tenv.Environment {
 }
 
 // newSchedulingWorkers builds a worker set whose only exercised behaviour is
-// schedule registration. Every dependency is nil because the sweeps those
-// schedules fire are not under test; ForDeploymentProcessing is here solely for
-// the noop publishers it supplies.
+// schedule registration, so it carries no Temporal workers.
 func newSchedulingWorkers(t *testing.T, env *tenv.Environment) *Workers {
 	t.Helper()
 
-	return NewTemporalWorker(
-		env,
-		testenv.NewLogger(t),
-		testenv.NewTracerProvider(t),
-		testenv.NewMeterProvider(t),
-		ForDeploymentProcessing(nil, nil, nil, nil, nil, nil, nil, nil),
-	)
+	return &Workers{
+		main:                nil,
+		named:               nil,
+		env:                 env,
+		logger:              testenv.NewLogger(t),
+		db:                  nil,
+		schedules:           scheduleConfig{StartupSeeds: nil, AssistantRuntimeImageRef: "", CustomDomainHealth: false, PluginGeneratorRollout: false},
+		networkIngressQueue: "",
+	}
 }
 
 func scheduleIDs(ctx context.Context, c client.Client) ([]string, error) {
@@ -139,7 +139,7 @@ func TestWorkers_RegisterSchedulesPreservesManualPauses(t *testing.T) {
 		var err error
 		ids, err = scheduleIDs(ctx, env.Client())
 		assert.NoError(c, err)
-		assert.Len(c, ids, 27, "all unconditional schedules should be registered")
+		assert.Len(c, ids, 28, "all unconditional schedules should be registered")
 		assert.Contains(c, ids, fmt.Sprintf("v1:trusted-delegation-cleanup:%s", env.Queue()), "delegation cleanup is an unconditional schedule")
 		assert.Contains(c, ids, fmt.Sprintf("v1:mcp-finding-evidence-cleanup:%s", env.Queue()), "MCP finding evidence cleanup is an unconditional schedule")
 	}, 30*time.Second, 250*time.Millisecond)

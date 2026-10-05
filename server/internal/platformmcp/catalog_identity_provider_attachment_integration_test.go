@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"fmt"
+	"net/url"
 	"testing"
 	"time"
 
@@ -12,7 +13,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -66,7 +69,14 @@ func attachmentTestResource(resourceURL, name, policyURL string) wellknown.OAuth
 
 func attachmentTestService(t *testing.T, conn *pgxpool.Pool) *CatalogIdentityProviderAttachmentService {
 	t.Helper()
-	return &CatalogIdentityProviderAttachmentService{db: conn, identity: remotesessions.NewIdentityCommitter(testenv.NewLogger(t), conn, nil, audit.NewLogger(), nil, nil, nil, nil), policy: nil, serverURL: nil}
+	logger := testenv.NewLogger(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	serverURL, err := url.Parse("https://gram.example.test")
+	require.NoError(t, err)
+	identity := remotesessions.NewIdentityCommitter(logger, conn, testenv.NewEncryptionClient(t), audit.NewLogger(), serverURL, policy, newTestTunnelClient(t, policy), registration.NewMetrics(logger, meterProvider))
+	return NewCatalogIdentityProviderAttachmentService(logger, meterProvider, conn, identity, policy, serverURL)
 }
 
 func attachmentTestUserSessionIssuer(t *testing.T, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {

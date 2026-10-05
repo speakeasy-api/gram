@@ -427,10 +427,6 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 		return DashboardSendResult{}, err
 	}
 
-	if s.dashboardIngestor == nil {
-		return DashboardSendResult{}, fmt.Errorf("dashboard ingestor is not configured")
-	}
-
 	if idempotencyKey == "" {
 		idempotencyKey = uuid.NewString()
 	}

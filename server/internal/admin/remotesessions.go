@@ -3,26 +3,18 @@ package admin
 import (
 	"context"
 	"fmt"
+
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	adminrsgen "github.com/speakeasy-api/gram/server/gen/admin_remote_sessions"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
-// SetRemoteSessionService supplies only global-operation dependencies.
-func (s *Service) SetRemoteSessionService(service *remotesessions.Service) {
-	s.remoteSessions = service
-}
 func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *gen.CreateGlobalIssuerPayload) (*types.RemoteSessionIssuer, error) {
 	a, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || a == nil || a.SessionID == "" || a.OIDCSubject == "" {
 		err := oops.C(oops.CodeUnauthorized)
-		return nil, err
-	}
-	if s.remoteSessions == nil {
-		err := oops.C(oops.CodeUnavailable)
 		return nil, err
 	}
 	v, err := s.remoteSessions.CreateGlobalIssuer(ctx, &adminrsgen.CreateGlobalIssuerPayload{SessionToken: nil, Slug: payload.Slug, Issuer: payload.Issuer, Name: payload.Name, LogoAssetID: payload.LogoAssetID, ClientSetupDocumentationURL: payload.ClientSetupDocumentationURL, AuthorizationEndpoint: payload.AuthorizationEndpoint, TokenEndpoint: payload.TokenEndpoint, RevocationEndpoint: payload.RevocationEndpoint, RegistrationEndpoint: payload.RegistrationEndpoint, JwksURI: payload.JwksURI, ServiceDocumentation: payload.ServiceDocumentation, OpPolicyURI: payload.OpPolicyURI, OpTosURI: payload.OpTosURI, ScopesSupported: payload.ScopesSupported, GrantTypesSupported: payload.GrantTypesSupported, AuthorizationGrantProfilesSupported: payload.AuthorizationGrantProfilesSupported, ResponseTypesSupported: payload.ResponseTypesSupported, TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported, CodeChallengeMethodsSupported: payload.CodeChallengeMethodsSupported, Oidc: payload.Oidc, Passthrough: payload.Passthrough, ClientIDMetadataDocumentSupported: payload.ClientIDMetadataDocumentSupported, UserinfoEndpoint: payload.UserinfoEndpoint, IntrospectionEndpoint: payload.IntrospectionEndpoint, IntrospectionEndpointAuthMethodsSupported: payload.IntrospectionEndpointAuthMethodsSupported, IDTokenSigningAlgValuesSupported: payload.IDTokenSigningAlgValuesSupported, ClaimsSupported: payload.ClaimsSupported, BackchannelLogoutSupported: payload.BackchannelLogoutSupported, AuthorizationResponseIssParameterSupported: payload.AuthorizationResponseIssParameterSupported, ScopeOverride: payload.ScopeOverride, ResourceIndicatorSupported: payload.ResourceIndicatorSupported, TunneledMcpServerID: payload.TunneledMcpServerID})
@@ -31,14 +23,11 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *gen.CreateGlo
 	}
 	return v, nil
 }
+
 func (s *Service) GetGlobalIssuerDuplicatePreflight(ctx context.Context, payload *gen.GetGlobalIssuerDuplicatePreflightPayload) (*types.RemoteSessionIssuerDuplicatePreflight, error) {
 	a, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || a == nil || a.SessionID == "" || a.OIDCSubject == "" {
 		err := oops.C(oops.CodeUnauthorized)
-		return nil, err
-	}
-	if s.remoteSessions == nil {
-		err := oops.C(oops.CodeUnavailable)
 		return nil, err
 	}
 	v, err := s.remoteSessions.GetGlobalIssuerDuplicatePreflight(ctx, &adminrsgen.GetGlobalIssuerDuplicatePreflightPayload{SessionToken: nil, Issuer: payload.Issuer})
@@ -47,14 +36,11 @@ func (s *Service) GetGlobalIssuerDuplicatePreflight(ctx context.Context, payload
 	}
 	return v, nil
 }
+
 func (s *Service) ListGlobalIssuers(ctx context.Context, payload *gen.ListGlobalIssuersPayload) (*gen.ListGlobalRemoteSessionIssuersResult, error) {
 	a, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || a == nil || a.SessionID == "" || a.OIDCSubject == "" {
 		err := oops.C(oops.CodeUnauthorized)
-		return nil, err
-	}
-	if s.remoteSessions == nil {
-		err := oops.C(oops.CodeUnavailable)
 		return nil, err
 	}
 	v, err := s.remoteSessions.ListGlobalIssuers(ctx, &adminrsgen.ListGlobalIssuersPayload{SessionToken: nil, Cursor: payload.Cursor, Limit: payload.Limit})
@@ -63,14 +49,11 @@ func (s *Service) ListGlobalIssuers(ctx context.Context, payload *gen.ListGlobal
 	}
 	return convertListGlobalRemoteSessionIssuersResult(v), nil
 }
+
 func (s *Service) GetGlobalIssuer(ctx context.Context, payload *gen.GetGlobalIssuerPayload) (*gen.GlobalRemoteSessionIssuer, error) {
 	a, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || a == nil || a.SessionID == "" || a.OIDCSubject == "" {
 		err := oops.C(oops.CodeUnauthorized)
-		return nil, err
-	}
-	if s.remoteSessions == nil {
-		err := oops.C(oops.CodeUnavailable)
 		return nil, err
 	}
 	v, err := s.remoteSessions.GetGlobalIssuer(ctx, &adminrsgen.GetGlobalIssuerPayload{SessionToken: nil, ID: payload.ID})
@@ -79,14 +62,11 @@ func (s *Service) GetGlobalIssuer(ctx context.Context, payload *gen.GetGlobalIss
 	}
 	return convertGlobalRemoteSessionIssuer(v), nil
 }
+
 func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *gen.UpdateGlobalIssuerPayload) (*types.RemoteSessionIssuer, error) {
 	a, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || a == nil || a.SessionID == "" || a.OIDCSubject == "" {
 		err := oops.C(oops.CodeUnauthorized)
-		return nil, err
-	}
-	if s.remoteSessions == nil {
-		err := oops.C(oops.CodeUnavailable)
 		return nil, err
 	}
 	v, err := s.remoteSessions.UpdateGlobalIssuer(ctx, &adminrsgen.UpdateGlobalIssuerPayload{SessionToken: nil, ID: payload.ID, Slug: payload.Slug, Issuer: payload.Issuer, Name: payload.Name, LogoAssetID: payload.LogoAssetID, ClientSetupDocumentationURL: payload.ClientSetupDocumentationURL, AuthorizationEndpoint: payload.AuthorizationEndpoint, TokenEndpoint: payload.TokenEndpoint, RevocationEndpoint: payload.RevocationEndpoint, RegistrationEndpoint: payload.RegistrationEndpoint, JwksURI: payload.JwksURI, ServiceDocumentation: payload.ServiceDocumentation, OpPolicyURI: payload.OpPolicyURI, OpTosURI: payload.OpTosURI, ScopesSupported: payload.ScopesSupported, GrantTypesSupported: payload.GrantTypesSupported, AuthorizationGrantProfilesSupported: payload.AuthorizationGrantProfilesSupported, ResponseTypesSupported: payload.ResponseTypesSupported, TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported, CodeChallengeMethodsSupported: payload.CodeChallengeMethodsSupported, Oidc: payload.Oidc, Passthrough: payload.Passthrough, ClientIDMetadataDocumentSupported: payload.ClientIDMetadataDocumentSupported, UserinfoEndpoint: payload.UserinfoEndpoint, IntrospectionEndpoint: payload.IntrospectionEndpoint, IntrospectionEndpointAuthMethodsSupported: payload.IntrospectionEndpointAuthMethodsSupported, IDTokenSigningAlgValuesSupported: payload.IDTokenSigningAlgValuesSupported, ClaimsSupported: payload.ClaimsSupported, BackchannelLogoutSupported: payload.BackchannelLogoutSupported, AuthorizationResponseIssParameterSupported: payload.AuthorizationResponseIssParameterSupported, ScopeOverride: payload.ScopeOverride, ResourceIndicatorSupported: payload.ResourceIndicatorSupported, TunneledMcpServerID: payload.TunneledMcpServerID})
@@ -95,14 +75,11 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *gen.UpdateGlo
 	}
 	return v, nil
 }
+
 func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *gen.DeleteGlobalIssuerPayload) error {
 	a, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || a == nil || a.SessionID == "" || a.OIDCSubject == "" {
 		err := oops.C(oops.CodeUnauthorized)
-		return err
-	}
-	if s.remoteSessions == nil {
-		err := oops.C(oops.CodeUnavailable)
 		return err
 	}
 	if err := s.remoteSessions.DeleteGlobalIssuer(ctx, &adminrsgen.DeleteGlobalIssuerPayload{SessionToken: nil, ID: payload.ID}); err != nil {
@@ -110,14 +87,11 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *gen.DeleteGlo
 	}
 	return nil
 }
+
 func (s *Service) FetchGlobalIssuerMetadata(ctx context.Context, payload *gen.FetchGlobalIssuerMetadataPayload) (*types.RemoteSessionIssuerDraft, error) {
 	a, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || a == nil || a.SessionID == "" || a.OIDCSubject == "" {
 		err := oops.C(oops.CodeUnauthorized)
-		return nil, err
-	}
-	if s.remoteSessions == nil {
-		err := oops.C(oops.CodeUnavailable)
 		return nil, err
 	}
 	v, err := s.remoteSessions.FetchGlobalIssuerMetadata(ctx, &adminrsgen.FetchGlobalIssuerMetadataPayload{SessionToken: nil, Issuer: payload.Issuer})
@@ -126,14 +100,11 @@ func (s *Service) FetchGlobalIssuerMetadata(ctx context.Context, payload *gen.Fe
 	}
 	return v, nil
 }
+
 func (s *Service) RefreshGlobalIssuerMetadata(ctx context.Context, payload *gen.RefreshGlobalIssuerMetadataPayload) (*types.RemoteSessionIssuerRefresh, error) {
 	a, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || a == nil || a.SessionID == "" || a.OIDCSubject == "" {
 		err := oops.C(oops.CodeUnauthorized)
-		return nil, err
-	}
-	if s.remoteSessions == nil {
-		err := oops.C(oops.CodeUnavailable)
 		return nil, err
 	}
 	v, err := s.remoteSessions.RefreshGlobalIssuerMetadata(ctx, &adminrsgen.RefreshGlobalIssuerMetadataPayload{SessionToken: nil, ID: payload.ID})
@@ -142,14 +113,11 @@ func (s *Service) RefreshGlobalIssuerMetadata(ctx context.Context, payload *gen.
 	}
 	return v, nil
 }
+
 func (s *Service) ListGlobalIssuerConvergenceCandidates(ctx context.Context, payload *gen.ListGlobalIssuerConvergenceCandidatesPayload) (*gen.ListIssuerConvergenceCandidatesResult, error) {
 	a, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || a == nil || a.SessionID == "" || a.OIDCSubject == "" {
 		err := oops.C(oops.CodeUnauthorized)
-		return nil, err
-	}
-	if s.remoteSessions == nil {
-		err := oops.C(oops.CodeUnavailable)
 		return nil, err
 	}
 	v, err := s.remoteSessions.ListGlobalIssuerConvergenceCandidates(ctx, &adminrsgen.ListGlobalIssuerConvergenceCandidatesPayload{SessionToken: nil, TargetID: payload.TargetID, Cursor: payload.Cursor, Limit: payload.Limit})
@@ -158,14 +126,11 @@ func (s *Service) ListGlobalIssuerConvergenceCandidates(ctx context.Context, pay
 	}
 	return convertListIssuerConvergenceCandidatesResult(v), nil
 }
+
 func (s *Service) GetGlobalIssuerMigratePreflight(ctx context.Context, payload *gen.GetGlobalIssuerMigratePreflightPayload) (*gen.IssuerMigratePreflight, error) {
 	a, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || a == nil || a.SessionID == "" || a.OIDCSubject == "" {
 		err := oops.C(oops.CodeUnauthorized)
-		return nil, err
-	}
-	if s.remoteSessions == nil {
-		err := oops.C(oops.CodeUnavailable)
 		return nil, err
 	}
 	v, err := s.remoteSessions.GetGlobalIssuerMigratePreflight(ctx, &adminrsgen.GetGlobalIssuerMigratePreflightPayload{SessionToken: nil, SourceID: payload.SourceID, TargetID: payload.TargetID})
@@ -174,14 +139,11 @@ func (s *Service) GetGlobalIssuerMigratePreflight(ctx context.Context, payload *
 	}
 	return convertIssuerMigratePreflight(v), nil
 }
+
 func (s *Service) MigrateToGlobalIssuer(ctx context.Context, payload *gen.MigrateToGlobalIssuerPayload) (*gen.MigrateRemoteSessionIssuerResult, error) {
 	a, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || a == nil || a.SessionID == "" || a.OIDCSubject == "" {
 		err := oops.C(oops.CodeUnauthorized)
-		return nil, err
-	}
-	if s.remoteSessions == nil {
-		err := oops.C(oops.CodeUnavailable)
 		return nil, err
 	}
 	v, err := s.remoteSessions.MigrateToGlobalIssuer(ctx, &adminrsgen.MigrateToGlobalIssuerPayload{SessionToken: nil, SourceID: payload.SourceID, TargetID: payload.TargetID})
@@ -190,6 +152,7 @@ func (s *Service) MigrateToGlobalIssuer(ctx context.Context, payload *gen.Migrat
 	}
 	return convertMigrateRemoteSessionIssuerResult(v), nil
 }
+
 func convertGlobalRemoteSessionIssuer(v *adminrsgen.GlobalRemoteSessionIssuer) *gen.GlobalRemoteSessionIssuer {
 	if v == nil {
 		return nil

@@ -510,18 +510,16 @@ func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.C
 		FunctionID:     nil,
 	}
 
-	if s.telemetryLogger != nil {
-		s.telemetryLogger.Log(ctx, telemetry.LogParams{
-			Timestamp:  time.Now(),
-			ToolInfo:   toolInfo,
-			UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
-			Attributes: withAgentActor(ctx, attrs),
-		})
+	s.telemetryLogger.Log(ctx, telemetry.LogParams{
+		Timestamp:  time.Now(),
+		ToolInfo:   toolInfo,
+		UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
+		Attributes: withAgentActor(ctx, attrs),
+	})
 
-		s.logger.DebugContext(ctx, "wrote Codex hook to ClickHouse",
-			attr.SlogEvent("codex_hook_written"),
-		)
-	}
+	s.logger.DebugContext(ctx, "wrote Codex hook to ClickHouse",
+		attr.SlogEvent("codex_hook_written"),
+	)
 }
 
 func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata) map[attr.Key]any {
@@ -831,15 +829,13 @@ func (s *Service) writeCodexAssistantResponseToPG(ctx context.Context, payload *
 		return err
 	}
 
-	if s.chatTitleGenerator != nil {
-		if err := s.chatTitleGenerator.ScheduleChatTitleGeneration(
-			context.WithoutCancel(ctx),
-			chatID.String(),
-			metadata.GramOrgID,
-			projectID.String(),
-		); err != nil {
-			s.logger.WarnContext(ctx, "failed to schedule chat title generation", attr.SlogError(err))
-		}
+	if err := s.chatTitleGenerator.ScheduleChatTitleGeneration(
+		context.WithoutCancel(ctx),
+		chatID.String(),
+		metadata.GramOrgID,
+		projectID.String(),
+	); err != nil {
+		s.logger.WarnContext(ctx, "failed to schedule chat title generation", attr.SlogError(err))
 	}
 
 	return nil

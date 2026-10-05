@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -44,8 +43,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
-	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	srv "github.com/speakeasy-api/gram/server/gen/http/hooks/server"
@@ -59,8 +56,6 @@ type Service struct {
 	telemetryLogger *telemetry.Logger
 	// otelLogPublisher tees OTLP logs received on the hooks endpoint into the
 	// OTel event feed pipeline (the gram.otel.v1.InboundLogRecord topic).
-	// Optional: when nil, hooks OTLP ingestion behaves exactly as before and
-	// nothing is republished.
 	otelLogPublisher gcp.Publisher[*otelv1.InboundLogRecord]
 	// otelTeeDrains tracks in-flight tee ack-drain goroutines so tests can
 	// await them deterministically.
@@ -69,50 +64,30 @@ type Service struct {
 	authz              *authz.Engine
 	audit              *audit.Logger
 	cache              cache.Cache
-	temporalEnv        *tenv.Environment
 	repo               *repo.Queries
 	productFeatures    ProductFeaturesClient
 	chatTitleGenerator ChatTitleGenerator
 	riskScanner        risk.RiskScanner
 	// piScanner flags captured skill manifests that read as prompt injections.
-	// Optional: when nil, skill capture stores content and scans nothing.
-	piScanner       *promptinjection.Scanner
-	riskRecorder    *metering.RiskRecorder
-	policyBypass    *risk.PolicyBypassEvaluator
-	spendGate       *spendrules.Gate
-	shadowMCPClient *shadowmcp.Client
-	writer          *chat.ChatMessageWriter
-	// efficacySignaler is optional: when nil, hook paths record exactly as
-	// before and emit no wakes.
-	efficacySignaler efficacy.Signaler
-	// identityMapRefresh is optional: when nil, newly attributed account
-	// links converge into the ClickHouse identity map at the sync schedule's
-	// next tick instead of immediately.
+	piScanner          *promptinjection.Scanner
+	riskRecorder       *metering.RiskRecorder
+	policyBypass       *risk.PolicyBypassEvaluator
+	spendGate          *spendrules.Gate
+	shadowMCPClient    *shadowmcp.Client
+	writer             *chat.ChatMessageWriter
+	efficacySignaler   efficacy.Signaler
 	identityMapRefresh IdentityMapRefreshSignaler
-	// suggestionSignaler is optional: when nil, recorded feedback skips the
-	// suggestion-analysis wake.
 	suggestionSignaler suggest.Signaler
-	serverURL          *url.URL
 	orgHosts           *orghost.Resolver
 	// orgHostCache keeps deny-link host lookups off the database on the deny
-	// hot path; nil disables caching.
+	// hot path.
 	orgHostCache *orgDefaultHostCache
 	jwtSecret    string
 	// nowFunc supplies the event timestamp for ingest paths that stamp
 	// server-side because the client sends none (the Cursor hook, and the
 	// Codex/OTEL fallbacks). Injectable so tests can pin telemetry event time
-	// relative to the attribute_metrics_summaries MV cutoff. Defaults to
-	// time.Now via NewService; access through now() for nil-safety.
+	// relative to the attribute_metrics_summaries MV cutoff.
 	nowFunc func() time.Time
-}
-
-// now returns the current time via the injected clock, falling back to
-// time.Now when unset (e.g. a zero-value Service).
-func (s *Service) now() time.Time {
-	if s.nowFunc != nil {
-		return s.nowFunc()
-	}
-	return time.Now()
 }
 
 type authorizer interface {
@@ -218,9 +193,6 @@ const identityMapRefreshSignalTimeout = time.Second
 // hook response open. Failures are logged and swallowed: the sync schedule
 // delivers the same refresh at its next tick.
 func (s *Service) signalIdentityMapRefresh(ctx context.Context) {
-	if s.identityMapRefresh == nil {
-		return
-	}
 	signalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), identityMapRefreshSignalTimeout)
 	defer cancel()
 	if err := s.identityMapRefresh.SignalIdentityMapRefresh(signalCtx); err != nil {
@@ -236,7 +208,7 @@ func (s *Service) signalSkillEfficacy(ctx context.Context, projectID uuid.UUID) 
 	ctx, span := s.tracer.Start(ctx, "hooks.signalSkillEfficacy")
 	defer span.End()
 
-	if s.efficacySignaler == nil || projectID == uuid.Nil {
+	if projectID == uuid.Nil {
 		return
 	}
 	signalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), skillEfficacySignalTimeout)
@@ -249,8 +221,10 @@ func (s *Service) signalSkillEfficacy(ctx context.Context, projectID uuid.UUID) 
 	}
 }
 
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
+var (
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
+)
 
 func NewService(
 	logger *slog.Logger,
@@ -261,8 +235,6 @@ func NewService(
 	otelLogPublisher gcp.Publisher[*otelv1.InboundLogRecord],
 	sessionsMgr *sessions.Manager,
 	cacheAdapter cache.Cache,
-	completionsClient openrouter.CompletionClient,
-	temporalEnv *tenv.Environment,
 	authz *authz.Engine,
 	auditLogger *audit.Logger,
 	pfClient ProductFeaturesClient,
@@ -276,7 +248,6 @@ func NewService(
 	efficacySignaler efficacy.Signaler,
 	suggestionSignaler suggest.Signaler,
 	identityMapRefresh IdentityMapRefreshSignaler,
-	serverURL *url.URL,
 	orgHosts *orghost.Resolver,
 	jwtSecret string,
 	riskRecorder *metering.RiskRecorder,
@@ -293,7 +264,6 @@ func NewService(
 		authz:              authz,
 		audit:              auditLogger,
 		cache:              cacheAdapter,
-		temporalEnv:        temporalEnv,
 		repo:               repo.New(db),
 		productFeatures:    pfClient,
 		chatTitleGenerator: chatTitleGenerator,
@@ -307,7 +277,6 @@ func NewService(
 		efficacySignaler:   efficacySignaler,
 		suggestionSignaler: suggestionSignaler,
 		identityMapRefresh: identityMapRefresh,
-		serverURL:          serverURL,
 		orgHosts:           orgHosts,
 		orgHostCache:       newOrgDefaultHostCache(),
 		jwtSecret:          jwtSecret,
@@ -410,12 +379,11 @@ func (s *Service) withAuthContext(ctx context.Context, logger *slog.Logger) *slo
 
 // lookupShadowMCPBlockingPolicy returns the first enabled shadow_mcp policy
 // with action=block for the given project, or nil when no such policy exists.
-// A nil scanner (test setups) or lookup failure returns nil so the hook falls
-// back to permissive behaviour. Flag-action policies are intentionally ignored
+// A lookup failure returns nil so the hook falls back to permissive behaviour. Flag-action policies are intentionally ignored
 // here — they surface as findings via the batch scanner instead of denying at
 // the hook layer.
 func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, organizationID, projectID, userID string) *risk.ShadowMCPPolicy {
-	if s.riskScanner == nil || projectID == "" {
+	if projectID == "" {
 		return nil
 	}
 	pid, err := uuid.Parse(projectID)

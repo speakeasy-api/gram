@@ -57,15 +57,3 @@ func TestAuthorizeRecord_PinsInstrumentAndDimensions(t *testing.T) {
 		attr.PKCESupport(PKCESupportUncaptured),
 	)
 }
-
-// A nil receiver and a nil instrument both degrade to no-ops rather than
-// panicking, per the package convention.
-func TestAuthorizeRecord_NilSafe(t *testing.T) {
-	t.Parallel()
-
-	var m *Authorize
-	m.Record(t.Context(), "okta-prod", PKCESupportSupported)
-
-	empty := &Authorize{flows: nil}
-	empty.Record(t.Context(), "okta-prod", PKCESupportSupported)
-}

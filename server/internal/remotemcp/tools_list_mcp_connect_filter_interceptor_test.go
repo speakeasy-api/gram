@@ -110,24 +110,6 @@ func TestToolsListMCPConnectFilterInterceptor_Name(t *testing.T) {
 	require.Equal(t, "tools-list-mcp-connect-filter", interceptor.Name())
 }
 
-func TestToolsListMCPConnectFilterInterceptor_NilEngineKeepsToolsButLabels(t *testing.T) {
-	t.Parallel()
-
-	// A nil engine must not panic and must not drop tools. It is still
-	// labelled: the interceptor is only attached to private-visibility
-	// servers, so the catalog describes what this caller may reach even
-	// when no grants could be evaluated.
-	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(nil, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
-
-	resp := newToolsListResponse(t, []*mcp.Tool{
-		{Name: "tool_a", InputSchema: map[string]any{}},
-		{Name: "tool_b", InputSchema: map[string]any{}},
-	})
-	require.NoError(t, interceptor.InterceptToolsListResponse(t.Context(), resp))
-	require.Len(t, resp.Result.Tools, 2, "nil engine must leave the tools array unchanged")
-	requireCallerVarying(t, resp)
-}
-
 func TestToolsListMCPConnectFilterInterceptor_ErrorResponseUntouched(t *testing.T) {
 	t.Parallel()
 

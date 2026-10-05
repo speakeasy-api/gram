@@ -94,7 +94,7 @@ func TestSignedWebhookPersistsTranscriptAndEnforcesPolicy(t *testing.T) {
 	result := new(risk.ScanResult)
 	result.Action = "block"
 	scanner := &recordingScanner{inputs: nil, userIDs: nil, result: result, err: nil}
-	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: scanner}
+	service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: store, scanner: scanner}
 	key := []byte("EXAMPLE-signing-secret")
 	config.SigningSecrets = []string{"whsec_" + base64.StdEncoding.EncodeToString(key)}
 	mux := goahttp.NewMuxer()
@@ -573,6 +573,7 @@ func TestStoreNeverAdoptsForAnonymousActor(t *testing.T) {
 	require.Equal(t, conversationOutcomeNew, outcome)
 	require.NotEqual(t, first, second)
 }
+
 func TestStoreKeepsConversationsWithSharedOpeningApart(t *testing.T) {
 	t.Parallel()
 	store, db, config := newTestStore(t)

@@ -56,16 +56,13 @@ type setupDiagnosticError struct {
 }
 
 func (e *setupDiagnosticError) Error() string {
-	if e == nil || e.cause == nil {
+	if e.cause == nil {
 		return "platform mcp setup diagnostic unavailable"
 	}
 	return e.cause.Error()
 }
 
 func (e *setupDiagnosticError) Unwrap() error {
-	if e == nil {
-		return nil
-	}
 	return e.cause
 }
 

@@ -87,7 +87,7 @@ func recentTransientFailure(state CacheState) bool {
 // and never through a hand-rolled loop over Resolver.Resolve, which carries
 // no rate limit.
 //
-// An optional second limiter charges every upstream consult to the source's
+// A second limiter charges every upstream consult to the source's
 // fetch scope, so a party naming many key set URLs still draws on one budget.
 //
 // Failure posture is fail-closed throughout, which is the correct posture
@@ -101,8 +101,8 @@ type KeyResolver struct {
 	cache          Cache
 	refreshLimiter *ratelimit.Limiter
 
-	// fetchLimiter, when set, is charged for every upstream consult and
-	// keyed by the source's fetch scope.
+	// fetchLimiter is charged for every upstream consult and keyed by the
+	// source's fetch scope.
 	fetchLimiter *ratelimit.Limiter
 
 	logger *slog.Logger
@@ -110,9 +110,6 @@ type KeyResolver struct {
 }
 
 // NewKeyResolver binds a Resolver to its storage and refresh-limit policy.
-// Every dependency is required; a nil limiter in particular is refused
-// rather than defaulted, because forgetting it is precisely the mis-assembly
-// this constructor exists to catch.
 //
 // The limiter is charged once per forced (unknown-kid) refresh, keyed by the
 // source's URI, and its budget is shared fleet-wide while caches are
@@ -120,7 +117,7 @@ type KeyResolver struct {
 // refresh to converge, so size the limiter burst at or above the replica
 // count or rotation propagates one replica per refill.
 //
-// fetchLimiter, when non-nil, is a second limiter charged once per upstream
+// fetchLimiter is a second limiter charged once per upstream
 // consult and keyed by the source's fetch scope. The required refresh
 // limiter bounds how often one key set URL is refetched on an unknown kid,
 // and nothing more: it cannot bound the cold fetch a never-seen URL costs,
@@ -130,20 +127,8 @@ type KeyResolver struct {
 // draws on that scope's one budget. Callers choose the scope; an
 // authorization server passing its own identifier makes the budget per
 // tenant, so one tenant's key sources cannot exhaust another's, and no
-// number of registrations buys more fetches. Nil disables it.
-func NewKeyResolver(resolver *Resolver, cache Cache, refreshLimiter *ratelimit.Limiter, fetchLimiter *ratelimit.Limiter, logger *slog.Logger) (*KeyResolver, error) {
-	if resolver == nil {
-		return nil, errors.New("jwks: KeyResolver requires a Resolver")
-	}
-	if cache == nil {
-		return nil, errors.New("jwks: KeyResolver requires a Cache")
-	}
-	if refreshLimiter == nil {
-		return nil, errors.New("jwks: KeyResolver requires a refresh rate limiter")
-	}
-	if logger == nil {
-		return nil, errors.New("jwks: KeyResolver requires a logger")
-	}
+// number of registrations buys more fetches.
+func NewKeyResolver(resolver *Resolver, cache Cache, refreshLimiter *ratelimit.Limiter, fetchLimiter *ratelimit.Limiter, logger *slog.Logger) *KeyResolver {
 	return &KeyResolver{
 		resolver:       resolver,
 		cache:          cache,
@@ -151,16 +136,13 @@ func NewKeyResolver(resolver *Resolver, cache Cache, refreshLimiter *ratelimit.L
 		fetchLimiter:   fetchLimiter,
 		logger:         logger.With(attr.SlogComponent("jwks")),
 		group:          singleflight.Group{},
-	}, nil
+	}
 }
 
 // fetchHook is the FetchHook that spends one unit of the source's scope
-// budget, or nil when no fetch limiter is configured. Handed to the resolver
-// so the charge lands exactly when a request is issued and never otherwise.
+// budget. Handed to the resolver so the charge lands exactly when a request
+// is issued and never otherwise.
 func (k *KeyResolver) fetchHook(source Source) FetchHook {
-	if k.fetchLimiter == nil {
-		return nil
-	}
 	return func(ctx context.Context) error {
 		return k.chargeFetch(ctx, source)
 	}

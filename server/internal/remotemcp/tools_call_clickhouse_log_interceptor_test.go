@@ -2,6 +2,7 @@ package remotemcp_test
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"testing"
 	"time"
@@ -45,7 +46,7 @@ func testToolsCallClickHouseEmission(t *testing.T, managedAgent bool) {
 
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
-	telemLogger := telemetry.NewLogger(t.Context(), logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, nil, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
+	telemLogger := telemetry.NewLogger(t.Context(), logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, newTestUserInfoResolver(t, logger), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 
 	projectID := uuid.New()
 	serverID := uuid.New().String()
@@ -164,7 +165,6 @@ func testToolsCallClickHouseEmission(t *testing.T, managedAgent bool) {
 			return err == nil && summarizedAgentID == agentID
 		}, 5*time.Second, 50*time.Millisecond, "trusted agent attribution did not reach trace_summaries")
 	}
-
 }
 
 func TestToolsCallClickHouseLogInterceptor_DurationMissingSentinel(t *testing.T) {
@@ -176,7 +176,7 @@ func TestToolsCallClickHouseLogInterceptor_DurationMissingSentinel(t *testing.T)
 
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
-	telemLogger := telemetry.NewLogger(t.Context(), logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, nil, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
+	telemLogger := telemetry.NewLogger(t.Context(), logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, newTestUserInfoResolver(t, logger), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 
 	projectID := uuid.New()
 	serverID := uuid.New().String()
@@ -248,7 +248,7 @@ func TestToolsCallClickHouseLogInterceptor_NoAuthContextSkips(t *testing.T) {
 
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
-	telemLogger := telemetry.NewLogger(t.Context(), logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, nil, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
+	telemLogger := telemetry.NewLogger(t.Context(), logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, newTestUserInfoResolver(t, logger), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 
 	serverID := uuid.New().String()
 	mcpServerID := uuid.New().String()
@@ -385,7 +385,7 @@ func runStatusCodeMappingCase(t *testing.T, tc statusCodeCase) int32 {
 
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
-	telemLogger := telemetry.NewLogger(t.Context(), logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, logsEnabled, toolIOLogsEnabled, nil, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
+	telemLogger := telemetry.NewLogger(t.Context(), logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, logsEnabled, toolIOLogsEnabled, newTestUserInfoResolver(t, logger), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 
 	projectID := uuid.New()
 	serverID := uuid.New().String()
@@ -432,4 +432,11 @@ func runStatusCodeMappingCase(t *testing.T, tc statusCodeCase) int32 {
 	}, 5*time.Second, 50*time.Millisecond, "telemetry_logs row did not appear")
 
 	return statusCode
+}
+
+func newTestUserInfoResolver(t *testing.T, logger *slog.Logger) *telemetry.UserInfoResolver {
+	t.Helper()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	return telemetry.NewUserInfoResolver(logger, db, testenv.NewMemoryCache())
 }

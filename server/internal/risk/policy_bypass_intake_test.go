@@ -2,9 +2,6 @@ package risk_test
 
 import (
 	"context"
-	"io"
-	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -12,26 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/authority"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/capability"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
 	mcpapprovalrepo "github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
-	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 // intakeTokenInput names the parts of a bypass token a binding test varies.
@@ -286,49 +269,6 @@ func TestCreatePolicyBypassRequest_NonHTTPURLKeepsLegacyFlow(t *testing.T) {
 	require.Equal(t, authCtx.UserID, redeemedBypassRow(t, ctx, ti, redemption).RequesterUserID)
 }
 
-// riskIntakeQuietProbes and riskIntakeNotFoundRegistry mirror the mcpapproval
-// package's own test stubs, so the real service can be wired as the intake
-// without reaching real registries or MCP servers.
-type riskIntakeQuietProbes struct{}
-
-func (riskIntakeQuietProbes) DiscoverAuthority(_ context.Context, _ string) (*authority.Declaration, error) {
-	return nil, nil
-}
-
-func (riskIntakeQuietProbes) ListToolDeclarations(_ context.Context, _ string) ([]capability.Declaration, error) {
-	return nil, nil
-}
-
-func (riskIntakeQuietProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
-	return nil, nil
-}
-
-type riskIntakeNotFoundRegistry struct{}
-
-func (riskIntakeNotFoundRegistry) Do(request *http.Request) (*http.Response, error) {
-	return &http.Response{
-		Status:     http.StatusText(http.StatusNotFound),
-		StatusCode: http.StatusNotFound,
-		Body:       io.NopCloser(strings.NewReader(`{"error":"Not found"}`)),
-		Header:     http.Header{},
-		Request:    request,
-	}, nil
-}
-
-// riskIntakeEmptyAdvisoryDB answers every advisory query with an empty
-// document, OSV's shape for a package it has nothing on.
-type riskIntakeEmptyAdvisoryDB struct{}
-
-func (riskIntakeEmptyAdvisoryDB) Do(request *http.Request) (*http.Response, error) {
-	return &http.Response{
-		Status:     http.StatusText(http.StatusOK),
-		StatusCode: http.StatusOK,
-		Body:       io.NopCloser(strings.NewReader(`{}`)),
-		Header:     http.Header{},
-		Request:    request,
-	}, nil
-}
-
 // The block link redeems end to end through the REAL mcpapproval service —
 // wired the way the server wires it — and lands as an approval request with
 // the blocked employee attached, deduplicated on the canonical URL, with no
@@ -338,21 +278,7 @@ func TestCreatePolicyBypassRequest_RealIntakeOpensApprovalRequest(t *testing.T) 
 
 	flags := &feature.InMemory{}
 	ctx, ti := newTestRiskService(t, func(instance *testInstance) {
-		logger := testenv.NewLogger(t)
-		tracerProvider := testenv.NewTracerProvider(t)
-		authzEngine := authz.NewEngine(logger, instance.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-		assembler := evidence.NewAssembler(
-			packagemeta.NewClient(riskIntakeNotFoundRegistry{}),
-			repometa.NewClient(riskIntakeNotFoundRegistry{}),
-			advisories.NewClient(riskIntakeEmptyAdvisoryDB{}),
-			domainmeta.NewClient(riskIntakeNotFoundRegistry{}),
-			telemetryrepo.New(instance.chConn),
-			riskIntakeQuietProbes{},
-			riskIntakeQuietProbes{},
-			riskIntakeQuietProbes{},
-		)
-
-		instance.approvalIntake = mcpapproval.NewService(logger, tracerProvider, instance.conn, instance.sessionManager, authzEngine, flags, audit.NewLogger(), assembler, nil)
+		instance.approvalIntake = newTestApprovalIntake(t, instance, flags)
 	})
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -164,7 +165,7 @@ func TestHandleInitialize_WritesNegotiatedVersionBackIntoPayload(t *testing.T) {
 		Params:  rawParams,
 	}
 
-	body, err := handleInitialize(t.Context(), testenv.NewLogger(t), nil, req, payload, nil, metadata_repo.New(failingDBTX{}), store)
+	body, err := handleInitialize(t.Context(), testenv.NewLogger(t), mcpmetrics.NewMetrics(testenv.NewMeterProvider(t).Meter("test"), testenv.NewLogger(t)), req, payload, nil, metadata_repo.New(failingDBTX{}), store)
 	require.NoError(t, err)
 
 	require.Equal(t, mcpversions.Version20251125, payload.protocolVersion.InEffect)

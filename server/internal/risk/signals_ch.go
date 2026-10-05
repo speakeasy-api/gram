@@ -69,10 +69,6 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 		return nil, oops.E(oops.CodeInvalid, err, "invalid signals window").LogError(ctx, s.logger)
 	}
 
-	if s.findingsCH == nil {
-		return nil, oops.E(oops.CodeNotImplemented, nil, "risk signals require the ClickHouse findings store").LogError(ctx, s.logger)
-	}
-
 	mcpServerID := ""
 	if payload.McpServerID != nil {
 		mcpServerID = *payload.McpServerID
@@ -274,12 +270,9 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 
 // riskWatchdogEnabled reports whether the Watchdog signals endpoint is
 // enabled for the org. Same PostHog flag key the dashboard uses to show the
-// Watchdog page, so one flag controls both surfaces. A nil provider or a
-// failed lookup degrades to disabled.
+// Watchdog page, so one flag controls both surfaces. A failed lookup degrades
+// to disabled.
 func (s *Service) riskWatchdogEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
-	if s.flags == nil {
-		return false
-	}
 	groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
 	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagRiskWatchdog, authCtx.ActiveOrganizationID, groups)
 	if err != nil {
@@ -491,10 +484,6 @@ func (s *Service) GetRiskMcpServerCounts(ctx context.Context, payload *gen.GetRi
 	from, to, err := resolveRiskOverviewWindow(payload.From, payload.To)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid window").LogError(ctx, s.logger)
-	}
-
-	if s.findingsCH == nil {
-		return nil, oops.E(oops.CodeNotImplemented, nil, "mcp server counts require the ClickHouse findings store").LogError(ctx, s.logger)
 	}
 
 	rows, err := s.findingsCH.ListRiskMCPServerCounts(ctx, chrepo.RiskOverviewWindowParams{

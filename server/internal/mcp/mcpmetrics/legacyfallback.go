@@ -53,16 +53,14 @@ const (
 )
 
 // LegacyFallbackCounter owns the two migration merge-gate instruments for the
-// toolsets → mcp_servers cutover (AIS-633). A nil *LegacyFallbackCounter is
-// valid — every Record becomes a no-op — so callers never nil-check.
+// toolsets → mcp_servers cutover (AIS-633).
 type LegacyFallbackCounter struct {
 	slugFallback     metric.Int64Counter
 	audienceAccepted metric.Int64Counter
 }
 
 // NewLegacyFallbackCounter constructs both instruments. An instrument-creation
-// failure is logged and leaves that instrument nil; Record methods handle nil
-// instruments so partial construction still records what it can.
+// failure is logged.
 func NewLegacyFallbackCounter(meter metric.Meter, logger *slog.Logger) *LegacyFallbackCounter {
 	slugFallback, err := meter.Int64Counter(
 		InstrumentToolsetSlugFallback,
@@ -90,9 +88,6 @@ func NewLegacyFallbackCounter(meter metric.Meter, logger *slog.Logger) *LegacyFa
 // live toolset — counting bare address misses would keep the series nonzero
 // forever on scanner probes of nonexistent slugs.
 func (c *LegacyFallbackCounter) RecordToolsetSlugFallback(ctx context.Context, entryPoint LegacyFallbackEntryPoint) {
-	if c == nil || c.slugFallback == nil {
-		return
-	}
 	c.slugFallback.Add(ctx, 1, metric.WithAttributes(attr.McpEntryPoint(entryPoint)))
 }
 
@@ -100,8 +95,5 @@ func (c *LegacyFallbackCounter) RecordToolsetSlugFallback(ctx context.Context, e
 // toolset-URN audience, dimensioned by the issuer whose sessions still carry
 // it.
 func (c *LegacyFallbackCounter) RecordLegacyAudienceAccepted(ctx context.Context, issuerID string) {
-	if c == nil || c.audienceAccepted == nil {
-		return
-	}
 	c.audienceAccepted.Add(ctx, 1, metric.WithAttributes(attr.UserSessionIssuerID(issuerID)))
 }

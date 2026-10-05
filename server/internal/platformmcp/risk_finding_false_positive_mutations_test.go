@@ -7,9 +7,11 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
@@ -115,14 +117,17 @@ func TestRiskFindingFalsePositiveReceiptResultsStayClosed(t *testing.T) {
 
 // The confirmation gate runs before the principal is read: an unconfirmed
 // call from a context with no principal is refused as confirmation_required,
-// not as unauthorized, and the disabled service is never consulted.
+// not as unauthorized.
 func TestRiskFindingFalsePositiveToolsRefuseBeforeReadingPrincipal(t *testing.T) {
 	t.Parallel()
 
-	service := newRiskFindingFalsePositiveService(nil, nil)
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_risk_finding_refusals")
+	require.NoError(t, err)
+	controls := NewRiskMutationControls(conn, &feature.InMemory{}, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "risk-finding-test-key")
+	service := newRiskFindingFalsePositiveService(controls, risk.NewFalsePositiveCore(audit.NewLogger()))
 	unconfirmed := map[string]any{"project_slug": "example", "finding_ids": []any{uuid.NewString()}, "confirmed": false, "idempotency_key": "key"}
 
-	_, _, err := service.markTool(t.Context(), nil, unconfirmed)
+	_, _, err = service.markTool(t.Context(), nil, unconfirmed)
 	requireRiskMutationRefusal(t, err, "confirmation_required")
 	_, _, err = service.unmarkTool(t.Context(), nil, unconfirmed)
 	requireRiskMutationRefusal(t, err, "confirmation_required")
@@ -138,7 +143,7 @@ func TestRiskFindingFalsePositiveToolsRefuseBeforeReadingPrincipal(t *testing.T)
 	requireRiskMutationRefusal(t, err, "invalid_request")
 
 	_, _, err = service.markTool(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), nil, confirmed)
-	requireRiskMutationRefusal(t, err, unavailableCode)
+	requireRiskMutationRefusal(t, err, "not_found")
 
 	_, _, err = service.markTool(t.Context(), nil, map[string]any{"project_slug": "example", "finding_ids": []any{uuid.NewString()}, "confirmed": true, "idempotency_key": "key", "unexpected": true})
 	requireRiskMutationRefusal(t, err, "invalid_request")
@@ -147,9 +152,7 @@ func TestRiskFindingFalsePositiveToolsRefuseBeforeReadingPrincipal(t *testing.T)
 func TestRiskFindingFalsePositiveToolSchemasBoundInput(t *testing.T) {
 	t.Parallel()
 
-	server := mcp.NewServer(&mcp.Implementation{Name: "risk-findings-test", Version: "0.0.1"}, nil)
-	reg := newRegistrar(server)
-	registerUnavailableRiskTools(reg)
+	_, reg := newTestServer(t)
 
 	for _, name := range []string{operationMarkRiskFindingsFalsePositive, operationUnmarkRiskFindingsFalsePositive} {
 		descriptor := descriptorByName(t, reg, name)
@@ -161,7 +164,6 @@ func TestRiskFindingFalsePositiveToolSchemasBoundInput(t *testing.T) {
 		require.True(t, descriptor.Annotations.IdempotentHint)
 		require.NotNil(t, descriptor.Annotations.DestructiveHint)
 		require.Equal(t, name == operationMarkRiskFindingsFalsePositive, *descriptor.Annotations.DestructiveHint, "dismissing hides findings; restoring does not")
-		require.Contains(t, descriptor.Description, "not enabled")
 
 		ctx := ContextWithPrincipal(t.Context(), testRiskPrincipal("user"))
 		ids := `["` + uuid.NewString() + `"]`
@@ -179,7 +181,7 @@ func TestRiskFindingFalsePositiveToolSchemasBoundInput(t *testing.T) {
 		_, err := descriptor.Invoke(ctx, json.RawMessage(`{"project_slug":"project","finding_ids":`+ids+`,"confirmed":true,"idempotency_key":"key"}`))
 		var refusal *ToolRefusalError
 		require.ErrorAs(t, err, &refusal)
-		require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`)
+		require.Contains(t, refusal.Payload, `"code":"not_found"`)
 	}
 
 	_, err := descriptorByName(t, reg, operationUnmarkRiskFindingsFalsePositive).Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","finding_ids":["`+uuid.NewString()+`"],"confirmed":true,"idempotency_key":"key","reason":"why"}`))

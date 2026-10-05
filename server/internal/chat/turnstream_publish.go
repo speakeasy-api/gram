@@ -33,10 +33,6 @@ func (w *ChatMessageWriter) publishTurnFrames(
 	pending []chatMessageRow,
 	assistants []repo.CreateChatMessageParams,
 ) {
-	if w == nil || w.turnStream == nil {
-		return
-	}
-
 	for _, row := range pending {
 		if row.role != "tool" || row.toolCallID == "" {
 			continue
@@ -129,7 +125,7 @@ const TurnInterruptedFinishReason = "interrupted"
 // here is what actually settles every client watching the chat, including the
 // tabs that did not press the button.
 func (w *ChatMessageWriter) PublishTurnInterrupted(ctx context.Context, chatID uuid.UUID) {
-	if w == nil || w.turnStream == nil || chatID == uuid.Nil {
+	if chatID == uuid.Nil {
 		return
 	}
 	w.publishTurnFrame(ctx, chatID, TurnFrame{
@@ -170,9 +166,6 @@ func marshalToolOutput(row chatMessageRow) json.RawMessage {
 // capture strategy writes pending rows, assistant rows and whole turns
 // separately — so every path publishes rather than relying on one funnel.
 func (w *ChatMessageWriter) publishRowFrames(ctx context.Context, rows []chatMessageRow) {
-	if w == nil || w.turnStream == nil {
-		return
-	}
 	for _, row := range rows {
 		switch row.role {
 		case "tool":

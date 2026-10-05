@@ -74,7 +74,7 @@ func (e *ExternalAuthorizationError) Unwrap() error { return e.cause }
 // PrepareExternalContext verifies live membership, binds a trusted user
 // context, and resolves current grants once for this external request.
 func (a *LiveOrgAdminAuthorizer) PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error) {
-	if a == nil || a.db == nil || a.engine == nil || principal.UserID == "" || principal.OrganizationID == "" {
+	if principal.UserID == "" || principal.OrganizationID == "" {
 		return ctx, ErrUnavailable
 	}
 	if err := a.RequireLiveMembership(ctx, principal); err != nil {
@@ -134,7 +134,7 @@ func (a *LiveOrgAdminAuthorizer) PrepareExternalContext(ctx context.Context, pri
 }
 
 func (a *LiveOrgAdminAuthorizer) AuthorizeExternalCall(ctx context.Context, principal Principal, policy ExternalAuthorization) error {
-	if a == nil || a.engine == nil || principal.UserID == "" || principal.OrganizationID == "" {
+	if principal.UserID == "" || principal.OrganizationID == "" {
 		return ErrUnavailable
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

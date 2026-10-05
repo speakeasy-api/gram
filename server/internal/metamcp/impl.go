@@ -62,8 +62,10 @@ type Service struct {
 	publicationRequests      plugins.PublicationRequests
 }
 
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
+var (
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
+)
 
 func NewService(
 	logger *slog.Logger,
@@ -74,6 +76,7 @@ func NewService(
 	auditLogger *audit.Logger,
 	temporalEnv *tenv.Environment,
 	networkAccessEligibility networkaccess.EligibilityChecker,
+	distributionAdmission *admission.Guard,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("metamcp"))
 
@@ -86,15 +89,10 @@ func NewService(
 		audit:                    auditLogger,
 		temporalEnv:              temporalEnv,
 		networkAccessEligibility: networkAccessEligibility,
-		distributionAdmission:    nil,
+		distributionAdmission:    distributionAdmission,
 		publisher:                nil,
 		publicationRequests:      plugins.PublicationRequests{Enabled: false},
 	}
-}
-
-func (s *Service) WithDistributionAdmission(guard *admission.Guard) *Service {
-	s.distributionAdmission = guard
-	return s
 }
 
 func (s *Service) WithPublicationRequests(enabled bool) *Service {
@@ -108,6 +106,7 @@ func (s *Service) WithPluginPublisher(publisher plugins.PluginPublishSignaler) *
 }
 
 func (s *Service) signalPluginPublish(ctx context.Context, projectID uuid.UUID, userID string, gatewayID uuid.UUID, detached bool) {
+	// No publisher is wired when GitHub publishing is off.
 	if s.publisher == nil {
 		return
 	}
@@ -481,7 +480,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 // gateway's network access mode. The caller owns the transaction and performs
 // authorization before calling. Admission is finalized before project and row locks.
 func UpdateMetaMCPServerNetworkAccessModeInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, organizationID string, projectID uuid.UUID, actorUserID string, actorEmail *string, serverID uuid.UUID, mode networkaccess.Mode, finalize networkaccess.AdmissionFinalizer) (repo.MetaMcpServer, error) {
-	if tx == nil || auditLogger == nil || organizationID == "" || projectID == uuid.Nil || actorUserID == "" || serverID == uuid.Nil {
+	if organizationID == "" || projectID == uuid.Nil || actorUserID == "" || serverID == uuid.Nil {
 		return repo.MetaMcpServer{}, fmt.Errorf("invalid gateway network access update input")
 	}
 	if _, err := networkaccess.Parse(string(mode)); err != nil {
@@ -524,9 +523,6 @@ func UpdateMetaMCPServerNetworkAccessModeInTransaction(ctx context.Context, tx p
 func (s *Service) prepareNetworkAccessMode(ctx context.Context, organizationID string, mode networkaccess.Mode) (networkaccess.AdmissionFinalizer, error) {
 	if mode.IsPublicOnly() {
 		return networkaccess.NewAdmissionFinalizer(func(context.Context, pgx.Tx) error { return nil }), nil
-	}
-	if s.networkAccessEligibility == nil {
-		return networkaccess.AdmissionFinalizer{}, oops.E(oops.CodeForbidden, nil, "private network access is not enabled for this organization")
 	}
 	finalize, err := s.networkAccessEligibility.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: organizationID, Mode: mode})
 	if err != nil {
@@ -793,13 +789,7 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sort_order").LogError(ctx, logger)
 	}
 
-	var rollout admission.RolloutConfig
-	var rolloutErr error
-	if s.distributionAdmission == nil {
-		rolloutErr = admission.ErrUnavailable
-	} else {
-		rollout, rolloutErr = s.distributionAdmission.ResolveProject(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, *authCtx.ProjectID)
-	}
+	rollout, rolloutErr := s.distributionAdmission.ResolveProject(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, *authCtx.ProjectID)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -1257,9 +1247,6 @@ func rootDomainIDs(endpoints []mcpendpointsrepo.McpEndpoint) []uuid.UUID {
 }
 
 func (s *Service) reconcileCustomDomains(ctx context.Context, customDomainIDs []uuid.UUID) error {
-	if s.temporalEnv == nil {
-		return nil
-	}
 	var reconcileErrors []error
 	for _, customDomainID := range customDomainIDs {
 		_, err := (&background.CustomDomainRegistrationClient{TemporalEnv: s.temporalEnv}).ExecuteCustomDomainReconcile(ctx, customDomainID)

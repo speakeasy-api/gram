@@ -1,15 +1,14 @@
 package telemetry_test
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattest"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -32,8 +31,7 @@ func TestImportedSessionObservationReachesUserAndSessionAnalytics(t *testing.T) 
 	})
 	require.NoError(t, err)
 	chatID := upserted.ID
-	writer, shutdown := chat.NewChatMessageWriter(ti.logger, ti.conn, assetstest.NewTestBlobStore(t))
-	t.Cleanup(func() { require.NoError(t, shutdown(context.WithoutCancel(t.Context()))) })
+	writer := chattest.NewMessageWriter(t, infra, ti.conn)
 	var write chat.ExternalMessageWrite
 	write.Params.ChatID = chatID
 	write.Params.ProjectID = projectID

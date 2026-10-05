@@ -42,9 +42,7 @@ var (
 // NewSessionSelectionInterceptor builds the selection enforcer. A nil
 // selection means all tools and must not be wired through this interceptor
 // at all; callers gate on non-nil before attaching, and a nil selection
-// reaching here fails closed to zero tools rather than all. store may be
-// nil, which disables witnessing — live grants then narrow to the frozen
-// name grant on both sides.
+// reaching here fails closed to zero tools rather than all.
 func NewSessionSelectionInterceptor(selection *toolfilter.SessionSelection, store *toolfilter.SessionToolWitnessStore) *SessionSelectionInterceptor {
 	return &SessionSelectionInterceptor{selection: selection, store: store}
 }
@@ -127,7 +125,7 @@ func (i *SessionSelectionInterceptor) InterceptToolsListResponse(ctx context.Con
 		sessionID = list.RemoteMessage.UserHTTPRequest.Header.Get(proxy.McpSessionIDHeader)
 	}
 	live := i.selection.LiveAnnotations()
-	liveEligible := len(live) > 0 && i.store != nil
+	liveEligible := len(live) > 0
 
 	allowed := make([]*mcp.Tool, 0, len(list.Result.Tools))
 	witnessed := make([]toolfilter.WitnessedTool, 0, len(list.Result.Tools))
@@ -179,7 +177,7 @@ func (i *SessionSelectionInterceptor) InterceptToolsCallRequest(ctx context.Cont
 		return nil
 	}
 	live := i.selection.LiveAnnotations()
-	if i.store != nil && len(live) > 0 {
+	if len(live) > 0 {
 		sessionID := ""
 		if call.UserRequest != nil && call.UserRequest.UserHTTPRequest != nil {
 			sessionID = call.UserRequest.UserHTTPRequest.Header.Get(proxy.McpSessionIDHeader)

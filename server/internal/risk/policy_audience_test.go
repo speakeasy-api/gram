@@ -12,6 +12,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -199,19 +200,17 @@ func TestScanner_ScanForEnforcement_RespectsTargetedAudience(t *testing.T) {
 	require.NoError(t, err)
 
 	pii := &instrumentedPIIScanner{findOnEntity: "EMAIL_ADDRESS"}
-	scanner, err := risk.NewScanner(
+	scanner := risk.NewScanner(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
 		newTestCustomRuleAnalyzer(t, ti.conn),
 		pii,
-		nil,
-		nil,
-		nil,
+		testPIScanner(t),
+		testPromptPolicyScanner(t),
+		&feature.InMemory{},
 		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
-
-	require.NoError(t, err)
 
 	otherUserResult, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, "user_"+uuid.NewString(), "irrelevant text", message.User, ""))
 	require.NoError(t, err)
@@ -244,19 +243,17 @@ func TestScanner_ScanForEnforcement_EveryoneAudienceAppliesWithoutResolvedUser(t
 	require.NoError(t, err)
 
 	pii := &instrumentedPIIScanner{findOnEntity: "EMAIL_ADDRESS"}
-	scanner, err := risk.NewScanner(
+	scanner := risk.NewScanner(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
 		newTestCustomRuleAnalyzer(t, ti.conn),
 		pii,
-		nil,
-		nil,
-		nil,
+		testPIScanner(t),
+		testPromptPolicyScanner(t),
+		&feature.InMemory{},
 		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
-
-	require.NoError(t, err)
 
 	emptyUserResult, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, "", "irrelevant text", message.User, ""))
 	require.NoError(t, err)
@@ -293,19 +290,17 @@ func TestScanner_LookupShadowMCPBlockingPolicy_EveryoneAudienceAppliesWithoutRes
 	})
 	require.NoError(t, err)
 
-	scanner, err := risk.NewScanner(
+	scanner := risk.NewScanner(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		ti.conn,
 		newTestCustomRuleAnalyzer(t, ti.conn),
 		nil,
-		nil,
-		nil,
-		nil,
+		testPIScanner(t),
+		testPromptPolicyScanner(t),
+		&feature.InMemory{},
 		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
-
-	require.NoError(t, err)
 
 	emptyUserPolicy, err := scanner.LookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "")
 	require.NoError(t, err)

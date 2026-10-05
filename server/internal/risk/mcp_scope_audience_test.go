@@ -10,7 +10,9 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/tooldisposition"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestListEnabledForMCP_FiltersByPrincipalAudience(t *testing.T) {
@@ -32,7 +34,7 @@ func TestListEnabledForMCP_FiltersByPrincipalAudience(t *testing.T) {
 	}
 	_, agentID := agentRequestContextWithID(t, ctx, ti, "Roleless agent", "")
 
-	core := policycore.New(ti.conn)
+	core := policycore.NewMCPPolicies(ti.conn, tooldisposition.New(testenv.NewLogger(t), ti.conn, ti.cacheAdapter))
 	list := func(principal *policycore.MCPPrincipal) []string {
 		t.Helper()
 		policies, err := core.ListEnabledForMCP(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, policycore.MCPTarget{

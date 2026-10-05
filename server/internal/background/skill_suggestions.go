@@ -198,7 +198,8 @@ func AddSkillSuggestionSweepSchedule(ctx context.Context, temporalEnv *tenv.Envi
 		WorkflowRunTimeout: skillSuggestionSweepTimeout,
 	}
 	_, err := scheduleClient.Create(ctx, client.ScheduleOptions{
-		CatchupWindow: skillSuggestionSweepCatchupWindow, ID: skillSuggestionSweepScheduleID, Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP, Spec: spec, Action: action})
+		CatchupWindow: skillSuggestionSweepCatchupWindow, ID: skillSuggestionSweepScheduleID, Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP, Spec: spec, Action: action,
+	})
 	switch {
 	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
 		if err := scheduleClient.GetHandle(ctx, skillSuggestionSweepScheduleID).Update(ctx, client.ScheduleUpdateOptions{DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
@@ -221,8 +222,10 @@ type TemporalSkillSuggestionSignaler struct {
 	StartDelay  time.Duration
 }
 
-var _ suggest.Signaler = (*TemporalSkillSuggestionSignaler)(nil)
-var _ domainskills.ManualSuggestionSignaler = (*TemporalSkillSuggestionSignaler)(nil)
+var (
+	_ suggest.Signaler                      = (*TemporalSkillSuggestionSignaler)(nil)
+	_ domainskills.ManualSuggestionSignaler = (*TemporalSkillSuggestionSignaler)(nil)
+)
 
 func (s *TemporalSkillSuggestionSignaler) Signal(ctx context.Context, projectID, skillID uuid.UUID) error {
 	return s.signal(ctx, projectID, skillID, "enqueue", s.StartDelay)

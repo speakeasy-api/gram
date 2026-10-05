@@ -173,7 +173,7 @@ type MCPServerHealthOutcomes struct {
 	Unknown      int64 `json:"unknown"`
 }
 
-func registerServerHealthTools(server *mcp.Server, organizations OrganizationReader, projects ProjectReader, health MCPServerHealthReader) {
+func registerServerHealthTools(server *mcp.Server, reader Reader) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:  "describe_mcp_server_health",
 		Title: "Describe MCP Server Health",
@@ -203,24 +203,21 @@ func registerServerHealthTools(server *mcp.Server, organizations OrganizationRea
 		if !slices.Contains(healthWindowDays, window) {
 			return nil, MCPServerHealth{}, errors.New("window_days must be 14, 30 or 90")
 		}
-		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
+		org, err := readExactOrganization(ctx, reader, input.OrganizationID)
 		if err != nil {
 			return nil, MCPServerHealth{}, err
 		}
-		if projects == nil || health == nil {
-			return nil, MCPServerHealth{}, errServerHealthUnavailable
-		}
-		project, err := projects.GetProject(ctx, &gen.GetProjectPayload{IDOrSlug: input.ProjectID, OrganizationIDOrSlug: &org.ID})
+		project, err := reader.GetProject(ctx, &gen.GetProjectPayload{IDOrSlug: input.ProjectID, OrganizationIDOrSlug: &org.ID})
 		if err != nil || project == nil || project.ID != input.ProjectID || project.OrganizationID != org.ID {
 			return nil, MCPServerHealth{}, errServerHealthUnavailable
 		}
-		result, err := health.DescribeMcpServerHealth(ctx, &gen.DescribeMcpServerHealthPayload{
+		result, err := reader.DescribeMcpServerHealth(ctx, &gen.DescribeMcpServerHealthPayload{
 			OrganizationID: org.ID, ProjectID: project.ID, McpServerID: input.MCPServerID, WindowDays: window,
 		})
 		if err != nil {
 			return nil, MCPServerHealth{}, errServerHealthUnavailable
 		}
-		calls, err := health.GetMcpServerToolCalls(ctx, &gen.GetMcpServerToolCallsPayload{
+		calls, err := reader.GetMcpServerToolCalls(ctx, &gen.GetMcpServerToolCallsPayload{
 			OrganizationID: org.ID, ProjectID: project.ID, McpServerID: input.MCPServerID, WindowDays: window,
 		})
 		if err != nil {

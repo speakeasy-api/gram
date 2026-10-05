@@ -91,7 +91,7 @@ func TestFileProxy_RejectsExpiredToken(t *testing.T) {
 
 	enc, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
-	proxy := &FileProxy{logger: discardTestLogger(), enc: enc, client: newAPIClient("https://slack.example", nil)}
+	proxy := &FileProxy{logger: discardTestLogger(), enc: enc, client: newAPIClient("https://slack.example", &http.Client{})}
 
 	blob := sealFetch(t, enc, sealedFileFetch{
 		FileID:    "F123",
@@ -107,7 +107,7 @@ func TestFileProxy_RejectsGarbageToken(t *testing.T) {
 
 	enc, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
-	proxy := &FileProxy{logger: discardTestLogger(), enc: enc, client: newAPIClient("https://slack.example", nil)}
+	proxy := &FileProxy{logger: discardTestLogger(), enc: enc, client: newAPIClient("https://slack.example", &http.Client{})}
 
 	rec := proxyRequest(t, proxy, "not-a-sealed-blob")
 	require.Equal(t, http.StatusForbidden, rec.Code)
@@ -118,7 +118,7 @@ func TestFileProxy_RejectsMissingToken(t *testing.T) {
 
 	enc, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
-	proxy := &FileProxy{logger: discardTestLogger(), enc: enc, client: newAPIClient("https://slack.example", nil)}
+	proxy := &FileProxy{logger: discardTestLogger(), enc: enc, client: newAPIClient("https://slack.example", &http.Client{})}
 
 	rec := proxyRequest(t, proxy, "")
 	require.Equal(t, http.StatusNotFound, rec.Code)

@@ -645,8 +645,7 @@ func TestTailscaleNetworkIngressCleanupWithoutApplyConfiguration(t *testing.T) {
 	full, typed, dynamicClient, desired := newTestTailscaleProvisioner(t)
 	_, err := full.Apply(t.Context(), desired)
 	require.NoError(t, err)
-	cleanup, err := NewTailscaleNetworkIngressProvisioner(typed, dynamicClient, TailscaleNetworkIngressConfig{OperatorNamespace: "tailscale"})
-	require.NoError(t, err)
+	cleanup := NewTailscaleNetworkIngressProvisioner(typed, dynamicClient, TailscaleNetworkIngressConfig{OperatorNamespace: "tailscale"})
 	_, err = cleanup.Observe(t.Context(), desired.Resources)
 	require.NoError(t, err)
 	typed.ClearActions()
@@ -668,7 +667,7 @@ func newTestTailscaleProvisioner(t *testing.T) (*TailscaleNetworkIngressProvisio
 	typed := fake.NewSimpleClientset(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "private-listener-ca", Namespace: "gram-system"}, Data: map[string][]byte{"ca.crt": []byte("test-ca")}})
 	scheme := runtime.NewScheme()
 	dynamicClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{tailnetGVR: "TailnetList", proxyGroupGVR: "ProxyGroupList", proxyGroupPolicyGVR: "ProxyGroupPolicyList"})
-	provisioner, err := NewTailscaleNetworkIngressProvisioner(typed, dynamicClient, TailscaleNetworkIngressConfig{
+	provisioner := NewTailscaleNetworkIngressProvisioner(typed, dynamicClient, TailscaleNetworkIngressConfig{
 		OperatorNamespace: "tailscale",
 		WorkerNamespace:   "gram-system",
 		BackendNamespace:  "gram-system",
@@ -680,7 +679,6 @@ func newTestTailscaleProvisioner(t *testing.T) (*TailscaleNetworkIngressProvisio
 		KubernetesAPIPort: 443,
 		ClusterCIDRs:      []string{"10.0.0.0/8", "192.168.0.0/16"},
 	})
-	require.NoError(t, err)
 	return provisioner, typed, dynamicClient, NetworkIngressDesired{
 		ID: id, Provider: NetworkIngressProviderTailscale, Hostname: "private-test", Credentials: []byte(`{"client_id":"test-client","client_secret":"test-secret"}`), Resources: resources,
 		AttestorImage: "gram-attestor@example", BackendService: "gram-server-private", BackendPort: 8443,

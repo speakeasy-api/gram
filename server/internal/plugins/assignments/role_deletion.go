@@ -28,7 +28,7 @@ type RoleDeletion struct {
 // No plugin content or publication state is changed.
 func RemoveDeletedRole(ctx context.Context, tx pluginsrepo.DBTX, logger *audit.Logger, input RoleDeletion) error {
 	principal, err := urn.ParsePrincipal(input.PrincipalURN)
-	if err != nil || principal.Type != urn.PrincipalTypeRole || input.Actor.IsZero() || logger == nil {
+	if err != nil || principal.Type != urn.PrincipalTypeRole || input.Actor.IsZero() {
 		return ErrInvalid
 	}
 	kind, id, ok := strings.Cut(principal.ID, ":")

@@ -88,7 +88,7 @@ func registerRegistryTools(server *mcp.Server, reader RegistryReader) {
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRegistryEntriesInput) (*mcp.CallToolResult, RegistryEntryPage, error) {
 		out := RegistryEntryPage{Entries: []RegistryEntrySummary{}}
-		if reader == nil || !verifiedStaff(ctx) {
+		if !verifiedStaff(ctx) {
 			return nil, out, errRegistryUnavailable
 		}
 		if len(input.Query) > maxRegistryQuery || len(input.Cursor) > maxRegistryCursor || input.Limit < 0 || input.Limit > maxRegistryPage {
@@ -123,7 +123,7 @@ func registerRegistryTools(server *mcp.Server, reader RegistryReader) {
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegistryEntryIDInput) (*mcp.CallToolResult, RegistryEntryDetail, error) {
 		out := RegistryEntryDetail{Transports: []RegistryTransportSummary{}, Issues: []RegistryValidationIssue{}}
-		if reader == nil || !verifiedStaff(ctx) {
+		if !verifiedStaff(ctx) {
 			return nil, out, errRegistryUnavailable
 		}
 		if !validRegistryUUID(input.ID) {

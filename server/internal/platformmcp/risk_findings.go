@@ -51,10 +51,6 @@ func NewRiskFindingsService(db *pgxpool.Pool, findings RiskFindingsReader, flags
 	return &RiskFindingsService{projects: postgresRiskProjectResolver{queries: platformrepo.New(db)}, organizations: organizations, flags: flags, policies: riskrepo.New(db), findings: findings, cursor: codec, now: time.Now}
 }
 
-func (s *RiskFindingsService) valid() bool {
-	return s != nil
-}
-
 type ListRiskFindingsInput struct {
 	ProjectID   string   `json:"project_id,omitempty"`
 	ProjectSlug string   `json:"project_slug,omitempty"`
@@ -171,9 +167,6 @@ func findingLabel(value string) string {
 
 func (s *RiskFindingsService) List(ctx context.Context, principal Principal, input ListRiskFindingsInput) (ListRiskFindingsOutput, error) {
 	var zero ListRiskFindingsOutput
-	if !s.valid() {
-		return zero, ErrUnavailable
-	}
 	if principal.OrganizationID == "" || (input.ProjectID != "" && input.ProjectSlug != "") {
 		return zero, ErrRiskReadInvalid
 	}

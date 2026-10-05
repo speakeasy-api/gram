@@ -150,9 +150,6 @@ type CodexCostImportService struct {
 }
 
 func NewCodexCostImportService(logger *slog.Logger, store *Store, telemetryLogger *telemetry.Logger, guardianPolicy *guardian.Policy, heartbeat func(ctx context.Context, page int)) *CodexCostImportService {
-	if heartbeat == nil {
-		panic("codex cost import service requires heartbeat")
-	}
 	return &CodexCostImportService{
 		logger:          logger.With(attr.SlogComponent("aiintegrations.codex_compliance")),
 		store:           store,

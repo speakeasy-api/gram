@@ -32,17 +32,7 @@ func newTestGate(t *testing.T, cacheImpl *gateCache) *spendrules.Gate {
 
 	celEng, err := celenv.New()
 	require.NoError(t, err)
-	gate, err := spendrules.NewGate(testenv.NewLogger(t), cacheImpl, celEng)
-	require.NoError(t, err)
-	return gate
-}
-
-func TestNewGateRequiresCELEngine(t *testing.T) {
-	t.Parallel()
-
-	gate, err := spendrules.NewGate(testenv.NewLogger(t), newGateCache(), nil)
-	require.Error(t, err)
-	require.Nil(t, gate)
+	return spendrules.NewGate(testenv.NewLogger(t), cacheImpl, celEng)
 }
 
 func (c *gateCache) Get(_ context.Context, key string, value any) error {

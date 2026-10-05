@@ -17,36 +17,25 @@ const (
 	toolExposureBlastRadiusNote = "Changing this list republishes every plugin that carries the server, so everyone holding one of those plugins gets the change immediately; the result names those plugins."
 )
 
-// registerToolExposureTools keeps the live and unavailable manifests identical
-// so a tool never appears on and disappears from the catalogue as a deployment
-// composes or fails to compose the service behind it.
-func registerToolExposureTools(reg *Registrar, service *MCPToolExposureService, reader Reader) {
-	listTools := unavailableToolExposureHandler[ListProjectToolsInput, ListProjectToolsOutput]("Listing a project's tools is not available on this server.")
-	addTools := unavailableToolExposureHandler[ChangeMCPToolsInput, MCPToolExposureMutationOutput](unavailableToolExposureChangeMessage)
-	removeTools := unavailableToolExposureHandler[ChangeMCPToolsInput, MCPToolExposureMutationOutput](unavailableToolExposureChangeMessage)
-	projects, _ := reader.(ProjectReadResolver)
-	if service.valid() && projects != nil {
-		listTools = func(ctx context.Context, _ *mcp.CallToolRequest, input ListProjectToolsInput) (*mcp.CallToolResult, ListProjectToolsOutput, error) {
-			return principalToolCall(ctx, toolExposureToolResult, func(principal Principal) (ListProjectToolsOutput, error) {
-				project, err := projects.ResolveProjectRead(ctx, principal, FindMCPInput{ProjectID: input.ProjectID})
-				if err != nil {
-					return ListProjectToolsOutput{}, fmt.Errorf("resolve project for its tool list: %w", err)
-				}
-				return service.ListProjectTools(ctx, principal, project, input)
-			})
-		}
+func registerToolExposureTools(reg *Registrar, service *MCPToolExposureService, projects ProjectReadResolver) {
+	listTools := func(ctx context.Context, _ *mcp.CallToolRequest, input ListProjectToolsInput) (*mcp.CallToolResult, ListProjectToolsOutput, error) {
+		return principalToolCall(ctx, toolExposureToolResult, func(principal Principal) (ListProjectToolsOutput, error) {
+			project, err := projects.ResolveProjectRead(ctx, principal, FindMCPInput{ProjectID: input.ProjectID})
+			if err != nil {
+				return ListProjectToolsOutput{}, fmt.Errorf("resolve project for its tool list: %w", err)
+			}
+			return service.ListProjectTools(ctx, principal, project, input)
+		})
 	}
-	if service.valid() {
-		addTools = func(ctx context.Context, _ *mcp.CallToolRequest, input ChangeMCPToolsInput) (*mcp.CallToolResult, MCPToolExposureMutationOutput, error) {
-			return principalToolCall(ctx, toolExposureToolResult, func(principal Principal) (MCPToolExposureMutationOutput, error) {
-				return service.AddTools(ctx, principal, input)
-			})
-		}
-		removeTools = func(ctx context.Context, _ *mcp.CallToolRequest, input ChangeMCPToolsInput) (*mcp.CallToolResult, MCPToolExposureMutationOutput, error) {
-			return principalToolCall(ctx, toolExposureToolResult, func(principal Principal) (MCPToolExposureMutationOutput, error) {
-				return service.RemoveTools(ctx, principal, input)
-			})
-		}
+	addTools := func(ctx context.Context, _ *mcp.CallToolRequest, input ChangeMCPToolsInput) (*mcp.CallToolResult, MCPToolExposureMutationOutput, error) {
+		return principalToolCall(ctx, toolExposureToolResult, func(principal Principal) (MCPToolExposureMutationOutput, error) {
+			return service.AddTools(ctx, principal, input)
+		})
+	}
+	removeTools := func(ctx context.Context, _ *mcp.CallToolRequest, input ChangeMCPToolsInput) (*mcp.CallToolResult, MCPToolExposureMutationOutput, error) {
+		return principalToolCall(ctx, toolExposureToolResult, func(principal Principal) (MCPToolExposureMutationOutput, error) {
+			return service.RemoveTools(ctx, principal, input)
+		})
 	}
 
 	addTool(reg, &mcp.Tool{
@@ -93,23 +82,6 @@ func registerToolExposureTools(reg *Registrar, service *MCPToolExposureService, 
 // listing composes from whatever reader a deployment supplies.
 type ProjectReadResolver interface {
 	ResolveProjectRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error)
-}
-
-const unavailableToolExposureChangeMessage = "Changing which tools an MCP server exposes is not available on this server."
-
-// unavailableToolExposureHandler takes its own message so a read's refusal
-// says the read is unavailable. Reusing the mutation's wording would tell a
-// caller that asked only to list a project's tools that it cannot change a
-// server, which is a different, more alarming claim.
-func unavailableToolExposureHandler[In, Out any](message string) mcp.ToolHandlerFor[In, Out] {
-	return func(_ context.Context, _ *mcp.CallToolRequest, _ In) (*mcp.CallToolResult, Out, error) {
-		var zero Out
-		payload, err := json.Marshal(featureUnavailableResult{Code: unavailableCode, Feature: toolExposureFeature, Message: message})
-		if err != nil {
-			return nil, zero, fmt.Errorf("encode unavailable MCP tool exposure result: %w", err)
-		}
-		return nil, zero, &ToolRefusalError{Code: unavailableCode, Payload: string(payload)}
-	}
 }
 
 type toolExposureRefusal struct {

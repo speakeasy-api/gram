@@ -29,9 +29,6 @@ import (
 func newCIMDAuthTestService(t *testing.T, conn *pgxpool.Pool) *Service {
 	t.Helper()
 	svc := newMCPAuthTestService(t, conn)
-	serverURL, err := url.Parse("https://gram.example.com")
-	require.NoError(t, err)
-	svc.core.serverURL = serverURL
 	siteURL, err := url.Parse("https://app.getgram.ai")
 	require.NoError(t, err)
 	svc.core.SetSiteURL(siteURL)
@@ -177,7 +174,7 @@ func TestAssistantCIMDAllowed(t *testing.T) {
 
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagAssistantOAuthCIMD, "org-test", true)
-	svc.core.SetFeatureProvider(flags)
+	svc.core.featureFlags = flags
 	require.True(t, svc.assistantCIMDAllowed(t.Context(), "org-test", "acme"))
 	require.False(t, svc.assistantCIMDAllowed(t.Context(), "other-org", "acme"))
 
@@ -456,7 +453,6 @@ func TestHandleMCPAuthCallbackInvalidClientRetiresCIMDClient(t *testing.T) {
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
 
 	service := newCIMDAuthTestService(t, conn)
-	service.core.assistantTokens = assistanttokens.New("test-jwt-secret", conn, nil)
 	service.signaler = &stubWorkflowSignaler{signalledThreads: nil}
 	redirectURI := "https://gram.example.com/rpc/assistantMcpAuth/" + assistantID.String() + "/oauth/callback"
 	cimd, err := service.getOrRegisterMCPAuthClient(
@@ -620,7 +616,7 @@ func TestAssistantCIMDAllowedFollowsPinnedOutboundOrigin(t *testing.T) {
 	svc := newPinnedCIMDAuthTestService(t, nil)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagAssistantOAuthCIMD, "org-test", true)
-	svc.core.SetFeatureProvider(flags)
+	svc.core.featureFlags = flags
 	plain, err := url.Parse("http://localhost:8080")
 	require.NoError(t, err)
 	svc.core.serverURL = plain

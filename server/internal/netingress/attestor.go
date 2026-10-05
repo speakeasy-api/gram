@@ -18,6 +18,7 @@ import (
 	"unicode"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
@@ -55,26 +56,17 @@ type AttestorConfig struct {
 	Telemetry    *Telemetry
 }
 
-func NewAttestorHandler(config AttestorConfig) (http.Handler, error) {
-	if config.Upstream == nil || config.Upstream.Scheme == "" || config.Upstream.Host == "" {
-		return nil, errors.New("attestor upstream must be an absolute URL")
-	}
-	if config.Upstream.Scheme != "https" {
-		return nil, errors.New("attestor upstream must use HTTPS")
-	}
-	if config.Upstream.User != nil || config.Upstream.Path != "" || config.Upstream.RawPath != "" || config.Upstream.RawQuery != "" || config.Upstream.ForceQuery || config.Upstream.Fragment != "" {
-		return nil, errors.New("attestor upstream must not contain userinfo, path, query, or fragment")
-	}
-	if config.Transport == nil {
-		return nil, errors.New("attestor upstream transport is required")
-	}
-	expectedHost, err := canonicalAuthority(config.ExpectedHost)
-	if err != nil {
-		return nil, fmt.Errorf("validate expected host: %w", err)
-	}
-	if config.TokenPath == "" {
-		return nil, errors.New("projected token path is required")
-	}
+func NewAttestorHandler(config AttestorConfig) http.Handler {
+	upstream := config.Upstream
+	expectedHost, expectedHostErr := canonicalAuthority(config.ExpectedHost)
+	inv.Require("private ingress attestor",
+		"upstream is an absolute URL", upstream.Scheme != "" && upstream.Host != "",
+		"upstream uses HTTPS", upstream.Scheme == "https",
+		"upstream has no userinfo, path, query, or fragment", upstream.User == nil && upstream.Path == "" && upstream.RawPath == "" && upstream.RawQuery == "" && !upstream.ForceQuery && upstream.Fragment == "",
+		"expected host is valid", expectedHostErr,
+		"projected token path is set", config.TokenPath != "",
+		"CA-pinned transport is set", config.Transport != nil,
+	)
 
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(request *httputil.ProxyRequest) {
@@ -113,9 +105,7 @@ func NewAttestorHandler(config AttestorConfig) (http.Handler, error) {
 				duration = time.Since(started)
 			}
 			config.Telemetry.Record(request.Context(), OperationProxy, ResultError, ReasonUpstreamFailed, ProviderTailscale, duration)
-			if config.Logger != nil {
-				config.Logger.ErrorContext(request.Context(), "private ingress attestor proxy error", attr.SlogError(proxyErr))
-			}
+			config.Logger.ErrorContext(request.Context(), "private ingress attestor proxy error", attr.SlogError(proxyErr))
 			http.Error(w, "private ingress upstream unavailable", http.StatusBadGateway)
 		},
 	}
@@ -132,14 +122,12 @@ func NewAttestorHandler(config AttestorConfig) (http.Handler, error) {
 		token, readErr := readProjectedToken(config.TokenPath)
 		if readErr != nil {
 			config.Telemetry.Record(request.Context(), OperationProxy, ResultError, ReasonTokenReadFailed, ProviderTailscale, time.Since(started))
-			if config.Logger != nil {
-				config.Logger.ErrorContext(request.Context(), "read projected private ingress token", attr.SlogError(readErr))
-			}
+			config.Logger.ErrorContext(request.Context(), "read projected private ingress token", attr.SlogError(readErr))
 			http.Error(w, "private ingress attestor unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		proxy.ServeHTTP(w, request.WithContext(withProjectedToken(request.Context(), token)))
-	})), nil
+	}))
 }
 
 func canonicalAuthority(value string) (string, error) {
@@ -166,8 +154,10 @@ func readProjectedToken(path string) (string, error) {
 	return token, nil
 }
 
-type projectedTokenKey struct{}
-type proxyStartedKey struct{}
+type (
+	projectedTokenKey struct{}
+	proxyStartedKey   struct{}
+)
 
 type telemetryResponseBody struct {
 	io.ReadCloser

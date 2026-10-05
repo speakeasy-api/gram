@@ -61,7 +61,6 @@ func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
 	features.SetFlag(feature.FlagGatewayPluginMembership, ac.ActiveOrganizationID, true)
 	features.SetFlag(feature.FlagPlatformMCPShadowAudienceEnforcement, ac.ActiveOrganizationID, false)
 	features.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, ac.ActiveOrganizationID, false)
-	ti.service.WithDistributionAdmission(admission.NewGuard(features, nil))
 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Gateway member"})
 	require.NoError(t, err)
@@ -221,16 +220,10 @@ func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
 	var missingIssuer *oops.ShareableError
 	require.ErrorAs(t, err, &missingIssuer)
 	require.Equal(t, oops.CodeUnavailable, missingIssuer.Code)
-	//nolint:glint // notestingrawsql: Restore the test gateway for the missing-admission-guard assertion below.
+	//nolint:glint // notestingrawsql: Restore the test gateway before removing it from the plugin.
 	result, err = ti.conn.Exec(ctx, `UPDATE meta_mcp_servers SET user_session_issuer_id = $1 WHERE id = $2`, issuer.ID, gateway.ID)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, result.RowsAffected())
-
-	ti.service.WithDistributionAdmission(nil)
-	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
-	var unavailable *oops.ShareableError
-	require.ErrorAs(t, err, &unavailable)
-	require.Equal(t, oops.CodeUnavailable, unavailable.Code)
 
 	features.SetFlag(feature.FlagGatewayPluginMembership, ac.ActiveOrganizationID, false)
 	err = ti.service.RemovePluginServer(ctx, &gen.RemovePluginServerPayload{PluginID: plugin.ID, ID: attached.ID})

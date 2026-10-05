@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -15,8 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 // DelegationTestDatabase shares the package TestMain infrastructure with internal
@@ -37,12 +38,15 @@ type delegationAdapterFixture struct {
 func (s *delegationAdapterFixture) service() *DelegationService {
 	return &DelegationService{service: delegation.New(s.db, s.enc, delegationDependencies(s.loadBinding, s.loadProvider, s.refreshIdentity, func() time.Time { return s.now() }))}
 }
+
 func (s *delegationAdapterFixture) RetainVerifiedLogin(ctx context.Context, p *FederatedProvider, human string, i *FederatedIdentity, requested bool) error {
 	return s.service().RetainVerifiedLogin(ctx, p, human, i, requested)
 }
+
 func (s *delegationAdapterFixture) Resolve(ctx context.Context, b DelegationBinding, a DelegationAuthorizer) (DelegationAssertion, error) {
 	return s.service().Resolve(ctx, b, a)
 }
+
 func (s *delegationAdapterFixture) decrypt(v string) (string, error) {
 	value, err := s.enc.Decrypt(v)
 	if err != nil {
@@ -66,9 +70,11 @@ type delegationTestAuthority func(context.Context, DelegationBinding) error
 func (f delegationTestAuthority) AuthorizeDelegation(ctx context.Context, b DelegationBinding) error {
 	return f(ctx, b)
 }
+
 func delegationBinding(p *FederatedProvider, human string) DelegationBinding {
 	return delegationProvider{p}.Binding(human)
 }
+
 func newDelegationUnitFixture(t *testing.T) (*delegationAdapterFixture, *delegationAdapterStore, *FederatedProvider, DelegationBinding, DelegationAuthorizer) {
 	t.Helper()
 	ctx := t.Context()
@@ -117,6 +123,7 @@ func newDelegationUnitFixture(t *testing.T) (*delegationAdapterFixture, *delegat
 func delegationLogin(p *FederatedProvider, now time.Time, id, refresh string, ttl time.Duration) *FederatedIdentity {
 	return &FederatedIdentity{Issuer: p.issuer.Issuer, Subject: "secret-subject", Nonce: "secret-nonce", ExpiresAt: now.Add(ttl), credentials: &federatedCredentialState{value: EphemeralFederatedCredentials{idToken: id, refreshToken: refresh, receivedAt: now}}}
 }
+
 func delegationRenewal(p *FederatedProvider, now time.Time, id, refresh string) *FederatedRefreshResult {
 	r := &FederatedRefreshResult{Credentials: FederatedRefreshCredentials{EphemeralFederatedCredentials: EphemeralFederatedCredentials{idToken: id, refreshToken: refresh, receivedAt: now}}}
 	if id != "" {
@@ -124,6 +131,7 @@ func delegationRenewal(p *FederatedProvider, now time.Time, id, refresh string) 
 	}
 	return r
 }
+
 func delegationPlain(t *testing.T, s *delegationAdapterFixture, ciphertext string) string {
 	t.Helper()
 	plain, err := s.decrypt(ciphertext)

@@ -28,6 +28,7 @@ func (c *organizationPlanCapture) Query(ctx context.Context, sql string, args ..
 	}
 	return rows, nil
 }
+
 func (c *organizationPlanCapture) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	c.sql, c.args = sql, args
 	return c.DBTX.QueryRow(ctx, sql, args...) //nolint:glint // notestingrawsql: wrapper forwards the SQLc-generated organization query while capturing its SQL and arguments for EXPLAIN

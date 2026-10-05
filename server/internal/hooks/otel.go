@@ -406,7 +406,7 @@ func extractSessionMetadata(payload *gen.LogsPayload) []claudeLogMetadata {
 }
 
 func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *gen.LogsPayload, orgID string, projectID string, attributionBySession map[string]SessionMetadata) {
-	if s.telemetryLogger == nil || payload == nil {
+	if payload == nil {
 		return
 	}
 

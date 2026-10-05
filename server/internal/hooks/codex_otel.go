@@ -141,7 +141,7 @@ func splitCodexMetricsPayload(payload *gen.MetricsPayload) (codex, claude *gen.M
 // cross-payload fast path) and its rows are stamped with account_type /
 // billing_mode so the cost surfaces can classify Codex spend (DNO-734).
 func (s *Service) writeCodexOTELLogsToClickHouse(ctx context.Context, payload *gen.LogsPayload, orgID string, projectID string) {
-	if s.telemetryLogger == nil || payload == nil {
+	if payload == nil {
 		return
 	}
 
@@ -253,7 +253,7 @@ func (s *Service) writeCodexOTELLogsToClickHouse(ctx context.Context, payload *g
 // value are stored verbatim. Non-Sum metric kinds are skipped, matching the
 // Claude extractor.
 func (s *Service) writeCodexMetricsToClickHouse(ctx context.Context, payload *gen.MetricsPayload, orgID string, projectID string) {
-	if s.telemetryLogger == nil || payload == nil {
+	if payload == nil {
 		return
 	}
 
@@ -323,7 +323,7 @@ func (s *Service) writeCodexMetricsToClickHouse(ctx context.Context, payload *ge
 						attrs[attribute.Key("metric.value")] = n
 					}
 
-					timestamp := s.now()
+					timestamp := s.nowFunc()
 					if dataPoint.TimeUnixNano != nil {
 						if n, ok := parseUnixNanoString(*dataPoint.TimeUnixNano); ok {
 							timestamp = time.Unix(0, n)

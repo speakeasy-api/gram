@@ -279,16 +279,12 @@ func findActor(actors []spendrules.Actor, userID, email string) (spendrules.Acto
 // organization. The flag is targeted by PostHog organization group (org
 // slug), the same way the dashboard evaluates it, so the org slug is
 // forwarded as the group key. Every unresolved state degrades to disabled —
-// a nil provider, a failed lookup, or PostHog being disabled outright (the
+// a failed lookup, or PostHog being disabled outright (the
 // provider returns false in that mode). This is deliberate for a blocking
 // feature: enforcement stays off until its rollout flag is affirmatively on,
 // rather than starting to block users on an unconfirmed flag. Local dev opts
 // in by enabling the flag (e.g. via the seed task), not implicitly.
 func (a *EvaluateOrg) budgetsEnabled(ctx context.Context, logger *slog.Logger, organizationID string) bool {
-	if a.flags == nil {
-		return false
-	}
-
 	var groups map[string]string
 	org, err := orgRepo.New(a.db).GetOrganizationMetadata(ctx, organizationID)
 	if err != nil {

@@ -40,7 +40,7 @@ func TestProcessSchedulesTitleOnlyWhilePlaceholder(t *testing.T) {
 	store, db, config := newTestStore(t)
 	titles := &recordingTitleGenerator{}
 	store.titles = titles
-	service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &recordingScanner{}}
+	service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: store, scanner: &recordingScanner{}}
 	frame := exampleFrame()
 	frame.Messages = []Message{textMessage("user", "EXAMPLE prompt"), textMessage("assistant", "EXAMPLE reply")}
 	chatID := conversationID(config, frame)

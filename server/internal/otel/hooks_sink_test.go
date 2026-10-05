@@ -39,6 +39,10 @@ type recordingHooksSink struct {
 	metrics []*hooksgen.MetricsPayload
 }
 
+func newRecordingHooksSink() *recordingHooksSink {
+	return &recordingHooksSink{events: &sinkEventLog{events: nil}, logs: nil, metrics: nil}
+}
+
 func (r *recordingHooksSink) IngestOTLPLogs(_ context.Context, payload *hooksgen.LogsPayload) {
 	r.events.events = append(r.events.events, "sink")
 	r.logs = append(r.logs, payload)
@@ -168,7 +172,7 @@ func TestLogsDoesNotForwardToHooksSinkWhenPublishFails(t *testing.T) {
 
 	publisher := gcp.NewMockPublisher[*otelv1.InboundLogRecord]()
 	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewErrPublishResult(errors.New("pubsub unavailable"))).Once()
-	sink := &recordingHooksSink{events: &sinkEventLog{events: nil}, logs: nil, metrics: nil}
+	sink := newRecordingHooksSink()
 	service := &Service{
 		logger:          testenv.NewLogger(t),
 		tracer:          testenv.NewTracerProvider(t).Tracer("test"),
@@ -187,33 +191,6 @@ func TestLogsDoesNotForwardToHooksSinkWhenPublishFails(t *testing.T) {
 	require.Error(t, err)
 	publisher.AssertExpectations(t)
 	require.Empty(t, sink.logs, "a failed publish is retried by the exporter; forwarding it would double-write telemetry")
-}
-
-func TestLogsWithoutHooksSinkStillPublishes(t *testing.T) {
-	t.Parallel()
-
-	body, err := proto.Marshal(claudeSinkTestExport())
-	require.NoError(t, err)
-
-	publisher := gcp.NewMockPublisher[*otelv1.InboundLogRecord]()
-	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Once()
-	service := &Service{
-		logger:          testenv.NewLogger(t),
-		tracer:          testenv.NewTracerProvider(t).Tracer("test"),
-		auth:            nil,
-		authz:           nil,
-		chRepo:          nil,
-		logsEnabled:     nil,
-		logPublisher:    publisher,
-		metricPublisher: nil,
-		spanPublisher:   nil,
-		hooksSink:       nil,
-	}
-	ctx := contextvalues.SetAuthContext(t.Context(), testOTELAuthContext(uuid.MustParse(testLogProjectID)))
-
-	err = service.Logs(ctx, &gen.LogsPayload{ApikeyToken: nil, ProjectSlugInput: nil, ContentEncoding: nil}, io.NopCloser(bytes.NewReader(body)))
-	require.NoError(t, err)
-	publisher.AssertExpectations(t)
 }
 
 func TestMetricsForwardsExportToHooksSinkAfterPublish(t *testing.T) {
@@ -331,7 +308,7 @@ func TestMetricsDoesNotForwardToHooksSinkWhenPublishFails(t *testing.T) {
 
 	publisher := gcp.NewMockPublisher[*otelv1.InboundMetric]()
 	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewErrPublishResult(errors.New("pubsub unavailable"))).Once()
-	sink := &recordingHooksSink{events: &sinkEventLog{events: nil}, logs: nil, metrics: nil}
+	sink := newRecordingHooksSink()
 	service := &Service{
 		logger:          testenv.NewLogger(t),
 		tracer:          testenv.NewTracerProvider(t).Tracer("test"),

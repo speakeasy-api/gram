@@ -72,9 +72,6 @@ func NewGuardianDirectRemoteInspector(policy *guardian.Policy) *GuardianDirectRe
 }
 
 func (s *GuardianDirectRemoteInspector) Inspect(ctx context.Context, rawURL string) (DirectRemoteInspection, error) {
-	if s == nil || s.policy == nil {
-		return DirectRemoteInspection{}, setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
-	}
 	canonicalURL, err := canonicalDirectRemoteURL(rawURL)
 	if err != nil {
 		return DirectRemoteInspection{}, setupFailure(SetupCategoryInvalidURL, err)
@@ -182,7 +179,7 @@ type directRemoteResponseBudget struct {
 }
 
 func (b *directRemoteResponseBudget) consumeRequest() error {
-	if b == nil || b.remaining <= 0 || b.requestsRemaining <= 0 {
+	if b.remaining <= 0 || b.requestsRemaining <= 0 {
 		return ErrDirectRemoteRejected
 	}
 	b.requestsRemaining--

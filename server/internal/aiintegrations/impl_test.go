@@ -71,14 +71,6 @@ func TestStartUsagePollStartsEveryAnthropicSchedule(t *testing.T) {
 	}, poller.calls)
 }
 
-func TestStartUsagePollAllowsMissingStarter(t *testing.T) {
-	t.Parallel()
-
-	svc := &Service{}
-
-	require.NoError(t, svc.startUsagePoll(t.Context(), "acme", uuid.MustParse("11111111-1111-1111-1111-111111111111"), ProviderCursor))
-}
-
 func TestStartUsagePollReturnsStarterError(t *testing.T) {
 	t.Parallel()
 

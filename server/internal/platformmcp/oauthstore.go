@@ -42,13 +42,11 @@ func (s *PostgresOAuthStore) WithTelemetry(telemetry OAuthTelemetry) *PostgresOA
 }
 
 func (s *PostgresOAuthStore) recordTerminalTransition(ctx context.Context, reason platformoauth.ReauthorizationReason) {
-	if s != nil && s.telemetry != nil {
-		s.telemetry.RecordTerminalTransition(ctx, reason)
-	}
+	s.telemetry.RecordTerminalTransition(ctx, reason)
 }
 
 func (s *PostgresOAuthStore) RegisterClient(ctx context.Context, client platformoauth.Client) error {
-	if s == nil || s.db == nil || client.ID == "" || client.Name == "" || len(client.RedirectURIs) == 0 {
+	if client.ID == "" || client.Name == "" || len(client.RedirectURIs) == 0 {
 		return platformoauth.ErrNotFound
 	}
 	_, err := platformrepo.New(s.db).CreatePlatformMCPOAuthClient(ctx, platformrepo.CreatePlatformMCPOAuthClientParams{
@@ -62,9 +60,6 @@ func (s *PostgresOAuthStore) RegisterClient(ctx context.Context, client platform
 }
 
 func (s *PostgresOAuthStore) GetClient(ctx context.Context, clientID string) (platformoauth.Client, error) {
-	if s == nil || s.db == nil {
-		return platformoauth.Client{}, platformoauth.ErrNotFound
-	}
 	row, err := platformrepo.New(s.db).GetActivePlatformMCPOAuthClientByClientID(ctx, clientID)
 	if err != nil {
 		return platformoauth.Client{}, mapOAuthReadError(err)
@@ -73,7 +68,7 @@ func (s *PostgresOAuthStore) GetClient(ctx context.Context, clientID string) (pl
 }
 
 func (s *PostgresOAuthStore) UpsertClientFromCIMD(ctx context.Context, input platformoauth.UpsertCIMDClientInput) (platformoauth.Client, error) {
-	if s == nil || s.db == nil || input.ClientID == "" || input.Name == "" || len(input.RedirectURIs) == 0 {
+	if input.ClientID == "" || input.Name == "" || len(input.RedirectURIs) == 0 {
 		return platformoauth.Client{}, platformoauth.ErrNotFound
 	}
 	row, err := platformrepo.New(s.db).UpsertPlatformMCPOAuthClientFromCIMD(ctx, platformrepo.UpsertPlatformMCPOAuthClientFromCIMDParams{
@@ -93,7 +88,7 @@ func (s *PostgresOAuthStore) UpsertClientFromCIMD(ctx context.Context, input pla
 }
 
 func (s *PostgresOAuthStore) TouchClientCIMDCache(ctx context.Context, input platformoauth.TouchCIMDCacheInput) (platformoauth.Client, error) {
-	if s == nil || s.db == nil || input.ClientID == "" {
+	if input.ClientID == "" {
 		return platformoauth.Client{}, platformoauth.ErrNotFound
 	}
 	row, err := platformrepo.New(s.db).UpdatePlatformMCPOAuthClientCIMDCache(ctx, platformrepo.UpdatePlatformMCPOAuthClientCIMDCacheParams{
@@ -122,9 +117,6 @@ func oauthClientFromRow(row platformrepo.PlatformMcpOauthClient) platformoauth.C
 }
 
 func (s *PostgresOAuthStore) RevokeClient(ctx context.Context, clientID string, now time.Time) error {
-	if s == nil || s.db == nil {
-		return platformoauth.ErrNotFound
-	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin revoke platform mcp client: %w", err)
@@ -162,9 +154,6 @@ func (s *PostgresOAuthStore) RevokeClient(ctx context.Context, clientID string, 
 }
 
 func (s *PostgresOAuthStore) RegisterConnection(ctx context.Context, connection platformoauth.Connection) error {
-	if s == nil || s.db == nil {
-		return platformoauth.ErrNotFound
-	}
 	id, err := uuid.Parse(connection.ID)
 	if err != nil {
 		return platformoauth.ErrNotFound
@@ -192,9 +181,6 @@ func (s *PostgresOAuthStore) RegisterConnection(ctx context.Context, connection 
 }
 
 func (s *PostgresOAuthStore) GetConnection(ctx context.Context, organizationID, subject, clientID string) (platformoauth.Connection, error) {
-	if s == nil || s.db == nil {
-		return platformoauth.Connection{}, platformoauth.ErrNotFound
-	}
 	client, err := platformrepo.New(s.db).GetActivePlatformMCPOAuthClientByClientID(ctx, clientID)
 	if err != nil {
 		return platformoauth.Connection{}, mapOAuthReadError(err)
@@ -207,9 +193,6 @@ func (s *PostgresOAuthStore) GetConnection(ctx context.Context, organizationID, 
 }
 
 func (s *PostgresOAuthStore) AuthorizeConnection(ctx context.Context, input platformoauth.AuthorizeConnectionInput) (platformoauth.Connection, error) {
-	if s == nil || s.db == nil {
-		return platformoauth.Connection{}, platformoauth.ErrNotFound
-	}
 	if !validPKCES256Challenge(input.Grant.CodeChallenge) {
 		return platformoauth.Connection{}, platformoauth.ErrPKCE
 	}
@@ -299,9 +282,6 @@ func (s *PostgresOAuthStore) AuthorizeConnection(ctx context.Context, input plat
 }
 
 func (s *PostgresOAuthStore) RevokeConnection(ctx context.Context, organizationID, connectionID string, now time.Time) error {
-	if s == nil || s.db == nil {
-		return platformoauth.ErrNotFound
-	}
 	id, err := uuid.Parse(connectionID)
 	if err != nil {
 		return platformoauth.ErrNotFound
@@ -335,9 +315,6 @@ func (s *PostgresOAuthStore) RevokeConnection(ctx context.Context, organizationI
 }
 
 func (s *PostgresOAuthStore) IssueGrant(ctx context.Context, grant platformoauth.Grant) error {
-	if s == nil || s.db == nil {
-		return platformoauth.ErrNotFound
-	}
 	connectionID, err := uuid.Parse(grant.Connection.ID)
 	if err != nil {
 		return platformoauth.ErrNotFound
@@ -370,9 +347,6 @@ func (s *PostgresOAuthStore) IssueGrant(ctx context.Context, grant platformoauth
 }
 
 func (s *PostgresOAuthStore) ValidateGrant(ctx context.Context, input platformoauth.ValidateGrantInput) (platformoauth.Grant, error) {
-	if s == nil || s.db == nil {
-		return platformoauth.Grant{}, platformoauth.ErrNotFound
-	}
 	row, err := platformrepo.New(s.db).GetPlatformMCPAuthorizationGrantForValidation(ctx, platformrepo.GetPlatformMCPAuthorizationGrantForValidationParams{OrganizationID: input.OrganizationID, AuthorizationCodeHash: opaqueHash(input.Code)})
 	if err != nil {
 		return platformoauth.Grant{}, mapOAuthReadError(err)
@@ -386,9 +360,6 @@ func (s *PostgresOAuthStore) ValidateGrant(ctx context.Context, input platformoa
 }
 
 func (s *PostgresOAuthStore) ExchangeGrant(ctx context.Context, input platformoauth.ExchangeGrantInput) (platformoauth.Grant, error) {
-	if s == nil || s.db == nil {
-		return platformoauth.Grant{}, platformoauth.ErrNotFound
-	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return platformoauth.Grant{}, fmt.Errorf("begin exchange platform mcp grant: %w", err)
@@ -431,9 +402,6 @@ func (s *PostgresOAuthStore) ExchangeGrant(ctx context.Context, input platformoa
 }
 
 func (s *PostgresOAuthStore) ConsumeGrant(ctx context.Context, input platformoauth.ConsumeGrantInput) (platformoauth.Grant, error) {
-	if s == nil || s.db == nil {
-		return platformoauth.Grant{}, platformoauth.ErrNotFound
-	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return platformoauth.Grant{}, fmt.Errorf("begin consume platform mcp grant: %w", err)
@@ -464,9 +432,6 @@ func (s *PostgresOAuthStore) ConsumeGrant(ctx context.Context, input platformoau
 }
 
 func (s *PostgresOAuthStore) CreateSession(ctx context.Context, session platformoauth.Session) error {
-	if s == nil || s.db == nil {
-		return platformoauth.ErrNotFound
-	}
 	q := platformrepo.New(s.db)
 	if err := validateSessionConnection(ctx, q, session); err != nil {
 		return err
@@ -475,9 +440,6 @@ func (s *PostgresOAuthStore) CreateSession(ctx context.Context, session platform
 }
 
 func (s *PostgresOAuthStore) GetSessionByRefreshHash(ctx context.Context, organizationID, refreshHash string) (platformoauth.Session, error) {
-	if s == nil || s.db == nil {
-		return platformoauth.Session{}, platformoauth.ErrNotFound
-	}
 	row, err := platformrepo.New(s.db).GetPlatformMCPSessionForRefresh(ctx, platformrepo.GetPlatformMCPSessionForRefreshParams{OrganizationID: organizationID, RefreshTokenHash: refreshHash})
 	if err != nil {
 		return platformoauth.Session{}, mapOAuthReadError(err)
@@ -486,9 +448,6 @@ func (s *PostgresOAuthStore) GetSessionByRefreshHash(ctx context.Context, organi
 }
 
 func (s *PostgresOAuthStore) DetectRefreshReuse(ctx context.Context, organizationID, refreshHash string, now time.Time) (bool, error) {
-	if s == nil || s.db == nil {
-		return false, platformoauth.ErrNotFound
-	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin detect platform mcp refresh reuse: %w", err)
@@ -519,9 +478,6 @@ func (s *PostgresOAuthStore) DetectRefreshReuse(ctx context.Context, organizatio
 }
 
 func (s *PostgresOAuthStore) PrepareRefresh(ctx context.Context, input platformoauth.PrepareRefreshInput) (platformoauth.Session, error) {
-	if s == nil || s.db == nil {
-		return platformoauth.Session{}, platformoauth.ErrNotFound
-	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return platformoauth.Session{}, fmt.Errorf("begin prepare platform mcp refresh: %w", err)
@@ -585,9 +541,6 @@ func (s *PostgresOAuthStore) PrepareRefresh(ctx context.Context, input platformo
 }
 
 func (s *PostgresOAuthStore) RotateSession(ctx context.Context, input platformoauth.RotateSessionInput) (platformoauth.Session, error) {
-	if s == nil || s.db == nil {
-		return platformoauth.Session{}, platformoauth.ErrNotFound
-	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return platformoauth.Session{}, fmt.Errorf("begin rotate platform mcp session: %w", err)
@@ -666,9 +619,6 @@ func (s *PostgresOAuthStore) RotateSession(ctx context.Context, input platformoa
 }
 
 func (s *PostgresOAuthStore) MarkAuthorizationLost(ctx context.Context, organizationID, connectionID, generation string, now time.Time) error {
-	if s == nil || s.db == nil {
-		return platformoauth.ErrNotFound
-	}
 	id, err := uuid.Parse(connectionID)
 	if err != nil {
 		return platformoauth.ErrNotFound
@@ -693,9 +643,6 @@ func (s *PostgresOAuthStore) MarkAuthorizationLost(ctx context.Context, organiza
 }
 
 func (s *PostgresOAuthStore) RevokeSession(ctx context.Context, organizationID, refreshHash, clientID string, now time.Time) (platformoauth.Session, error) {
-	if s == nil || s.db == nil {
-		return platformoauth.Session{}, platformoauth.ErrNotFound
-	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return platformoauth.Session{}, fmt.Errorf("begin revoke platform mcp session: %w", err)
@@ -723,9 +670,6 @@ func (s *PostgresOAuthStore) RevokeSession(ctx context.Context, organizationID, 
 }
 
 func (s *PostgresOAuthStore) RevokeAccessSession(ctx context.Context, organizationID, jti, clientID string, now time.Time) (platformoauth.Session, error) {
-	if s == nil || s.db == nil {
-		return platformoauth.Session{}, platformoauth.ErrNotFound
-	}
 	client, err := platformrepo.New(s.db).GetActivePlatformMCPOAuthClientByClientID(ctx, clientID)
 	if err != nil {
 		return platformoauth.Session{}, mapOAuthReadError(err)
@@ -738,9 +682,6 @@ func (s *PostgresOAuthStore) RevokeAccessSession(ctx context.Context, organizati
 }
 
 func (s *PostgresOAuthStore) RotateConnectionGeneration(ctx context.Context, organizationID, connectionID, generation string, now time.Time) (platformoauth.Connection, error) {
-	if s == nil || s.db == nil {
-		return platformoauth.Connection{}, platformoauth.ErrNotFound
-	}
 	id, err := uuid.Parse(connectionID)
 	if err != nil {
 		return platformoauth.Connection{}, platformoauth.ErrNotFound

@@ -24,16 +24,13 @@ type pluginCursorCodec struct {
 	key []byte
 }
 
-func newPluginCursorCodec(keyMaterial string) (*pluginCursorCodec, error) {
-	if keyMaterial == "" {
-		return nil, ErrPluginCursorInvalid
-	}
+func newPluginCursorCodec(keyMaterial string) *pluginCursorCodec {
 	key := sha256.Sum256([]byte("platform-mcp-plugin-cursor:" + keyMaterial))
-	return &pluginCursorCodec{key: key[:]}, nil
+	return &pluginCursorCodec{key: key[:]}
 }
 
 func (c *pluginCursorCodec) Encode(cursor pluginCursor) (string, error) {
-	if c == nil || len(c.key) == 0 || cursor.OrganizationID == "" || cursor.Binding == "" || cursor.ProjectID == "" || cursor.AfterPluginID == "" {
+	if cursor.OrganizationID == "" || cursor.Binding == "" || cursor.ProjectID == "" || cursor.AfterPluginID == "" {
 		return "", ErrPluginCursorInvalid
 	}
 	payload, err := json.Marshal(cursor)
@@ -55,7 +52,7 @@ func (c *pluginCursorCodec) Decode(value string, principal Principal, projectID 
 		return uuid.Nil, nil
 	}
 	binding := principalCursorBinding(principal)
-	if c == nil || len(c.key) == 0 || principal.OrganizationID == "" || binding == "" || projectID == uuid.Nil {
+	if principal.OrganizationID == "" || binding == "" || projectID == uuid.Nil {
 		return uuid.Nil, ErrPluginCursorInvalid
 	}
 	token, err := base64.RawURLEncoding.DecodeString(value)

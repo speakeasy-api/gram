@@ -4,12 +4,14 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/stretchr/testify/require"
 )
 
 //nolint:paralleltest,tparallel // Subtests share one database and mutation fixtures.
@@ -27,12 +29,9 @@ func TestSelfRemovalRiskPolicyTransaction(t *testing.T) {
 	ctx = ContextWithPrincipal(ctx, principal)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPRiskMutations, principal.OrganizationID, true)
-	controls, err := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "self-removal-test-key")
-	require.NoError(t, err)
-	handlers, err := NewRiskPolicyMutationHandlers(conn, controls, risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil))
-	require.NoError(t, err)
-	reads, err := newRiskReadService(conn, "self-removal-test-key")
-	require.NoError(t, err)
+	controls := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "self-removal-test-key")
+	handlers := NewRiskMutationHandlers(conn, controls, newTestRiskPolicyCore(t, conn, flags), risk.NewExclusionMutationCore(testenv.NewLogger(t), conn, audit.NewLogger(), &recordingRiskExclusionReconciler{}, "risk-exclusion-test-key"), risk.NewFalsePositiveCore(audit.NewLogger()), testRiskPolicyCatalog(t))
+	reads := newRiskReadService(conn, "self-removal-test-key", testRiskPolicyCatalog(t))
 	create := func(t *testing.T, kind string, targets []string) (string, string) {
 		t.Helper()
 		_, created, err := handlers.CreatePolicy(ctx, nil, map[string]any{"project_slug": project.Slug, "policy_type": "standard", "name": "Policy " + uuid.NewString(), "enabled": true, "sources": []string{"gitleaks"}, "idempotency_key": uuid.NewString()})

@@ -25,7 +25,7 @@ import (
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, ClickHouse: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
 		log.Fatalf("launch metering test infrastructure: %v", err)
 	}
@@ -57,6 +57,7 @@ func newMeteringPostgres(t *testing.T) (*pgxpool.Pool, string) {
 	seedMeteringOrganization(t, conn, organizationID)
 	return conn, organizationID
 }
+
 func seedMeteringAccount(t *testing.T, conn *pgxpool.Pool, organizationID, userID, email string) {
 	t.Helper()
 	ctx := t.Context()

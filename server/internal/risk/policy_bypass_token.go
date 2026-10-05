@@ -115,9 +115,6 @@ func newPolicyBypassRequestID() (string, error) {
 }
 
 func GeneratePolicyBypassRequestURL(ctx context.Context, c cache.Cache, siteURL *url.URL, input PolicyBypassRequestTokenInput, ttl time.Duration) (string, string, time.Time, error) {
-	if siteURL == nil {
-		return "", "", time.Time{}, fmt.Errorf("site url is required")
-	}
 	token, expiry, err := GeneratePolicyBypassRequestToken(ctx, c, input, ttl)
 	if err != nil {
 		return "", "", time.Time{}, err
@@ -163,10 +160,6 @@ func GeneratePolicyBypassRequestToken(ctx context.Context, c cache.Cache, input 
 	if err := validatePolicyBypassRequestFields(record.OrganizationID, record.ProjectID, record.RiskPolicyID, record.ObservedFullURL, record.ObservedURLHost, record.ObservedServerIdentity); err != nil {
 		return "", time.Time{}, err
 	}
-	if c == nil {
-		return "", time.Time{}, fmt.Errorf("risk policy bypass request cache is not configured")
-	}
-
 	id, err := newPolicyBypassRequestID()
 	if err != nil {
 		return "", time.Time{}, err
@@ -202,9 +195,6 @@ func parsePolicyBypassRequestToken(ctx context.Context, c cache.Cache, jwtSecret
 }
 
 func lookupPolicyBypassRequestClaims(ctx context.Context, c cache.Cache, tokenString string) (*policyBypassRequestClaims, error) {
-	if c == nil {
-		return nil, fmt.Errorf("risk policy bypass request cache is not configured")
-	}
 	id := strings.TrimPrefix(tokenString, policyBypassRequestTokenPrefixV2)
 	if strings.TrimSpace(id) == "" {
 		return nil, fmt.Errorf("invalid risk policy bypass request token format")

@@ -372,10 +372,7 @@ func (s *Service) logAgent(ctx context.Context, tx pgx.Tx, human HumanContext, a
 }
 
 func (s *Service) view(ctx context.Context, db repo.DBTX, human HumanContext, agent repo.Agent) (*gen.ManagedAgent, error) {
-	permissions, err := s.authorizer.Permissions(ctx, human, agent)
-	if err != nil {
-		return nil, fmt.Errorf("evaluate agent permissions: %w", err)
-	}
+	permissions := s.authorizer.Permissions(human, agent)
 	ownerProfile, err := s.ownerProfile(ctx, db, agent.OrganizationID, agent.OwnerUserID)
 	if err != nil {
 		return nil, err

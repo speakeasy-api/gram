@@ -57,11 +57,12 @@ type ManagementService struct {
 	tracer        trace.Tracer
 }
 
-var _ platformmcpgen.Service = (*ManagementService)(nil)
-var _ platformmcpgen.Auther = (*ManagementService)(nil)
+var (
+	_ platformmcpgen.Service = (*ManagementService)(nil)
+	_ platformmcpgen.Auther  = (*ManagementService)(nil)
+)
 
 func NewManagementService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, gate Gate, authorizer Authorizer, mcpURL string, registrations *RegistrationService, readiness *ReadinessService, distributions *DistributionService, versionTokenKey string, catalog Catalog) *ManagementService {
-	versionTokens, _ := newDistributionVersionTokenCodec(versionTokenKey)
 	return &ManagementService{
 		auth:          auth.New(logger, db, sessionManager, authzEngine),
 		db:            db,
@@ -71,7 +72,7 @@ func NewManagementService(logger *slog.Logger, tracerProvider trace.TracerProvid
 		registrations: registrations,
 		readiness:     readiness,
 		distributions: distributions,
-		versionTokens: versionTokens,
+		versionTokens: newDistributionVersionTokenCodec(versionTokenKey),
 		catalog:       catalog,
 		mcpURL:        mcpURL,
 		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/platformmcp"),
@@ -89,9 +90,6 @@ func AttachManagement(mux goahttp.Muxer, service *ManagementService) {
 }
 
 func (s *ManagementService) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	if s == nil || s.auth == nil {
-		return ctx, oops.C(oops.CodeUnexpected)
-	}
 	return s.auth.Authorize(ctx, key, schema)
 }
 
@@ -109,7 +107,7 @@ func (s *ManagementService) GetOnboarding(ctx context.Context, _ *platformmcpgen
 	}
 	projection, err := s.onboarding.Get(ctx, authCtx.ActiveOrganizationID, authCtx.UserID)
 	if err != nil {
-		return nil, s.mapOnboardingError(err)
+		return nil, mapOnboardingError(err)
 	}
 	if !admin {
 		return s.memberState(ctx, projection, true), nil
@@ -135,7 +133,7 @@ func (s *ManagementService) StartOnboarding(ctx context.Context, payload *platfo
 	}
 	projection, err := s.onboarding.Start(ctx, authCtx.ActiveOrganizationID, authCtx.UserID, source)
 	if err != nil {
-		return nil, s.mapOnboardingError(err)
+		return nil, mapOnboardingError(err)
 	}
 	if !admin {
 		return s.memberState(ctx, projection, true), nil
@@ -154,9 +152,6 @@ func (s *ManagementService) RecordDashboardCtaEvent(ctx context.Context, payload
 	milestone, ok := platformMCPDashboardCtaMilestone(payload.Action, payload.Surface)
 	if !ok {
 		return oops.C(oops.CodeBadRequest)
-	}
-	if s.db == nil {
-		return oops.C(oops.CodeUnexpected)
 	}
 	if _, err := repo.New(s.db).RecordPlatformMCPDashboardCtaEvent(ctx, repo.RecordPlatformMCPDashboardCtaEventParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -178,7 +173,7 @@ func (s *ManagementService) RecordInstallIntent(ctx context.Context, payload *pl
 	}
 	projection, err := s.onboarding.RecordInstallIntent(ctx, authCtx.ActiveOrganizationID, authCtx.UserID, OnboardingClientFamily(payload.ClientFamily))
 	if err != nil {
-		return nil, s.mapOnboardingError(err)
+		return nil, mapOnboardingError(err)
 	}
 	if !admin {
 		return s.memberState(ctx, projection, true), nil
@@ -193,7 +188,7 @@ func (s *ManagementService) RecordAgentConfigurationCopied(ctx context.Context, 
 	}
 	projection, err := s.onboarding.RecordAgentConfigurationCopied(ctx, authCtx.ActiveOrganizationID, authCtx.UserID)
 	if err != nil {
-		return nil, s.mapOnboardingError(err)
+		return nil, mapOnboardingError(err)
 	}
 	if !admin {
 		return s.memberState(ctx, projection, true), nil
@@ -209,29 +204,29 @@ func (s *ManagementService) StartOnboardingSetup(ctx context.Context, _ *platfor
 	}
 	projection, err := s.onboarding.Get(ctx, authCtx.ActiveOrganizationID, authCtx.UserID)
 	if err != nil {
-		return nil, s.mapOnboardingError(err)
+		return nil, mapOnboardingError(err)
 	}
 	principal, err := s.currentConnectionPrincipal(authCtx, projection)
 	if err != nil {
-		return nil, s.mapOnboardingError(err)
+		return nil, mapOnboardingError(err)
 	}
-	if s.catalog == nil || s.registrations == nil || s.registrations.store == nil || projection.Workflow == nil || projection.SelectedProject == nil || projection.Workflow.SelectedRegistrationID == uuid.Nil {
+	if projection.Workflow == nil || projection.SelectedProject == nil || projection.Workflow.SelectedRegistrationID == uuid.Nil {
 		return nil, oops.C(oops.CodeBadRequest)
 	}
 	candidate, err := s.registrations.RegistrationCatalogIdentity(ctx, principal, *projection.SelectedProject, projection.Workflow.SelectedRegistrationID)
 	if err != nil {
-		return nil, s.mapOnboardingError(err)
+		return nil, mapOnboardingError(err)
 	}
 	if isBrowserCatalogProviderKey(candidate.ProviderKey) || candidate.ProviderKey == directRemoteProviderKey {
 		setupURL, err := s.registrations.DashboardSetupURL(ctx, principal, IssueSetupHandoffInput{ProjectSlug: projection.SelectedProject.Slug, RegistrationID: projection.Workflow.SelectedRegistrationID.String(), ProviderKey: candidate.ProviderKey, CatalogRef: candidate.CatalogRef})
 		if err != nil {
-			return nil, s.mapOnboardingError(err)
+			return nil, mapOnboardingError(err)
 		}
 		return &platformmcpgen.PlatformMCPOnboardingSetupHandoff{DashboardSetupURL: &setupURL}, nil
 	}
 	issued, err := s.registrations.IssueSetupHandoffForRegistration(ctx, principal, projection.SelectedProject.Slug, projection.Workflow.SelectedRegistrationID.String())
 	if err != nil {
-		return nil, s.mapOnboardingError(err)
+		return nil, mapOnboardingError(err)
 	}
 	return &platformmcpgen.PlatformMCPOnboardingSetupHandoff{Handoff: &issued.Value}, nil
 }
@@ -243,18 +238,18 @@ func (s *ManagementService) RecheckOnboardingReadiness(ctx context.Context, _ *p
 	}
 	projection, err := s.onboarding.Get(ctx, authCtx.ActiveOrganizationID, authCtx.UserID)
 	if err != nil {
-		return nil, s.mapOnboardingError(err)
+		return nil, mapOnboardingError(err)
 	}
 	principal, err := s.currentConnectionPrincipal(authCtx, projection)
 	if err != nil {
-		return nil, s.mapOnboardingError(err)
+		return nil, mapOnboardingError(err)
 	}
-	if s.readiness == nil || projection.Workflow == nil || projection.SelectedProject == nil || projection.Workflow.SelectedRegistrationID == uuid.Nil {
+	if projection.Workflow == nil || projection.SelectedProject == nil || projection.Workflow.SelectedRegistrationID == uuid.Nil {
 		return nil, oops.C(oops.CodeBadRequest)
 	}
 	_, readiness, found, err := s.readiness.GetReadiness(ctx, principal, projection.SelectedProject.Slug, projection.Workflow.SelectedRegistrationID.String(), true)
 	if err != nil {
-		return nil, s.mapOnboardingError(err)
+		return nil, mapOnboardingError(err)
 	}
 	return s.state(ctx, authCtx, projection, true, &readiness, found), nil
 }
@@ -268,6 +263,7 @@ func (s *ManagementService) DistributeOnboardingCandidate(ctx context.Context, p
 		return err
 	})
 }
+
 func (s *ManagementService) RemoveOnboardingDistribution(ctx context.Context, payload *platformmcpgen.RemoveOnboardingDistributionPayload) (*platformmcpgen.PlatformMCPOnboardingState, error) {
 	if payload == nil {
 		return nil, oops.C(oops.CodeBadRequest)
@@ -277,6 +273,7 @@ func (s *ManagementService) RemoveOnboardingDistribution(ctx context.Context, pa
 		return err
 	})
 }
+
 func (s *ManagementService) RepairOnboardingPublication(ctx context.Context, payload *platformmcpgen.RepairOnboardingPublicationPayload) (*platformmcpgen.PlatformMCPOnboardingState, error) {
 	if payload == nil {
 		return nil, oops.C(oops.CodeBadRequest)
@@ -299,10 +296,10 @@ func (s *ManagementService) mutateDistribution(ctx context.Context, projectSlug,
 	}
 	projection, err := s.onboarding.Get(ctx, authCtx.ActiveOrganizationID, authCtx.UserID)
 	if err != nil {
-		return nil, s.mapOnboardingError(err)
+		return nil, mapOnboardingError(err)
 	}
 	principal, err := s.currentConnectionPrincipal(authCtx, projection)
-	if err != nil || s.distributions == nil || s.versionTokens == nil || projection.SelectedProject == nil {
+	if err != nil || projection.SelectedProject == nil {
 		return nil, oops.C(oops.CodeBadRequest)
 	}
 	expectedVersion, err := s.versionTokens.Decode(expectedVersionToken, principal, projectSlug)
@@ -310,7 +307,7 @@ func (s *ManagementService) mutateDistribution(ctx context.Context, projectSlug,
 		return nil, oops.C(oops.CodeBadRequest)
 	}
 	if err := mutate(s.distributions, principal, projectSlug, expectedVersion); err != nil {
-		return nil, s.mapOnboardingError(err)
+		return nil, mapOnboardingError(err)
 	}
 	readiness, found := s.currentReadiness(ctx, authCtx, projection)
 	return s.state(ctx, authCtx, projection, true, readiness, found), nil
@@ -322,15 +319,12 @@ func (s *ManagementService) DismissOnboarding(ctx context.Context, _ *platformmc
 		return err
 	}
 	if err := s.onboarding.Dismiss(ctx, authCtx.ActiveOrganizationID, authCtx.UserID); err != nil {
-		return s.mapOnboardingError(err)
+		return mapOnboardingError(err)
 	}
 	return nil
 }
 
 func (s *ManagementService) memberContext(ctx context.Context) (*contextvalues.AuthContext, bool, error) {
-	if s == nil || s.authorizer == nil || s.gate == nil || s.onboarding == nil {
-		return nil, false, oops.C(oops.CodeUnexpected)
-	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.UserID == "" || authCtx.ActiveOrganizationID == "" {
 		return nil, false, oops.C(oops.CodeUnauthorized)
@@ -363,9 +357,6 @@ func (s *ManagementService) memberContext(ctx context.Context) (*contextvalues.A
 }
 
 func (s *ManagementService) authorizedContext(ctx context.Context) (*contextvalues.AuthContext, error) {
-	if s == nil || s.authorizer == nil || s.gate == nil || s.onboarding == nil {
-		return nil, oops.C(oops.CodeUnexpected)
-	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.UserID == "" || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -407,6 +398,7 @@ func (s *ManagementService) enabledContext(ctx context.Context) (*contextvalues.
 	}
 	return authCtx, nil
 }
+
 func (s *ManagementService) enabled(ctx context.Context, authCtx *contextvalues.AuthContext) (bool, error) {
 	enabled, err := s.gate.Enabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
@@ -489,10 +481,8 @@ func (s *ManagementService) state(ctx context.Context, authCtx *contextvalues.Au
 			distributionAttached = distribution.AttachmentLive
 			distributionPublicationState = distribution.PublicationState
 			selectedUseVerified = s.hasSelectedUseEvidence(ctx, authCtx, projection)
-			if s.versionTokens != nil {
-				if principal, err := s.currentConnectionPrincipal(authCtx, projection); err == nil {
-					distributionExpectedVersion, _ = s.versionTokens.Encode(principal, projection.SelectedProject.Slug, distribution.Version)
-				}
+			if principal, err := s.currentConnectionPrincipal(authCtx, projection); err == nil {
+				distributionExpectedVersion, _ = s.versionTokens.Encode(principal, projection.SelectedProject.Slug, distribution.Version)
 			}
 		}
 	}
@@ -522,6 +512,7 @@ func (s *ManagementService) state(ctx context.Context, authCtx *contextvalues.Au
 	}
 	return &platformmcpgen.PlatformMCPOnboardingState{Enabled: enabled, Stage: string(projection.Stage), McpURL: s.requestMCPURL(ctx), WorkflowActive: workflowActive, OrganizationSetupComplete: projection.OrganizationSetupComplete, ClientFamily: clientFamily, AgentConfigurationCopied: agentConfigurationReady(projection), ConnectionAuthorized: projection.ConnectionAuthState == ConnectionAuthStateActive, ConnectionAuthState: projection.ConnectionAuthState, ReauthorizationReason: projection.ReauthorizationReason, ConnectionReady: connectionReady, CatalogExplored: projection.CatalogExplored, SelectedProjectName: selectedProjectName, SelectedProjectSlug: selectedProjectSlug, RegistrationComplete: registrationComplete, ReadinessState: readinessState, ReadinessFreshness: freshness, DistributionState: distributionState, DistributionAttached: distributionAttached, DistributionToolSucceeded: projection.DistributionToolSucceeded, ReadinessVerified: readinessVerified || projection.ReadinessVerified, DistributionPublicationState: distributionPublicationState, SelectedUseVerified: selectedUseVerified, DistributionExpectedVersion: distributionExpectedVersion, RepairAction: repairAction}
 }
+
 func agentConfigurationReady(projection OnboardingProjection) bool {
 	if projection.Workflow == nil {
 		return false
@@ -529,15 +520,17 @@ func agentConfigurationReady(projection OnboardingProjection) bool {
 	_, hasConnectionEvidence := projection.connectionForEvidence()
 	return projection.Workflow.AgentConfigurationCopiedAt != nil || hasConnectionEvidence || projection.CatalogExplored || projection.RegistrationSucceeded || projection.DistributionToolSucceeded || projection.ReadinessVerified
 }
+
 func (s *ManagementService) hasSelectedUseEvidence(ctx context.Context, authCtx *contextvalues.AuthContext, projection OnboardingProjection) bool {
-	if authCtx == nil || projection.Workflow == nil || projection.SelectedProject == nil || projection.Workflow.SelectedRegistrationID == uuid.Nil || s.db == nil {
+	if authCtx == nil || projection.Workflow == nil || projection.SelectedProject == nil || projection.Workflow.SelectedRegistrationID == uuid.Nil {
 		return false
 	}
 	verified, err := repo.New(s.db).HasPlatformMCPSelectedUseEvidence(ctx, repo.HasPlatformMCPSelectedUseEvidenceParams{InitiatingSubjectUrn: userSubjectURN(authCtx.UserID), OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projection.SelectedProject.ID, RegistrationID: projection.Workflow.SelectedRegistrationID})
 	return err == nil && verified
 }
+
 func (s *ManagementService) currentDistribution(ctx context.Context, authCtx *contextvalues.AuthContext, projection OnboardingProjection) (Distribution, bool) {
-	if s.distributions == nil || authCtx == nil || projection.SelectedProject == nil {
+	if authCtx == nil || projection.SelectedProject == nil {
 		return Distribution{}, false
 	}
 	principal, err := s.currentConnectionPrincipal(authCtx, projection)
@@ -553,8 +546,9 @@ func (s *ManagementService) currentDistribution(ctx context.Context, authCtx *co
 	}
 	return distribution, true
 }
+
 func (s *ManagementService) currentReadiness(ctx context.Context, authCtx *contextvalues.AuthContext, projection OnboardingProjection) (*Readiness, bool) {
-	if s.readiness == nil || projection.Workflow == nil || projection.SelectedProject == nil || projection.Workflow.SelectedRegistrationID == uuid.Nil {
+	if projection.Workflow == nil || projection.SelectedProject == nil || projection.Workflow.SelectedRegistrationID == uuid.Nil {
 		return nil, false
 	}
 	principal, err := s.currentConnectionPrincipal(authCtx, projection)
@@ -567,6 +561,7 @@ func (s *ManagementService) currentReadiness(ctx context.Context, authCtx *conte
 	}
 	return &readiness, true
 }
+
 func (s *ManagementService) currentConnectionPrincipal(authCtx *contextvalues.AuthContext, projection OnboardingProjection) (Principal, error) {
 	if authCtx == nil || authCtx.UserID == "" || authCtx.ActiveOrganizationID == "" || len(projection.Connections) == 0 {
 		return Principal{}, ErrUnauthorized
@@ -577,6 +572,7 @@ func (s *ManagementService) currentConnectionPrincipal(authCtx *contextvalues.Au
 	}
 	return Principal{UserID: authCtx.UserID, OrganizationID: authCtx.ActiveOrganizationID, ConnectionID: connection.ID.String(), Generation: connection.Generation.String()}, nil
 }
+
 func platformMCPDashboardCtaSubject(organizationID, userID string) uuid.UUID {
 	return uuid.NewSHA1(platformMCPDashboardCtaNamespace, []byte(platformMCPDashboardCtaCampaign+"\x00"+organizationID+"\x00"+userSubjectURN(userID)))
 }
@@ -600,7 +596,8 @@ func onboardingRegistrationIdempotencyKey(workflowID uuid.UUID, projectSlug, pro
 	digest := sha256.Sum256([]byte(payload))
 	return "platform-mcp-onboarding-registration:" + hex.EncodeToString(digest[:])
 }
-func (s *ManagementService) mapOnboardingError(err error) error {
+
+func mapOnboardingError(err error) error {
 	switch {
 	case errors.Is(err, ErrOnboardingInvalid), errors.Is(err, ErrRegistrationInvalid), errors.Is(err, ErrSetupHandoffInvalid), errors.Is(err, ErrReadinessInvalid), errors.Is(err, ErrReadinessRegistrationNotFound), errors.Is(err, ErrDistributionInvalid), errors.Is(err, ErrDistributionVersionTokenInvalid):
 		return oops.C(oops.CodeBadRequest)
@@ -618,6 +615,7 @@ func (s *ManagementService) mapOnboardingError(err error) error {
 		return oops.E(oops.CodeUnexpected, fmt.Errorf("platform mcp onboarding: %w", err), "load platform mcp onboarding")
 	}
 }
+
 func noStoreHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")

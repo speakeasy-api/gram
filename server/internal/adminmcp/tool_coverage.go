@@ -34,21 +34,18 @@ type OrganizationCoverage struct {
 	UnmappedSources []string `json:"unmapped_sources,omitempty"`
 }
 
-func registerCoverageTools(server *mcp.Server, organizations OrganizationReader, coverage CoverageReader) {
+func registerCoverageTools(server *mcp.Server, reader Reader) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_organization_support_coverage",
 		Title:       "What Gram Observes for an Organization",
 		Description: "Report which consuming surfaces (Claude Code, Claude Chat, Cowork, Codex, Cursor, other agents) Gram has evidence for in an exact organization, across session activity, policy enforcement, identity attribution, token usage and shadow MCP. A cell reporting no evidence means nothing was observed, not that the surface is unsupported.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input OrganizationIDInput) (*mcp.CallToolResult, OrganizationCoverage, error) {
-		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
+		org, err := readExactOrganization(ctx, reader, input.OrganizationID)
 		if err != nil {
 			return nil, OrganizationCoverage{}, err
 		}
-		if coverage == nil {
-			return nil, OrganizationCoverage{}, errCoverageUnavailable
-		}
-		result, err := coverage.GetSupportCoverage(ctx, &gen.GetSupportCoveragePayload{OrganizationID: org.ID})
+		result, err := reader.GetSupportCoverage(ctx, &gen.GetSupportCoveragePayload{OrganizationID: org.ID})
 		if err != nil || result == nil {
 			return nil, OrganizationCoverage{}, errCoverageUnavailable
 		}

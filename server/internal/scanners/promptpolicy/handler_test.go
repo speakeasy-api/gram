@@ -174,7 +174,7 @@ func TestHandle_LegacyPolicyFieldsPublishFindingAndUsage(t *testing.T) {
 	}
 	scanner := promptpolicy.NewScanner(testenv.NewLogger(t), evaluator)
 	gate := scanners.NewAsyncShadowGate(testenv.NewLogger(t), &recordingFlagProvider{enabled: true}, fakeFlagGroupDB{})
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), scanner, nil, pub, gate, metering.NewRiskRecorder(meterPub))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), scanner, promptpolicy.NewScanner(testenv.NewLogger(t), promptpolicy.NoopEvaluator), pub, gate, metering.NewRiskRecorder(meterPub))
 	request := newRequest("delete production")
 	request.ClearOriginRiskPolicyId()
 	request.SetOriginRiskPolicyVersion(0)
@@ -207,7 +207,7 @@ func TestHandle_MalformedMeteringMetadataDoesNotSuppressFinding(t *testing.T) {
 	}
 	scanner := promptpolicy.NewScanner(testenv.NewLogger(t), evaluator)
 	gate := scanners.NewAsyncShadowGate(testenv.NewLogger(t), &recordingFlagProvider{enabled: true}, fakeFlagGroupDB{})
-	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), scanner, nil, pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), scanner, promptpolicy.NewScanner(testenv.NewLogger(t), promptpolicy.NoopEvaluator), pub, gate, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	request := newRequest("delete production")
 	request.SetOriginRiskPolicyId("not-a-uuid")
 

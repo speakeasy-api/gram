@@ -19,7 +19,7 @@ func TestDashboardTurnAttachmentPartsInlinesText(t *testing.T) {
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_turn_attachment_parts")
 	store := assetstest.NewTestBlobStore(t)
-	svc.core.SetAssetStorage(store)
+	svc.core.assetStorage = store
 
 	const spec = "openapi: 3.1.0\ninfo:\n  title: Petstore\n"
 	writer, assetURL, err := store.Write(ctx, "attachment-test.yaml", "application/yaml", int64(len(spec)))

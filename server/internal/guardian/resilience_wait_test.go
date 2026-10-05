@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	"golang.org/x/time/rate"
 )
 
@@ -71,7 +73,7 @@ func pacingTransport(limiter Limiter, next http.RoundTripper) *resilienceTranspo
 			Breaker:         NoBreaker(),
 		},
 		limiter: limiter,
-		breaker: NoopBreaker{partitions: nil},
+		breaker: NewNoopBreaker(slog.New(slog.DiscardHandler), metricnoop.NewMeterProvider()), //nolint:forbidigo // GG006/GG009: testenv imports guardian, so this internal test cannot use it
 	}
 }
 

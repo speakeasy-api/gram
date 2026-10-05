@@ -39,7 +39,7 @@ type GetMyInstallInstructionsOutput struct {
 var ErrInstallTargetNotFound = errors.New("install target not found")
 
 func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal Principal, input GetMyInstallInstructionsInput) (GetMyInstallInstructionsOutput, error) {
-	if !s.valid() || s.authorization == nil || !validOnboardingClient(input.ClientFamily) {
+	if !validOnboardingClient(input.ClientFamily) {
 		return GetMyInstallInstructionsOutput{}, ErrUnavailable
 	}
 	projectID, err := uuid.Parse(strings.TrimSpace(input.ProjectID))

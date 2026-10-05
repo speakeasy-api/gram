@@ -26,11 +26,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
-// ChatTitleGenerator schedules async chat title generation.
-type ChatTitleGenerator interface {
-	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error
-}
-
 // TelemetryLogger emits telemetry events for observability.
 type TelemetryLogger interface {
 	Log(ctx context.Context, params telemetry.LogParams)
@@ -53,7 +48,6 @@ type ChatClient struct {
 	keyResolver            KeyResolver
 	messageCaptureStrategy MessageCaptureStrategy
 	usageTrackingStrategy  UsageTrackingStrategy
-	chatTitleGenerator     ChatTitleGenerator
 	telemetryLogger        TelemetryLogger
 }
 
@@ -65,7 +59,6 @@ func NewUnifiedClient(
 	keyResolver KeyResolver,
 	captureStrategy MessageCaptureStrategy,
 	trackingStrategy UsageTrackingStrategy,
-	chatTitleGenerator ChatTitleGenerator,
 	telemetryLogger TelemetryLogger,
 ) *ChatClient {
 	return &ChatClient{
@@ -75,7 +68,6 @@ func NewUnifiedClient(
 		keyResolver:            keyResolver,
 		messageCaptureStrategy: captureStrategy,
 		usageTrackingStrategy:  trackingStrategy,
-		chatTitleGenerator:     chatTitleGenerator,
 		telemetryLogger:        telemetryLogger,
 	}
 }
@@ -304,25 +296,6 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSessi
 				c.logger.ErrorContext(ctx, "failed to track usage", attr.SlogError(err))
 			}
 		}()
-	}
-
-	projectID, err := uuid.Parse(req.ProjectID)
-	if err != nil {
-		c.logger.WarnContext(ctx, "failed to parse project ID for chat title generation", attr.SlogError(err))
-		return
-	}
-
-	// Schedule chat title generation.
-	// Use WithoutCancel to ensure the workflow is scheduled even if the HTTP request is cancelled.
-	if c.chatTitleGenerator != nil && req.ChatID != uuid.Nil {
-		if err := c.chatTitleGenerator.ScheduleChatTitleGeneration(
-			context.WithoutCancel(ctx),
-			req.ChatID.String(),
-			req.OrgID,
-			projectID.String(),
-		); err != nil {
-			c.logger.WarnContext(ctx, "failed to schedule chat title generation", attr.SlogError(err))
-		}
 	}
 
 	// Emit telemetry

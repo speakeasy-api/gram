@@ -2,6 +2,7 @@ package testenv
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/testsuite"
@@ -160,7 +162,20 @@ func NewTemporalEnvironment(t *testing.T, devserver *testsuite.DevServer) (*serv
 	request.Namespace = namespace
 	request.WorkflowExecutionRetentionPeriod = durationpb.New(24 * time.Hour)
 
-	_, err := devserver.Client().WorkflowService().RegisterNamespace(t.Context(), request)
+	// The dev server rate limits namespace registration, and a package whose
+	// parallel tests each register one can burst past it.
+	var err error
+	for attempt := 1; ; attempt++ {
+		_, err = devserver.Client().WorkflowService().RegisterNamespace(t.Context(), request)
+		if _, limited := errors.AsType[*serviceerror.ResourceExhausted](err); !limited || attempt == 10 {
+			break
+		}
+		select {
+		case <-t.Context().Done():
+			return nil, fmt.Errorf("register temporal namespace: %w", t.Context().Err())
+		case <-time.After(time.Duration(attempt) * 100 * time.Millisecond):
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("register temporal namespace: %w", err)
 	}

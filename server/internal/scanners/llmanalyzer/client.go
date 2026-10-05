@@ -122,9 +122,6 @@ type Client struct {
 // relies on: up to three retries on 5xx, 429 and connection errors with
 // 100ms to 1s backoff, never on a context deadline.
 func NewClient(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, policy *guardian.Policy, cfg Config) (*Client, error) {
-	if policy == nil {
-		return nil, errors.New("risk llm: guardian policy is required")
-	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}

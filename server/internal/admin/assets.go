@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	legacy "github.com/speakeasy-api/gram/server/gen/admin_assets"
 	assetgen "github.com/speakeasy-api/gram/server/gen/assets"
@@ -11,8 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"io"
-	"net/http"
 )
 
 func (s *Service) SetAssetService(service *assets.Service) { s.assets = service }

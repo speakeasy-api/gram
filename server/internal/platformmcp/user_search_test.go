@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -108,8 +107,7 @@ const (
 func newUserSearchService(t *testing.T, reader UserSearchReader, auditor DrilldownAuditor, gate CanonicalIdentityGate) *DiagnosticsService {
 	t.Helper()
 
-	codec, err := newSubjectReferenceCodec("user-search-test-key")
-	require.NoError(t, err)
+	codec := newSubjectReferenceCodec("user-search-test-key")
 	return &DiagnosticsService{
 		db:              nil,
 		telemetry:       stubUserSearchTelemetry{watermark: userSearchTestNow.Add(-time.Minute).UnixNano()},
@@ -345,7 +343,7 @@ func TestSearchUsers_ExternalGroupsByExternalUserIDWithoutFolding(t *testing.T) 
 func TestSearchUsers_RefusesWindowBeyondAMonth(t *testing.T) {
 	t.Parallel()
 
-	service := newUserSearchService(t, &recordingUserSearchReader{}, &recordingUserSearchAuditor{}, nil)
+	service := newUserSearchService(t, &recordingUserSearchReader{}, &recordingUserSearchAuditor{}, literalIdentityGate{})
 	_, err := service.SearchUsers(t.Context(), testPrincipal(), SearchUsersInput{ProjectID: userSearchTestProject, Query: "pat", UserType: "", Window: "90d", Limit: 0, Cursor: ""})
 	require.ErrorIs(t, err, ErrDiagnosticWindowInvalid)
 }
@@ -364,7 +362,7 @@ func TestSearchUsers_CursorResumesOnlyTheQueryThatMintedIt(t *testing.T) {
 		rows = append(rows, row)
 	}
 	reader := &recordingUserSearchReader{rows: rows}
-	service := newUserSearchService(t, reader, &recordingUserSearchAuditor{}, nil)
+	service := newUserSearchService(t, reader, &recordingUserSearchAuditor{}, literalIdentityGate{})
 	principal := testPrincipal()
 
 	first, err := service.SearchUsers(t.Context(), principal, SearchUsersInput{ProjectID: userSearchTestProject, Query: "pat", UserType: "", Window: "24h", Limit: 2, Cursor: ""})
@@ -417,7 +415,7 @@ func TestSearchUsers_RefusesACursorWithoutASealedPosition(t *testing.T) {
 	t.Parallel()
 
 	reader := &recordingUserSearchReader{rows: []telemetryrepo.UserSummary{userSummaryRow("pat.a@example.com", "pat.a@example.com", 1, 0)}}
-	service := newUserSearchService(t, reader, &recordingUserSearchAuditor{}, nil)
+	service := newUserSearchService(t, reader, &recordingUserSearchAuditor{}, literalIdentityGate{})
 	principal := testPrincipal()
 	search, err := normalizeUserSearch(SearchUsersInput{ProjectID: userSearchTestProject, Query: "pat", UserType: "", Window: "24h", Limit: 2, Cursor: ""})
 	require.NoError(t, err)
@@ -461,7 +459,7 @@ func TestSearchUsers_TraversalCapWithholdsTheCursor(t *testing.T) {
 		rows = append(rows, userSummaryRow(key, key, 1, 0))
 	}
 	reader := &recordingUserSearchReader{rows: rows}
-	service := newUserSearchService(t, reader, &recordingUserSearchAuditor{}, nil)
+	service := newUserSearchService(t, reader, &recordingUserSearchAuditor{}, literalIdentityGate{})
 	principal := testPrincipal()
 
 	cursor := ""
@@ -553,7 +551,7 @@ func TestGetUserMetricsSummary_ReportsInactiveWithoutObservations(t *testing.T) 
 	t.Parallel()
 
 	reader := &recordingUserSearchReader{rows: nil, metrics: &telemetryrepo.MetricsSummaryRow{ToolCounts: map[string]uint64{}, ToolFailureCounts: map[string]uint64{}}}
-	service := newUserSearchService(t, reader, &recordingUserSearchAuditor{}, nil)
+	service := newUserSearchService(t, reader, &recordingUserSearchAuditor{}, literalIdentityGate{})
 	principal := testPrincipal()
 	reference, err := service.references.EncodeScoped(principal, subjectKindUser, projectUserScope(userSearchTestProject), FormatSubjectIdentity(SubjectIdentityUser, "user-77"), userSearchTestNow)
 	require.NoError(t, err)
@@ -596,7 +594,7 @@ func TestGetUserMetricsSummary_AcceptsDrilldownReferenceOnlyWithItsScope(t *test
 
 	reader := &recordingUserSearchReader{rows: nil, metrics: &telemetryrepo.MetricsSummaryRow{LastSeenUnixNano: userSearchTestNow.UnixNano(), ToolCounts: map[string]uint64{}}}
 	auditor := &recordingUserSearchAuditor{}
-	service := newUserSearchService(t, reader, auditor, nil)
+	service := newUserSearchService(t, reader, auditor, literalIdentityGate{})
 	principal := testPrincipal()
 	window, err := resolveWindow("24h", userSearchTestNow, drilldownWindowSpec)
 	require.NoError(t, err)
@@ -620,7 +618,7 @@ func TestGetUserMetricsSummary_RefusesForeignAndMalformedReferences(t *testing.T
 
 	reader := &recordingUserSearchReader{metrics: &telemetryrepo.MetricsSummaryRow{ToolCounts: map[string]uint64{}}}
 	auditor := &recordingUserSearchAuditor{}
-	service := newUserSearchService(t, reader, auditor, nil)
+	service := newUserSearchService(t, reader, auditor, literalIdentityGate{})
 	principal := testPrincipal()
 	otherProject := "00000000-0000-0000-0000-000000000009"
 	reference, err := service.references.EncodeScoped(principal, subjectKindUser, projectUserScope(otherProject), FormatSubjectIdentity(SubjectIdentityEmail, "pat.rivera@example.com"), userSearchTestNow)
@@ -661,7 +659,7 @@ func TestGetUserMetricsSummary_RefusesForeignAndMalformedReferences(t *testing.T
 func TestGetUserMetricsSummary_RequiresProjectAndReference(t *testing.T) {
 	t.Parallel()
 
-	service := newUserSearchService(t, &recordingUserSearchReader{}, &recordingUserSearchAuditor{}, nil)
+	service := newUserSearchService(t, &recordingUserSearchReader{}, &recordingUserSearchAuditor{}, literalIdentityGate{})
 	for name, input := range map[string]GetUserMetricsSummaryInput{
 		"missing project":   {ProjectID: "", UserReference: "opaque", Window: "", MCPID: ""},
 		"missing reference": {ProjectID: userSearchTestProject, UserReference: " ", Window: "", MCPID: ""},
@@ -669,24 +667,6 @@ func TestGetUserMetricsSummary_RequiresProjectAndReference(t *testing.T) {
 		_, err := service.GetUserMetricsSummary(t.Context(), testPrincipal(), input)
 		require.ErrorIs(t, err, ErrUserSearchInvalid, name)
 	}
-}
-
-func TestUserSearchService_UnavailableWithoutComposition(t *testing.T) {
-	t.Parallel()
-
-	var nilService *DiagnosticsService
-	_, err := nilService.SearchUsers(t.Context(), testPrincipal(), SearchUsersInput{ProjectID: userSearchTestProject, Query: "pat", UserType: "", Window: "", Limit: 0, Cursor: ""})
-	require.ErrorIs(t, err, ErrUnavailable)
-
-	withoutReader := newUserSearchService(t, nil, &recordingUserSearchAuditor{}, nil)
-	_, err = withoutReader.GetUserMetricsSummary(t.Context(), testPrincipal(), GetUserMetricsSummaryInput{ProjectID: userSearchTestProject, UserReference: "opaque", Window: "", MCPID: ""})
-	require.ErrorIs(t, err, ErrUnavailable)
-	require.False(t, withoutReader.userSearchValid())
-	// A deployment without ClickHouse composes with a nil reader, which must
-	// leave the tools on the unavailable stub path rather than registering a
-	// live handler that fails on every call.
-	require.False(t, withoutReader.WithUserSearch(nil).userSearchValid())
-	require.True(t, withoutReader.WithUserSearch(&recordingUserSearchReader{}).userSearchValid())
 }
 
 func TestToolServer_NamesOnlyServersItCanDerive(t *testing.T) {
@@ -719,66 +699,26 @@ func TestUserMetricsTools_OrdersBrokenToolsFirstAndReportsTruncation(t *testing.
 }
 
 // TestUserSearchTools_DeclareOrgAdminReadsForBothAudiences pins the manifest
-// contract on both the live and the unavailable registration, so a tool does
-// not appear on and disappear from a surface as the rollout flips.
+// contract of the people search tools.
 func TestUserSearchTools_DeclareOrgAdminReadsForBothAudiences(t *testing.T) {
 	t.Parallel()
 
-	_, unavailable := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	live := newRegistrar(newTestMCPServer())
-	registerUserSearchTools(live, nil)
+	registerUserSearchTools(live, newUserSearchService(t, &recordingUserSearchReader{}, &recordingUserSearchAuditor{}, literalIdentityGate{}))
 
-	for _, registrar := range []*Registrar{unavailable, live} {
-		for _, name := range []string{"search_users", "get_user_metrics_summary"} {
-			descriptor := descriptorByName(t, registrar, name)
-			require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization)
-			require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
-			require.ElementsMatch(t, bothAudiences, descriptor.Meta.Audiences)
-			require.True(t, descriptor.Annotations.ReadOnlyHint)
-			require.NotEmpty(t, descriptor.InputSchema)
-		}
+	for _, name := range []string{"search_users", "get_user_metrics_summary"} {
+		descriptor := descriptorByName(t, live, name)
+		require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization)
+		require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
+		require.ElementsMatch(t, bothAudiences, descriptor.Meta.Audiences)
+		require.True(t, descriptor.Annotations.ReadOnlyHint)
+		require.NotEmpty(t, descriptor.InputSchema)
 	}
 	liveSearch := descriptorByName(t, live, "search_users")
 	require.Contains(t, string(liveSearch.InputSchema), "\"query\"")
 	require.Contains(t, string(liveSearch.InputSchema), "\"cursor\"")
 	liveSummary := descriptorByName(t, live, "get_user_metrics_summary")
 	require.Contains(t, string(liveSummary.InputSchema), "\"user_reference\"")
-}
-
-// TestUserSearchTools_UnavailableStubsRefuseReadably calls the stubs through
-// a real MCP session with every required input supplied, so the refusal under
-// test is the tool's structured one rather than a transport schema error.
-func TestUserSearchTools_UnavailableStubsRefuseReadably(t *testing.T) {
-	t.Parallel()
-
-	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
-	bindExternalTestPrincipal(server)
-	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
-
-	clientTransport, serverTransport := mcp.NewInMemoryTransports()
-	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
-	require.NoError(t, err)
-	defer func() { _ = serverSession.Close() }()
-	client := mcp.NewClient(&mcp.Implementation{Name: "user-search-test", Version: "0.0.1"}, nil)
-	session, err := client.Connect(t.Context(), clientTransport, nil)
-	require.NoError(t, err)
-	defer func() { _ = session.Close() }()
-
-	for name, arguments := range map[string]map[string]any{
-		"search_users":             {"project_id": userSearchTestProject, "query": "pat"},
-		"get_user_metrics_summary": {"project_id": userSearchTestProject, "user_reference": "opaque"},
-	} {
-		result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: name, Arguments: arguments})
-		require.NoError(t, err, name)
-		require.True(t, result.IsError, name)
-		require.Len(t, result.Content, 1, name)
-		text, ok := result.Content[0].(*mcp.TextContent)
-		require.True(t, ok, name)
-		var refusal featureUnavailableResult
-		require.NoError(t, json.Unmarshal([]byte(text.Text), &refusal), name)
-		require.Equal(t, unavailableCode, refusal.Code, name)
-		require.Equal(t, "user_search", refusal.Feature, name)
-	}
 }
 
 // unmappedIdentityReader answers like the repository does for a person whose
@@ -937,7 +877,7 @@ func TestSearchUsers_CursorAnchorsTheWindowAcrossPages(t *testing.T) {
 	}
 	reader := &recordingUserSearchReader{rows: rows}
 	clock := userSearchTestNow
-	service := newUserSearchService(t, reader, &recordingUserSearchAuditor{}, nil)
+	service := newUserSearchService(t, reader, &recordingUserSearchAuditor{}, literalIdentityGate{})
 	service.now = func() time.Time { return clock }
 	principal := testPrincipal()
 
@@ -994,7 +934,7 @@ func TestSearchUsers_ReachesAPersonNearTheOriginalWindowStart(t *testing.T) {
 	}
 	reader := &windowedUserSearchReader{people: people}
 	clock := userSearchTestNow
-	service := newUserSearchService(t, reader, &recordingUserSearchAuditor{}, nil)
+	service := newUserSearchService(t, reader, &recordingUserSearchAuditor{}, literalIdentityGate{})
 	service.now = func() time.Time { return clock }
 	principal := testPrincipal()
 

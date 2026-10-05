@@ -61,19 +61,15 @@ type CatalogService struct {
 
 // NewCatalogService temporarily accepts both RegistryReader implementations for
 // the organization-targeted catalog cutover. Remove the legacy reader after rollout.
-func NewCatalogService(db *pgxpool.Pool, legacy RegistryReader, native RegistryReader, providers ...feature.Provider) *CatalogService {
-	adapters := make(map[string]RegistryReader, 2)
-	if legacy != nil {
-		adapters[registryAdapterKey(registrySourceTypePulseV01, registryAuthProfilePulseServerCredentials)] = legacy
+func NewCatalogService(db *pgxpool.Pool, legacy RegistryReader, native RegistryReader, features feature.Provider) *CatalogService {
+	return &CatalogService{
+		repo: repo.New(db),
+		adapters: map[string]RegistryReader{
+			registryAdapterKey(registrySourceTypePulseV01, registryAuthProfilePulseServerCredentials): legacy,
+			registryAdapterKey(registrySourceTypeNative, registryAuthProfileNone):                     native,
+		},
+		features: features,
 	}
-	if native != nil {
-		adapters[registryAdapterKey(registrySourceTypeNative, registryAuthProfileNone)] = native
-	}
-	var flags feature.Provider
-	if len(providers) > 0 {
-		flags = providers[0]
-	}
-	return &CatalogService{repo: repo.New(db), adapters: adapters, features: flags}
 }
 
 func registryAdapterKey(sourceType, authProfile string) string {
@@ -204,7 +200,7 @@ func (s *CatalogService) adapterFor(source CatalogSource) (RegistryReader, error
 		return nil, ErrCatalogSourceNotFound
 	}
 	adapter, ok := s.adapters[registryAdapterKey(source.SourceType, source.AuthProfile)]
-	if !ok || adapter == nil {
+	if !ok {
 		return nil, fmt.Errorf("%w: %s/%s", ErrUnknownRegistrySource, source.SourceType, source.AuthProfile)
 	}
 	return adapter, nil
@@ -230,9 +226,6 @@ func (s *CatalogService) sources(ctx context.Context, registryID *uuid.UUID) ([]
 // SelectedSource selects exactly one catalog. Flag errors/off/unknown select the legacy catalog;
 // missing or failing selected sources never fall back to the other catalog.
 func (s *CatalogService) SelectedSource(ctx context.Context, organizationID, organizationSlug string) (CatalogSource, error) {
-	if s == nil || s.repo == nil {
-		return zeroCatalogSource(), ErrCatalogSourceNotFound
-	}
 	native, _ := feature.GramMCPCatalogEnabled(ctx, s.features, organizationID, organizationSlug)
 	rows, err := s.repo.ListMCPRegistries(ctx)
 	if err != nil {
@@ -283,9 +276,6 @@ func (s *CatalogService) SelectSource(ctx context.Context, organizationID, organ
 // IdentitySource resolves persisted/accepted work independently of rollout state.
 // It still requires a known enabled/certified source; it never switches identities.
 func (s *CatalogService) IdentitySource(ctx context.Context, id uuid.UUID) (CatalogSource, error) {
-	if s == nil || s.repo == nil {
-		return zeroCatalogSource(), ErrCatalogSourceNotFound
-	}
 	row, err := s.repo.GetMCPRegistryByID(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return zeroCatalogSource(), ErrCatalogSourceNotFound

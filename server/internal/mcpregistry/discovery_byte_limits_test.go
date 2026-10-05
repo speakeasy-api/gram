@@ -1,9 +1,10 @@
 package mcpregistry
 
 import (
-	"github.com/stretchr/testify/require"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestDiscoveryFilterUTF8ByteLimits(t *testing.T) {

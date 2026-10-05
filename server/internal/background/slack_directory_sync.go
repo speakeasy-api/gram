@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
-	"sync"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -199,9 +200,6 @@ func slackDirectoryWorkflowID(queue tenv.TaskQueueName, id, generation uuid.UUID
 }
 
 func (s *slackDirectoryScheduler) Start(ctx context.Context, input slackdirectoryconnections.SyncInput) error {
-	if s.env == nil {
-		return errors.New("slack directory sync is not configured")
-	}
 	_, err := s.env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID: slackDirectoryWorkflowID(s.env.Queue(), input.ConnectionID, input.Generation), TaskQueue: string(s.env.Queue()),
 		WorkflowExecutionTimeout: 2*time.Hour + time.Minute,
@@ -216,10 +214,6 @@ func (s *slackDirectoryScheduler) Start(ctx context.Context, input slackdirector
 
 func (s *slackDirectoryScheduler) State(ctx context.Context, id, generation uuid.UUID) (slackdirectoryconnections.SyncState, error) {
 	state := slackdirectoryconnections.SyncState{Status: "idle", Progress: slackdirectoryconnections.SyncProgress{Phase: "", Pages: 0, Members: 0, ExcludedExternal: 0, Bots: 0}}
-	if s.env == nil {
-		state.Status = "unknown"
-		return state, errors.New("slack directory sync is not configured")
-	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	execution, err := s.env.Client().DescribeWorkflowExecution(ctx, slackDirectoryWorkflowID(s.env.Queue(), id, generation), "")

@@ -2,7 +2,6 @@ package gram
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -38,11 +37,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
-	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -412,9 +411,6 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			if temporalEnv == nil {
-				return errors.New("insufficient options to create temporal client")
-			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
@@ -440,9 +436,7 @@ func newWorkerCommand() *cli.Command {
 			}
 
 			encryptionClient, err := encryption.New(c.String("encryption-key"))
-			if err != nil {
-				return fmt.Errorf("failed to create encryption client: %w", err)
-			}
+			inv.Require("encryption client", "encryption-key is a valid AES-256 key", err)
 
 			auditLogger := newAuditLogger()
 
@@ -480,14 +474,6 @@ func newWorkerCommand() *cli.Command {
 			}
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
-			var pluginPublisher *plugins.Service
-			if pluginsGitHub != nil {
-				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
-				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags).
-					WithDistributionAdmission(admission.NewGuard(featureFlags, admission.NewReportMetrics(meterProvider, logger)))
-			} else {
-				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
-			}
 
 			mcpMetadataRepo := mcpmetadata_repo.New(db)
 			env := environments.NewEnvironmentEntries(logger, db, encryptionClient, mcpMetadataRepo)
@@ -550,10 +536,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create Stripe client: %w", err)
 			}
 
-			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
-			if err != nil {
-				return fmt.Errorf("failed to create billing provider: %w", err)
-			}
+			billingRepo, billingTracker := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
 
 			var openRouter interface {
 				openrouter.Provisioner
@@ -616,13 +599,21 @@ func newWorkerCommand() *cli.Command {
 					DevMode:                          c.String("environment") == "local",
 				})
 
-			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)
-			if err != nil {
-				return fmt.Errorf("failed to create WorkOS client: %w", err)
+			var pluginPublisher *plugins.Service
+			if pluginsGitHub != nil {
+				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
+				pluginPublisher = plugins.NewPublisher(logger, db, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, admission.NewGuard(featureFlags, admission.NewReportMetrics(meterProvider, logger)))
+			} else {
+				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
 			}
+
+			workosClient, workosAvailable := newWorkOSClient(guardianPolicy, c)
 			var backgroundWorkOSClient activities.WorkOSClient = workosClient
+			var identityWorkOSClient identity.WorkOSClient = workosClient
 			if !workosAvailable {
-				backgroundWorkOSClient = workos.NewStubClient()
+				stub := workos.NewStubClient()
+				backgroundWorkOSClient = stub
+				identityWorkOSClient = stub
 			}
 
 			telemetryLogPublisher := telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
@@ -630,7 +621,7 @@ func newWorkerCommand() *cli.Command {
 			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled, telemetryLogPublisher)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db, assetStorage)
+			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db, assetStorage, chat.NewTurnStream(redisClient))
 			shutdownFuncs = append(shutdownFuncs, chatWriterShutdown)
 
 			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter)
@@ -643,7 +634,7 @@ func newWorkerCommand() *cli.Command {
 			// riskSignaler.Shutdown is flushed synchronously after temporalWorker.Run
 			// returns (below), not via shutdownFuncs, to avoid racing the concurrent
 			// temporalClient.Close() over the same gRPC connection.
-			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler, auditLogger, metering.NewRiskRecorder(publishers.MeterReadings)))
+			chatWriter.AddObserver(risk.NewObserver(logger, riskSignaler))
 
 			// Throttled for the same reason riskSignaler is: the writer emits one
 			// wake per durable message write and a wake carries no payload, so a
@@ -685,7 +676,6 @@ func newWorkerCommand() *cli.Command {
 				modelkeys.NewResolver(db, encryptionClient, openRouter),
 				captureStrategy,
 				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
-				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				telemetryLogger,
 			)
 
@@ -708,6 +698,7 @@ func newWorkerCommand() *cli.Command {
 			}
 			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, catalogValidator)), featureFlags)
 
+			inv.Require("worker", "jwt-signing-key is set", c.String(usersessions.JWTSigningKeyFlag) != "")
 			serverURL, err := url.Parse(c.String("server-url"))
 			if err != nil {
 				return fmt.Errorf("failed to parse server url: %w", err)
@@ -720,12 +711,15 @@ func newWorkerCommand() *cli.Command {
 
 			idpClientSecret := c.String("idp-client-secret")
 
-			umClient := newIDPUserManagementClient(guardianPolicy, idpClientSecret, c)
-			if umClient == nil {
-				return fmt.Errorf("failed to create IDP user management client: idp-client-secret is required")
-			}
+			idpClient := identity.NewWorkOSAdapter(newIDPUserManagementClient(guardianPolicy, idpClientSecret, c))
 
-			idpClient := identity.NewWorkOSAdapter(umClient)
+			var siteURL *url.URL
+			if raw := c.String("site-url"); raw != "" {
+				siteURL, err = url.Parse(raw)
+				if err != nil {
+					return fmt.Errorf("failed to parse site url: %w", err)
+				}
+			}
 
 			identityResolver := identity.NewResolver(
 				logger,
@@ -734,12 +728,12 @@ func newWorkerCommand() *cli.Command {
 				c.String("idp-base-url"),
 				c.String("idp-client-id"),
 				idpClient,
-				nil, // no WorkOS client in worker
+				identityWorkOSClient,
 				orgRepo.New(db),
 				userRepo.New(db),
 				pylonClient,
 				posthogClient,
-				nil,
+				newGrowthSignalsEmitter(logger, posthogClient, db, siteURL),
 				cache.SuffixNone,
 			)
 
@@ -782,14 +776,9 @@ func newWorkerCommand() *cli.Command {
 				return err
 			}
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
-			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger, contextWindowResolver, auditLogger)
+			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger, contextWindowResolver, auditLogger, chatWriter, assetStorage, c.String(usersessions.JWTSigningKeyFlag), env, slackapi.NewClient("", guardianPolicy.PooledClient()), featureFlags)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
-			assistantsCore.SetChatMessageWriter(chatWriter)
-			assistantsCore.SetAssetStorage(assetStorage)
-			assistantsCore.SetAssetSigningKey(c.String(usersessions.JWTSigningKeyFlag))
-			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
-			assistantsCore.SetFeatureProvider(featureFlags)
 			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
@@ -805,23 +794,13 @@ func newWorkerCommand() *cli.Command {
 
 			piScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
 
-			customRuleScanner, err := customruleanalyzer.NewScanner(db)
-			if err != nil {
-				return fmt.Errorf("create custom rules scanner: %w", err)
-			}
+			customRuleScanner := customruleanalyzer.NewScanner(db)
 
 			builtinPresets, err := presetlib.New()
 			if err != nil {
 				return fmt.Errorf("load built-in exclusion library: %w", err)
 			}
 
-			var siteURL *url.URL
-			if raw := c.String("site-url"); raw != "" {
-				siteURL, err = url.Parse(raw)
-				if err != nil {
-					return fmt.Errorf("failed to parse site url: %w", err)
-				}
-			}
 			platformHosts, err := customdomains.ParsePlatformHosts(c.StringSlice(platformHostsFlag))
 			if err != nil {
 				return fmt.Errorf("invalid platform hosts: %w", err)

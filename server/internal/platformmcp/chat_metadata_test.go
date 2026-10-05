@@ -44,8 +44,7 @@ func (r *recordingChatReader) CountChats(_ context.Context, arg chatrepo.CountCh
 func newChatMetadataService(t *testing.T, reader chatMetadataReader, budget OperationBudget) (*ChatMetadataService, ResolvedProject) {
 	t.Helper()
 
-	codec, err := newSubjectReferenceCodec("chat-list-test-key")
-	require.NoError(t, err)
+	codec := newSubjectReferenceCodec("chat-list-test-key")
 	project := ResolvedProject{ID: uuid.New(), Slug: "default", Name: "Project"}
 	return &ChatMetadataService{
 		projects:   &findingProjects{project: project, calls: nil, err: nil},
@@ -419,13 +418,6 @@ func TestListChatsRefusesWithoutBudgetOrProject(t *testing.T) {
 		ProjectID: "", ProjectSlug: "", Window: "", Risk: "", Source: "", AssistantID: "", UserReference: "", Limit: 0, Cursor: "",
 	})
 	require.ErrorContains(t, err, "list project chats")
-
-	var nilService *ChatMetadataService
-	_, err = nilService.List(t.Context(), registrationServicePrincipal(), ListChatsInput{
-		ProjectID: "", ProjectSlug: "", Window: "", Risk: "", Source: "", AssistantID: "", UserReference: "", Limit: 0, Cursor: "",
-	})
-	require.ErrorIs(t, err, ErrUnavailable)
-	require.Nil(t, NewChatMetadataService(nil, allowBudget(), "key"), "no database leaves the service nil so the stub registers")
 }
 
 // denyOperationLimiter models a throttled bucket.

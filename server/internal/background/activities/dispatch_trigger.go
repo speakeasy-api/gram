@@ -27,10 +27,6 @@ func (d *DispatchTrigger) Do(ctx context.Context, input DispatchTriggerInput) er
 		return nil
 	}
 
-	if d.app == nil {
-		return fmt.Errorf("trigger app is not configured")
-	}
-
 	if err := d.app.Dispatch(ctx, *input.Task); err != nil {
 		return fmt.Errorf("dispatch: %w", err)
 	}

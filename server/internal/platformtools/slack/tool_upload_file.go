@@ -125,9 +125,6 @@ func callUploadFile(ctx context.Context, client *apiClient, env toolconfig.ToolC
 }
 
 func postBinary(ctx context.Context, httpClient *guardian.HTTPClient, uploadURL string, data []byte) error {
-	if httpClient == nil {
-		return fmt.Errorf("slack HTTP client not configured")
-	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uploadURL, bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("build slack upload request: %w", err)

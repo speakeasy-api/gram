@@ -57,7 +57,8 @@ func registerCatalogTools(reg *Registrar, catalog Catalog, budget OperationBudge
 		Description: "Search the reviewed catalogue — the MCP servers Speakeasy has vetted and made available to add. Searching only lists options: nothing is added to a project and nobody receives anything.",
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
-		Audiences:     bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input SearchCatalogInput) (*mcp.CallToolResult, SearchCatalogOutput, error) {
+		Audiences:     bothAudiences, ProjectScope: ProjectScopeNone,
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input SearchCatalogInput) (*mcp.CallToolResult, SearchCatalogOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, SearchCatalogOutput{}, err
@@ -67,9 +68,6 @@ func registerCatalogTools(reg *Registrar, catalog Catalog, budget OperationBudge
 				return result, SearchCatalogOutput{}, nil
 			}
 			return nil, SearchCatalogOutput{}, err
-		}
-		if catalog == nil || cursorCodec == nil {
-			return nil, SearchCatalogOutput{}, ErrCatalogUnavailable
 		}
 		position := 0
 		if input.Cursor != "" {
@@ -96,10 +94,8 @@ func registerCatalogTools(reg *Registrar, catalog Catalog, budget OperationBudge
 		if err != nil {
 			return nil, SearchCatalogOutput{}, err
 		}
-		if onboarding != nil {
-			if err := onboarding.RecordCatalogExplored(ctx, principal); err != nil {
-				return nil, SearchCatalogOutput{}, err
-			}
+		if err := onboarding.RecordCatalogExplored(ctx, principal); err != nil {
+			return nil, SearchCatalogOutput{}, err
 		}
 		output := SearchCatalogOutput{Candidates: page}
 		if nextPosition > 0 {
@@ -135,9 +131,6 @@ func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemo
 			return nil, CandidateInspection{}, ErrCatalogRejected
 		}
 		if remoteURL != "" {
-			if directRemote == nil || gate == nil {
-				return directRemoteInspectionUnavailableToolResult(setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable))
-			}
 			enabled, err := gate.EnabledOrganization(ctx, principal.OrganizationID)
 			if err != nil || !enabled {
 				return directRemoteInspectionUnavailableToolResult(setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable))
@@ -151,9 +144,6 @@ func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemo
 			}
 			category := setupCategoryFromInspection(inspection)
 			return nil, CandidateInspection{CanonicalURL: inspection.CanonicalURL, Transport: inspection.Transport, ToolNames: inspection.ToolNames, ToolCount: inspection.ToolCount, RequiresDashboardSetup: inspection.RequiresDashboardSetup, Trust: inspection.Trust, Authentication: inspection.Authentication, OAuthDiscovery: inspection.OAuthDiscovery, SetupCategory: category, Actions: inspectionResultActions(category)}, nil
-		}
-		if catalog == nil {
-			return nil, CandidateInspection{}, ErrCatalogUnavailable
 		}
 		details, err := catalog.Inspect(ctx, input.ProviderKey, input.CatalogRef)
 		if errors.Is(err, ErrCatalogRejected) {

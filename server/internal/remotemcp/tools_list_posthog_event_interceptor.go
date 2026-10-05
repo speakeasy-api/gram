@@ -63,7 +63,7 @@ func (i *ToolsListPostHogEventInterceptor) Name() string {
 // Always returns nil — analytics emission is best-effort and must not block
 // the request from reaching the remote server.
 func (i *ToolsListPostHogEventInterceptor) InterceptToolsListRequest(ctx context.Context, list *proxy.ToolsListRequest) error {
-	if i.posthog == nil || list == nil || list.UserRequest == nil {
+	if list == nil || list.UserRequest == nil {
 		return nil
 	}
 

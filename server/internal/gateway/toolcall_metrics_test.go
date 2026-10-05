@@ -88,10 +88,10 @@ func newMetricToolProxy(t *testing.T, reader sdkmetric.Reader) *ToolProxy {
 		meterProvider,
 		ToolCallSourceMCP,
 		testenv.NewEncryptionClient(t),
-		nil,
+		testenv.NewMemoryCache(),
 		policy,
 		funcs,
-		nil,
+		&mockPlatformExecutor{},
 	)
 }
 

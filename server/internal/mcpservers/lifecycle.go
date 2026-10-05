@@ -53,7 +53,7 @@ const maxLifecycleMCPServerNameBytes = 256
 // RBAC check before calling. Admission is finalized before the project lock to
 // keep ingress/project lock order consistent across MCP and gateway writes.
 func UpdateMCPServerNetworkAccessModeInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, input LifecycleUpdateInput, mode networkaccess.Mode, finalize networkaccess.AdmissionFinalizer) (repo.McpServer, error) {
-	if tx == nil || auditLogger == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || input.ActorUserID == "" || input.ServerID == uuid.Nil {
+	if input.OrganizationID == "" || input.ProjectID == uuid.Nil || input.ActorUserID == "" || input.ServerID == uuid.Nil {
 		return repo.McpServer{}, fmt.Errorf("invalid MCP server network access update input")
 	}
 	if _, err := networkaccess.Parse(string(mode)); err != nil {
@@ -110,7 +110,7 @@ type MCPServerVisibilityResult struct {
 // MCP-server lock order used by deletion and root-selection paths. Call it before
 // locking the MCP server for a disabling transition.
 func LockMCPServerVisibilityDependencies(ctx context.Context, tx pgx.Tx, organizationID string, projectID, serverID uuid.UUID) error {
-	if tx == nil || organizationID == "" || projectID == uuid.Nil || serverID == uuid.Nil {
+	if organizationID == "" || projectID == uuid.Nil || serverID == uuid.Nil {
 		return fmt.Errorf("invalid MCP server visibility lock input")
 	}
 	// Root-selection mutations lock the organization's custom-domain row before
@@ -159,7 +159,7 @@ func UpdateMCPServerVisibilityInTransaction(ctx context.Context, tx pgx.Tx, audi
 }
 
 func logMCPServerRootAutoClears(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, organizationID string, actor urn.Principal, actorDisplayName *string, rootEndpoints []mcpendpointsrepo.McpEndpoint) error {
-	if auditLogger == nil || organizationID == "" {
+	if organizationID == "" {
 		return fmt.Errorf("invalid MCP root cleanup audit input")
 	}
 	repository := customdomainsrepo.New(tx)
@@ -192,7 +192,7 @@ func logMCPServerRootAutoClears(ctx context.Context, tx pgx.Tx, auditLogger *aud
 // names and writes the normal MCP update audit event, but it never creates,
 // removes, or selects a plugin attachment.
 func UpdateMCPServerLifecycleInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, existing repo.McpServer, input LifecycleUpdateInput) (repo.McpServer, error) {
-	if tx == nil || auditLogger == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || input.ActorUserID == "" || input.ServerID == uuid.Nil || existing.ID != input.ServerID || existing.ProjectID != input.ProjectID || input.Visibility == "" {
+	if input.OrganizationID == "" || input.ProjectID == uuid.Nil || input.ActorUserID == "" || input.ServerID == uuid.Nil || existing.ID != input.ServerID || existing.ProjectID != input.ProjectID || input.Visibility == "" {
 		return repo.McpServer{}, fmt.Errorf("invalid MCP server lifecycle update input")
 	}
 

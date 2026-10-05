@@ -18,27 +18,18 @@ type WorkloadVerifier interface {
 	Verify(ctx context.Context, token, source string) (Ingress, error)
 }
 
-func Middleware(verifier WorkloadVerifier, parsers IdentityParsers, telemetry ...*Telemetry) func(http.Handler) http.Handler {
-	var metrics *Telemetry
-	if len(telemetry) > 0 {
-		metrics = telemetry[0]
-	}
+func Middleware(verifier WorkloadVerifier, parsers IdentityParsers, telemetry *Telemetry) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 			started := time.Now()
 			record := func(result, reason, provider string) {
-				metrics.Record(request.Context(), OperationAdmission, result, reason, provider, time.Since(started))
+				telemetry.Record(request.Context(), OperationAdmission, result, reason, provider, time.Since(started))
 			}
 			token, ok := bearerToken(request.Header.Values(AttestationHeader))
 			request.Header.Del(AttestationHeader)
 			if !ok {
 				record(ResultDenied, ReasonMissingAttestation, "")
 				http.Error(w, "workload attestation required", http.StatusUnauthorized)
-				return
-			}
-			if verifier == nil {
-				record(ResultError, ReasonVerifierUnavailable, "")
-				http.Error(w, "private ingress unavailable", http.StatusServiceUnavailable)
 				return
 			}
 

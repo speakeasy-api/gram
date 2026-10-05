@@ -166,9 +166,6 @@ func (s *Service) SendAccessPaused(ctx context.Context, input SendAccessPausedIn
 		if trialErr != nil {
 			return fmt.Errorf("get demoted trial: %w", trialErr)
 		}
-		if s.features == nil {
-			return nil
-		}
 		enabled, flagErr := s.features.IsFlagEnabled(ctx, feature.FlagPaygSelfServeBilling, input.OrganizationID, feature.OrgProjectGroups(organization.Slug, ""))
 		if flagErr != nil || !enabled {
 			if flagErr != nil {

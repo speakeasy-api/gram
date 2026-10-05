@@ -71,7 +71,7 @@ func newTestMCPServersService(t *testing.T) (context.Context, *Service, *pgxpool
 	ctx, svc, conn := newTestAdminService(t)
 	serverURL, err := url.Parse("https://gram.example.com")
 	require.NoError(t, err)
-	svc.SetMCPServerURL(serverURL)
+	svc.mcpServerURL = serverURL
 
 	return ctx, svc, conn
 }

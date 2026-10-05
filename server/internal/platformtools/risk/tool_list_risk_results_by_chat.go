@@ -41,10 +41,6 @@ func (s *ListRiskResultsByChat) Descriptor() core.ToolDescriptor {
 }
 
 func (s *ListRiskResultsByChat) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if s.risk == nil {
-		return fmt.Errorf("risk service not configured")
-	}
-
 	input := listRiskResultsByChatInput{Cursor: nil, Limit: nil}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err

@@ -108,8 +108,8 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	}
 
 	// The transport exists only while the organization's admin opt-in is
-	// enabled; an unavailable checker reads as off. 404 matches how the
-	// island's absence hides the surface entirely.
+	// enabled. 404 matches how the island's absence hides the surface
+	// entirely.
 	if !s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID) {
 		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger)
 	}
@@ -274,7 +274,7 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 				return oops.E(oops.CodeUnauthorized, nil, "consent subject has no authenticated context").LogWarn(ctx, logger)
 			}
 		}
-		if s.authz != nil && private {
+		if private {
 			if authzCtx, cerr = s.authz.PrepareContext(authzCtx); cerr != nil {
 				return oops.E(oops.CodeUnexpected, cerr, "load access grants for consent inventory").LogError(ctx, logger)
 			}
@@ -388,9 +388,6 @@ func (s *Service) serveConsentProxiedMCP(
 
 	var p *proxy.Proxy
 	if serverRow.RemoteMcpServerID.Valid {
-		if s.remoteProxyManager == nil {
-			return oops.E(oops.CodeUnexpected, nil, "remote MCP proxy manager is unavailable").LogError(ctx, logger)
-		}
 		remoteServer, rerr := remotemcp_repo.New(s.db).GetServerByID(ctx, remotemcp_repo.GetServerByIDParams{
 			ID:        serverRow.RemoteMcpServerID.UUID,
 			ProjectID: endpoint.ProjectID,

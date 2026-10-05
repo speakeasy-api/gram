@@ -58,7 +58,7 @@ type Decision struct {
 // LockProject acquires the shared transaction-scoped lock for every writer or
 // admission reader of a project's Shadow MCP enforcement state.
 func LockProject(ctx context.Context, tx pgx.Tx, projectID uuid.UUID) error {
-	if tx == nil || projectID == uuid.Nil {
+	if projectID == uuid.Nil {
 		return errors.New("invalid shadow MCP admission lock")
 	}
 	if err := approvalrepo.New(tx).LockProjectEnforcementState(ctx, projectID.String()); err != nil {
@@ -70,7 +70,7 @@ func LockProject(ctx context.Context, tx pgx.Tx, projectID uuid.UUID) error {
 // Check evaluates a canonical server URL and complete desired assignment set
 // from one transaction snapshot. Callers must acquire LockProject first.
 func Check(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, canonicalURL string, desiredPrincipalURNs []string) (Verdict, error) {
-	if tx == nil || organizationID == "" || projectID == uuid.Nil || canonicalURL == "" {
+	if organizationID == "" || projectID == uuid.Nil || canonicalURL == "" {
 		return Verdict{}, errors.New("invalid shadow MCP admission check")
 	}
 	if _, err := projectsrepo.New(tx).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{

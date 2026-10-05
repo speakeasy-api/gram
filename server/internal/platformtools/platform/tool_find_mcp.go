@@ -43,9 +43,6 @@ func (t *FindMCP) Descriptor() core.ToolDescriptor {
 }
 
 func (t *FindMCP) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if t.reader == nil {
-		return fmt.Errorf("platform reader not configured")
-	}
 	var assistantInput findMCPInput
 	if err := core.DecodeInput(payload, &assistantInput); err != nil {
 		return err

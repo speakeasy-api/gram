@@ -41,7 +41,7 @@ func SignalPluginPublishAfterRequest(ctx context.Context, signaler PluginPublish
 // only be called after the triggering transaction has committed — the publish
 // reads the project's live state, which a later rollback would take back.
 func (s *Service) signalPublish(ctx context.Context, projectID uuid.UUID, createdByUserID string) {
-	if s.publisher == nil || s.github == nil {
+	if s.publisher == nil {
 		return
 	}
 	// Keep the direct signal while emission and consumption are independently

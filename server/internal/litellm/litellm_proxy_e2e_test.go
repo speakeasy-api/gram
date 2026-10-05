@@ -48,8 +48,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskcelenv "github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -292,16 +295,14 @@ func TestLiteLLMProxyE2E(t *testing.T) { //nolint:paralleltest // Scenarios inte
 func newProxyHarness(t *testing.T) *proxyHarness {
 	t.Helper()
 	ctx, instance := newRealTestServiceWithScannerFactory(t, func(conn *pgxpool.Pool) risk.RiskScanner {
-		customRules, err := customruleanalyzer.NewScanner(conn)
-		require.NoError(t, err)
+		customRules := customruleanalyzer.NewScanner(conn)
 		celEngine, err := riskcelenv.New()
 		require.NoError(t, err)
-		scanner, err := risk.NewScanner(
+		scanner := risk.NewScanner(
 			testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn,
-			customRules, nil, nil, nil, &feature.InMemory{}, celEngine,
+			customRules, nil, promptinjection.NewScanner(testenv.NewLogger(t), promptinjection.NoopClassifier), promptpolicy.NewScanner(testenv.NewLogger(t), func(context.Context, promptpolicy.Input) (*promptpolicy.Verdict, error) { return nil, nil }), &feature.InMemory{}, celEngine,
 			metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		)
-		require.NoError(t, err)
 		return scanner
 	})
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -790,15 +791,16 @@ func (h *proxyHarness) timeoutAndResend() {
 
 func (h *proxyHarness) materializeFinding(messageID uuid.UUID) {
 	h.t.Helper()
-	customRules, err := customruleanalyzer.NewScanner(h.conn)
-	require.NoError(h.t, err)
+	customRules := customruleanalyzer.NewScanner(h.conn)
 	celEngine, err := riskcelenv.New()
 	require.NoError(h.t, err)
+	presets, err := presetlib.New()
+	require.NoError(h.t, err)
 	flags := &feature.InMemory{}
-	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(h.t), h.conn, cache.NoopCache, nil)
-	analyze, err := riskanalysis.NewAnalyzeBatch(
+	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(h.t), h.conn, cache.NoopCache, &url.URL{Scheme: "https", Host: "app.getgram.ai"})
+	analyze := riskanalysis.NewAnalyzeBatch(
 		testenv.NewLogger(h.t), testenv.NewTracerProvider(h.t), testenv.NewMeterProvider(h.t), h.conn,
-		nil, &riskanalysis.StubPIIScanner{}, nil, shadowMCPClient, noMCPProvenance{}, nil, flags,
+		nil, &riskanalysis.StubPIIScanner{}, promptinjection.NewScanner(testenv.NewLogger(h.t), promptinjection.NoopClassifier), shadowMCPClient, noMCPProvenance{}, promptpolicy.NoopEvaluator, flags,
 		gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.PromptInjectionAnalysis](),
@@ -806,11 +808,10 @@ func (h *proxyHarness) materializeFinding(messageID uuid.UUID) {
 		gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.LLMAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.Finding](),
-		customRules, celEngine, nil, nil,
+		customRules, celEngine, presets, risk.NewShadowMCPBypassChecker(risk.NewPolicyBypassEvaluator(testenv.NewLogger(h.t), h.conn)),
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		false,
 	)
-	require.NoError(h.t, err)
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(analyze.Do)

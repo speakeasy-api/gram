@@ -77,10 +77,6 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if s.signer == nil || s.serverURL == "" {
-		return nil, oops.E(oops.CodeUnexpected, nil, "user-session signer not configured").LogError(ctx, s.logger)
-	}
-
 	hasToolset := payload.ToolsetID != nil && *payload.ToolsetID != ""
 	hasServer := payload.McpServerID != nil && *payload.McpServerID != ""
 	hasMeta := payload.MetaMcpServerID != nil && *payload.MetaMcpServerID != ""

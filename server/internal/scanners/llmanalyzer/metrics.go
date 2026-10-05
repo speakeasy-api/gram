@@ -134,20 +134,13 @@ func (m *metrics) RecordRequest(ctx context.Context, info CallInfo, model string
 		attr.RiskLLMModel(model),
 		attr.Outcome(outcome),
 	)
-	if m.requests != nil {
-		m.requests.Add(ctx, 1, attrs)
-	}
-	if m.duration != nil {
-		m.duration.Record(ctx, duration.Seconds(), attrs)
-	}
+	m.requests.Add(ctx, 1, attrs)
+	m.duration.Record(ctx, duration.Seconds(), attrs)
 }
 
 // RecordTokens records the prompt and completion token counts of a successful
 // call.
 func (m *metrics) RecordTokens(ctx context.Context, info CallInfo, model string, promptTokens, completionTokens int) {
-	if m.tokens == nil {
-		return
-	}
 	m.tokens.Add(ctx, int64(promptTokens), metric.WithAttributes(
 		attr.OrganizationID(info.OrgID),
 		attr.OrganizationSlug(info.OrgSlug),
@@ -167,7 +160,7 @@ func (m *metrics) RecordTokens(ctx context.Context, info CallInfo, model string,
 // RecordRetries records how many attempts beyond the first a call made. Zero
 // retries record nothing.
 func (m *metrics) RecordRetries(ctx context.Context, info CallInfo, model string, retries int) {
-	if m.retries == nil || retries <= 0 {
+	if retries <= 0 {
 		return
 	}
 	m.retries.Add(ctx, int64(retries), metric.WithAttributes(
@@ -182,9 +175,6 @@ func (m *metrics) RecordRetries(ctx context.Context, info CallInfo, model string
 // call itself was already recorded as a success on risk.llm.requests: that
 // counter tracks transport outcomes and this one tracks verdict quality.
 func (m *metrics) RecordParseFailure(ctx context.Context, info CallInfo, model string) {
-	if m.parseFailures == nil {
-		return
-	}
 	m.parseFailures.Add(ctx, 1, metric.WithAttributes(
 		attr.OrganizationID(info.OrgID),
 		attr.OrganizationSlug(info.OrgSlug),

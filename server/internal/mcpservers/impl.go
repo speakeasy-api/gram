@@ -81,8 +81,10 @@ type Service struct {
 	publicationRequests      plugins.PublicationRequests
 }
 
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
+var (
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
+)
 
 func NewService(
 	logger *slog.Logger,
@@ -97,6 +99,7 @@ func NewService(
 	assetsService *assets.Service,
 	revoker *remotesessions.UpstreamRevoker,
 	networkAccessEligibility networkaccess.EligibilityChecker,
+	distributionAdmission *admission.Guard,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("mcpservers"))
 
@@ -113,7 +116,7 @@ func NewService(
 		assets:                   assetsService,
 		revoker:                  revoker,
 		networkAccessEligibility: networkAccessEligibility,
-		distributionAdmission:    admission.NewGuard(nil, nil),
+		distributionAdmission:    distributionAdmission,
 		publicationRequests:      plugins.PublicationRequests{Enabled: false},
 	}
 }
@@ -256,9 +259,6 @@ type DefaultServerIconSetter interface {
 // post-commit icon behavior as CreateMcpServer without exposing its transaction
 // command or requiring the remote workflow to duplicate favicon logic.
 func (s *Service) ScheduleDefaultRemoteServerIcon(ctx context.Context, projectID, mcpServerID, remoteMCPServerID uuid.UUID) {
-	if s == nil {
-		return
-	}
 	s.scheduleDefaultServerIcon(ctx, projectID, mcpServerID, serverIDs{
 		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -978,9 +978,6 @@ func (s *Service) prepareNetworkAccessMode(ctx context.Context, organizationID s
 	if unproxied {
 		return networkaccess.AdmissionFinalizer{}, oops.E(oops.CodeInvalid, nil, "unproxied MCP servers support only public_only network access")
 	}
-	if s.networkAccessEligibility == nil {
-		return networkaccess.AdmissionFinalizer{}, oops.E(oops.CodeForbidden, nil, "private network access is not enabled for this organization")
-	}
 	finalize, err := s.networkAccessEligibility.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: organizationID, Mode: mode})
 	if err != nil {
 		return networkaccess.AdmissionFinalizer{}, oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
@@ -1329,9 +1326,6 @@ func rootDomainIDs(endpoints []mcpendpointsrepo.McpEndpoint) []uuid.UUID {
 }
 
 func (s *Service) reconcileMcpServerCustomDomains(ctx context.Context, customDomainIDs []uuid.UUID) error {
-	if s.temporalEnv == nil {
-		return nil
-	}
 	var reconcileErrors []error
 	for _, customDomainID := range customDomainIDs {
 		_, err := (&background.CustomDomainRegistrationClient{TemporalEnv: s.temporalEnv}).ExecuteCustomDomainReconcile(ctx, customDomainID)

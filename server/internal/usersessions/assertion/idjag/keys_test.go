@@ -29,8 +29,7 @@ func TestIssuerVerificationKeysUseKnownStaleKeyOnTransientFailure(t *testing.T) 
 		Revision:    "",
 	}))
 	base := &testKeys{key: nil, err: jwks.ErrKeySetUnavailable, calls: 0}
-	keys, err := NewIssuerVerificationKeys(base, cache)
-	require.NoError(t, err)
+	keys := NewIssuerVerificationKeys(base, cache)
 	key, err := keys.VerificationKeyForAlgorithm(t.Context(), source, "key-1", jose.ES256)
 	require.NoError(t, err)
 	require.Equal(t, "key-1", key.KeyID)
@@ -57,8 +56,7 @@ func TestIssuerVerificationKeysRejectPastStaleBound(t *testing.T) {
 		Revision:    "",
 	}))
 	base := &testKeys{key: nil, err: jwks.ErrKeySetUnavailable, calls: 0}
-	keys, err := NewIssuerVerificationKeys(base, cache)
-	require.NoError(t, err)
+	keys := NewIssuerVerificationKeys(base, cache)
 	_, err = keys.VerificationKeyForAlgorithm(t.Context(), source, "key-1", jose.ES256)
 	require.ErrorIs(t, err, jwks.ErrKeySetUnavailable)
 }
@@ -75,8 +73,7 @@ func TestIssuerVerificationKeysUsesFreshStateAfterConcurrentRefresh(t *testing.T
 		Document: document, ETag: "", ExpiresAt: time.Now().Add(time.Hour), RefreshedAt: time.Now(),
 		LastErrorAt: time.Time{}, LastError: "", Revision: "",
 	}))
-	keys, err := NewIssuerVerificationKeys(&testKeys{key: nil, err: jwks.ErrKeySetUnavailable, calls: 0}, cache)
-	require.NoError(t, err)
+	keys := NewIssuerVerificationKeys(&testKeys{key: nil, err: jwks.ErrKeySetUnavailable, calls: 0}, cache)
 	key, err := keys.VerificationKeyForAlgorithm(t.Context(), source, "key-1", jose.ES256)
 	require.NoError(t, err)
 	require.Equal(t, "key-1", key.KeyID)
@@ -96,8 +93,7 @@ func TestIssuerVerificationKeysSelectsStaleKeyByAlgorithm(t *testing.T) {
 		Document: document, ETag: "", ExpiresAt: time.Now().Add(-time.Minute), RefreshedAt: time.Now().Add(-time.Hour),
 		LastErrorAt: time.Time{}, LastError: "", Revision: "",
 	}))
-	keys, err := NewIssuerVerificationKeys(&testKeys{key: nil, err: jwks.ErrKeySetUnavailable, calls: 0}, cache)
-	require.NoError(t, err)
+	keys := NewIssuerVerificationKeys(&testKeys{key: nil, err: jwks.ErrKeySetUnavailable, calls: 0}, cache)
 	key, err := keys.VerificationKeyForAlgorithm(t.Context(), source, "key-1", jose.ES256)
 	require.NoError(t, err)
 	require.Equal(t, string(jose.ES256), key.Algorithm)

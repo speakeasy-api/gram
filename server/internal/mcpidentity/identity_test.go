@@ -161,8 +161,7 @@ func TestValidatorBoundaryStampAgent(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, mcpidentity.KindAPIKey, identity.Kind())
 	require.Empty(t, identity.AgentID())
-	for _, inert := range []*mcpidentity.ValidatorBoundary{nil, {}} {
-		_, ok := mcpidentity.FromContext(inert.StampAgent(t.Context(), id))
-		require.False(t, ok)
-	}
+	var inert mcpidentity.ValidatorBoundary
+	_, ok = mcpidentity.FromContext(inert.StampAgent(t.Context(), id))
+	require.False(t, ok)
 }

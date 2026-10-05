@@ -37,9 +37,8 @@ func TestLifecycleToolRetainsDistributionErrorCodes(t *testing.T) {
 
 func TestManagementAdmissionUnavailableEncodesHTTP503(t *testing.T) {
 	t.Parallel()
-	service := &ManagementService{}
 	cause := fmt.Errorf("admission: %w", ErrDistributionAdmissionUnavailable)
-	err := service.mapOnboardingError(cause)
+	err := mapOnboardingError(cause)
 	require.ErrorIs(t, err, cause)
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)

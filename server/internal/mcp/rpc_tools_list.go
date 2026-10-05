@@ -155,7 +155,7 @@ func handleToolsList(
 	// Public MCPs skip this (open to everyone, matching the connection guard).
 	// Both the privacy read and the resource id follow the wrapper when one
 	// fronts the request.
-	if payload.authenticated && authzEngine != nil && payload.effectiveMCPPrivate(toolset.McpIsPublic) {
+	if payload.authenticated && payload.effectiveMCPPrivate(toolset.McpIsPublic) {
 		allowed := make([]*toolListEntry, 0, len(tools))
 		for _, t := range tools {
 			disposition := dispositionFromAnnotations(t.Annotations)

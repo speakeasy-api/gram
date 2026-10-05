@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/dns"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -59,7 +60,7 @@ func TestFederatedDelegationLoaderDatabaseOnly(t *testing.T) {
 	require.Positive(t, resolutions.Load())
 	requests.Store(0)
 	resolutions.Store(0)
-	manager := &ChallengeManager{db: db, policy: policy}
+	manager := &ChallengeManager{db: db, policy: policy, locks: cache.NoopCache}
 	const org = "org_delegation_loader_test"
 	const otherOrg = "org_delegation_loader_other"
 	issuer, client, otherIssuer, otherClient := uuid.New(), uuid.New(), uuid.New(), uuid.New()

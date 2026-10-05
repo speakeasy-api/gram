@@ -50,8 +50,8 @@ func TestGetToolUsageSummaryAttributesToConfiguredServers(t *testing.T) {
 	}
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
-	service := NewDiagnosticsService(conn, stubUsageSummaryTelemetry{}, func(context.Context, string) (bool, error) { return false, nil }, reader, nil,
-		OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}).
+	service := NewDiagnosticsService(conn, stubUsageSummaryTelemetry{}, func(context.Context, string) (bool, error) { return false, nil }, reader, NewReadinessService(NewRegistrationStore(conn), NewCatalogRegistrationGate(testGate{enabled: true}), NewProviderAdapters(nil), allowOperationLimiter{}, allowBudget()),
+		OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}, literalIdentityGate{}).
 		WithToolUsageBreakdown(toolUsage)
 	service.now = func() time.Time { return fixedNow }
 
@@ -132,8 +132,8 @@ func TestGetToolUsageSummaryRequiresProjectRead(t *testing.T) {
 	toolUsage := &recordingToolUsageReader{}
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
-	service := NewDiagnosticsService(conn, stubUsageSummaryTelemetry{}, func(context.Context, string) (bool, error) { return false, nil }, reader, nil,
-		OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}).
+	service := NewDiagnosticsService(conn, stubUsageSummaryTelemetry{}, func(context.Context, string) (bool, error) { return false, nil }, reader, NewReadinessService(NewRegistrationStore(conn), NewCatalogRegistrationGate(testGate{enabled: true}), NewProviderAdapters(nil), allowOperationLimiter{}, allowBudget()),
+		OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}, literalIdentityGate{}).
 		WithToolUsageBreakdown(toolUsage)
 
 	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
@@ -189,8 +189,8 @@ func TestGetToolUsageSummaryReportsTruncationOnlyWhenATargetWasOmitted(t *testin
 				totals: telemetryrepo.ToolUsageTotalsRow{EventCount: usageSummaryTargetRowLimit, SuccessCount: usageSummaryTargetRowLimit},
 				rows:   test.rows,
 			}
-			service := NewDiagnosticsService(conn, stubUsageSummaryTelemetry{}, func(context.Context, string) (bool, error) { return false, nil }, reader, nil,
-				OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}).
+			service := NewDiagnosticsService(conn, stubUsageSummaryTelemetry{}, func(context.Context, string) (bool, error) { return false, nil }, reader, NewReadinessService(NewRegistrationStore(conn), NewCatalogRegistrationGate(testGate{enabled: true}), NewProviderAdapters(nil), allowOperationLimiter{}, allowBudget()),
+				OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}, literalIdentityGate{}).
 				WithToolUsageBreakdown(toolUsage)
 
 			scoped := contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))

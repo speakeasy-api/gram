@@ -11,11 +11,11 @@
 package mcptoolexecution
 
 import (
-	"fmt"
 	"slices"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 )
 
@@ -135,12 +135,10 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 }
 
 // NewRegistry builds and validates the finalized mcp_tool_execution registry.
-func NewRegistry(db *pgxpool.Pool) (*killswitches.Registry, error) {
+func NewRegistry(db *pgxpool.Pool) *killswitches.Registry {
 	registry, err := killswitches.BuildRegistry(NewRegistration(db))
-	if err != nil {
-		return nil, fmt.Errorf("build mcp_tool_execution registry: %w", err)
-	}
-	return registry, nil
+	inv.Require("mcp_tool_execution kill-switch registry", "builds", err)
+	return registry
 }
 
 // ExcludedMCPSurface documents an MCP serving mode that deliberately produces

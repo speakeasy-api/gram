@@ -112,8 +112,10 @@ func TestGetSupportMatrixProjectsBoundedFactsOnly(t *testing.T) {
 func TestGetSupportMatrixOrdersMapFactsDeterministically(t *testing.T) {
 	t.Parallel()
 	matrix := supportMatrixFixture()
-	matrix.Methods = append(matrix.Methods, &gen.SupportMethod{ID: "method-b", Name: "Method B", Vendor: "Vendor A",
-		Facts: map[string]*gen.SupportFact{"capability-c": {Status: "supported"}, "capability-b": {Status: "impossible"}, "capability-a": {Status: "unknown"}}})
+	matrix.Methods = append(matrix.Methods, &gen.SupportMethod{
+		ID: "method-b", Name: "Method B", Vendor: "Vendor A",
+		Facts: map[string]*gen.SupportFact{"capability-c": {Status: "supported"}, "capability-b": {Status: "impossible"}, "capability-a": {Status: "unknown"}},
+	})
 	matrix.Products = append(matrix.Products, &gen.SupportPlatform{ID: "product-b", Name: "Product B", Vendor: "Vendor B", Family: "agent", Surface: "cli"})
 	matrix.Capabilities = append(matrix.Capabilities, &gen.SupportCapability{ID: "capability-b", Name: "Capability B", Group: "Group A"})
 	matrix.Draft.Mappings["method-b/product-b"] = &gen.SupportMapping{Applicability: "na", Facts: map[string]*gen.SupportFact{}}
@@ -180,7 +182,6 @@ func TestGetSupportMatrixFailsClosed(t *testing.T) {
 		name   string
 		reader SupportMatrixReader
 	}{
-		{name: "missing reader"},
 		{name: "error", reader: &recordingSupportMatrixReader{err: errors.New("private database failure")}},
 		{name: "nil result", reader: &recordingSupportMatrixReader{}},
 		{name: "nil draft", reader: &recordingSupportMatrixReader{result: &gen.SupportMatrix{}}},

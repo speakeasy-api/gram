@@ -223,10 +223,10 @@ func (s *SkillEfficacyScorer) ResetStaleSkillEfficacyReservations(ctx context.Co
 	if err != nil {
 		return nil, fmt.Errorf("recover stale skill efficacy reservations: %w", err)
 	}
-	if result.Recovered > 0 && s.recovered != nil {
+	if result.Recovered > 0 {
 		s.recovered.Add(ctx, result.Recovered)
 	}
-	if result.DeadLettered > 0 && s.deadLettered != nil {
+	if result.DeadLettered > 0 {
 		s.deadLettered.Add(ctx, result.DeadLettered)
 	}
 

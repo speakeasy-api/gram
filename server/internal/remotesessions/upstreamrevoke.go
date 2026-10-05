@@ -583,11 +583,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, to
 		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeInternal
 	}
 
-	doer, err := upstreamHTTPDoer(r.client, r.tunnels, client.TunneledMcpServerID)
-	if err != nil {
-		logger.WarnContext(ctx, "upstream revoke: no transport to the identity provider", attr.SlogError(err))
-		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeUnreachable
-	}
+	doer := upstreamHTTPDoer(r.client, r.tunnels, client.TunneledMcpServerID)
 
 	resp, err := doer.Do(req)
 	if err != nil {

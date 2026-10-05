@@ -49,10 +49,9 @@ func TestAccessRoleMutationsCommitReplayAndPreserveOtherGrants(t *testing.T) {
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPAccessRoleMutations, principal.OrganizationID, true)
 	logger := testenv.NewLogger(t)
-	reads := NewAccessReadService(logger, conn, allowBudget(), "access-role-integration-key")
+	reads := NewAccessReadService(logger, conn, access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger()), allowBudget(), "access-role-integration-key")
 	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger())
-	service, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "access-role-integration-key", manager)
-	require.NoError(t, err)
+	service := NewAccessRoleMutationService(reads, flags, allowBudget(), "access-role-integration-key", manager)
 
 	createAuditsBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAccessRoleCreate)
 	require.NoError(t, err)

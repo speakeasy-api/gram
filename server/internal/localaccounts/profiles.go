@@ -127,9 +127,6 @@ func Apply(ctx context.Context, db *pgxpool.Pool, features *productfeatures.Clie
 	if err := profile.Validate(); err != nil {
 		return result, err
 	}
-	if recheck == nil {
-		return result, errors.New("selected identity recheck is required")
-	}
 	conn, release, err := features.AcquireFeatureCacheLocks(ctx, orgID, profileFeatures())
 	if err != nil {
 		return result, fmt.Errorf("acquire account feature locks: %w", err)

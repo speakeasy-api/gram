@@ -65,7 +65,7 @@ func TestAdmitCIMDClient_PlatformAssistant(t *testing.T) {
 		logger:               testenv.NewLogger(t),
 		db:                   conn,
 		serverURL:            serverURL,
-		cimdAdmissionMetrics: nil,
+		cimdAdmissionMetrics: admission.NewMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 	}
 	endpoint := func(mode admission.Mode) *ResolvedMcpEndpoint {
 		return &ResolvedMcpEndpoint{
@@ -151,7 +151,7 @@ func TestAdmitCIMDClient_PlatformAssistantOnPinnedOrigin(t *testing.T) {
 	require.NoError(t, err)
 	outbound, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
-	svc := &Service{logger: testenv.NewLogger(t), db: conn, serverURL: serverURL, cimdAdmissionMetrics: nil}
+	svc := &Service{logger: testenv.NewLogger(t), db: conn, serverURL: serverURL, cimdAdmissionMetrics: admission.NewMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t))}
 	svc.SetCallbackOrigins(remotesessions.CallbackOrigins{Outbound: outbound, Registration: nil})
 	endpoint := &ResolvedMcpEndpoint{
 		AudienceURN: "toolset:test", CIMDAdmissionModeRaw: conv.ToPGText(string(admission.ModePresets)), CustomDomainID: uuid.NullUUID{},

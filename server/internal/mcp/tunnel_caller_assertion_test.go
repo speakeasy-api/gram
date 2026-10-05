@@ -294,7 +294,6 @@ func testPrivateTunnelConsentAssertion(t *testing.T, resource string) {
 	require.NoError(t, err)
 	require.Equal(t, "valid", storedSession(t, ctx, fx).ValidationStatus.String)
 	require.EqualValues(t, 1, cleanups.Load(), "SDK session cleanup must retain discovery provenance")
-
 }
 
 func TestPrivateTunnelKeepaliveProbesWithoutCallerAssertion(t *testing.T) {
@@ -390,7 +389,7 @@ func TestCallerProfileLookupFailureIsOperational(t *testing.T) {
 	t.Parallel()
 	issuer, _ := callerIssuerForTest(t)
 	reader := sdkmetric.NewManualReader()
-	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, issuer)
+	ctx, ti := newTestMCPServiceWithConfig(t, testenv.NewLogger(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, issuer)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	shared := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)

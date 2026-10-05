@@ -634,11 +634,11 @@ func allowBudget() OperationBudget {
 func newRegistrationService(catalog Catalog, gate CatalogRegistrationGateChecker, store RegistrationPersistence) *RegistrationService {
 	budget := allowBudget()
 	return NewRegistrationService(catalog, gate, store).WithOperationBudgets(OperationBudgets{
-		Catalog:      budget,
-		Registration: budget,
-		Handoff:      budget,
-		SetupStart:   budget,
-		Repair:       budget,
+		RiskFindings: budget, Catalog: budget, Registration: budget, ReviewRequests: budget, Handoff: budget,
+		SetupStart: budget, Repair: budget, Docs: budget, Skills: budget, LifecycleMetadata: budget, Plugins: budget,
+		AccessReads: budget, AccessRoleMutations: budget, Diagnostics: budget, SensitiveDiagnostics: budget,
+		SensitiveSessionRecall: budget, RiskMutations: budget,
+		DrilldownVolume: DrilldownVolumeBudget{Rows: allowOperationLimiter{}, MetricQueries: allowOperationLimiter{}},
 	})
 }
 

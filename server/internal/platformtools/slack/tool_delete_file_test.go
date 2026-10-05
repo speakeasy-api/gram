@@ -48,7 +48,7 @@ func TestDeleteFileTool_RejectsMissingFile(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewDeleteFileTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callDeleteFile,
 	}
 

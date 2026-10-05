@@ -38,10 +38,8 @@ type dataExportMutationService struct {
 // WithDataExportMutations enables creation after the read dependencies have
 // been configured. Secret headers remain dashboard-only.
 func (r *PostgresReader) WithDataExportMutations(auditLogger *audit.Logger, dashboardURL *url.URL) *PostgresReader {
-	if auditLogger != nil && validDashboardURL(dashboardURL) {
-		copyURL := *dashboardURL
-		r.dataExportMutations = &dataExportMutationService{db: r.db, audit: auditLogger, dashboardURL: &copyURL}
-	}
+	copyURL := *dashboardURL
+	r.dataExportMutations = &dataExportMutationService{db: r.db, audit: auditLogger, dashboardURL: &copyURL}
 	return r
 }
 
@@ -63,9 +61,6 @@ type CreateDataExportOutput struct {
 }
 
 func (r *PostgresReader) CreateDataExport(ctx context.Context, principal Principal, input CreateDataExportInput) (CreateDataExportOutput, error) {
-	if r == nil || r.reader == nil || r.dataExportMutations == nil {
-		return CreateDataExportOutput{}, ErrUnavailable
-	}
 	if !input.Confirmed {
 		return CreateDataExportOutput{}, ErrDataExportConfirmationRequired
 	}
@@ -211,14 +206,6 @@ func registerDataExportMutationTool(reg *Registrar, reader *PostgresReader) {
 		}
 		return nil, output, nil
 	})
-}
-
-func registerUnavailableDataExportMutationTool(reg *Registrar) {
-	addTool(reg, &mcp.Tool{
-		Name:        "create_data_export",
-		Title:       "Create a Data Export",
-		Description: "Create an OTEL data export after explicit confirmation. This is not switched on for your organization yet.",
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("data_export_mutations"))
 }
 
 func dataExportMutationToolResult(err error) (*mcp.CallToolResult, bool) {

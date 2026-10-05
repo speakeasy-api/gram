@@ -1,9 +1,10 @@
 package remotesessions_test
 
 import (
+	"testing"
+
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"

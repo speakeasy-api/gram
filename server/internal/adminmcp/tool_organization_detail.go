@@ -109,17 +109,17 @@ type staffMemberCursor struct {
 	UserID         string `json:"user_id"`
 }
 
-func registerOrganizationDetailTools(server *mcp.Server, organizations OrganizationReader, stats OrganizationStatsReader, members OrganizationMemberReader) {
+func registerOrganizationDetailTools(server *mcp.Server, reader Reader) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "get_organization_statistics", Title: "Get Global Organization Statistics",
 		Description: "Read the staff dashboard's deployment-wide organization counts and recent trends. These counters are global and unfiltered, not totals for the last organization search.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, OrganizationStatistics, error) {
 		var output OrganizationStatistics
-		if !verifiedStaff(ctx) || stats == nil {
+		if !verifiedStaff(ctx) {
 			return nil, output, errOrganizationUnavailable
 		}
-		result, err := stats.GetOrganizationStats(ctx, &gen.GetOrganizationStatsPayload{})
+		result, err := reader.GetOrganizationStats(ctx, &gen.GetOrganizationStatsPayload{})
 		if err != nil || result == nil {
 			return nil, output, errOrganizationUnavailable
 		}
@@ -136,13 +136,13 @@ func registerOrganizationDetailTools(server *mcp.Server, organizations Organizat
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input OrganizationMembersInput) (*mcp.CallToolResult, OrganizationMembersOutput, error) {
 		output := OrganizationMembersOutput{Members: []OrganizationMember{}}
-		if !verifiedStaff(ctx) || members == nil {
+		if !verifiedStaff(ctx) {
 			return nil, output, errOrganizationUnavailable
 		}
 		if input.Limit < 0 || input.Limit > admin.MaxMemberPageSize || len(input.Cursor) > maxMemberCursorBytes {
 			return nil, output, errors.New("provide a member limit of 1 to 50 and a cursor returned for this organization")
 		}
-		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
+		org, err := readExactOrganization(ctx, reader, input.OrganizationID)
 		if err != nil {
 			return nil, output, err
 		}
@@ -159,7 +159,7 @@ func registerOrganizationDetailTools(server *mcp.Server, organizations Organizat
 		if limit == 0 {
 			limit = defaultMemberLookupLimit
 		}
-		page, err := members.ListOrganizationMembersPage(ctx, org.ID, afterUserID, limit)
+		page, err := reader.ListOrganizationMembersPage(ctx, org.ID, afterUserID, limit)
 		if err != nil || page == nil || page.OrganizationID != org.ID || len(page.Members) > limit {
 			return nil, output, errOrganizationUnavailable
 		}

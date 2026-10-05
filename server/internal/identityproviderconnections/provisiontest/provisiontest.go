@@ -172,7 +172,7 @@ func NewProvisioner(t *testing.T, conn *pgxpool.Pool, kmsClients gcpkms.Provisio
 	base, err := url.Parse(serverURL)
 	require.NoError(t, err)
 
-	provisioner, err := identityproviderconnections.NewProvisioner(
+	return identityproviderconnections.NewProvisioner(
 		testenv.NewLogger(t),
 		conn,
 		gcpauth.NewIdentity(gcpauth.NewStubResolver()),
@@ -185,9 +185,6 @@ func NewProvisioner(t *testing.T, conn *pgxpool.Pool, kmsClients gcpkms.Provisio
 			ServerURL:             base,
 		},
 	)
-	require.NoError(t, err)
-
-	return provisioner
 }
 
 // Fixture is a provisioned connection and the pieces that built it.

@@ -1,7 +1,6 @@
 package platformmcp
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -145,11 +144,4 @@ func TestFeedbackServiceRejectsCrossTenantConnectionBinding(t *testing.T) {
 		IdempotencyKey: "feedback-cross-tenant",
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-}
-
-func TestFeedbackServiceReturnsUnavailableWithoutDatabase(t *testing.T) {
-	t.Parallel()
-
-	_, err := NewFeedbackService(nil).Submit(context.Background(), testPrincipal(), FeedbackInput{Category: "other", IdempotencyKey: "feedback-unavailable"})
-	require.ErrorIs(t, err, ErrFeedbackUnavailable)
 }

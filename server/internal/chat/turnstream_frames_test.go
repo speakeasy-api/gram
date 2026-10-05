@@ -8,19 +8,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattest"
 )
 
 // The turn stream is what lets the dashboard stop polling, so the properties
 // worth testing are the ones the poll used to provide for free: nothing is
 // lost across a reconnect, and a client never re-applies a frame it has
 // already seen.
-
-func newTurnStream(t *testing.T) *chat.TurnStream {
-	t.Helper()
-	redisClient, err := infra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-	return chat.NewTurnStream(redisClient)
-}
 
 func textFrame(text string) chat.TurnFrame {
 	return chat.TurnFrame{
@@ -43,7 +37,7 @@ func TestTurnStreamReplayIsExclusiveOfCursor(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	stream := newTurnStream(t)
+	stream := chattest.NewTurnStream(t, infra)
 	chatID := uuid.New()
 
 	first, err := stream.Publish(ctx, chatID, textFrame("one"))
@@ -71,7 +65,7 @@ func TestTurnStreamSubscribeReplaysThenTails(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	stream := newTurnStream(t)
+	stream := chattest.NewTurnStream(t, infra)
 	chatID := uuid.New()
 
 	start, err := stream.Publish(ctx, chatID, textFrame("before"))
@@ -103,7 +97,7 @@ func TestTurnStreamSubscribeWithoutCursorStartsFromNow(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	stream := newTurnStream(t)
+	stream := chattest.NewTurnStream(t, infra)
 	chatID := uuid.New()
 
 	// A previous, completed turn.
@@ -132,7 +126,7 @@ func TestTurnStreamSubscribeStopsAtTerminalFrame(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	stream := newTurnStream(t)
+	stream := chattest.NewTurnStream(t, infra)
 	chatID := uuid.New()
 
 	frames, err := stream.Subscribe(ctx, chatID, "")
@@ -154,24 +148,6 @@ func TestTurnStreamSubscribeStopsAtTerminalFrame(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("subscription did not close after the terminal frame")
 	}
-}
-
-// TestTurnStreamPublishIsInertWithoutRedis: teeing is an optimisation, so a
-// deployment without Redis must degrade to the poll path rather than failing
-// turns. Every publish site treats the error as non-fatal, and a nil stream
-// must not panic.
-func TestTurnStreamPublishIsInertWithoutRedis(t *testing.T) {
-	t.Parallel()
-
-	stream := chat.NewTurnStream(nil)
-	require.Nil(t, stream)
-
-	cursor, err := stream.Publish(t.Context(), uuid.New(), textFrame("ignored"))
-	require.NoError(t, err)
-	require.Empty(t, cursor)
-
-	_, err = stream.Subscribe(t.Context(), uuid.New(), "")
-	require.Error(t, err, "subscribing without a stream must fail loudly, not hang")
 }
 
 // collectFrames reads exactly n frames, failing rather than hanging if the

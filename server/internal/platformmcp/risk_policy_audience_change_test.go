@@ -69,59 +69,51 @@ func TestRiskPolicyAudienceChangeToolContract(t *testing.T) {
 	t.Parallel()
 	catalog, err := policycatalog.Build()
 	require.NoError(t, err)
-	for _, enabled := range []bool{false, true} {
-		reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
-		reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
-		called := false
-		handler := func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {
-			called = true
-			return nil, UpdateRiskPolicyToolOutput{}, nil
-		}
-		registerRiskMutationHandlers(reg, catalog, enabled, &RiskMutationHandlers{Controls: &RiskMutationControls{}, ChangeAudience: handler})
-		descriptor := descriptorByName(t, reg, operationChangeRiskPolicyAudience)
-		require.Equal(t, externalOnly, descriptor.Meta.Audiences)
-		require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization)
-		require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
-		require.True(t, *descriptor.Annotations.DestructiveHint)
-		require.True(t, descriptor.Annotations.IdempotentHint)
-		for _, entry := range reg.For(AudienceAssistant) {
-			require.NotEqual(t, operationChangeRiskPolicyAudience, entry.Name)
-		}
-		schema := new(jsonschema.Schema)
-		require.NoError(t, json.Unmarshal(descriptor.InputSchema, schema))
-		resolved, err := schema.Resolve(nil)
-		require.NoError(t, err)
-		args := map[string]any{"project_slug": "default", "policy_id": "11111111-1111-4111-8111-111111111111", "expected_version": "version", "idempotency_key": "key", "confirmed": true, "add_principals": []any{"user:new"}, "remove_principals": []any{}}
-		require.NoError(t, resolved.Validate(args))
-		for _, field := range []string{"project_slug", "policy_id", "expected_version", "idempotency_key", "confirmed", "add_principals", "remove_principals"} {
-			value := args[field]
-			delete(args, field)
-			require.Error(t, resolved.Validate(args))
-			args[field] = value
-		}
-		args["confirmed"] = false
-		require.Error(t, resolved.Validate(args))
-		args["confirmed"] = true
-		args["add_principals"] = []any{}
-		require.Error(t, resolved.Validate(args))
-		args["add_principals"] = []any{"user:new", "user:new"}
-		require.Error(t, resolved.Validate(args))
-		args["add_principals"] = []any{"user:new"}
-		args["patch"] = map[string]any{}
-		require.Error(t, resolved.Validate(args))
-		delete(args, "patch")
-		encoded, err := json.Marshal(args)
-		require.NoError(t, err)
-		_, err = descriptor.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("self")), encoded)
-		if enabled {
-			require.NoError(t, err)
-		} else {
-			var refusal *ToolRefusalError
-			require.ErrorAs(t, err, &refusal)
-			require.Contains(t, refusal.Payload, "feature_unavailable")
-		}
-		require.Equal(t, enabled, called)
+	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
+	called := false
+	handler := func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {
+		called = true
+		return nil, UpdateRiskPolicyToolOutput{}, nil
 	}
+	registerRiskMutationHandlers(reg, catalog, &RiskMutationHandlers{Controls: &RiskMutationControls{}, ChangeAudience: handler})
+	descriptor := descriptorByName(t, reg, operationChangeRiskPolicyAudience)
+	require.Equal(t, externalOnly, descriptor.Meta.Audiences)
+	require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization)
+	require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
+	require.True(t, *descriptor.Annotations.DestructiveHint)
+	require.True(t, descriptor.Annotations.IdempotentHint)
+	for _, entry := range reg.For(AudienceAssistant) {
+		require.NotEqual(t, operationChangeRiskPolicyAudience, entry.Name)
+	}
+	schema := new(jsonschema.Schema)
+	require.NoError(t, json.Unmarshal(descriptor.InputSchema, schema))
+	resolved, err := schema.Resolve(nil)
+	require.NoError(t, err)
+	args := map[string]any{"project_slug": "default", "policy_id": "11111111-1111-4111-8111-111111111111", "expected_version": "version", "idempotency_key": "key", "confirmed": true, "add_principals": []any{"user:new"}, "remove_principals": []any{}}
+	require.NoError(t, resolved.Validate(args))
+	for _, field := range []string{"project_slug", "policy_id", "expected_version", "idempotency_key", "confirmed", "add_principals", "remove_principals"} {
+		value := args[field]
+		delete(args, field)
+		require.Error(t, resolved.Validate(args))
+		args[field] = value
+	}
+	args["confirmed"] = false
+	require.Error(t, resolved.Validate(args))
+	args["confirmed"] = true
+	args["add_principals"] = []any{}
+	require.Error(t, resolved.Validate(args))
+	args["add_principals"] = []any{"user:new", "user:new"}
+	require.Error(t, resolved.Validate(args))
+	args["add_principals"] = []any{"user:new"}
+	args["patch"] = map[string]any{}
+	require.Error(t, resolved.Validate(args))
+	delete(args, "patch")
+	encoded, err := json.Marshal(args)
+	require.NoError(t, err)
+	_, err = descriptor.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("self")), encoded)
+	require.NoError(t, err)
+	require.True(t, called)
 }
 
 func TestRiskPolicyAudienceChangeRejectsAssistantDirectInvocation(t *testing.T) {
@@ -192,7 +184,7 @@ func TestRiskPolicyAudienceChangeRequiresOrgAdmin(t *testing.T) {
 	reg := newRegistrar(server)
 	reg.withExternalAuthorizer(denyExternalCallAuthorizer{err: &ExternalAuthorizationError{RequiredScope: "org:admin", cause: ErrForbidden}})
 	called := false
-	registerRiskMutationHandlers(reg, catalog, true, &RiskMutationHandlers{Controls: &RiskMutationControls{}, ChangeAudience: func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {
+	registerRiskMutationHandlers(reg, catalog, &RiskMutationHandlers{Controls: &RiskMutationControls{}, ChangeAudience: func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {
 		called = true
 		return nil, UpdateRiskPolicyToolOutput{}, nil
 	}})

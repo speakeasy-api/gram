@@ -75,7 +75,7 @@ type ListProjectMCPServersOutput struct {
 	PossiblyIncomplete bool               `json:"possibly_incomplete"`
 }
 
-func registerDiagnosticTools(server *mcp.Server, organizations OrganizationReader, projects ProjectReader, onboarding OnboardingReader, mcpServers ProjectMCPServerReader) {
+func registerDiagnosticTools(server *mcp.Server, reader Reader) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_organization_onboarding",
 		Title:       "Get Organization Onboarding",
@@ -86,14 +86,11 @@ func registerDiagnosticTools(server *mcp.Server, organizations OrganizationReade
 		if !verifiedStaff(ctx) {
 			return nil, output, errDiagnosticsUnavailable
 		}
-		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
+		org, err := readExactOrganization(ctx, reader, input.OrganizationID)
 		if err != nil {
 			return nil, output, err
 		}
-		if onboarding == nil {
-			return nil, output, errDiagnosticsUnavailable
-		}
-		result, err := onboarding.GetOrganizationOnboardingPlaybook(ctx, &gen.GetOrganizationOnboardingPlaybookPayload{OrganizationID: org.ID})
+		result, err := reader.GetOrganizationOnboardingPlaybook(ctx, &gen.GetOrganizationOnboardingPlaybookPayload{OrganizationID: org.ID})
 		if err != nil || result == nil || result.OrganizationID != org.ID || len(result.Applicability) > maxOnboardingSteps {
 			return nil, output, errDiagnosticsUnavailable
 		}
@@ -137,18 +134,15 @@ func registerDiagnosticTools(server *mcp.Server, organizations OrganizationReade
 		if err != nil || id.String() != input.ProjectID {
 			return nil, output, errors.New("provide an exact project ID from list_organization_projects")
 		}
-		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
+		org, err := readExactOrganization(ctx, reader, input.OrganizationID)
 		if err != nil {
 			return nil, output, err
 		}
-		if projects == nil || mcpServers == nil {
-			return nil, output, errDiagnosticsUnavailable
-		}
-		project, err := projects.GetProject(ctx, &gen.GetProjectPayload{IDOrSlug: input.ProjectID, OrganizationIDOrSlug: &org.ID})
+		project, err := reader.GetProject(ctx, &gen.GetProjectPayload{IDOrSlug: input.ProjectID, OrganizationIDOrSlug: &org.ID})
 		if err != nil || project == nil || project.ID != input.ProjectID || project.OrganizationID != org.ID {
 			return nil, output, errDiagnosticsUnavailable
 		}
-		result, err := mcpServers.ListProjectMcpServers(ctx, &gen.ListProjectMcpServersPayload{OrganizationID: org.ID, ProjectID: project.ID})
+		result, err := reader.ListProjectMcpServers(ctx, &gen.ListProjectMcpServersPayload{OrganizationID: org.ID, ProjectID: project.ID})
 		if err != nil || result == nil {
 			return nil, output, errDiagnosticsUnavailable
 		}

@@ -25,7 +25,7 @@ import (
 
 func TestInstanceLifecycle(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newRealTestService(t, nil)
+	ctx, ti := newRealTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -116,7 +116,7 @@ func TestInstanceLifecycle(t *testing.T) {
 
 func TestManagedKeyLastAccessedOnlyAfterProjectAuthorization(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newRealTestService(t, nil)
+	ctx, ti := newRealTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	created, err := ti.service.CreateInstance(ctx, &gen.CreateInstancePayload{Name: "access-time", FailurePosture: "fail_closed"})
@@ -145,7 +145,7 @@ func TestManagedKeyLastAccessedOnlyAfterProjectAuthorization(t *testing.T) {
 
 func TestInstanceLifecycleRequiresOrgAdmin(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newRealTestService(t, nil)
+	ctx, ti := newRealTestService(t)
 	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := ti.service.ListInstances(ctx, &gen.ListInstancesPayload{})
@@ -154,7 +154,7 @@ func TestInstanceLifecycleRequiresOrgAdmin(t *testing.T) {
 
 func TestInstanceProjectAndOrganizationIsolation(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newRealTestService(t, nil)
+	ctx, ti := newRealTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	created, err := ti.service.CreateInstance(ctx, &gen.CreateInstancePayload{Name: "isolated", FailurePosture: "fail_closed"})

@@ -518,12 +518,10 @@ func (a *MaybeSendOpenRouterCreditsAlerts) sendOne(
 		return fmt.Errorf("persist openrouter credits alert recipient delivery: %w", err)
 	}
 
-	if a.alertsSent != nil {
-		a.alertsSent.Add(ctx, 1, metric.WithAttributes(
-			attr.OrganizationID(c.orgID),
-			attr.OpenRouterKeyType(string(c.keyType)),
-		))
-	}
+	a.alertsSent.Add(ctx, 1, metric.WithAttributes(
+		attr.OrganizationID(c.orgID),
+		attr.OpenRouterKeyType(string(c.keyType)),
+	))
 	logger.InfoContext(ctx, "sent openrouter credits alert", attr.SlogValueInt(c.threshold))
 	return nil
 }
@@ -533,9 +531,6 @@ func (a *MaybeSendOpenRouterCreditsAlerts) sendOne(
 // metrics collection never fails on account of alerting, which would otherwise
 // leave persistent alert breakage invisible to monitoring.
 func (a *MaybeSendOpenRouterCreditsAlerts) recordFailure(ctx context.Context, orgID string, keyType openrouter.KeyType) {
-	if a.alertsFailed == nil {
-		return
-	}
 	attrs := []attribute.KeyValue{}
 	if orgID != "" {
 		attrs = append(attrs, attr.OrganizationID(orgID))

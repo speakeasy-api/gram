@@ -64,7 +64,7 @@ func TestUpdateMessageTool_RequiresContent(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewChatUpdateTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callUpdateMessage,
 	}
 

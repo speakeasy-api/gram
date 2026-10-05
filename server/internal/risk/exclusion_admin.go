@@ -24,8 +24,8 @@ type exclusionMutationAuditor struct {
 
 // NewExclusionMutationCore composes the shared exclusion command for non-Goa
 // adapters with the same audit, reconciliation, and keyed-redaction behavior.
-func NewExclusionMutationCore(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, reconciler RiskExclusionReconciler, redactionKey string) *exclusioncore.Core {
-	return exclusioncore.New(db, exclusioncore.MutationDependencies{
+func NewExclusionMutationCore(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, reconciler RiskExclusionReconciler, redactionKey string) *exclusioncore.MutationCore {
+	return exclusioncore.NewMutationCore(db, exclusioncore.MutationDependencies{
 		Transactor:  db,
 		Auditor:     exclusionMutationAuditor{logger: auditLogger},
 		AfterCommit: newExclusionAfterCommit(logger, reconciler),
@@ -120,9 +120,6 @@ func (s *Service) exclusionError(ctx context.Context, err error) error {
 }
 
 func newExclusionAfterCommit(logger *slog.Logger, reconciler RiskExclusionReconciler) exclusioncore.AfterCommit {
-	if reconciler == nil {
-		return nil
-	}
 	return func(ctx context.Context, projectID, exclusionID uuid.UUID) {
 		reconcileBaseCtx := context.WithoutCancel(ctx)
 		go func() {

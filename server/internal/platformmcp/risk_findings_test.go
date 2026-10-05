@@ -58,6 +58,7 @@ func (s *findingReader) ListWatchdogAlerts(_ context.Context, p chrepo.RiskSigna
 	s.limits = append(s.limits, limit)
 	return s.rows, s.err
 }
+
 func (s *findingReader) GroupWatchdogAlerts(_ context.Context, p chrepo.RiskSignalWindowParams, rules []string, dimension string) ([]chrepo.WatchdogAlertGroup, error) {
 	s.params = append(s.params, p)
 	s.rules = append(s.rules, rules)
@@ -92,7 +93,6 @@ func TestNewRiskFindingsService(t *testing.T) {
 				return
 			}
 			service := NewRiskFindingsService(&pgxpool.Pool{}, reader, &riskMutationFlagProvider{evaluation: feature.EvaluationEnabled}, riskMutationOrganizationResolver{slug: "org"}, key)
-			require.True(t, service.valid())
 			require.Same(t, reader, service.findings)
 			require.NotNil(t, service.projects)
 			require.NotNil(t, service.policies)
@@ -395,19 +395,6 @@ func TestRiskFindingsWindowAndLabels(t *testing.T) {
 	require.Less(t, len(a), 160)
 	require.NotEqual(t, a, b)
 	require.NotContains(t, findingLabel("unsafe\nlabel"), "\n")
-}
-
-func TestRiskFindingsStub(t *testing.T) {
-	t.Parallel()
-
-	server := mcp.NewServer(&mcp.Implementation{Name: "findings-stub", Version: "1"}, nil)
-	reg := newRegistrar(server)
-	registerRiskFindingsTool(reg, nil)
-	d := descriptorByName(t, reg, "list_watchdog_findings")
-	require.Contains(t, d.Description, "unavailable in this deployment")
-	_, err := d.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{}`))
-	var refusal *ToolRefusalError
-	require.ErrorAs(t, err, &refusal)
 }
 
 func TestRiskFindingsBreakdownsUseSelectedRawRuleIDs(t *testing.T) {

@@ -42,8 +42,14 @@ func TestPrivateIngressActionRejectsDisabledRuntimeBeforeDependencies(t *testing
 	set := flag.NewFlagSet("private-ingress", flag.ContinueOnError)
 	set.Bool("network-ingress-enabled", false, "")
 	c := cli.NewContext(nil, set, nil)
-	err := newNetworkIngressServerCommand().Action(c)
-	require.EqualError(t, err, "private network ingress runtime is disabled")
+	var recovered any
+	func() {
+		defer func() { recovered = recover() }()
+		_ = newNetworkIngressServerCommand().Action(c)
+	}()
+	err, ok := recovered.(error)
+	require.True(t, ok, "expected an invariant panic, got %v", recovered)
+	require.ErrorContains(t, err, "runtime is enabled")
 }
 
 func TestPrivateIngressRuntimeClosesInReverseOrderAfterCancellation(t *testing.T) {

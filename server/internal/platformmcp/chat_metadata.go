@@ -74,25 +74,15 @@ type ChatMetadataService struct {
 	now        func() time.Time
 }
 
-// NewChatMetadataService composes the listing. A nil database, an invalid
-// budget, or missing key material leaves the service nil, which registers the
-// unavailable stub rather than a tool that always fails.
+// NewChatMetadataService composes the listing.
 func NewChatMetadataService(db *pgxpool.Pool, budget OperationBudget, keyMaterial string) *ChatMetadataService {
-	codec, err := newSubjectReferenceCodec(keyMaterial)
-	if db == nil || err != nil || !budget.valid() {
-		return nil
-	}
 	return &ChatMetadataService{
 		projects:   postgresRiskProjectResolver{queries: platformrepo.New(db)},
 		chats:      chatrepo.New(db),
-		references: codec,
+		references: newSubjectReferenceCodec(keyMaterial),
 		budget:     budget,
 		now:        time.Now,
 	}
-}
-
-func (s *ChatMetadataService) valid() bool {
-	return s != nil && s.projects != nil && s.chats != nil && s.references != nil && s.budget.valid() && s.now != nil
 }
 
 // ListChatsInput narrows one project's chats. Every filter is optional; an
@@ -161,9 +151,6 @@ type chatList struct {
 
 func (s *ChatMetadataService) List(ctx context.Context, principal Principal, input ListChatsInput) (ListChatsOutput, error) {
 	var zero ListChatsOutput
-	if !s.valid() {
-		return zero, ErrUnavailable
-	}
 	list, err := normalizeChatList(input)
 	if err != nil {
 		return zero, err

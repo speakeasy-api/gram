@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -25,7 +26,7 @@ import (
 func TestMemberMCPStatusToolsAreExternalMemberReads(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newTestServer(t)
 	for _, name := range []string{"get_my_mcp_access", "get_my_mcp_connection_status"} {
 		descriptor := descriptorByName(t, registrar, name)
 		require.Equal(t, ExternalAuthorizationMember, descriptor.Meta.Authorization)
@@ -56,7 +57,7 @@ func TestMemberMCPAccessUsesLiveRBACAndTenantQualifiedTarget(t *testing.T) {
 
 	dashboardURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
-	service := NewPluginsService(conn, allowBudget(), "member-self-status-key").WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).WithInstallLinks(dashboardURL, dashboardURL)
+	service := NewPluginsService(conn, allowBudget(), "member-self-status-key", testDistributionGuard(t, &feature.InMemory{})).WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).WithInstallLinks(dashboardURL, dashboardURL)
 	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, OrganizationSlug: "example-org"}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	input := GetMyMCPStatusInput{ProjectID: project.ID.String(), MCPID: mcpID.String()}
 
@@ -147,7 +148,7 @@ func TestMemberMCPConnectionStatusProjectsOnlyCallerState(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			service := NewPluginsService(conn, allowBudget(), "member-connection-status-key").WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).withMemberMCPConnectionReader(test.reader).WithInstallLinks(serverURL, serverURL)
+			service := NewPluginsService(conn, allowBudget(), "member-connection-status-key", testDistributionGuard(t, &feature.InMemory{})).WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).withMemberMCPConnectionReader(test.reader).WithInstallLinks(serverURL, serverURL)
 			output, err := service.GetMyMCPConnectionStatus(ctx, principal, input)
 			require.NoError(t, err)
 			require.Equal(t, test.state, output.State)
@@ -158,7 +159,7 @@ func TestMemberMCPConnectionStatusProjectsOnlyCallerState(t *testing.T) {
 		})
 	}
 
-	service := NewPluginsService(conn, allowBudget(), "member-connection-denied-key").WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).withMemberMCPConnectionReader(testMemberMCPConnectionReader{}).WithInstallLinks(serverURL, serverURL)
+	service := NewPluginsService(conn, allowBudget(), "member-connection-denied-key", testDistributionGuard(t, &feature.InMemory{})).WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).withMemberMCPConnectionReader(testMemberMCPConnectionReader{}).WithInstallLinks(serverURL, serverURL)
 	denied := authz.GrantsToContext(ctx, []authz.Grant{
 		authz.NewGrant(authz.ScopeMCPRead, mcpID.String()),
 		authz.NewGrant(authz.ScopeMCPBlockedConnect, mcpID.String()),
@@ -176,9 +177,9 @@ func TestMemberMCPConnectionStatusProjectsOnlyCallerState(t *testing.T) {
 func TestMemberMCPStatusDependencyAndAccessLinkFailClosed(t *testing.T) {
 	t.Parallel()
 
-	service := NewPluginsService(nil, OperationBudget{}, "")
-	require.Same(t, service, service.WithRemoteSessions(nil))
-	require.Nil(t, service.remoteSessions)
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_member_access_link")
+	require.NoError(t, err)
+	service := NewPluginsService(conn, allowBudget(), "member-access-link-key", testDistributionGuard(t, &feature.InMemory{}))
 
 	dashboardURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)

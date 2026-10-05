@@ -177,9 +177,6 @@ func decryptHeaders(encryptionClient *encryption.Client, stored pgtype.Text) (ma
 	if !stored.Valid || stored.String == "" {
 		return map[string]string{}, nil
 	}
-	if encryptionClient == nil {
-		return nil, fmt.Errorf("decrypt destination headers: encryption is unavailable")
-	}
 
 	plaintext, err := encryptionClient.Decrypt(stored.String)
 	if err != nil {

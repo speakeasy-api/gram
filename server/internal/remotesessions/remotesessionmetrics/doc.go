@@ -13,10 +13,7 @@
 // tenant-chosen slug — which stays bounded because issuers are
 // operator-configured rows, not traffic.
 //
-// Constructors never fail: an instrument that cannot be created is logged and
-// left nil, and every Record method is nil-receiver- and nil-instrument-safe,
-// so a partially constructed value degrades to no metrics rather than a
-// panic.
+// Constructors never fail: an instrument that cannot be created is logged.
 package remotesessionmetrics
 
 // meterScope names the instrumentation scope for every instrument in this

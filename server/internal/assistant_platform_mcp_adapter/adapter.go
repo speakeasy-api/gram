@@ -104,9 +104,6 @@ func (t Tool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Rea
 	if err != nil {
 		return err
 	}
-	if t.authorizer == nil {
-		return platformmcp.ErrUnavailable
-	}
 	if err := t.authorizer.RequireLiveOrgAdmin(ctx, principal); err != nil {
 		return fmt.Errorf("authorize assistant platform tool %q: %w", t.descriptor.Name, err)
 	}

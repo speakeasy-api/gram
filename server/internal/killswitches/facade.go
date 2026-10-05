@@ -88,11 +88,8 @@ type Facade struct {
 
 var _ GenericService = (*Facade)(nil)
 
-func NewFacade(lifecycle *LifecycleService) (*Facade, error) {
-	if lifecycle == nil {
-		return nil, ErrInvalidArgument
-	}
-	return &Facade{lifecycle: lifecycle, registry: lifecycle.registry, db: lifecycle.db}, nil
+func NewFacade(lifecycle *LifecycleService) *Facade {
+	return &Facade{lifecycle: lifecycle, registry: lifecycle.registry, db: lifecycle.db}
 }
 
 func (f *Facade) ListDefinitions(_ context.Context) ([]Definition, error) {

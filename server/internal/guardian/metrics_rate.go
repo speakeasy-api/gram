@@ -64,17 +64,15 @@ func newRateLimitMetrics(logger *slog.Logger, meter metric.Meter) *rateLimitMetr
 func (m *rateLimitMetrics) recordCheck(ctx context.Context, key Partition, result RateLimitResult, err error) {
 	attrs := partitionAttrs(key)
 
-	if m.requests != nil {
-		outcome := outcomeAllowed
-		switch {
-		case err != nil:
-			outcome = outcomeError
-		case result.Allowed == 0:
-			outcome = outcomeRejected
-		}
-
-		m.requests.Add(ctx, 1, metric.WithAttributes(append(attrs, attr.Outcome(outcome))...))
+	outcome := outcomeAllowed
+	switch {
+	case err != nil:
+		outcome = outcomeError
+	case result.Allowed == 0:
+		outcome = outcomeRejected
 	}
+
+	m.requests.Add(ctx, 1, metric.WithAttributes(append(attrs, attr.Outcome(outcome))...))
 
 	if err != nil {
 		return
@@ -82,11 +80,11 @@ func (m *rateLimitMetrics) recordCheck(ctx context.Context, key Partition, resul
 
 	// InfDuration means the request exceeds burst capacity and can never be
 	// admitted; it would poison the distribution.
-	if m.retryAfter != nil && result.Allowed == 0 && result.RetryAfter > 0 && result.RetryAfter < rate.InfDuration {
+	if result.Allowed == 0 && result.RetryAfter > 0 && result.RetryAfter < rate.InfDuration {
 		m.retryAfter.Record(ctx, result.RetryAfter.Seconds(), metric.WithAttributes(attrs...))
 	}
 
-	if m.utilization != nil && result.Limit.Burst > 0 {
+	if result.Limit.Burst > 0 {
 		used := (float64(result.Limit.Burst) - float64(result.Remaining)) / float64(result.Limit.Burst)
 		m.utilization.Record(ctx, min(max(used, 0), 1), metric.WithAttributes(attrs...))
 	}

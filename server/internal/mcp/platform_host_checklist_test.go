@@ -2,7 +2,9 @@ package mcp_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -68,7 +70,7 @@ func newPlatformHostMux(t *testing.T, ti *testInstance) (http.Handler, platformH
 		ti.cacheAdapter,
 		authz.NewEngine(ti.logger, ti.conn, nil, workos.NewStubClient()),
 		ti.audit,
-		nil,
+		func(context.Context, string) error { return errors.New("private network access disabled") },
 	)
 
 	mcpSecurity, err := middleware.MCPSecurity(ti.logger, append([]string{ti.serverURL.String()}, slices.Sorted(maps.Values(platformHosts))...), mcp.ServesInstallPage)

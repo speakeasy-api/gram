@@ -16,43 +16,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func newMCPAuthTestService(t *testing.T, conn *pgxpool.Pool) *Service {
 	t.Helper()
 
-	logger := testenv.NewLogger(t)
-	tracerProvider := testenv.NewTracerProvider(t)
-	meterProvider := testenv.NewMeterProvider(t)
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
-	require.NoError(t, err)
-	core := NewServiceCore(
-		logger,
-		tracerProvider,
-		meterProvider,
-		conn,
-		guardianPolicy,
-		testenv.NewEncryptionClient(t),
-		testRuntimeBackend{backend: runtimeBackendFlyIO},
-		nil,
-		nil,
-		nil,
-		telemetry.NewStub(logger),
-		nil,
-		newTestAuditLogger(),
-	)
-	return &Service{
-		tracer:           tracerProvider.Tracer("test"),
-		logger:           logger,
-		auth:             nil,
-		authz:            nil,
-		core:             core,
-		signaler:         nil,
-		bootstrapLimiter: nil,
-	}
+	return newTestService(t, conn, newTestServiceCore(t, conn, testRuntimeBackend{backend: runtimeBackendFlyIO}))
 }
 
 func TestGetOrRegisterMCPAuthClientReusesRegistration(t *testing.T) {

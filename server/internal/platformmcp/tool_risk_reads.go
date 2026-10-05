@@ -16,17 +16,9 @@ import (
 )
 
 // registerRiskToolsWithMutations is the single handler-selection seam used by
-// the external endpoint and assistant catalogue. Policy callbacks may be live
-// while exclusion callbacks remain stable unavailable stubs during rollout.
+// the external endpoint and assistant catalogue.
 func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, status *RiskAnalysisStatusService, mutations *RiskMutationHandlers) {
-	// The analysis status read does not depend on the policy reader, so it is
-	// registered on its own: a deployment whose policy reads are unavailable
-	// still answers "when did the Watchdog last run" when it can.
 	registerRiskAnalysisStatusTool(reg, status)
-	if risk == nil || !risk.valid() {
-		registerUnavailableRiskToolsWithMutations(reg, mutations)
-		return
-	}
 	addTool(reg, &mcp.Tool{
 		Name:        "list_risk_policies",
 		Title:       "List Risk Policies",
@@ -60,25 +52,15 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, statu
 			return risk.ListExclusions(ctx, principal, input)
 		})
 	})
-	registerRiskMutationHandlers(reg, risk.catalog, true, mutations)
+	registerRiskMutationHandlers(reg, risk.catalog, mutations)
 }
 
 const (
 	riskAnalysisStatusToolName  = "get_risk_analysis_status"
 	riskAnalysisStatusToolTitle = "Get Watchdog Analysis Status"
-	// riskAnalysisStatusToolStub is the description served when the analysis
-	// run state cannot be described in this deployment.
-	riskAnalysisStatusToolStub = "Report when the Watchdog analysis last ran for a project. Analysis status is unavailable in this deployment."
 )
 
-// registerRiskAnalysisStatusTool serves get_risk_analysis_status live when the
-// analysis run state can be described, and as a stub otherwise, so the tool
-// always exists in the manifest.
 func registerRiskAnalysisStatusTool(reg *Registrar, status *RiskAnalysisStatusService) {
-	if !status.valid() {
-		addTool(reg, &mcp.Tool{Name: riskAnalysisStatusToolName, Title: riskAnalysisStatusToolTitle, Description: riskAnalysisStatusToolStub, Annotations: readOnlyAnnotations(), InputSchema: riskAnalysisStatusSchema()}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableRiskReadTool(reg, riskAnalysisStatusToolName))
-		return
-	}
 	addTool(reg, &mcp.Tool{
 		Name:        riskAnalysisStatusToolName,
 		Title:       riskAnalysisStatusToolTitle,
@@ -90,34 +72,6 @@ func registerRiskAnalysisStatusTool(reg *Registrar, status *RiskAnalysisStatusSe
 			return status.Get(ctx, principal, input)
 		})
 	})
-}
-
-func registerUnavailableRiskTools(reg *Registrar) {
-	registerRiskAnalysisStatusTool(reg, nil)
-	registerUnavailableRiskToolsWithMutations(reg, nil)
-}
-
-func registerUnavailableRiskToolsWithMutations(reg *Registrar, mutations *RiskMutationHandlers) {
-	registerUnavailableRiskToolsWithCatalogAndMutations(reg, policycatalog.Build, mutations)
-}
-
-func registerUnavailableRiskToolsWithCatalog(reg *Registrar, buildCatalog func() (policycatalog.Catalog, error)) {
-	registerUnavailableRiskToolsWithCatalogAndMutations(reg, buildCatalog, nil)
-}
-
-func registerUnavailableRiskToolsWithCatalogAndMutations(reg *Registrar, buildCatalog func() (policycatalog.Catalog, error), mutations *RiskMutationHandlers) {
-	for _, tool := range []struct {
-		name, title, description string
-		schema                   *jsonschema.Schema
-	}{
-		{"list_risk_policies", "List Risk Policies", "List risk policy summaries. Risk reads are unavailable in this deployment.", riskListSchema(false)},
-		{"get_risk_policy", "Get Risk Policy", "Read one risk policy. Risk reads are unavailable in this deployment.", riskGetPolicySchema()},
-		{"list_risk_exclusions", "List Risk Exclusions", "List risk exclusions. Risk reads are unavailable in this deployment.", riskListSchema(true)},
-	} {
-		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: readOnlyAnnotations(), InputSchema: tool.schema}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableRiskReadTool(reg, tool.name))
-	}
-	catalog, err := buildCatalog()
-	registerRiskMutationHandlers(reg, catalog, err == nil, mutations)
 }
 
 type RiskMutationToolReceipt struct {
@@ -145,10 +99,9 @@ type UpdateRiskExclusionToolOutput struct {
 	Receipt RiskMutationToolReceipt `json:"receipt"`
 }
 
-// RiskMutationHandlers names the independently selectable write callbacks.
-// Every callback has an exported success type that composition code can
-// construct, while the schemas remain owned by this package. A nil callback
-// keeps its tool in the catalogue as a stable "not enabled" stub.
+// RiskMutationHandlers names the write callbacks. Every callback has an
+// exported success type that composition code can construct, while the
+// schemas remain owned by this package.
 type RiskMutationHandlers struct {
 	ChangeAudience              mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
 	RemoveSelf                  mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
@@ -161,66 +114,18 @@ type RiskMutationHandlers struct {
 	UnmarkFindingsFalsePositive mcp.ToolHandlerFor[map[string]any, UnmarkRiskFindingsFalsePositiveToolOutput]
 }
 
-func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog, catalogAvailable bool, handlers *RiskMutationHandlers) {
-	registerRemoveSelfFromRiskPolicy(reg, catalogAvailable, handlers)
-	registerChangeRiskPolicyAudience(reg, catalogAvailable, handlers)
-	createPolicySchema := fallbackCreateRiskPolicySchema()
-	updatePolicySchema := fallbackUpdateRiskPolicySchema()
-	createExclusionSchema := fallbackCreateRiskExclusionSchema()
-	if catalogAvailable {
-		createPolicySchema = createRiskPolicySchema(catalog)
-		updatePolicySchema = updateRiskPolicySchema(catalog)
-		createExclusionSchema = createRiskExclusionSchema(catalog)
-	}
-	createPolicy := unavailableRiskMutationTool[CreateRiskPolicyToolOutput]()
-	updatePolicy := unavailableRiskMutationTool[UpdateRiskPolicyToolOutput]()
-	createExclusion := unavailableRiskMutationTool[CreateRiskExclusionToolOutput]()
-	updateExclusion := unavailableRiskMutationTool[UpdateRiskExclusionToolOutput]()
-	createPolicyDescription := "Create a risk policy in an explicit project. Risk policy mutations are not enabled in this rollout."
-	updatePolicyDescription := "Patch a risk policy in an explicit project. MCP-scoped policies support flag and block actions only. Risk policy mutations are not enabled in this rollout."
-	createExclusionDescription := "Create a non-regex risk exclusion in an explicit project. Exclusion mutations are not enabled in this rollout."
-	updateExclusionDescription := "Enable or disable one risk exclusion without changing its definition. Exclusion mutations are not enabled in this rollout."
-	markFindings := unavailableRiskMutationTool[MarkRiskFindingsFalsePositiveToolOutput]()
-	unmarkFindings := unavailableRiskMutationTool[UnmarkRiskFindingsFalsePositiveToolOutput]()
-	markFindingsDescription := "Dismiss specific Watchdog findings as reviewed false positives in an explicit project. Finding dismissal is not enabled in this rollout."
-	unmarkFindingsDescription := "Restore previously dismissed Watchdog findings in an explicit project. Finding restore is not enabled in this rollout."
-	if handlers != nil && handlers.Controls != nil {
-		if handlers.MarkFindingsFalsePositive != nil {
-			markFindings = handlers.MarkFindingsFalsePositive
-			markFindingsDescription = riskFindingsMarkDescription
-		}
-		if handlers.UnmarkFindingsFalsePositive != nil {
-			unmarkFindings = handlers.UnmarkFindingsFalsePositive
-			unmarkFindingsDescription = riskFindingsUnmarkDescription
-		}
-	}
-	if catalogAvailable && handlers != nil && handlers.Controls != nil {
-		if handlers.CreatePolicy != nil {
-			createPolicy = handlers.CreatePolicy
-			createPolicyDescription = "Create an allowlisted standard or prompt-based risk policy in an explicit project with idempotent replay safety."
-		}
-		if handlers.UpdatePolicy != nil {
-			updatePolicy = handlers.UpdatePolicy
-			updatePolicyDescription = "Patch allowlisted fields on a risk policy in an explicit project using an opaque expected version; omitted fields are preserved. MCP-scoped policies support flag and block actions only. The audience patch is available only to external OAuth administrators and replaces positive user/role grants, requires confirm=true, and never creates exclusions. Inspect get_risk_policy first. Targeted audiences must remain nonempty; everyone requires an empty principal_urns array. Removing a direct user grant does not remove role-derived access. Never represent everyone-except-one or role exclusions as supported."
-		}
-		if handlers.CreateExclusion != nil {
-			createExclusion = handlers.CreateExclusion
-			createExclusionDescription = "Create a non-regex risk exclusion in an explicit project with idempotent replay safety."
-		}
-		if handlers.UpdateExclusion != nil {
-			updateExclusion = handlers.UpdateExclusion
-			updateExclusionDescription = "Enable or disable one risk exclusion without changing its definition using an opaque expected version."
-		}
-	}
+func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog, handlers *RiskMutationHandlers) {
+	registerRemoveSelfFromRiskPolicy(reg, handlers)
+	registerChangeRiskPolicyAudience(reg, handlers)
 	meta := ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}
-	addTool(reg, &mcp.Tool{Name: "create_risk_policy", Title: "Create Risk Policy", Description: createPolicyDescription, InputSchema: createPolicySchema}, meta, instrumentRiskMutation(reg, "create_risk_policy", createPolicy))
-	addTool(reg, &mcp.Tool{Name: "update_risk_policy", Title: "Update Risk Policy", Description: updatePolicyDescription, InputSchema: updatePolicySchema}, meta, instrumentRiskMutation(reg, "update_risk_policy", updatePolicy))
-	addTool(reg, &mcp.Tool{Name: "create_risk_exclusion", Title: "Create Risk Exclusion", Description: createExclusionDescription, InputSchema: createExclusionSchema}, meta, instrumentRiskMutation(reg, "create_risk_exclusion", createExclusion))
-	addTool(reg, &mcp.Tool{Name: "update_risk_exclusion", Title: "Update Risk Exclusion", Description: updateExclusionDescription, InputSchema: updateRiskExclusionSchema()}, meta, instrumentRiskMutation(reg, "update_risk_exclusion", updateExclusion))
+	addTool(reg, &mcp.Tool{Name: "create_risk_policy", Title: "Create Risk Policy", Description: "Create an allowlisted standard or prompt-based risk policy in an explicit project with idempotent replay safety.", InputSchema: createRiskPolicySchema(catalog)}, meta, instrumentRiskMutation(reg, "create_risk_policy", handlers.CreatePolicy))
+	addTool(reg, &mcp.Tool{Name: "update_risk_policy", Title: "Update Risk Policy", Description: "Patch allowlisted fields on a risk policy in an explicit project using an opaque expected version; omitted fields are preserved. MCP-scoped policies support flag and block actions only. The audience patch is available only to external OAuth administrators and replaces positive user/role grants, requires confirm=true, and never creates exclusions. Inspect get_risk_policy first. Targeted audiences must remain nonempty; everyone requires an empty principal_urns array. Removing a direct user grant does not remove role-derived access. Never represent everyone-except-one or role exclusions as supported.", InputSchema: updateRiskPolicySchema(catalog)}, meta, instrumentRiskMutation(reg, "update_risk_policy", handlers.UpdatePolicy))
+	addTool(reg, &mcp.Tool{Name: "create_risk_exclusion", Title: "Create Risk Exclusion", Description: "Create a non-regex risk exclusion in an explicit project with idempotent replay safety.", InputSchema: createRiskExclusionSchema(catalog)}, meta, instrumentRiskMutation(reg, "create_risk_exclusion", handlers.CreateExclusion))
+	addTool(reg, &mcp.Tool{Name: "update_risk_exclusion", Title: "Update Risk Exclusion", Description: "Enable or disable one risk exclusion without changing its definition using an opaque expected version.", InputSchema: updateRiskExclusionSchema()}, meta, instrumentRiskMutation(reg, "update_risk_exclusion", handlers.UpdateExclusion))
 	// Dismissing hides findings from the active list, so clients should
 	// treat mark as destructive; restoring only re-surfaces them.
-	addTool(reg, &mcp.Tool{Name: operationMarkRiskFindingsFalsePositive, Title: "Mark Risk Findings False Positive", Description: markFindingsDescription, Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true)}, InputSchema: riskFindingsFalsePositiveSchema(true)}, meta, instrumentRiskMutation(reg, operationMarkRiskFindingsFalsePositive, markFindings))
-	addTool(reg, &mcp.Tool{Name: operationUnmarkRiskFindingsFalsePositive, Title: "Unmark Risk Findings False Positive", Description: unmarkFindingsDescription, Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)}, InputSchema: riskFindingsFalsePositiveSchema(false)}, meta, instrumentRiskMutation(reg, operationUnmarkRiskFindingsFalsePositive, unmarkFindings))
+	addTool(reg, &mcp.Tool{Name: operationMarkRiskFindingsFalsePositive, Title: "Mark Risk Findings False Positive", Description: riskFindingsMarkDescription, Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true)}, InputSchema: riskFindingsFalsePositiveSchema(true)}, meta, instrumentRiskMutation(reg, operationMarkRiskFindingsFalsePositive, handlers.MarkFindingsFalsePositive))
+	addTool(reg, &mcp.Tool{Name: operationUnmarkRiskFindingsFalsePositive, Title: "Unmark Risk Findings False Positive", Description: riskFindingsUnmarkDescription, Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)}, InputSchema: riskFindingsFalsePositiveSchema(false)}, meta, instrumentRiskMutation(reg, operationUnmarkRiskFindingsFalsePositive, handlers.UnmarkFindingsFalsePositive))
 }
 
 const (
@@ -241,21 +146,6 @@ func riskFindingsFalsePositiveSchema(withReason bool) *jsonschema.Schema {
 		properties["reason"] = stringSchema("Optional reason recorded on the dismissal.", 0, maxRiskFindingFalsePositiveReasonRunes)
 	}
 	return closedObject(properties, []string{"project_slug", "finding_ids", "confirmed", "idempotency_key"})
-}
-
-func unavailableRiskMutationTool[Out any]() mcp.ToolHandlerFor[map[string]any, Out] {
-	return func(_ context.Context, _ *mcp.CallToolRequest, _ map[string]any) (*mcp.CallToolResult, Out, error) {
-		var zero Out
-		result := featureUnavailableResult{Code: unavailableCode, Feature: "risk_mutations", Message: "This Platform MCP capability is not enabled for the current rollout."}
-		content, err := json.Marshal(result)
-		if err != nil {
-			return nil, zero, fmt.Errorf("encode unavailable risk mutation result: %w", err)
-		}
-		// Return a tool error rather than an existing IsError result. The MCP SDK
-		// short-circuits on errors before marshaling the typed zero Out value, so
-		// disabled tools emit no empty structured success fields.
-		return nil, zero, &ToolRefusalError{Code: unavailableCode, Payload: string(content)}
-	}
 }
 
 func instrumentRiskMutation[Out any](reg *Registrar, tool string, handler mcp.ToolHandlerFor[map[string]any, Out]) mcp.ToolHandlerFor[map[string]any, Out] {
@@ -316,19 +206,6 @@ func riskMutationReplayState(replayed, matched bool) string {
 		return riskTelemetryMatched
 	default:
 		return riskTelemetryFresh
-	}
-}
-
-func unavailableRiskReadTool(reg *Registrar, tool string) mcp.ToolHandlerFor[map[string]any, featureUnavailableResult] {
-	return func(ctx context.Context, _ *mcp.CallToolRequest, _ map[string]any) (*mcp.CallToolResult, featureUnavailableResult, error) {
-		started := time.Now()
-		result := featureUnavailableResult{Code: unavailableCode, Feature: "risk_reads", Message: "This is not switched on for your organization yet."}
-		reg.riskTelemetry.Record(ctx, riskTelemetryEvent(tool, result.Code), time.Since(started))
-		content, err := json.Marshal(result)
-		if err != nil {
-			return nil, featureUnavailableResult{}, fmt.Errorf("encode unavailable risk read result: %w", err)
-		}
-		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, result, nil
 	}
 }
 
@@ -494,22 +371,11 @@ func riskPolicyCreateCommonProperties(catalog policycatalog.Catalog) map[string]
 		"idempotency_key": stringSchema("Caller key retained for 24-hour replay safety.", 1, 128),
 	}
 }
+
 func riskPolicyActionSchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 	schema := catalogEnumSchema(catalog, catalog.Actions)
 	schema.Description = "Policy action. MCP-scoped policies support flag and block only."
 	return schema
-}
-
-func fallbackCreateRiskPolicySchema() *jsonschema.Schema {
-	return createRiskPolicySchema(policycatalog.Catalog{})
-}
-
-func fallbackUpdateRiskPolicySchema() *jsonschema.Schema {
-	return updateRiskPolicySchema(policycatalog.Catalog{})
-}
-
-func fallbackCreateRiskExclusionSchema() *jsonschema.Schema {
-	return createRiskExclusionSchema(policycatalog.Catalog{})
 }
 
 func detectionScopesSchema(catalog policycatalog.Catalog) *jsonschema.Schema {
@@ -548,6 +414,7 @@ func stringSchema(description string, minLength, maxLength int) *jsonschema.Sche
 func uuidSchema(description string) *jsonschema.Schema {
 	return &jsonschema.Schema{Type: "string", Format: "uuid", Description: description}
 }
+
 func catalogEnumSchema(catalog policycatalog.Catalog, values []string) *jsonschema.Schema {
 	if catalog.Schema == "" {
 		return stringSchema("Pinned catalog value.", 1, 256)
@@ -562,10 +429,12 @@ func enumSchema(values ...string) *jsonschema.Schema {
 	}
 	return &jsonschema.Schema{Type: "string", Enum: enum}
 }
+
 func constSchema(value string) *jsonschema.Schema {
 	constant := any(value)
 	return &jsonschema.Schema{Type: "string", Const: &constant}
 }
+
 func arraySchema(items *jsonschema.Schema, minItems int, unique bool) *jsonschema.Schema {
 	return boundedArraySchema(items, minItems, 0, unique)
 }

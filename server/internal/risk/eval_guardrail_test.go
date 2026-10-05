@@ -18,13 +18,13 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattest"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -382,8 +382,7 @@ func insertAssistantToolCallMessage(t *testing.T, ti *testInstance, projectID, c
 	require.NoError(t, err)
 
 	messageID := "msg-" + uuid.NewString()
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
-	t.Cleanup(func() { _ = shutdown(t.Context()) })
+	writer := chattest.NewMessageWriter(t, infra, ti.conn)
 	_, err = writer.Write(t.Context(), projectID, []chat.MessageWrite{{Params: chatrepo.CreateChatMessageParams{
 		ID:               uuid.Nil,
 		CreatedAt:        pgtype.Timestamptz{},

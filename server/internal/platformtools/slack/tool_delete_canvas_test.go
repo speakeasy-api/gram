@@ -46,7 +46,7 @@ func TestDeleteCanvasTool_RequiresCanvasID(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewDeleteCanvasTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callDeleteCanvas,
 	}
 

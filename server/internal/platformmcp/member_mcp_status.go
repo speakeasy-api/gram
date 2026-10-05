@@ -125,9 +125,6 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 		output.NextAction = "ask_administrator"
 		return output, nil
 	}
-	if s.remoteSessions == nil {
-		return GetMyMCPConnectionStatusOutput{}, ErrUnavailable
-	}
 
 	clients, err := s.remoteSessions.ListClients(ctx, target.projectID, principal.OrganizationID, target.userSessionIssuerID)
 	if err != nil {
@@ -167,9 +164,6 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 }
 
 func (s *PluginsService) memberMCPStatusTarget(ctx context.Context, principal Principal, input GetMyMCPStatusInput) (memberMCPStatusTarget, error) {
-	if !s.valid() || s.authorization == nil {
-		return memberMCPStatusTarget{}, ErrUnavailable
-	}
 	projectID, err := uuid.Parse(strings.TrimSpace(input.ProjectID))
 	if err != nil {
 		return memberMCPStatusTarget{}, ErrMemberMCPStatusTargetNotFound

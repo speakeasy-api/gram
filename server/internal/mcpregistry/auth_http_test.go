@@ -333,5 +333,4 @@ func TestDiscoveryRealCredentialsHTTP(t *testing.T) {
 		require.NoError(t, err, string(output))
 		t.Log(string(output))
 	})
-
 }

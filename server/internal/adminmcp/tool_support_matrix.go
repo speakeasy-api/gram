@@ -83,7 +83,7 @@ func registerSupportMatrixTools(server *mcp.Server, reader SupportMatrixReader) 
 			Methods: []SupportMatrixMethod{}, Products: []SupportMatrixProduct{},
 			Capabilities: []SupportMatrixCapability{}, Mappings: []SupportMatrixMapping{}, References: []SupportMatrixReference{},
 		}
-		if reader == nil || !verifiedStaff(ctx) {
+		if !verifiedStaff(ctx) {
 			return nil, output, errSupportMatrixUnavailable
 		}
 		matrix, err := reader.GetSupportMatrix(ctx, &gen.GetSupportMatrixPayload{})

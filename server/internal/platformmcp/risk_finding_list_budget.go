@@ -6,9 +6,8 @@ import (
 )
 
 // riskFindingListLister is the handler-selection seam for the per-finding
-// reads: the live service, its budgeted wrapper, or nil for the stubs.
+// reads: the live service or its budgeted wrapper.
 type riskFindingListLister interface {
-	valid() bool
 	List(context.Context, Principal, ListRiskFindingPageInput) (ListRiskFindingPageOutput, error)
 	ListByChat(context.Context, Principal, ListRiskFindingsByChatInput) (ListRiskFindingsByChatOutput, error)
 	RuleBreakdown(context.Context, Principal, GetRiskRuleBreakdownInput) (GetRiskRuleBreakdownOutput, error)
@@ -21,10 +20,6 @@ type riskFindingListLister interface {
 type budgetedRiskFindingList struct {
 	service riskFindingListLister
 	budget  OperationBudget
-}
-
-func (s *budgetedRiskFindingList) valid() bool {
-	return s != nil && s.service != nil && s.service.valid() && s.budget.valid()
 }
 
 func (s *budgetedRiskFindingList) List(ctx context.Context, principal Principal, input ListRiskFindingPageInput) (ListRiskFindingPageOutput, error) {

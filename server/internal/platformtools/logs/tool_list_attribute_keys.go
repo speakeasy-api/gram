@@ -44,10 +44,6 @@ func (s *ListAttributeKeys) Descriptor() core.ToolDescriptor {
 }
 
 func (s *ListAttributeKeys) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if s.telemetry == nil {
-		return fmt.Errorf("telemetry service not configured")
-	}
-
 	input := listAttributeKeysInput{From: "", To: ""}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err

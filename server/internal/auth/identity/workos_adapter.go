@@ -15,11 +15,7 @@ type WorkOSAdapter struct {
 }
 
 // NewWorkOSAdapter creates an adapter from a WorkOS SDK client.
-// Returns nil when client is nil (e.g. OSS / test environments).
 func NewWorkOSAdapter(client *usermanagement.Client) *WorkOSAdapter {
-	if client == nil {
-		return nil
-	}
 	return &WorkOSAdapter{client: client}
 }
 

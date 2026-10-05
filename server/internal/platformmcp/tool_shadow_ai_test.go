@@ -147,15 +147,6 @@ func TestShadowAIListLibraryRejectsUnknownCategory(t *testing.T) {
 	require.NotErrorIs(t, err, ErrShadowAIUnavailable)
 }
 
-func TestShadowAIServiceRequiresEveryDependency(t *testing.T) {
-	t.Parallel()
-
-	require.Nil(t, NewShadowAIService(nil, &stubLibraryReader{}, stubAuthorizer{}, allowingBudget()))
-	require.Nil(t, NewShadowAIService(&stubDetectionReader{}, nil, stubAuthorizer{}, allowingBudget()))
-	require.Nil(t, NewShadowAIService(&stubDetectionReader{}, &stubLibraryReader{}, nil, allowingBudget()))
-	require.Nil(t, NewShadowAIService(&stubDetectionReader{}, &stubLibraryReader{}, stubAuthorizer{}, OperationBudget{}))
-}
-
 // TestShadowAIListInventoryProjectsTheUnenforceableHalf covers the distinction the
 // feature exists to make. A tool publishing no client ID metadata document
 // reads unreviewed because no decision about it can be enforced, and a

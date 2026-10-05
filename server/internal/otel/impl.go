@@ -49,8 +49,10 @@ type Service struct {
 	hooksSink       HooksSink
 }
 
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
+var (
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
+)
 
 func NewService(
 	logger *slog.Logger,
@@ -63,6 +65,7 @@ func NewService(
 	spanPublisher gcp.Publisher[*otelv1.InboundSpan],
 	logPublisher gcp.Publisher[*otelv1.InboundLogRecord],
 	metricPublisher gcp.Publisher[*otelv1.InboundMetric],
+	hooksSink HooksSink,
 ) *Service {
 	return &Service{
 		logger:          logger,
@@ -74,7 +77,7 @@ func NewService(
 		logPublisher:    logPublisher,
 		metricPublisher: metricPublisher,
 		spanPublisher:   spanPublisher,
-		hooksSink:       nil,
+		hooksSink:       hooksSink,
 	}
 }
 

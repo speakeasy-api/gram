@@ -58,10 +58,8 @@ func TestShadowInventoryProjectionSuppressesIdentityAndReferencesRoundTrip(t *te
 		ApprovalRequest: &accessgen.ShadowMCPInventoryApprovalRequest{Status: status, RequesterCount: 1},
 	}
 	flags := &riskMutationFlagProvider{evaluation: feature.EvaluationEnabled}
-	codec, err := newSubjectReferenceCodec("shadow-test-key")
-	require.NoError(t, err)
-	versions, err := newShadowDecisionVersionCodec("shadow-test-key")
-	require.NoError(t, err)
+	codec := newSubjectReferenceCodec("shadow-test-key")
+	versions := newShadowDecisionVersionCodec("shadow-test-key")
 	admissionResult := DistributionAdmission{State: DistributionAdmissionRepairRequired, Mode: string(admission.ModeEnforce), MissingAudienceCounts: admission.MissingAudienceCounts{Roles: 1}, CheckedAt: "2026-09-06T12:00:00Z", Complete: true}
 	targetAdmissionCalls := 0
 	notApplicableAdmissionCalls := 0
@@ -109,10 +107,8 @@ func TestShadowInventoryBoundsRequestOnlyPrefixAcrossPages(t *testing.T) {
 			AccessSummary: &accessgen.ShadowMCPAccessSummary{State: "unenforced", AllowedFor: "none", BlockedFor: "none", BlockingDefault: "none", DecisionCoverage: "none"},
 		})
 	}
-	codec, err := newSubjectReferenceCodec("shadow-prefix-key")
-	require.NoError(t, err)
-	versions, err := newShadowDecisionVersionCodec("shadow-prefix-key")
-	require.NoError(t, err)
+	codec := newSubjectReferenceCodec("shadow-prefix-key")
+	versions := newShadowDecisionVersionCodec("shadow-prefix-key")
 	service := &ShadowInventoryService{
 		projects:  &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "organization", projectID: project.ID.String()}, {organizationID: "organization", projectID: project.ID.String()}}},
 		inventory: stubShadowInventory{list: &accessgen.ListShadowMCPInventoryResult{Servers: rows}}, reviews: stubShadowReview{},
@@ -147,10 +143,8 @@ func TestShadowInventoryCursorIsProjectAndSessionBound(t *testing.T) {
 
 	project := ResolvedProject{ID: uuid.New(), Slug: "default"}
 	row := &accessgen.ShadowMCPInventoryServer{CanonicalServerURL: "https://one.example.test", TargetKind: new(shadowTargetKindServerURL), FirstSeen: "2026-09-06T10:00:00Z", AccessSummary: &accessgen.ShadowMCPAccessSummary{State: "unenforced", AllowedFor: "none", BlockedFor: "none", BlockingDefault: "none", DecisionCoverage: "none"}}
-	codec, err := newSubjectReferenceCodec("shadow-cursor-key")
-	require.NoError(t, err)
-	versions, err := newShadowDecisionVersionCodec("shadow-cursor-key")
-	require.NoError(t, err)
+	codec := newSubjectReferenceCodec("shadow-cursor-key")
+	versions := newShadowDecisionVersionCodec("shadow-cursor-key")
 	service := &ShadowInventoryService{projects: &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "organization", projectID: project.ID.String()}, {organizationID: "organization", projectID: project.ID.String()}}}, inventory: stubShadowInventory{list: &accessgen.ListShadowMCPInventoryResult{Servers: []*accessgen.ShadowMCPInventoryServer{row, row}}}, reviews: stubShadowReview{}, flags: &riskMutationFlagProvider{evaluation: feature.EvaluationEnabled}, organizations: riskMutationOrganizationResolver{slug: "organization"}, budget: allowBudget(), references: codec, versions: versions, now: time.Now}
 	principal := Principal{UserID: "user", OrganizationID: "organization", ConnectionID: uuid.NewString(), Generation: uuid.NewString()}
 

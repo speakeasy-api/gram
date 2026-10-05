@@ -2,7 +2,6 @@ package platformmcp
 
 import (
 	"crypto/hmac"
-
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -46,16 +45,13 @@ type catalogCursorCodec struct {
 	key []byte
 }
 
-func newCatalogCursorCodec(keyMaterial string) (*catalogCursorCodec, error) {
-	if keyMaterial == "" {
-		return nil, ErrCatalogCursorInvalid
-	}
+func newCatalogCursorCodec(keyMaterial string) *catalogCursorCodec {
 	key := sha256.Sum256([]byte("platform-mcp-catalog-cursor:" + keyMaterial))
-	return &catalogCursorCodec{key: key[:]}, nil
+	return &catalogCursorCodec{key: key[:]}
 }
 
 func (c *catalogCursorCodec) Encode(cursor catalogCursor) (string, error) {
-	if c == nil || len(c.key) == 0 || cursor.OrganizationID == "" || cursor.Generation == "" || cursor.Position < 0 {
+	if cursor.OrganizationID == "" || cursor.Generation == "" || cursor.Position < 0 {
 		return "", ErrCatalogCursorInvalid
 	}
 	payload, err := json.Marshal(cursor)
@@ -72,7 +68,7 @@ func (c *catalogCursorCodec) Encode(cursor catalogCursor) (string, error) {
 
 func (c *catalogCursorCodec) Decode(value string, principal Principal, query, providerKey string) (int, error) {
 	binding := principalCursorBinding(principal)
-	if c == nil || len(c.key) == 0 || value == "" || principal.OrganizationID == "" || binding == "" {
+	if value == "" || principal.OrganizationID == "" || binding == "" {
 		return 0, ErrCatalogCursorInvalid
 	}
 	token, err := base64.RawURLEncoding.DecodeString(value)

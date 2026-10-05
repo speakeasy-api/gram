@@ -78,8 +78,7 @@ func TestSetMCPNetworkAccessHostedToolsetUsesCanonicalPolicy(t *testing.T) {
 	})
 	settings := NewMCPConnectionSettingsService(conn)
 	authorizer := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	service, err := NewMCPConnectionMutationService(conn, settings, unusedConnectionEndpointWriter{}, audit.NewLogger(), authorizer, allowConnectionNetworkAccess{}, plugins.PublicationRequests{}, nil)
-	require.NoError(t, err)
+	service := NewMCPConnectionMutationService(conn, settings, unusedConnectionEndpointWriter{}, audit.NewLogger(), authorizer, allowConnectionNetworkAccess{}, plugins.PublicationRequests{}, nil)
 	before, err := settings.Get(ctx, principal, GetMCPConnectionSettingsInput{
 		ProjectID: project.ID.String(), TargetKind: MCPConnectionSettingsMCPServer, TargetID: toolset.ID.String(),
 	})

@@ -9,6 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 )
 
 // minHoldTTL is the floor applied to every reservation's lifetime.
@@ -45,26 +46,16 @@ type Guard struct {
 // caller's own maximum assertion lifetime plus whatever clock skew it
 // tolerates, since a reservation released while the assertion is still
 // acceptable would let it be replayed.
-//
-// A nil client is refused rather than defaulted. Reserve cannot report a
-// truthful verdict without a store, and the shared no-op cache answers
-// set-if-absent by telling every caller it won, which for a replay guard is
-// the one wrong answer.
-func NewRedisGuard(client *redis.Client, namespace string, maxHold time.Duration) (*Guard, error) {
-	if client == nil {
-		return nil, errors.New("replay: Guard requires a Redis client")
-	}
-	if namespace == "" {
-		return nil, errors.New("replay: Guard requires a namespace")
-	}
-	if maxHold < minHoldTTL {
-		return nil, fmt.Errorf("replay: maxHold must be at least %s", minHoldTTL)
-	}
+func NewRedisGuard(client *redis.Client, namespace string, maxHold time.Duration) *Guard {
+	inv.Require("replay guard",
+		"namespace is set", namespace != "",
+		"maxHold is at least the minimum hold", maxHold >= minHoldTTL,
+	)
 	return &Guard{
 		cache:     cache.NewRedisCacheAdapter(client),
 		namespace: namespace,
 		maxHold:   maxHold,
-	}, nil
+	}
 }
 
 // MaxHold is the longest this guard will keep any reservation. A consumer

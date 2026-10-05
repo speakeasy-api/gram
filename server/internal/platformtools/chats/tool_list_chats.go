@@ -58,10 +58,6 @@ func (s *ListChats) Descriptor() core.ToolDescriptor {
 }
 
 func (s *ListChats) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if s.chat == nil {
-		return fmt.Errorf("chat service not configured")
-	}
-
 	input := listChatsInput{
 		Search:         nil,
 		ExternalUserID: nil,

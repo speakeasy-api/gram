@@ -41,9 +41,6 @@ func (s *Service) HandleTurnStream(w http.ResponseWriter, r *http.Request) error
 	}); err != nil {
 		return err
 	}
-	if s.turnStream == nil {
-		return oops.E(oops.CodeInvalid, nil, "assistant turn streaming is not enabled")
-	}
 
 	chatID, parseErr := uuid.Parse(r.URL.Query().Get("chat_id"))
 	if parseErr != nil {

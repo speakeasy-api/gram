@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -150,27 +149,6 @@ func (m *mockUsageTrackingStrategy) TrackUsage(ctx context.Context, usage *Model
 	return m.trackUsageError
 }
 
-type mockChatTitleGenerator struct {
-	mu        sync.Mutex
-	called    bool
-	err       error
-	chatID    string
-	orgID     string
-	projectID string
-	callCount int
-}
-
-func (m *mockChatTitleGenerator) ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.called = true
-	m.callCount++
-	m.chatID = chatID
-	m.orgID = orgID
-	m.projectID = projectID
-	return m.err
-}
-
 type mockTelemetryLogger struct {
 	mu     sync.Mutex
 	called bool
@@ -236,7 +214,6 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	provisioner := &mockProvisioner{apiKey: "test-api-key"}
 	captureStrategy := &mockMessageCaptureStrategy{}
 	trackingStrategy := &mockUsageTrackingStrategy{}
-	titleGenerator := &mockChatTitleGenerator{}
 	telemetryLogger := &mockTelemetryLogger{}
 
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -251,7 +228,6 @@ func TestChatClient_GetCompletion(t *testing.T) {
 		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
 		trackingStrategy,
-		titleGenerator,
 		telemetryLogger,
 	)
 
@@ -303,10 +279,6 @@ func TestChatClient_GetCompletion(t *testing.T) {
 		trackUsage := trackingStrategy.trackUsageCalled
 		trackingStrategy.mu.Unlock()
 
-		titleGenerator.mu.Lock()
-		titleCalled := titleGenerator.called
-		titleGenerator.mu.Unlock()
-
 		telemetryLogger.mu.Lock()
 		telemetryCalled := telemetryLogger.called
 		telemetryLogger.mu.Unlock()
@@ -314,7 +286,6 @@ func TestChatClient_GetCompletion(t *testing.T) {
 		assert.True(c, startResume, "StartOrResumeChat should be called")
 		assert.True(c, capMsg, "CaptureMessage should be called")
 		assert.True(c, trackUsage, "TrackUsage should be called")
-		assert.True(c, titleCalled, "ScheduleChatTitleGeneration should be called")
 		assert.True(c, telemetryCalled, "CreateLog should be called")
 	}, 10*time.Second, 10*time.Millisecond)
 
@@ -333,9 +304,6 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	assert.Equal(t, 2, trackingStrategy.usage.NativeTokensReasoning)
 	assert.Equal(t, "test-org", trackingStrategy.orgID)
 	assert.Equal(t, projectID.String(), trackingStrategy.projectID)
-	assert.Equal(t, chatID.String(), titleGenerator.chatID)
-	assert.Equal(t, "test-org", titleGenerator.orgID)
-	assert.Equal(t, projectID.String(), titleGenerator.projectID)
 }
 
 func TestChatClient_GetCompletionStream(t *testing.T) {
@@ -385,7 +353,6 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 	provisioner := &mockProvisioner{apiKey: "test-api-key"}
 	captureStrategy := &mockMessageCaptureStrategy{}
 	trackingStrategy := &mockUsageTrackingStrategy{}
-	titleGenerator := &mockChatTitleGenerator{}
 	telemetryLogger := &mockTelemetryLogger{}
 
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -400,7 +367,6 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
 		trackingStrategy,
-		titleGenerator,
 		telemetryLogger,
 	)
 
@@ -455,10 +421,6 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 		trackUsage := trackingStrategy.trackUsageCalled
 		trackingStrategy.mu.Unlock()
 
-		titleGenerator.mu.Lock()
-		titleCalled := titleGenerator.called
-		titleGenerator.mu.Unlock()
-
 		telemetryLogger.mu.Lock()
 		telemetryCalled := telemetryLogger.called
 		telemetryLogger.mu.Unlock()
@@ -466,7 +428,6 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 		assert.True(c, startResume, "StartOrResumeChat should be called")
 		assert.True(c, capMsg, "CaptureMessage should be called")
 		assert.True(c, trackUsage, "TrackUsage should be called")
-		assert.True(c, titleCalled, "ScheduleChatTitleGeneration should be called")
 		assert.True(c, telemetryCalled, "CreateLog should be called")
 	}, 10*time.Second, 10*time.Millisecond)
 
@@ -527,7 +488,6 @@ func TestChatClient_GetCompletionStream_FetchesFallbackUsageWhenFinalUsageChunkM
 		&PlatformKeyResolver{Provisioner: provisioner},
 		&mockMessageCaptureStrategy{},
 		trackingStrategy,
-		&mockChatTitleGenerator{},
 		&mockTelemetryLogger{},
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
@@ -622,7 +582,6 @@ func TestChatClient_GetCompletion_FetchesFallbackUsageWhenInlineCostMissing(t *t
 		&PlatformKeyResolver{Provisioner: provisioner},
 		&mockMessageCaptureStrategy{},
 		trackingStrategy,
-		&mockChatTitleGenerator{},
 		&mockTelemetryLogger{},
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
@@ -716,7 +675,6 @@ func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
 	provisioner := &mockProvisioner{apiKey: "test-api-key"}
 	captureStrategy := &mockMessageCaptureStrategy{}
 	trackingStrategy := &mockUsageTrackingStrategy{}
-	titleGenerator := &mockChatTitleGenerator{}
 	telemetryService := &mockTelemetryLogger{}
 
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -731,7 +689,6 @@ func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
 		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
 		trackingStrategy,
-		titleGenerator,
 		telemetryService,
 	)
 
@@ -831,7 +788,6 @@ func TestChatClient_NormalizesMixedAssistantOnlyForOpenRouterRequest(t *testing.
 		captureStrategy,
 		nil,
 		nil,
-		nil,
 	)
 	client.httpClient = &http.Client{
 		Transport: &testTransport{server: server},
@@ -912,7 +868,6 @@ func TestChatClient_PassesMixedAssistantThroughWhenNormalizeFlagUnset(t *testing
 		&mockMessageCaptureStrategy{},
 		nil,
 		nil,
-		nil,
 	)
 	client.httpClient = &http.Client{
 		Transport: &testTransport{server: server},
@@ -977,7 +932,6 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 				captureError:       tt.captureError,
 			}
 			trackingStrategy := &mockUsageTrackingStrategy{}
-			titleGenerator := &mockChatTitleGenerator{}
 			telemetryService := &mockTelemetryLogger{}
 
 			tracerProvider := testenv.NewTracerProvider(t)
@@ -992,7 +946,6 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 				&PlatformKeyResolver{Provisioner: provisioner},
 				captureStrategy,
 				trackingStrategy,
-				titleGenerator,
 				telemetryService,
 			)
 
@@ -1014,108 +967,6 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 			assert.Contains(t, err.Error(), tt.expectedError)
 		})
 	}
-}
-
-func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.T) {
-	t.Parallel()
-
-	// Create a mock OpenRouter server
-	callCount := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCount++
-		w.Header().Set("Content-Type", "application/json")
-		response := fmt.Sprintf(`{
-			"id": "msg_%d",
-			"model": "openai/gpt-5.4",
-			"choices": [{
-				"message": {
-					"role": "assistant",
-					"content": "Response %d"
-				},
-				"finish_reason": "stop"
-			}],
-			"usage": {
-				"prompt_tokens": 10,
-				"completion_tokens": 5,
-				"total_tokens": 15
-			}
-		}`, callCount, callCount)
-		_, _ = w.Write([]byte(response))
-	}))
-	defer server.Close()
-
-	// Create mocks
-	provisioner := &mockProvisioner{apiKey: "test-api-key"}
-	captureStrategy := &mockMessageCaptureStrategy{}
-	trackingStrategy := &mockUsageTrackingStrategy{}
-	titleGenerator := &mockChatTitleGenerator{}
-	telemetryService := &mockTelemetryLogger{}
-
-	tracerProvider := testenv.NewTracerProvider(t)
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	require.NoError(t, err)
-
-	// Create client
-	client := NewUnifiedClient(
-		testenv.NewLogger(t),
-		guardianPolicy,
-		provisioner,
-		&PlatformKeyResolver{Provisioner: provisioner},
-		captureStrategy,
-		trackingStrategy,
-		titleGenerator,
-		telemetryService,
-	)
-
-	// Override the HTTP client to use the test server
-	client.httpClient = &http.Client{
-		Transport: &testTransport{server: server},
-	}
-
-	// Create test request
-	chatID := uuid.New()
-	projectID := uuid.New()
-	req := CompletionRequest{
-		OrgID:     "test-org",
-		ProjectID: projectID.String(),
-		Messages: []or.ChatMessages{
-			CreateMessageUser("Hello"),
-		},
-		ChatID:      chatID,
-		UsageSource: billing.ModelUsageSourcePlayground,
-		APIKeyID:    "test-api-key-id",
-	}
-
-	// Make multiple completions
-	for range 3 {
-		_, err := client.GetCompletion(context.Background(), req)
-		require.NoError(t, err)
-	}
-
-	// Wait for async operations to complete.
-	// Title generation should be scheduled for each completion since the simple mock always reports isFirstMessage=true.
-	// In production, the real capture strategy only returns isFirstMessage=true on the first call.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		titleGenerator.mu.Lock()
-		count := titleGenerator.callCount
-		titleGenerator.mu.Unlock()
-
-		assert.Equal(c, 3, count, "Title generation should be scheduled when isFirstMessage=true (mock always returns true)")
-	}, 10*time.Second, 10*time.Millisecond)
-}
-
-// trackingTitleGenerator records every ScheduleChatTitleGeneration call with its chatID.
-type trackingTitleGenerator struct {
-	mu    sync.Mutex
-	calls []string // chatIDs for each call
-	err   error
-}
-
-func (m *trackingTitleGenerator) ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.calls = append(m.calls, chatID)
-	return m.err
 }
 
 // trackingCaptureStrategy simulates the real ChatMessageCaptureStrategy counting behavior.
@@ -1206,120 +1057,6 @@ func newMockServer(t *testing.T) *httptest.Server {
 	}))
 }
 
-// BUG: Title generation should NOT be scheduled when ChatID is nil.
-// The title generation activity itself uses GetCompletion with ChatID=uuid.Nil,
-// which means onMessageComplete erroneously schedules another title generation
-// workflow with the nil UUID, creating v1:generate-chat-title:00000000-...
-func TestChatClient_NilChatID_ShouldNotScheduleTitleGeneration(t *testing.T) {
-	t.Parallel()
-
-	server := newMockServer(t)
-	defer server.Close()
-
-	tracerProvider := testenv.NewTracerProvider(t)
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	require.NoError(t, err)
-
-	titleGenerator := &trackingTitleGenerator{}
-	client := NewUnifiedClient(
-		testenv.NewLogger(t),
-		guardianPolicy,
-		&mockProvisioner{apiKey: "test-api-key"},
-		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
-		&mockMessageCaptureStrategy{},
-		&mockUsageTrackingStrategy{},
-		titleGenerator,
-		&mockTelemetryLogger{},
-	)
-	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
-
-	projectID := uuid.New()
-	req := CompletionRequest{
-		OrgID:       "test-org",
-		ProjectID:   projectID.String(),
-		Messages:    []or.ChatMessages{CreateMessageUser("Hello")},
-		ChatID:      uuid.Nil, // No chat - like title generation activity's internal call
-		UsageSource: billing.ModelUsageSourceGram,
-		APIKeyID:    "",
-	}
-
-	_, err = client.GetCompletion(context.Background(), req)
-	require.NoError(t, err)
-
-	require.Never(t, func() bool {
-		titleGenerator.mu.Lock()
-		defer titleGenerator.mu.Unlock()
-		return len(titleGenerator.calls) > 0
-	}, 100*time.Millisecond, 20*time.Millisecond,
-		"title generation must not be scheduled when ChatID is nil")
-}
-
-// Title generation should be scheduled on every completion that has a real ChatID,
-// but NEVER for completions with ChatID == uuid.Nil (e.g. internal title-gen calls).
-func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *testing.T) {
-	t.Parallel()
-
-	server := newMockServer(t)
-	defer server.Close()
-
-	tracerProvider := testenv.NewTracerProvider(t)
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	require.NoError(t, err)
-
-	titleGenerator := &trackingTitleGenerator{}
-	tracker := newTrackingCaptureStrategy()
-	client := NewUnifiedClient(
-		testenv.NewLogger(t),
-		guardianPolicy,
-		&mockProvisioner{apiKey: "test-api-key"},
-		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
-		tracker,
-		&mockUsageTrackingStrategy{},
-		titleGenerator,
-		&mockTelemetryLogger{},
-	)
-	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
-
-	chatID := uuid.New()
-	projectID := uuid.New()
-
-	// Three completions with a valid ChatID
-	for range 3 {
-		_, err := client.GetCompletion(context.Background(), CompletionRequest{
-			OrgID:       "test-org",
-			ProjectID:   projectID.String(),
-			Messages:    []or.ChatMessages{CreateMessageUser("Hello")},
-			ChatID:      chatID,
-			UsageSource: billing.ModelUsageSourcePlayground,
-			APIKeyID:    "key-1",
-		})
-		require.NoError(t, err)
-	}
-
-	// One completion with nil ChatID (simulating title-gen activity's internal call)
-	_, err = client.GetCompletion(context.Background(), CompletionRequest{
-		OrgID:       "test-org",
-		ProjectID:   projectID.String(),
-		Messages:    []or.ChatMessages{CreateMessageUser("Generate title")},
-		ChatID:      uuid.Nil,
-		UsageSource: billing.ModelUsageSourceGram,
-		APIKeyID:    "",
-	})
-	require.NoError(t, err)
-
-	// Only the 3 real-chat completions should trigger title gen, not the nil one.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		titleGenerator.mu.Lock()
-		calls := slices.Clone(titleGenerator.calls)
-		titleGenerator.mu.Unlock()
-
-		assert.Len(c, calls, 3, "title generation should be scheduled for each completion with a valid ChatID")
-		for _, id := range calls {
-			assert.Equal(c, chatID.String(), id, "all title generation calls should use the real chat ID, never nil")
-		}
-	}, 10*time.Second, 10*time.Millisecond)
-}
-
 // Verify that reloading a chat and sending a new message does not duplicate
 // the last message in the history.
 func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
@@ -1340,7 +1077,6 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		tracker,
 		&mockUsageTrackingStrategy{},
-		&mockChatTitleGenerator{},
 		&mockTelemetryLogger{},
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
@@ -1454,7 +1190,6 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 	provisioner := &mockProvisioner{apiKey: "test-api-key"}
 	captureStrategy := &mockMessageCaptureStrategy{}
 	trackingStrategy := &mockUsageTrackingStrategy{}
-	titleGenerator := &mockChatTitleGenerator{}
 	telemetryService := &mockTelemetryLogger{}
 
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -1469,7 +1204,6 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
 		trackingStrategy,
-		titleGenerator,
 		telemetryService,
 	)
 
@@ -1570,7 +1304,6 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 	provisioner := &mockProvisioner{apiKey: "test-api-key"}
 	captureStrategy := &mockMessageCaptureStrategy{}
 	trackingStrategy := &mockUsageTrackingStrategy{}
-	titleGenerator := &mockChatTitleGenerator{}
 	telemetryService := &mockTelemetryLogger{}
 
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -1585,7 +1318,6 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
 		trackingStrategy,
-		titleGenerator,
 		telemetryService,
 	)
 
@@ -1714,7 +1446,6 @@ func TestChatClient_GetCompletion_UnsupportedModelFallback(t *testing.T) {
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
 		&mockUsageTrackingStrategy{},
-		&mockChatTitleGenerator{},
 		&mockTelemetryLogger{},
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
@@ -1772,7 +1503,6 @@ func TestChatClient_GetCompletion_AttributionFields(t *testing.T) {
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
 		&mockUsageTrackingStrategy{},
-		&mockChatTitleGenerator{},
 		&mockTelemetryLogger{},
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
@@ -1941,7 +1671,6 @@ func TestChatClient_GetCompletion_ForwardsMaxTokens(t *testing.T) {
 				&PlatformKeyResolver{Provisioner: provisioner},
 				&mockMessageCaptureStrategy{},
 				&mockUsageTrackingStrategy{},
-				&mockChatTitleGenerator{},
 				&mockTelemetryLogger{},
 			)
 			client.httpClient = &http.Client{Transport: &testTransport{server: server}}

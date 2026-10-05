@@ -728,10 +728,6 @@ func (s *Service) remoteBackendProxyBuilder(
 		return nil, oops.E(oops.CodeUnexpected, err, "load remote mcp server headers").LogError(ctx, logger)
 	}
 
-	if s.remoteProxyManager == nil {
-		return nil, oops.E(oops.CodeUnexpected, nil, "remote MCP proxy manager is unavailable").LogError(ctx, logger)
-	}
-
 	return func(context.Context) (*proxy.Proxy, error) {
 		return s.remoteProxyManager.Build(logger, &server, mcpServer.ID.String(), headers, mcpServer.Visibility, organizationID, projectID.String(), upstreamAuth, wwwAuthenticate, selection, options...), nil
 	}, nil

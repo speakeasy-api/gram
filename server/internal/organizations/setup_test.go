@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/svix/svixtest"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -141,7 +142,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 	}
@@ -225,6 +226,13 @@ func (f *fakeOnboardingTelemetry) IdentifyUser(_ context.Context, distinctID str
 	defer f.mu.Unlock()
 	f.identified = append(f.identified, capturedOnboardingEvent{distinctID: distinctID, properties: properties})
 	return f.identifyErr
+}
+
+func newTestHookEventReader(t *testing.T) organizations.HookEventReader {
+	t.Helper()
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	return telemetryrepo.New(chConn)
 }
 
 func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) {
@@ -315,7 +323,8 @@ func newTestOrganizationsServiceWithOptions(t *testing.T, featureStub orgFeature
 	if useRealFeatures {
 		featureChecker = features
 	}
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, invite, featureChecker, nil, authzEngine, nil, trialNotifier, trialBundleSeeder, posthog, nil, "http://localhost:5173", testOrgHosts(t), auditLogger, svixClient)
+	emailService := email.NewService(logger, newMockLoopsClient(t), email.NewTemplateIDs(map[string]string{}), false)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, invite, featureChecker, newTestHookEventReader(t), authzEngine, emailService, trialNotifier, trialBundleSeeder, posthog, testenv.NewGrowthEmitter(t, logger, conn), "http://localhost:5173", testOrgHosts(t), auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service:  svc,
@@ -379,7 +388,7 @@ func newTestOrganizationsServiceWithEmailEnabled(t *testing.T, emailEnabled bool
 		"setup_task_assignment": "setup-task-assignment-test-id",
 	}), emailEnabled)
 	trialNotifier := &fakeTrialNotifier{}
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, enabledFeatures(), nil, authzEngine, emailService, trialNotifier, productfeatures.SeedEnterpriseTrialBundleTx, nil, nil, "http://localhost:5173", testOrgHosts(t), auditLogger, svixClient)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, enabledFeatures(), newTestHookEventReader(t), authzEngine, emailService, trialNotifier, productfeatures.SeedEnterpriseTrialBundleTx, &fakeOnboardingTelemetry{}, testenv.NewGrowthEmitter(t, logger, conn), "http://localhost:5173", testOrgHosts(t), auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service: svc,

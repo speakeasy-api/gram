@@ -86,26 +86,16 @@ func (m *judgeMetrics) RecordEvaluation(ctx context.Context, orgID string, outco
 		attr.OrganizationID(orgID),
 		attr.Outcome(outcome),
 	)
-	if m.evaluations != nil {
-		m.evaluations.Add(ctx, 1, attrs)
-	}
-	if m.duration != nil {
-		m.duration.Record(ctx, duration.Seconds(), attrs)
-	}
+	m.evaluations.Add(ctx, 1, attrs)
+	m.duration.Record(ctx, duration.Seconds(), attrs)
 }
 
 // RecordRateLimited records a judge evaluation rejected by the rate limiter.
 func (m *judgeMetrics) RecordRateLimited(ctx context.Context, orgID string) {
-	if m.rateLimited == nil {
-		return
-	}
 	m.rateLimited.Add(ctx, 1, metric.WithAttributes(attr.OrganizationID(orgID)))
 }
 
 // RecordConfidence records the confidence score of a matched verdict.
 func (m *judgeMetrics) RecordConfidence(ctx context.Context, orgID string, confidence float64) {
-	if m.confidence == nil {
-		return
-	}
 	m.confidence.Record(ctx, confidence, metric.WithAttributes(attr.OrganizationID(orgID)))
 }

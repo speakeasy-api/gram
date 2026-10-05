@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -340,8 +341,20 @@ type AssistantThread struct {
 	ChatID string
 }
 
-func (a *App) assistantThreadCorrelation(ctx context.Context, thread AssistantThread) (string, error) {
-	queries := assistantrepo.New(a.db)
+// ThreadRouter subscribes assistants to conversations and routes Slack
+// threads to them. It only touches the database, so tiers without Temporal can
+// use it on its own.
+type ThreadRouter struct {
+	db   *pgxpool.Pool
+	repo *triggerrepo.Queries
+}
+
+func NewThreadRouter(db *pgxpool.Pool) *ThreadRouter {
+	return &ThreadRouter{db: db, repo: triggerrepo.New(db)}
+}
+
+func (r *ThreadRouter) assistantThreadCorrelation(ctx context.Context, thread AssistantThread) (string, error) {
+	queries := assistantrepo.New(r.db)
 	if thread.ThreadID == uuid.Nil {
 		chatID, err := uuid.Parse(thread.ChatID)
 		if err != nil {
@@ -374,19 +387,19 @@ func (a *App) assistantThreadCorrelation(ctx context.Context, thread AssistantTh
 // SetAssistantThreadRouteState subscribes or unsubscribes an assistant from
 // the conversation behind one of its threads and from every conversation
 // routed to that thread.
-func (a *App) SetAssistantThreadRouteState(ctx context.Context, thread AssistantThread, state ThreadRouteState) error {
-	correlationID, err := a.assistantThreadCorrelation(ctx, thread)
+func (r *ThreadRouter) SetAssistantThreadRouteState(ctx context.Context, thread AssistantThread, state ThreadRouteState) error {
+	correlationID, err := r.assistantThreadCorrelation(ctx, thread)
 	if err != nil {
 		return err
 	}
 
-	tx, err := a.db.Begin(ctx)
+	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin thread route tx: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	queries := a.repo.WithTx(tx)
+	queries := r.repo.WithTx(tx)
 	if _, err := queries.UpsertTriggerThreadRouteState(ctx, triggerrepo.UpsertTriggerThreadRouteStateParams{
 		ProjectID:      thread.ProjectID,
 		TargetKind:     TargetKindAssistant,
@@ -415,12 +428,12 @@ func (a *App) SetAssistantThreadRouteState(ctx context.Context, thread Assistant
 // RouteSlackThreadToAssistant delivers future events on the Slack thread
 // rooted at threadTS to an assistant thread and subscribes the assistant to
 // it. The assistant has seen the thread up to threadTS.
-func (a *App) RouteSlackThreadToAssistant(ctx context.Context, thread AssistantThread, channelID, threadTS string) error {
-	toCorrelationID, err := a.assistantThreadCorrelation(ctx, thread)
+func (r *ThreadRouter) RouteSlackThreadToAssistant(ctx context.Context, thread AssistantThread, channelID, threadTS string) error {
+	toCorrelationID, err := r.assistantThreadCorrelation(ctx, thread)
 	if err != nil {
 		return err
 	}
-	if _, err := a.repo.RouteTriggerThread(ctx, triggerrepo.RouteTriggerThreadParams{
+	if _, err := r.repo.RouteTriggerThread(ctx, triggerrepo.RouteTriggerThreadParams{
 		ProjectID:            thread.ProjectID,
 		TargetKind:           TargetKindAssistant,
 		TargetRef:            thread.AssistantID.String(),

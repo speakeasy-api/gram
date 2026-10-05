@@ -215,19 +215,10 @@ type SkillEfficacyMetrics struct {
 // They are limited with the other telemetry reads rather than with skill
 // authoring and distribution because the work being limited is a ClickHouse
 // scan. Reading insights must not spend the allowance needed to write a skill.
-//
-// A nil reader leaves both tools registered as stubs.
 func (s *SkillsService) WithInsights(insights SkillInsightsReader, budget OperationBudget) *SkillsService {
-	if s == nil {
-		return nil
-	}
 	s.insights = insights
 	s.insightsBudget = budget
 	return s
-}
-
-func (s *SkillsService) insightsValid() bool {
-	return s.valid() && s.insights != nil && s.insightsBudget.valid() && s.now != nil
 }
 
 // ListSkillInsights ranks a project's skills by activations, sampled efficacy,
@@ -239,9 +230,6 @@ func (s *SkillsService) insightsValid() bool {
 // registry IDs.
 func (s *SkillsService) ListSkillInsights(ctx context.Context, principal Principal, input ListSkillInsightsInput) (ListSkillInsightsOutput, error) {
 	var zero ListSkillInsightsOutput
-	if !s.insightsValid() {
-		return zero, ErrSkillsUnavailable
-	}
 	sortBy := strings.ToLower(strings.TrimSpace(input.SortBy))
 	if sortBy == "" {
 		sortBy = SkillInsightsSortEstimatedMinutesSaved
@@ -308,9 +296,6 @@ func (s *SkillsService) ListSkillInsights(ctx context.Context, principal Princip
 // the same window and with the same numbers ListSkillInsights reports.
 func (s *SkillsService) CompareSkillVersions(ctx context.Context, principal Principal, input CompareSkillVersionsInput) (CompareSkillVersionsOutput, error) {
 	var zero CompareSkillVersionsOutput
-	if !s.insightsValid() {
-		return zero, ErrSkillsUnavailable
-	}
 	skillID := strings.TrimSpace(input.SkillID)
 	if _, err := uuid.Parse(skillID); err != nil {
 		return zero, fmt.Errorf("%w: skill_id must be a skill ID returned by list_skills", ErrRegistrationInvalid)

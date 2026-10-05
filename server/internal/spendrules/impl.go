@@ -75,17 +75,16 @@ type ActorEvaluationSignaler interface {
 }
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	chConn chrepo.CHTX
-	auth   *auth.Auth
-	authz  *authz.Engine
-	audit  *audit.Logger
-	celEng *celenv.Engine
-	cache  cache.Cache
-	flags  feature.Provider
-	// signaler is optional; nil disables mutation-triggered re-evaluation.
+	tracer   trace.Tracer
+	logger   *slog.Logger
+	db       *pgxpool.Pool
+	chConn   chrepo.CHTX
+	auth     *auth.Auth
+	authz    *authz.Engine
+	audit    *audit.Logger
+	celEng   *celenv.Engine
+	cache    cache.Cache
+	flags    feature.Provider
 	signaler EvaluationSignaler
 }
 
@@ -858,18 +857,12 @@ func (s *Service) actorSpendByEmail(ctx context.Context, organizationID string, 
 }
 
 func (s *Service) signalEvaluation(ctx context.Context, organizationID string) {
-	if s.signaler == nil {
-		return
-	}
 	if err := s.signaler.Signal(ctx, organizationID); err != nil {
 		s.logger.ErrorContext(ctx, "signal spend rule evaluation", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
 	}
 }
 
 func (s *Service) refreshGateRules(ctx context.Context, organizationID string, queries *repo.Queries) error {
-	if s.cache == nil {
-		return nil
-	}
 	if !s.budgetsEnabled(ctx, organizationID) {
 		if err := WriteGateRules(ctx, s.cache, organizationID, GateRules{SourceUpdatedAt: time.Now().UTC(), Rules: nil}); err != nil {
 			return fmt.Errorf("clear disabled gate rules: %w", err)
@@ -892,10 +885,6 @@ func (s *Service) refreshGateRulesAfterCommit(ctx context.Context, organizationI
 }
 
 func (s *Service) budgetsEnabled(ctx context.Context, organizationID string) bool {
-	if s.flags == nil {
-		return false
-	}
-
 	var groups map[string]string
 	org, err := orgRepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
 	if err != nil {

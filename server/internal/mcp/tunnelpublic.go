@@ -175,9 +175,6 @@ const (
 )
 
 func newTunnelPublicRuntime(redisClient *redis.Client, meterProvider metric.MeterProvider, metrics *mcpmetrics.Metrics, cfg TunnelPublicConfig) *tunnelPublicRuntime {
-	if redisClient == nil {
-		return nil
-	}
 	cfg = cfg.withDefaults()
 	store := ratelimit.NewRedisStore(redisClient)
 	return &tunnelPublicRuntime{
@@ -275,19 +272,13 @@ func hashSessionID(sid string) string {
 // the tunnel owner's allow_public consent (double opt-in with
 // visibility=public). Every rejection surfaces as 404 so unauthenticated
 // callers cannot distinguish a gated endpoint from a missing one; the
-// distinct causes are logged. A nil runtime (no Redis wired) also fails
-// closed — the abuse controls that bound anonymous traffic cannot run
-// without it.
+// distinct causes are logged.
 func (s *Service) requireTunneledPublicConsent(
 	ctx context.Context,
 	logger *slog.Logger,
 	endpoint *mcpendpointsrepo.McpEndpoint,
 	mcpServer *mcpserversrepo.McpServer,
 ) (*tunneledmcprepo.TunneledMcpServer, error) {
-	if s.tunnelPublic == nil {
-		return nil, oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger.With(attr.SlogErrorMessage("public tunnel runtime unavailable")))
-	}
-
 	source, err := tunneledmcprepo.New(s.db).GetServerByID(ctx, tunneledmcprepo.GetServerByIDParams{
 		ID:        mcpServer.TunneledMcpServerID.UUID,
 		ProjectID: endpoint.ProjectID,

@@ -99,8 +99,7 @@ type Judge struct {
 	stokenCodec *stokens.Codec
 }
 
-// New constructs a Judge. A nil client yields a judge whose Evaluate always
-// returns (nil, nil), so callers can wire it unconditionally.
+// New constructs a Judge.
 func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient, limiter *ratelimit.Limiter) *Judge {
 	logger = logger.With(attr.SlogComponent("risk-llm-judge"))
 	return &Judge{
@@ -114,13 +113,10 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 }
 
 // Evaluate runs the judge and returns a non-nil verdict when the message
-// violates the policy prompt, or a non-matching verdict when it does not. A nil
-// client or an empty prompt/text yields (nil, nil). On judge error or timeout it
+// violates the policy prompt, or a non-matching verdict when it does not. An
+// empty prompt/text yields (nil, nil). On judge error or timeout it
 // returns a non-nil error so callers can apply policy fail-mode.
 func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpolicy.Verdict, error) {
-	if j == nil || j.client == nil {
-		return nil, nil
-	}
 	// Skip only when there is nothing to judge. An empty body is NOT enough:
 	// a no-arg/no-output tool call still carries tool attribution that a
 	// tool-scoped policy ("flag any call to MCP server X") can match, so

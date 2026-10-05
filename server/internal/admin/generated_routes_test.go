@@ -13,7 +13,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/constants"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func TestGeneratedAdminRoutes_ExposeExactMigratedMounts(t *testing.T) {
@@ -56,42 +55,6 @@ func TestGeneratedAdminRoutes_ExposeExactMigratedMounts(t *testing.T) {
 		}
 	}
 	require.Equal(t, want, got)
-}
-
-func TestGeneratedAdminBillingRoutes_MapUnavailable(t *testing.T) {
-	t.Parallel()
-
-	_, svc, _ := newTestAdminService(t)
-	sessionID, err := svc.sessions.Store(t.Context(), StoreParams{
-		Email: "operator@example.com", Name: "Test Operator", OIDCSubject: "sub-admin", HD: testAdminHD,
-		AccessToken: "access-token", RefreshToken: "refresh-token", ExpiresAt: time.Now().Add(time.Hour),
-	})
-	require.NoError(t, err)
-
-	mux := goahttp.NewMuxer()
-	Attach(mux, svc)
-	handler := SessionMiddleware(mux)
-
-	for name, request := range map[string]*http.Request{
-		"summary":                    httptest.NewRequest(http.MethodGet, "/admin/organization.paygBillingSummary?organization_id=org_test", nil),
-		"get customer":               httptest.NewRequest(http.MethodGet, "/admin/organization.stripeCustomer?organization_id=org_test&stripe_customer_id=cus_test", nil),
-		"set customer":               httptest.NewRequest(http.MethodPost, "/admin/organization.setStripeCustomer", bytes.NewBufferString(`{"organization_id":"org_test","stripe_customer_id":"cus_test"}`)),
-		"get subscription candidate": httptest.NewRequest(http.MethodGet, "/admin/organization.stripeSubscriptionCandidate?organization_id=org_test&stripe_subscription_id=sub_test", nil),
-		"set subscription":           httptest.NewRequest(http.MethodPost, "/admin/organization.setStripeSubscription", bytes.NewBufferString(`{"organization_id":"org_test","stripe_subscription_id":"sub_test"}`)),
-		"get subscription":           httptest.NewRequest(http.MethodGet, "/admin/organization.stripeSubscription?organization_id=org_test", nil),
-		"cancel subscription":        httptest.NewRequest(http.MethodPost, "/admin/organization.cancelStripeSubscription", bytes.NewBufferString(`{"organization_id":"org_test"}`)),
-		"resume subscription":        httptest.NewRequest(http.MethodPost, "/admin/organization.resumeStripeSubscription", bytes.NewBufferString(`{"organization_id":"org_test"}`)),
-	} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			request.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
-			rec := httptest.NewRecorder()
-			handler.ServeHTTP(rec, request)
-			require.Equal(t, http.StatusServiceUnavailable, rec.Code)
-			require.Equal(t, string(oops.CodeUnavailable), rec.Header().Get("goa-error"))
-		})
-	}
 }
 
 func TestGeneratedAdminRoutes_AuthenticateBeforeDecode(t *testing.T) {

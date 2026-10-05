@@ -28,12 +28,6 @@ type Handler struct {
 }
 
 func NewHandler(logger *slog.Logger, meterProvider metric.MeterProvider, realScanner, stubScanner *Scanner, findingsPub gcp.Publisher[*riskv1.Finding], gate *scanners.AsyncShadowGate, riskRecorder *metering.RiskRecorder) *Handler {
-	if stubScanner == nil {
-		stubScanner = NewScanner(logger, NoopClassifier)
-	}
-	if realScanner == nil {
-		realScanner = stubScanner
-	}
 	return &Handler{
 		logger:       logger.With(attr.SlogComponent("prompt-injection-analyzer")),
 		findingsPub:  findingsPub,

@@ -754,40 +754,21 @@ func TestSkillsToolResultLeavesUnexpectedFailuresAsErrors(t *testing.T) {
 	require.False(t, ok, "an internal failure is a transport error, not a refusal the model should act on")
 }
 
-// The kill switch must change what a skills tool answers, not whether it
-// exists: a tool that vanishes with the rollout looks to a client exactly like
-// one that was never built.
-func TestSkillsToolsAreDeclaredWithAndWithoutTheirDependencies(t *testing.T) {
+func TestSkillsToolsAreDeclaredOnBothSurfaces(t *testing.T) {
 	t.Parallel()
 
 	wanted := []string{"list_skills", "get_skill", "list_skill_versions", "create_skill", "add_skill_version", "update_skill_metadata", "distribute_skill", "list_skill_distributions", "undistribute_skill", "list_skill_insights", "compare_skill_versions"}
 
-	for _, test := range []struct {
-		name  string
-		build func() *SkillsService
-	}{
-		{name: "composed", build: func() *SkillsService { return testSkillsService(t, &recordingSkillsManagement{skill: testSkill()}) }},
-		{name: "absent", build: func() *SkillsService { return nil }},
-		{name: "incomplete", build: func() *SkillsService {
-			return NewSkillsService(nil, nil, nil, nil, nil, OperationBudget{Connection: nil, Organization: nil})
-		}},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, test.build(), nil, nil, nil, nil, CatalogDescriptor{})
-
-			registered := make(map[string]Descriptor, len(wanted))
-			for _, descriptor := range registrar.Descriptors() {
-				registered[descriptor.Name] = descriptor
-			}
-			for _, name := range wanted {
-				descriptor, ok := registered[name]
-				require.True(t, ok, "tool %q is not registered", name)
-				require.Equal(t, bothAudiences, descriptor.Meta.Audiences, "skills tools serve the assistant as well; the adapter supplies the project it acts in")
-				require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
-			}
-		})
+	_, registrar := newTestServer(t)
+	registered := make(map[string]Descriptor, len(wanted))
+	for _, descriptor := range registrar.Descriptors() {
+		registered[descriptor.Name] = descriptor
+	}
+	for _, name := range wanted {
+		descriptor, ok := registered[name]
+		require.True(t, ok, "tool %q is not registered", name)
+		require.Equal(t, bothAudiences, descriptor.Meta.Audiences, "skills tools serve the assistant as well; the adapter supplies the project it acts in")
+		require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
 	}
 }
 
@@ -1201,7 +1182,7 @@ func TestUndistributeSkillToolRefusesWithoutConfirmation(t *testing.T) {
 	t.Parallel()
 
 	skills := &recordingSkillsManagement{skill: testSkill()}
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, testSkillsService(t, skills), nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newTestServer(t, func(services *Services) { services.Skills = testSkillsService(t, skills) })
 	var descriptor Descriptor
 	for _, candidate := range registrar.Descriptors() {
 		if candidate.Name == "undistribute_skill" {
@@ -1226,7 +1207,9 @@ func TestUndistributeSkillToolRefusesWithoutConfirmation(t *testing.T) {
 func TestListSkillDistributionsToolIsAReadForMembers(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, testSkillsService(t, &recordingSkillsManagement{skill: testSkill()}), nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newTestServer(t, func(services *Services) {
+		services.Skills = testSkillsService(t, &recordingSkillsManagement{skill: testSkill()})
+	})
 	for _, descriptor := range registrar.Descriptors() {
 		if descriptor.Name != "list_skill_distributions" {
 			continue

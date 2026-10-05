@@ -43,9 +43,12 @@ func TestIssuerDiscoveryEvidence(t *testing.T) {
 		name             string
 		profiles, grants []string
 	}{
-		{"none", nil, nil}, {"jwt_only", nil, []string{oauthwire.GrantTypeJWTBearer}},
-		{"profile_only", []string{oauthwire.GrantProfileIDJAG}, nil}, {"both", []string{oauthwire.GrantProfileIDJAG}, []string{oauthwire.GrantTypeJWTBearer}},
-		{"unrelated", []string{"other"}, []string{oauthwire.GrantTypeJWTBearer}}, {"removed", []string{}, []string{}},
+		{"none", nil, nil},
+		{"jwt_only", nil, []string{oauthwire.GrantTypeJWTBearer}},
+		{"profile_only", []string{oauthwire.GrantProfileIDJAG}, nil},
+		{"both", []string{oauthwire.GrantProfileIDJAG}, []string{oauthwire.GrantTypeJWTBearer}},
+		{"unrelated", []string{"other"}, []string{oauthwire.GrantTypeJWTBearer}},
+		{"removed", []string{}, []string{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -234,7 +237,8 @@ func TestIssuerDiscoveryPartialSuccessPreservesStatusAndFreshEvidence(t *testing
 				require.Equal(t, expectedURL, discovered.UnreadableURL)
 				require.Contains(t, discovered.UnreadableMessage, fmt.Sprintf("Unexpected HTTP %d from %s", status, expectedURL))
 				require.NotContains(t, discovered.UnreadableMessage, "private upstream")
-				stored := repo.RemoteSessionIssuer{Issuer: server.URL,
+				stored := repo.RemoteSessionIssuer{
+					Issuer:                              server.URL,
 					AuthorizationGrantProfilesSupported: []string{"stale-profile"},
 					Metadata:                            []byte(fmt.Sprintf(`{"issuer":%q,"authorization_grant_profiles_supported":["stale-profile"],"grant_types_supported":["stale-grant"],"registration_endpoint":"https://stale.example/register"}`, server.URL)),
 				}

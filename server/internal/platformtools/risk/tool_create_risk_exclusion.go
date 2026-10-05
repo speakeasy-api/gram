@@ -95,10 +95,6 @@ func samePolicyBinding(a, b *string) bool {
 }
 
 func (s *CreateRiskExclusion) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if s.risk == nil {
-		return fmt.Errorf("risk service not configured")
-	}
-
 	input := createRiskExclusionInput{
 		RiskPolicyID: nil,
 		MatchType:    "",

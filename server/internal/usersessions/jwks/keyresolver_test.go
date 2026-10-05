@@ -24,8 +24,7 @@ func newTestKeyResolver(t *testing.T, server *keySetServer, rate ratelimit.Rate)
 	t.Helper()
 
 	cache := NewMemoryCache()
-	kr, err := NewKeyResolver(resolverFor(t, server), cache, newTestLimiter(t, rate), nil, testenv.NewLogger(t))
-	require.NoError(t, err)
+	kr := NewKeyResolver(resolverFor(t, server), cache, newTestLimiter(t, rate), newTestLimiter(t, generousRate()), testenv.NewLogger(t))
 	return kr, cache
 }
 
@@ -162,14 +161,13 @@ func TestVerificationKey_FetchScopeBudget(t *testing.T) {
 
 	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
 	cache := NewMemoryCache()
-	kr, err := NewKeyResolver(
+	kr := NewKeyResolver(
 		resolverFor(t, server),
 		cache,
 		newTestLimiter(t, generousRate()),
 		newTestLimiter(t, ratelimit.PerMinute(1)),
 		testenv.NewLogger(t),
 	)
-	require.NoError(t, err)
 
 	// Two sources on one host (the host serves the same set at any path),
 	// so both are reachable and only the budget can refuse the second.
@@ -210,14 +208,13 @@ func TestVerificationKey_FetchScopeBudgetCoversRescreenFailure(t *testing.T) {
 
 	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
 	cache := NewMemoryCache()
-	kr, err := NewKeyResolver(
+	kr := NewKeyResolver(
 		resolverFor(t, server),
 		cache,
 		newTestLimiter(t, generousRate()),
 		newTestLimiter(t, ratelimit.PerMinute(1)),
 		testenv.NewLogger(t),
 	)
-	require.NoError(t, err)
 
 	// Spend the scope's budget on an unrelated cold fetch.
 	other, err := NewRemoteSource(server.server.URL + "/other.json")
@@ -252,14 +249,13 @@ func TestVerificationKey_ScopeDenialDoesNotStampCooldown(t *testing.T) {
 
 	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a"), testKey(t, "b")))
 	cache := NewMemoryCache()
-	kr, err := NewKeyResolver(
+	kr := NewKeyResolver(
 		resolverFor(t, server),
 		cache,
 		newTestLimiter(t, generousRate()),
 		newTestLimiter(t, ratelimit.PerMinute(1)),
 		testenv.NewLogger(t),
 	)
-	require.NoError(t, err)
 
 	// Spend the scope's budget on an unrelated cold fetch.
 	other, err := NewRemoteSource(server.server.URL + "/other.json")
@@ -291,20 +287,19 @@ func TestVerificationKey_RefusedRefreshDoesNotChargeScope(t *testing.T) {
 
 	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a"), testKey(t, "b")))
 	cache := NewMemoryCache()
-	kr, err := NewKeyResolver(
+	kr := NewKeyResolver(
 		resolverFor(t, server),
 		cache,
 		newTestLimiter(t, ratelimit.PerMinute(1)),
 		newTestLimiter(t, ratelimit.PerMinute(2)),
 		testenv.NewLogger(t),
 	)
-	require.NoError(t, err)
 
 	// One forced refresh spends the source's whole budget and one of the
 	// scope's two tokens.
 	probed := remoteSourceFor(t, server).WithFetchScope("tenant-4")
 	primeRotatable(t, cache, probed, keySetJSON(t, testKey(t, "a")))
-	_, err = kr.VerificationKey(t.Context(), probed, "b")
+	_, err := kr.VerificationKey(t.Context(), probed, "b")
 	require.NoError(t, err)
 	require.Equal(t, 1, server.Fetches())
 
@@ -333,18 +328,17 @@ func TestVerificationKey_FetchScopeBudgetCoversRefresh(t *testing.T) {
 
 	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a"), testKey(t, "b")))
 	cache := NewMemoryCache()
-	kr, err := NewKeyResolver(
+	kr := NewKeyResolver(
 		resolverFor(t, server),
 		cache,
 		newTestLimiter(t, generousRate()),
 		newTestLimiter(t, ratelimit.PerMinute(1)),
 		testenv.NewLogger(t),
 	)
-	require.NoError(t, err)
 
 	// One cold fetch spends the scope's whole budget.
 	cold := remoteSourceFor(t, server).WithFetchScope("tenant-2")
-	_, err = kr.VerificationKey(t.Context(), cold, "a")
+	_, err := kr.VerificationKey(t.Context(), cold, "a")
 	require.NoError(t, err)
 	require.Equal(t, 1, server.Fetches())
 
@@ -501,14 +495,13 @@ func TestVerificationKey_InlineUnknownKidTerminal(t *testing.T) {
 
 	source, err := NewInlineSource(keySetJSON(t, testKey(t, "a")))
 	require.NoError(t, err)
-	kr, err := NewKeyResolver(
+	kr := NewKeyResolver(
 		newResolver(nil, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 		NewMemoryCache(),
 		newTestLimiter(t, generousRate()),
-		nil,
+		newTestLimiter(t, generousRate()),
 		testenv.NewLogger(t),
 	)
-	require.NoError(t, err)
 
 	key, err := kr.VerificationKey(t.Context(), source, "a")
 	require.NoError(t, err)
@@ -564,16 +557,15 @@ func TestVerificationKey_CacheReadErrorFailsClosed(t *testing.T) {
 	t.Parallel()
 
 	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
-	kr, err := NewKeyResolver(
+	kr := NewKeyResolver(
 		resolverFor(t, server),
 		&failingCache{getErr: errors.New("store down"), putErr: nil, inner: nil},
 		newTestLimiter(t, generousRate()),
-		nil,
+		newTestLimiter(t, generousRate()),
 		testenv.NewLogger(t),
 	)
-	require.NoError(t, err)
 
-	_, err = kr.VerificationKey(t.Context(), remoteSourceFor(t, server), "a")
+	_, err := kr.VerificationKey(t.Context(), remoteSourceFor(t, server), "a")
 	require.ErrorContains(t, err, "read key set cache")
 	require.Zero(t, server.Fetches(), "a broken store must not degrade into an upstream fetch")
 }
@@ -582,14 +574,13 @@ func TestVerificationKey_CacheWriteFailureDoesNotFailResolution(t *testing.T) {
 	t.Parallel()
 
 	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
-	kr, err := NewKeyResolver(
+	kr := NewKeyResolver(
 		resolverFor(t, server),
 		&failingCache{getErr: nil, putErr: errors.New("store down"), inner: NewMemoryCache()},
 		newTestLimiter(t, generousRate()),
-		nil,
+		newTestLimiter(t, generousRate()),
 		testenv.NewLogger(t),
 	)
-	require.NoError(t, err)
 
 	key, err := kr.VerificationKey(t.Context(), remoteSourceFor(t, server), "a")
 	require.NoError(t, err)
@@ -740,31 +731,13 @@ func TestVerificationKey_LimiterErrorFailsClosed(t *testing.T) {
 	server := newKeySetServer(t, keySetJSON(t, testKey(t, "b")))
 	// An invalid rate makes Allow return an error on every call, standing in
 	// for a limiter store outage.
-	broken := ratelimit.New(nil, t.Name(), ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0})
+	broken := newTestLimiter(t, ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0})
 	cache := NewMemoryCache()
-	kr, err := NewKeyResolver(resolverFor(t, server), cache, broken, nil, testenv.NewLogger(t))
-	require.NoError(t, err)
+	kr := NewKeyResolver(resolverFor(t, server), cache, broken, newTestLimiter(t, generousRate()), testenv.NewLogger(t))
 	source := remoteSourceFor(t, server)
 	primeRotatable(t, cache, source, keySetJSON(t, testKey(t, "a")))
 
-	_, err = kr.VerificationKey(t.Context(), source, "b")
+	_, err := kr.VerificationKey(t.Context(), source, "b")
 	require.ErrorContains(t, err, "rate limiter")
 	require.Zero(t, server.Fetches(), "a limiter outage fails closed, never open")
-}
-
-func TestNewKeyResolver_RequiresDependencies(t *testing.T) {
-	t.Parallel()
-
-	resolver := newResolver(nil, testenv.NewMeterProvider(t), testenv.NewLogger(t))
-	limiter := newTestLimiter(t, generousRate())
-	logger := testenv.NewLogger(t)
-
-	_, err := NewKeyResolver(nil, NewMemoryCache(), limiter, nil, logger)
-	require.Error(t, err)
-	_, err = NewKeyResolver(resolver, nil, limiter, nil, logger)
-	require.Error(t, err)
-	_, err = NewKeyResolver(resolver, NewMemoryCache(), nil, nil, logger)
-	require.Error(t, err)
-	_, err = NewKeyResolver(resolver, NewMemoryCache(), limiter, nil, nil)
-	require.Error(t, err)
 }

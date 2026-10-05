@@ -70,12 +70,8 @@ func (s *Service) SyncApplications(ctx context.Context, payload *gen.SyncApplica
 
 // kickApplicationSync nudges the coordinator off the request path; the
 // schedule picks the connection up within its interval even when the nudge
-// fails or is not configured.
+// fails.
 func (s *Service) kickApplicationSync(ctx context.Context, logger *slog.Logger) {
-	if s.syncTrigger == nil {
-		logger.WarnContext(ctx, "applications sync trigger not configured; waiting for the scheduled pass")
-		return
-	}
 	detached := context.WithoutCancel(ctx)
 	go func() {
 		triggerCtx, cancel := context.WithTimeout(detached, 10*time.Second)

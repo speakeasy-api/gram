@@ -4,46 +4,12 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
-
-func TestMCPConnectionSettingsToolHasSameInputSchemaWhenUnavailable(t *testing.T) {
-	t.Parallel()
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "settings-live", Version: "0.0.1"}, nil))
-	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "settings-unavailable", Version: "0.0.1"}, nil))
-	registerMCPConnectionSettingsTool(live, nil)
-	registerUnavailableMCPConnectionSettingsTool(unavailable)
-	require.JSONEq(t, string(live.Descriptors()[0].InputSchema), string(unavailable.Descriptors()[0].InputSchema))
-	require.Equal(t, live.Descriptors()[0].Meta, unavailable.Descriptors()[0].Meta)
-
-	server := mcp.NewServer(&mcp.Implementation{Name: "settings-fallback", Version: "0.0.1"}, nil)
-	bindExternalTestPrincipal(server)
-	reg := newRegistrar(server)
-	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
-	registerUnavailableMCPConnectionSettingsTool(reg)
-	clientTransport, serverTransport := mcp.NewInMemoryTransports()
-	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
-	require.NoError(t, err)
-	defer func() { _ = serverSession.Close() }()
-	client := mcp.NewClient(&mcp.Implementation{Name: "settings-client", Version: "0.0.1"}, nil)
-	session, err := client.Connect(t.Context(), clientTransport, nil)
-	require.NoError(t, err)
-	defer func() { _ = session.Close() }()
-	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: getMCPConnectionSettingsToolName, Arguments: map[string]any{
-		"project_id": uuid.NewString(), "target_kind": "mcp_server", "target_id": uuid.NewString(),
-	}})
-	require.NoError(t, err)
-	require.True(t, result.IsError)
-	require.Len(t, result.Content, 1)
-	text, ok := result.Content[0].(*mcp.TextContent)
-	require.True(t, ok)
-	require.Contains(t, text.Text, `"code":"feature_unavailable"`)
-}
 
 func TestGetMCPConnectionSettingsScopesExactTargetToProjectAndOrganization(t *testing.T) {
 	t.Parallel()

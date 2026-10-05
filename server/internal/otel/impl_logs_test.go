@@ -76,6 +76,7 @@ func TestLogsPublishesFlattenedRecordsWithAuthenticatedProvenance(t *testing.T) 
 		logPublisher:    publisher,
 		metricPublisher: nil,
 		spanPublisher:   nil,
+		hooksSink:       newRecordingHooksSink(),
 	}
 	projectID := uuid.MustParse(testLogProjectID)
 	ctx := contextvalues.SetAuthContext(t.Context(), testOTELAuthContext(projectID))
@@ -132,6 +133,7 @@ func TestLogsStampsObservedTimeWhenMissing(t *testing.T) {
 		logPublisher:    publisher,
 		metricPublisher: nil,
 		spanPublisher:   nil,
+		hooksSink:       newRecordingHooksSink(),
 	}
 	projectID := uuid.MustParse(testLogProjectID)
 	ctx := contextvalues.SetAuthContext(t.Context(), testOTELAuthContext(projectID))
@@ -175,6 +177,7 @@ func TestLogsRejectsInvalidExportBeforePublishing(t *testing.T) {
 		logPublisher:    publisher,
 		metricPublisher: nil,
 		spanPublisher:   nil,
+		hooksSink:       newRecordingHooksSink(),
 	}
 	projectID := uuid.MustParse(testLogProjectID)
 	ctx := contextvalues.SetAuthContext(t.Context(), testOTELAuthContext(projectID))
@@ -215,6 +218,7 @@ func TestLogsRejectsRecordOverMaximumSizeBeforePublishing(t *testing.T) {
 		logPublisher:    publisher,
 		metricPublisher: nil,
 		spanPublisher:   nil,
+		hooksSink:       newRecordingHooksSink(),
 	}
 	projectID := uuid.MustParse(testLogProjectID)
 	ctx := contextvalues.SetAuthContext(t.Context(), testOTELAuthContext(projectID))

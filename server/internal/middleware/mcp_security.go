@@ -112,7 +112,7 @@ func MCPSecurity(logger *slog.Logger, trustedOrigins []string, safeNavigation fu
 // the route's own handler answers with a page rather than a stream, so a link
 // from another site can still open them.
 func originCheckProbe(r *http.Request, safeNavigation func(*http.Request) bool) *http.Request {
-	if safeNavigation != nil && safeNavigation(r) {
+	if safeNavigation(r) {
 		return r
 	}
 

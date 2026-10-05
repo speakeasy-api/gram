@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/exclusioncore"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
@@ -42,7 +43,7 @@ type postgresRiskProjectResolver struct {
 }
 
 func (r postgresRiskProjectResolver) Resolve(ctx context.Context, organizationID, projectID, projectSlug string) (ResolvedProject, error) {
-	if r.queries == nil || organizationID == "" || (projectID != "" && projectSlug != "") {
+	if organizationID == "" || (projectID != "" && projectSlug != "") {
 		return ResolvedProject{}, ErrRiskReadInvalid
 	}
 	if projectID != "" {
@@ -85,23 +86,11 @@ type RiskReadService struct {
 	loadPolicyDetail   func(context.Context, uuid.UUID, uuid.UUID) (riskPolicySnapshot, string, error)
 }
 
-func newRiskReadService(db *pgxpool.Pool, keyMaterial string) (*RiskReadService, error) {
-	if db == nil {
-		return nil, ErrUnavailable
-	}
+func newRiskReadService(db *pgxpool.Pool, keyMaterial string, catalog policycatalog.Catalog) *RiskReadService {
 	cursor := newRiskCursorCodec(keyMaterial)
-	catalog, err := policycatalog.Build()
-	if err != nil {
-		return nil, fmt.Errorf("build risk policy catalog: %w", err)
-	}
 	fingerprint, err := policycatalog.Fingerprint(catalog)
-	if err != nil {
-		return nil, fmt.Errorf("fingerprint risk policy catalog: %w", err)
-	}
-	versions, err := newRiskVersionCodec(keyMaterial)
-	if err != nil {
-		return nil, err
-	}
+	inv.Require("risk policy catalog", "fingerprints", err)
+	versions := newRiskVersionCodec(keyMaterial)
 	redactionKey := sha256.Sum256([]byte("platform-mcp-risk-value:" + keyMaterial))
 	return &RiskReadService{
 		projects: postgresRiskProjectResolver{queries: platformrepo.New(db)},
@@ -164,7 +153,7 @@ func newRiskReadService(db *pgxpool.Pool, keyMaterial string) (*RiskReadService,
 			}
 			return riskPolicySnapshot{policy: policy, shadowDecisions: decisions}, version, nil
 		},
-	}, nil
+	}
 }
 
 type RiskProject struct {
@@ -273,9 +262,6 @@ type ListRiskExclusionsOutput struct {
 }
 
 func (s *RiskReadService) ListPolicies(ctx context.Context, principal Principal, input ListRiskPoliciesInput) (ListRiskPoliciesOutput, error) {
-	if !s.valid() {
-		return ListRiskPoliciesOutput{}, ErrUnavailable
-	}
 	project, err := s.projects.Resolve(ctx, principal.OrganizationID, input.ProjectID, input.ProjectSlug)
 	if err != nil {
 		return ListRiskPoliciesOutput{}, fmt.Errorf("resolve risk policy list project: %w", err)
@@ -311,9 +297,6 @@ func (s *RiskReadService) ListPolicies(ctx context.Context, principal Principal,
 }
 
 func (s *RiskReadService) GetPolicy(ctx context.Context, principal Principal, input GetRiskPolicyInput) (GetRiskPolicyOutput, error) {
-	if !s.valid() {
-		return GetRiskPolicyOutput{}, ErrUnavailable
-	}
 	project, err := s.projects.Resolve(ctx, principal.OrganizationID, input.ProjectID, input.ProjectSlug)
 	if err != nil {
 		return GetRiskPolicyOutput{}, fmt.Errorf("resolve risk policy project: %w", err)
@@ -343,9 +326,6 @@ func (s *RiskReadService) GetPolicy(ctx context.Context, principal Principal, in
 }
 
 func (s *RiskReadService) ListExclusions(ctx context.Context, principal Principal, input ListRiskExclusionsInput) (ListRiskExclusionsOutput, error) {
-	if !s.valid() {
-		return ListRiskExclusionsOutput{}, ErrUnavailable
-	}
 	project, err := s.projects.Resolve(ctx, principal.OrganizationID, input.ProjectID, input.ProjectSlug)
 	if err != nil {
 		return ListRiskExclusionsOutput{}, fmt.Errorf("resolve risk exclusion list project: %w", err)
@@ -390,10 +370,6 @@ func (s *RiskReadService) ListExclusions(ctx context.Context, principal Principa
 		}
 	}
 	return output, nil
-}
-
-func (s *RiskReadService) valid() bool {
-	return s != nil && s.projects != nil && s.exclusions != nil && s.cursor != nil && len(s.redactionKey) > 0 && s.versions != nil && s.catalog.Schema != "" && s.catalogFingerprint != "" && s.loadPolicyPage != nil && s.loadPolicyDetail != nil
 }
 
 func riskPageLimit(value int) (int, error) {

@@ -139,9 +139,6 @@ func (s *Service) GetMcpServerToolCalls(ctx context.Context, payload *gen.GetMcp
 		}, nil
 	}
 
-	if s.mcpServerHealth == nil {
-		return nil, oops.E(oops.CodeUnavailable, nil, "mcp server health telemetry is unavailable")
-	}
 	correlation := healthCorrelation(target.row)
 	telemetryTarget := MCPServerTelemetryTarget{
 		ProjectID:   target.projectID.String(),

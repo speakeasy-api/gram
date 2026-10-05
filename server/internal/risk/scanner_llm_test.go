@@ -104,7 +104,7 @@ func insertRealtimeEnforcingPolicy(t *testing.T, ti *testInstance, ctx context.C
 // prompt-injection engine records classifications.
 func newLLMModeScanner(t *testing.T, ti *testInstance, pii *instrumentedPIIScanner, engine *recordingPIEngine, flags *feature.InMemory, dispatcher risk.EnforcementDispatcher) *risk.Scanner {
 	t.Helper()
-	scanner, err := risk.NewScannerWithEnforcementDispatcher(
+	scanner := risk.NewScannerWithEnforcementDispatcher(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
@@ -112,11 +112,10 @@ func newLLMModeScanner(t *testing.T, ti *testInstance, pii *instrumentedPIIScann
 		newTestCustomRuleAnalyzer(t, ti.conn),
 		pii,
 		promptinjection.NewScanner(testenv.NewLogger(t), engine.Classify),
-		nil,
+		testPromptPolicyScanner(t),
 		flags,
 		testCELEngine(t),
 		dispatcher, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
-	require.NoError(t, err)
 	return scanner
 }
 

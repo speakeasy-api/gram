@@ -7,8 +7,6 @@ import (
 	"errors"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-
-	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 type pluginRefusalResult struct {
@@ -119,50 +117,6 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 			return plugins.GetMyMCPConnectionStatus(ctx, principal, input)
 		})
 	})
-}
-
-func registerUnavailablePluginTools(reg *Registrar) {
-	for _, tool := range []struct {
-		name        string
-		title       string
-		description string
-		readOnly    bool
-	}{
-		{operationSetPluginAssignments, "Set Plugin Assignments", "Replace the complete assignment set of one exact plugin. This is not switched on for your organization yet.", false},
-		{"list_plugin_assignments", "List Plugin Assignments", "List the roles and directory assignment targets that can receive plugins. This is not switched on for your organization yet.", true},
-		{"list_plugins", "List Plugins", "List the plugins in a project. This is not switched on for your organization yet.", true},
-		{"get_plugin", "Get One Plugin", "Get one plugin and what it carries. This is not switched on for your organization yet.", true},
-		{"get_my_install_instructions", "Get My Install Instructions", "Get non-secret install guidance for an assigned plugin or permitted MCP server. This is not switched on for your organization yet.", true},
-		{"get_my_mcp_access", "Check My MCP Access", "Check your access to one MCP server. This is not switched on for your organization yet.", true},
-		{"get_my_mcp_connection_status", "Check My MCP Connection", "Check your authorization state for one MCP server. This is not switched on for your organization yet.", true},
-	} {
-		manifest := &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description}
-		if tool.readOnly {
-			manifest.Annotations = readOnlyAnnotations()
-		}
-		authority := ExternalAuthorizationOrgAdmin
-		if tool.name == "list_plugins" || tool.name == "get_plugin" || tool.name == "get_my_install_instructions" || tool.name == "get_my_mcp_access" || tool.name == "get_my_mcp_connection_status" {
-			authority = ExternalAuthorizationMember
-		}
-		var discoveryScopes []authz.Scope
-		switch tool.name {
-		case "list_plugins", "get_plugin":
-			discoveryScopes = discoveryOrgRead
-		case "get_my_install_instructions":
-			discoveryScopes = discoveryOrgReadOrMCPConnect
-		case "get_my_mcp_access", "get_my_mcp_connection_status":
-			discoveryScopes = discoveryMCPReadOrConnect
-		}
-		// Audiences match the live registration so an assistant in an
-		// organization without plugins sees a readable refusal rather than a
-		// tool that appears only once the feature is switched on.
-		audiences := externalOnly
-		if tool.name == "list_plugins" || tool.name == "get_plugin" || tool.name == "list_plugin_assignments" {
-			audiences = bothAudiences
-		}
-		addTool(reg, manifest, ToolMeta{Authorization: authority, Audiences: audiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryScopes}, unavailableTool("plugins"))
-	}
-	registerRepublishPluginTool(reg, nil)
 }
 
 const republishPluginDescription = "Request a publish of an explicit project's plugin packages now, for a plugin whose published package is stale (get_plugin reports publication_evidence.fresh=false), instead of waiting for the periodic refresh. " +

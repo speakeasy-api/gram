@@ -249,7 +249,7 @@ func TestAttachBoundsLongTranscriptScanning(t *testing.T) {
 		body, err := json.Marshal(frame)
 		require.NoError(t, err)
 		scanner := &slowScanner{}
-		service := &Service{logger: testenv.NewLogger(t), store: &memoryStore{saved: nil, userID: "", err: nil}, scanner: scanner}
+		service := &Service{logger: testenv.NewLogger(t), metrics: newMetrics(testenv.NewMeterProvider(t), testenv.NewLogger(t)), store: &memoryStore{saved: nil, userID: "", err: nil}, scanner: scanner}
 		key := []byte("EXAMPLE-signing-secret")
 		var config Config
 		config.SigningSecrets = []string{"whsec_" + base64.StdEncoding.EncodeToString(key)}

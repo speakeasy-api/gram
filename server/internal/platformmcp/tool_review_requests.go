@@ -105,9 +105,6 @@ func registerReviewRequestTools(reg *Registrar, service MCPReviewRequestService,
 }
 
 func reviewRequestProject(ctx context.Context, service MCPReviewRequestService, projects MCPReviewProjectResolver, principal Principal, rawProjectID string) (uuid.UUID, error) {
-	if service == nil || projects == nil {
-		return uuid.Nil, ErrUnavailable
-	}
 	project, err := projects.ResolveReviewProject(ctx, principal, rawProjectID)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("resolve MCP review project: %w", err)
@@ -150,20 +147,4 @@ func reviewRequestToolResult(err error) (*mcp.CallToolResult, bool) {
 		return nil, false
 	}
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(payload)}}, IsError: true}, true
-}
-
-func registerUnavailableReviewRequestTools(reg *Registrar) {
-	for _, tool := range []struct {
-		name, title, description string
-		readOnly                 bool
-	}{
-		{"request_mcp_review", "Request Review of an MCP Server", "Ask an administrator to review an MCP server. This is not switched on for your organization yet.", false},
-		{"get_my_mcp_review_request", "Get My MCP Review Request", "Check one MCP review request you submitted. This is not switched on for your organization yet.", true},
-	} {
-		manifest := &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description}
-		if tool.readOnly {
-			manifest.Annotations = readOnlyAnnotations()
-		}
-		addTool(reg, manifest, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_review_requests"))
-	}
 }

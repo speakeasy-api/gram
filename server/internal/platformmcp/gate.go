@@ -26,7 +26,7 @@ func NewOrganizationGate(capabilities CapabilityChecker) *OrganizationGate {
 }
 
 func (g *OrganizationGate) Enabled(ctx context.Context, organizationID string) (bool, error) {
-	if g == nil || g.capabilities == nil || organizationID == "" {
+	if organizationID == "" {
 		return false, ErrUnavailable
 	}
 
@@ -59,7 +59,7 @@ func (g *CatalogRegistrationGate) Enabled(ctx context.Context, organizationID, p
 // without accepting a project selector. Read-only direct inspection
 // needs this gate before it can perform user-directed egress.
 func (g *CatalogRegistrationGate) EnabledOrganization(ctx context.Context, organizationID string) (bool, error) {
-	if g == nil || g.platform == nil || organizationID == "" {
+	if organizationID == "" {
 		return false, ErrUnavailable
 	}
 	enabled, err := g.platform.Enabled(ctx, organizationID)

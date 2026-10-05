@@ -71,22 +71,19 @@ func newLiveWorkloadFixture(t *testing.T) liveWorkloadFixture {
 	require.NoError(t, err)
 
 	store := ratelimit.NewRedisStore(client)
-	keys, err := jwks.NewKeyResolver(
+	keys := jwks.NewKeyResolver(
 		jwks.NewResolver(policy, testenv.NewMeterProvider(t), logger),
 		jwks.NewMemoryCache(),
 		ratelimit.New(store, string(testenv.NewCacheSuffix(t, "workload-live-refresh")), ratelimit.PerMinute(1000)),
 		ratelimit.New(store, string(testenv.NewCacheSuffix(t, "workload-live-fetch")), ratelimit.PerMinute(1000)),
 		logger,
 	)
-	require.NoError(t, err)
 
 	// Any hold covering the grant's own lifetime ceiling satisfies the
 	// verifier; a day is well past it.
-	guard, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "workload-live-replay")), assertioncore.ReplayHoldFor(24*time.Hour))
-	require.NoError(t, err)
+	guard := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "workload-live-replay")), assertioncore.ReplayHoldFor(24*time.Hour))
 
-	verifier, err := workload.NewVerifier(keys, guard)
-	require.NoError(t, err)
+	verifier := workload.NewVerifier(keys, guard)
 
 	organizationID := newLiveWorkloadOrganization(t, conn)
 

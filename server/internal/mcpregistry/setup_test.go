@@ -2,12 +2,13 @@ package mcpregistry
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/stretchr/testify/require"
 	"log"
 	"os"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/stretchr/testify/require"
 )
 
 var infra *testenv.Environment

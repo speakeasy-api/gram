@@ -37,10 +37,6 @@ func NewReapInactiveAssistantRuntimes(logger *slog.Logger, core *assistants.Serv
 }
 
 func (r *ReapInactiveAssistantRuntimes) Do(ctx context.Context, req ReapInactiveAssistantRuntimesRequest) (*ReapInactiveAssistantRuntimesResult, error) {
-	if r.core == nil {
-		return nil, fmt.Errorf("assistants core not configured")
-	}
-
 	result, err := r.core.ReapInactiveAssistantRuntimes(ctx, assistants.ReapInactiveAssistantRuntimesParams{
 		InactivityThreshold: req.InactivityThreshold,
 		BatchSize:           req.BatchSize,
@@ -89,10 +85,6 @@ func NewReapStoppedAssistantRuntimes(logger *slog.Logger, core *assistants.Servi
 }
 
 func (r *ReapStoppedAssistantRuntimes) Do(ctx context.Context, req ReapStoppedAssistantRuntimesRequest) (*ReapStoppedAssistantRuntimesResult, error) {
-	if r.core == nil {
-		return nil, fmt.Errorf("assistants core not configured")
-	}
-
 	result, err := r.core.ReapStoppedAssistantRuntimes(ctx, assistants.ReapStoppedAssistantRuntimesParams{
 		StoppedTTL: req.StoppedTTL,
 		BatchSize:  req.BatchSize,

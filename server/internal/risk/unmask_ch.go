@@ -65,9 +65,6 @@ func (s *Service) unmaskRiskResultFromClickHouse(ctx context.Context, authCtx *c
 		if row.MatchLen == 0 {
 			return nil, oops.E(oops.CodeNotFound, nil, "risk result has no revealable match content")
 		}
-		if s.findingEvidence == nil {
-			return evidenceNotStoredResult(row.ID), nil
-		}
 		match, err := s.findingEvidence.Reveal(ctx, authCtx.ActiveOrganizationID, projectID, row.ID, time.Now().UTC())
 		if errors.Is(err, ErrMCPFindingEvidenceNotStored) {
 			return evidenceNotStoredResult(row.ID), nil

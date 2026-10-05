@@ -66,9 +66,6 @@ type drilldownTarget struct {
 }
 
 func (s *DiagnosticsService) resolveDrilldown(ctx context.Context, principal Principal, projectID, mcpID, window string, budget OperationBudget, spec windowSpec) (drilldownTarget, error) {
-	if !s.valid() || s.drilldown == nil || !budget.valid() {
-		return drilldownTarget{}, ErrUnavailable
-	}
 	if projectID == "" || mcpID == "" {
 		return drilldownTarget{}, fmt.Errorf("project_id and mcp_id are required")
 	}
@@ -316,9 +313,6 @@ type QueryMCPTracesOutput struct {
 }
 
 func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Principal, input QueryMCPTracesInput) (QueryMCPTracesOutput, error) {
-	if s == nil || s.references == nil {
-		return QueryMCPTracesOutput{}, ErrUnavailable
-	}
 	if input.Outcome != "" && !validOutcomeClass(input.Outcome) {
 		return QueryMCPTracesOutput{}, fmt.Errorf("outcome must be one of success, blocked, unauthorized, client_error, server_error, failed, unknown")
 	}
@@ -577,9 +571,6 @@ type GetUserMCPStatusOutput struct {
 }
 
 func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Principal, input GetUserMCPStatusInput) (GetUserMCPStatusOutput, error) {
-	if s == nil || s.references == nil {
-		return GetUserMCPStatusOutput{}, ErrUnavailable
-	}
 	if input.SubjectReference == "" {
 		return GetUserMCPStatusOutput{}, fmt.Errorf("subject_reference is required")
 	}

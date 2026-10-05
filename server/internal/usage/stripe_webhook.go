@@ -213,15 +213,13 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 	if err := tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to commit Stripe webhook transaction").LogError(ctx, logger)
 	}
-	if s.productFeatures != nil {
-		for _, enabledFeature := range result.newlyEnabledFeatures {
-			s.productFeatures.UpdateFeatureCache(ctx, organizationID, enabledFeature, true)
-		}
+	for _, enabledFeature := range result.newlyEnabledFeatures {
+		s.productFeatures.UpdateFeatureCache(ctx, organizationID, enabledFeature, true)
 	}
-	if result.invoicePaymentFailed && s.stripeMetrics != nil {
+	if result.invoicePaymentFailed {
 		s.stripeMetrics.RecordInvoicePaymentFailed(ctx)
 	}
-	if result.subscriptionLost && s.stripeMetrics != nil {
+	if result.subscriptionLost {
 		s.stripeMetrics.RecordSubscriptionLost(ctx)
 	}
 	if reconciler, ok := s.openRouter.(openrouter.DisableStateReconciler); ok {
@@ -300,18 +298,16 @@ func (s *Service) finishPaygCheckout(ctx context.Context, organizationID string)
 	if err != nil {
 		return err
 	}
-	if s.trial != nil {
-		trial, err := trialsrepo.New(s.db).GetTrial(ctx, organizationID)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("read committed trial conversion: %w", err)
-		}
-		// Subscription deletion keeps the customer and converted trial. Pending
-		// notification cleanup must survive it, without stopping an active trial
-		// for a Checkout event that was ignored as ineligible.
-		if trial.ConvertedAt.Valid || (errors.Is(err, pgx.ErrNoRows) && metadata.StripeSubscriptionID.Valid) {
-			if err := s.trial.TrialInactive(ctx, organizationID); err != nil {
-				return fmt.Errorf("stop converted trial notifications: %w", err)
-			}
+	trial, err := trialsrepo.New(s.db).GetTrial(ctx, organizationID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("read committed trial conversion: %w", err)
+	}
+	// Subscription deletion keeps the customer and converted trial. Pending
+	// notification cleanup must survive it, without stopping an active trial
+	// for a Checkout event that was ignored as ineligible.
+	if trial.ConvertedAt.Valid || (errors.Is(err, pgx.ErrNoRows) && metadata.StripeSubscriptionID.Valid) {
+		if err := s.trial.TrialInactive(ctx, organizationID); err != nil {
+			return fmt.Errorf("stop converted trial notifications: %w", err)
 		}
 	}
 	// Reflect a subscription deletion already committed before this cleanup in
@@ -539,9 +535,6 @@ func (s *Service) deactivatePaygSubscription(ctx context.Context, tx pgx.Tx, org
 		return stripeWebhookResult{}, fmt.Errorf("record inactive PAYG billing for OpenRouter chat key: %w", err)
 	}
 
-	if s.auditLogger == nil {
-		return stripeWebhookResult{}, errors.New("audit logger is unavailable")
-	}
 	if err := s.auditLogger.LogOrganizationPaygDeactivated(ctx, tx, audit.LogOrganizationPaygDeactivatedEvent{
 		OrganizationID:   organizationID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, "system"),
@@ -738,9 +731,6 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 		return stripeWebhookResult{}, fmt.Errorf("activate PAYG organization: %w", err)
 	}
 
-	if s.auditLogger == nil {
-		return stripeWebhookResult{}, errors.New("audit logger is unavailable")
-	}
 	if err := s.auditLogger.LogOrganizationPaygActivated(ctx, tx, audit.LogOrganizationPaygActivatedEvent{
 		OrganizationID:   organizationID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, "system"),

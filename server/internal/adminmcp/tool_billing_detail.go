@@ -217,7 +217,7 @@ type OrganizationSpendBreakdown struct {
 	Products []SpendProductDetail `json:"products"`
 }
 
-func registerBillingDetailTools(server *mcp.Server, organizations OrganizationReader, reads BillingDetailReader) {
+func registerBillingDetailTools(server *mcp.Server, reader Reader) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "get_organization_billing_status", Title: "Get Organization Billing Status",
 		Description: "Read stored Stripe-association presence and the associated subscription status for one exact organization. A missing subscription is distinct from an unavailable billing dependency. No provider IDs, payment details, contact data or provider metadata are returned.",
@@ -226,7 +226,7 @@ func registerBillingDetailTools(server *mcp.Server, organizations OrganizationRe
 		if !verifiedStaff(ctx) {
 			return nil, BillingStatusDetail{}, errBillingDetailUnavailable
 		}
-		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
+		org, err := readExactOrganization(ctx, reader, input.OrganizationID)
 		if err != nil {
 			return nil, BillingStatusDetail{}, err
 		}
@@ -237,10 +237,7 @@ func registerBillingDetailTools(server *mcp.Server, organizations OrganizationRe
 		if !out.HasStripeSubscription {
 			return nil, out, nil
 		}
-		if reads == nil {
-			return nil, BillingStatusDetail{}, errBillingDetailUnavailable
-		}
-		subscription, err := reads.GetStripeSubscription(ctx, &gen.GetStripeSubscriptionPayload{OrganizationID: org.ID})
+		subscription, err := reader.GetStripeSubscription(ctx, &gen.GetStripeSubscriptionPayload{OrganizationID: org.ID})
 		if err != nil || subscription == nil || !validBillingStatus(subscription) {
 			return nil, BillingStatusDetail{}, errBillingDetailUnavailable
 		}
@@ -270,14 +267,11 @@ func registerBillingDetailTools(server *mcp.Server, organizations OrganizationRe
 		if !validMeterFamily(input.Family) || !validBillingDateWindow(input.From, input.To) {
 			return nil, OrganizationMeterUsageDetail{}, errors.New("provide a supported meter family and a valid billing date window")
 		}
-		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
+		org, err := readExactOrganization(ctx, reader, input.OrganizationID)
 		if err != nil {
 			return nil, OrganizationMeterUsageDetail{}, err
 		}
-		if reads == nil {
-			return nil, OrganizationMeterUsageDetail{}, errBillingDetailUnavailable
-		}
-		report, err := reads.GetMeterUsage(ctx, &gen.GetMeterUsagePayload{OrganizationID: org.ID, Family: input.Family, From: input.From, To: input.To})
+		report, err := reader.GetMeterUsage(ctx, &gen.GetMeterUsagePayload{OrganizationID: org.ID, Family: input.Family, From: input.From, To: input.To})
 		if err != nil || report == nil || report.Window == nil || report.Family != input.Family || len(report.Buckets) > maxBillingDetailBuckets || !validMeterReport(report) {
 			return nil, OrganizationMeterUsageDetail{}, errBillingDetailUnavailable
 		}
@@ -309,14 +303,11 @@ func registerBillingDetailTools(server *mcp.Server, organizations OrganizationRe
 		if !validBillingDateWindow(input.From, input.To) {
 			return nil, OrganizationSpendBreakdown{}, errors.New("provide a valid billing date window")
 		}
-		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
+		org, err := readExactOrganization(ctx, reader, input.OrganizationID)
 		if err != nil {
 			return nil, OrganizationSpendBreakdown{}, err
 		}
-		if reads == nil {
-			return nil, OrganizationSpendBreakdown{}, errBillingDetailUnavailable
-		}
-		report, err := reads.GetSpendBreakdown(ctx, &gen.GetSpendBreakdownPayload{OrganizationID: org.ID, From: input.From, To: input.To})
+		report, err := reader.GetSpendBreakdown(ctx, &gen.GetSpendBreakdownPayload{OrganizationID: org.ID, From: input.From, To: input.To})
 		if err != nil || report == nil || report.Window == nil || len(report.Products) > maxBillingDetailProducts || !validSpendReport(report) {
 			return nil, OrganizationSpendBreakdown{}, errBillingDetailUnavailable
 		}

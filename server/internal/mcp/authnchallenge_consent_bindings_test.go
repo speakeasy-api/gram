@@ -24,14 +24,20 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
@@ -45,8 +51,13 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 	policy, policyErr := guardian.NewUnsafePolicy(ti.tracerProvider, []string{})
 	require.NoError(t, policyErr)
 	meterProvider := testenv.NewMeterProvider(t)
-	refresher := remotesessions.NewRefreshService(ti.logger, meterProvider, ti.conn, ti.enc, policy, nil, ti.cacheAdapter)
-	bindings := remotesessions.NewService(ti.logger, ti.tracerProvider, meterProvider, ti.conn, ti.sessionManager, ti.authzEngine, ti.enc, nil, policy, nil, ti.audit, ti.serverURL, remotesessions.NewIdentityCommitter(ti.logger, ti.conn, ti.enc, ti.audit, ti.serverURL, policy, nil, nil), refresher, nil)
+	tunnels := tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", policy, nil)
+	refresher := remotesessions.NewRefreshService(ti.logger, meterProvider, ti.conn, ti.enc, policy, tunnels, ti.cacheAdapter)
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	env := environments.NewEnvironmentEntries(ti.logger, ti.conn, ti.enc, mcpmetadata_repo.New(ti.conn))
+	features := productfeatures.NewClient(ti.logger, ti.tracerProvider, ti.conn, redisClient)
+	bindings := remotesessions.NewService(ti.logger, ti.tracerProvider, meterProvider, ti.conn, ti.sessionManager, ti.authzEngine, ti.enc, env, policy, tunnels, ti.audit, ti.serverURL, remotesessions.NewIdentityCommitter(ti.logger, ti.conn, ti.enc, ti.audit, ti.serverURL, policy, tunnels, registration.NewMetrics(testenv.NewLogger(t), testenv.NewMeterProvider(t))), refresher, features)
 	bindings.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
 		require.False(t, contextvalues.HasValidatedGramSession(ctx))
 		auth, ok := contextvalues.GetAuthContext(ctx)

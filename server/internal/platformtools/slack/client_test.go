@@ -37,7 +37,7 @@ func TestSlackTool_MissingTokenReturnsHelpfulError(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewReadUserProfileTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callReadUserProfile,
 	}
 

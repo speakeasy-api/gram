@@ -24,13 +24,10 @@ import (
 
 var _ gen.Service = (*Service)(nil)
 
-// AttachDiscovery mounts nothing until both persistence and authorization are ready.
+// AttachDiscovery mounts the discovery API when enabled, once persistence is ready.
 func (s *Service) AttachDiscovery(ctx context.Context, logger *slog.Logger, mux goahttp.Muxer, enabled bool, a *auth.Auth, az *authz.Engine) error {
 	if !enabled {
 		return nil
-	}
-	if a == nil || az == nil {
-		return errors.New("registry discovery authorization unavailable")
 	}
 	if err := s.Ready(ctx); err != nil {
 		return err
@@ -84,15 +81,12 @@ func (m discoveryMux) Handle(method, path string, h http.HandlerFunc) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
-	if s.auth == nil {
-		return ctx, oops.C(oops.CodeUnauthorized)
-	}
 	return s.auth.Authorize(ctx, key, scheme)
 }
 
 func (s *Service) authorizeDiscovery(ctx context.Context, updated *string) error {
 	a, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || a == nil || a.ProjectID == nil || s.authz == nil {
+	if !ok || a == nil || a.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: a.ProjectID.String(), Dimensions: nil}); err != nil {

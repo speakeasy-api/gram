@@ -74,7 +74,7 @@ func NewOAuthHTTP(config *Config) *OAuthHTTP {
 // process restart. Only the local configurator calls this after validating the
 // persisted no-secret client contract and its fixed callback URL.
 func (s *OAuthHTTP) RestoreRegisteredClient(clientID string) error {
-	if s == nil || s.config == nil || clientID == "" {
+	if clientID == "" {
 		return fmt.Errorf("local fixture client cannot be restored")
 	}
 	s.mu.Lock()
@@ -88,10 +88,6 @@ func (s *OAuthHTTP) RestoreRegisteredClient(clientID string) error {
 
 func (s *OAuthHTTP) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s == nil || s.config == nil {
-			http.NotFound(w, r)
-			return
-		}
 		w.Header().Set("Cache-Control", "no-store")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/.well-known/oauth-authorization-server/"+fixtureOAuthPath:
@@ -305,7 +301,7 @@ func (s *OAuthHTTP) issueTokens(w http.ResponseWriter, clientID string) {
 }
 
 func (s *OAuthHTTP) HasRegisteredClient(clientID string) bool {
-	if s == nil || clientID == "" {
+	if clientID == "" {
 		return false
 	}
 	s.mu.Lock()
@@ -318,7 +314,7 @@ func (s *OAuthHTTP) HasRegisteredClient(clientID string) bool {
 // It is intentionally the only token-store operation exposed to the fixture MCP
 // handler; token values never leave the localfixture package or reach logs.
 func (s *OAuthHTTP) HasLiveAccessToken(token string) bool {
-	if s == nil || token == "" {
+	if token == "" {
 		return false
 	}
 	s.mu.Lock()

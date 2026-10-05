@@ -120,15 +120,6 @@ func (s *Service) authenticateOAuthClient(ctx context.Context, logger *slog.Logg
 // when the assertion verified. Every rejection reason comes from the
 // verifier's vocabulary so the logs read the same at both endpoints.
 func (s *Service) verifyClientAssertion(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, at clientAssertionEndpoint, row *usersessions_repo.UserSessionClient, assertion privatekeyjwt.Assertion, baseURL string) string {
-	if s.clientAssertionVerifier == nil {
-		// No shared store, no single-use guarantee. Refused, and loudly:
-		// this is a surface that should not be receiving these requests.
-		logger.ErrorContext(ctx, "client assertion presented on a surface with no verifier, refusing",
-			attr.SlogOAuthClientID(row.ClientID),
-		)
-		return "assertion_verifier_unavailable"
-	}
-
 	keySource, err := clientKeySource(row)
 	if err != nil {
 		logger.ErrorContext(ctx, "assertion client has no usable key source, failing closed",

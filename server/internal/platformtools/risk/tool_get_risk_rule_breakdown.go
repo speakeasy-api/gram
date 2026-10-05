@@ -56,10 +56,6 @@ func (s *GetRiskRuleBreakdown) Descriptor() core.ToolDescriptor {
 }
 
 func (s *GetRiskRuleBreakdown) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if s.risk == nil {
-		return fmt.Errorf("risk service not configured")
-	}
-
 	input := getRiskRuleBreakdownInput{Category: "", From: nil, To: nil}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err

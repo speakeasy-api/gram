@@ -35,10 +35,6 @@ type AsyncScanHandlerMetrics struct {
 }
 
 func NewAsyncScanHandlerMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *AsyncScanHandlerMetrics {
-	if meterProvider == nil {
-		return &AsyncScanHandlerMetrics{handledMessages: nil}
-	}
-
 	ctx := context.Background()
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/scanners")
 	handledMessages, err := meter.Int64Counter(
@@ -54,10 +50,6 @@ func NewAsyncScanHandlerMetrics(meterProvider metric.MeterProvider, logger *slog
 }
 
 func (m *AsyncScanHandlerMetrics) RecordHandled(ctx context.Context, orgID, scanner, engine, outcome string, gateReason AsyncShadowGateReason) {
-	if m == nil || m.handledMessages == nil {
-		return
-	}
-
 	m.handledMessages.Add(ctx, 1, metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attribute.String("scanner", scanner),

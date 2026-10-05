@@ -37,9 +37,7 @@ import (
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-var (
-	infra *testenv.Environment
-)
+var infra *testenv.Environment
 
 type noopCancelScheduler struct{}
 
@@ -162,7 +160,39 @@ func createMockWorkOSServer(userInfo *MockUserInfo) *httptest.Server {
 func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, *testInstance) {
 	t.Helper()
 
-	return newTestAuthServiceWithWorkOSClient(t, userInfo, nil)
+	return newTestAuthServiceWithWorkOSClient(t, userInfo, newMockWorkOSFetcherFromUserInfo(userInfo))
+}
+
+// newMockWorkOSFetcherFromUserInfo models WorkOS as knowing the user's
+// memberships in every mock organization that carries a WorkOS ID.
+func newMockWorkOSFetcherFromUserInfo(userInfo *MockUserInfo) *mockWorkOSFetcher {
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{},
+		orgs:    map[string]*workos.Organization{},
+	}
+	for _, org := range userInfo.Organizations {
+		if org.WorkosID == nil {
+			continue
+		}
+		fetcher.members[userInfo.UserID] = append(fetcher.members[userInfo.UserID], workos.Member{
+			ID:             "om_" + org.ID,
+			UserID:         userInfo.UserID,
+			OrganizationID: *org.WorkosID,
+			Organization:   org.Name,
+			RoleSlugs:      nil,
+			Status:         "active",
+			CreatedAt:      "",
+			UpdatedAt:      "",
+		})
+		fetcher.orgs[*org.WorkosID] = &workos.Organization{
+			ID:         *org.WorkosID,
+			Name:       org.Name,
+			ExternalID: org.ID,
+			CreatedAt:  "",
+			UpdatedAt:  "",
+		}
+	}
+	return fetcher
 }
 
 func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, workosClient identity.WorkOSClient) (context.Context, *testInstance) {
@@ -195,7 +225,8 @@ func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, wo
 
 	authzProvisioner := authz.NewProvisioner(conn)
 	cacheSuffix := testenv.NewCacheSuffix(t, cache.Suffix("auth"))
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, workosClient, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, nil, cacheSuffix)
+	growthEmitter := testenv.NewGrowthEmitter(t, logger, conn)
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, workosClient, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, growthEmitter, cacheSuffix)
 	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cacheSuffix, idpClient, billingClient, resolver)
 
 	authConfigs := auth.AuthConfigurations{
@@ -208,7 +239,7 @@ func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, wo
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential})
 	trialNotifier := &fakeTrialNotifier{}
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nil, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, growthEmitter, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
 	result := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	result.authorizer = auth.New(logger, conn, sessionManager, authzEngine)
 	result.trialNotifier = trialNotifier
@@ -262,7 +293,8 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 
 	authzProvisioner := authz.NewProvisioner(conn)
 	cacheSuffix := testenv.NewCacheSuffix(t, cache.Suffix("auth"))
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, nil, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, nil, cacheSuffix)
+	growthEmitter := testenv.NewGrowthEmitter(t, logger, conn)
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, newMockWorkOSFetcherFromUserInfo(userInfo), orgRepo.New(conn), userRepo.New(conn), pylon, posthog, growthEmitter, cacheSuffix)
 	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cacheSuffix, idpClient, billingClient, resolver)
 
 	authConfigs := auth.AuthConfigurations{
@@ -275,7 +307,7 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential})
 	trialNotifier := &fakeTrialNotifier{}
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nil, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, growthEmitter, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
 	result := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	result.authorizer = auth.New(logger, conn, sessionManager, authzEngine)
 	result.trialNotifier = trialNotifier

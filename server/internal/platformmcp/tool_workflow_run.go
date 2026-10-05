@@ -40,19 +40,6 @@ func workflowRunToolResult(err error) (*mcp.CallToolResult, bool) {
 }
 
 func registerWorkflowRunTool(reg *Registrar, workflowRun *WorkflowRunService) {
-	if !workflowRun.valid() {
-		addTool(reg, &mcp.Tool{
-			Name:        recordWorkflowRunToolName,
-			Title:       "Record Workflow Run",
-			Description: "Record what one run of a Speakeasy workflow handled. This is not switched on for your organization yet.",
-		}, ToolMeta{
-			Authorization: ExternalAuthorizationOrgAdmin,
-			Audiences:     bothAudiences,
-			ProjectScope:  ProjectScopeNone,
-		}, unavailableTool("platform_mcp_workflow_run_reporting"))
-		return
-	}
-
 	addTool(reg, &mcp.Tool{
 		Name:        recordWorkflowRunToolName,
 		Title:       "Record Workflow Run",

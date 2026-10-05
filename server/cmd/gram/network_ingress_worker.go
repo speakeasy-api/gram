@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -34,14 +35,11 @@ const (
 	networkIngressWorkerStartupTimeout  = 30 * time.Second
 )
 
-func validateNetworkIngressWorkerTemporalTLS(environment, cert, key string) error {
-	if (cert == "") != (key == "") {
-		return errors.New("private ingress Temporal client certificate and key must be configured together")
-	}
-	if environment != "local" && cert == "" {
-		return errors.New("private ingress Temporal mTLS is required outside local development")
-	}
-	return nil
+func requireNetworkIngressWorkerTemporalTLS(environment, cert, key string) {
+	inv.Require("private ingress Temporal mTLS",
+		"client certificate and key are configured together", (cert == "") == (key == ""),
+		"is configured outside local development", environment == "local" || cert != "",
+	)
 }
 
 func checkNetworkIngressWorkerKubernetes(ctx context.Context, clientset kubernetes.Interface) error {
@@ -68,14 +66,11 @@ func checkNetworkIngressWorkerKubernetes(ctx context.Context, clientset kubernet
 	return nil
 }
 
-func validateNetworkIngressWorkerQueue(queue, sharedQueue string) error {
-	if queue == "" {
-		return errors.New("private ingress reconciliation task queue is required")
-	}
-	if queue == sharedQueue {
-		return errors.New("private ingress reconciliation task queue must differ from the shared worker queue")
-	}
-	return nil
+func requireNetworkIngressWorkerQueue(queue, sharedQueue string) {
+	inv.Require("private ingress reconciliation task queue",
+		"is set", queue != "",
+		"differs from the shared worker queue", queue != sharedQueue,
+	)
 }
 
 func newNetworkIngressWorkerCommand() *cli.Command {
@@ -117,15 +112,9 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 		},
 		Action: func(c *cli.Context) error {
 			queue := c.String(networkIngressQueueFlag)
-			if err := validateNetworkIngressWorkerQueue(queue, c.String("shared-worker-task-queue")); err != nil {
-				return err
-			}
-			if err := validateNetworkIngressWorkerTemporalTLS(c.String("environment"), c.String("temporal-client-cert"), c.String("temporal-client-key")); err != nil {
-				return err
-			}
-			if c.String("network-ingress-operator-namespace") == "" {
-				return errors.New("private ingress operator namespace is required for observation and cleanup")
-			}
+			requireNetworkIngressWorkerQueue(queue, c.String("shared-worker-task-queue"))
+			requireNetworkIngressWorkerTemporalTLS(c.String("environment"), c.String("temporal-client-cert"), c.String("temporal-client-key"))
+			inv.Require("private ingress operator namespace", "is set", c.String("network-ingress-operator-namespace") != "")
 
 			serviceName := "gram-network-ingress-worker"
 			serviceEnv := c.String("environment")
@@ -162,9 +151,6 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			if temporalEnv == nil {
-				return errors.New("insufficient options to create Temporal client")
-			}
 			defer func() { _ = shutdownTemporal(context.WithoutCancel(ctx)) }()
 
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{enableUnsafeLogging: c.Bool("unsafe-db-log")})
@@ -177,19 +163,15 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			if config.ProviderMutationsEnabled && !config.MutationReady() {
-				return errors.New("private ingress provider mutation configuration is incomplete")
-			}
 			var encryptionClient *encryption.Client
 			if key := c.String("encryption-key"); key != "" {
 				encryptionClient, err = encryption.New(key)
-				if err != nil {
-					return fmt.Errorf("create encryption client: %w", err)
-				}
+				inv.Require("encryption client", "encryption-key is a valid AES-256 key", err)
 			}
-			if config.ProviderMutationsEnabled && encryptionClient == nil {
-				return errors.New("private ingress encryption key is required when provider mutations are enabled")
-			}
+			inv.Require("private ingress provider mutations",
+				"configuration is complete when enabled", !config.ProviderMutationsEnabled || config.MutationReady(),
+				"encryption key is set when enabled", !config.ProviderMutationsEnabled || encryptionClient != nil,
+			)
 			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, serviceEnv, "", "")
 			if err != nil {
 				return fmt.Errorf("create Kubernetes client: %w", err)
@@ -201,14 +183,8 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			if c.Bool(pluginPublicationEmitFlagName) {
 				publicationRequester = plugins.PublicationRequests{Enabled: true}
 			}
-			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, config, publicationRequester)
-			if err != nil {
-				return err
-			}
-			worker, err := background.NewNetworkIngressWorker(temporalEnv, db, executor)
-			if err != nil {
-				return fmt.Errorf("configure private ingress worker: %w", err)
-			}
+			executor := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, config, publicationRequester)
+			worker := background.NewNetworkIngressWorker(temporalEnv, db, executor)
 
 			healthListener, err := net.Listen("tcp", c.String("control-address"))
 			if err != nil {

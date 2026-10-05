@@ -67,7 +67,7 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 			}
 			return nil, RegisterCatalogMCPToolOutput{}, err
 		}
-		if onboarding != nil && principal.HasConnection() {
+		if principal.HasConnection() {
 			// Registration has committed before this projection work begins. A
 			// bookkeeping failure must not tell the caller that the durable
 			// registration failed and encourage a duplicate retry; returning the
@@ -133,7 +133,7 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 			}
 			return nil, RegisterRemoteMCPToolOutput{}, err
 		}
-		if onboarding != nil && principal.HasConnection() {
+		if principal.HasConnection() {
 			// Registration has committed before this projection work begins. A
 			// bookkeeping failure must not tell the caller that the durable
 			// registration failed and encourage a duplicate retry; returning the

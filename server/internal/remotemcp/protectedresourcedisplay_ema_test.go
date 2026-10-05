@@ -1,6 +1,8 @@
 package remotemcp_test
 
 import (
+	"testing"
+
 	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -9,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestUpdateServer_EMABindingBlocksResourceIdentityChange(t *testing.T) {

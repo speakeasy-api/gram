@@ -124,9 +124,6 @@ func (t *Insights) Descriptor() core.ToolDescriptor {
 }
 
 func (t *Insights) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if t.skills == nil || t.insights == nil {
-		return fmt.Errorf("skill insights dependencies not configured")
-	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx.ProjectID == nil {
 		return fmt.Errorf("skill insights requires project auth context")

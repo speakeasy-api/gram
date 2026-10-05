@@ -9,14 +9,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 func TestSignedTokensRequireExactIssuer(t *testing.T) {
 	t.Parallel()
 	key, keys, policy := newRSAKeyPolicyFixture(t, 2048)
 	verifier := NewIDTokenVerifier(keys)
-	enricher := NewSessionEnricher(testenv.NewLogger(t), nil, policy, keys, nil, nil, nil)
+	enricher := NewSessionEnricher(testenv.NewLogger(t), nil, policy, keys, nil, tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", policy, nil), nil)
 	for _, tc := range []struct{ name, expected, advertised string }{
 		{"exact slash", "/tenant/", "/tenant/"},
 		{"exact no slash", "/tenant", "/tenant"},

@@ -110,7 +110,6 @@ func TestRiskFindingRelayEligibility(t *testing.T) {
 		reason relayReason
 		ok     bool
 	}{
-
 		{name: "new finding", mutate: func(f *riskv1.Finding) { f.SetEventKind("finding") }, ok: true},
 		{name: "legacy new finding", mutate: func(f *riskv1.Finding) { f.SetEventKind("") }, ok: true},
 		{name: "dead letter", mutate: func(f *riskv1.Finding) { f.SetDeadLetterReason("scanner failed") }, reason: relayReasonDeadLetter},
@@ -141,6 +140,7 @@ func TestRiskFindingRelayEligibility(t *testing.T) {
 		})
 	}
 }
+
 func TestRiskFindingRelayNeverExportsMatchWithExcludePolicy(t *testing.T) {
 	t.Parallel()
 
@@ -299,11 +299,8 @@ func TestRiskFindingRelayIsolatesCollectorFailuresByProject(t *testing.T) {
 	)
 	createRelayTestRoute(t, db, "org-test", failingProjectID, dataexports.DataSourceRiskFindings, true, uuid.NullUUID{UUID: failingDestination.ID, Valid: true})
 	createRelayTestRoute(t, db, "org-test", successProjectID, dataexports.DataSourceRiskFindings, true, uuid.NullUUID{UUID: successDestination.ID, Valid: true})
-	handler := &RiskFindingRelayHandler{
-		logger: testenv.NewLogger(t),
-		relay:  newSignalRelay(db, enc, productRelay.policy, dataexports.DataSourceRiskFindings, "/v1/logs", "risk finding"),
-		now:    func() time.Time { return riskFindingRelayObservedAt },
-	}
+	handler := NewRiskFindingRelayHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, enc, productRelay.policy)
+	handler.now = func() time.Time { return riskFindingRelayObservedAt }
 
 	failing, _, ok := newRiskFindingRelayMessage(riskFindingRelayTestFinding(failingProjectID), nil)
 	require.True(t, ok)
@@ -403,11 +400,8 @@ func TestRiskFindingRelaySkipsExclusionLookupWithoutDestination(t *testing.T) {
 
 	db, enc, productRelay := newRelayRouteTest(t, "/v1/logs")
 	projectID := createRelayTestProject(t, db, "org-test")
-	handler := &RiskFindingRelayHandler{
-		logger: testenv.NewLogger(t),
-		relay:  newSignalRelay(db, enc, productRelay.policy, dataexports.DataSourceRiskFindings, "/v1/logs", "risk finding"),
-		now:    func() time.Time { return riskFindingRelayObservedAt },
-	}
+	handler := NewRiskFindingRelayHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, enc, productRelay.policy)
+	handler.now = func() time.Time { return riskFindingRelayObservedAt }
 	destination, err := handler.relay.destinationForRoute(t.Context(), relayRouteKey{
 		organizationID: "org-test",
 		projectID:      projectID,
@@ -447,11 +441,8 @@ func newRiskFindingRelayTestHandler(t *testing.T, endpoint, sensitiveDataPolicy 
 		sensitiveDataPolicy,
 	)
 	createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceRiskFindings, true, uuid.NullUUID{UUID: destination.ID, Valid: true})
-	handler := &RiskFindingRelayHandler{
-		logger: testenv.NewLogger(t),
-		relay:  newSignalRelay(db, enc, productRelay.policy, dataexports.DataSourceRiskFindings, "/v1/logs", "risk finding"),
-		now:    func() time.Time { return riskFindingRelayObservedAt },
-	}
+	handler := NewRiskFindingRelayHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, enc, productRelay.policy)
+	handler.now = func() time.Time { return riskFindingRelayObservedAt }
 	return handler, projectID
 }
 

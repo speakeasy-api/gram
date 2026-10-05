@@ -27,7 +27,7 @@ const maxSlackUnfurlLinks = 10
 // database lookups — so an unfurl reveals nothing beyond what the pasted URL
 // already shows to everyone in the channel.
 func (a *App) unfurlSlackGramLinks(ctx context.Context, instance triggerrepo.TriggerInstance, env map[string]string, body []byte, event EventEnvelope) {
-	if a.slackClient == nil || a.siteURL == nil || instance.DefinitionSlug != DefinitionSlugSlack {
+	if a.siteURL == nil || instance.DefinitionSlug != DefinitionSlugSlack {
 		return
 	}
 	// ProcessEvent runs after this call and only enforces the pause for

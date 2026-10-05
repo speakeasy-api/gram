@@ -212,6 +212,10 @@ ALTER TABLE audit_logs DISABLE TRIGGER fail_admin_key_audit;
 -- Test-only failure injection proving audit callers roll back when enqueueing fails.
 ALTER TABLE publish_outbox ADD CONSTRAINT reject_publish_outbox_writes_fixture CHECK (false) NOT VALID;
 
+-- name: RejectAuditLogWritesFixture :exec
+-- Test-only failure injection proving audit callers roll back when the audit write fails.
+ALTER TABLE audit_logs ADD CONSTRAINT reject_audit_log_writes_fixture CHECK (false) NOT VALID;
+
 -- name: RejectAgentPolicyGrantAuditWritesFixture :exec
 -- Allow agent creation audit, then fail after the policy grant has been persisted.
 ALTER TABLE audit_logs ADD CONSTRAINT reject_agent_policy_grant_audit_fixture CHECK (action <> 'agent:policy_grant_create') NOT VALID;

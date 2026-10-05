@@ -119,7 +119,11 @@ func TestMCPHTTPRequiresLiveBearerAndServesInitializeAndToolsList(t *testing.T) 
 func TestMCPHTTPLimitsActiveSessionsWithoutEvictingExistingSession(t *testing.T) {
 	t.Parallel()
 
-	handler := NewMCPHTTP(nil)
+	origin, err := url.Parse("https://localhost:8080")
+	require.NoError(t, err)
+	config, err := NewConfig(origin)
+	require.NoError(t, err)
+	handler := NewMCPHTTP(NewOAuthHTTP(config))
 	handler.sessions = make(map[string]time.Time, maxFixtureMCPSessions)
 	for index := range maxFixtureMCPSessions {
 		handler.sessions[fmt.Sprintf("session-%d", index)] = time.Now()

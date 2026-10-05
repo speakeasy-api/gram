@@ -50,8 +50,7 @@ type PolicyCacheInvalidator interface {
 // ReconcilePolicyURLs replaces the URL grants owned by one policy.
 type ReconcilePolicyURLs func(ctx context.Context, db repo.DBTX, input policybypass.ReconcilePolicyURLsInput) error
 
-// MutationDependencies are optional for read-only Core users and required by
-// CreatePolicy and UpdatePolicy.
+// MutationDependencies are the collaborators every policy write requires.
 type MutationDependencies struct {
 	Transactor       Transactor
 	Auditor          MutationAuditor
@@ -59,6 +58,16 @@ type MutationDependencies struct {
 	ReconcileURLs    ReconcilePolicyURLs
 	Signaler         PolicySignaler
 	CacheInvalidator PolicyCacheInvalidator
+}
+
+// MutationCore adds audited policy writes to the read-only Core.
+type MutationCore struct {
+	*Core
+	deps MutationDependencies
+}
+
+func NewMutationCore(db repo.DBTX, deps MutationDependencies) *MutationCore {
+	return &MutationCore{Core: New(db), deps: deps}
 }
 
 // Actor is the real user attributed to a policy mutation.
@@ -166,19 +175,14 @@ func (e *BlockingPolicyConflictError) Error() string {
 
 // CreatePolicy commits a fully prepared policy create and all of its domain
 // invariants in one transaction, then runs best-effort convergence effects.
-func (c *Core) CreatePolicy(ctx context.Context, input CreateMutation) (MutationResult, error) {
-	deps, err := c.requireMutationDependencies()
-	if err != nil {
-		return MutationResult{}, err
-	}
-
-	tx, err := deps.Transactor.Begin(ctx)
+func (c *MutationCore) CreatePolicy(ctx context.Context, input CreateMutation) (MutationResult, error) {
+	tx, err := c.deps.Transactor.Begin(ctx)
 	if err != nil {
 		return MutationResult{}, mutationError("begin transaction", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	result, err := c.createPolicyInTransaction(ctx, tx, input, deps)
+	result, err := c.CreatePolicyInTransaction(ctx, tx, input)
 	if err != nil {
 		return MutationResult{}, err
 	}
@@ -192,18 +196,7 @@ func (c *Core) CreatePolicy(ctx context.Context, input CreateMutation) (Mutation
 // CreatePolicyInTransaction applies the complete policy create and audit to a
 // caller-owned transaction. The caller owns commit and must invoke
 // AfterCreatePolicy only after that commit succeeds.
-func (c *Core) CreatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input CreateMutation) (MutationResult, error) {
-	deps, err := c.requireMutationDependencies()
-	if err != nil {
-		return MutationResult{}, err
-	}
-	if tx == nil {
-		return MutationResult{}, mutationError("policy mutation transaction is not configured", nil)
-	}
-	return c.createPolicyInTransaction(ctx, tx, input, deps)
-}
-
-func (c *Core) createPolicyInTransaction(ctx context.Context, tx pgx.Tx, input CreateMutation, deps *MutationDependencies) (MutationResult, error) {
+func (c *MutationCore) CreatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input CreateMutation) (MutationResult, error) {
 	if err := validateStoredMCPScope(input.Params.McpScope, input.Params.Sources, input.Params.Action); err != nil {
 		return MutationResult{}, err
 	}
@@ -228,7 +221,7 @@ func (c *Core) createPolicyInTransaction(ctx context.Context, tx pgx.Tx, input C
 	}
 
 	if input.AllowedURLsSet {
-		if err := deps.ReconcileURLs(ctx, tx, policybypass.ReconcilePolicyURLsInput{
+		if err := c.deps.ReconcileURLs(ctx, tx, policybypass.ReconcilePolicyURLsInput{
 			OrganizationID: row.OrganizationID,
 			PolicyID:       row.ID.String(),
 			Scope:          authz.ScopeRiskPolicyBypass,
@@ -240,7 +233,7 @@ func (c *Core) createPolicyInTransaction(ctx context.Context, tx pgx.Tx, input C
 		}
 	}
 	if input.BlockedURLsSet {
-		if err := deps.ReconcileURLs(ctx, tx, policybypass.ReconcilePolicyURLsInput{
+		if err := c.deps.ReconcileURLs(ctx, tx, policybypass.ReconcilePolicyURLsInput{
 			OrganizationID: row.OrganizationID,
 			PolicyID:       row.ID.String(),
 			Scope:          authz.ScopeRiskPolicyBlock,
@@ -252,14 +245,14 @@ func (c *Core) createPolicyInTransaction(ctx context.Context, tx pgx.Tx, input C
 		}
 	}
 
-	if deps.Approvals != nil && isBlockingShadowPolicy(row) {
-		if err := deps.Approvals.ReconcileStandingDecisionsForPolicy(ctx, tx, row.OrganizationID, row.ProjectID, row.ID); err != nil {
+	if isBlockingShadowPolicy(row) {
+		if err := c.deps.Approvals.ReconcileStandingDecisionsForPolicy(ctx, tx, row.OrganizationID, row.ProjectID, row.ID); err != nil {
 			return MutationResult{}, mutationError("honor standing approval decisions on policy create", err)
 		}
 	}
 
 	audience := principalStrings(input.AudiencePrincipals)
-	if err := deps.Auditor.LogPolicyCreate(ctx, tx, CreateAuditEvent{
+	if err := c.deps.Auditor.LogPolicyCreate(ctx, tx, CreateAuditEvent{
 		OrganizationID: row.OrganizationID,
 		ProjectID:      row.ProjectID,
 		Actor:          input.Actor,
@@ -272,34 +265,23 @@ func (c *Core) createPolicyInTransaction(ctx context.Context, tx pgx.Tx, input C
 
 // AfterCreatePolicy runs best-effort convergence only after the transaction
 // containing the policy, audit, and any outer receipt has committed.
-func (c *Core) AfterCreatePolicy(ctx context.Context, result MutationResult) {
-	deps, err := c.requireMutationDependencies()
-	if err != nil {
-		return
-	}
-	if deps.CacheInvalidator != nil {
-		deps.CacheInvalidator.Invalidate(ctx, result.Row.ProjectID)
-	}
+func (c *MutationCore) AfterCreatePolicy(ctx context.Context, result MutationResult) {
+	c.deps.CacheInvalidator.Invalidate(ctx, result.Row.ProjectID)
 	if result.Row.Enabled {
-		_ = deps.Signaler.Signal(ctx, result.Row.ProjectID)
+		_ = c.deps.Signaler.Signal(ctx, result.Row.ProjectID)
 	}
 }
 
 // UpdatePolicy locks the current row, rejects a stale prepared command, and
 // commits the policy row, grants, standing decisions, and audit atomically.
-func (c *Core) UpdatePolicy(ctx context.Context, input UpdateMutation) (MutationResult, error) {
-	deps, err := c.requireMutationDependencies()
-	if err != nil {
-		return MutationResult{}, err
-	}
-
-	tx, err := deps.Transactor.Begin(ctx)
+func (c *MutationCore) UpdatePolicy(ctx context.Context, input UpdateMutation) (MutationResult, error) {
+	tx, err := c.deps.Transactor.Begin(ctx)
 	if err != nil {
 		return MutationResult{}, mutationError("begin transaction", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	result, err := c.updatePolicyInTransaction(ctx, tx, input, deps)
+	result, err := c.UpdatePolicyInTransaction(ctx, tx, input)
 	if err != nil {
 		return MutationResult{}, err
 	}
@@ -313,18 +295,7 @@ func (c *Core) UpdatePolicy(ctx context.Context, input UpdateMutation) (Mutation
 // UpdatePolicyInTransaction applies the complete locked sparse update and audit
 // to a caller-owned transaction. The caller owns commit and must invoke
 // AfterUpdatePolicy only after that commit succeeds.
-func (c *Core) UpdatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input UpdateMutation) (MutationResult, error) {
-	deps, err := c.requireMutationDependencies()
-	if err != nil {
-		return MutationResult{}, err
-	}
-	if tx == nil {
-		return MutationResult{}, mutationError("policy mutation transaction is not configured", nil)
-	}
-	return c.updatePolicyInTransaction(ctx, tx, input, deps)
-}
-
-func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input UpdateMutation, deps *MutationDependencies) (MutationResult, error) {
+func (c *MutationCore) UpdatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input UpdateMutation) (MutationResult, error) {
 	if err := validateStoredMCPScope(input.Params.McpScope, input.Params.Sources, input.Params.Action); err != nil {
 		return MutationResult{}, err
 	}
@@ -423,8 +394,8 @@ func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input U
 	wasBlocking := isBlockingShadowPolicy(locked)
 	nowBlocking := isBlockingShadowPolicy(row)
 	var preserveDecisionURLs map[string]struct{}
-	if deps.Approvals != nil && wasBlocking && nowBlocking {
-		review, err := deps.Approvals.ReviewShadowMCPPolicyURLEdit(
+	if wasBlocking && nowBlocking {
+		review, err := c.deps.Approvals.ReviewShadowMCPPolicyURLEdit(
 			ctx, tx, row.OrganizationID, row.ProjectID, row.ID,
 			input.EffectiveDisposition, optionalURLs(input.AllowedURLs, input.AllowedURLsSet), optionalURLs(input.BlockedURLs, input.BlockedURLsSet),
 		)
@@ -439,7 +410,7 @@ func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input U
 				}
 				return MutationResult{}, &DecisionConflictError{Targets: targets}
 			}
-			if err := deps.Approvals.SupersedeShadowMCPDecisions(ctx, tx, row.OrganizationID, row.ProjectID, review.Conflicts, input.Actor.Principal, input.Actor.DisplayName); err != nil {
+			if err := c.deps.Approvals.SupersedeShadowMCPDecisions(ctx, tx, row.OrganizationID, row.ProjectID, review.Conflicts, input.Actor.Principal, input.Actor.DisplayName); err != nil {
 				return MutationResult{}, mutationError("supersede contradicted decisions", err)
 			}
 		}
@@ -452,7 +423,7 @@ func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input U
 	}
 
 	if input.AllowedURLsSet || input.AudienceChanged {
-		if err := deps.ReconcileURLs(ctx, tx, policybypass.ReconcilePolicyURLsInput{
+		if err := c.deps.ReconcileURLs(ctx, tx, policybypass.ReconcilePolicyURLsInput{
 			OrganizationID: row.OrganizationID,
 			PolicyID:       row.ID.String(),
 			Scope:          authz.ScopeRiskPolicyBypass,
@@ -464,7 +435,7 @@ func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input U
 		}
 	}
 	if input.BlockedURLsSet {
-		if err := deps.ReconcileURLs(ctx, tx, policybypass.ReconcilePolicyURLsInput{
+		if err := c.deps.ReconcileURLs(ctx, tx, policybypass.ReconcilePolicyURLsInput{
 			OrganizationID: row.OrganizationID,
 			PolicyID:       row.ID.String(),
 			Scope:          authz.ScopeRiskPolicyBlock,
@@ -475,14 +446,14 @@ func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input U
 			return MutationResult{}, mutationError("reconcile shadow mcp policy blocked urls", err)
 		}
 	}
-	if deps.Approvals != nil && nowBlocking && !wasBlocking {
-		if err := deps.Approvals.ReconcileStandingDecisionsForPolicy(ctx, tx, row.OrganizationID, row.ProjectID, row.ID); err != nil {
+	if nowBlocking && !wasBlocking {
+		if err := c.deps.Approvals.ReconcileStandingDecisionsForPolicy(ctx, tx, row.OrganizationID, row.ProjectID, row.ID); err != nil {
 			return MutationResult{}, mutationError("honor standing approval decisions on policy update", err)
 		}
 	}
 
 	audience := principalStrings(effectiveAudience)
-	if err := deps.Auditor.LogPolicyUpdate(ctx, tx, UpdateAuditEvent{
+	if err := c.deps.Auditor.LogPolicyUpdate(ctx, tx, UpdateAuditEvent{
 		OrganizationID: row.OrganizationID,
 		ProjectID:      row.ProjectID,
 		Actor:          input.Actor,
@@ -496,22 +467,9 @@ func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input U
 
 // AfterUpdatePolicy runs best-effort convergence only after the transaction
 // containing the policy, audit, and any outer receipt has committed.
-func (c *Core) AfterUpdatePolicy(ctx context.Context, result MutationResult) {
-	deps, err := c.requireMutationDependencies()
-	if err != nil {
-		return
-	}
-	if deps.CacheInvalidator != nil {
-		deps.CacheInvalidator.Invalidate(ctx, result.Row.ProjectID)
-	}
-	_ = deps.Signaler.Signal(ctx, result.Row.ProjectID)
-}
-
-func (c *Core) requireMutationDependencies() (*MutationDependencies, error) {
-	if c.mutations == nil || c.mutations.Transactor == nil || c.mutations.Auditor == nil || c.mutations.ReconcileURLs == nil || c.mutations.Signaler == nil {
-		return nil, mutationError("policy mutation dependencies are not configured", nil)
-	}
-	return c.mutations, nil
+func (c *MutationCore) AfterUpdatePolicy(ctx context.Context, result MutationResult) {
+	c.deps.CacheInvalidator.Invalidate(ctx, result.Row.ProjectID)
+	_ = c.deps.Signaler.Signal(ctx, result.Row.ProjectID)
 }
 
 func replaceAudience(ctx context.Context, db repo.DBTX, organizationID, policyID string, principals []urn.Principal) error {

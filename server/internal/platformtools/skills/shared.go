@@ -5,7 +5,6 @@ import (
 
 	genskills "github.com/speakeasy-api/gram/server/gen/skills"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -23,13 +22,4 @@ type SkillsService interface {
 
 type SkillInsightsReader interface {
 	QuerySkillInsights(context.Context, telemetryrepo.QuerySkillInsightsParams) ([]telemetryrepo.SkillInsightBucket, error)
-}
-
-// LoadOption configures the skills load tool.
-type LoadOption func(*Load)
-
-// WithEfficacySignaler attaches the efficacy wake to the load tool. Without it
-// the tool records activations exactly as before and emits no wakes.
-func WithEfficacySignaler(signaler efficacy.Signaler) LoadOption {
-	return func(t *Load) { t.efficacySignaler = signaler }
 }

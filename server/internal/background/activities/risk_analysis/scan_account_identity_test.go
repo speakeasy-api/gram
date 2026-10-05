@@ -13,10 +13,13 @@ import (
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -123,32 +126,31 @@ func seedChatMessage(t *testing.T, conn *pgxpool.Pool, td testData, chatID uuid.
 
 func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, findingsPub gcp.Publisher[*riskv1.Finding]) *risk_analysis.AnalyzeBatch {
 	t.Helper()
-	ab, err := risk_analysis.NewAnalyzeBatch(
+	ab := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		conn,
-		nil,
+		assetstest.NewTestBlobStore(t),
 		&risk_analysis.StubPIIScanner{},
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
+		promptinjection.NewScanner(testenv.NewLogger(t), promptinjection.NoopClassifier),
+		newShadowMCPClient(t, conn),
+		newMCPProvenanceLookup(t),
+		(&recordingPromptJudge{}).Evaluate,
+		&feature.InMemory{},
 		newPresidioPub(),
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
 		newCustomRulesPub(), newLLMPub(),
 		findingsPub,
-		mustCustomRuleScanner(t, nil),
+		mustCustomRuleScanner(t, cloneDB(t)),
 		mustCELEngine(t),
-		nil,
-		nil,
+		mustPresetLibrary(t),
+		newShadowMCPBypassChecker(t, conn),
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		false,
 	)
-	require.NoError(t, err)
 	return ab
 }
 

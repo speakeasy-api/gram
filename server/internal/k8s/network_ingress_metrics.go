@@ -30,16 +30,13 @@ type NetworkIngressMetrics struct {
 }
 
 func NewNetworkIngressMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) *NetworkIngressMetrics {
-	if meterProvider == nil {
-		return &NetworkIngressMetrics{operations: nil, duration: nil}
-	}
 	meter := meterProvider.Meter(networkIngressMeterScope)
 	operations, err := meter.Int64Counter(
 		networkIngressOperationsMetric,
 		metric.WithDescription("Network ingress provisioner operations by provider, operation, result, and redacted error code."),
 		metric.WithUnit("{operation}"),
 	)
-	if err != nil && logger != nil {
+	if err != nil {
 		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(networkIngressOperationsMetric), attr.SlogError(err))
 	}
 	duration, err := meter.Float64Histogram(
@@ -48,16 +45,13 @@ func NewNetworkIngressMetrics(logger *slog.Logger, meterProvider metric.MeterPro
 		metric.WithUnit("s"),
 		metric.WithExplicitBucketBoundaries(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60),
 	)
-	if err != nil && logger != nil {
+	if err != nil {
 		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(networkIngressDurationMetric), attr.SlogError(err))
 	}
 	return &NetworkIngressMetrics{operations: operations, duration: duration}
 }
 
 func (m *NetworkIngressMetrics) Record(ctx context.Context, provider, operation, result, errorCode string, duration time.Duration) {
-	if m == nil {
-		return
-	}
 	provider = clampNetworkIngressProvider(provider)
 	operation = clampNetworkIngressOperation(operation)
 	result = clampNetworkIngressResult(result)
@@ -68,12 +62,8 @@ func (m *NetworkIngressMetrics) Record(ctx context.Context, provider, operation,
 		attr.NetworkIngressResult(result),
 		attr.NetworkIngressErrorCode(errorCode),
 	)
-	if m.operations != nil {
-		m.operations.Add(ctx, 1, attributes)
-	}
-	if m.duration != nil {
-		m.duration.Record(ctx, duration.Seconds(), attributes)
-	}
+	m.operations.Add(ctx, 1, attributes)
+	m.duration.Record(ctx, duration.Seconds(), attributes)
 }
 
 type observedNetworkIngressProvisioner struct {
@@ -84,12 +74,7 @@ type observedNetworkIngressProvisioner struct {
 }
 
 func ObserveNetworkIngressProvisioner(provider string, provisioner NetworkIngressProvisioner, logger *slog.Logger, metrics *NetworkIngressMetrics) NetworkIngressProvisioner {
-	if provisioner == nil {
-		return nil
-	}
-	if logger != nil {
-		logger = logger.With(attr.SlogComponent("network_ingress_provisioner"))
-	}
+	logger = logger.With(attr.SlogComponent("network_ingress_provisioner"))
 	return &observedNetworkIngressProvisioner{provider: provider, provisioner: provisioner, logger: logger, metrics: metrics}
 }
 
@@ -132,9 +117,6 @@ func (p *observedNetworkIngressProvisioner) record(ctx context.Context, operatio
 		errorCode = clampNetworkIngressErrorCode(observation.ErrorCode)
 	}
 	p.metrics.Record(ctx, p.provider, operation, result, errorCode, duration)
-	if p.logger == nil {
-		return
-	}
 	attrs := []any{
 		attr.SlogProvider(p.provider),
 		attr.SlogOutcome(result),

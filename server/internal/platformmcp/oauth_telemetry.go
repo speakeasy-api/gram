@@ -48,10 +48,6 @@ type oauthTelemetry struct {
 }
 
 func NewOAuthTelemetry(logger *slog.Logger, meterProvider metric.MeterProvider) OAuthTelemetry {
-	if logger == nil || meterProvider == nil {
-		return noopOAuthTelemetry{}
-	}
-
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/platformmcp")
 	events, err := meter.Int64Counter(platformMCPOAuthEventMetric, metric.WithDescription("Bounded Platform MCP OAuth outcomes"), metric.WithUnit("{event}"))
 	if err != nil {
@@ -74,7 +70,7 @@ func NewOAuthTelemetry(logger *slog.Logger, meterProvider metric.MeterProvider) 
 }
 
 func (t *oauthTelemetry) Record(ctx context.Context, event OAuthEvent) {
-	if t == nil || t.events == nil || !validOAuthEvent(event) {
+	if !validOAuthEvent(event) {
 		return
 	}
 	attributes := []attribute.KeyValue{
@@ -88,20 +84,15 @@ func (t *oauthTelemetry) Record(ctx context.Context, event OAuthEvent) {
 }
 
 func (t *oauthTelemetry) RecordRefreshSuccess(ctx context.Context, duration, connectionAge time.Duration) {
-	if t == nil {
-		return
-	}
 	attributes := metric.WithAttributes(attribute.String("platform_mcp.operation", "refresh"), attribute.String("platform_mcp.outcome", "succeeded"))
-	if t.refreshDuration != nil {
-		t.refreshDuration.Record(ctx, duration.Seconds(), attributes)
-	}
-	if t.connectionAge != nil && connectionAge >= 0 {
+	t.refreshDuration.Record(ctx, duration.Seconds(), attributes)
+	if connectionAge >= 0 {
 		t.connectionAge.Record(ctx, connectionAge.Seconds(), attributes)
 	}
 }
 
 func (t *oauthTelemetry) RecordTerminalTransition(ctx context.Context, reason platformoauth.ReauthorizationReason) {
-	if t == nil || t.reauthorizationRequired == nil || !validReauthorizationReason(reason) {
+	if !validReauthorizationReason(reason) {
 		return
 	}
 	t.reauthorizationRequired.Add(ctx, 1, metric.WithAttributes(attribute.String("platform_mcp.reason", string(reason))))

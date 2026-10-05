@@ -96,10 +96,6 @@ func (l *triggerDeliveryLogger) LogTriggerDelivery(
 	reason string,
 	err error,
 ) {
-	if l == nil || l.write == nil {
-		return
-	}
-
 	body := fmt.Sprintf("trigger event %s", status)
 	if reason != "" {
 		body += ": " + reason
@@ -140,6 +136,8 @@ func (l *triggerDeliveryLogger) LogTriggerDelivery(
 }
 
 type App struct {
+	*ThreadRouter
+
 	logger         *slog.Logger
 	db             *pgxpool.Pool
 	repo           *triggerrepo.Queries
@@ -216,6 +214,7 @@ func NewApp(
 	}
 
 	return &App{
+		ThreadRouter:   NewThreadRouter(db),
 		logger:         logger,
 		db:             db,
 		repo:           triggerrepo.New(db),
@@ -632,21 +631,19 @@ func (a *App) MarkInstanceFired(ctx context.Context, instanceID string) error {
 		return fmt.Errorf("mark trigger fired: %w", err)
 	}
 
-	if a.audit != nil {
-		correlationID, fireAt := WakeConfigFields(item.ConfigJson)
-		if err := a.audit.LogWakeFired(ctx, tx, audit.LogWakeEvent{
-			OrganizationID:     item.OrganizationID,
-			ProjectID:          item.ProjectID,
-			Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, "system"),
-			ActorDisplayName:   nil,
-			ActorSlug:          nil,
-			TriggerInstanceURN: urn.NewTriggerInstance(item.ID),
-			Name:               item.Name,
-			Correlation:        correlationID,
-			FireAt:             fireAt,
-		}); err != nil {
-			return fmt.Errorf("log wake fired: %w", err)
-		}
+	correlationID, fireAt := WakeConfigFields(item.ConfigJson)
+	if err := a.audit.LogWakeFired(ctx, tx, audit.LogWakeEvent{
+		OrganizationID:     item.OrganizationID,
+		ProjectID:          item.ProjectID,
+		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, "system"),
+		ActorDisplayName:   nil,
+		ActorSlug:          nil,
+		TriggerInstanceURN: urn.NewTriggerInstance(item.ID),
+		Name:               item.Name,
+		Correlation:        correlationID,
+		FireAt:             fireAt,
+	}); err != nil {
+		return fmt.Errorf("log wake fired: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -667,9 +664,6 @@ func (a *App) CancelAssistantWakes(ctx context.Context, projectID, assistantID u
 	var firstErr error
 	for _, row := range rows {
 		_, err := a.CancelWakeInstance(ctx, projectID, row.ID, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
-			if a.audit == nil {
-				return nil
-			}
 			correlationID, fireAt := WakeConfigFields(instance.ConfigJson)
 			return a.audit.LogWakeCancelled(ctx, dbtx, audit.LogWakeEvent{
 				OrganizationID:     instance.OrganizationID,
@@ -814,7 +808,7 @@ func (a *App) clearSlackThreadStatus(ctx context.Context, instance triggerrepo.T
 }
 
 func (a *App) setSlackThreadStatus(ctx context.Context, instance triggerrepo.TriggerInstance, env map[string]string, event EventEnvelope, status string, loadingMessages []string) {
-	if a.slackClient == nil || instance.DefinitionSlug != DefinitionSlugSlack {
+	if instance.DefinitionSlug != DefinitionSlugSlack {
 		return
 	}
 	if !slackEventExpectsReply(event) {

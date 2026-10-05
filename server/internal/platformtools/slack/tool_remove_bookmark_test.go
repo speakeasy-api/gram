@@ -52,7 +52,7 @@ func TestRemoveBookmarkTool_RequiresFields(t *testing.T) {
 
 	tool := &slackTool{
 		descriptor: NewRemoveBookmarkTool(nil).Descriptor(),
-		client:     newAPIClient("https://slack.test.invalid", nil),
+		client:     newAPIClient("https://slack.test.invalid", &http.Client{}),
 		callFn:     callRemoveBookmark,
 	}
 

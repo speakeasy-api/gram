@@ -267,8 +267,7 @@ func mapJudgment(result *typesafe.Result, callerIDs []string) *gen.LauncherJudgm
 // outcomeDisabled is recorded when a judgement is skipped for lack of a key.
 const outcomeDisabled o11y.Outcome = "disabled"
 
-// judgeMetrics holds the service's OpenTelemetry instruments. The counter is
-// nil-guarded so a construction failure degrades to no metrics.
+// judgeMetrics holds the service's OpenTelemetry instruments.
 type judgeMetrics struct {
 	outcome metric.Int64Counter
 }
@@ -287,8 +286,5 @@ func newMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) *judgeM
 }
 
 func (m *judgeMetrics) record(ctx context.Context, outcome o11y.Outcome) {
-	if m.outcome == nil {
-		return
-	}
 	m.outcome.Add(ctx, 1, metric.WithAttributes(attr.Outcome(outcome)))
 }
