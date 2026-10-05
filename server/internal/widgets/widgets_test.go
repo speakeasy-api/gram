@@ -548,3 +548,42 @@ func withQuery(query map[string]any, key string, value any) map[string]any {
 func rowsQuery() map[string]any {
 	return map[string]any{"window": "24h", "grain": "none", "dimensions": []any{"user"}, "ungrouped": true}
 }
+
+func TestGetPreset(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	widgets.UsePresets(ti.service, []byte(`{"pages":[{"page":"home","rows":[
+		{"widgets":[
+			{"key":"sessions","name":"Sessions","dataset":"sessions","span":3,
+			 "query":{"window":"24h","grain":"none","measures":[{"op":"count","alias":"count"}],"limit":1000},
+			 "visualization":{"type":"number","options":{}}},
+			{"key":"broken","name":"Broken","dataset":"sessions","span":6,
+			 "query":{"window":"24h","grain":"none","dimensions":["no_such_field"],"measures":[{"op":"count","alias":"count"}]},
+			 "visualization":{"type":"ranked","options":{}}}
+		]}
+	]}]}`))
+
+	preset, err := ti.service.GetPreset(ctx, &gen.GetPresetPayload{Page: "home", SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, "home", preset.Page)
+	require.Len(t, preset.Rows, 1)
+	row := preset.Rows[0].Widgets
+	require.Len(t, row, 2)
+	require.Equal(t, "sessions", row[0].Key)
+	require.Equal(t, 3, row[0].Span)
+	require.Nil(t, row[0].InvalidReason)
+	require.Equal(t, json.Number("1000"), row[0].Query["limit"], "numbers are served as written, as a saved widget's are")
+	require.NotNil(t, row[1].InvalidReason, "a preset widget validates on read like a saved one")
+	require.Contains(t, *row[1].InvalidReason, "unknown_field")
+
+	_, err = ti.service.GetPreset(ctx, &gen.GetPresetPayload{Page: "nowhere", SessionToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	member := asMember(t, ctx, ti, "member-"+uuid.NewString())
+	_, err = ti.service.GetPreset(member, &gen.GetPresetPayload{Page: "home", SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err, "any member can read a page's preset")
+
+	_, err = ti.service.GetPreset(t.Context(), &gen.GetPresetPayload{Page: "home", SessionToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+}

@@ -6,11 +6,13 @@ import { widgetsCreate } from "../funcs/widgetsCreate.js";
 import { widgetsDelete } from "../funcs/widgetsDelete.js";
 import { widgetsDuplicate } from "../funcs/widgetsDuplicate.js";
 import { widgetsGet } from "../funcs/widgetsGet.js";
+import { widgetsGetPreset } from "../funcs/widgetsGetPreset.js";
 import { widgetsList } from "../funcs/widgetsList.js";
 import { widgetsUpdate } from "../funcs/widgetsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListWidgetsResult } from "../models/components/listwidgetsresult.js";
 import { Widget } from "../models/components/widget.js";
+import { WidgetPreset } from "../models/components/widgetpreset.js";
 import {
   CreateWidgetRequest,
   CreateWidgetSecurity,
@@ -27,6 +29,10 @@ import {
   GetWidgetRequest,
   GetWidgetSecurity,
 } from "../models/operations/getwidget.js";
+import {
+  GetWidgetPresetRequest,
+  GetWidgetPresetSecurity,
+} from "../models/operations/getwidgetpreset.js";
 import {
   ListWidgetsRequest,
   ListWidgetsSecurity,
@@ -126,6 +132,25 @@ export class Widgets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListWidgetsResult> {
     return unwrapAsync(widgetsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getPreset widgets
+   *
+   * @remarks
+   * Get a product page's preset layout of widgets. Each widget is validated as it is read, as saved widgets are.
+   */
+  async getPreset(
+    request: GetWidgetPresetRequest,
+    security?: GetWidgetPresetSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<WidgetPreset> {
+    return unwrapAsync(widgetsGetPreset(
       this,
       request,
       security,

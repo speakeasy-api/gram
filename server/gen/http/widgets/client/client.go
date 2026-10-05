@@ -21,6 +21,10 @@ type Client struct {
 	// endpoint.
 	ListWidgetsDoer goahttp.Doer
 
+	// GetPreset Doer is the HTTP client used to make requests to the getPreset
+	// endpoint.
+	GetPresetDoer goahttp.Doer
+
 	// GetWidget Doer is the HTTP client used to make requests to the getWidget
 	// endpoint.
 	GetWidgetDoer goahttp.Doer
@@ -62,6 +66,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		ListWidgetsDoer:     doer,
+		GetPresetDoer:       doer,
 		GetWidgetDoer:       doer,
 		CreateWidgetDoer:    doer,
 		UpdateWidgetDoer:    doer,
@@ -94,6 +99,30 @@ func (c *Client) ListWidgets() goa.Endpoint {
 		resp, err := c.ListWidgetsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("widgets", "listWidgets", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetPreset returns an endpoint that makes HTTP requests to the widgets
+// service getPreset server.
+func (c *Client) GetPreset() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetPresetRequest(c.encoder)
+		decodeResponse = DecodeGetPresetResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetPresetRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetPresetDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("widgets", "getPreset", err)
 		}
 		return decodeResponse(resp)
 	}

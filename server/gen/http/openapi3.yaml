@@ -80323,6 +80323,105 @@ paths:
             x-speakeasy-react-hook:
                 name: Widgets
                 type: query
+    /rpc/widgets.preset:
+        get:
+            description: Get a product page's preset layout of widgets. Each widget is validated as it is read, as saved widgets are.
+            operationId: getWidgetPreset
+            parameters:
+                - allowEmptyValue: true
+                  description: The page whose preset to get
+                  in: query
+                  name: page
+                  required: true
+                  schema:
+                    description: The page whose preset to get
+                    minLength: 1
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WidgetPreset'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getPreset widgets
+            tags:
+                - widgets
+            x-speakeasy-name-override: getPreset
+            x-speakeasy-react-hook:
+                name: WidgetPreset
+                type: query
     /rpc/widgets.update:
         post:
             description: Replace a widget's name, description, dataset, query and visualization. Its creator can; editing someone else's needs project write access.
@@ -100905,6 +101004,58 @@ components:
                 - user_session_issuer_id
                 - remote_session_issuer_id
                 - resource
+        PresetRow:
+            type: object
+            properties:
+                widgets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PresetWidget'
+                    description: Left to right
+            required:
+                - widgets
+        PresetWidget:
+            type: object
+            properties:
+                dataset:
+                    type: string
+                    description: The catalog dataset the widget asks
+                    example: tool_calls
+                invalid_reason:
+                    type: string
+                    description: Present when the widget does not validate against the catalog. CI checks every preset, so this is a safety net, not an expected state.
+                key:
+                    type: string
+                    description: Stable within the page; identifies the card across releases
+                    example: tool-calls
+                name:
+                    type: string
+                    description: Display name
+                query:
+                    type: object
+                    description: The question, as a saved widget stores it
+                    additionalProperties: true
+                span:
+                    type: integer
+                    description: 'Columns the widget spans on a 12-column grid: a quarter, a third, a half or the full width'
+                    enum:
+                        - 3
+                        - 4
+                        - 6
+                        - 12
+                    format: int64
+                visualization:
+                    type: object
+                    description: How the question is drawn, as a saved widget stores it
+                    additionalProperties: true
+            description: 'A widget placed by a product page''s preset: the shape the widgets service stores, plus where it sits. Presets are checked into the repository and cannot be edited.'
+            required:
+                - key
+                - name
+                - dataset
+                - query
+                - visualization
+                - span
         PreviewSpendRuleRequestBody:
             type: object
             properties:
@@ -115401,6 +115552,22 @@ components:
                 - visualization
                 - created_at
                 - updated_at
+        WidgetPreset:
+            type: object
+            properties:
+                page:
+                    type: string
+                    description: The page the preset lays out
+                    example: mcp-tools
+                rows:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PresetRow'
+                    description: Top to bottom
+            description: A product page's widgets, laid out in rows on a 12-column grid. Built-in pages are presets checked into the repository, not rows in the widgets table.
+            required:
+                - page
+                - rows
         WorkOSDomainVerificationIntentOptions:
             type: object
             properties:

@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	widgets "github.com/speakeasy-api/gram/server/gen/widgets"
 	goahttp "goa.design/goa/v3/http"
@@ -214,6 +215,223 @@ func EncodeListWidgetsError(encoder func(context.Context, http.ResponseWriter) g
 				body = formatter(ctx, res)
 			} else {
 				body = NewListWidgetsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeGetPresetResponse returns an encoder for responses returned by the
+// widgets getPreset endpoint.
+func EncodeGetPresetResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*widgets.WidgetPreset)
+		enc := encoder(ctx, w)
+		body := NewGetPresetResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetPresetRequest returns a decoder for requests sent to the widgets
+// getPreset endpoint.
+func DecodeGetPresetRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*widgets.GetPresetPayload, error) {
+	return func(r *http.Request) (*widgets.GetPresetPayload, error) {
+		var payload *widgets.GetPresetPayload
+		var (
+			page             string
+			sessionToken     *string
+			projectSlugInput *string
+			err              error
+		)
+		page = r.URL.Query().Get("page")
+		if page == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("page", "query string"))
+		}
+		if utf8.RuneCountInString(page) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("page", page, utf8.RuneCountInString(page), 1, true))
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGetPresetPayload(page, sessionToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetPresetError returns an encoder for errors returned by the getPreset
+// widgets endpoint.
+func EncodeGetPresetError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPresetUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPresetForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPresetBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPresetNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPresetConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPresetUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPresetInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPresetInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPresetUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPresetGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -1340,6 +1558,56 @@ func marshalWidgetsWidgetToWidgetResponseBody(v *widgets.Widget) *WidgetResponse
 		InvalidReason:   v.InvalidReason,
 		CreatedAt:       v.CreatedAt,
 		UpdatedAt:       v.UpdatedAt,
+	}
+	if v.Query != nil {
+		res.Query = make(map[string]any, len(v.Query))
+		for key, val := range v.Query {
+			tk := key
+			tv := val
+			res.Query[tk] = tv
+		}
+	}
+	if v.Visualization != nil {
+		res.Visualization = make(map[string]any, len(v.Visualization))
+		for key, val := range v.Visualization {
+			tk := key
+			tv := val
+			res.Visualization[tk] = tv
+		}
+	}
+
+	return res
+}
+
+// marshalWidgetsPresetRowToPresetRowResponseBody builds a value of type
+// *PresetRowResponseBody from a value of type *widgets.PresetRow.
+func marshalWidgetsPresetRowToPresetRowResponseBody(v *widgets.PresetRow) *PresetRowResponseBody {
+	res := &PresetRowResponseBody{}
+	if v.Widgets != nil {
+		res.Widgets = make([]*PresetWidgetResponseBody, len(v.Widgets))
+		for i, val := range v.Widgets {
+			if val == nil {
+				res.Widgets[i] = nil
+				continue
+			}
+			res.Widgets[i] = marshalWidgetsPresetWidgetToPresetWidgetResponseBody(val)
+		}
+	} else {
+		res.Widgets = []*PresetWidgetResponseBody{}
+	}
+
+	return res
+}
+
+// marshalWidgetsPresetWidgetToPresetWidgetResponseBody builds a value of type
+// *PresetWidgetResponseBody from a value of type *widgets.PresetWidget.
+func marshalWidgetsPresetWidgetToPresetWidgetResponseBody(v *widgets.PresetWidget) *PresetWidgetResponseBody {
+	res := &PresetWidgetResponseBody{
+		Key:           v.Key,
+		Name:          v.Name,
+		Dataset:       v.Dataset,
+		Span:          v.Span,
+		InvalidReason: v.InvalidReason,
 	}
 	if v.Query != nil {
 		res.Query = make(map[string]any, len(v.Query))

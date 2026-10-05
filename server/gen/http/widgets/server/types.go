@@ -60,6 +60,15 @@ type ListWidgetsResponseBody struct {
 	Widgets []*WidgetResponseBody `form:"widgets" json:"widgets" xml:"widgets"`
 }
 
+// GetPresetResponseBody is the type of the "widgets" service "getPreset"
+// endpoint HTTP response body.
+type GetPresetResponseBody struct {
+	// The page the preset lays out
+	Page string `form:"page" json:"page" xml:"page"`
+	// Top to bottom
+	Rows []*PresetRowResponseBody `form:"rows" json:"rows" xml:"rows"`
+}
+
 // GetWidgetResponseBody is the type of the "widgets" service "getWidget"
 // endpoint HTTP response body.
 type GetWidgetResponseBody struct {
@@ -342,6 +351,186 @@ type ListWidgetsUnexpectedResponseBody struct {
 // ListWidgetsGatewayErrorResponseBody is the type of the "widgets" service
 // "listWidgets" endpoint HTTP response body for the "gateway_error" error.
 type ListWidgetsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPresetUnauthorizedResponseBody is the type of the "widgets" service
+// "getPreset" endpoint HTTP response body for the "unauthorized" error.
+type GetPresetUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPresetForbiddenResponseBody is the type of the "widgets" service
+// "getPreset" endpoint HTTP response body for the "forbidden" error.
+type GetPresetForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPresetBadRequestResponseBody is the type of the "widgets" service
+// "getPreset" endpoint HTTP response body for the "bad_request" error.
+type GetPresetBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPresetNotFoundResponseBody is the type of the "widgets" service
+// "getPreset" endpoint HTTP response body for the "not_found" error.
+type GetPresetNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPresetConflictResponseBody is the type of the "widgets" service
+// "getPreset" endpoint HTTP response body for the "conflict" error.
+type GetPresetConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPresetUnsupportedMediaResponseBody is the type of the "widgets" service
+// "getPreset" endpoint HTTP response body for the "unsupported_media" error.
+type GetPresetUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPresetInvalidResponseBody is the type of the "widgets" service
+// "getPreset" endpoint HTTP response body for the "invalid" error.
+type GetPresetInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPresetInvariantViolationResponseBody is the type of the "widgets" service
+// "getPreset" endpoint HTTP response body for the "invariant_violation" error.
+type GetPresetInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPresetUnexpectedResponseBody is the type of the "widgets" service
+// "getPreset" endpoint HTTP response body for the "unexpected" error.
+type GetPresetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPresetGatewayErrorResponseBody is the type of the "widgets" service
+// "getPreset" endpoint HTTP response body for the "gateway_error" error.
+type GetPresetGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1293,6 +1482,32 @@ type WidgetResponseBody struct {
 	UpdatedAt     string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// PresetRowResponseBody is used to define fields on response body types.
+type PresetRowResponseBody struct {
+	// Left to right
+	Widgets []*PresetWidgetResponseBody `form:"widgets" json:"widgets" xml:"widgets"`
+}
+
+// PresetWidgetResponseBody is used to define fields on response body types.
+type PresetWidgetResponseBody struct {
+	// Stable within the page; identifies the card across releases
+	Key string `form:"key" json:"key" xml:"key"`
+	// Display name
+	Name string `form:"name" json:"name" xml:"name"`
+	// The catalog dataset the widget asks
+	Dataset string `form:"dataset" json:"dataset" xml:"dataset"`
+	// The question, as a saved widget stores it
+	Query map[string]any `form:"query" json:"query" xml:"query"`
+	// How the question is drawn, as a saved widget stores it
+	Visualization map[string]any `form:"visualization" json:"visualization" xml:"visualization"`
+	// Columns the widget spans on a 12-column grid: a quarter, a third, a half or
+	// the full width
+	Span int `form:"span" json:"span" xml:"span"`
+	// Present when the widget does not validate against the catalog. CI checks
+	// every preset, so this is a safety net, not an expected state.
+	InvalidReason *string `form:"invalid_reason,omitempty" json:"invalid_reason,omitempty" xml:"invalid_reason,omitempty"`
+}
+
 // NewListWidgetsResponseBody builds the HTTP response body from the result of
 // the "listWidgets" endpoint of the "widgets" service.
 func NewListWidgetsResponseBody(res *widgets.ListWidgetsResult) *ListWidgetsResponseBody {
@@ -1308,6 +1523,27 @@ func NewListWidgetsResponseBody(res *widgets.ListWidgetsResult) *ListWidgetsResp
 		}
 	} else {
 		body.Widgets = []*WidgetResponseBody{}
+	}
+	return body
+}
+
+// NewGetPresetResponseBody builds the HTTP response body from the result of
+// the "getPreset" endpoint of the "widgets" service.
+func NewGetPresetResponseBody(res *widgets.WidgetPreset) *GetPresetResponseBody {
+	body := &GetPresetResponseBody{
+		Page: res.Page,
+	}
+	if res.Rows != nil {
+		body.Rows = make([]*PresetRowResponseBody, len(res.Rows))
+		for i, val := range res.Rows {
+			if val == nil {
+				body.Rows[i] = nil
+				continue
+			}
+			body.Rows[i] = marshalWidgetsPresetRowToPresetRowResponseBody(val)
+		}
+	} else {
+		body.Rows = []*PresetRowResponseBody{}
 	}
 	return body
 }
@@ -1578,6 +1814,146 @@ func NewListWidgetsUnexpectedResponseBody(res *goa.ServiceError) *ListWidgetsUne
 // the result of the "listWidgets" endpoint of the "widgets" service.
 func NewListWidgetsGatewayErrorResponseBody(res *goa.ServiceError) *ListWidgetsGatewayErrorResponseBody {
 	body := &ListWidgetsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPresetUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "getPreset" endpoint of the "widgets" service.
+func NewGetPresetUnauthorizedResponseBody(res *goa.ServiceError) *GetPresetUnauthorizedResponseBody {
+	body := &GetPresetUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPresetForbiddenResponseBody builds the HTTP response body from the
+// result of the "getPreset" endpoint of the "widgets" service.
+func NewGetPresetForbiddenResponseBody(res *goa.ServiceError) *GetPresetForbiddenResponseBody {
+	body := &GetPresetForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPresetBadRequestResponseBody builds the HTTP response body from the
+// result of the "getPreset" endpoint of the "widgets" service.
+func NewGetPresetBadRequestResponseBody(res *goa.ServiceError) *GetPresetBadRequestResponseBody {
+	body := &GetPresetBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPresetNotFoundResponseBody builds the HTTP response body from the
+// result of the "getPreset" endpoint of the "widgets" service.
+func NewGetPresetNotFoundResponseBody(res *goa.ServiceError) *GetPresetNotFoundResponseBody {
+	body := &GetPresetNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPresetConflictResponseBody builds the HTTP response body from the
+// result of the "getPreset" endpoint of the "widgets" service.
+func NewGetPresetConflictResponseBody(res *goa.ServiceError) *GetPresetConflictResponseBody {
+	body := &GetPresetConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPresetUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "getPreset" endpoint of the "widgets" service.
+func NewGetPresetUnsupportedMediaResponseBody(res *goa.ServiceError) *GetPresetUnsupportedMediaResponseBody {
+	body := &GetPresetUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPresetInvalidResponseBody builds the HTTP response body from the
+// result of the "getPreset" endpoint of the "widgets" service.
+func NewGetPresetInvalidResponseBody(res *goa.ServiceError) *GetPresetInvalidResponseBody {
+	body := &GetPresetInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPresetInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getPreset" endpoint of the "widgets" service.
+func NewGetPresetInvariantViolationResponseBody(res *goa.ServiceError) *GetPresetInvariantViolationResponseBody {
+	body := &GetPresetInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPresetUnexpectedResponseBody builds the HTTP response body from the
+// result of the "getPreset" endpoint of the "widgets" service.
+func NewGetPresetUnexpectedResponseBody(res *goa.ServiceError) *GetPresetUnexpectedResponseBody {
+	body := &GetPresetUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPresetGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "getPreset" endpoint of the "widgets" service.
+func NewGetPresetGatewayErrorResponseBody(res *goa.ServiceError) *GetPresetGatewayErrorResponseBody {
+	body := &GetPresetGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2292,6 +2668,16 @@ func NewDeleteWidgetGatewayErrorResponseBody(res *goa.ServiceError) *DeleteWidge
 // NewListWidgetsPayload builds a widgets service listWidgets endpoint payload.
 func NewListWidgetsPayload(sessionToken *string, projectSlugInput *string) *widgets.ListWidgetsPayload {
 	v := &widgets.ListWidgetsPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetPresetPayload builds a widgets service getPreset endpoint payload.
+func NewGetPresetPayload(page string, sessionToken *string, projectSlugInput *string) *widgets.GetPresetPayload {
+	v := &widgets.GetPresetPayload{}
+	v.Page = page
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

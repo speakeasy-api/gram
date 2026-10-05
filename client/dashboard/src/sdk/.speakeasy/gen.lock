@@ -770,6 +770,7 @@ trackedFiles:
   src/funcs/widgetsDelete.ts: {}
   src/funcs/widgetsDuplicate.ts: {}
   src/funcs/widgetsGet.ts: {}
+  src/funcs/widgetsGetPreset.ts: {}
   src/funcs/widgetsList.ts: {}
   src/funcs/widgetsUpdate.ts: {}
   src/funcs/workloadIdentitiesAdmitSubject.ts: {}
@@ -1468,6 +1469,8 @@ trackedFiles:
   src/models/components/pluginskilldistribution.ts: {}
   src/models/components/policybypassredemption.ts: {}
   src/models/components/prepareemarequestbody.ts: {}
+  src/models/components/presetrow.ts: {}
+  src/models/components/presetwidget.ts: {}
   src/models/components/previewspendrulerequestbody.ts: {}
   src/models/components/previewspendruleresult.ts: {}
   src/models/components/principalremotesessionbinding.ts: {}
@@ -1910,6 +1913,7 @@ trackedFiles:
   src/models/components/verifyurlrequestbody.ts: {}
   src/models/components/verifyurlresult.ts: {}
   src/models/components/widget.ts: {}
+  src/models/components/widgetpreset.ts: {}
   src/models/components/workloadadmission.ts: {}
   src/models/components/workloadidentitypolicy.ts: {}
   src/models/components/workloadissuer.ts: {}
@@ -2250,6 +2254,7 @@ trackedFiles:
   src/models/operations/getusersessionissuer.ts: {}
   src/models/operations/getusersessionissuercimdclient.ts: {}
   src/models/operations/getwidget.ts: {}
+  src/models/operations/getwidgetpreset.ts: {}
   src/models/operations/getworkunitstrend.ts: {}
   src/models/operations/hooksnumberclaude.ts: {}
   src/models/operations/hooksnumbercodex.ts: {}
@@ -3736,6 +3741,8 @@ trackedFiles:
   src/react-query/verifyUserSessionIssuerCimdClientURL.ts: {}
   src/react-query/widget.core.ts: {}
   src/react-query/widget.ts: {}
+  src/react-query/widgetPreset.core.ts: {}
+  src/react-query/widgetPreset.ts: {}
   src/react-query/widgets.core.ts: {}
   src/react-query/widgets.ts: {}
   src/react-query/withdrawWorkloadIssuer.ts: {}
@@ -7876,6 +7883,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getWidgetPreset:
+    speakeasy-default-get-widget-preset:
+      parameters:
+        query:
+          page: "<value>"
+      responses:
+        "200":
+          application/json: {"page": "mcp-tools", "rows": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getWorkUnitsTrend:
     speakeasy-default-get-work-units-trend:
       responses:

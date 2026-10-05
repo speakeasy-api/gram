@@ -38,6 +38,40 @@ func BuildListWidgetsPayload(widgetsListWidgetsSessionToken string, widgetsListW
 	return v, nil
 }
 
+// BuildGetPresetPayload builds the payload for the widgets getPreset endpoint
+// from CLI flags.
+func BuildGetPresetPayload(widgetsGetPresetPage string, widgetsGetPresetSessionToken string, widgetsGetPresetProjectSlugInput string) (*widgets.GetPresetPayload, error) {
+	var err error
+	var page string
+	{
+		page = widgetsGetPresetPage
+		if utf8.RuneCountInString(page) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("page", page, utf8.RuneCountInString(page), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if widgetsGetPresetSessionToken != "" {
+			sessionToken = &widgetsGetPresetSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if widgetsGetPresetProjectSlugInput != "" {
+			projectSlugInput = &widgetsGetPresetProjectSlugInput
+		}
+	}
+	v := &widgets.GetPresetPayload{}
+	v.Page = page
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetWidgetPayload builds the payload for the widgets getWidget endpoint
 // from CLI flags.
 func BuildGetWidgetPayload(widgetsGetWidgetID string, widgetsGetWidgetSessionToken string, widgetsGetWidgetProjectSlugInput string) (*widgets.GetWidgetPayload, error) {

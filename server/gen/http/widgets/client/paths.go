@@ -12,6 +12,11 @@ func ListWidgetsWidgetsPath() string {
 	return "/rpc/widgets.list"
 }
 
+// GetPresetWidgetsPath returns the URL path to the widgets service getPreset HTTP endpoint.
+func GetPresetWidgetsPath() string {
+	return "/rpc/widgets.preset"
+}
+
 // GetWidgetWidgetsPath returns the URL path to the widgets service getWidget HTTP endpoint.
 func GetWidgetWidgetsPath() string {
 	return "/rpc/widgets.get"

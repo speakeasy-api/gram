@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -51,8 +52,15 @@ type Service struct {
 	authz   *authz.Engine
 	audit   *audit.Logger
 	catalog *analytics.Catalog
+	presets func() (map[string]presetPage, error)
 	now     func() time.Time
 }
+
+// builtinPresets parses the embedded presets once. TestPresets keeps a
+// broken file from shipping, so a failure here is a server error.
+var builtinPresets = sync.OnceValues(func() (map[string]presetPage, error) {
+	return parsePresets(presetsJSON)
+})
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
@@ -67,6 +75,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		authz:   authzEngine,
 		audit:   auditLogger,
 		catalog: analytics.Default,
+		presets: builtinPresets,
 		now:     time.Now,
 	}
 }
@@ -153,6 +162,26 @@ func (s *Service) ListWidgets(ctx context.Context, _ *gen.ListWidgetsPayload) (*
 		result.Widgets = append(result.Widgets, s.view(ctx, row, now))
 	}
 	return result, nil
+}
+
+// GetPreset returns a product page's preset layout of widgets, each
+// validated as it is read, as a saved widget is.
+func (s *Service) GetPreset(ctx context.Context, payload *gen.GetPresetPayload) (*gen.WidgetPreset, error) {
+	if _, err := s.authorize(ctx, authz.ScopeProjectRead); err != nil {
+		return nil, err
+	}
+	pages, err := s.presets()
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load widget presets").LogError(ctx, s.logger)
+	}
+	page, ok := pages[payload.Page]
+	if !ok {
+		return nil, oops.E(oops.CodeNotFound, nil, "no preset for page %q", payload.Page)
+	}
+	now := s.now()
+	return presetView(page, func(dataset string, query, visualization []byte) string {
+		return s.validate(ctx, dataset, query, visualization, now)
+	}), nil
 }
 
 // GetWidget returns one widget, validated as it is read.

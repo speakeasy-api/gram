@@ -17,6 +17,7 @@ import (
 // Endpoints wraps the "widgets" service endpoints.
 type Endpoints struct {
 	ListWidgets     goa.Endpoint
+	GetPreset       goa.Endpoint
 	GetWidget       goa.Endpoint
 	CreateWidget    goa.Endpoint
 	UpdateWidget    goa.Endpoint
@@ -30,6 +31,7 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		ListWidgets:     NewListWidgetsEndpoint(s, a.APIKeyAuth),
+		GetPreset:       NewGetPresetEndpoint(s, a.APIKeyAuth),
 		GetWidget:       NewGetWidgetEndpoint(s, a.APIKeyAuth),
 		CreateWidget:    NewCreateWidgetEndpoint(s, a.APIKeyAuth),
 		UpdateWidget:    NewUpdateWidgetEndpoint(s, a.APIKeyAuth),
@@ -41,6 +43,7 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "widgets" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListWidgets = m(e.ListWidgets)
+	e.GetPreset = m(e.GetPreset)
 	e.GetWidget = m(e.GetWidget)
 	e.CreateWidget = m(e.CreateWidget)
 	e.UpdateWidget = m(e.UpdateWidget)
@@ -80,6 +83,41 @@ func NewListWidgetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 			return nil, err
 		}
 		return s.ListWidgets(ctx, p)
+	}
+}
+
+// NewGetPresetEndpoint returns an endpoint function that calls the method
+// "getPreset" of service "widgets".
+func NewGetPresetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetPresetPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetPreset(ctx, p)
 	}
 }
 

@@ -28,6 +28,32 @@ var ListWidgetsResult = Type("ListWidgetsResult", func() {
 	Required("widgets")
 })
 
+var PresetWidget = Type("PresetWidget", func() {
+	Description("A widget placed by a product page's preset: the shape the widgets service stores, plus where it sits. Presets are checked into the repository and cannot be edited.")
+	Attribute("key", String, "Stable within the page; identifies the card across releases", func() { Example("tool-calls") })
+	Attribute("name", String, "Display name")
+	Attribute("dataset", String, "The catalog dataset the widget asks", func() { Example("tool_calls") })
+	Attribute("query", MapOf(String, Any), "The question, as a saved widget stores it")
+	Attribute("visualization", MapOf(String, Any), "How the question is drawn, as a saved widget stores it")
+	Attribute("span", Int, "Columns the widget spans on a 12-column grid: a quarter, a third, a half or the full width", func() {
+		Enum(3, 4, 6, 12)
+	})
+	Attribute("invalid_reason", String, "Present when the widget does not validate against the catalog. CI checks every preset, so this is a safety net, not an expected state.")
+	Required("key", "name", "dataset", "query", "visualization", "span")
+})
+
+var PresetRow = Type("PresetRow", func() {
+	Attribute("widgets", ArrayOf(PresetWidget), "Left to right")
+	Required("widgets")
+})
+
+var WidgetPreset = Type("WidgetPreset", func() {
+	Description("A product page's widgets, laid out in rows on a 12-column grid. Built-in pages are presets checked into the repository, not rows in the widgets table.")
+	Attribute("page", String, "The page the preset lays out", func() { Example("mcp-tools") })
+	Attribute("rows", ArrayOf(PresetRow), "Top to bottom")
+	Required("page", "rows")
+})
+
 func widgetForm() {
 	Attribute("name", String, "Display name, at most 200 characters", func() {
 		MinLength(1)
@@ -67,6 +93,27 @@ var _ = Service("widgets", func() {
 		Meta("openapi:operationId", "listWidgets")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Widgets", "type": "query"}`)
+	})
+
+	Method("getPreset", func() {
+		Description("Get a product page's preset layout of widgets. Each widget is validated as it is read, as saved widgets are.")
+		Payload(func() {
+			Attribute("page", String, "The page whose preset to get", func() { MinLength(1) })
+			Required("page")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+		Result(WidgetPreset)
+		HTTP(func() {
+			GET("/rpc/widgets.preset")
+			Param("page")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "getWidgetPreset")
+		Meta("openapi:extension:x-speakeasy-name-override", "getPreset")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WidgetPreset", "type": "query"}`)
 	})
 
 	Method("getWidget", func() {

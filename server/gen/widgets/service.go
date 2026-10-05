@@ -19,6 +19,9 @@ type Service interface {
 	// List the project's widgets, most recently updated first. Each is validated
 	// as it is read, so a widget a catalog change broke says so.
 	ListWidgets(context.Context, *ListWidgetsPayload) (res *ListWidgetsResult, err error)
+	// Get a product page's preset layout of widgets. Each widget is validated as
+	// it is read, as saved widgets are.
+	GetPreset(context.Context, *GetPresetPayload) (res *WidgetPreset, err error)
 	// Get one widget by id, validated as it is read.
 	GetWidget(context.Context, *GetWidgetPayload) (res *Widget, err error)
 	// Save a widget. Any member of the project can. The question is validated
@@ -57,7 +60,7 @@ const ServiceName = "widgets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"listWidgets", "getWidget", "createWidget", "updateWidget", "duplicateWidget", "deleteWidget"}
+var MethodNames = [7]string{"listWidgets", "getPreset", "getWidget", "createWidget", "updateWidget", "duplicateWidget", "deleteWidget"}
 
 // CreateWidgetPayload is the payload type of the widgets service createWidget
 // method.
@@ -94,6 +97,14 @@ type DuplicateWidgetPayload struct {
 	ProjectSlugInput *string
 }
 
+// GetPresetPayload is the payload type of the widgets service getPreset method.
+type GetPresetPayload struct {
+	// The page whose preset to get
+	Page             string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
 // GetWidgetPayload is the payload type of the widgets service getWidget method.
 type GetWidgetPayload struct {
 	// The widget to get
@@ -114,6 +125,33 @@ type ListWidgetsPayload struct {
 type ListWidgetsResult struct {
 	// Widgets in the project, most recently updated first
 	Widgets []*Widget
+}
+
+type PresetRow struct {
+	// Left to right
+	Widgets []*PresetWidget
+}
+
+// A widget placed by a product page's preset: the shape the widgets service
+// stores, plus where it sits. Presets are checked into the repository and
+// cannot be edited.
+type PresetWidget struct {
+	// Stable within the page; identifies the card across releases
+	Key string
+	// Display name
+	Name string
+	// The catalog dataset the widget asks
+	Dataset string
+	// The question, as a saved widget stores it
+	Query map[string]any
+	// How the question is drawn, as a saved widget stores it
+	Visualization map[string]any
+	// Columns the widget spans on a 12-column grid: a quarter, a third, a half or
+	// the full width
+	Span int
+	// Present when the widget does not validate against the catalog. CI checks
+	// every preset, so this is a safety net, not an expected state.
+	InvalidReason *string
 }
 
 // UpdateWidgetPayload is the payload type of the widgets service updateWidget
@@ -161,6 +199,14 @@ type Widget struct {
 	InvalidReason *string
 	CreatedAt     string
 	UpdatedAt     string
+}
+
+// WidgetPreset is the result type of the widgets service getPreset method.
+type WidgetPreset struct {
+	// The page the preset lays out
+	Page string
+	// Top to bottom
+	Rows []*PresetRow
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

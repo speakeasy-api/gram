@@ -203,7 +203,7 @@ func UsageCommands() []string {
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
 		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
-		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
+		"widgets (list-widgets|get-preset|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
 		"workload-identities (list|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
 	}
@@ -4667,6 +4667,11 @@ func ParseEndpoint(
 		widgetsListWidgetsSessionTokenFlag     = widgetsListWidgetsFlags.String("session-token", "", "")
 		widgetsListWidgetsProjectSlugInputFlag = widgetsListWidgetsFlags.String("project-slug-input", "", "")
 
+		widgetsGetPresetFlags                = flag.NewFlagSet("get-preset", flag.ExitOnError)
+		widgetsGetPresetPageFlag             = widgetsGetPresetFlags.String("page", "REQUIRED", "")
+		widgetsGetPresetSessionTokenFlag     = widgetsGetPresetFlags.String("session-token", "", "")
+		widgetsGetPresetProjectSlugInputFlag = widgetsGetPresetFlags.String("project-slug-input", "", "")
+
 		widgetsGetWidgetFlags                = flag.NewFlagSet("get-widget", flag.ExitOnError)
 		widgetsGetWidgetIDFlag               = widgetsGetWidgetFlags.String("id", "REQUIRED", "")
 		widgetsGetWidgetSessionTokenFlag     = widgetsGetWidgetFlags.String("session-token", "", "")
@@ -5757,6 +5762,7 @@ func ParseEndpoint(
 
 	widgetsFlags.Usage = widgetsUsage
 	widgetsListWidgetsFlags.Usage = widgetsListWidgetsUsage
+	widgetsGetPresetFlags.Usage = widgetsGetPresetUsage
 	widgetsGetWidgetFlags.Usage = widgetsGetWidgetUsage
 	widgetsCreateWidgetFlags.Usage = widgetsCreateWidgetUsage
 	widgetsUpdateWidgetFlags.Usage = widgetsUpdateWidgetUsage
@@ -8793,6 +8799,9 @@ func ParseEndpoint(
 			case "list-widgets":
 				epf = widgetsListWidgetsFlags
 
+			case "get-preset":
+				epf = widgetsGetPresetFlags
+
 			case "get-widget":
 				epf = widgetsGetWidgetFlags
 
@@ -11706,6 +11715,9 @@ func ParseEndpoint(
 			case "list-widgets":
 				endpoint = c.ListWidgets()
 				data, err = widgetsc.BuildListWidgetsPayload(*widgetsListWidgetsSessionTokenFlag, *widgetsListWidgetsProjectSlugInputFlag)
+			case "get-preset":
+				endpoint = c.GetPreset()
+				data, err = widgetsc.BuildGetPresetPayload(*widgetsGetPresetPageFlag, *widgetsGetPresetSessionTokenFlag, *widgetsGetPresetProjectSlugInputFlag)
 			case "get-widget":
 				endpoint = c.GetWidget()
 				data, err = widgetsc.BuildGetWidgetPayload(*widgetsGetWidgetIDFlag, *widgetsGetWidgetSessionTokenFlag, *widgetsGetWidgetProjectSlugInputFlag)
@@ -31764,6 +31776,7 @@ func widgetsUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] widgets COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-widgets: List the project's widgets, most recently updated first. Each is validated as it is read, so a widget a catalog change broke says so.`)
+	fmt.Fprintln(os.Stderr, `    get-preset: Get a product page's preset layout of widgets. Each widget is validated as it is read, as saved widgets are.`)
 	fmt.Fprintln(os.Stderr, `    get-widget: Get one widget by id, validated as it is read.`)
 	fmt.Fprintln(os.Stderr, `    create-widget: Save a widget. Any member of the project can. The question is validated against the catalog, and the chart against the question, before it is stored.`)
 	fmt.Fprintln(os.Stderr, `    update-widget: Replace a widget's name, description, dataset, query and visualization. Its creator can; editing someone else's needs project write access.`)
@@ -31791,6 +31804,28 @@ func widgetsListWidgetsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "widgets list-widgets --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func widgetsGetPresetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] widgets get-preset", os.Args[0])
+	fmt.Fprint(os.Stderr, " -page STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a product page's preset layout of widgets. Each widget is validated as it is read, as saved widgets are.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -page STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "widgets get-preset --page \"aa\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func widgetsGetWidgetUsage() {

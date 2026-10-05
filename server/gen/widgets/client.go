@@ -16,6 +16,7 @@ import (
 // Client is the "widgets" service client.
 type Client struct {
 	ListWidgetsEndpoint     goa.Endpoint
+	GetPresetEndpoint       goa.Endpoint
 	GetWidgetEndpoint       goa.Endpoint
 	CreateWidgetEndpoint    goa.Endpoint
 	UpdateWidgetEndpoint    goa.Endpoint
@@ -24,9 +25,10 @@ type Client struct {
 }
 
 // NewClient initializes a "widgets" service client given the endpoints.
-func NewClient(listWidgets, getWidget, createWidget, updateWidget, duplicateWidget, deleteWidget goa.Endpoint) *Client {
+func NewClient(listWidgets, getPreset, getWidget, createWidget, updateWidget, duplicateWidget, deleteWidget goa.Endpoint) *Client {
 	return &Client{
 		ListWidgetsEndpoint:     listWidgets,
+		GetPresetEndpoint:       getPreset,
 		GetWidgetEndpoint:       getWidget,
 		CreateWidgetEndpoint:    createWidget,
 		UpdateWidgetEndpoint:    updateWidget,
@@ -55,6 +57,28 @@ func (c *Client) ListWidgets(ctx context.Context, p *ListWidgetsPayload) (res *L
 		return
 	}
 	return ires.(*ListWidgetsResult), nil
+}
+
+// GetPreset calls the "getPreset" endpoint of the "widgets" service.
+// GetPreset may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetPreset(ctx context.Context, p *GetPresetPayload) (res *WidgetPreset, err error) {
+	var ires any
+	ires, err = c.GetPresetEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*WidgetPreset), nil
 }
 
 // GetWidget calls the "getWidget" endpoint of the "widgets" service.

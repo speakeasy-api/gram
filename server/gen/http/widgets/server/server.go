@@ -20,6 +20,7 @@ import (
 type Server struct {
 	Mounts          []*MountPoint
 	ListWidgets     http.Handler
+	GetPreset       http.Handler
 	GetWidget       http.Handler
 	CreateWidget    http.Handler
 	UpdateWidget    http.Handler
@@ -55,6 +56,7 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"ListWidgets", "GET", "/rpc/widgets.list"},
+			{"GetPreset", "GET", "/rpc/widgets.preset"},
 			{"GetWidget", "GET", "/rpc/widgets.get"},
 			{"CreateWidget", "POST", "/rpc/widgets.create"},
 			{"UpdateWidget", "POST", "/rpc/widgets.update"},
@@ -62,6 +64,7 @@ func New(
 			{"DeleteWidget", "DELETE", "/rpc/widgets.delete"},
 		},
 		ListWidgets:     NewListWidgetsHandler(e.ListWidgets, mux, decoder, encoder, errhandler, formatter),
+		GetPreset:       NewGetPresetHandler(e.GetPreset, mux, decoder, encoder, errhandler, formatter),
 		GetWidget:       NewGetWidgetHandler(e.GetWidget, mux, decoder, encoder, errhandler, formatter),
 		CreateWidget:    NewCreateWidgetHandler(e.CreateWidget, mux, decoder, encoder, errhandler, formatter),
 		UpdateWidget:    NewUpdateWidgetHandler(e.UpdateWidget, mux, decoder, encoder, errhandler, formatter),
@@ -76,6 +79,7 @@ func (s *Server) Service() string { return "widgets" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListWidgets = m(s.ListWidgets)
+	s.GetPreset = m(s.GetPreset)
 	s.GetWidget = m(s.GetWidget)
 	s.CreateWidget = m(s.CreateWidget)
 	s.UpdateWidget = m(s.UpdateWidget)
@@ -89,6 +93,7 @@ func (s *Server) MethodNames() []string { return widgets.MethodNames[:] }
 // Mount configures the mux to serve the widgets endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountListWidgetsHandler(mux, h.ListWidgets)
+	MountGetPresetHandler(mux, h.GetPreset)
 	MountGetWidgetHandler(mux, h.GetWidget)
 	MountCreateWidgetHandler(mux, h.CreateWidget)
 	MountUpdateWidgetHandler(mux, h.UpdateWidget)
@@ -131,6 +136,59 @@ func NewListWidgetsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listWidgets")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "widgets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetPresetHandler configures the mux to serve the "widgets" service
+// "getPreset" endpoint.
+func MountGetPresetHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/widgets.preset", f)
+}
+
+// NewGetPresetHandler creates a HTTP handler which loads the HTTP request and
+// calls the "widgets" service "getPreset" endpoint.
+func NewGetPresetHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetPresetRequest(mux, decoder)
+		encodeResponse = EncodeGetPresetResponse(encoder)
+		encodeError    = EncodeGetPresetError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getPreset")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "widgets")
 		payload, err := decodeRequest(r)
 		if err != nil {

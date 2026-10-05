@@ -252,6 +252,243 @@ func DecodeListWidgetsResponse(decoder func(*http.Response) goahttp.Decoder, res
 	}
 }
 
+// BuildGetPresetRequest instantiates a HTTP request object with method and
+// path set to call the "widgets" service "getPreset" endpoint
+func (c *Client) BuildGetPresetRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetPresetWidgetsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("widgets", "getPreset", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetPresetRequest returns an encoder for requests sent to the widgets
+// getPreset server.
+func EncodeGetPresetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*widgets.GetPresetPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("widgets", "getPreset", "*widgets.GetPresetPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("page", p.Page)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetPresetResponse returns a decoder for responses returned by the
+// widgets getPreset endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeGetPresetResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetPresetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetPresetResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("widgets", "getPreset", err)
+			}
+			err = ValidateGetPresetResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("widgets", "getPreset", err)
+			}
+			res := NewGetPresetWidgetPresetOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetPresetUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("widgets", "getPreset", err)
+			}
+			err = ValidateGetPresetUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("widgets", "getPreset", err)
+			}
+			return nil, NewGetPresetUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetPresetForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("widgets", "getPreset", err)
+			}
+			err = ValidateGetPresetForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("widgets", "getPreset", err)
+			}
+			return nil, NewGetPresetForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetPresetBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("widgets", "getPreset", err)
+			}
+			err = ValidateGetPresetBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("widgets", "getPreset", err)
+			}
+			return nil, NewGetPresetBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetPresetNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("widgets", "getPreset", err)
+			}
+			err = ValidateGetPresetNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("widgets", "getPreset", err)
+			}
+			return nil, NewGetPresetNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetPresetConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("widgets", "getPreset", err)
+			}
+			err = ValidateGetPresetConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("widgets", "getPreset", err)
+			}
+			return nil, NewGetPresetConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetPresetUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("widgets", "getPreset", err)
+			}
+			err = ValidateGetPresetUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("widgets", "getPreset", err)
+			}
+			return nil, NewGetPresetUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetPresetInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("widgets", "getPreset", err)
+			}
+			err = ValidateGetPresetInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("widgets", "getPreset", err)
+			}
+			return nil, NewGetPresetInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetPresetInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("widgets", "getPreset", err)
+				}
+				err = ValidateGetPresetInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("widgets", "getPreset", err)
+				}
+				return nil, NewGetPresetInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetPresetUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("widgets", "getPreset", err)
+				}
+				err = ValidateGetPresetUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("widgets", "getPreset", err)
+				}
+				return nil, NewGetPresetUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("widgets", "getPreset", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetPresetGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("widgets", "getPreset", err)
+			}
+			err = ValidateGetPresetGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("widgets", "getPreset", err)
+			}
+			return nil, NewGetPresetGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("widgets", "getPreset", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetWidgetRequest instantiates a HTTP request object with method and
 // path set to call the "widgets" service "getWidget" endpoint
 func (c *Client) BuildGetWidgetRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1441,6 +1678,48 @@ func unmarshalWidgetResponseBodyToWidgetsWidget(v *WidgetResponseBody) *widgets.
 		InvalidReason:   v.InvalidReason,
 		CreatedAt:       *v.CreatedAt,
 		UpdatedAt:       *v.UpdatedAt,
+	}
+	res.Query = make(map[string]any, len(v.Query))
+	for key, val := range v.Query {
+		tk := key
+		tv := val
+		res.Query[tk] = tv
+	}
+	res.Visualization = make(map[string]any, len(v.Visualization))
+	for key, val := range v.Visualization {
+		tk := key
+		tv := val
+		res.Visualization[tk] = tv
+	}
+
+	return res
+}
+
+// unmarshalPresetRowResponseBodyToWidgetsPresetRow builds a value of type
+// *widgets.PresetRow from a value of type *PresetRowResponseBody.
+func unmarshalPresetRowResponseBodyToWidgetsPresetRow(v *PresetRowResponseBody) *widgets.PresetRow {
+	res := &widgets.PresetRow{}
+	res.Widgets = make([]*widgets.PresetWidget, len(v.Widgets))
+	for i, val := range v.Widgets {
+		if val == nil {
+			res.Widgets[i] = nil
+			continue
+		}
+		res.Widgets[i] = unmarshalPresetWidgetResponseBodyToWidgetsPresetWidget(val)
+	}
+
+	return res
+}
+
+// unmarshalPresetWidgetResponseBodyToWidgetsPresetWidget builds a value of
+// type *widgets.PresetWidget from a value of type *PresetWidgetResponseBody.
+func unmarshalPresetWidgetResponseBodyToWidgetsPresetWidget(v *PresetWidgetResponseBody) *widgets.PresetWidget {
+	res := &widgets.PresetWidget{
+		Key:           *v.Key,
+		Name:          *v.Name,
+		Dataset:       *v.Dataset,
+		Span:          *v.Span,
+		InvalidReason: v.InvalidReason,
 	}
 	res.Query = make(map[string]any, len(v.Query))
 	for key, val := range v.Query {
