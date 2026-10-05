@@ -1071,7 +1071,17 @@ SELECT EXISTS (
   WHERE p.id = $1 AND p.organization_id = $2 AND p.project_id = $3
     AND ((ps.toolset_id = $4::uuid)
       OR (ps.mcp_server_id = $5::uuid)
-      OR (ps.toolset_id = $6::uuid))
+      OR (ps.toolset_id = $6::uuid)
+      OR (ps.mcp_server_id IN (
+        SELECT m.id FROM mcp_servers m
+        WHERE m.toolset_id = $4::uuid
+          AND m.project_id = $3 AND m.deleted IS FALSE
+      ))
+      OR (ps.toolset_id IN (
+        SELECT m.toolset_id FROM mcp_servers m
+        WHERE m.id = $5::uuid
+          AND m.project_id = $3 AND m.deleted IS FALSE
+      )))
     AND (ps.deleted IS FALSE OR $7::boolean)
 )
 `

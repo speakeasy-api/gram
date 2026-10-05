@@ -832,10 +832,11 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	// Serialize all backend representations with role delivery before checking identity.
+	if err := lockDistributionAdmission(ctx, tx, *ac.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, s.logger)
+	}
 	if backend.mcpServerID.Valid || backend.metaMcpServerID.Valid {
-		if err := lockDistributionAdmission(ctx, tx, *ac.ProjectID); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, s.logger)
-		}
 		if backend.metaMcpServerID.Valid {
 			gateway, gatewayErr := s.repo.WithTx(tx).GetGatewayForPluginServer(ctx, repo.GetGatewayForPluginServerParams{
 				MetaMcpServerID: backend.metaMcpServerID.UUID,
@@ -865,6 +866,20 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 				return nil, mapDistributionAdmissionError(err)
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, s.logger)
+		}
+	}
+
+	if !backend.metaMcpServerID.Valid {
+		exists, err := s.repo.WithTx(tx).HasRoleDeliveryMembership(ctx, repo.HasRoleDeliveryMembershipParams{
+			PluginID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
+			ToolsetID: backend.toolsetID, McpServerID: backend.mcpServerID,
+			LegacyToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, PreserveRemoval: false,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check plugin server identity").LogError(ctx, s.logger)
+		}
+		if exists {
+			return nil, oops.E(oops.CodeConflict, nil, "this server has already been added to the plugin")
 		}
 	}
 

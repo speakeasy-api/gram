@@ -1262,7 +1262,17 @@ SELECT EXISTS (
   WHERE p.id = @plugin_id AND p.organization_id = @organization_id AND p.project_id = @project_id
     AND ((ps.toolset_id = sqlc.narg('toolset_id')::uuid)
       OR (ps.mcp_server_id = sqlc.narg('mcp_server_id')::uuid)
-      OR (ps.toolset_id = sqlc.narg('legacy_toolset_id')::uuid))
+      OR (ps.toolset_id = sqlc.narg('legacy_toolset_id')::uuid)
+      OR (ps.mcp_server_id IN (
+        SELECT m.id FROM mcp_servers m
+        WHERE m.toolset_id = sqlc.narg('toolset_id')::uuid
+          AND m.project_id = @project_id AND m.deleted IS FALSE
+      ))
+      OR (ps.toolset_id IN (
+        SELECT m.toolset_id FROM mcp_servers m
+        WHERE m.id = sqlc.narg('mcp_server_id')::uuid
+          AND m.project_id = @project_id AND m.deleted IS FALSE
+      )))
     AND (ps.deleted IS FALSE OR @preserve_removal::boolean)
 );
 

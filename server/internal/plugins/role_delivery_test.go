@@ -10,7 +10,9 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	endpointrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
@@ -127,6 +129,11 @@ func TestRoleAudiencePreservesLegacyToolsetMembershipIdentity(t *testing.T) {
 	require.NoError(t, err)
 	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{role}})
 	require.NoError(t, err)
+	// The public manual-add path also rejects the typed alias of this legacy entry.
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, McpServerID: conv.PtrEmpty(wrapper.String()), DisplayName: conv.PtrEmpty("Typed alias"), Policy: "required"})
+	var duplicate *oops.ShareableError
+	require.ErrorAs(t, err, &duplicate)
+	require.Equal(t, oops.CodeConflict, duplicate.Code)
 	got, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
 	require.NoError(t, err)
 	require.Len(t, got.Servers, 1)
@@ -172,4 +179,52 @@ func TestRoleAudienceDeliveryAvoidsOccupiedFallbackDisplayName(t *testing.T) {
 		actualIDs = append(actualIDs, *entry.ToolsetID)
 	}
 	require.ElementsMatch(t, expectedIDs, actualIDs, "delivery preserves both original servers and adds the granted target")
+}
+
+func TestAddPluginServerRejectsLegacyDuplicateOfRoleDeliveredServer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestPluginsService(t)
+	ac, _ := contextvalues.GetAuthContext(ctx)
+	role := createTestRolePrincipal(t, ctx, ti, "legacy-delivery")
+	server := createTestToolset(t, ctx, ti.conn, "Legacy server")
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Legacy delivery"})
+	require.NoError(t, err)
+	id := server.ID.String()
+
+	principal, err := urn.ParsePrincipal(role)
+	require.NoError(t, err)
+	selectors, err := authz.NewSelector(authz.ScopeMCPConnect, id).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: principal, Scope: string(authz.ScopeMCPConnect), Selectors: selectors})
+	require.NoError(t, err)
+	wrapper, err := testrepo.New(ti.conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{ID: uuid.New(), ProjectID: *ac.ProjectID, ToolsetID: uuid.NullUUID{UUID: server.ID, Valid: true}, Visibility: "private"})
+	require.NoError(t, err)
+	_, err = endpointrepo.New(ti.conn).CreateMCPEndpoint(ctx, endpointrepo.CreateMCPEndpointParams{ProjectID: *ac.ProjectID, McpServerID: uuid.NullUUID{UUID: wrapper, Valid: true}, Slug: "legacy-endpoint"})
+	require.NoError(t, err)
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{role}})
+	require.NoError(t, err)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: &id, DisplayName: conv.PtrEmpty("Manual alias"), Policy: "optional"})
+	var duplicate *oops.ShareableError
+	require.ErrorAs(t, err, &duplicate)
+	require.Equal(t, oops.CodeConflict, duplicate.Code)
+	got, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+	require.NoError(t, err)
+	require.Len(t, got.Servers, 1)
+	require.Equal(t, "required", got.Servers[0].Policy, "duplicate does not overwrite automatic membership configuration")
+	removedID := got.Servers[0].ID
+	require.NoError(t, ti.service.RemovePluginServer(ctx, &gen.RemovePluginServerPayload{PluginID: plugin.ID, ID: removedID}))
+	membership, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: &id, Policy: "optional"})
+	require.NoError(t, err, "deleted typed membership does not prevent an explicit legacy re-add")
+	require.NotEqual(t, removedID, membership.ID)
+	got, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+	require.NoError(t, err)
+	require.Len(t, got.Servers, 1)
+	require.Equal(t, membership.ID, got.Servers[0].ID)
+	require.Equal(t, "optional", got.Servers[0].Policy)
+
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{}})
+	require.NoError(t, err)
+	got, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+	require.NoError(t, err)
+	require.Empty(t, got.Servers)
 }
