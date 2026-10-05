@@ -28,9 +28,6 @@ const HTTP_RETRY_MAX: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Error)]
 enum MiddlewareError {
-    #[error("token registry lock poisoned")]
-    LockPoisoned,
-
     #[error("invalid bearer token header value: {0}")]
     InvalidTokenHeader(#[from] http::header::InvalidHeaderValue),
 }
@@ -55,7 +52,7 @@ impl TokenRegistry {
         let mut slot = self
             .inner
             .write()
-            .map_err(|_| RunnerError::Loop("token registry write lock poisoned".into()))?;
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         *slot = next.into();
         Ok(())
     }
@@ -64,7 +61,7 @@ impl TokenRegistry {
         Ok(self
             .inner
             .read()
-            .map_err(|_| RunnerError::Loop("token registry read lock poisoned".into()))?
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone())
     }
 }
@@ -79,7 +76,7 @@ impl Middleware for TokenRegistry {
     ) -> reqwest_middleware::Result<reqwest::Response> {
         let token = self
             .current()
-            .map_err(|_| reqwest_middleware::Error::middleware(MiddlewareError::LockPoisoned))?;
+            .map_err(reqwest_middleware::Error::middleware)?;
         let value = http::HeaderValue::try_from(format!("Bearer {token}"))
             .map_err(|e| reqwest_middleware::Error::middleware(MiddlewareError::from(e)))?;
         req.headers_mut().insert(http::header::AUTHORIZATION, value);
@@ -197,5 +194,25 @@ impl McpHttpClient for McpRotatingClient {
             headers,
         )
         .await
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scalar_bearer_recovers_after_lock_poison() {
+        let tokens = TokenRegistry::new("opaque-original");
+        let poison = tokens.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = poison.inner.write().unwrap();
+            panic!("test-only poison");
+        })
+        .join();
+        assert_eq!(tokens.current().unwrap(), "opaque-original");
+        tokens.rotate("opaque-next").unwrap();
+        assert_eq!(tokens.current().unwrap(), "opaque-next");
     }
 }
