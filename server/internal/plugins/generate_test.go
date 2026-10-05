@@ -3220,6 +3220,11 @@ func TestGeneratePlatformMCPPackageGatesCatalogPluginCreation(t *testing.T) {
 		"A managed project assistant has no `create_plugin` tool, so never offer or call it there",
 		"ask the user to create the plugin in the AICP dashboard or from an external MCP client",
 		"call `list_plugins` again and continue with the plugin they created",
+		// A server without the plugin metadata writes answers
+		// feature_unavailable; the workflow must stop and hand off rather
+		// than retry or quietly use another plugin.
+		"If it refuses with `feature_unavailable`, creating a plugin is not available on this server",
+		"do not retry or substitute another plugin",
 	} {
 		require.Contains(t, workflow, required)
 	}
