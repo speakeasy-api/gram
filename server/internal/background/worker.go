@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -100,20 +101,22 @@ type WorkerOptions struct {
 	// lookups; empty falls back to GitHub's small unauthenticated budget.
 	GitHubEvidenceToken string
 	SiteURL             *url.URL
-	BillingTracker      billing.Tracker
-	BillingRepository   billing.Repository
-	StripeClient        stripeclient.Client
-	RedisClient         *redis.Client
-	CacheAdapter        cache.Cache
-	EmailService        *email.Service
-	PosthogClient       *posthog.Posthog
-	FunctionsDeployer   functions.Deployer
-	FunctionsVersion    functions.RunnerVersion
-	RagService          *rag.ToolsetVectorStore
-	MCPRegistryClient   *externalmcp.RegistryClient
-	MCPCatalog          *externalmcp.CatalogService
-	TelemetryLogger     *telemetry.Logger
-	ClickhouseConn      clickhouse.Conn
+	// OrgHosts resolves the host of links sent to an organization by email.
+	OrgHosts          *orghost.Resolver
+	BillingTracker    billing.Tracker
+	BillingRepository billing.Repository
+	StripeClient      stripeclient.Client
+	RedisClient       *redis.Client
+	CacheAdapter      cache.Cache
+	EmailService      *email.Service
+	PosthogClient     *posthog.Posthog
+	FunctionsDeployer functions.Deployer
+	FunctionsVersion  functions.RunnerVersion
+	RagService        *rag.ToolsetVectorStore
+	MCPRegistryClient *externalmcp.RegistryClient
+	MCPCatalog        *externalmcp.CatalogService
+	TelemetryLogger   *telemetry.Logger
+	ClickhouseConn    clickhouse.Conn
 	// MeterReadConn uses the least-privilege ClickHouse reader for billing summaries.
 	MeterReadConn       clickhouse.Conn
 	TelemetryRepo       *telemetryrepo.Queries
@@ -217,6 +220,7 @@ func ForDeploymentProcessing(
 		ExpectedARecords:             nil,
 		GitHubEvidenceToken:          "",
 		SiteURL:                      nil,
+		OrgHosts:                     orghost.New(orghost.Config{ServerURL: nil, SiteURL: nil, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
 		BillingTracker:               nil,
 		BillingRepository:            nil,
 		StripeClient:                 nil,
@@ -308,6 +312,7 @@ func NewTemporalWorker(
 		ExpectedARecords:             nil,
 		GitHubEvidenceToken:          "",
 		SiteURL:                      nil,
+		OrgHosts:                     orghost.New(orghost.Config{ServerURL: nil, SiteURL: nil, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
 		BillingTracker:               nil,
 		BillingRepository:            nil,
 		StripeClient:                 nil,
@@ -365,6 +370,7 @@ func NewTemporalWorker(
 			ExpectedARecords:             conv.DefaultSlice(o.ExpectedARecords, opts.ExpectedARecords),
 			GitHubEvidenceToken:          conv.Default(o.GitHubEvidenceToken, opts.GitHubEvidenceToken),
 			SiteURL:                      conv.Default(o.SiteURL, opts.SiteURL),
+			OrgHosts:                     conv.Default(o.OrgHosts, opts.OrgHosts),
 			BillingTracker:               conv.Default(o.BillingTracker, opts.BillingTracker),
 			BillingRepository:            conv.Default(o.BillingRepository, opts.BillingRepository),
 			StripeClient:                 conv.Default(o.StripeClient, opts.StripeClient),
@@ -478,6 +484,7 @@ func NewTemporalWorker(
 		opts.ExpectedTargetCNAME,
 		opts.ExpectedARecords,
 		opts.SiteURL,
+		opts.OrgHosts,
 		opts.BillingTracker,
 		opts.BillingRepository,
 		opts.StripeClient,
