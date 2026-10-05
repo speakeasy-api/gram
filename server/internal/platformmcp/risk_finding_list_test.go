@@ -481,7 +481,7 @@ func TestRiskFindingListToolsMCPInProcess(t *testing.T) {
 	require.Contains(t, string(findingDescriptor.InputSchema), `"execution_id"`)
 	outputSchema, err := json.Marshal(inferOutputSchema[ListRiskFindingPageOutput](riskFindingListToolName))
 	require.NoError(t, err)
-	require.Contains(t, string(outputSchema), "the MCP tool call that raised this finding")
+	require.Contains(t, string(outputSchema), "the mediated MCP execution (tool call, resource read or prompt get) that raised this finding")
 	require.Contains(t, findingDescriptor.Description, "mediation_surface")
 	require.Contains(t, string(descriptorByName(t, reg, riskRuleBreakdownToolName).InputSchema), `"required":["category"]`)
 

@@ -279,12 +279,12 @@ var RiskExclusion = Type("RiskExclusion", func() {
 // riskExecutionAttributes describes mediated execution metadata without
 // implying that a finding has a durable chat anchor or revealable payload.
 func riskExecutionAttributes() {
-	Attribute("execution_id", String, "The MCP tool call that raised this finding. Filter listResults by it to see every finding on that call.")
+	Attribute("execution_id", String, "The mediated MCP execution (tool call, resource read or prompt get) that raised this finding. Filter listResults by it to list that execution's non-dismissed findings.")
 	Attribute("mcp_server_id", String, "Concrete MCP server that executed the operation.")
 	Attribute("meta_mcp_server_id", String, "Outer gateway that routed the execution, when present.")
 	Attribute("toolset_id", String, "Toolset serving the execution, when present.")
 	Attribute("tool_name", String, "Name of the concrete tool, when applicable.")
-	Attribute("phase", String, "Which side of the MCP tool call was scanned: request (the arguments) or response (the result).")
+	Attribute("phase", String, "Which phase of the mediated MCP execution was scanned: its request or its response.")
 	Attribute("mediation_surface", String, "Concrete mediation surface where the execution was observed.")
 	Attribute("mcp_method", String, "MCP method or equivalent mediated operation.")
 	Attribute("principal_kind", String, "Credential provenance class resolved by MCP identity.")

@@ -898,9 +898,11 @@ type ListRiskResultsPayload struct {
 	// loaded page, such as from a shared link. A dismissed finding, such as a
 	// false positive, is not returned.
 	ResultID *string
-	// Optional MCP tool call ID, the execution_id a result carries; returns every
-	// finding raised on that one call across its request and response phases.
-	// Dismissed findings, such as false positives, are not returned.
+	// Optional ID of one mediated MCP execution (tool call, resource read or
+	// prompt get), the execution_id a result carries; returns the live findings on
+	// that execution across its request and response phases. Findings that were
+	// dismissed, auto-excluded by exclusion rules, or raised under deleted
+	// policies are omitted.
 	ExecutionID *string
 	// Optional rule category key to filter by (e.g. secrets, pii, financial).
 	Category *string

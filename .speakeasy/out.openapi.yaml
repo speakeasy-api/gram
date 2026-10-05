@@ -52901,11 +52901,11 @@ paths:
             format: uuid
             type: string
         - allowEmptyValue: true
-          description: Optional MCP tool call ID, the execution_id a result carries; returns every finding raised on that one call across its request and response phases. Dismissed findings, such as false positives, are not returned.
+          description: Optional ID of one mediated MCP execution (tool call, resource read or prompt get), the execution_id a result carries; returns the live findings on that execution across its request and response phases. Findings that were dismissed, auto-excluded by exclusion rules, or raised under deleted policies are omitted.
           in: query
           name: execution_id
           schema:
-            description: Optional MCP tool call ID, the execution_id a result carries; returns every finding raised on that one call across its request and response phases. Dismissed findings, such as false positives, are not returned.
+            description: Optional ID of one mediated MCP execution (tool call, resource read or prompt get), the execution_id a result carries; returns the live findings on that execution across its request and response phases. Findings that were dismissed, auto-excluded by exclusion rules, or raised under deleted policies are omitted.
             type: string
         - allowEmptyValue: true
           description: Optional rule category key to filter by (e.g. secrets, pii, financial).
@@ -95092,7 +95092,7 @@ components:
           format: uuid
         execution_id:
           type: string
-          description: The MCP tool call that raised this finding. Filter listResults by it to see every finding on that call.
+          description: The mediated MCP execution (tool call, resource read or prompt get) that raised this finding. Filter listResults by it to list that execution's non-dismissed findings.
         false_positive_at:
           type: string
           description: 'Deprecated: mirror of suppressed_at, kept while clients migrate to the suppressed_* fields. Null when not suppressed.'
@@ -95124,7 +95124,7 @@ components:
           description: Outer gateway that routed the execution, when present.
         phase:
           type: string
-          description: 'Which side of the MCP tool call was scanned: request (the arguments) or response (the result).'
+          description: 'Which phase of the mediated MCP execution was scanned: its request or its response.'
         policy_id:
           type: string
           description: The risk policy ID.
@@ -95227,7 +95227,7 @@ components:
             - quarantined
         execution_id:
           type: string
-          description: The MCP tool call that raised this finding. Filter listResults by it to see every finding on that call.
+          description: The mediated MCP execution (tool call, resource read or prompt get) that raised this finding. Filter listResults by it to list that execution's non-dismissed findings.
         id:
           type: string
           description: The result ID.
@@ -95252,7 +95252,7 @@ components:
           description: Outer gateway that routed the execution, when present.
         phase:
           type: string
-          description: 'Which side of the MCP tool call was scanned: request (the arguments) or response (the result).'
+          description: 'Which phase of the mediated MCP execution was scanned: its request or its response.'
         policy_id:
           type: string
           description: The risk policy ID.

@@ -105,12 +105,12 @@ type RiskFinding struct {
 	ID                 string   `json:"id"`
 	PolicyID           string   `json:"policy_id"`
 	PolicyVersion      int64    `json:"policy_version"`
-	ExecutionID        string   `json:"execution_id,omitempty" jsonschema:"the MCP tool call that raised this finding; pass it as the execution_id filter to list everything that call triggered"`
+	ExecutionID        string   `json:"execution_id,omitempty" jsonschema:"the mediated MCP execution (tool call, resource read or prompt get) that raised this finding; pass it as the execution_id filter to list its non-dismissed findings"`
 	MCPServerID        string   `json:"mcp_server_id,omitempty"`
 	MetaMCPServerID    string   `json:"meta_mcp_server_id,omitempty"`
 	ToolsetID          string   `json:"toolset_id,omitempty"`
 	ToolName           string   `json:"tool_name,omitempty"`
-	Phase              string   `json:"phase,omitempty" jsonschema:"which side of the MCP tool call was scanned: request (the arguments) or response (the result)"`
+	Phase              string   `json:"phase,omitempty" jsonschema:"which phase of the mediated MCP execution was scanned: its request or its response"`
 	MediationSurface   string   `json:"mediation_surface,omitempty"`
 	MCPMethod          string   `json:"mcp_method,omitempty"`
 	PrincipalKind      string   `json:"principal_kind,omitempty"`
