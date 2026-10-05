@@ -18,7 +18,7 @@ import (
 type scopeOutcome string
 
 const (
-	// scopeOutcomeUnknown: the resource document omits scopes_supported.
+	// scopeOutcomeUnknown: either metadata document omits scopes_supported.
 	scopeOutcomeUnknown scopeOutcome = "unknown"
 	// scopeOutcomeMatch: both advertise the same set.
 	scopeOutcomeMatch scopeOutcome = "match"
@@ -35,7 +35,7 @@ const (
 // compareScopes relates a resource document's scopes_supported (nil when the
 // member is omitted) to its issuer's. Both sides are treated as sets.
 func compareScopes(resource, issuer []string) scopeOutcome {
-	if resource == nil {
+	if resource == nil || issuer == nil {
 		return scopeOutcomeUnknown
 	}
 	resourceSet := make(map[string]struct{}, len(resource))
@@ -69,9 +69,15 @@ func compareScopes(resource, issuer []string) scopeOutcome {
 }
 
 // recordProtectedResource stores the document read for resourceURL. The
-// resource identifier is the URL the document was probed for, not the
-// document's own resource member.
+// resource identifier must exactly match the document's resource member.
 func (s *Service) recordProtectedResource(ctx context.Context, projectID uuid.UUID, orgID, resourceURL string, doc wellknown.OAuthProtectedResourceMetadata) error {
+	// RFC 9728 §§3.3 and 6 require exact equality, not URL equivalence.
+	// Keep this check at the write boundary so every discovery path rejects
+	// mismatches, including identifiers differing only by a trailing slash.
+	if doc.Resource == "" || doc.Resource != resourceURL {
+		return nil
+	}
+
 	_, err := repo.New(s.db).UpsertRemoteProtectedResource(ctx, repo.UpsertRemoteProtectedResourceParams{
 		ProjectID:                             projectID,
 		OrganizationID:                        orgID,

@@ -1,10 +1,14 @@
 package remotemcp
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 )
 
 func TestCompareScopes(t *testing.T) {
@@ -24,7 +28,9 @@ func TestCompareScopes(t *testing.T) {
 		{name: "duplicates ignored", resource: []string{"a", "a"}, issuer: []string{"a"}, want: scopeOutcomeMatch},
 		{name: "resource subset", resource: []string{"a"}, issuer: []string{"a", "b"}, want: scopeOutcomeResourceSubset},
 		{name: "resource superset", resource: []string{"a", "b"}, issuer: []string{"a"}, want: scopeOutcomeResourceSuperset},
-		{name: "resource superset of nothing", resource: []string{"a"}, issuer: nil, want: scopeOutcomeResourceSuperset},
+		{name: "resource superset of empty set", resource: []string{"a"}, issuer: []string{}, want: scopeOutcomeResourceSuperset},
+		{name: "issuer omits member", resource: []string{"a"}, issuer: nil, want: scopeOutcomeUnknown},
+		{name: "issuer omits member and resource empty", resource: []string{}, issuer: nil, want: scopeOutcomeUnknown},
 		{name: "disjoint", resource: []string{"a"}, issuer: []string{"b"}, want: scopeOutcomeDisjoint},
 		{name: "partial overlap", resource: []string{"a", "b"}, issuer: []string{"b", "c"}, want: scopeOutcomePartialOverlap},
 	}
@@ -79,6 +85,31 @@ func TestParseChallengeScopes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tc.want, parseChallengeScopes(tc.headers))
+		})
+	}
+}
+
+func TestRecordProtectedResourceRejectsMismatchedIdentifier(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		resource string
+		probed   string
+	}{
+		{name: "document adds trailing slash", resource: "https://rs.example.test/mcp/", probed: "https://rs.example.test/mcp"},
+		{name: "document omits trailing slash", resource: "https://rs.example.test/mcp", probed: "https://rs.example.test/mcp/"},
+		{name: "different resource", resource: "https://rs.example.test/other", probed: "https://rs.example.test/mcp"},
+		{name: "missing resource", resource: "", probed: "https://rs.example.test/mcp"},
+		{name: "both empty", resource: "", probed: ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			// A nil database proves rejected documents never reach persistence.
+			s := new(Service)
+			doc := wellknown.OAuthProtectedResourceMetadata{Resource: tc.resource}
+			require.NoError(t, s.recordProtectedResource(context.Background(), uuid.Nil, "", tc.probed, doc))
 		})
 	}
 }
