@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -286,28 +287,24 @@ func TestPolicyEvaluator_SkipsPayloadWhenToolIOLogsLookupFails(t *testing.T) {
 
 func TestPolicyEvaluator_SlowToolIOLogsLookupStillStoresMatchEvidence(t *testing.T) {
 	t.Parallel()
-	projectID := uuid.New()
-	var storeErr error
-	evidence := &evidenceWriter{}
-	evidence.store = func(ctx context.Context, batch risk.MCPFindingEvidenceBatch) error {
-		storeErr = ctx.Err()
-		evidence.batches = append(evidence.batches, batch)
-		return nil
-	}
-	evaluator := newPolicyEvaluator(t, staticPolicies(policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Block policy", Action: "block", Version: 1}), policyDetectorFunc(func(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
-		return []scanners.Finding{{RuleID: "secret.token", Description: "Credential detected", Match: "secret", StartPos: 10, EndPos: 16, Tags: []string{}, Source: "gitleaks", Confidence: 1}}, nil
-	}), &findingPublisher{}, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithMCPFindingEvidenceWriter(evidence, func(ctx context.Context, _ string) (bool, error) {
-		<-ctx.Done()
-		return true, ctx.Err()
-	}))
-
-	require.True(t, evaluator.Scan(t.Context(), requestSubject(t.Context(), projectID, uuid.New(), `{"token":"secret"}`)).Denied())
-	batches := evidence.snapshot()
-	require.NoError(t, storeErr)
-	require.Len(t, batches, 1)
-	require.Nil(t, batches[0].Execution)
-	require.Len(t, batches[0].Findings, 1)
-	require.Equal(t, "secret", batches[0].Findings[0].Match)
+	synctest.Test(t, func(t *testing.T) {
+		var storeErr error
+		evidence := &evidenceWriter{}
+		evidence.store = func(ctx context.Context, batch risk.MCPFindingEvidenceBatch) error {
+			storeErr = ctx.Err()
+			evidence.batches = append(evidence.batches, batch)
+			return nil
+		}
+		batches := evaluateBlockWithEvidence(t, evidence, func(ctx context.Context, _ string) (bool, error) {
+			<-ctx.Done()
+			return true, ctx.Err()
+		})
+		require.NoError(t, storeErr)
+		require.Len(t, batches, 1)
+		require.Nil(t, batches[0].Execution)
+		require.Len(t, batches[0].Findings, 1)
+		require.Equal(t, "secret", batches[0].Findings[0].Match)
+	})
 }
 
 func TestPolicyEvaluator_ChecksPayloadStorageOncePerPhase(t *testing.T) {
@@ -334,8 +331,12 @@ func TestPolicyEvaluator_ChecksPayloadStorageOncePerPhase(t *testing.T) {
 
 func evaluateBlockWithPayloadStorage(t *testing.T, payloadStorage mcpriskscan.PayloadStorageCheck) []risk.MCPFindingEvidenceBatch {
 	t.Helper()
+	return evaluateBlockWithEvidence(t, &evidenceWriter{}, payloadStorage)
+}
+
+func evaluateBlockWithEvidence(t *testing.T, evidence *evidenceWriter, payloadStorage mcpriskscan.PayloadStorageCheck) []risk.MCPFindingEvidenceBatch {
+	t.Helper()
 	projectID := uuid.New()
-	evidence := &evidenceWriter{}
 	evaluator := newPolicyEvaluator(t, staticPolicies(policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Block policy", Action: "block", Version: 1}), policyDetectorFunc(func(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
 		return []scanners.Finding{{RuleID: "secret.token", Description: "Credential detected", Match: "secret", StartPos: 10, EndPos: 16, Tags: []string{}, Source: "gitleaks", Confidence: 1}}, nil
 	}), &findingPublisher{}, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithMCPFindingEvidenceWriter(evidence, payloadStorage))
