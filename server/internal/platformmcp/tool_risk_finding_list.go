@@ -21,7 +21,7 @@ func registerRiskFindingListTools(reg *Registrar, service riskFindingListLister)
 	available := service != nil && service.valid()
 	registerRiskFindingListTool(reg, &mcp.Tool{
 		Name: riskFindingListToolName, Title: "List Risk Findings",
-		Description: "List individual risk findings in an exact project or the organization's literal default project, newest message first, with the matched value redacted to a length and hash fingerprint that never reaches the model. Filter by message-time window, policy, concrete MCP server, chat, category, rule substring, user substring, assistant linkage, or unique match; page with an opaque cursor, 25 per page by default and at most 50. MCP findings can be chatless and return execution_id, mcp_server_id, meta_mcp_server_id, toolset_id, tool_name, phase, mediation_surface, mcp_method, principal_kind, identity_stamped, and enforcement_outcome. Each finding carries a stable id for later dismissal, its severity band and score, and an organization-scoped user pseudonym shared with list_watchdog_findings. Prefer get_risk_rule_breakdown to size a finding set, and list_watchdog_findings for severity-first rule triage.",
+		Description: "List individual risk findings in an exact project or the organization's literal default project, newest message first, with the matched value redacted to a length and hash fingerprint that never reaches the model. Filter by message-time window, policy, concrete MCP server, chat, category, rule substring, user substring, assistant linkage, or unique match; fetch one finding by result_id, or every finding on one MCP tool call by execution_id; page with an opaque cursor, 25 per page by default and at most 50. MCP findings can be chatless and return execution_id (the tool call that raised them), mcp_server_id, meta_mcp_server_id, toolset_id, tool_name, phase, mediation_surface, mcp_method, principal_kind, identity_stamped, and enforcement_outcome. Each finding carries a stable id for later dismissal, its severity band and score, and an organization-scoped user pseudonym shared with list_watchdog_findings. Prefer get_risk_rule_breakdown to size a finding set, and list_watchdog_findings for severity-first rule triage.",
 		Annotations: readOnlyAnnotations(), InputSchema: riskFindingListSchema(),
 	}, available, func(ctx context.Context, principal Principal, input ListRiskFindingPageInput) (ListRiskFindingPageOutput, error) {
 		return service.List(ctx, principal, input)
@@ -75,6 +75,8 @@ func riskFindingListSchema() *jsonschema.Schema {
 	properties["assistant_id"] = uuidSchema("Optional assistant ID; only findings from chats linked to it. Mutually exclusive with non_assistant.")
 	properties["non_assistant"] = &jsonschema.Schema{Type: "boolean", Description: "Only findings from chats not linked to any assistant."}
 	properties["unique_match"] = &jsonschema.Schema{Type: "boolean", Description: "Collapse to one finding per (policy, rule, matched value), keeping the most recent occurrence."}
+	properties["result_id"] = uuidSchema("Optional finding ID. Fetches that one finding, such as one from a shared link, even when it is not on the current page. Returns nothing if it was marked a false positive.")
+	properties["execution_id"] = stringSchema("Optional MCP tool call ID, the execution_id a finding returns. Lists every finding raised on that one call, across both its request and response phases, so you can see everything the call triggered. Findings marked as false positives stay hidden.", 1, 128)
 	return projectSelectorSchema(properties, nil)
 }
 

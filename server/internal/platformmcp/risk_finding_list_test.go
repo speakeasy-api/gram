@@ -127,6 +127,8 @@ func TestRiskFindingListValidation(t *testing.T) {
 		{AssistantID: uuid.NewString(), NonAssistant: true},
 		{Category: "unknown-category"},
 		{RuleID: strings.Repeat("r", 129)},
+		{ResultID: "not-a-uuid"},
+		{ExecutionID: strings.Repeat("e", 129)},
 		{UserID: strings.Repeat("u", 257)},
 		{Limit: 51},
 		{Limit: -1},
@@ -475,6 +477,11 @@ func TestRiskFindingListToolsMCPInProcess(t *testing.T) {
 	findingDescriptor := descriptorByName(t, reg, riskFindingListToolName)
 	require.Contains(t, string(findingDescriptor.InputSchema), `"secrets"`, "categories are enumerated so the model picks a real key")
 	require.Contains(t, string(findingDescriptor.InputSchema), `"mcp_server_id"`)
+	require.Contains(t, string(findingDescriptor.InputSchema), `"result_id"`)
+	require.Contains(t, string(findingDescriptor.InputSchema), `"execution_id"`)
+	outputSchema, err := json.Marshal(inferOutputSchema[ListRiskFindingPageOutput](riskFindingListToolName))
+	require.NoError(t, err)
+	require.Contains(t, string(outputSchema), "the MCP tool call that raised this finding")
 	require.Contains(t, findingDescriptor.Description, "mediation_surface")
 	require.Contains(t, string(descriptorByName(t, reg, riskRuleBreakdownToolName).InputSchema), `"required":["category"]`)
 
@@ -641,4 +648,24 @@ func TestRiskFindingListMCPServerFilter(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, f.clickhouse.list, 1)
 	require.Equal(t, serverID, f.clickhouse.list[0].MCPServerID, "the analytics store filters on the canonical server id")
+}
+
+func TestRiskFindingListResultAndExecutionFilters(t *testing.T) {
+	t.Parallel()
+
+	resultID := uuid.New()
+	f := newFindingListFixture(t)
+	_, err := f.service.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{ResultID: strings.ToUpper(resultID.String()), ExecutionID: "  exec-1  "})
+	require.NoError(t, err)
+	require.Len(t, f.clickhouse.list, 1)
+	require.Equal(t, uuid.NullUUID{UUID: resultID, Valid: true}, f.clickhouse.list[0].ResultID)
+	require.Equal(t, "exec-1", f.clickhouse.list[0].ExecutionID)
+}
+
+func TestRiskFindingListCursorBindsResultAndExecutionFilters(t *testing.T) {
+	t.Parallel()
+
+	unfiltered := riskFindingFilters{}
+	require.NotEqual(t, unfiltered.cursorKind(), riskFindingFilters{ExecutionID: "exec-1"}.cursorKind())
+	require.NotEqual(t, unfiltered.cursorKind(), riskFindingFilters{ResultID: uuid.NewString()}.cursorKind())
 }
