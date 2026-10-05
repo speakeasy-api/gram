@@ -197,6 +197,20 @@ describe("rule labels", () => {
     ).toBe("Manage · includes View");
   });
 
+  it("keeps the tools a higher grant is narrowed to", () => {
+    expect(
+      ruleAccessLabel(
+        rule({
+          displayName: "Engineer",
+          level: "view",
+          dispositions: ["read_only"],
+          effect: "allows",
+        }),
+        "use",
+      ),
+    ).toBe("View · includes Connect · Read-only tools");
+  });
+
   it("names a grant at the level shown plainly", () => {
     expect(
       ruleAccessLabel(
@@ -412,6 +426,31 @@ describe("groupRules", () => {
     );
     expect(groups).toHaveLength(3);
     expect(new Set(groups.map((group) => group.key)).size).toBe(3);
+  });
+
+  it("keeps differently narrowed higher grants on their own lines", () => {
+    const groups = groupRules(
+      [
+        rule({
+          displayName: "Engineer",
+          level: "view",
+          tools: ["get_issue"],
+          effect: "allows",
+        }),
+        rule({
+          displayName: "Engineer",
+          level: "view",
+          tools: ["list_issues"],
+          effect: "allows",
+        }),
+      ],
+      "use",
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.labels).toEqual([
+      "View · includes Connect · get_issue",
+      "View · includes Connect · list_issues",
+    ]);
   });
 
   it("lists a label shared by two grants once", () => {

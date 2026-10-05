@@ -243,12 +243,29 @@ export function ruleAccessLabel(
   explained: ExplainedLevel,
 ): string {
   const access = RULE_LEVEL_NAME[rule.level];
+  const narrowing = narrowingLabel(rule);
+  // A label leading with a tool name keeps the name exactly as the tool has
+  // it; one leading with words ("all tools", "read-only tools") reads as a
+  // phrase.
+  const leadsWithTool =
+    (rule.tools ?? []).length === 1 && (rule.dispositions ?? []).length === 0;
+  const narrowed = leadsWithTool
+    ? narrowing
+    : `${narrowing.charAt(0).toUpperCase()}${narrowing.slice(1)}`;
   if (!ruleIsBlock(rule) && rule.level !== explained) {
-    return `${access} · includes ${LEVEL_NAME[explained]}`;
+    const includes = `${access} · includes ${LEVEL_NAME[explained]}`;
+    // A grant narrowed to some tools says so, so two such grants on one row
+    // are told apart.
+    if (
+      (rule.tools ?? []).length === 0 &&
+      (rule.dispositions ?? []).length === 0
+    ) {
+      return includes;
+    }
+    return `${includes} · ${narrowed}`;
   }
   if (rule.level !== "use" && rule.level !== "blocked") return access;
-  const narrowing = narrowingLabel(rule);
-  return `${access} · ${narrowing.charAt(0).toUpperCase()}${narrowing.slice(1)}`;
+  return `${access} · ${narrowed}`;
 }
 
 /** Narrowest access first, so a group reads Connect, then View, then Manage. */
@@ -291,7 +308,12 @@ export function groupRules(
       rule.appliesTo,
       rule.reason ?? "",
     ].join("|");
-    groups.set(key, [...(groups.get(key) ?? []), rule]);
+    const members = groups.get(key);
+    if (members) {
+      members.push(rule);
+    } else {
+      groups.set(key, [rule]);
+    }
   }
   return [...groups.entries()].map(([key, members]) => {
     const ordered = [...members].sort(

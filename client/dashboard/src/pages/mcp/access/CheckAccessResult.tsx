@@ -188,7 +188,8 @@ function LevelWhy({
   onToggleRules: () => void;
 }): JSX.Element {
   const groups = groupRules(level.rules, level.level);
-  const ruleCount = groups.length;
+  // Every grant counts, not every row: a row stacks a role's grants.
+  const ruleCount = level.rules.length;
   const columns: Column<RuleGroup>[] = [
     {
       key: "source",
