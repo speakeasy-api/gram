@@ -8,7 +8,7 @@ import {
 } from "./slack";
 
 /** Metadata needed to decide whether a guide can safely configure a provider. */
-export type OAuthSetupProvider = {
+type OAuthSetupProvider = {
   issuer?: string;
   authorizationEndpoint?: string | null;
   tokenEndpoint?: string | null;

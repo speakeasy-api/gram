@@ -946,7 +946,10 @@ describe("RemoteMcpIdentitySectionBody", () => {
       screen.queryByRole("link", { name: "Create app in Slack ↗" }),
     ).toBeNull();
     expect(
-      screen.getByRole("link", { name: "Connect your Slack account" }),
+      screen.queryByRole("link", { name: "Connect your Slack account" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Change Slack app" }),
     ).toBeDefined();
     view.unmount();
     renderIdentity();
