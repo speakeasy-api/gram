@@ -60,11 +60,15 @@ export function WidgetView({
   className?: string;
 }): JSX.Element {
   const spec = useMemo(() => specFromStoredWidget(widget), [widget]);
-  const bodyHeight =
-    height ??
-    widgetBodyHeight(
-      spec?.chartType ?? (widget.visualization.type as ChartType),
-    );
+  const chartType = spec?.chartType ?? (widget.visualization.type as ChartType);
+  const bodyHeight = height ?? widgetBodyHeight(chartType);
+  // A number tile is only as tall as its figure, so it grows to fit a
+  // failure in its place rather than clipping the reason; anything drawn to
+  // a height keeps it.
+  const bodyStyle =
+    height === undefined && chartType === "number"
+      ? { minHeight: bodyHeight }
+      : { height: bodyHeight };
   return (
     <section
       aria-label={widget.name}
@@ -74,10 +78,7 @@ export function WidgetView({
       )}
     >
       <WidgetHeader name={widget.name} spec={spec} widgetId={widget.id} />
-      <div
-        className="flex min-h-0 flex-col overflow-auto"
-        style={{ height: bodyHeight }}
-      >
+      <div className="flex min-h-0 flex-col overflow-auto" style={bodyStyle}>
         {spec === null ? (
           <WidgetBroken
             reason={

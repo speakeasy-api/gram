@@ -159,6 +159,26 @@ describe("WidgetView", () => {
     );
   });
 
+  it("lets a number tile grow to fit a failure, and keeps a chart's height fixed", () => {
+    renderView(
+      widget(
+        { chartType: "number" },
+        { name: "Tile", invalidReason: "a long reason" },
+      ),
+    );
+    const tile = screen.getByRole("alert").parentElement!;
+    expect(tile.style.minHeight).toBe("72px");
+    expect(tile.style.height).toBe("");
+    cleanup();
+
+    testState.rows = [];
+    renderView(widget({ chartType: "line" }));
+    const body = screen
+      .getByText("Nothing in this window")
+      .closest("[style]") as HTMLElement;
+    expect(body.style.height).toBe("240px");
+  });
+
   it("says why when the server reports the widget broken, and runs nothing", () => {
     renderView(
       widget({}, { invalidReason: 'field "user" is not a dimension' }),
