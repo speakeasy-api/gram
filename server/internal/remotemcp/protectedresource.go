@@ -70,7 +70,7 @@ func compareScopes(resource, issuer []string) scopeOutcome {
 
 // recordProtectedResource stores the document read for resourceURL. The
 // resource identifier must exactly match the document's resource member.
-func (s *Service) recordProtectedResource(ctx context.Context, projectID uuid.UUID, orgID, resourceURL string, doc wellknown.OAuthProtectedResourceMetadata) error {
+func recordProtectedResource(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resourceURL string, doc wellknown.OAuthProtectedResourceMetadata) error {
 	// RFC 9728 §§3.3 and 6 require exact equality, not URL equivalence.
 	// Keep this check at the write boundary so every discovery path rejects
 	// mismatches, including identifiers differing only by a trailing slash.
@@ -78,7 +78,7 @@ func (s *Service) recordProtectedResource(ctx context.Context, projectID uuid.UU
 		return nil
 	}
 
-	_, err := repo.New(s.db).UpsertRemoteProtectedResource(ctx, repo.UpsertRemoteProtectedResourceParams{
+	_, err := repo.New(db).UpsertRemoteProtectedResource(ctx, repo.UpsertRemoteProtectedResourceParams{
 		ProjectID:                             projectID,
 		OrganizationID:                        orgID,
 		ResourceIdentifier:                    resourceURL,
@@ -103,8 +103,8 @@ func (s *Service) recordProtectedResource(ctx context.Context, projectID uuid.UU
 
 // recordProtectedResourceFetchError stores the public-safe reason the last
 // read of resourceURL failed.
-func (s *Service) recordProtectedResourceFetchError(ctx context.Context, projectID uuid.UUID, orgID, resourceURL string, probeErr *wellknown.ProtectedResourceDiscoveryError) error {
-	_, err := repo.New(s.db).RecordRemoteProtectedResourceFetchError(ctx, repo.RecordRemoteProtectedResourceFetchErrorParams{
+func recordProtectedResourceFetchError(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resourceURL string, probeErr *wellknown.ProtectedResourceDiscoveryError) error {
+	_, err := repo.New(db).RecordRemoteProtectedResourceFetchError(ctx, repo.RecordRemoteProtectedResourceFetchErrorParams{
 		ProjectID:          projectID,
 		OrganizationID:     orgID,
 		ResourceIdentifier: resourceURL,

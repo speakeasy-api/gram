@@ -174,7 +174,7 @@ func (s *Service) refreshProtectedResourceDisplay(ctx context.Context, logger *s
 	case err != nil:
 		logger.WarnContext(ctx, "re-probe protected resource metadata", attr.SlogError(err))
 		if typed, ok := errors.AsType[*wellknown.ProtectedResourceDiscoveryError](err); ok {
-			if err := s.recordProtectedResourceFetchError(ctx, projectID, authCtx.ActiveOrganizationID, resourceURL, typed); err != nil {
+			if err := recordProtectedResourceFetchError(ctx, s.db, projectID, authCtx.ActiveOrganizationID, resourceURL, typed); err != nil {
 				logger.ErrorContext(ctx, "record protected resource fetch error", attr.SlogError(err))
 			}
 		}
@@ -183,7 +183,7 @@ func (s *Service) refreshProtectedResourceDisplay(ctx context.Context, logger *s
 		logger.WarnContext(ctx, "protected resource metadata names another resource", attr.SlogURLFull(resourceURL))
 		return
 	}
-	if err := s.recordProtectedResource(ctx, projectID, authCtx.ActiveOrganizationID, resourceURL, doc); err != nil {
+	if err := recordProtectedResource(ctx, s.db, projectID, authCtx.ActiveOrganizationID, resourceURL, doc); err != nil {
 		logger.ErrorContext(ctx, "record protected resource", attr.SlogError(err))
 	}
 	logScopeComparison(ctx, logger, projectID, serverID, resourceURL, doc, clients)

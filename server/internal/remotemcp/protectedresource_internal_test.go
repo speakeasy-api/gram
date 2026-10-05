@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestCompareScopes(t *testing.T) {
@@ -107,9 +108,26 @@ func TestRecordProtectedResourceRejectsMismatchedIdentifier(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			// A nil database proves rejected documents never reach persistence.
-			s := new(Service)
 			doc := wellknown.OAuthProtectedResourceMetadata{Resource: tc.resource}
-			require.NoError(t, s.recordProtectedResource(context.Background(), uuid.Nil, "", tc.probed, doc))
+			require.NoError(t, recordProtectedResource(context.Background(), nil, uuid.Nil, "", tc.probed, doc))
 		})
 	}
+}
+
+func TestProbeProtectedResourceOnUseSkipsPlainHTTP(t *testing.T) {
+	t.Parallel()
+
+	// A nil database and policy prove no probe is started.
+	f := &ProxyManager{protectedResourceProbes: newProtectedResourceProbeState()}
+	started := make(chan struct{}, 1)
+	f.afterProtectedResourceProbe = func() { started <- struct{}{} }
+
+	f.probeProtectedResourceOnUse(t.Context(), testenv.NewLogger(t), uuid.New(), "org", "http://rs.example.test/mcp")
+
+	require.Empty(t, f.protectedResourceProbes.slots)
+	f.protectedResourceProbes.checked.Range(func(key, _ any) bool {
+		require.Fail(t, "unexpected debounce entry", "%v", key)
+		return true
+	})
+	require.Empty(t, started)
 }

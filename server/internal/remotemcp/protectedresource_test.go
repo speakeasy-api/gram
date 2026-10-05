@@ -8,8 +8,10 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -392,8 +394,21 @@ func TestProxyManager_ChallengeScopesWithoutRowIsNoop(t *testing.T) {
 	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	written := make(chan struct{}, 1)
 	manager.SetAfterChallengeScopes(func() { written <- struct{}{} })
+	probed := make(chan struct{}, 1)
+	manager.SetAfterProtectedResourceProbe(func() { probed <- struct{}{} })
 
-	upstream := rejectingUpstream(t, `Bearer scope="a"`)
+	// The on-use probe is held until the challenge is handled, so no row exists yet.
+	release := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == wellknown.OAuthProtectedResourcePath {
+			<-release
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("WWW-Authenticate", `Bearer scope="a"`)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(upstream.Close)
 	server := seedRemoteMcpServerWithURL(t, ctx, ti, upstream.URL)
 	postInitialize(t, ctx, manager, server)
 	<-written
@@ -401,5 +416,179 @@ func TestProxyManager_ChallengeScopesWithoutRowIsNoop(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	_, err = repo.New(ti.conn).GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: *authCtx.ProjectID, ResourceIdentifier: upstream.URL})
-	require.Error(t, err)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	close(release)
+	<-probed
+}
+
+// probedUpstream rejects MCP traffic with a bare 401 and serves body at the
+// origin-style well-known path ("{{origin}}" is its own URL; an empty body is
+// a 404). The counter is the number of metadata reads.
+func probedUpstream(t *testing.T, body string) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
+	var origin string
+	hits := new(atomic.Int32)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != wellknown.OAuthProtectedResourcePath {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		hits.Add(1)
+		if body == "" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(strings.ReplaceAll(body, "{{origin}}", origin)))
+	}))
+	t.Cleanup(upstream.Close)
+	origin = upstream.URL
+	return upstream, hits
+}
+
+// newProbingManager is a fresh replica: its own debounce state, and a channel
+// signalled each time a detached on-use probe finishes.
+func newProbingManager(t *testing.T, ti *testInstance) (*remotemcp.ProxyManager, <-chan struct{}) {
+	t.Helper()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	probed := make(chan struct{}, 8)
+	manager.SetAfterProtectedResourceProbe(func() { probed <- struct{}{} })
+	return manager, probed
+}
+
+const probedResourceDocument = `{"resource":"{{origin}}","authorization_servers":["https://auth.example.test"],"scopes_supported":["read"],"resource_name":"Probed"}`
+
+// The first proxied request to a server without a row records its metadata.
+func TestProxyManager_ProbesProtectedResourceOnFirstUse(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestServiceForProbe(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	upstream, hits := probedUpstream(t, probedResourceDocument)
+	server := seedRemoteMcpServerWithURL(t, ctx, ti, upstream.URL)
+	manager, probed := newProbingManager(t, ti)
+
+	postInitialize(t, ctx, manager, server)
+	<-probed
+
+	row := loadProtectedResource(t, ctx, ti, upstream.URL)
+	require.Equal(t, authCtx.ActiveOrganizationID, row.OrganizationID)
+	require.Equal(t, upstream.URL+wellknown.OAuthProtectedResourcePath, row.MetadataUrl.String)
+	require.Equal(t, []string{"https://auth.example.test"}, row.AuthorizationServers)
+	require.Equal(t, []string{"read"}, row.ScopesSupported)
+	require.Equal(t, "Probed", row.ResourceName.String)
+	require.True(t, row.MetadataFetchedAt.Valid)
+	require.False(t, row.MetadataLastError.Valid)
+	require.EqualValues(t, 1, hits.Load())
+}
+
+// A replica that checked a server within the hour neither probes nor reads
+// the row again; once the hour passes it reads the row and finds it fresh.
+func TestProxyManager_ProtectedResourceProbeDebouncedPerReplica(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestServiceForProbe(t)
+	upstream, hits := probedUpstream(t, probedResourceDocument)
+	server := seedRemoteMcpServerWithURL(t, ctx, ti, upstream.URL)
+	manager, probed := newProbingManager(t, ti)
+	var clock atomic.Int64
+	manager.SetProtectedResourceProbeClock(func() time.Time { return time.Now().Add(time.Duration(clock.Load())) })
+
+	postInitialize(t, ctx, manager, server)
+	<-probed
+	first := loadProtectedResource(t, ctx, ti, upstream.URL)
+
+	postInitialize(t, ctx, manager, server)
+	require.Empty(t, probed, "a debounced use starts no detached work")
+	require.EqualValues(t, 1, hits.Load())
+
+	clock.Store(int64(2 * time.Hour))
+	postInitialize(t, ctx, manager, server)
+	<-probed
+	require.EqualValues(t, 1, hits.Load(), "a row read two hours ago is still fresh")
+	require.Equal(t, first.UpdatedAt.Time, loadProtectedResource(t, ctx, ti, upstream.URL).UpdatedAt.Time)
+}
+
+// A row read within the day is not probed again by another replica; one read
+// longer ago is.
+func TestProxyManager_ProtectedResourceProbeFollowsRowFreshness(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestServiceForProbe(t)
+	upstream, hits := probedUpstream(t, probedResourceDocument)
+	server := seedRemoteMcpServerWithURL(t, ctx, ti, upstream.URL)
+
+	first, firstProbed := newProbingManager(t, ti)
+	postInitialize(t, ctx, first, server)
+	<-firstProbed
+	fetched := loadProtectedResource(t, ctx, ti, upstream.URL)
+	require.EqualValues(t, 1, hits.Load())
+
+	fresh, freshProbed := newProbingManager(t, ti)
+	postInitialize(t, ctx, fresh, server)
+	<-freshProbed
+	require.EqualValues(t, 1, hits.Load())
+	require.Equal(t, fetched.MetadataFetchedAt.Time, loadProtectedResource(t, ctx, ti, upstream.URL).MetadataFetchedAt.Time)
+
+	// A replica whose clock runs a day ahead sees the same row as stale.
+	later, laterProbed := newProbingManager(t, ti)
+	later.SetProtectedResourceProbeClock(func() time.Time { return time.Now().Add(25 * time.Hour) })
+	postInitialize(t, ctx, later, server)
+	<-laterProbed
+	require.EqualValues(t, 2, hits.Load())
+	require.True(t, loadProtectedResource(t, ctx, ti, upstream.URL).MetadataFetchedAt.Time.After(fetched.MetadataFetchedAt.Time))
+}
+
+// A failed probe records the public-safe reason, and the failure keeps other
+// replicas from probing again within the day.
+func TestProxyManager_FailedProtectedResourceProbeIsRecordedAndNotRetried(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestServiceForProbe(t)
+	upstream, hits := probedUpstream(t, "")
+	server := seedRemoteMcpServerWithURL(t, ctx, ti, upstream.URL)
+
+	first, firstProbed := newProbingManager(t, ti)
+	postInitialize(t, ctx, first, server)
+	<-firstProbed
+	failed := loadProtectedResource(t, ctx, ti, upstream.URL)
+	require.Equal(t, upstream.URL+wellknown.OAuthProtectedResourcePath, failed.MetadataUrl.String)
+	require.Contains(t, failed.MetadataLastError.String, "not advertised")
+	require.True(t, failed.MetadataLastErrorAt.Valid)
+	require.False(t, failed.MetadataFetchedAt.Valid)
+	require.EqualValues(t, 1, hits.Load())
+
+	second, secondProbed := newProbingManager(t, ti)
+	postInitialize(t, ctx, second, server)
+	<-secondProbed
+	require.EqualValues(t, 1, hits.Load())
+	require.Equal(t, failed.MetadataLastErrorAt.Time, loadProtectedResource(t, ctx, ti, upstream.URL).MetadataLastErrorAt.Time)
+}
+
+// A document naming another resource is recorded as unusable, with nothing it advertised.
+func TestProxyManager_ProtectedResourceProbeRecordsAnotherResourceAsError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestServiceForProbe(t)
+	upstream, hits := probedUpstream(t, `{"resource":"https://other.example.test/mcp","authorization_servers":["https://auth.example.test"]}`)
+	server := seedRemoteMcpServerWithURL(t, ctx, ti, upstream.URL)
+	manager, probed := newProbingManager(t, ti)
+
+	postInitialize(t, ctx, manager, server)
+	<-probed
+	require.EqualValues(t, 1, hits.Load())
+
+	row := loadProtectedResource(t, ctx, ti, upstream.URL)
+	require.Equal(t, "The metadata document names a different resource.", row.MetadataLastError.String)
+	require.True(t, row.MetadataLastErrorAt.Valid)
+	require.False(t, row.MetadataFetchedAt.Valid)
+	require.Nil(t, row.AuthorizationServers)
+
+	postInitialize(t, ctx, manager, server)
+	require.Empty(t, probed)
+	require.EqualValues(t, 1, hits.Load(), "the check still counts for the debounce")
 }

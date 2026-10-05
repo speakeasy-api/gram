@@ -101,6 +101,10 @@ type ProxyManager struct {
 	challengeScopes *challengeScopesState
 	// afterChallengeScopes runs when a challenge-scope observation is handled; tests only.
 	afterChallengeScopes func()
+
+	protectedResourceProbes *protectedResourceProbeState
+	// afterProtectedResourceProbe runs when a detached on-use probe finishes; tests only.
+	afterProtectedResourceProbe func()
 }
 
 // NewProxyManager wires the MCP-aware proxy stack with its dependencies.
@@ -151,6 +155,8 @@ func NewProxyManager(
 		witnessStore:                          witnessStore,
 		challengeScopes:                       newChallengeScopesState(),
 		afterChallengeScopes:                  nil,
+		protectedResourceProbes:               newProtectedResourceProbeState(),
+		afterProtectedResourceProbe:           nil,
 	}
 }
 
@@ -214,6 +220,7 @@ func (f *ProxyManager) Build(
 	// The server's URL is the resource identifier its protected resource row is keyed by.
 	if parsedProjectID, err := uuid.Parse(projectID); err == nil && f.db != nil {
 		p.UpstreamResponseInterceptor = func(ctx context.Context, resp *http.Response) error {
+			f.probeProtectedResourceOnUse(ctx, logger, parsedProjectID, organizationID, server.Url)
 			f.observeChallengeScopes(ctx, logger, parsedProjectID, server.Url, resp.StatusCode, resp.Header.Values("WWW-Authenticate"))
 			return nil
 		}

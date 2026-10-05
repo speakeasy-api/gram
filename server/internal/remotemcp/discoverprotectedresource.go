@@ -55,7 +55,7 @@ func (s *Service) DiscoverProtectedResourceMetadata(ctx context.Context, payload
 	doc, warnings, probeErr := wellknown.DiscoverProtectedResourceMetadata(ctx, s.policy, server.Url)
 	if probeErr != nil {
 		if typed, ok := errors.AsType[*wellknown.ProtectedResourceDiscoveryError](probeErr); ok {
-			if err := s.recordProtectedResourceFetchError(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, server.Url, typed); err != nil {
+			if err := recordProtectedResourceFetchError(ctx, s.db, *authCtx.ProjectID, authCtx.ActiveOrganizationID, server.Url, typed); err != nil {
 				logger.ErrorContext(ctx, "record protected resource fetch error", attr.SlogError(err))
 			}
 			return &gen.ProtectedResourceMetadataDiscovery{
@@ -77,7 +77,7 @@ func (s *Service) DiscoverProtectedResourceMetadata(ctx context.Context, payload
 	// A document read from the origin-style path may describe a sibling
 	// resource; only one that names this URL is recorded for it.
 	if doc.IdentifiesResource(server.Url) {
-		if err := s.recordProtectedResource(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, server.Url, doc); err != nil {
+		if err := recordProtectedResource(ctx, s.db, *authCtx.ProjectID, authCtx.ActiveOrganizationID, server.Url, doc); err != nil {
 			logger.ErrorContext(ctx, "record protected resource", attr.SlogError(err))
 		}
 	}
