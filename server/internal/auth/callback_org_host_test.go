@@ -111,6 +111,13 @@ func TestService_Callback_OrganizationHost(t *testing.T) {
 			want:        "/other-org/mcp",
 		},
 		{
+			name:        "http target from an https request stays",
+			defaultHost: new(testServerURL.String()),
+			origin:      originAt(requestorigin.SurfacePlatform, extraHost),
+			destination: "/other-org/mcp",
+			want:        "/other-org/mcp",
+		},
+		{
 			name:        "custom domain request stays",
 			defaultHost: new(extraHost),
 			origin:      originAt(requestorigin.SurfaceCustomDomain, "https://mcp.customer.example"),

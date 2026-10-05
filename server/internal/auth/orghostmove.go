@@ -33,38 +33,49 @@ type orgHostMove struct {
 // the legacy host, and users of those organizations keep using whichever
 // platform host they signed in on. Custom domains and private network ingress
 // never move either. Because the target is always a configured platform host
-// other than the current one, a move cannot loop or leave the platform.
+// other than the current one, a move cannot loop or leave the platform. The
+// target must also be https, or http only when the request itself arrived
+// over http (local development), so a move never downgrades a session.
 func (s *Service) organizationHostMove(ctx context.Context, defaultHost pgtype.Text) (orgHostMove, bool) {
 	var none orgHostMove
 	if s.cfg.OrgHosts == nil {
 		return none, false
 	}
 	origin, ok := requestorigin.FromContext(ctx)
-	if !ok || origin.Surface != requestorigin.SurfacePlatform || origin.BaseURL == "" {
+	if !ok || origin.Surface != requestorigin.SurfacePlatform {
+		return none, false
+	}
+	current, err := url.Parse(origin.BaseURL)
+	if err != nil || current.Host == "" {
 		return none, false
 	}
 	serverURL, siteURL, ok := s.cfg.OrgHosts.StoredPlatformHost(defaultHost)
 	if !ok {
 		return none, false
 	}
-	if sameHost(origin.BaseURL, serverURL.Host) {
+	if !allowedScheme(serverURL.Scheme, current.Scheme) || !allowedScheme(siteURL.Scheme, current.Scheme) {
+		return none, false
+	}
+	if sameHost(current.Host, serverURL.Host) {
 		return none, false
 	}
 	return orgHostMove{serverURL: serverURL, siteURL: siteURL}, true
 }
 
-// sameHost reports whether baseURL names host. Unparseable values count as the
-// same host, so a malformed configuration leaves the browser where it is.
-func sameHost(baseURL, host string) bool {
-	parsed, err := url.Parse(baseURL)
+// allowedScheme reports whether a move from a request over current may target
+// a URL over target: https always, http only from http.
+func allowedScheme(target, current string) bool {
+	return target == "https" || (target == "http" && current == "http")
+}
+
+// sameHost reports whether two hosts are the same. Unparseable values count as
+// the same host, so a malformed configuration leaves the browser where it is.
+func sameHost(currentHost, targetHost string) bool {
+	current, err := requestorigin.CanonicalHost(currentHost)
 	if err != nil {
 		return true
 	}
-	current, err := requestorigin.CanonicalHost(parsed.Host)
-	if err != nil {
-		return true
-	}
-	target, err := requestorigin.CanonicalHost(host)
+	target, err := requestorigin.CanonicalHost(targetHost)
 	if err != nil {
 		return true
 	}

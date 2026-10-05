@@ -89,9 +89,15 @@ func TestService_Info_ActiveOrganizationDashboardURL(t *testing.T) {
 			want:        nil,
 		},
 		{
-			name:        "stored server host moves to the dashboard URL",
+			name:        "http target from an https request stays",
 			defaultHost: new(testServerURL.String()),
 			origin:      platformOrigin(extraHost),
+			want:        nil,
+		},
+		{
+			name:        "http target from an http request moves",
+			defaultHost: new(testServerURL.String()),
+			origin:      platformOrigin("http://other.localhost:8080"),
 			want:        new(testSiteURL.String()),
 		},
 		{
