@@ -86,6 +86,18 @@ func (f dataExportToggleFixture) input(routeID uuid.UUID, key string) ToggleData
 	return ToggleDataExportRouteInput{ProjectID: f.project.ID.String(), RouteID: routeID.String(), IdempotencyKey: key, Confirmed: true}
 }
 
+// resumeInput carries the data source and destination exactly as a current
+// read of the route reports them, which is what the user confirms.
+func (f dataExportToggleFixture) resumeInput(t *testing.T, ctx context.Context, routeID uuid.UUID, key string) ResumeDataExportRouteInput {
+	t.Helper()
+	route := f.route(t, ctx, routeID)
+	return ResumeDataExportRouteInput{
+		ProjectID: f.project.ID.String(), RouteID: routeID.String(),
+		ExpectedDataSource: route.DataSource, ExpectedDestinationID: uuidString(route.OtelDestinationID),
+		IdempotencyKey: key, Confirmed: true,
+	}
+}
+
 func (f dataExportToggleFixture) receiptStored(t *testing.T, ctx context.Context, operation, key string) bool {
 	t.Helper()
 	_, err := platformrepo.New(f.conn).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
@@ -155,7 +167,7 @@ func TestPauseDataExportChangesOnlyEnabledAndResumeRestoresIt(t *testing.T) {
 	require.Equal(t, configurationOf(original), configurationOf(afterPause), "pausing must not touch the data source, destination, or anything else")
 	require.EqualValues(t, 1, auditCount(t, ctx, f.conn, audit.ActionDataExportRoutePause))
 
-	resumed, err := f.service.Resume(ctx, f.principal, f.input(created.ID, "resume-1"))
+	resumed, err := f.service.Resume(ctx, f.principal, f.resumeInput(t, ctx, created.ID, "resume-1"))
 	require.NoError(t, err)
 	require.Equal(t, dataExportOutcomeResumed, resumed.Outcome)
 	require.True(t, resumed.Route.Enabled)
@@ -194,7 +206,7 @@ func TestPauseDataExportReplayWritesNothingNew(t *testing.T) {
 	first, err := f.service.Pause(ctx, f.principal, f.input(created.ID, "pause-replay"))
 	require.NoError(t, err)
 	require.Equal(t, dataExportOutcomePaused, first.Outcome)
-	_, err = f.service.Resume(ctx, f.principal, f.input(created.ID, "resume-between"))
+	_, err = f.service.Resume(ctx, f.principal, f.resumeInput(t, ctx, created.ID, "resume-between"))
 	require.NoError(t, err)
 	resumedRow := f.route(t, ctx, created.ID)
 
@@ -223,7 +235,7 @@ func TestResumeDataExportRefusesWithoutAUsableDestination(t *testing.T) {
 
 	destinationless := f.createRoute(t, ctx, "product_telemetry", false, uuid.NullUUID{})
 	before := f.route(t, ctx, destinationless.ID)
-	_, err := f.service.Resume(ctx, f.principal, f.input(destinationless.ID, "resume-none"))
+	_, err := f.service.Resume(ctx, f.principal, f.resumeInput(t, ctx, destinationless.ID, "resume-none"))
 	message := requireDataExportToggleCode(t, err, "no_destination")
 	require.Contains(t, message, "has no destination")
 	require.Equal(t, before, f.route(t, ctx, destinationless.ID))
@@ -235,7 +247,7 @@ func TestResumeDataExportRefusesWithoutAUsableDestination(t *testing.T) {
 	})
 	require.NoError(t, err)
 	before = f.route(t, ctx, orphaned.ID)
-	_, err = f.service.Resume(ctx, f.principal, f.input(orphaned.ID, "resume-deleted"))
+	_, err = f.service.Resume(ctx, f.principal, f.resumeInput(t, ctx, orphaned.ID, "resume-deleted"))
 	message = requireDataExportToggleCode(t, err, "destination_deleted")
 	require.Contains(t, message, "has been deleted")
 	require.Equal(t, before, f.route(t, ctx, orphaned.ID))
@@ -336,15 +348,73 @@ func TestDataExportToggleUnavailableManifestMatchesLive(t *testing.T) {
 		require.Contains(t, descriptor.Description, "dropped, not buffered", "%s must say what happens to data while paused", name)
 		require.Contains(t, descriptor.Description, "confirmed: true", "%s", name)
 
-		refusal := invokeUnavailable(t, descriptor, map[string]any{
+		arguments := map[string]any{
 			"project_id": f.project.ID.String(), "route_id": uuid.NewString(), "idempotency_key": "stub", "confirmed": true,
-		})
+		}
+		if name == resumeDataExportToolName {
+			arguments["expected_data_source"] = "product_telemetry"
+			arguments["expected_destination_id"] = uuid.NewString()
+		}
+		refusal := invokeUnavailable(t, descriptor, arguments)
 		require.Contains(t, refusal, `"feature":"data_export_pause"`)
 	}
 	resume := unavailable[resumeDataExportToolName].Description
-	for _, refusal := range []string{"no destination", "destination was deleted", "stored configuration", "repaired in the dashboard"} {
+	for _, refusal := range []string{"no destination", "destination was deleted", "stored configuration", "repaired in the dashboard", "route_changed"} {
 		require.Contains(t, resume, refusal, "resume must name every reason it refuses")
 	}
+	// Resume can be delayed by the cached "no active route" lookup whatever the
+	// destination, so only pause may promise next-batch timing.
+	require.NotContains(t, resume, "next batch")
+	require.Contains(t, resume, "for every destination")
+	require.Contains(t, unavailable[pauseDataExportToolName].Description, "stops on the next batch")
+
+	var schema struct {
+		Required []string `json:"required"`
+	}
+	require.NoError(t, json.Unmarshal(unavailable[resumeDataExportToolName].InputSchema, &schema))
+	require.Subset(t, schema.Required, []string{"expected_data_source", "expected_destination_id"}, "resume must require what the user confirmed")
+	require.NoError(t, json.Unmarshal(unavailable[pauseDataExportToolName].InputSchema, &schema))
+	require.NotContains(t, schema.Required, "expected_destination_id", "stopping an export needs no expectation")
+}
+
+func TestResumeDataExportRefusesARouteChangedAfterItWasRead(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	f := newDataExportToggleFixture(t, ctx, "platform_mcp_data_export_toggle_route_changed")
+	created := f.createRoute(t, ctx, "product_telemetry", false, uuid.NullUUID{UUID: f.destination, Valid: true})
+	queries := dataexportsrepo.New(f.conn)
+	other, err := queries.CreateOtelDestination(ctx, dataexportsrepo.CreateOtelDestinationParams{
+		OrganizationID: f.principal.OrganizationID, ProjectID: f.project.ID, Name: "Other collector",
+		EndpointUrl: "https://other.example.test/v1", HeadersEncrypted: pgtype.Text{}, SensitiveData: pgtype.Text{String: "exclude", Valid: true},
+	})
+	require.NoError(t, err)
+
+	// The user reads the route and confirms it…
+	confirmed := f.resumeInput(t, ctx, created.ID, "resume-after-repoint")
+	// …and another administrator repoints it in the dashboard before the call
+	// lands. This is the statement the dashboard's route update runs.
+	_, err = queries.UpdateDataExportRoute(ctx, dataexportsrepo.UpdateDataExportRouteParams{
+		DataSource: "product_telemetry", Enabled: false, OtelDestinationID: uuid.NullUUID{UUID: other.ID, Valid: true},
+		OrganizationID: f.principal.OrganizationID, ProjectID: f.project.ID, ID: created.ID,
+	})
+	require.NoError(t, err)
+	before := f.route(t, ctx, created.ID)
+
+	_, err = f.service.Resume(ctx, f.principal, confirmed)
+	text := requireDataExportToggleCode(t, err, "route_changed")
+	require.Contains(t, text, "destination changed")
+	require.NotContains(t, text, "other.example.test", "the refusal must not name the endpoint")
+	require.Equal(t, before, f.route(t, ctx, created.ID), "a changed route stays paused and untouched")
+	require.False(t, f.receiptStored(t, ctx, operationResumeDataExport, "resume-after-repoint"), "no receipt completes")
+	require.Zero(t, auditCount(t, ctx, f.conn, audit.ActionDataExportRouteResume))
+
+	// Re-read and re-confirm: the resume goes through against the new destination.
+	resumed, err := f.service.Resume(ctx, f.principal, f.resumeInput(t, ctx, created.ID, "resume-reconfirmed"))
+	require.NoError(t, err)
+	require.Equal(t, dataExportOutcomeResumed, resumed.Outcome)
+	require.Equal(t, other.ID.String(), resumed.Route.DestinationID)
+	require.Contains(t, resumed.TakesEffect, "for every destination")
 }
 
 func TestPauseDataExportReplayIsNotChargedAgainstAnExhaustedBudget(t *testing.T) {
@@ -477,7 +547,7 @@ func TestResumeDataExportRefusesAnEnabledRouteWhoseDestinationIsGone(t *testing.
 	before := f.route(t, ctx, created.ID)
 
 	// Already enabled, but exporting nothing: "unchanged" would hide that.
-	_, err = f.service.Resume(ctx, f.principal, f.input(created.ID, "resume-enabled-orphan"))
+	_, err = f.service.Resume(ctx, f.principal, f.resumeInput(t, ctx, created.ID, "resume-enabled-orphan"))
 	requireDataExportToggleCode(t, err, "destination_deleted")
 	require.Equal(t, before, f.route(t, ctx, created.ID))
 	require.False(t, f.receiptStored(t, ctx, operationResumeDataExport, "resume-enabled-orphan"))
@@ -497,7 +567,7 @@ func TestResumeDataExportRefusesACorruptDestinationWithoutEchoingIt(t *testing.T
 	require.NoError(t, err)
 	before := f.route(t, ctx, created.ID)
 
-	_, err = f.service.Resume(ctx, f.principal, f.input(created.ID, "resume-corrupt"))
+	_, err = f.service.Resume(ctx, f.principal, f.resumeInput(t, ctx, created.ID, "resume-corrupt"))
 	text := requireDataExportToggleCode(t, err, "destination_invalid")
 	require.NotContains(t, text, corruptEndpoint, "the refusal must not echo the stored endpoint")
 	require.Equal(t, before, f.route(t, ctx, created.ID))

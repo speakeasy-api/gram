@@ -62,9 +62,37 @@ type SetRouteEnabledParams struct {
 	RouteID        uuid.UUID
 	Enabled        bool
 
+	// Expect, when set, is the route configuration the caller confirmed. It is
+	// compared under the row lock, so a route repointed or re-sourced after the
+	// caller read it is refused rather than enabled against something nobody
+	// confirmed. Nil skips the comparison, which only a pause should do:
+	// stopping an export is safe whatever it points at.
+	Expect *RouteExpectation
+
 	Actor            urn.Principal
 	ActorDisplayName *string
 }
+
+// RouteExpectation is the part of a route a person confirms before it is
+// enabled: what it exports and where to.
+type RouteExpectation struct {
+	DataSource        string
+	OtelDestinationID uuid.NullUUID
+}
+
+// ErrRouteChanged means the route no longer matches the expectation the caller
+// confirmed. A RouteChangedError says which part moved.
+var ErrRouteChanged = errors.New("the data export route changed since it was confirmed")
+
+// RouteChangedError names which confirmed fields no longer match. It carries
+// only the field names, never the destination's endpoint or headers.
+type RouteChangedError struct {
+	DestinationChanged bool
+	DataSourceChanged  bool
+}
+
+func (e *RouteChangedError) Error() string        { return ErrRouteChanged.Error() }
+func (e *RouteChangedError) Is(target error) bool { return target == ErrRouteChanged }
 
 // SetRouteEnabledResult carries the committed route row. Changed is false when
 // the route was already in the requested state, in which case nothing was
@@ -93,6 +121,17 @@ func (c *RouteEnabledCore) SetEnabled(ctx context.Context, tx pgx.Tx, params Set
 	}
 	if err != nil {
 		return SetRouteEnabledResult{}, fmt.Errorf("lock data export route: %w", err)
+	}
+	// Compared against the locked row, so nothing can repoint the route
+	// between this check and the write.
+	if params.Expect != nil {
+		changed := &RouteChangedError{
+			DestinationChanged: before.OtelDestinationID != params.Expect.OtelDestinationID,
+			DataSourceChanged:  before.DataSource != params.Expect.DataSource,
+		}
+		if changed.DestinationChanged || changed.DataSourceChanged {
+			return SetRouteEnabledResult{}, changed
+		}
 	}
 	// Checked before the no-op return, not only when the flag flips: an enabled
 	// route whose destination has since been deleted or corrupted is exporting

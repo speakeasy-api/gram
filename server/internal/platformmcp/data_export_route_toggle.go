@@ -66,6 +66,19 @@ type ToggleDataExportRouteInput struct {
 	Confirmed      bool   `json:"confirmed" jsonschema:"true only after the user confirmed this exact project and route"`
 }
 
+// ResumeDataExportRouteInput adds the route configuration the user was shown.
+// Resume starts data leaving the platform, so it must start it toward exactly
+// what was confirmed: if the route was repointed or re-sourced after it was
+// read, the resume is refused instead of exporting somewhere nobody saw.
+type ResumeDataExportRouteInput struct {
+	ProjectID             string `json:"project_id" jsonschema:"project ID that owns the route, from list_data_exports"`
+	RouteID               string `json:"route_id" jsonschema:"exact route ID from list_data_exports"`
+	ExpectedDataSource    string `json:"expected_data_source" jsonschema:"the route's data_source exactly as list_data_exports returned it and the user confirmed"`
+	ExpectedDestinationID string `json:"expected_destination_id" jsonschema:"the route's destination_id exactly as list_data_exports returned it and the user confirmed; empty only when the list showed no destination"`
+	IdempotencyKey        string `json:"idempotency_key" jsonschema:"caller-chosen key that makes a retry of this exact change safe"`
+	Confirmed             bool   `json:"confirmed" jsonschema:"true only after the user confirmed this exact project, route, data source, and destination"`
+}
+
 // ToggleDataExportRouteOutput lets a caller tell the outcomes apart: the route
 // changed state (paused or resumed), it was already in the requested state
 // (unchanged), or the call was refused, which is returned as an error result
@@ -96,10 +109,16 @@ const (
 	// them rather than failing them back for redelivery.
 	dataExportWhilePaused = "Dropped, not buffered: data this route would have exported while it is paused is discarded, and resuming does not send any of it later. Only data produced after the resume reaches the destination."
 
-	// dataExportTakesEffect reflects the relay's destination cache: a route
-	// lookup, including "no active route", is reused for up to 60 seconds
-	// unless the destination includes sensitive fields, which is never cached.
-	dataExportTakesEffect = "Within about a minute. The export relays reuse a route lookup for up to 60 seconds, so data can keep flowing briefly after a pause and keep being dropped briefly after a resume; a destination that includes sensitive fields is looked up on every batch and changes immediately."
+	// dataExportPauseTakesEffect and dataExportResumeTakesEffect reflect the
+	// relay's route cache in server/internal/otel/signal_relay.go
+	// (destinationForRoute): a lookup is reused for up to 60 seconds when it
+	// found no active route or a destination that excludes sensitive fields,
+	// and is never reused for a destination that includes them. So pausing a
+	// route whose destination includes sensitive fields is seen on the next
+	// batch, while a paused route's "no active route" lookup is cached like any
+	// other, and resuming can take up to a minute whatever the destination.
+	dataExportPauseTakesEffect  = "Within about a minute. The export relays reuse a route lookup for up to 60 seconds, so data can keep flowing briefly after the pause; a destination that includes sensitive fields is looked up on every batch and stops on the next one."
+	dataExportResumeTakesEffect = "Within about a minute, for every destination. While the route was paused the relays cached that it had no active destination, and they reuse that lookup for up to 60 seconds, so the first batches after the resume can still be dropped."
 )
 
 // DataExportRouteToggleService pauses and resumes one data export route. It
@@ -129,13 +148,42 @@ func (s *DataExportRouteToggleService) valid() bool {
 }
 
 func (s *DataExportRouteToggleService) Pause(ctx context.Context, principal Principal, input ToggleDataExportRouteInput) (ToggleDataExportRouteOutput, error) {
-	output, err := s.toggle(ctx, principal, operationPauseDataExport, false, input)
+	// Pausing carries no expectation: stopping an export is safe whatever the
+	// route points at now.
+	output, err := s.toggle(ctx, principal, operationPauseDataExport, false, input, nil)
 	return output, s.boundaryError(ctx, operationPauseDataExport, err)
 }
 
-func (s *DataExportRouteToggleService) Resume(ctx context.Context, principal Principal, input ToggleDataExportRouteInput) (ToggleDataExportRouteOutput, error) {
-	output, err := s.toggle(ctx, principal, operationResumeDataExport, true, input)
+func (s *DataExportRouteToggleService) Resume(ctx context.Context, principal Principal, input ResumeDataExportRouteInput) (ToggleDataExportRouteOutput, error) {
+	common := ToggleDataExportRouteInput{ProjectID: input.ProjectID, RouteID: input.RouteID, IdempotencyKey: input.IdempotencyKey, Confirmed: input.Confirmed}
+	expect, err := validateResumeExpectation(input)
+	if err != nil {
+		return ToggleDataExportRouteOutput{}, s.boundaryError(ctx, operationResumeDataExport, err)
+	}
+	output, err := s.toggle(ctx, principal, operationResumeDataExport, true, common, expect)
 	return output, s.boundaryError(ctx, operationResumeDataExport, err)
+}
+
+// validateResumeExpectation requires the data source and destination the user
+// was shown. Both are required: a resume without them could not tell a route
+// that was repointed after it was read from the one that was confirmed.
+func validateResumeExpectation(input ResumeDataExportRouteInput) (*dataexports.RouteExpectation, error) {
+	dataSource, err := dataexports.NormalizeDataSource(strings.TrimSpace(input.ExpectedDataSource))
+	if err != nil {
+		return nil, dataExportToggleInvalid("Provide expected_data_source exactly as the current data export list shows it for this route.")
+	}
+	// An empty value is what the list shows for a route with no destination.
+	// It is accepted so that route reaches the readable no_destination
+	// refusal rather than a generic input error.
+	destination := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if trimmed := strings.TrimSpace(input.ExpectedDestinationID); trimmed != "" {
+		parsed, err := uuid.Parse(trimmed)
+		if err != nil {
+			return nil, dataExportToggleInvalid("Provide expected_destination_id exactly as the current data export list shows it for this route.")
+		}
+		destination = uuid.NullUUID{UUID: parsed, Valid: true}
+	}
+	return &dataexports.RouteExpectation{DataSource: dataSource, OtelDestinationID: destination}, nil
 }
 
 // boundaryError is the last step before an error leaves for the MCP caller.
@@ -181,9 +229,13 @@ type dataExportToggleRequest struct {
 	Operation string `json:"operation"`
 	ProjectID string `json:"project_id"`
 	RouteID   string `json:"route_id"`
+	// The expectation is part of the request identity, so the same key reused
+	// with a different confirmed destination is a conflict, not a replay.
+	ExpectedDataSource    string `json:"expected_data_source,omitempty"`
+	ExpectedDestinationID string `json:"expected_destination_id,omitempty"`
 }
 
-func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Principal, operation string, enabled bool, input ToggleDataExportRouteInput) (ToggleDataExportRouteOutput, error) {
+func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Principal, operation string, enabled bool, input ToggleDataExportRouteInput, expect *dataexports.RouteExpectation) (ToggleDataExportRouteOutput, error) {
 	if !s.valid() {
 		return ToggleDataExportRouteOutput{}, dataExportToggleUnavailable(errors.New("data export pause service is not composed"))
 	}
@@ -208,7 +260,12 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 	}
 	project := ResolvedProject{ID: row.ID, Name: row.Name, Slug: row.Slug}
 
-	payload, err := json.Marshal(dataExportToggleRequest{Operation: operation, ProjectID: project.ID.String(), RouteID: routeID.String()})
+	request := dataExportToggleRequest{Operation: operation, ProjectID: project.ID.String(), RouteID: routeID.String(), ExpectedDataSource: "", ExpectedDestinationID: ""}
+	if expect != nil {
+		request.ExpectedDataSource = expect.DataSource
+		request.ExpectedDestinationID = uuidString(expect.OtelDestinationID)
+	}
+	payload, err := json.Marshal(request)
 	if err != nil {
 		return ToggleDataExportRouteOutput{}, dataExportToggleInvalid("The request could not be normalized.")
 	}
@@ -221,7 +278,7 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 	// opens no transaction; the executor's locked re-check below still
 	// replays a duplicate that commits concurrently with this one.
 	if stored, ok := s.completedReceipt(ctx, principal, project, operation, key, inputHash); ok {
-		return s.finish(ctx, principal, project, routeID, stored)
+		return s.finish(ctx, principal, project, routeID, enabled, stored)
 	}
 	// Charged outside any transaction. The limiter is a network round-trip to
 	// Redis, and doing it inside the receipt transaction would hold a
@@ -257,6 +314,7 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 				ProjectID:        project.ID,
 				RouteID:          routeID,
 				Enabled:          enabled,
+				Expect:           expect,
 				Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
 				ActorDisplayName: nil,
 			})
@@ -276,7 +334,7 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 	if err != nil {
 		return ToggleDataExportRouteOutput{}, err
 	}
-	return s.finish(ctx, principal, project, routeID, receipt)
+	return s.finish(ctx, principal, project, routeID, enabled, receipt)
 }
 
 func validDataExportToggleReceipt(stored []byte) bool {
@@ -309,7 +367,7 @@ func (s *DataExportRouteToggleService) completedReceipt(ctx context.Context, pri
 
 // finish turns a stored or freshly written receipt into the tool result, with
 // a verification read of the route as it stands now.
-func (s *DataExportRouteToggleService) finish(ctx context.Context, principal Principal, project ResolvedProject, routeID uuid.UUID, receipt OperationReceipt) (ToggleDataExportRouteOutput, error) {
+func (s *DataExportRouteToggleService) finish(ctx context.Context, principal Principal, project ResolvedProject, routeID uuid.UUID, enabled bool, receipt OperationReceipt) (ToggleDataExportRouteOutput, error) {
 	var stored dataExportToggleReceipt
 	if err := json.Unmarshal(receipt.ResultPayload, &stored); err != nil {
 		return ToggleDataExportRouteOutput{}, dataExportToggleUnavailable(err)
@@ -320,8 +378,11 @@ func (s *DataExportRouteToggleService) finish(ctx context.Context, principal Pri
 		SnapshotScope: "verification_unavailable",
 		LastDelivery:  dataExportLastDeliveryNotRecorded,
 		WhilePaused:   dataExportWhilePaused,
-		TakesEffect:   dataExportTakesEffect,
+		TakesEffect:   dataExportPauseTakesEffect,
 		Receipt:       riskMutationToolReceipt(receipt),
+	}
+	if enabled {
+		output.TakesEffect = dataExportResumeTakesEffect
 	}
 	if route := s.readRoute(ctx, principal, project, routeID); route != nil {
 		output.Route = route
@@ -379,6 +440,8 @@ func validateDataExportToggle(input ToggleDataExportRouteInput) (uuid.UUID, uuid
 
 func classifyDataExportToggleError(err error) error {
 	switch {
+	case errors.Is(err, dataexports.ErrRouteChanged):
+		return dataExportRouteChanged(err)
 	case errors.Is(err, dataexports.ErrRouteNotFound):
 		return dataExportToggleMissing()
 	case errors.Is(err, dataexports.ErrRouteDestinationRequired):
@@ -450,4 +513,24 @@ func (r *PostgresReader) WithDataExportRouteToggle(service *DataExportRouteToggl
 		r.dataExportRouteToggle = service
 	}
 	return r
+}
+
+// dataExportRouteChanged names which confirmed part of the route moved — its
+// destination, its data source, or both — and never the destination's endpoint
+// or headers, which the caller would have to re-read to see anyway.
+func dataExportRouteChanged(err error) error {
+	what := "destination and data source"
+	if changed, ok := errors.AsType[*dataexports.RouteChangedError](err); ok {
+		switch {
+		case changed.DestinationChanged && !changed.DataSourceChanged:
+			what = "destination"
+		case changed.DataSourceChanged && !changed.DestinationChanged:
+			what = "data source"
+		}
+	}
+	return &DataExportToggleError{
+		Code:    "route_changed",
+		Message: "This route's " + what + " changed after it was read, so it was not resumed and nothing was changed. Read the current data exports again, show the user where the route now sends data, and resume only after they confirm that.",
+		Cause:   errors.Join(ErrDataExportToggleRefused, err),
+	}
 }
