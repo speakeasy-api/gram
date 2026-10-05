@@ -192,7 +192,7 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 	}
 	if legacyReplay != nil {
 		proposedIntent = legacyReplay.intent
-	} else if proposedIntent.trialEnd != nil && proposedIntent.trialEnd.Sub(now) < minimumStripeCheckoutTrialLead {
+	} else if proposedIntent.trialEnd != nil && proposedIntent.trialEnd.Sub(now) <= minimumStripeCheckoutTrialLead {
 		proposedIntent, _ = withStripeCheckoutReturnBase(
 			newStripeCheckoutIntentForTrial(authCtx.ActiveOrganizationID, now, nil, expectedTrial),
 			returnBaseURL,
@@ -242,33 +242,46 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 		return "", err
 	}
 
-	preparedIntent, err := s.prepareStripeCheckoutIntent(ctx, authCtx.ActiveOrganizationID, customerID, now, proposedIntent, replaceExpiredSessionID, replaceLifecycleIntentKey)
-	if err != nil {
-		return "", err
-	}
-	if legacyReplay != nil && !preparedIntent.expiresAt.After(s.checkoutNow()) {
-		return "", oops.E(oops.CodeConflict, nil, "the previous Stripe Checkout session expired while it was being recovered").LogWarn(ctx, s.logger)
-	}
-	// A reused live intent keeps the return host it was created on, even when
-	// this request arrived on another host.
-	billingURL, err := stripeCheckoutBillingURL(preparedIntent.idempotencyKey, s.siteURL, authCtx.OrganizationSlug)
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "stored Stripe Checkout intent is incomplete").LogError(ctx, s.logger)
-	}
+	var preparedIntent preparedStripeCheckoutIntent
+	var checkout *stripeclient.CheckoutSession
+	for attempt := range 2 {
+		preparedIntent, err = s.prepareStripeCheckoutIntent(ctx, authCtx.ActiveOrganizationID, customerID, now, proposedIntent, replaceExpiredSessionID, replaceLifecycleIntentKey)
+		if err != nil {
+			return "", err
+		}
+		if legacyReplay != nil && !preparedIntent.expiresAt.After(s.checkoutNow()) {
+			return "", oops.E(oops.CodeConflict, nil, "the previous Stripe Checkout session expired while it was being recovered").LogWarn(ctx, s.logger)
+		}
+		// A reused live intent keeps the return host it was created on, even when
+		// this request arrived on another host.
+		billingURL, err := stripeCheckoutBillingURL(preparedIntent.idempotencyKey, s.siteURL, authCtx.OrganizationSlug)
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "stored Stripe Checkout intent is incomplete").LogError(ctx, s.logger)
+		}
 
-	checkout, err := s.stripeClient.CreateCheckoutSession(ctx, stripeclient.CreateCheckoutSessionInput{
-		CustomerID:         preparedIntent.customerID,
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		OrganizationSlug:   authCtx.OrganizationSlug,
-		SuccessURL:         billingURL,
-		CancelURL:          billingURL,
-		TrialEnd:           preparedIntent.trialEnd,
-		BillingCycleAnchor: preparedIntent.billingCycleAnchor,
-		ExpiresAt:          preparedIntent.expiresAt,
-		IdempotencyKey:     preparedIntent.idempotencyKey,
-	})
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "failed to create Stripe Checkout session").LogError(ctx, s.logger)
+		checkout, err = s.stripeClient.CreateCheckoutSession(ctx, stripeclient.CreateCheckoutSessionInput{
+			CustomerID:         preparedIntent.customerID,
+			OrganizationID:     authCtx.ActiveOrganizationID,
+			OrganizationSlug:   authCtx.OrganizationSlug,
+			SuccessURL:         billingURL,
+			CancelURL:          billingURL,
+			TrialEnd:           preparedIntent.trialEnd,
+			BillingCycleAnchor: preparedIntent.billingCycleAnchor,
+			ExpiresAt:          preparedIntent.expiresAt,
+			IdempotencyKey:     preparedIntent.idempotencyKey,
+		})
+		if err == nil {
+			break
+		}
+		if attempt != 0 || proposedIntent.trialEnd != nil || preparedIntent.trialEnd == nil ||
+			preparedIntent.idempotencyKey == proposedIntent.idempotencyKey ||
+			!errors.Is(err, stripeclient.ErrCheckoutTrialEndInvalid) {
+			return "", oops.E(oops.CodeUnexpected, err, "failed to create Stripe Checkout session").LogError(ctx, s.logger)
+		}
+		// Stripe rejected the original parameters, rather than returning a
+		// previously created session. Replace this exact intent and retry once;
+		// ambiguous failures (including timeouts) must keep the original key.
+		replaceLifecycleIntentKey = pgtype.Text{String: preparedIntent.idempotencyKey, Valid: true}
 	}
 	if checkout.ID == "" || checkout.URL == "" {
 		return "", oops.E(oops.CodeUnexpected, nil, "Stripe Checkout did not return a complete hosted session").LogError(ctx, s.logger)
