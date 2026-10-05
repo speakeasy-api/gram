@@ -39,6 +39,8 @@ const testState = vi.hoisted(() => ({
   writes: [] as { kind: string; request: Record<string, unknown> }[],
   /** Whether the viewer holds project:write on the project. */
   projectWrite: false,
+  /** What the cards' filter bar holds. */
+  pageContext: {} as Record<string, unknown>,
 }));
 
 type Write = "create" | "update" | "duplicate" | "delete";
@@ -255,8 +257,14 @@ vi.mock("@/routes", () => ({
 vi.mock("@/components/page-templates", () => ({
   WorkbenchPage: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
-vi.mock("@/components/page-layout", () => ({
-  Page: { Eyebrow: () => null },
+vi.mock("@/components/page-layout", () => {
+  const Toolbar = ({ children }: { children: ReactNode }) => <>{children}</>;
+  Toolbar.Filters = () => <div aria-label="Card filters" />;
+  return { Page: { Eyebrow: () => null, Toolbar } };
+});
+// The cards' filter bar is the shared one, tested with usePageFilters.
+vi.mock("./usePageFilters", () => ({
+  usePageFilters: () => ({ toolbar: {}, context: testState.pageContext }),
 }));
 vi.mock("@/components/release-stage-badge", () => ({
   ReleaseStageBadge: ({ stage }: { stage: string }) => <span>{stage}</span>,
@@ -385,6 +393,7 @@ describe("Explore", () => {
     testState.listPending = false;
     testState.writes = [];
     testState.projectWrite = false;
+    testState.pageContext = {};
   });
 
   afterEach(() => {
@@ -881,6 +890,28 @@ describe("Explore", () => {
         .map((body) => body.dataset);
       expect(asked).toContain("tool_calls");
       expect(asked).toContain("sessions");
+    });
+
+    it("opens a card the filter bar narrowed as the question it ran, not the saved widget", () => {
+      const byUser: ExploreSpec = {
+        ...p95ByTool,
+        dataset: "sessions",
+        measures: [{ op: "count", field: "" }],
+        dimensions: ["user"],
+        orderBy: "",
+      };
+      testState.widgets = [storedWidget("w-1", "Sessions by user", byUser)];
+      testState.pageContext = { filters: { user: ["ann"] } };
+      renderExplore("/explore?tab=widgets&view=cards");
+
+      const card = screen.getByRole("region", { name: "Sessions by user" });
+      fireEvent.click(
+        within(card).getByRole("button", { name: /Open in Explore/ }),
+      );
+      expect(param("widget")).toBeNull();
+      expect(urlSpec()?.filters).toEqual([
+        { field: "user", operator: "in", values: ["ann"] },
+      ]);
     });
 
     it("opens a card's widget in the builder, and filters cards as it filters rows", () => {

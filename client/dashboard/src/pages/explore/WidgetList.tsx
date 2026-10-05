@@ -34,6 +34,7 @@ import { useMemo, useState, type JSX } from "react";
 import { useLocation, useSearchParams } from "react-router";
 import { ViewToggle } from "@/components/ui/ViewToggle";
 import { WidgetCards } from "./WidgetCards";
+import type { ExploreSpec } from "./exploreModel";
 import { useCanEditWidget } from "./useCanEditWidget";
 import { useCreatorName } from "./useCreatorName";
 import { useWidgetMutations } from "./useWidgetMutations";
@@ -66,6 +67,7 @@ export function WidgetList({
   isPending,
   isError,
   onOpen,
+  onOpenQuery,
   confirmLeave,
   onDeleted,
   onExplore,
@@ -76,6 +78,8 @@ export function WidgetList({
   isError: boolean;
   /** Open a widget in the Explore tab. */
   onOpen: (widget: Widget) => void;
+  /** Open a question in the Explore tab: a saved widget's, or its own. */
+  onOpenQuery: (spec: ExploreSpec, widgetId: string | null) => void;
   /**
    * Run this once leaving the open widget's unsaved edits is confirmed,
    * before anything is opened or copied.
@@ -315,8 +319,11 @@ export function WidgetList({
       {view === "cards" ? (
         <WidgetCards
           widgets={rows}
+          datasets={datasets}
           actionsFor={actionsFor}
-          onOpen={(widget) => confirmLeave(() => onOpen(widget))}
+          onOpen={(spec, widgetId) =>
+            confirmLeave(() => onOpenQuery(spec, widgetId ?? null))
+          }
         />
       ) : (
         <Table

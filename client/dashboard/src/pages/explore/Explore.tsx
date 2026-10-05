@@ -154,6 +154,12 @@ function ExploreWorkbench({
     (broken ? { unreadable: false, reason: broken.problem } : null);
   // The last answer belongs to the question being left, so it goes; a
   // widget that still runs brings its own as it opens.
+  // A card opens the question it ran, which a page may have changed from
+  // the saved widget's.
+  const openQuery = (next: ExploreSpec, widgetId: string | null) => {
+    setSubmitted(null);
+    url.open(next, widgetId);
+  };
   const open = (widget: Widget) => {
     setSubmitted(null);
     url.open(specFromStoredWidget(widget), widget.id);
@@ -238,6 +244,7 @@ function ExploreWorkbench({
           isPending={list.isPending}
           isError={list.isError}
           onOpen={open}
+          onOpenQuery={openQuery}
           confirmLeave={confirmLeave}
           onDeleted={(id) => {
             // The deleted widget may be the one the builder has open.

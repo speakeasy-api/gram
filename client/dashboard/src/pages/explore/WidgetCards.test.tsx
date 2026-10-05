@@ -1,5 +1,6 @@
 import type { Widget } from "@gram/client/models/components/widget.js";
 import { act, cleanup, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WidgetCards } from "./WidgetCards";
 
@@ -9,6 +10,20 @@ vi.mock("./WidgetView", () => ({
   WidgetView: ({ widget }: { widget: { name: string } }) => (
     <section aria-label={widget.name} />
   ),
+}));
+
+// The filter bar is the shared one, tested with usePageFilters; here it
+// only has to be there.
+vi.mock("./usePageFilters", () => ({
+  usePageFilters: () => ({ toolbar: {}, context: {} }),
+}));
+vi.mock("@/components/page-layout", () => {
+  const Toolbar = ({ children }: { children: ReactNode }) => <>{children}</>;
+  Toolbar.Filters = () => <div aria-label="Filters" />;
+  return { Page: { Toolbar } };
+});
+vi.mock("@gram/client/react-query/analyticsDescribe.js", () => ({
+  useAnalyticsDescribe: () => ({ data: { datasets: [] } }),
 }));
 
 /** An observer the test reports intersections through, by hand. */
@@ -57,6 +72,7 @@ describe("WidgetCards", () => {
     render(
       <WidgetCards
         widgets={[widget("w-1", "First"), widget("w-2", "Second")]}
+        datasets={["sessions"]}
         actionsFor={() => []}
         onOpen={() => {}}
       />,
@@ -81,7 +97,12 @@ describe("WidgetCards", () => {
 
   it("says so when no widget matches the filters", () => {
     render(
-      <WidgetCards widgets={[]} actionsFor={() => []} onOpen={() => {}} />,
+      <WidgetCards
+        widgets={[]}
+        datasets={[]}
+        actionsFor={() => []}
+        onOpen={() => {}}
+      />,
     );
     expect(screen.getByText("No widgets match these filters.")).toBeTruthy();
   });

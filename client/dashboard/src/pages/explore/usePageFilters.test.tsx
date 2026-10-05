@@ -161,4 +161,18 @@ describe("usePageFilters", () => {
     act(() => result.current.context.onRangeSelect?.(from, to));
     expect(result.current.context.window?.customRange).toEqual({ from, to });
   });
+
+  it("without a default range, leaves each widget its own window and says so", () => {
+    const { result } = renderHook(
+      () => usePageFilters({ fields: CONFIG.fields }),
+      { wrapper: wrapper("/page") },
+    );
+    expect(result.current.context.window).toEqual({
+      preset: null,
+      customRange: null,
+      customLabel: null,
+    });
+    const date = result.current.toolbar.schema[0];
+    expect(date?.allLabel).toBe("Each widget's window");
+  });
 });

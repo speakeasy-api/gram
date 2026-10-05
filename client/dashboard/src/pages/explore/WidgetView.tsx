@@ -67,10 +67,12 @@ export function WidgetView({
   /** The body's height in pixels; the chart type decides when unset. */
   height?: number;
   /**
-   * Open the widget in Explore yourself, in place of the link, for a caller
-   * that has to check something first, such as edits not yet saved.
+   * Open in Explore yourself, in place of the link, for a caller that has
+   * to check something first, such as edits not yet saved. It is handed
+   * what the link would open: the question, and the saved widget when the
+   * card still asks it.
    */
-  onOpen?: (() => void) | undefined;
+  onOpen?: OpenInExplore | undefined;
   /** Controls beside Open in Explore, such as a widget's actions menu. */
   actions?: ReactNode;
   className?: string;
@@ -167,6 +169,12 @@ export function WidgetView({
   );
 }
 
+/** Opens a question in Explore: a saved widget's when it has an id. */
+export type OpenInExplore = (
+  spec: ExploreSpec,
+  widgetId: string | undefined,
+) => void;
+
 const OPEN_CLASSES =
   "text-muted-foreground hover:text-foreground inline-flex shrink-0 items-center gap-1 text-xs no-underline hover:underline";
 
@@ -180,7 +188,7 @@ function WidgetHeader({
   name: string;
   spec: ExploreSpec | null;
   widgetId: string | undefined;
-  onOpen: (() => void) | undefined;
+  onOpen: OpenInExplore | undefined;
   actions: ReactNode;
 }): JSX.Element {
   const routes = useRoutes();
@@ -206,8 +214,12 @@ function WidgetHeader({
         {name}
       </h3>
       <span className="flex shrink-0 items-center gap-1">
-        {href && onOpen ? (
-          <button type="button" onClick={onOpen} className={OPEN_CLASSES}>
+        {href && spec && onOpen ? (
+          <button
+            type="button"
+            onClick={() => onOpen(spec, widgetId)}
+            className={OPEN_CLASSES}
+          >
             Open in Explore
             <Icon name="arrow-up-right" className="size-3" />
           </button>

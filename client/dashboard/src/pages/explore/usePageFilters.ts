@@ -29,8 +29,12 @@ export interface PageFilterConfig {
    * few its widgets are about, not every field the catalog has.
    */
   fields: readonly PageFilterField[];
-  /** The date range the page opens on. */
-  defaultPreset: DateRangePreset;
+  /**
+   * The date range the page opens on. Without one the page opens on no
+   * range, and each widget answers over its own saved window until someone
+   * picks one.
+   */
+  defaultPreset?: DateRangePreset | undefined;
 }
 
 /** The dimension id the page's date range sits under. */
@@ -71,7 +75,9 @@ export function usePageFilters(config: PageFilterConfig): {
         kind: "daterange",
         pinned: true,
         presets: [...WINDOW_PRESETS],
-        defaultPreset: config.defaultPreset,
+        ...(config.defaultPreset
+          ? { defaultPreset: config.defaultPreset }
+          : { allLabel: "Each widget's window" }),
       },
       ...config.fields.map(({ field, label }): FilterDimension => ({
         id: field,
@@ -131,7 +137,9 @@ function useFieldOptions(
   const client = useGramContext();
   const project = useProject();
   const datasets = useAnalyticsDescribe().data?.datasets;
-  const { from, to } = date.customRange ?? windowRange(date.preset ?? "1d");
+  // With no page range, options come from the longest window a widget is
+  // likely to ask over.
+  const { from, to } = date.customRange ?? windowRange(date.preset ?? "30d");
   const sources = fields.map(({ field }) => ({
     field,
     dataset:
