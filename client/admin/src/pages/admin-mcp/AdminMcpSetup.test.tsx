@@ -39,7 +39,7 @@ describe("Admin MCP setup", () => {
             mcpServers: {
               "gram-admin": {
                 command: "npx",
-                args: ["-y", "mcp-remote", endpoint],
+                args: ["-y", "mcp-remote@0.1.25", endpoint],
               },
             },
           },

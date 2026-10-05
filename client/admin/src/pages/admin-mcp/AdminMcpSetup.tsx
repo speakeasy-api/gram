@@ -32,7 +32,7 @@ export function AdminMcpSetup(): JSX.Element {
       mcpServers: {
         "gram-admin": {
           command: "npx",
-          args: ["-y", "mcp-remote", endpoint],
+          args: ["-y", "mcp-remote@0.1.25", endpoint],
         },
       },
     },
@@ -140,11 +140,14 @@ export function AdminMcpSetup(): JSX.Element {
               label="Claude Desktop configuration"
             />
             <p className="text-muted-foreground text-sm">
-              <code>mcp-remote</code> opens the OAuth browser flow locally. This
-              workaround only applies to Claude Desktop, not claude.ai web or
-              mobile. To avoid hand-editing this file on every staff machine,
-              this setup could later be packaged as a Desktop Extension{" "}
-              <code>(.mcpb)</code>. Follow{" "}
+              <code>mcp-remote</code> opens the OAuth browser flow locally. If
+              Claude reports <code>spawn npx ENOENT</code>, run{" "}
+              <code>command -v npx</code> in Terminal and replace{" "}
+              <code>npx</code> in the configuration’s <code>command</code> field
+              with the absolute path it prints. This workaround only applies to
+              Claude Desktop, not claude.ai web or mobile. To avoid hand-editing
+              this file on every staff machine, this setup could later be
+              packaged as a Desktop Extension <code>(.mcpb)</code>. Follow{" "}
               <a
                 href="https://linear.app/speakeasy/issue/GRW-224/feat-set-up-admin-mcp-locally-in-claude-desktop"
                 target="_blank"
