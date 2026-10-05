@@ -49,6 +49,11 @@ actions:
     remove: true
   - target: $.servers[0].url
     update: /
+  # Goa inlines string enums, and an unnamed one would claim the generated name
+  # Source from the MCP server health model.
+  - target: $.components.schemas.AdminOrganizationHooksRollout.properties.source
+    update:
+      x-speakeasy-name-override: AdminHooksRolloutSource
   # Goa's service-method separator is not a valid generated operation name.
   - target: $.paths.*[?@.operationId=='admin#logout']
     update:
@@ -61,6 +66,9 @@ actions:
   - target: $.paths.*[?@.operationId=='adminCancelStripeSubscription']
     update:
       x-speakeasy-name-override: cancelStripeSubscription
+  - target: $.paths.*[?@.operationId=='adminClearOrganizationHooksRollout']
+    update:
+      x-speakeasy-name-override: clearOrganizationHooksRollout
   - target: $.paths.*[?@.operationId=='adminCreateOrganization']
     update:
       x-speakeasy-name-override: createOrganization
@@ -76,6 +84,9 @@ actions:
   - target: $.paths.*[?@.operationId=='adminExtendTrial']
     update:
       x-speakeasy-name-override: extendTrial
+  - target: $.paths.*[?@.operationId=='adminGetHooksRollout']
+    update:
+      x-speakeasy-name-override: getHooksRollout
   - target: $.paths.*[?@.operationId=='adminGetInferenceKeys']
     update:
       x-speakeasy-name-override: getInferenceKeys
@@ -91,6 +102,9 @@ actions:
   - target: $.paths.*[?@.operationId=='adminGetOrganizationChatAnalysisSettings']
     update:
       x-speakeasy-name-override: getOrganizationChatAnalysisSettings
+  - target: $.paths.*[?@.operationId=='adminGetOrganizationHooksRollout']
+    update:
+      x-speakeasy-name-override: getOrganizationHooksRollout
   - target: $.paths.*[?@.operationId=='adminGetOrganizationFeatures']
     update:
       x-speakeasy-name-override: getOrganizationFeatures
@@ -187,6 +201,9 @@ actions:
   - target: $.paths.*[?@.operationId=='adminResumeStripeSubscription']
     update:
       x-speakeasy-name-override: resumeStripeSubscription
+  - target: $.paths.*[?@.operationId=='adminSetHooksRolloutDefault']
+    update:
+      x-speakeasy-name-override: setHooksRolloutDefault
   - target: $.paths.*[?@.operationId=='adminSetInferenceKeyMonthlyLimit']
     update:
       x-speakeasy-name-override: setInferenceKeyMonthlyLimit
@@ -199,6 +216,9 @@ actions:
   - target: $.paths.*[?@.operationId=='adminStartTrial']
     update:
       x-speakeasy-name-override: startTrial
+  - target: $.paths.*[?@.operationId=='adminSetOrganizationHooksRollout']
+    update:
+      x-speakeasy-name-override: setOrganizationHooksRollout
   - target: $.paths.*[?@.operationId=='adminSetOrganizationOnboardingStack']
     update:
       x-speakeasy-name-override: setOrganizationOnboardingStack
