@@ -5,8 +5,8 @@
  * organization lives on a different configured platform host from the one the
  * request arrived on, so the server owns which hosts qualify. The checks here
  * are the browser's own guard: the target must be an absolute https URL (http only
- * from an http page) on another host, and a tab moves at most once to a given host, so two hosts
- * that disagree can never bounce a tab back and forth.
+ * from an http page) on another host, and a tab moves an organization at most once to a given
+ * host, so two hosts that disagree can never bounce a tab back and forth.
  */
 
 const MOVED_HOSTS_KEY = "organizationHostMoves";
@@ -75,34 +75,46 @@ export function organizationHostRedirectTarget(
   return target.origin + current.pathname + current.search + current.hash;
 }
 
-function movedHosts(): string[] {
+function moves(): string[] {
   try {
     const parsed = JSON.parse(
       sessionStorage.getItem(MOVED_HOSTS_KEY) ?? "[]",
     ) as unknown;
     return Array.isArray(parsed)
-      ? parsed.filter((host): host is string => typeof host === "string")
+      ? parsed.filter((move): move is string => typeof move === "string")
       : [];
   } catch {
     return [];
   }
 }
 
-/** Whether this tab already moved from this host to the target's host. */
-export function alreadyMovedTo(target: string): boolean {
-  return movedHosts().includes(new URL(target).host);
+function moveKey(organizationId: string, target: string): string {
+  return `${organizationId} ${new URL(target).host}`;
+}
+
+/**
+ * Whether this tab already moved this organization from this host to the
+ * target's host. The record is per organization, so switching back to another
+ * organization that lives on that host still moves the tab.
+ */
+export function alreadyMovedTo(
+  organizationId: string,
+  target: string,
+): boolean {
+  return moves().includes(moveKey(organizationId, target));
 }
 
 /**
  * Records the move in this host's tab storage before leaving, so a tab that
- * comes back here is not sent off again. Returns false when storage is
- * unavailable: without the guard the move is not safe to make.
+ * comes back here with the same organization is not sent off again. Returns
+ * false when storage is unavailable: without the guard the move is not safe
+ * to make.
  */
-export function recordMoveTo(target: string): boolean {
+export function recordMoveTo(organizationId: string, target: string): boolean {
   try {
-    const hosts = movedHosts();
-    hosts.push(new URL(target).host);
-    sessionStorage.setItem(MOVED_HOSTS_KEY, JSON.stringify(hosts));
+    const recorded = moves();
+    recorded.push(moveKey(organizationId, target));
+    sessionStorage.setItem(MOVED_HOSTS_KEY, JSON.stringify(recorded));
     return true;
   } catch {
     return false;

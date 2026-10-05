@@ -796,6 +796,38 @@ describe("AuthProvider organization host", () => {
     expect(replaceSpy).not.toHaveBeenCalled();
   });
 
+  it("still moves another organization to a host this tab visited", async () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+    );
+    renderGate(PAGE);
+    await waitFor(() => {
+      expect(replaceSpy).toHaveBeenCalledTimes(1);
+    });
+    cleanup();
+
+    const otherPage = "/other-org/mcp";
+    window.history.replaceState(null, "", otherPage);
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        organizations: [ORG, OTHER_ORG],
+        organization: OTHER_ORG,
+        activeOrganizationId: OTHER_ORG.id,
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+    );
+    renderGate(otherPage);
+
+    await waitFor(() => {
+      expect(replaceSpy).toHaveBeenCalledTimes(2);
+    });
+    expect(replaceSpy).toHaveBeenLastCalledWith(`${ORG_HOST}${otherPage}`);
+  });
+
   it("does not move a tab to the same host twice", async () => {
     mocks.sessionData.mockReturnValue(
       gatedSession({

@@ -125,18 +125,20 @@ describe("move guard", () => {
     sessionStorage.clear();
   });
 
-  it("remembers each host this tab moved to", () => {
+  it("remembers each organization and host this tab moved to", () => {
     const target = "https://ai.example.com/acme";
-    expect(alreadyMovedTo(target)).toBe(false);
+    expect(alreadyMovedTo("org-1", target)).toBe(false);
 
-    expect(recordMoveTo(target)).toBe(true);
+    expect(recordMoveTo("org-1", target)).toBe(true);
 
-    expect(alreadyMovedTo("https://ai.example.com/other")).toBe(true);
-    expect(alreadyMovedTo("https://app.example.com/acme")).toBe(false);
+    expect(alreadyMovedTo("org-1", "https://ai.example.com/other")).toBe(true);
+    expect(alreadyMovedTo("org-1", "https://app.example.com/acme")).toBe(false);
+    // Another organization on the same host still moves.
+    expect(alreadyMovedTo("org-2", target)).toBe(false);
   });
 
   it("ignores a corrupt record", () => {
     sessionStorage.setItem("organizationHostMoves", "{not json");
-    expect(alreadyMovedTo("https://ai.example.com/acme")).toBe(false);
+    expect(alreadyMovedTo("org-1", "https://ai.example.com/acme")).toBe(false);
   });
 });

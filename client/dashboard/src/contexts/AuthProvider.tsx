@@ -208,7 +208,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
           window.location,
         )
       : undefined;
-  const movingHost = useOrganizationHostMove(organizationHostTarget);
+  const movingHost = useOrganizationHostMove(
+    session?.activeOrganizationId ?? "",
+    organizationHostTarget,
+  );
 
   // you need something like this so you don't redirect with empty session too soon
   // isLoading is not synchronized with the session data actually being populated, so we need to wait for the session to actually finish loading
