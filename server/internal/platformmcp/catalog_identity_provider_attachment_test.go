@@ -52,6 +52,8 @@ func TestDiscoverSupportedIssuerMetadataAcceptsAutomaticRegistrationPaths(t *tes
 		{name: "client ID metadata document only", extra: map[string]any{"client_id_metadata_document_supported": true, "token_endpoint_auth_methods_supported": []string{"none"}, "code_challenge_methods_supported": []string{"S256"}}, supported: true},
 		{name: "client ID metadata document refusing public clients", extra: map[string]any{"client_id_metadata_document_supported": true, "token_endpoint_auth_methods_supported": []string{"client_secret_basic"}}, supported: false},
 		{name: "neither", extra: map[string]any{"token_endpoint_auth_methods_supported": []string{"none"}}, supported: false},
+		{name: "dynamic registration refusing client_secret_basic", extra: map[string]any{"registration_endpoint": "https://issuer.example.com/register", "token_endpoint_auth_methods_supported": []string{"none"}}, supported: false},
+		{name: "dynamic registration refusing client_secret_basic with CIMD", extra: map[string]any{"registration_endpoint": "https://issuer.example.com/register", "client_id_metadata_document_supported": true, "token_endpoint_auth_methods_supported": []string{"none"}}, supported: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -82,6 +84,38 @@ func TestDiscoverSupportedIssuerMetadataAcceptsAutomaticRegistrationPaths(t *tes
 	}
 }
 
+// An issuer whose dynamic registration cannot issue the client_secret_basic
+// client attachment requires is skipped, so a later CIMD issuer is chosen
+// instead of registering an upstream client attachment would then refuse.
+func TestDiscoverSupportedIssuerMetadataSkipsUnusableDynamicRegistration(t *testing.T) {
+	t.Parallel()
+
+	issuer := func(extra map[string]any) *httptest.Server {
+		var server *httptest.Server
+		server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			document := map[string]any{
+				"issuer":                 server.URL,
+				"authorization_endpoint": server.URL + "/authorize",
+				"token_endpoint":         server.URL + "/token",
+			}
+			maps.Copy(document, extra)
+			w.Header().Set("Content-Type", "application/json")
+			assert.NoError(t, json.NewEncoder(w).Encode(document))
+		}))
+		t.Cleanup(server.Close)
+		return server
+	}
+	unusable := issuer(map[string]any{"registration_endpoint": "https://issuer.example.com/register", "token_endpoint_auth_methods_supported": []string{"none"}})
+	cimd := issuer(map[string]any{"client_id_metadata_document_supported": true, "token_endpoint_auth_methods_supported": []string{"none"}})
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	service := &CatalogIdentityProviderAttachmentService{policy: policy}
+
+	metadata, err := service.discoverSupportedIssuerMetadata(t.Context(), []string{unusable.URL, cimd.URL})
+	require.NoError(t, err)
+	require.Equal(t, cimd.URL, metadata.Issuer)
+}
+
 func TestSupportsAutomaticClientRegistration(t *testing.T) {
 	t.Parallel()
 
@@ -91,6 +125,7 @@ func TestSupportsAutomaticClientRegistration(t *testing.T) {
 	require.False(t, supportsAutomaticClientRegistration("", true, []string{"client_secret_post"}))
 	require.False(t, supportsAutomaticClientRegistration("", false, []string{"none"}))
 	require.False(t, supportsAutomaticClientRegistration("http://issuer.example.com/register", false, nil))
+	require.False(t, supportsAutomaticClientRegistration("https://issuer.example.com/register", false, []string{"none"}))
 }
 
 // Dynamic registration is chosen over a Client ID Metadata Document only when

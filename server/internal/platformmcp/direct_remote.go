@@ -440,14 +440,11 @@ func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, cl
 
 // directRemoteAutomaticRegistration names the automatic client registration
 // path one authorization server's metadata offers, or "" when it offers none.
-// Dynamic client registration through an absolute https endpoint (the only
-// kind attachment accepts) is preferred; otherwise a Client ID Metadata
-// Document qualifies under the same predicate the dashboard's automatic setup
-// and attachment use.
+// It picks the path attachment takes: dynamic client registration when
+// attachment can use it, then a Client ID Metadata Document under the
+// predicate the dashboard's automatic setup and attachment share.
 func directRemoteAutomaticRegistration(metadata map[string]any) string {
-	if endpoint, _ := metadata["registration_endpoint"].(string); validDynamicClientRegistrationEndpoint(endpoint) {
-		return oauthDiscoveryAvailableDCR
-	}
+	endpoint, _ := metadata["registration_endpoint"].(string)
 	supported, _ := metadata["client_id_metadata_document_supported"].(bool)
 	var methods []string
 	if advertised, ok := metadata["token_endpoint_auth_methods_supported"].([]any); ok {
@@ -458,10 +455,14 @@ func directRemoteAutomaticRegistration(metadata map[string]any) string {
 			}
 		}
 	}
-	if remotesessions.SupportsClientIDMetadataDocument(supported, methods) {
+	switch {
+	case attachmentCanUseDynamicRegistration(endpoint, methods):
+		return oauthDiscoveryAvailableDCR
+	case remotesessions.SupportsClientIDMetadataDocument(supported, methods):
 		return oauthDiscoveryAvailableCIMD
+	default:
+		return ""
 	}
-	return ""
 }
 
 func transientDirectRemoteMetadataStatus(status int) bool {

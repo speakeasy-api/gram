@@ -390,10 +390,11 @@ func sameIssuerURL(a, b string) bool {
 
 // supportsAutomaticClientRegistration reports whether this flow can obtain a
 // client from a provider without manual setup: through dynamic client
-// registration, or through a Client ID Metadata Document under the predicate
-// the dashboard's automatic setup uses.
+// registration it can use, or through a Client ID Metadata Document under the
+// predicate the dashboard's automatic setup uses. An issuer offering neither is
+// skipped before any upstream client is registered.
 func supportsAutomaticClientRegistration(registrationEndpoint string, clientIDMetadataDocumentSupported bool, tokenEndpointAuthMethodsSupported []string) bool {
-	return validDynamicClientRegistrationEndpoint(registrationEndpoint) || remotesessions.SupportsClientIDMetadataDocument(clientIDMetadataDocumentSupported, tokenEndpointAuthMethodsSupported)
+	return attachmentCanUseDynamicRegistration(registrationEndpoint, tokenEndpointAuthMethodsSupported) || remotesessions.SupportsClientIDMetadataDocument(clientIDMetadataDocumentSupported, tokenEndpointAuthMethodsSupported)
 }
 
 // attachmentCanUseDynamicRegistration reports whether dynamic registration can

@@ -138,6 +138,8 @@ func TestDirectRemoteAutomaticRegistration(t *testing.T) {
 		{name: "CIMD without enumerated methods", metadata: `{"client_id_metadata_document_supported":true}`, want: "available_cimd"},
 		{name: "plain http registration endpoint", metadata: `{"registration_endpoint":"http://auth.example.test/register"}`, want: ""},
 		{name: "relative registration endpoint", metadata: `{"registration_endpoint":"/register"}`, want: ""},
+		{name: "dynamic registration without client_secret_basic prefers CIMD", metadata: `{"registration_endpoint":"https://auth.example.test/register","client_id_metadata_document_supported":true,"token_endpoint_auth_methods_supported":["none"]}`, want: "available_cimd"},
+		{name: "dynamic registration without client_secret_basic or CIMD", metadata: `{"registration_endpoint":"https://auth.example.test/register","token_endpoint_auth_methods_supported":["none"]}`, want: ""},
 		{name: "unusable registration endpoint falls back to CIMD", metadata: `{"registration_endpoint":"http://auth.example.test/register","client_id_metadata_document_supported":true}`, want: "available_cimd"},
 		{name: "CIMD refusing public clients", metadata: `{"client_id_metadata_document_supported":true,"token_endpoint_auth_methods_supported":["client_secret_basic"]}`, want: ""},
 		{name: "CIMD flag not a boolean", metadata: `{"client_id_metadata_document_supported":"true"}`, want: ""},
