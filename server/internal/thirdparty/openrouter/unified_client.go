@@ -19,9 +19,11 @@ import (
 	or_base "github.com/OpenRouterTeam/go-sdk"
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	or_operations "github.com/OpenRouterTeam/go-sdk/models/operations"
+	or_retry "github.com/OpenRouterTeam/go-sdk/retry"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -55,9 +57,11 @@ type ChatClient struct {
 	usageTrackingStrategy  UsageTrackingStrategy
 	chatTitleGenerator     ChatTitleGenerator
 	telemetryLogger        TelemetryLogger
+	inferenceCheckpoint    hostedinference.AttemptCheckpoint
 }
 
-// NewUnifiedClient creates a new UnifiedClient with the given strategies.
+// NewUnifiedClient creates a client that cannot egress without the
+// production hosted-inference checkpoint.
 func NewUnifiedClient(
 	logger *slog.Logger,
 	guardianPolicy *guardian.Policy,
@@ -67,10 +71,40 @@ func NewUnifiedClient(
 	trackingStrategy UsageTrackingStrategy,
 	chatTitleGenerator ChatTitleGenerator,
 	telemetryLogger TelemetryLogger,
+	checkpoint hostedinference.AttemptCheckpoint,
+) (*ChatClient, error) {
+	if checkpoint == nil {
+		return nil, hostedinference.ErrCheckpointUnavailable
+	}
+	return NewUncheckedUnifiedClient(
+		logger, guardianPolicy, provisioner, keyResolver, captureStrategy,
+		trackingStrategy, chatTitleGenerator, telemetryLogger,
+	).WithHostedInferenceCheckpoint(checkpoint), nil
+}
+
+// NewUncheckedUnifiedClient creates a client without hosted-inference
+// enforcement. It is restricted to tests and explicitly inventoried standalone
+// commands that do not serve production traffic.
+func NewUncheckedUnifiedClient(
+	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
+	provisioner Provisioner,
+	keyResolver KeyResolver,
+	captureStrategy MessageCaptureStrategy,
+	trackingStrategy UsageTrackingStrategy,
+	chatTitleGenerator ChatTitleGenerator,
+	telemetryLogger TelemetryLogger,
 ) *ChatClient {
-	return &ChatClient{
+	httpClient := guardianPolicy.PooledClient()
+	// Provider redirects are never followed implicitly. Following a 307/308
+	// would create another provider attempt inside http.Client.Do, outside the
+	// call site's per-attempt checkpoint. Treat the redirect as the response.
+	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	return &ChatClient{ //nolint:exhaustruct // The explicit unchecked constructor intentionally leaves the checkpoint at its zero value.
 		logger:                 logger.With(attr.SlogComponent("openrouter_completions")),
-		httpClient:             guardianPolicy.PooledClient(),
+		httpClient:             httpClient,
 		provisioner:            provisioner,
 		keyResolver:            keyResolver,
 		messageCaptureStrategy: captureStrategy,
@@ -78,6 +112,60 @@ func NewUnifiedClient(
 		chatTitleGenerator:     chatTitleGenerator,
 		telemetryLogger:        telemetryLogger,
 	}
+}
+
+// WithHostedInferenceCheckpoint returns a client copy with the production
+// pre-provider checkpoint installed.
+func (c *ChatClient) WithHostedInferenceCheckpoint(checkpoint hostedinference.AttemptCheckpoint) *ChatClient {
+	if c == nil {
+		return nil
+	}
+	result := *c
+	if checkpoint == nil {
+		checkpoint = unavailableInferenceCheckpoint{}
+	}
+	result.inferenceCheckpoint = checkpoint
+	return &result
+}
+
+type unavailableInferenceCheckpoint struct{}
+
+func (unavailableInferenceCheckpoint) Check(context.Context, string) error {
+	return hostedinference.ErrCheckpointUnavailable
+}
+
+func (c *ChatClient) checkHostedInference(ctx context.Context, organizationID string) error {
+	if c.inferenceCheckpoint == nil {
+		return nil // explicitly unchecked standalone/test construction
+	}
+	if err := c.inferenceCheckpoint.Check(ctx, organizationID); err != nil {
+		return fmt.Errorf("check hosted-inference access: %w", err)
+	}
+	return nil
+}
+
+// hostedInferenceHTTPClient puts the checkpoint inside the OpenRouter SDK's
+// retry loop. Every SDK attempt therefore re-evaluates ai_access immediately
+// before the existing Guardian client performs network I/O. Checkpoint errors
+// are permanent so the SDK returns denials and evaluator outages directly
+// instead of retrying them.
+type hostedInferenceHTTPClient struct {
+	delegate       or_base.HTTPClient
+	checkpoint     hostedinference.AttemptCheckpoint
+	organizationID string
+}
+
+func (c *hostedInferenceHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	if c.checkpoint != nil {
+		if err := c.checkpoint.Check(req.Context(), c.organizationID); err != nil {
+			return nil, or_retry.Permanent(err) //nolint:wrapcheck // The SDK requires its permanent-error wrapper to remain outermost.
+		}
+	}
+	resp, err := c.delegate.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("send hosted-inference request: %w", err)
+	}
+	return resp, nil
 }
 
 // ResolveKey exposes key resolution so callers can scope rate-limit buckets to
@@ -370,6 +458,9 @@ func (c *ChatClient) requestCompletion(ctx context.Context, apiKey string, reqBo
 
 // GetCompletion makes a non-streaming completion request to OpenRouter and applies capture/tracking strategies.
 func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {
+	if err := c.checkHostedInference(ctx, req.OrgID); err != nil {
+		return nil, err
+	}
 	start := time.Now()
 
 	// Build request body (non-streaming)
@@ -390,6 +481,12 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 		body     []byte
 	)
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		// The first attempt runs under the check above; retries re-evaluate.
+		if attempt > 1 {
+			if err := c.checkHostedInference(ctx, req.OrgID); err != nil {
+				return nil, err
+			}
+		}
 		var err error
 		chatResp, body, err = c.requestCompletion(ctx, initResult.apiKey, reqBody)
 		if err != nil {
@@ -489,6 +586,10 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 	// non-streaming path carries annotations and is what search uses.
 	if req.WebSearch != nil {
 		return nil, fmt.Errorf("web search is not available on the streaming path: its citations would be dropped")
+	}
+
+	if err := c.checkHostedInference(ctx, req.OrgID); err != nil {
+		return nil, err
 	}
 
 	// Build request body (streaming)
@@ -1045,7 +1146,13 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 	return c.createEmbeddings(ctx, orgID, model, inputs, resolved.Dimensions, resolved.KeyType.OrDefault())
 }
 
+// embeddingsRequestTimeout bounds one embeddings call, including SDK retries.
+const embeddingsRequestTimeout = 60 * time.Second
+
 func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model string, inputs []string, dimensions *int64, keyType KeyType) ([][]float32, error) {
+	if err := c.checkHostedInference(ctx, orgID); err != nil {
+		return nil, err
+	}
 	resolvedKey, err := c.keyResolver.ResolveKey(ctx, orgID, "", "", keyType)
 	if err != nil {
 		return nil, fmt.Errorf("resolving OpenRouter key: %w", err)
@@ -1074,8 +1181,19 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 		)
 	}
 
-	orClient := or_base.New(or_base.WithSecurity(openrouterKey))
-	result, err := orClient.Embeddings.Generate(ctx, or_operations.CreateEmbeddingsRequest{
+	orClient := or_base.New(
+		or_base.WithSecurity(openrouterKey),
+		or_base.WithClient(&hostedInferenceHTTPClient{
+			delegate:       c.httpClient,
+			checkpoint:     c.inferenceCheckpoint,
+			organizationID: orgID,
+		}),
+	)
+	// The pooled Guardian client has no timeout of its own; keep the 60s bound
+	// the SDK's default client used to provide.
+	embedCtx, cancel := context.WithTimeout(ctx, embeddingsRequestTimeout)
+	defer cancel()
+	result, err := orClient.Embeddings.Generate(embedCtx, or_operations.CreateEmbeddingsRequest{
 		Model:          model,
 		Input:          or_operations.CreateInputUnionArrayOfStr(inputs),
 		EncodingFormat: nil,

@@ -1203,7 +1203,7 @@ func newOpenRouterClient(apiKey string) openrouter.CompletionClient {
 	logger := slog.New(slog.DiscardHandler)
 	policy := guardian.NewDefaultPolicy(tracenoop.NewTracerProvider())
 	prov := &devProvisioner{apiKey: apiKey}
-	return openrouter.NewUnifiedClient(
+	return openrouter.NewUncheckedUnifiedClient(
 		logger,
 		policy,
 		prov,

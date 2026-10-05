@@ -62,6 +62,20 @@ func (s *Service) ProjectSlugAuth(ctx context.Context, slug string, scheme *secu
 	return s.auth.Authorize(ctx, slug, scheme)
 }
 
+func validatedGramSessionClaim(ctx context.Context, authCtx *contextvalues.AuthContext) *chatsessions.GramSessionActingUserClaim {
+	provenance, ok := contextvalues.ValidatedGramSessionActingUser(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil ||
+		authCtx.ActiveOrganizationID != provenance.OrganizationID() ||
+		authCtx.UserID != provenance.UserID() || *authCtx.SessionID != provenance.SessionID() {
+		return nil
+	}
+	return &chatsessions.GramSessionActingUserClaim{
+		OrgID:     provenance.OrganizationID(),
+		UserID:    provenance.UserID(),
+		SessionID: provenance.SessionID(),
+	}
+}
+
 func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.CreateResult, error) {
 	ctx, span := s.tracer.Start(ctx, "chatsessions.create")
 	defer span.End()
@@ -84,16 +98,17 @@ func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.Create
 	}
 
 	claims := chatsessions.ChatSessionClaims{
-		OrgID:            authCtx.ActiveOrganizationID,
-		ProjectID:        authCtx.ProjectID.String(),
-		OrganizationSlug: authCtx.OrganizationSlug,
-		ProjectSlug:      *authCtx.ProjectSlug,
-		ExternalUserID:   p.UserIdentifier,
-		APIKeyID:         authCtx.APIKeyID,
-		UserID:           authCtx.UserID,
-		SessionID:        sessionID,
-		AccountType:      authCtx.AccountType,
-		RegisteredClaims: jwt.RegisteredClaims{}, //nolint:exhaustruct // to be populated by chatSessionsManager
+		OrgID:                 authCtx.ActiveOrganizationID,
+		ProjectID:             authCtx.ProjectID.String(),
+		OrganizationSlug:      authCtx.OrganizationSlug,
+		ProjectSlug:           *authCtx.ProjectSlug,
+		ExternalUserID:        p.UserIdentifier,
+		APIKeyID:              authCtx.APIKeyID,
+		UserID:                authCtx.UserID,
+		SessionID:             sessionID,
+		AccountType:           authCtx.AccountType,
+		GramSessionActingUser: validatedGramSessionClaim(ctx, authCtx),
+		RegisteredClaims:      jwt.RegisteredClaims{}, //nolint:exhaustruct // to be populated by chatSessionsManager
 	}
 
 	token, _, err := s.chatSessionsManager.GenerateToken(

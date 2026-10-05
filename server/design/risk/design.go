@@ -15,6 +15,7 @@ var _ = Service("risk", func() {
 	shared.DeclareErrorResponses()
 
 	Method("createRiskPolicy", func() {
+		shared.DeclareHostedInferenceErrors()
 		Description("Create a new risk analysis policy for the current project.")
 
 		Payload(func() {
@@ -74,6 +75,7 @@ var _ = Service("risk", func() {
 
 		HTTP(func() {
 			POST("/rpc/risk.createPolicy")
+			shared.DeclareHTTPHostedInferenceErrorResponses()
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -223,6 +225,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("updateRiskPolicy", func() {
+		shared.DeclareHostedInferenceErrors()
 		Description("Update a risk analysis policy.")
 
 		Payload(func() {
@@ -282,6 +285,7 @@ var _ = Service("risk", func() {
 
 		HTTP(func() {
 			PUT("/rpc/risk.updatePolicy")
+			shared.DeclareHTTPHostedInferenceErrorResponses()
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -1591,6 +1595,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("suggestCustomDetectionRule", func() {
+		shared.DeclareHostedInferenceErrors()
 		Description("Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.")
 
 		Payload(func() {
@@ -1609,6 +1614,7 @@ var _ = Service("risk", func() {
 
 		HTTP(func() {
 			POST("/rpc/risk.suggestCustomRules")
+			shared.DeclareHTTPHostedInferenceErrorResponses()
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -1622,6 +1628,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("suggestExclusion", func() {
+		shared.DeclareHostedInferenceErrors()
 		Description("Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt, a batch of example findings, or both. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form. At least one of prompt or finding_ids is required.")
 
 		Payload(func() {
@@ -1642,6 +1649,7 @@ var _ = Service("risk", func() {
 
 		HTTP(func() {
 			POST("/rpc/risk.suggestExclusion")
+			shared.DeclareHTTPHostedInferenceErrorResponses()
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()

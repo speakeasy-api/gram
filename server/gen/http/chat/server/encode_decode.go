@@ -2137,7 +2137,7 @@ func EncodeSummarizeError(encoder func(context.Context, http.ResponseWriter) goa
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
-		case "unauthorized":
+		case "unavailable":
 			var res *goa.ServiceError
 			errors.As(v, &res)
 			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
@@ -2146,10 +2146,24 @@ func EncodeSummarizeError(encoder func(context.Context, http.ResponseWriter) goa
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSummarizeUnauthorizedResponseBody(res)
+				body = NewSummarizeUnavailableResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnauthorized)
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "ai_access_denied":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSummarizeAiAccessDeniedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
 			return enc.Encode(body)
 		case "forbidden":
 			var res *goa.ServiceError
@@ -2164,6 +2178,20 @@ func EncodeSummarizeError(encoder func(context.Context, http.ResponseWriter) goa
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSummarizeUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
 			return enc.Encode(body)
 		case "bad_request":
 			var res *goa.ServiceError
@@ -2362,7 +2390,7 @@ func EncodeSummarizeToolCallError(encoder func(context.Context, http.ResponseWri
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
-		case "unauthorized":
+		case "unavailable":
 			var res *goa.ServiceError
 			errors.As(v, &res)
 			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
@@ -2371,10 +2399,24 @@ func EncodeSummarizeToolCallError(encoder func(context.Context, http.ResponseWri
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSummarizeToolCallUnauthorizedResponseBody(res)
+				body = NewSummarizeToolCallUnavailableResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnauthorized)
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "ai_access_denied":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSummarizeToolCallAiAccessDeniedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
 			return enc.Encode(body)
 		case "forbidden":
 			var res *goa.ServiceError
@@ -2389,6 +2431,20 @@ func EncodeSummarizeToolCallError(encoder func(context.Context, http.ResponseWri
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSummarizeToolCallUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
 			return enc.Encode(body)
 		case "bad_request":
 			var res *goa.ServiceError

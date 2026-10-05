@@ -133,14 +133,25 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 	// direct key and enforce project and owner boundaries. M2 must reject
 	// principal-backed keys at token issuance or add an explicit versioned profile
 	// before they can reach here.
+	var authorizedCtx context.Context
 	switch {
 	case authCtx.APIKeyID != "":
-		return contextvalues.WithLegacyAPIKeyAuthorization(ctx, authCtx), nil
+		authorizedCtx = contextvalues.WithLegacyAPIKeyAuthorization(ctx, authCtx)
 	case authCtx.UserID != "":
-		return contextvalues.WithAuthenticatedActor(
+		authorizedCtx = contextvalues.WithAuthenticatedActor(
 			ctx, authCtx, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		), nil
+		)
 	default:
-		return contextvalues.SetAuthContext(ctx, authCtx), nil
+		authorizedCtx = contextvalues.SetAuthContext(ctx, authCtx)
 	}
+	if provenance := claims.GramSessionActingUser; provenance != nil &&
+		provenance.OrgID != "" && provenance.OrgID == claims.OrgID &&
+		provenance.UserID != "" && provenance.UserID == claims.UserID &&
+		provenance.SessionID != "" && claims.SessionID != nil && provenance.SessionID == *claims.SessionID {
+		authorizedCtx = contextvalues.WithValidatedChatSessionActingUser(
+			authorizedCtx, provenance.OrgID, provenance.UserID, provenance.SessionID,
+		)
+	}
+
+	return authorizedCtx, nil
 }

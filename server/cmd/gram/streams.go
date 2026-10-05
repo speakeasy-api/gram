@@ -389,7 +389,11 @@ func newStreamsCommand() *cli.Command {
 				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient)
 			}
 
-			completionsClient := openrouter.NewUnifiedClient(
+			aiAccess, err := newAIAccessEnforcement(db, meterProvider, logger)
+			if err != nil {
+				return err
+			}
+			completionsClient, err := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
 				openRouter,
@@ -398,7 +402,11 @@ func newStreamsCommand() *cli.Command {
 				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
 				nil,
 				nil,
+				aiAccess.hostedInference,
 			)
+			if err != nil {
+				return fmt.Errorf("create hosted inference client: %w", err)
+			}
 			judgeRateLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
 
 			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)

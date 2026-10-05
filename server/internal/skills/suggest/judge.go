@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
@@ -176,6 +177,10 @@ func (g *modelGenerator) Generate(ctx context.Context, in GenerateInput) (Genera
 	prompt, err := BuildPrompt(g.config, in)
 	if err != nil {
 		return Generation{}, err
+	}
+	ctx, err = hostedinference.WithBackground(ctx, hostedinference.CallCategorySkillJudge)
+	if err != nil {
+		return Generation{}, fmt.Errorf("classify skill-suggestion inference: %w", err)
 	}
 	bucket := openrouter.ResolveJudgeRateLimitKey(ctx, g.logger, g.completion, in.OrganizationID, in.ProjectID.String(), billing.ModelUsageSourceSkillSuggestions, g.config.Model)
 	switch result, err := g.limiter.Allow(ctx, bucket); {

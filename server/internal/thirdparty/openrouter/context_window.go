@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -28,16 +29,36 @@ type ContextWindowResolver struct {
 	baseURL    string
 }
 
-func NewContextWindowResolver(logger *slog.Logger, guardianPolicy *guardian.Policy, cacheImpl cache.Cache) *ContextWindowResolver {
+func NewContextWindowResolver(logger *slog.Logger, guardianPolicy *guardian.Policy, cacheImpl cache.Cache, checkpoint hostedinference.AttemptCheckpoint) *ContextWindowResolver {
 	component := logger.With(attr.SlogComponent("openrouter_context_window"))
+	attemptCheck := func(req *http.Request) error {
+		organizationID, governed := req.Context().Value(contextWindowOrganizationKey{}).(string)
+		if !governed {
+			return nil // assistant context-window lookup remains explicitly unchanged
+		}
+		if checkpoint == nil {
+			return hostedinference.ErrCheckpointUnavailable
+		}
+		return checkpoint.Check(req.Context(), organizationID)
+	}
 	return &ContextWindowResolver{
 		logger:     component,
-		httpClient: guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),
+		httpClient: guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig(), guardian.WithAttemptCheck(attemptCheck)),
 		cache:      cache.NewTypedObjectCache[mv.ModelContextWindow](component.With(attr.SlogCacheNamespace("openrouter_context_window")), cacheImpl, cache.SuffixNone),
 		baseURL:    OpenRouterBaseURL,
 	}
 }
 
+type contextWindowOrganizationKey struct{}
+
+// ResolveGoverned resolves metadata for a governed user call. The organization
+// marker is consumed by the HTTP transport immediately before every attempt.
+func (r *ContextWindowResolver) ResolveGoverned(ctx context.Context, organizationID, modelID string) (int, error) {
+	return r.Resolve(context.WithValue(ctx, contextWindowOrganizationKey{}, organizationID), modelID)
+}
+
+// Resolve preserves the explicit assistant/internal metadata path without
+// introducing user-session enforcement.
 func (r *ContextWindowResolver) Resolve(ctx context.Context, modelID string) (int, error) {
 	if cached, err := r.cache.Get(ctx, mv.ModelContextWindowCacheKey(modelID)); err == nil {
 		return cached.Tokens, nil

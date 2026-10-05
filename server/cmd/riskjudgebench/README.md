@@ -5,8 +5,9 @@ evaluation** - the call in
 [`server/internal/scanners/promptpolicy/openrouter/judge.go`](../../internal/scanners/promptpolicy/openrouter/judge.go).
 
 It drives the **real production `openrouter.ChatClient`**
-(`NewUnifiedClient` to `GetObjectCompletion`), so every model runs under
-prod-equivalent conditions:
+(`NewUncheckedUnifiedClient` to `GetObjectCompletion`), so every model runs
+under prod-equivalent conditions, except that the standalone bench is not
+governed by the `ai_access` hosted-inference checkpoint:
 
 - reasoning effort `"low"`, which is what the judge sends,
 - the production model **allowlist** + `ResolveModel` fallback,

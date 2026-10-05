@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/hostedinference"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -187,6 +188,10 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID 
 		"Do NOT expand, interpret, or replace abbreviations or acronyms — use the user's exact terminology. " +
 		"If the conversation is a greeting, vague, or lacks a clear topic, return exactly: " + defaultChatTitle
 
+	titleCtx, err := hostedinference.WithBackground(titleCtx, hostedinference.CallCategoryAutomaticChatTitle)
+	if err != nil {
+		return defaultChatTitle
+	}
 	response, err := g.chatClient.GetCompletion(titleCtx, openrouter.CompletionRequest{
 		MaxTokens: nil,
 		OrgID:     orgID,

@@ -430,10 +430,29 @@ type ListBusinessMemoryContentScopesGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// SearchBusinessMemoriesUnauthorizedResponseBody is the type of the
+// SearchBusinessMemoriesUnavailableResponseBody is the type of the
 // "businessMemories" service "searchBusinessMemories" endpoint HTTP response
-// body for the "unauthorized" error.
-type SearchBusinessMemoriesUnauthorizedResponseBody struct {
+// body for the "unavailable" error.
+type SearchBusinessMemoriesUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchBusinessMemoriesAiAccessDeniedResponseBody is the type of the
+// "businessMemories" service "searchBusinessMemories" endpoint HTTP response
+// body for the "ai_access_denied" error.
+type SearchBusinessMemoriesAiAccessDeniedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -453,6 +472,25 @@ type SearchBusinessMemoriesUnauthorizedResponseBody struct {
 // "businessMemories" service "searchBusinessMemories" endpoint HTTP response
 // body for the "forbidden" error.
 type SearchBusinessMemoriesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SearchBusinessMemoriesUnauthorizedResponseBody is the type of the
+// "businessMemories" service "searchBusinessMemories" endpoint HTTP response
+// body for the "unauthorized" error.
+type SearchBusinessMemoriesUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1026,11 +1064,26 @@ func NewListBusinessMemoryContentScopesGatewayErrorResponseBody(res *goa.Service
 	return body
 }
 
-// NewSearchBusinessMemoriesUnauthorizedResponseBody builds the HTTP response
+// NewSearchBusinessMemoriesUnavailableResponseBody builds the HTTP response
 // body from the result of the "searchBusinessMemories" endpoint of the
 // "businessMemories" service.
-func NewSearchBusinessMemoriesUnauthorizedResponseBody(res *goa.ServiceError) *SearchBusinessMemoriesUnauthorizedResponseBody {
-	body := &SearchBusinessMemoriesUnauthorizedResponseBody{
+func NewSearchBusinessMemoriesUnavailableResponseBody(res *goa.ServiceError) *SearchBusinessMemoriesUnavailableResponseBody {
+	body := &SearchBusinessMemoriesUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchBusinessMemoriesAiAccessDeniedResponseBody builds the HTTP response
+// body from the result of the "searchBusinessMemories" endpoint of the
+// "businessMemories" service.
+func NewSearchBusinessMemoriesAiAccessDeniedResponseBody(res *goa.ServiceError) *SearchBusinessMemoriesAiAccessDeniedResponseBody {
+	body := &SearchBusinessMemoriesAiAccessDeniedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1046,6 +1099,21 @@ func NewSearchBusinessMemoriesUnauthorizedResponseBody(res *goa.ServiceError) *S
 // "businessMemories" service.
 func NewSearchBusinessMemoriesForbiddenResponseBody(res *goa.ServiceError) *SearchBusinessMemoriesForbiddenResponseBody {
 	body := &SearchBusinessMemoriesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSearchBusinessMemoriesUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "searchBusinessMemories" endpoint of the
+// "businessMemories" service.
+func NewSearchBusinessMemoriesUnauthorizedResponseBody(res *goa.ServiceError) *SearchBusinessMemoriesUnauthorizedResponseBody {
+	body := &SearchBusinessMemoriesUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
