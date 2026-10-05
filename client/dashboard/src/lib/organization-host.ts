@@ -16,7 +16,7 @@ const MOVED_HOSTS_KEY = "organizationHostMoves";
  * takes a bearer token from the URL fragment into this host's session storage,
  * which another host cannot read, so moving mid-flow would lose the token.
  */
-export const HOST_MOVE_EXEMPT_PATHS = [
+const HOST_MOVE_EXEMPT_PATHS = [
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
   "/risk-policy-challenge/acknowledge",
