@@ -914,13 +914,10 @@ function IdentityGroup({
   onRowClick: (row: Employee) => void;
   emptyMessage: ReactNode;
 }): JSX.Element {
+  // Equal halves: both tables are on screen whatever either one holds, and
+  // each scrolls its own rows rather than pushing the other down.
   return (
-    <section
-      className="flex min-h-[9rem] flex-col gap-3"
-      // Sized by what it holds: a five-row inventory does not claim the same
-      // height as a forty-row directory, and neither is pinned to half.
-      style={{ flexGrow: Math.max(rows.length, 2), flexBasis: 0 }}
-    >
+    <section className="flex min-h-[9rem] flex-1 basis-0 flex-col gap-3">
       <div className="flex items-end justify-between gap-6">
         <div className="space-y-1">
           <div className="flex items-baseline gap-2">
@@ -943,7 +940,7 @@ function IdentityGroup({
       {/* The table clips its own overflow, which would anchor a sticky header
           to the table rather than to this pane; scrolling moves to the pane so
           the header can stay put while its rows move. */}
-      <div className="border-border min-h-0 flex-1 overflow-auto border-b [&_table]:overflow-visible [&_thead]:bg-background [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10">
+      <div className="border-border min-h-0 flex-1 overflow-auto overscroll-contain border-b [&_table]:overflow-visible [&_thead]:bg-background [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10">
         <Table
           columns={columns}
           data={rows.slice(0, visible)}
