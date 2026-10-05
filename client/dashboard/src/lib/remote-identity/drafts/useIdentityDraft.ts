@@ -25,6 +25,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
+  advertisedScopes,
+  normalizeScopes,
   preferredScopes,
   serverIdentityAuthMethod,
 } from "../model/clientConfiguration";
@@ -161,10 +163,6 @@ function clientOptionHint(
 ): string | null {
   if (!candidate.clientIdMetadataUri) return idTail(candidate.clientId);
   return labelShared ? idTail(candidate.id) : null;
-}
-
-function scopesFromText(text: string): string[] {
-  return [...new Set(text.split(/\s+/).filter((scope) => scope !== ""))];
 }
 
 // A provider counts as this upstream's own only on a DNS-label boundary. A
@@ -331,9 +329,11 @@ export type UserIdentityDraft = {
   setClientId: (value: string) => void;
   clientSecret: string;
   setClientSecret: (value: string) => void;
-  /** Space-separated scopes for a manual client. Blank requests the defaults. */
-  scopeText: string;
-  setScopeText: (value: string) => void;
+  /** Scopes chosen for a manual client. Empty requests the defaults. */
+  scopes: string[];
+  setScopes: (values: string[]) => void;
+  /** Scopes the server and provider advertise, offered as choices. */
+  scopeOptions: string[];
   registrationGuideUrl: string | null;
 
   /** Save swaps the server's client for another, so everyone signs in again. */
@@ -381,7 +381,7 @@ export function useUserIdentityDraft({
     useState<RegistrationMethod>("cimd");
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
-  const [scopeText, setScopeText] = useState("");
+  const [scopes, setScopes] = useState<string[]>([]);
   const [localStatus, setLocalStatus] = useState<UserIdentityStatus>({
     kind: "idle",
   });
@@ -688,6 +688,20 @@ export function useUserIdentityDraft({
   const replacesClient =
     linkedClients.length > 0 && !connected && !sameAsConnected;
 
+  // The provider probe is off once a provider matches. Manual is also the
+  // fallback while clients load, so wait for the choice to settle.
+  const scopeProbe = useProtectedResourceMetadata(
+    remoteMcpServerId,
+    enabled && !!selected && !clientsLoading && manualNeeded && !connected,
+  );
+  const resourceScopes = scopeProbe.metadata?.scopesSupported;
+  const issuerScopes =
+    selectedIssuer?.scopesSupported ?? discoveredMetadata?.scopesSupported;
+  const scopeOptions = useMemo(
+    () => advertisedScopes(resourceScopes, issuerScopes),
+    [resourceScopes, issuerScopes],
+  );
+
   const resetChoice = (): void => {
     setChoicePick(null);
     setExistingPick(null);
@@ -696,7 +710,7 @@ export function useUserIdentityDraft({
     // next, so they leave with it rather than being saved under its successor.
     setClientId("");
     setClientSecret("");
-    setScopeText("");
+    setScopes([]);
     setLocalStatus({ kind: "idle" });
   };
 
@@ -774,13 +788,14 @@ export function useUserIdentityDraft({
         // A new client asks for what this server's protected resource
         // advertises, exactly as the create flow does. Left empty, the server
         // falls back to every scope the issuer advertises — the request that
-        // broke Salesforce logins. Scopes typed for a manual client win.
-        const typedScopes = manualNeeded ? scopesFromText(scopeText) : [];
-        const scopes =
-          typedScopes.length > 0
-            ? typedScopes
+        // broke Salesforce logins. Scopes chosen for a manual client win.
+        const chosenScopes = manualNeeded ? scopes : [];
+        const requestedScopes =
+          chosenScopes.length > 0
+            ? chosenScopes
             : preferredScopes(
                 prm.metadata?.scopesSupported ??
+                  resourceScopes ??
                   (await protectedResourceScopes(client, remoteMcpServerId)),
                 selectedIssuer?.scopesSupported ?? draft?.scopesSupported,
               );
@@ -788,7 +803,7 @@ export function useUserIdentityDraft({
         clientConfiguration = {
           clientId: manualNeeded ? clientId.trim() : undefined,
           clientSecret: secret || undefined,
-          scope: scopes.length > 0 ? scopes : undefined,
+          scope: requestedScopes.length > 0 ? requestedScopes : undefined,
           // A manual client without a secret is a public client; naming a
           // secret-based method for it is refused by the server.
           tokenEndpointAuthMethod:
@@ -939,8 +954,9 @@ export function useUserIdentityDraft({
     setClientId,
     clientSecret,
     setClientSecret,
-    scopeText,
-    setScopeText,
+    scopes,
+    setScopes: (values: string[]): void => setScopes(normalizeScopes(values)),
+    scopeOptions,
     registrationGuideUrl:
       selectedIssuer?.clientSetupDocumentationUrl ??
       selectedIssuer?.serviceDocumentation ??

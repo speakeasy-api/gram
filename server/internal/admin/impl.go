@@ -82,6 +82,10 @@ type Service struct {
 	// workosEnvironmentID scopes WorkOS dashboard links. Empty leaves them out.
 	workosEnvironmentID string
 
+	// newOrganizationDefaultHost is recorded as the default host of
+	// organizations staff create. Null records none.
+	newOrganizationDefaultHost pgtype.Text
+
 	// workos creates organizations in the identity provider. Deployments with
 	// no WorkOS configuration get orgprovision.Unavailable, whose failure
 	// CreateOrganization reports rather than working around.
@@ -99,6 +103,7 @@ type Service struct {
 	billing BillingOperations
 
 	supportCoverage SupportCoverageReader
+	mcpServerHealth MCPServerHealthReader
 }
 
 type BillingOperations interface {
@@ -205,6 +210,7 @@ func NewService(
 	openRouterSpendCap OpenRouterSpendCapScheduler,
 	billing BillingOperations,
 	supportCoverage SupportCoverageReader,
+	mcpServerHealth MCPServerHealthReader,
 	dashboardURL *url.URL,
 	registry *mcpregistry.Service,
 ) *Service {
@@ -225,14 +231,15 @@ func NewService(
 	)
 
 	return &Service{remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", registry: registry,
-		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
-		logger:         logger,
-		db:             db,
-		oidc:           oidcClient,
-		sessions:       sessionStore,
-		verifier:       NewVerifier(logger, sessionStore, oidcClient, adminCache),
-		allowedOrigins: allowedOrigins,
-		dashboardURL:   dashboardURL,
+		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
+		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
+		logger:                     logger,
+		db:                         db,
+		oidc:                       oidcClient,
+		sessions:                   sessionStore,
+		verifier:                   NewVerifier(logger, sessionStore, oidcClient, adminCache),
+		allowedOrigins:             allowedOrigins,
+		dashboardURL:               dashboardURL,
 		supportHandoffIssuer: supporthandoff.NewIssuer(
 			supporthandoff.NewStore(adminCache),
 		),
@@ -251,7 +258,14 @@ func NewService(
 		trial:           trialNotifier,
 		billing:         billing,
 		supportCoverage: supportCoverage,
+		mcpServerHealth: mcpServerHealth,
 	}
+}
+
+// SetNewOrganizationDefaultHost sets the default host recorded on
+// organizations staff create. Unset records none.
+func (s *Service) SetNewOrganizationDefaultHost(host pgtype.Text) {
+	s.newOrganizationDefaultHost = host
 }
 
 func (s *Service) GetSession(ctx context.Context, _ *gen.GetSessionPayload) (*gen.AdminSession, error) {
@@ -264,7 +278,8 @@ func (s *Service) GetSession(ctx context.Context, _ *gen.GetSessionPayload) (*ge
 
 func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *gen.ProductFeatures {
 	return &gen.ProductFeatures{
-		LogsEnabled: snapshot.LogsEnabled, ToolIoLogsEnabled: snapshot.ToolIoLogsEnabled, SessionCaptureEnabled: snapshot.SessionCaptureEnabled,
+		AutomaticRoleDistribution: snapshot.AutomaticRoleDistribution,
+		LogsEnabled:               snapshot.LogsEnabled, ToolIoLogsEnabled: snapshot.ToolIoLogsEnabled, SessionCaptureEnabled: snapshot.SessionCaptureEnabled,
 		AuthzChallengeLoggingEnabled: snapshot.AuthzChallengeLoggingEnabled, SsoEnabled: snapshot.SsoEnabled, ScimEnabled: snapshot.ScimEnabled,
 		HooksBrowserLoginEnabled: snapshot.HooksBrowserLoginEnabled, HooksFailOpenEnabled: snapshot.HooksFailOpenEnabled,
 		CustomModelKeysEnabled: snapshot.CustomModelKeysEnabled, SkillsEnabled: snapshot.SkillsEnabled, SkillCaptureMetadataOnly: snapshot.SkillCaptureMetadataOnly,
@@ -1109,6 +1124,24 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 	if payload.AccountType == nil && payload.Whitelisted == nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "at least one of account_type or whitelisted must be supplied")
 	}
+	if payload.AccountType == nil {
+		tx, err := s.db.Begin(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "begin organization whitelist change").LogError(ctx, s.logger)
+		}
+		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+		actor, displayName, _ := adminActor(ctx)
+		if _, err := SetOrganizationWhitelistTx(ctx, tx, s.audit, payload.ID, *payload.Whitelisted, actor, displayName); err != nil {
+			if errors.Is(err, ErrOrganizationWhitelistNotFound) {
+				return nil, oops.E(oops.CodeNotFound, err, "organization not found")
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "set organization whitelist").LogError(ctx, s.logger)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "commit organization whitelist change").LogError(ctx, s.logger)
+		}
+		return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after whitelist change")
+	}
 	// See ExtendTrial: the design bounds this too, but generated validation only
 	// runs at the HTTP boundary.
 	if payload.AccountType != nil && !constants.IsAccountType(*payload.AccountType) {
@@ -1566,6 +1599,7 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		// and that path records no source, so writing it here is what makes the
 		// two orderings agree.
 		CreationSource: conv.ToPGText(orgprovision.SourcePlatformAdmin),
+		DefaultHost:    s.newOrganizationDefaultHost,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create organization metadata: %w", err), organizationCreationUncertain).LogError(ctx, logger)

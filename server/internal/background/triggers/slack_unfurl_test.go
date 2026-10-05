@@ -95,7 +95,7 @@ func TestUnfurlSlackGramLinksCallsChatUnfurl(t *testing.T) {
 	require.Len(t, preview.Blocks, 1)
 	require.Equal(t, "context", preview.Blocks[0].Type)
 	require.Len(t, preview.Blocks[0].Elements, 2)
-	require.Equal(t, "https://app.getgram.ai/favicon.png", preview.Blocks[0].Elements[0].ImageURL)
+	require.Equal(t, "https://app.getgram.ai/external/sticker-logo.png", preview.Blocks[0].Elements[0].ImageURL)
 	require.Equal(t, "Speakeasy", preview.Blocks[0].Elements[0].AltText)
 	require.Equal(t, "<https://app.getgram.ai/acme/projects/default/toolsets/my-tools|My Tools · Toolsets>", preview.Blocks[0].Elements[1].Text)
 }
@@ -155,13 +155,13 @@ func TestUnfurlSlackGramLinksCoversExtraPlatformHosts(t *testing.T) {
 	require.Len(t, unfurls, 2)
 	site, ok := unfurls["https://app.getgram.ai/acme/projects/default/toolsets"]
 	require.True(t, ok)
-	require.Equal(t, "https://app.getgram.ai/favicon.png", site.Blocks[0].Elements[0].ImageURL)
+	require.Equal(t, "https://app.getgram.ai/external/sticker-logo.png", site.Blocks[0].Elements[0].ImageURL)
 	require.Equal(t, "<https://app.getgram.ai/acme/projects/default/toolsets|Toolsets>", site.Blocks[0].Elements[1].Text)
 
 	extra, ok := unfurls["https://AI.Speakeasy.com/acme/projects/default/toolsets/my-tools"]
 	require.True(t, ok)
 	// The icon stays on the site URL; the link keeps its own host.
-	require.Equal(t, "https://app.getgram.ai/favicon.png", extra.Blocks[0].Elements[0].ImageURL)
+	require.Equal(t, "https://app.getgram.ai/external/sticker-logo.png", extra.Blocks[0].Elements[0].ImageURL)
 	require.Equal(t, "<https://AI.Speakeasy.com/acme/projects/default/toolsets/my-tools|My Tools · Toolsets>", extra.Blocks[0].Elements[1].Text)
 }
 

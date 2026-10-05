@@ -308,6 +308,7 @@ E'---\nname: runbook\ndescription: General operational runbook for the Acme stac
   role_urn_member text;
   custom_role_id uuid;
   custom_role_urn text;
+  custom_role_slug text;
   custom_role record;
   skill_id uuid;
   version_id uuid;
@@ -517,7 +518,7 @@ BEGIN
   -- own-sessions-only, hiding every seeded chat (owned by user_demo_*).
   INSERT INTO organization_features (organization_id, feature_name)
   SELECT demo_org, f
-  FROM unnest(ARRAY['logs', 'tool_io_logs', 'session_capture', 'skills', 'rbac']) AS f
+  FROM unnest(ARRAY['logs', 'tool_io_logs', 'session_capture', 'skills', 'rbac', 'automatic-role-distribution']) AS f
   ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
 
   -- Unlike demo entitlements, preserve an explicit fail-closed choice on reseed.
@@ -708,6 +709,39 @@ BEGIN
       INSERT INTO agent_role_assignments (organization_id, agent_id, role_urn)
       VALUES (demo_org, demo.det_uuid(custom_role.agents[i]), custom_role_urn);
     END LOOP;
+  END LOOP;
+
+  -- Show the completed one-time onboarding result, not a pending repair job.
+  -- Role plugins are empty and role-only; the Default plugin remains Everyone.
+  INSERT INTO plugins (organization_id, project_id, name, slug, is_default)
+  VALUES (demo_org, proj_a, 'Default', 'default', true)
+  RETURNING id INTO custom_role_id;
+  INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
+  VALUES (custom_role_id, demo_org, '*');
+
+  FOR custom_role IN
+    SELECT 'role:organization:' || id AS role_urn, workos_name AS name
+    FROM organization_roles WHERE organization_id = demo_org AND deleted IS FALSE AND workos_deleted IS FALSE
+    UNION ALL
+    SELECT 'role:global:' || id, workos_name
+    FROM global_roles WHERE deleted IS FALSE AND workos_deleted IS FALSE
+  LOOP
+    -- Match conv.ToSlug, including Go's ASCII-only whitespace class.
+    custom_role_slug := trim(BOTH '-' FROM regexp_replace(
+      lower(regexp_replace(custom_role.name, E'[^a-zA-Z0-9 \t\n\f\r-]', '', 'g')),
+      E'[- \t\n\f\r]+', '-', 'g'));
+    SELECT id INTO custom_role_id FROM plugins
+    WHERE organization_id = demo_org AND project_id = proj_a AND deleted IS FALSE
+      AND slug = custom_role_slug
+    ORDER BY created_at, id LIMIT 1;
+    IF custom_role_id IS NULL THEN
+      INSERT INTO plugins (organization_id, project_id, name, slug, auto_created)
+      VALUES (demo_org, proj_a, custom_role.name, custom_role_slug, true)
+      RETURNING id INTO custom_role_id;
+    END IF;
+    INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
+    VALUES (custom_role_id, demo_org, custom_role.role_urn)
+    ON CONFLICT (plugin_id, principal_urn) DO NOTHING;
   END LOOP;
 
   -- The Read-only Tools role is the disposition case: it reaches every server,
@@ -1580,6 +1614,26 @@ BEGIN
           'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
           ARRAY['releases:read'], 'Fictional release account',
           now() - interval '3 days', now() - interval '40 minutes');
+
+  -- Upstream sessions on Linear's CIMD client, one per last-validation outcome
+  -- plus one never validated, so the admin server health page shows every
+  -- validation state. Inert like the session above: an invalid ciphertext and
+  -- no refresh token. grant_generation above 1 records re-authorizations.
+  INSERT INTO remote_sessions
+    (id, subject_urn, user_session_issuer_id, remote_session_client_id,
+     access_token_encrypted, access_expires_at, auto_refresh, scopes,
+     grant_generation, last_validated_at, validation_status, created_at, last_used_at)
+  SELECT demo.det_uuid('gram-demo-validated-session-' || v.n),
+         'user:' || demo_user_ids[v.n], demo.det_uuid('gram-demo-issuer-linear'),
+         demo.det_uuid('gram-demo-remote-identity-client-linear'),
+         'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
+         ARRAY['read'], v.grant_generation,
+         CASE WHEN v.status IS NOT NULL THEN now() - (v.n || ' hours')::interval END,
+         v.status, now() - ((v.n + 2) || ' days')::interval, now() - (v.n || ' hours')::interval
+  FROM (VALUES
+    (1, 'valid', 1), (2, 'valid', 3), (3, 'rejected_by_member', 2),
+    (4, 'inactive', 1), (5, 'unknown', 1), (6, NULL, 1)
+  ) AS v(n, status, grant_generation);
 
   ------------------------------------------------------------------
   -- Many principals can reference one exact human-owned session. Reconnecting
@@ -2661,6 +2715,7 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     OR (SELECT count(*) FROM organization_onboarding_vendors WHERE organization_id = demo_org) <> 2 THEN
     RAISE EXCEPTION 'demo seed postflight: expected the recorded onboarding stack';
   END IF;
+
   SELECT count(*) INTO stray FROM organization_features
   WHERE organization_id = demo_org AND feature_name = 'network_ingress';
   IF stray <> 0 THEN
@@ -3221,8 +3276,18 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   SELECT count(*) INTO stray FROM remote_sessions
   WHERE user_session_issuer_id IN
     (SELECT id FROM user_session_issuers WHERE project_id = proj_a);
-  IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 1 user-owned upstream session, found %', stray;
+  IF stray <> 7 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 7 user-owned upstream sessions, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM remote_sessions
+  WHERE remote_session_client_id = demo.det_uuid('gram-demo-remote-identity-client-linear')
+    AND deleted IS FALSE
+    AND access_token_encrypted = 'DEMO-NOT-VALID-CIPHERTEXT' AND refresh_token_encrypted IS NULL
+    AND (validation_status IS NULL
+         OR validation_status IN ('valid', 'rejected_by_member', 'inactive', 'unknown'));
+  IF stray <> 6 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 6 inert validated-spread upstream sessions, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM agents WHERE organization_id = demo_org;

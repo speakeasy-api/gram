@@ -647,6 +647,24 @@ WHERE receipt.organization_id = @organization_id
 ORDER BY receipt.created_at DESC, receipt.id DESC
 LIMIT 1;
 
+-- name: GetPlatformMCPProjectCreationReceipt :one
+-- An operation that creates its own project has no project to key a receipt
+-- on before it runs, so its replay lookup spans the organization: the receipt
+-- is written against the project the operation created, and a retry finds it
+-- by user, operation and key alone. Callers hold the advisory lock taken by
+-- LockPlatformMCPOperationReceipt with an empty project id. Expired receipts
+-- are ignored rather than reclaimed: each is pinned to the project it made,
+-- so a fresh run under the same key can never collide with it.
+SELECT *
+FROM platform_mcp_operation_receipts
+WHERE organization_id = @organization_id
+  AND user_id = @user_id
+  AND operation = @operation
+  AND idempotency_key = @idempotency_key
+  AND expires_at > clock_timestamp()
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
+
 -- name: DeleteExpiredPlatformMCPOperationReceipt :execrows
 -- Matches GetPlatformMCPOperationReceipt exactly. A receipt this cannot reach
 -- never expires, and its idempotency key stays unusable for that user.
@@ -2853,6 +2871,7 @@ SELECT
     p.name,
     p.slug,
     p.description,
+    p.auto_created,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -2915,6 +2934,7 @@ SELECT
     p.name,
     p.slug,
     p.description,
+    p.auto_created,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -2964,6 +2984,7 @@ SELECT
     p.name,
     p.slug,
     p.description,
+    p.auto_created,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -3160,6 +3181,7 @@ SELECT
     p.name,
     p.slug,
     p.description,
+    p.auto_created,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -3563,3 +3585,244 @@ WHERE p.id = @plugin_id
   AND p.organization_id = @organization_id
   AND p.deleted IS FALSE
 FOR UPDATE;
+
+-- name: ListPlatformMCPProjectTools :many
+-- The tools a project's latest completed deployment generated, with the source
+-- that produced each one. This is the catalogue an agent picks from when it is
+-- asked to expose a freshly pushed tool; it reports generated tool definitions
+-- only and never reads an environment, a secret, or a runtime credential.
+--
+-- The deployment and all_deployment_ids CTEs below are duplicated verbatim in
+-- ListPlatformMCPProjectToolURNs, because sqlc cannot share a CTE between
+-- queries. The two MUST stay identical: this one decides what a caller is
+-- offered and that one decides what the mutation accepts, so any divergence
+-- shows a tool here that the change then refuses by name. Edit both together.
+WITH deployment AS (
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    JOIN projects p ON p.id = d.project_id
+    WHERE d.project_id = @project_id
+      AND p.organization_id = @organization_id
+      AND p.deleted IS FALSE
+      AND ds.status = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
+),
+all_deployment_ids AS (
+    SELECT id FROM deployment
+    UNION
+    SELECT DISTINCT pv.deployment_id
+    FROM deployment d
+    JOIN deployments_packages dp ON dp.deployment_id = d.id
+    JOIN package_versions pv ON dp.version_id = pv.id
+),
+project_tools AS (
+    SELECT
+        ftd.tool_urn::TEXT AS tool_urn,
+        ftd.name::TEXT AS tool_name,
+        COALESCE(ftd.description, '')::TEXT AS summary,
+        'function'::TEXT AS source_kind,
+        COALESCE(df.slug, '')::TEXT AS source_slug,
+        COALESCE(df.name, '')::TEXT AS source_name
+    FROM function_tool_definitions ftd
+    LEFT JOIN deployments_functions df ON ftd.function_id = df.id
+    WHERE ftd.deployment_id = (SELECT id FROM deployment)
+      AND ftd.deleted IS FALSE
+    UNION ALL
+    SELECT
+        htd.tool_urn::TEXT AS tool_urn,
+        htd.name::TEXT AS tool_name,
+        COALESCE(NULLIF(htd.summary, ''), htd.description, '')::TEXT AS summary,
+        'openapi'::TEXT AS source_kind,
+        COALESCE(doa.slug, '')::TEXT AS source_slug,
+        COALESCE(doa.name, '')::TEXT AS source_name
+    FROM http_tool_definitions htd
+    LEFT JOIN deployments_openapiv3_assets doa ON htd.openapiv3_document_id = doa.id
+    WHERE htd.deployment_id IN (SELECT id FROM all_deployment_ids)
+      AND htd.deleted IS FALSE
+)
+SELECT
+    (SELECT id FROM deployment)::uuid AS deployment_id,
+    project_tools.tool_urn,
+    project_tools.tool_name,
+    project_tools.summary,
+    project_tools.source_kind,
+    project_tools.source_slug,
+    project_tools.source_name
+FROM project_tools
+WHERE (sqlc.narg(after_tool_urn)::text IS NULL OR project_tools.tool_urn > sqlc.narg(after_tool_urn)::text)
+  AND (sqlc.narg(source_kind)::text IS NULL OR project_tools.source_kind = sqlc.narg(source_kind)::text)
+  AND (
+      @query_text::text = ''
+      OR project_tools.tool_urn ILIKE '%' || @query_text::text || '%'
+      OR project_tools.tool_name ILIKE '%' || @query_text::text || '%'
+      OR project_tools.source_slug ILIKE '%' || @query_text::text || '%'
+  )
+ORDER BY project_tools.tool_urn ASC
+LIMIT @limit_value;
+
+-- name: ListPlatformMCPProjectToolURNs :many
+-- Confirms that exactly the named tool URNs are generated by the project's
+-- latest completed deployment. A URN missing from the result is named back to
+-- the caller rather than silently skipped.
+--
+-- The deployment and all_deployment_ids CTEs below are duplicated verbatim from
+-- ListPlatformMCPProjectTools, because sqlc cannot share a CTE between
+-- queries. The two MUST stay identical: that one decides what a caller is
+-- offered and this one decides what the mutation accepts, so any divergence
+-- refuses a tool the listing just advertised. Edit both together.
+WITH deployment AS (
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    JOIN projects p ON p.id = d.project_id
+    WHERE d.project_id = @project_id
+      AND p.organization_id = @organization_id
+      AND p.deleted IS FALSE
+      AND ds.status = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
+),
+all_deployment_ids AS (
+    SELECT id FROM deployment
+    UNION
+    SELECT DISTINCT pv.deployment_id
+    FROM deployment d
+    JOIN deployments_packages dp ON dp.deployment_id = d.id
+    JOIN package_versions pv ON dp.version_id = pv.id
+)
+SELECT ftd.tool_urn::TEXT AS tool_urn
+FROM function_tool_definitions ftd
+WHERE ftd.deployment_id = (SELECT id FROM deployment)
+  AND ftd.deleted IS FALSE
+  AND ftd.tool_urn = ANY(@tool_urns::text[])
+UNION
+SELECT htd.tool_urn::TEXT AS tool_urn
+FROM http_tool_definitions htd
+WHERE htd.deployment_id IN (SELECT id FROM all_deployment_ids)
+  AND htd.deleted IS FALSE
+  AND htd.tool_urn = ANY(@tool_urns::text[]);
+
+-- name: LockPlatformMCPToolsetForToolExposure :one
+-- Takes the toolset row lock, and must run BEFORE the server row is locked.
+--
+-- The order is the constraint, not the lock. toolsets.UpdateToolset holds this
+-- same row (via GetToolsetForUpdate) and then, inside reconcileHostedNetworkAccess,
+-- updates the hosted mcp_servers row — an exclusive row lock taken by a plain
+-- UPDATE rather than an explicit FOR UPDATE. For a hosted server both ids are
+-- the toolset id, so it is the same pair of rows this path touches. Locking the
+-- server first here and the toolset first there is an ABBA cycle that
+-- PostgreSQL resolves by aborting one side with deadlock_detected, so both
+-- paths take toolsets before mcp_servers.
+SELECT t.id
+FROM toolsets AS t
+JOIN projects AS p
+  ON p.id = t.project_id
+ AND p.organization_id = @organization_id
+ AND p.deleted IS FALSE
+WHERE t.id = @toolset_id
+  AND t.project_id = @project_id
+  AND t.deleted IS FALSE
+FOR UPDATE OF t;
+
+-- name: LockPlatformMCPServerToolsetBinding :one
+-- Pins the named server's backing-toolset binding for the rest of the caller's
+-- transaction, and must run before anything reads the exposure.
+--
+-- GetPlatformMCPServerToolExposure takes no lock, so without this the whole
+-- decision — which toolset to write, which servers that write moves, whether
+-- any of them sit outside the project — is made against an unpinned snapshot
+-- of mcp_servers. UpdateMCPServer assigns toolset_id, so a concurrent
+-- dashboard edit can repoint this server between the read and the write; the
+-- exposure version token covers toolset_versions only and would not notice.
+-- The change would then land on a toolset the named server no longer fronts.
+--
+-- FOR UPDATE OF m locks only the server row, which is what UpdateMCPServer and
+-- DeleteMCPServer update by id, so both block until this transaction ends.
+--
+-- This runs AFTER LockPlatformMCPToolsetForToolExposure, never before: see
+-- that query for the lock-order cycle it would otherwise form with
+-- UpdateToolset. Because the toolset id can only be learned by reading this
+-- binding first, the caller peeks at it unlocked, locks the toolset, locks
+-- this row, and then re-reads — so a repoint in between is detected rather
+-- than acted on.
+SELECT m.id
+FROM mcp_servers AS m
+JOIN projects AS p
+  ON p.id = m.project_id
+ AND p.organization_id = @organization_id
+ AND p.deleted IS FALSE
+WHERE m.id = @mcp_server_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE
+  AND m.toolset_id IS NOT NULL
+FOR UPDATE OF m;
+
+-- name: GetPlatformMCPServerToolExposure :one
+-- The tool list one hosted MCP server exposes, read through its modern server
+-- record. A server whose backend is not a Gram toolset, or a bare toolset with
+-- no server record, deliberately returns no row: its tool list is not Gram's
+-- to change from here.
+-- The columns this returns are only the ones the caller cannot already supply:
+-- the organization, project and MCP server ids are query inputs, so echoing
+-- them back would just be a second source of truth for the same values.
+SELECT
+    t.id AS toolset_id,
+    t.slug AS toolset_slug,
+    COALESCE(latest.version, 0)::bigint AS toolset_version,
+    COALESCE(latest.tool_urns, ARRAY[]::TEXT[])::TEXT[] AS tool_urns,
+    -- Every live server in THIS project fronting this same toolset. The tool
+    -- list lives on the toolset, not on the server record, so these servers
+    -- are aliases for one list: a write authorized against only the named
+    -- server would move all of them. Nothing in the schema forbids the
+    -- sharing, so the caller authorizes each of these before applying the
+    -- change.
+    --
+    -- The project predicate is load-bearing, not tidiness. mcp_servers.
+    -- toolset_id has no composite constraint pairing it with project_id, so a
+    -- server in another project can front this toolset. Each id here is
+    -- authorized with authz.MCPCheck(ScopeMCPWrite, id, <this project>), and
+    -- that check injects the project as a selector dimension so a
+    -- project-scoped grant matches — which means a project-wide mcp:write in
+    -- THIS project would wave through a server id belonging to another one.
+    (
+        SELECT COALESCE(array_agg(fronting.id ORDER BY fronting.id), ARRAY[]::uuid[])
+        FROM mcp_servers AS fronting
+        WHERE fronting.toolset_id = t.id
+          AND fronting.project_id = m.project_id
+          AND fronting.deleted IS FALSE
+    )::uuid[] AS fronting_server_ids,
+    -- Scoping the list above makes the authorization sound but makes the
+    -- out-of-project alias invisible, and the write would still move it. This
+    -- counts them so the mutation can refuse instead: silently changing
+    -- another project's server is worse than refusing and naming the
+    -- dashboard, which can show the shared set and every server using it.
+    (
+        SELECT count(*)
+        FROM mcp_servers AS outside
+        WHERE outside.toolset_id = t.id
+          AND outside.project_id <> m.project_id
+          AND outside.deleted IS FALSE
+    )::bigint AS foreign_fronting_server_count
+FROM mcp_servers AS m
+JOIN projects AS p
+  ON p.id = m.project_id
+ AND p.organization_id = @organization_id
+ AND p.deleted IS FALSE
+JOIN toolsets AS t
+  ON t.id = m.toolset_id
+ AND t.project_id = m.project_id
+ AND t.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT tv.version, tv.tool_urns
+    FROM toolset_versions AS tv
+    WHERE tv.toolset_id = t.id
+      AND tv.deleted IS FALSE
+    ORDER BY tv.version DESC
+    LIMIT 1
+) AS latest ON TRUE
+WHERE m.id = @mcp_server_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE
+  AND m.toolset_id IS NOT NULL;

@@ -15,6 +15,15 @@ vi.mock("@gram/admin-client/react-query/adminListRegistryEntries.core", () => ({
     queryFn: () => list(request),
   }),
 }));
+vi.mock(
+  "@gram/admin-client/react-query/adminListRegistryOktaUnmapped.core",
+  () => ({
+    buildAdminListRegistryOktaUnmappedQuery: () => ({
+      queryKey: ["@gram/admin-client", "admin", "listRegistryOktaUnmapped"],
+      queryFn: async () => ({ names: [] }),
+    }),
+  }),
+);
 import { QueryClient } from "@tanstack/react-query";
 import { RegistryList } from "./RegistryList";
 afterEach(() => {
@@ -143,7 +152,16 @@ it("keeps accessible headers and a spanning cell while loading and empty", async
   const { unmount } = await renderWithApp(<RegistryList />);
   expect(
     screen.getAllByRole("columnheader").map((header) => header.textContent),
-  ).toEqual(["Name", "Publication", "Validation", "Actions"]);
+  ).toEqual([
+    "Name",
+    "Publication",
+    "Validation",
+    "Actions",
+    "Okta name",
+    "Organizations",
+    "Sign-on modes",
+    "Proposed entry",
+  ]);
   expect(
     screen
       .getByRole("cell", { name: "Loading registry…" })

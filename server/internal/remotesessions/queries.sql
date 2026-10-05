@@ -704,7 +704,8 @@ INSERT INTO remote_session_clients (
     audience,
     legacy_callback_url,
     json_web_key_set_id,
-    identity_provider_connection_id
+    identity_provider_connection_id,
+    callback_base_url
 )
 VALUES (
     @project_id,
@@ -720,7 +721,8 @@ VALUES (
     @audience,
     @legacy_callback_url,
     sqlc.narg('json_web_key_set_id'),
-    sqlc.narg('identity_provider_connection_id')
+    sqlc.narg('identity_provider_connection_id'),
+    sqlc.narg('callback_base_url')
 )
 RETURNING *;
 
@@ -1014,7 +1016,8 @@ SELECT
     c.grant_types,
     COALESCE(c.token_endpoint_auth_method, 'none')::text AS token_endpoint_auth_method,
     CASE WHEN s.id IS NULL THEN false ELSE true END AS has_json_web_key_set,
-    c.scope
+    c.scope,
+    c.callback_base_url
 FROM remote_session_clients AS c
 LEFT JOIN json_web_key_sets AS s
   ON s.organization_id = c.organization_id
@@ -1309,7 +1312,8 @@ INSERT INTO remote_session_clients (
     client_id_issued_at,
     token_endpoint_auth_method,
     scope,
-    audience
+    audience,
+    callback_base_url
 )
 VALUES (
     @id,
@@ -1321,7 +1325,8 @@ VALUES (
     @client_id_issued_at,
     'none',
     sqlc.narg('scope')::text[],
-    @audience
+    @audience,
+    sqlc.narg('callback_base_url')
 )
 RETURNING *;
 
@@ -1852,6 +1857,7 @@ SELECT
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
     c.legacy_callback_url                  AS legacy_callback_url,
+    c.callback_base_url                    AS callback_base_url,
     c.resource_identifier                  AS resource_identifier,
     c.resource_name                        AS resource_name,
     c.resource_documentation               AS resource_documentation,
@@ -3933,6 +3939,12 @@ WHERE id = @id
 UPDATE remote_session_clients
 SET client_id = coalesce(sqlc.narg('client_id')::text, client_id),
     client_secret_encrypted = coalesce(sqlc.narg('client_secret_encrypted')::text, client_secret_encrypted)
+WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL;
+
+-- name: SetOrganizationRemoteSessionClientCallbackBaseURLFixture :exec
+-- Test fixture: record a callback origin on an organization-level login client.
+UPDATE remote_session_clients
+SET callback_base_url = @callback_base_url
 WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL;
 
 -- name: SoftDeleteOrganizationRemoteSessionClientFixture :exec

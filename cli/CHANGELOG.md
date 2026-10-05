@@ -1,5 +1,13 @@
 # cli
 
+## 0.17.0
+
+### Minor Changes
+
+- 1cad72d: Add ChatGPT Desktop as an MCP client on the hosted install page and in
+  `gram install chatgpt-desktop`, with Developer mode and custom connector steps
+  matched to the server's authentication.
+
 ## 0.16.0
 
 ### Minor Changes

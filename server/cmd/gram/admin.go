@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
@@ -327,6 +328,8 @@ func newAdminCommand() *cli.Command {
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 	flags = append(flags, clickHouseReadFlags()...)
+	flags = append(flags, platformHostsCLIFlag())
+	flags = append(flags, orgDefaultHostFlags()...)
 
 	return &cli.Command{
 		Name:  "admin",
@@ -480,8 +483,26 @@ func newAdminCommand() *cli.Command {
 			adminWorkOSClient := newAdminWorkOSOrganizationCreator(ctx, logger, guardianPolicy, c)
 			adminOpenRouter := newAdminOpenRouter(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c)
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+			mcpServerURL := siteURL
+			if raw := c.String("server-url"); raw != "" {
+				mcpServerURL, err = url.Parse(raw)
+				if err != nil {
+					return fmt.Errorf("invalid server-url: %w", err)
+				}
+				if err := validateServerURL(mcpServerURL, c.String("environment")); err != nil {
+					return fmt.Errorf("invalid server-url: %w", err)
+				}
+			}
+			platformHosts, err := customdomains.ParsePlatformHosts(c.StringSlice(platformHostsFlag))
+			if err != nil {
+				return fmt.Errorf("invalid platform hosts: %w", err)
+			}
+			orgHosts, err := orgHostResolverFromCLI(c, mcpServerURL, siteURL, c.String("environment"), platformHosts)
+			if err != nil {
+				return err
+			}
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
-			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
+			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, orgHosts)
 
 			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger(), meterReadConn)
 			if err := admin.SeedSupportMatrix(ctx, db); err != nil {
@@ -498,18 +519,9 @@ func newAdminCommand() *cli.Command {
 			if err := organizations.SyncOnboardingSteps(ctx, db); err != nil {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
-			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chDB), siteURL, registryService)
-			mcpServerURL := siteURL
-			if raw := c.String("server-url"); raw != "" {
-				mcpServerURL, err = url.Parse(raw)
-				if err != nil {
-					return fmt.Errorf("invalid server-url: %w", err)
-				}
-				if err := validateServerURL(mcpServerURL, c.String("environment")); err != nil {
-					return fmt.Errorf("invalid server-url: %w", err)
-				}
-			}
+			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chDB), telemetry.NewMCPServerHealth(db, chDB), siteURL, registryService)
 			adminService.SetMCPServerURL(mcpServerURL)
+			adminService.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 			adminService.SetWorkOSEnvironmentID(c.String("workos-environment-id"))
 			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
 			if err != nil {

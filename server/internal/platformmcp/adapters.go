@@ -363,8 +363,10 @@ type PostgresReader struct {
 	riskAnalysisStatus        *RiskAnalysisStatusService
 	riskFindings              riskFindingsLister
 	riskFindingList           riskFindingListLister
+	chatMetadata              *ChatMetadataService
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
+	dataExportRouteToggle     *DataExportRouteToggleService
 	recentToolCalls           *RecentToolCallReadService
 	networkTraffic            MCPNetworkTrafficReader
 	networkTrafficLogsEnabled FeatureChecker
@@ -376,6 +378,8 @@ type PostgresReader struct {
 	shadowAI                  *ShadowAIService
 	reviewRequests            MCPReviewRequestService
 	reviewRequestBudget       OperationBudget
+	toolExposure              *MCPToolExposureService
+	projectLifecycle          *ProjectLifecycleService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -390,8 +394,10 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		riskAnalysisStatus:        nil,
 		riskFindings:              nil,
 		riskFindingList:           nil,
+		chatMetadata:              nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
+		dataExportRouteToggle:     nil,
 		recentToolCalls:           nil,
 		networkTraffic:            nil,
 		networkTrafficLogsEnabled: nil,
@@ -404,12 +410,33 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		shadowAI:                  nil,
 		reviewRequests:            nil,
 		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
+		toolExposure:              nil,
+		projectLifecycle:          nil,
 	}
 }
 
 func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader {
 	if r != nil {
 		r.authz = engine
+	}
+	return r
+}
+
+// WithToolExposure composes the reads and writes that decide which tools a
+// hosted MCP server exposes. Without it the tools stay in the catalogue as
+// stable refusals rather than disappearing from it.
+func (r *PostgresReader) WithToolExposure(service *MCPToolExposureService) *PostgresReader {
+	if r != nil {
+		r.toolExposure = service
+	}
+	return r
+}
+
+// WithProjectLifecycle composes project creation and renaming. Without it the
+// tools stay in the catalogue as stable refusals rather than disappearing.
+func (r *PostgresReader) WithProjectLifecycle(service *ProjectLifecycleService) *PostgresReader {
+	if r != nil {
+		r.projectLifecycle = service
 	}
 	return r
 }
@@ -520,6 +547,15 @@ func (r *PostgresReader) WithRiskFindings(service *RiskFindingsService, budget O
 func (r *PostgresReader) WithRiskFindingList(service *RiskFindingListService, budget OperationBudget) *PostgresReader {
 	if r != nil && service.valid() {
 		r.riskFindingList = &budgetedRiskFindingList{service: service, budget: budget}
+	}
+	return r
+}
+
+// WithChatMetadata attaches the metadata-only chat listing. A nil or
+// incomplete service leaves list_chats served as a stub.
+func (r *PostgresReader) WithChatMetadata(service *ChatMetadataService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.chatMetadata = service
 	}
 	return r
 }
@@ -783,6 +819,21 @@ func (r *PostgresReader) getMCPInventory(ctx context.Context, principal Principa
 	}
 	mcp := mcpFromInventoryItem(row, byMCPServer)
 	r.setInventoryVersion(&mcp)
+	// The exposure read rides the same mcp:read boundary as the rest of the
+	// detail, so it is filled in only where plugin membership is: a caller
+	// admitted on project read alone gets the operational projection, not the
+	// server's configuration.
+	if withPluginMembership && r.toolExposure.valid() && row.McpServerID != uuid.Nil {
+		exposure, err := r.toolExposure.Exposure(ctx, principal, projectID, row.McpServerID)
+		switch {
+		case err == nil:
+			mcp.ToolExposure = &exposure
+		case errors.Is(err, ErrMCPToolExposureMissing):
+			// Not a hosted toolset-backed server: its tools are its upstream's.
+		default:
+			return MCP{}, fmt.Errorf("read platform MCP tool exposure: %w", err)
+		}
+	}
 	return mcp, nil
 }
 

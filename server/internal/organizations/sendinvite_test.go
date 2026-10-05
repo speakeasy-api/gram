@@ -2,6 +2,7 @@ package organizations_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -346,4 +347,36 @@ func TestService_SendInvite_ForbiddenWithGrantForDifferentOrganization(t *testin
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestService_SendInvite_InviteLinkUsesServerURLWithoutDefaultHost(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceWithEmail(t)
+
+	ti.loops.On("SendTransactional", mock.Anything, mock.MatchedBy(func(input loops.SendTransactionalInput) bool {
+		return strings.HasPrefix(input.DataVariables["invite_link"], "http://localhost:35291/rpc/organizations.inviteCallback?invite_token=")
+	})).Return(nil).Once()
+
+	_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "legacy-host@example.com"})
+	require.NoError(t, err)
+}
+
+func TestService_SendInvite_InviteLinkUsesOrganizationDefaultHost(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceWithEmail(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NoError(t, orgrepo.New(ti.conn).SetOrganizationDefaultHostForTest(ctx, orgrepo.SetOrganizationDefaultHostForTestParams{
+		DefaultHost: conv.ToPGText(testPlatformHost),
+		ID:          authCtx.ActiveOrganizationID,
+	}))
+
+	ti.loops.On("SendTransactional", mock.Anything, mock.MatchedBy(func(input loops.SendTransactionalInput) bool {
+		return strings.HasPrefix(input.DataVariables["invite_link"], testPlatformHost+"/rpc/organizations.inviteCallback?invite_token=")
+	})).Return(nil).Once()
+
+	_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "platform-host@example.com"})
+	require.NoError(t, err)
 }

@@ -13,6 +13,13 @@ func TestSpeakeasyRegistryMetadataOverlay(t *testing.T) {
 	value, err := decode([]byte(`{"server":{"name":"example.test/demo","description":"Demo","version":"1"},"_meta":{"com.speakeasy.ai/catalog":{"documentationUrl":"ftp://example.test/docs"}}}`))
 	require.NoError(t, err)
 	require.Error(t, s.Validate(value))
+
+	value, err = decode([]byte(`{"server":{"name":"example.test/demo","description":"Demo","version":"1"},"_meta":{"com.speakeasy.ai/catalog":{"supportsDcr":"yes"}}}`))
+	require.NoError(t, err)
+	require.Error(t, s.Validate(value))
+	value, err = decode([]byte(`{"server":{"name":"example.test/demo","description":"Demo","version":"1"},"_meta":{"com.speakeasy.ai/catalog":{"supportsDcr":true}}}`))
+	require.NoError(t, err)
+	require.NoError(t, s.Validate(value))
 }
 
 func TestOverlayPreservesRootAllOf(t *testing.T) {

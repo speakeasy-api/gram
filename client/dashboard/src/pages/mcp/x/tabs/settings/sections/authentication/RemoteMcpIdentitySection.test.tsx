@@ -1189,7 +1189,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
-  it("sends the scopes typed for a manual client", async () => {
+  it("sends the scopes chosen and typed for a manual client", async () => {
     mocks.issuers.mockReturnValue({
       data: {
         result: {
@@ -1203,11 +1203,20 @@ describe("RemoteMcpIdentitySectionBody", () => {
               clientIdMetadataDocumentSupported: true,
               authorizationEndpoint: "https://mcp.linear.app/authorize",
               tokenEndpoint: "https://mcp.linear.app/token",
+              scopesSupported: ["read", "admin"],
             },
           ],
         },
       },
     });
+    // The provider matches by host, so the provider probe stays off and only
+    // the scope probe, enabled in manual mode, reads the resource's scopes.
+    mocks.protectedResourceMetadata.mockImplementation(
+      (_id: unknown, enabled: unknown) =>
+        enabled
+          ? { status: "available", metadata: { scopesSupported: ["issues"] } }
+          : { status: "idle", metadata: null },
+    );
 
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
@@ -1216,9 +1225,28 @@ describe("RemoteMcpIdentitySectionBody", () => {
       target: { value: "manual-client" },
     });
     fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
-    fireEvent.change(screen.getByLabelText("Scope"), {
-      target: { value: "read  write read" },
-    });
+    fireEvent.click(screen.getByRole("combobox", { name: "Scope" }));
+
+    // The resource's scopes lead, followed by the provider's.
+    expect(
+      screen
+        .getAllByRole("option", { name: /not selected/ })
+        .map((option) => option.textContent),
+    ).toEqual(["issues", "read", "admin"]);
+
+    fireEvent.click(screen.getByRole("option", { name: /^read,/ }));
+    const search = screen.getByPlaceholderText("Search options...");
+    fireEvent.change(search, { target: { value: "write  read" } });
+    fireEvent.click(screen.getByRole("option", { name: /Create new option/ }));
+    // Scopes are case-sensitive: Read is not the advertised read.
+    fireEvent.change(search, { target: { value: "Read" } });
+    fireEvent.click(screen.getByRole("option", { name: /Create new option/ }));
+
+    // A typed scope joins the menu, so it can be found and removed there.
+    expect(
+      screen.getByRole("option", { name: /^write, selected/ }),
+    ).toBeDefined();
+
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
@@ -1228,7 +1256,97 @@ describe("RemoteMcpIdentitySectionBody", () => {
           clientMode: "manual",
           clientConfiguration: expect.objectContaining({
             clientId: "manual-client",
-            scope: ["read", "write"],
+            scope: ["read", "write", "Read"],
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("requests the default scopes when a manual client chooses none", async () => {
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Linear",
+              issuer: "https://mcp.linear.app",
+              slug: "linear",
+              projectId: "project-1",
+              authorizationEndpoint: "https://mcp.linear.app/authorize",
+              tokenEndpoint: "https://mcp.linear.app/token",
+              scopesSupported: ["read", "admin"],
+            },
+          ],
+        },
+      },
+    });
+    // Only the scope probe answers; the save-time probe stays unavailable,
+    // so the resource's scopes can only come from what the field loaded.
+    mocks.protectedResourceMetadata.mockImplementation(
+      (_id: unknown, enabled: unknown) =>
+        enabled
+          ? { status: "available", metadata: { scopesSupported: ["issues"] } }
+          : { status: "idle", metadata: null },
+    );
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Manual/ }));
+    fireEvent.change(screen.getByLabelText("Client ID"), {
+      target: { value: "manual-client" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    expect(mocks.commit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          clientMode: "manual",
+          clientConfiguration: expect.objectContaining({ scope: ["issues"] }),
+        }),
+      }),
+    );
+  });
+
+  it("drops scopes chosen for a manual client when Auto-Configure is saved", async () => {
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Linear",
+              issuer: "https://mcp.linear.app",
+              slug: "linear",
+              projectId: "project-1",
+              authorizationEndpoint: "https://mcp.linear.app/authorize",
+              tokenEndpoint: "https://mcp.linear.app/token",
+              registrationEndpoint: "https://mcp.linear.app/register",
+              scopesSupported: ["read", "write", "admin"],
+            },
+          ],
+        },
+      },
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Manual/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
+    fireEvent.click(screen.getByRole("combobox", { name: "Scope" }));
+    fireEvent.click(screen.getByRole("option", { name: /^admin,/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Auto-Configure/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    expect(mocks.commit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          clientMode: "auto",
+          clientConfiguration: expect.objectContaining({
+            scope: ["read", "write", "admin"],
           }),
         }),
       }),

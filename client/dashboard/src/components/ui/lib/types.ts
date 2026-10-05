@@ -4,6 +4,7 @@ export const buttonVariants = [
   "primary",
   "secondary",
   "tertiary",
+  "success",
   "destructive-primary",
   "destructive-secondary",
 ] as const;

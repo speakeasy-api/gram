@@ -71,7 +71,7 @@ func newPlatformHostMux(t *testing.T, ti *testInstance) (http.Handler, platformH
 		nil,
 	)
 
-	mcpSecurity, err := middleware.MCPSecurity(ti.logger, append([]string{ti.serverURL.String()}, slices.Sorted(maps.Values(platformHosts))...))
+	mcpSecurity, err := middleware.MCPSecurity(ti.logger, append([]string{ti.serverURL.String()}, slices.Sorted(maps.Values(platformHosts))...), mcp.ServesInstallPage)
 	require.NoError(t, err)
 
 	mux := goahttp.NewMuxer()

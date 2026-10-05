@@ -105,7 +105,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // tenancy is the caller's organization and selected project, resolved once per
 // request. Both are needed on every query: organization_id is the tenancy
 // boundary, and project_id narrows within it rather than replacing it, because
-// the trust policy has an organization tier whose rows carry no project.
+// the trust policy has an organization tier whose rows carry no project. A
+// dashboard session never selects a project, so its projectID is NULL and it
+// reads and writes the organization tier alone; only an API key names a project.
 type tenancy struct {
 	organizationID string
 	projectID      uuid.NullUUID
@@ -132,8 +134,12 @@ func (s *Service) resolve(ctx context.Context, scope authz.Scope) (tenancy, erro
 		return tenancy{}, err
 	}
 
+	// Only an API key selects a project. Every other caller, a dashboard
+	// session included, resolves to the organization tier even when its auth
+	// context carries a project, so the tier never depends on which security
+	// schemes happened to populate ProjectID.
 	projectID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if authCtx.ProjectID != nil {
+	if _, byKey := contextvalues.APIKeyAuthorization(ctx); byKey && authCtx.ProjectID != nil {
 		projectID = conv.ToNullUUID(*authCtx.ProjectID)
 	}
 
@@ -164,7 +170,7 @@ func (t tenancy) requestedTier(projectScoped bool) (uuid.NullUUID, error) {
 		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
 	}
 	if !t.projectID.Valid {
-		return uuid.NullUUID{}, oops.E(oops.CodeInvalid, nil, "project_scoped requires a project to be selected")
+		return uuid.NullUUID{}, oops.E(oops.CodeInvalid, nil, "project_scoped requires a caller that names a project, and a dashboard session does not: omit it to write at the organization tier")
 	}
 	return t.projectID, nil
 }

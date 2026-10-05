@@ -15,6 +15,7 @@ import { adminCreateRegistryEntry } from "../funcs/adminCreateRegistryEntry.js";
 import { adminDeleteGlobalIssuer } from "../funcs/adminDeleteGlobalIssuer.js";
 import { adminDeleteOnboardingPlaybook } from "../funcs/adminDeleteOnboardingPlaybook.js";
 import { adminDeleteOnboardingUseCase } from "../funcs/adminDeleteOnboardingUseCase.js";
+import { adminDescribeMcpServerHealth } from "../funcs/adminDescribeMcpServerHealth.js";
 import { adminDisableOrganization } from "../funcs/adminDisableOrganization.js";
 import { adminEnableOrganization } from "../funcs/adminEnableOrganization.js";
 import { adminExtendTrial } from "../funcs/adminExtendTrial.js";
@@ -24,6 +25,7 @@ import { adminGetGlobalIssuerDuplicatePreflight } from "../funcs/adminGetGlobalI
 import { adminGetGlobalIssuerMigratePreflight } from "../funcs/adminGetGlobalIssuerMigratePreflight.js";
 import { adminGetInferenceKeys } from "../funcs/adminGetInferenceKeys.js";
 import { adminGetInferenceSpendHistory } from "../funcs/adminGetInferenceSpendHistory.js";
+import { adminGetMcpServerToolCalls } from "../funcs/adminGetMcpServerToolCalls.js";
 import { adminGetMeterUsage } from "../funcs/adminGetMeterUsage.js";
 import { adminGetOnboardingStackOptions } from "../funcs/adminGetOnboardingStackOptions.js";
 import { adminGetOrganization } from "../funcs/adminGetOrganization.js";
@@ -35,6 +37,7 @@ import { adminGetOrganizationStats } from "../funcs/adminGetOrganizationStats.js
 import { adminGetPaygBillingSummary } from "../funcs/adminGetPaygBillingSummary.js";
 import { adminGetProject } from "../funcs/adminGetProject.js";
 import { adminGetRegistryEntry } from "../funcs/adminGetRegistryEntry.js";
+import { adminGetRegistryOktaCandidates } from "../funcs/adminGetRegistryOktaCandidates.js";
 import { adminGetSession } from "../funcs/adminGetSession.js";
 import { adminGetSpendBreakdown } from "../funcs/adminGetSpendBreakdown.js";
 import { adminGetStripeCustomer } from "../funcs/adminGetStripeCustomer.js";
@@ -53,6 +56,7 @@ import { adminListOrganizationProjects } from "../funcs/adminListOrganizationPro
 import { adminListOrganizations } from "../funcs/adminListOrganizations.js";
 import { adminListProjectMcpServers } from "../funcs/adminListProjectMcpServers.js";
 import { adminListRegistryEntries } from "../funcs/adminListRegistryEntries.js";
+import { adminListRegistryOktaUnmapped } from "../funcs/adminListRegistryOktaUnmapped.js";
 import { adminListUserOrganizations } from "../funcs/adminListUserOrganizations.js";
 import { adminListUsers } from "../funcs/adminListUsers.js";
 import { adminLogout } from "../funcs/adminLogout.js";
@@ -90,6 +94,8 @@ import { AdminListOrganizationProjectsResult } from "../models/components/adminl
 import { AdminListProjectMcpServersResult } from "../models/components/adminlistprojectmcpserversresult.js";
 import { AdminListUserOrganizationsResult } from "../models/components/adminlistuserorganizationsresult.js";
 import { AdminListUsersResult } from "../models/components/adminlistusersresult.js";
+import { AdminMcpServerHealth } from "../models/components/adminmcpserverhealth.js";
+import { AdminMcpServerToolCalls } from "../models/components/adminmcpservertoolcalls.js";
 import { AdminMeterUsageResponse } from "../models/components/adminmeterusageresponse.js";
 import { AdminOnboardingPlaybook } from "../models/components/adminonboardingplaybook.js";
 import { AdminOnboardingPlaybookList } from "../models/components/adminonboardingplaybooklist.js";
@@ -104,6 +110,8 @@ import { AdminOrganizationStats } from "../models/components/adminorganizationst
 import { AdminPaygBillingSummary } from "../models/components/adminpaygbillingsummary.js";
 import { AdminProjectDetail } from "../models/components/adminprojectdetail.js";
 import { AdminRegistryEntry } from "../models/components/adminregistryentry.js";
+import { AdminRegistryOktaCandidates } from "../models/components/adminregistryoktacandidates.js";
+import { AdminRegistryOktaUnmapped } from "../models/components/adminregistryoktaunmapped.js";
 import { AdminRegistryPage } from "../models/components/adminregistrypage.js";
 import { AdminSession } from "../models/components/adminsession.js";
 import { AdminSpendBreakdownResponse } from "../models/components/adminspendbreakdownresponse.js";
@@ -159,11 +167,13 @@ import { UpdateRemoteSessionIssuerForm } from "../models/components/updateremote
 import { UpdateSupportMatrixRequestBody } from "../models/components/updatesupportmatrixrequestbody.js";
 import { UploadImageResult } from "../models/components/uploadimageresult.js";
 import { AdminDeleteGlobalIssuerRequest } from "../models/operations/admindeleteglobalissuer.js";
+import { AdminDescribeMcpServerHealthRequest } from "../models/operations/admindescribemcpserverhealth.js";
 import { AdminGetGlobalIssuerRequest } from "../models/operations/admingetglobalissuer.js";
 import { AdminGetGlobalIssuerDuplicatePreflightRequest } from "../models/operations/admingetglobalissuerduplicatepreflight.js";
 import { AdminGetGlobalIssuerMigratePreflightRequest } from "../models/operations/admingetglobalissuermigratepreflight.js";
 import { AdminGetInferenceKeysRequest } from "../models/operations/admingetinferencekeys.js";
 import { AdminGetInferenceSpendHistoryRequest } from "../models/operations/admingetinferencespendhistory.js";
+import { AdminGetMcpServerToolCallsRequest } from "../models/operations/admingetmcpservertoolcalls.js";
 import { AdminGetMeterUsageRequest } from "../models/operations/admingetmeterusage.js";
 import { AdminGetOrganizationRequest } from "../models/operations/admingetorganization.js";
 import { AdminGetOrganizationChatAnalysisSettingsRequest } from "../models/operations/admingetorganizationchatanalysissettings.js";
@@ -173,6 +183,7 @@ import { AdminGetOrganizationOnboardingStackRequest } from "../models/operations
 import { AdminGetPaygBillingSummaryRequest } from "../models/operations/admingetpaygbillingsummary.js";
 import { AdminGetProjectRequest } from "../models/operations/admingetproject.js";
 import { AdminGetRegistryEntryRequest } from "../models/operations/admingetregistryentry.js";
+import { AdminGetRegistryOktaCandidatesRequest } from "../models/operations/admingetregistryoktacandidates.js";
 import { AdminGetSpendBreakdownRequest } from "../models/operations/admingetspendbreakdown.js";
 import { AdminGetStripeCustomerRequest } from "../models/operations/admingetstripecustomer.js";
 import { AdminGetStripeSubscriptionRequest } from "../models/operations/admingetstripesubscription.js";
@@ -1000,6 +1011,40 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * describeMcpServerHealth admin
+   *
+   * @remarks
+   * Describes one MCP server's health: authentication configuration and session counts (admin view, no auth scoping). Tool calls come from getMcpServerToolCalls.
+   */
+  async describeMcpServerHealth(
+    request: AdminDescribeMcpServerHealthRequest,
+    options?: RequestOptions,
+  ): Promise<AdminMcpServerHealth> {
+    return unwrapAsync(adminDescribeMcpServerHealth(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getMcpServerToolCalls admin
+   *
+   * @remarks
+   * Reads one MCP server's tool call outcomes and series over a window (admin view, no auth scoping). Returns logging:disabled without reading telemetry when the organization's logs are off.
+   */
+  async getMcpServerToolCalls(
+    request: AdminGetMcpServerToolCallsRequest,
+    options?: RequestOptions,
+  ): Promise<AdminMcpServerToolCalls> {
+    return unwrapAsync(adminGetMcpServerToolCalls(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * listProjectMcpServers admin
    *
    * @remarks
@@ -1063,6 +1108,38 @@ export class Admin extends ClientSDK {
     return unwrapAsync(adminListRegistryEntries(
       this,
       request,
+      options,
+    ));
+  }
+
+  /**
+   * getRegistryOktaCandidates admin
+   *
+   * @remarks
+   * Staff-only registry administration: Okta application names observed across synced tenants that plausibly belong to the entry, for confirmation in the editor.
+   */
+  async getRegistryOktaCandidates(
+    request: AdminGetRegistryOktaCandidatesRequest,
+    options?: RequestOptions,
+  ): Promise<AdminRegistryOktaCandidates> {
+    return unwrapAsync(adminGetRegistryOktaCandidates(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listRegistryOktaUnmapped admin
+   *
+   * @remarks
+   * Staff-only registry administration: observed Okta application names no entry claims yet, with the entry the heuristic would propose.
+   */
+  async listRegistryOktaUnmapped(
+    options?: RequestOptions,
+  ): Promise<AdminRegistryOktaUnmapped> {
+    return unwrapAsync(adminListRegistryOktaUnmapped(
+      this,
       options,
     ));
   }

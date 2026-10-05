@@ -24,13 +24,14 @@ func TestImportedSessionObservationReachesUserAndSessionAnalytics(t *testing.T) 
 	ctx, ti := newTestLogsService(t)
 	projectID := uuid.MustParse(ti.projectID)
 	now := time.Now().UTC().Add(-time.Minute)
-	chatID, err := chatrepo.New(ti.conn).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
+	upserted, err := chatrepo.New(ti.conn).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
 		ID: uuid.New(), ProjectID: projectID, OrganizationID: ti.orgID,
 		UserID: conv.ToPGText("imported-user"), ExternalUserID: conv.ToPGText("person@example.test"),
 		ExternalChatID: conv.ToPGText("provider-conversation"), Title: conv.ToPGText("Imported conversation"),
 		CreatedAt: conv.ToPGTimestamptz(now), UpdatedAt: conv.ToPGTimestamptz(now), PreferStoredTitle: true,
 	})
 	require.NoError(t, err)
+	chatID := upserted.ID
 	writer, shutdown := chat.NewChatMessageWriter(ti.logger, ti.conn, assetstest.NewTestBlobStore(t))
 	t.Cleanup(func() { require.NoError(t, shutdown(context.WithoutCancel(t.Context()))) })
 	var write chat.ExternalMessageWrite

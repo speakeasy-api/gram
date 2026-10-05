@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"net/url"
 	"os"
 	"sync"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
@@ -85,6 +87,23 @@ func TestTrialStartedUsesLifecyclePropertiesAndStableIdempotency(t *testing.T) {
 	require.Equal(t, activeProperties(ti), events[0].EventProperties)
 	require.Equal(t, events[0].IdempotencyKey, events[1].IdempotencyKey)
 	require.Equal(t, trialStartedEvent(ti, admin).IdempotencyKey, events[0].IdempotencyKey)
+}
+
+func TestTrialStartedLinksToOrganizationDefaultHost(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	ti.seedAdmin(t, ctx, "<ADMIN_USER_ID>", "<ADMIN_EMAIL>@example.test", "Admin")
+	require.NoError(t, orgrepo.New(ti.conn).SetOrganizationDefaultHostForTest(ctx, orgrepo.SetOrganizationDefaultHostForTestParams{
+		DefaultHost: conv.ToPGText("https://platform.example.test"),
+		ID:          ti.organizationID,
+	}))
+
+	require.NoError(t, ti.service.TrialStarted(ctx, ti.organizationID))
+
+	updates := ti.client.updates()
+	require.Len(t, updates, 1)
+	require.Equal(t, "https://platform.example.test/<ORGANIZATION_SLUG>", updates[0].CustomProperties["dashboardUrl"])
 }
 
 func TestTrialStartedSkipsInactiveTrial(t *testing.T) {
@@ -239,13 +258,30 @@ func newTestServiceWithTrial(t *testing.T, active bool) (context.Context, *testI
 
 	client := newFakeWorkflowClient()
 	return ctx, &testInstance{
-		service:        NewService(conn, client, testenv.NewLogger(t), "https://app.example.test/"),
+		service:        NewService(conn, client, testenv.NewLogger(t), testOrgHosts(t)),
 		client:         client,
 		conn:           conn,
 		organizationID: organizationID,
 		trialCreatedAt: createdAt,
 		trialEndsAt:    endsAt,
 	}
+}
+
+// testOrgHosts resolves organizations without a default host to the site URL,
+// and accepts platform.example.test as a recorded default host.
+func testOrgHosts(t *testing.T) *orghost.Resolver {
+	t.Helper()
+	serverURL, err := url.Parse("https://app.example.test")
+	require.NoError(t, err)
+	siteURL, err := url.Parse("https://app.example.test/")
+	require.NoError(t, err)
+	return orghost.New(orghost.Config{
+		ServerURL:                  serverURL,
+		SiteURL:                    siteURL,
+		PlatformHosts:              map[string]string{"platform.example.test": "https://platform.example.test"},
+		LegacyDefaultHost:          nil,
+		NewOrganizationDefaultHost: nil,
+	})
 }
 
 type testAdmin struct {

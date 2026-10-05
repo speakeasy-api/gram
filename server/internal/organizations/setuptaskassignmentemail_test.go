@@ -12,6 +12,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -184,4 +186,29 @@ func waitForAssignmentEmail(t *testing.T, sent <-chan struct{}) {
 	case <-time.After(time.Second):
 		t.Fatal("assignment email was not sent")
 	}
+}
+
+func TestService_UpdateSetupTaskAssignmentEmailUsesOrganizationDefaultHost(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceWithEmail(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NoError(t, orgrepo.New(ti.conn).SetOrganizationDefaultHostForTest(ctx, orgrepo.SetOrganizationDefaultHostForTestParams{
+		DefaultHost: conv.ToPGText(testPlatformHost),
+		ID:          authCtx.ActiveOrganizationID,
+	}))
+
+	sent := make(chan struct{})
+	ti.loops.On("SendTransactional", mock.Anything, mock.MatchedBy(func(input loops.SendTransactionalInput) bool {
+		return strings.HasPrefix(input.DataVariables["setup_link"], testPlatformHost+"/") &&
+			strings.HasSuffix(input.DataVariables["setup_link"], "/setup?task=configure-policies")
+	})).Run(func(mock.Arguments) { close(sent) }).Return(nil).Once()
+
+	_, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{
+		TaskKey:  "configure-policies",
+		Assignee: &gen.SetupTaskAssigneeInput{UserID: &authCtx.UserID},
+	})
+	require.NoError(t, err)
+	waitForAssignmentEmail(t, sent)
 }

@@ -44,7 +44,7 @@ vi.mock("@/components/page-templates", async (importOriginal) => ({
   ),
 }));
 vi.mock("@/routes", () => ({
-  useRoutes: () => ({
+  useOrgRoutes: () => ({
     workloadIssuers: { href: () => "/access-hub" },
   }),
 }));

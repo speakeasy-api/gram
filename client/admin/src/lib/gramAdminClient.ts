@@ -16,6 +16,8 @@ import type {
 import type { AdminListRegistryEntriesRequest } from "@gram/admin-client/models/operations/adminlistregistryentries";
 import { buildAdminListRegistryEntriesQuery } from "@gram/admin-client/react-query/adminListRegistryEntries.core";
 import { buildAdminGetRegistryEntryQuery } from "@gram/admin-client/react-query/adminGetRegistryEntry.core";
+import { buildAdminGetRegistryOktaCandidatesQuery } from "@gram/admin-client/react-query/adminGetRegistryOktaCandidates.core";
+import { buildAdminListRegistryOktaUnmappedQuery } from "@gram/admin-client/react-query/adminListRegistryOktaUnmapped.core";
 import { buildAdminCreateRegistryEntryMutation } from "@gram/admin-client/react-query/adminCreateRegistryEntry";
 import { buildAdminSaveRegistryEntryMutation } from "@gram/admin-client/react-query/adminSaveRegistryEntry";
 import { buildAdminSetRegistryEntryPublishedMutation } from "@gram/admin-client/react-query/adminSetRegistryEntryPublished";
@@ -26,6 +28,8 @@ import type { AdminGetMeterUsageRequest } from "@gram/admin-client/models/operat
 import type { AdminSpendBreakdownResponse } from "@gram/admin-client/models/components/adminspendbreakdownresponse";
 import { buildAdminGetSpendBreakdownQuery } from "@gram/admin-client/react-query/adminGetSpendBreakdown.core";
 import type { AdminGetSpendBreakdownRequest } from "@gram/admin-client/models/operations/admingetspendbreakdown";
+import { buildAdminDescribeMcpServerHealthQuery } from "@gram/admin-client/react-query/adminDescribeMcpServerHealth.core";
+import { buildAdminGetMcpServerToolCallsQuery } from "@gram/admin-client/react-query/adminGetMcpServerToolCalls.core";
 import { buildAdminChangeTrialEndDateMutation } from "@gram/admin-client/react-query/adminChangeTrialEndDate";
 import type { ChangeTrialEndDateRequestBody } from "@gram/admin-client/models/components/changetrialenddaterequestbody";
 import {
@@ -197,6 +201,129 @@ export function organizationSpendBreakdownQuery(
   );
   return queryOptions({
     ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    staleTime: 30_000,
+  });
+}
+
+// Keyed on the route's own address for the organization, id or slug as typed,
+// the way `projectQuery` is, so the name entry the breadcrumb watches can be
+// built from the route alone. A missing window is the default one.
+function mcpServerHealthKey(
+  organizationIdOrSlug: string,
+  projectId: string,
+  mcpServerId: string,
+  windowDays: 14 | 30 | 90 = 14,
+): readonly [string, string, string, string, number] {
+  return [
+    "gram-admin-mcp-server-health",
+    organizationIdOrSlug,
+    projectId,
+    mcpServerId,
+    windowDays,
+  ] as const;
+}
+
+// The server's name alone, with no window in the key, for the breadcrumb.
+// Every window's health read writes it as it lands, so changing the window
+// never empties the crumb while the new answer is on its way.
+export function mcpServerNameKey(
+  organizationIdOrSlug: string,
+  projectId: string,
+  mcpServerId: string,
+): readonly [string, string, string, string] {
+  return [
+    "gram-admin-mcp-server-name",
+    organizationIdOrSlug,
+    projectId,
+    mcpServerId,
+  ] as const;
+}
+
+type McpServerHealthRequest = {
+  organizationId: string;
+  projectId: string;
+  mcpServerId: string;
+  windowDays: 14 | 30 | 90;
+};
+
+export function mcpServerHealthQuery(
+  organizationIdOrSlug: string,
+  request: McpServerHealthRequest,
+): ReturnType<typeof createMcpServerHealthQuery> {
+  return createMcpServerHealthQuery(organizationIdOrSlug, request);
+}
+
+function createMcpServerHealthQuery(
+  organizationIdOrSlug: string,
+  request: McpServerHealthRequest,
+) {
+  const generated = buildAdminDescribeMcpServerHealthQuery(
+    redirectingClient,
+    request,
+  );
+  return queryOptions({
+    queryKey: mcpServerHealthKey(
+      organizationIdOrSlug,
+      request.projectId,
+      request.mcpServerId,
+      request.windowDays,
+    ),
+    queryFn: async (context) => {
+      const health = await redirecting(generated.queryFn(context));
+      context.client.setQueryData(
+        mcpServerNameKey(
+          organizationIdOrSlug,
+          request.projectId,
+          request.mcpServerId,
+        ),
+        { name: health.server.name },
+      );
+      return health;
+    },
+    staleTime: 30_000,
+  });
+}
+
+// Tool call telemetry for the same server, keyed the same way so the two
+// queries for one page share every part of their key but the name.
+function mcpServerToolCallsKey(
+  organizationIdOrSlug: string,
+  projectId: string,
+  mcpServerId: string,
+  windowDays: 14 | 30 | 90 = 14,
+): readonly [string, string, string, string, number] {
+  return [
+    "gram-admin-mcp-server-tool-calls",
+    organizationIdOrSlug,
+    projectId,
+    mcpServerId,
+    windowDays,
+  ] as const;
+}
+
+export function mcpServerToolCallsQuery(
+  organizationIdOrSlug: string,
+  request: McpServerHealthRequest,
+): ReturnType<typeof createMcpServerToolCallsQuery> {
+  return createMcpServerToolCallsQuery(organizationIdOrSlug, request);
+}
+
+function createMcpServerToolCallsQuery(
+  organizationIdOrSlug: string,
+  request: McpServerHealthRequest,
+) {
+  const generated = buildAdminGetMcpServerToolCallsQuery(
+    redirectingClient,
+    request,
+  );
+  return queryOptions({
+    queryKey: mcpServerToolCallsKey(
+      organizationIdOrSlug,
+      request.projectId,
+      request.mcpServerId,
+      request.windowDays,
+    ),
     queryFn: (context) => redirecting(generated.queryFn(context)),
     staleTime: 30_000,
   });
@@ -855,4 +982,36 @@ export function registryEntryQuery(
   id: string,
 ): ReturnType<typeof createRegistryEntryQuery> {
   return createRegistryEntryQuery(id);
+}
+
+function createRegistryOktaCandidatesQuery(id: string) {
+  const generated = buildAdminGetRegistryOktaCandidatesQuery(
+    redirectingClient,
+    { id },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    enabled: id !== "",
+  });
+}
+
+export function registryOktaCandidatesQuery(
+  id: string,
+): ReturnType<typeof createRegistryOktaCandidatesQuery> {
+  return createRegistryOktaCandidatesQuery(id);
+}
+
+function createRegistryOktaUnmappedQuery() {
+  const generated = buildAdminListRegistryOktaUnmappedQuery(redirectingClient);
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+export function registryOktaUnmappedQuery(): ReturnType<
+  typeof createRegistryOktaUnmappedQuery
+> {
+  return createRegistryOktaUnmappedQuery();
 }

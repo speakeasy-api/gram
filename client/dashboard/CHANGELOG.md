@@ -1,5 +1,42 @@
 # dashboard
 
+## 0.131.0
+
+### Minor Changes
+
+- cf3bdc7: Add a Findings page to each identity, listing the person's risk findings with filters by category and rule. Clicking a category or rule on the Security tab opens it filtered. An identity's Open in Risk Events link now filters on every identifier the person reports. Without chat:read, a locked match now says which permission it needs.
+
+### Patch Changes
+
+- 1cad72d: Add ChatGPT Desktop as an MCP client on the hosted install page and in
+  `gram install chatgpt-desktop`, with Developer mode and custom connector steps
+  matched to the server's authentication.
+- e97ebb8: Pin the OAuth redirect URI and client identity URLs that remote session clients register with upstream providers. `GRAM_OUTBOUND_CALLBACK_URL` fixes the origin for existing clients so a server URL change cannot move them, and `GRAM_REGISTRATION_CALLBACK_URL` records a new origin on organization-owned clients created from now on. Remote session clients now report their `callback_url`, and `remoteSessionClients.getNewClientCallbackUrl` returns the redirect URI a new client will register; the dashboard shows these instead of deriving the URL from the server URL.
+- c52cc0b: Keep project favorites when a logged-out visit is sent to the login page. The session-expiry cleanup now snapshots theme and favorites after auth confirms there is no session, instead of deleting them because that document was never classified.
+- 2878e60: Fix Slack previews of platform links showing a broken Speakeasy image. The preview now uses the opaque sticker logo, which Slack can decode and which stays visible in dark mode.
+
+## 0.130.0
+
+### Minor Changes
+
+- cd0189b: The Access Hub is now an organization-wide page at `/<org>/access-hub`, listed in the organization sidebar under Secure for anyone holding `workload:read` or `workload:write`. Old project URLs, including a trusted platform's page, redirect there. The `workloadIdentities` API no longer needs a project when called from a dashboard session, which reads and writes the organization tier; API-key callers still name a project, and `project_scoped` requires one.
+- a2f90fc: Allowed access in the Access Hub can now be edited. Each machine on a platform's page has an Edit action that opens the access form prefilled, where you can change the machine's label, tags and assigned agent. The subject and its match kind stay fixed once access is allowed. Reassigning the agent also applies to the same subject's access at the other tier, since that assignment is shared. Each edit is recorded in the audit log with the machine's state before and after.
+- 53ed86a: A trusted platform in the Access Hub can now be edited. The platform page has an Edit action that opens the registration form prefilled, where you can change the platform's name, description, tags and JWKS URI. The issuer URL and the wildcard admission setting stay fixed once a platform is registered. Each edit is recorded in the audit log with the platform's state before and after.
+- 1f7f43a: Findings from MCP tool calls can now be revealed. Findings recorded before this change show "Evidence not stored" instead of an error.
+- d4567e4: Cross App Access readiness now reflects what identity chaining exchanges observe. A confirmed server reads Verified once an exchange succeeds, returns to Not confirmed when Okta rejects the target, and reads Not working when Okta refuses the scopes or the agent app's authentication, or the server's authorization server refuses Okta's assertion. A confirmation whose issuer URL does not match the server's authorization server now reads Not working until the mismatch is corrected, including existing confirmations and rows with an earlier successful exchange. Result changes are recorded in the audit log as okta-resource-connection:observe, and confirming again clears an earlier result.
+
+### Patch Changes
+
+- a566fab: The Access Hub reads more plainly. The page opens with a one-line summary of what it is for, and each platform card shows only its name, description (or issuer URL) and tags. On a platform's page the issuer and keys URLs sit on labeled lines of their own, machine tags get their own column, and the machines table shows ten rows a page. Allowing a machine is now "Allow access", withdrawing one is now "Remove", and "Stop trusting" moves out of the header into a danger-zone section below the machines.
+- 8d48ab4: The IDP and SSO page now has an Identity providers tab in place of Enterprise Managed Auth, since providers such as Okta are connected first and Enterprise Managed Auth is one use of the connection. On the Okta page the Setup tab keeps only the connection checklist, and the Enterprise Managed Auth steps (register the agent, connect it to servers) moved to the Cross App Access tab above the server readiness table.
+- b74ea45: Organization administrators with an Okta connection can list MCP servers suggested from their synced Okta applications, based on the catalog Okta mapping, and dismiss or restore each suggestion. Suggestions flag app instances whose sign-on mode does not support Cross App Access and mark servers the organization already runs. Gated by the okta-connections rollout.
+- d66209e: Suggest catalog MCP servers from the Okta applications snapshot on the Okta Applications tab, with add, dismiss, and restore actions.
+- ce4f3bd: Remove the redundant "Skip for now" button from the catalog install's Guardrails step; switching the recommended policy off and adding the server already installs it without one.
+- d8f2d7b: Choosing scopes for a manually configured identity provider client is now a multi-select. It lists the scopes the server and provider advertise, and a scope that is not listed can still be typed in and added.
+- 4ee99fd: Organizations that staff have enabled for Tailscale private access can use it on any plan, instead of the dashboard warning that private access is no longer enabled after a move off Enterprise. Enterprise organizations without the feature are now pointed to support.
+- dfe104d: Onboarding use cases and playbooks in the admin dashboard. Staff create use cases and playbooks on a new Use Cases & Playbooks page: a playbook is ordered top-level steps that belong to a use case, shared and possibly its default, or to one customer, never both, and every playbook is checked for prerequisites. An organization's Overview page shows its assigned playbook and links to the page scoped to that organization, where staff write it a playbook of its own or assign it a shared one, refused when the recorded stack does not support a step. A shared playbook is a template: assigning it gives the organization a copy of its own, so later edits to the shared playbook never reach an organization already on it. The onboarding survey assigns a use case's default playbook and the customer setup wizard walks the assigned one. The preset selection editor and its Admin API are gone, the Admin MCP diagnostics tool reports the assigned playbook instead, and the Admin MCP's onboarding write proposal assigns a playbook, by ID or by use case, in place of setting task visibility. Enable it with the `assign_organization_onboarding_playbook` write operation.
+- a49b065: Onboarding stack and step catalog in the admin dashboard. Staff record an organization's stack, meaning the vendors it uses with the organizational plan it is on for each and its device management, on the organization's Overview page; the vendor, plan and product lists come from the support matrix catalog, which now carries plans and files every product under its real vendor. Setup steps can nest one level under a group, whose status follows its cards: observability in other platforms and MCP distribution become groups over their cards. The catalog is mirrored into the database at start-up and shown read-only on a new Steps page, where a prerequisite links to its own row.
+
 ## 0.129.0
 
 ### Minor Changes

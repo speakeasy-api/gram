@@ -227,7 +227,8 @@ func withCanonicalFoldSettings(sb squirrel.SelectBuilder, canonicalOrgLit string
 // identity_map generation — while a user-id identifier matches user_id-keyed
 // rows directly plus rows carrying the user's directory email (resolved by
 // the caller with a single lookup). The zero value disables canonical
-// matching (callers fall back to the literal UserIdentity path).
+// matching, leaving the literal UserIdentity path as the whole scope; a
+// populated one is unioned with that path rather than replacing it.
 type CanonicalUserIdentity struct {
 	OrgID      string
 	UserID     string
@@ -243,12 +244,18 @@ func (c CanonicalUserIdentity) Enabled() bool {
 	return canonicalIdentityOrgLiteral(c.OrgID) != "" && (c.UserID != "" || c.EmailLower != "")
 }
 
-// withCanonicalUserIdentityFilter mirrors withUserIdentityFilter's id-wins
+// canonicalUserIdentityMatch mirrors withUserIdentityFilter's id-wins
 // precedence: a row with a user_id is attributed by that id alone, and only
 // email-less rows fall back to the folded email comparison — the DNO-509
 // double-count guard, unchanged. The joinGet arm guards user_id != ” because
 // an unmapped email folds to ” and must never sweep in email-less rows.
-func withCanonicalUserIdentityFilter(sb squirrel.SelectBuilder, ident CanonicalUserIdentity) squirrel.SelectBuilder {
+//
+// That guard is also why these arms are only ever half of a scope: an email
+// absent from the map resolves to no owner id here, so an employee whose rows
+// all carry a user_id matches nothing. withUserIdentityFilter unions these
+// arms with the caller-expanded literal set, which the rows themselves supply,
+// for exactly that case.
+func canonicalUserIdentityMatch(ident CanonicalUserIdentity) squirrel.Or {
 	orgLit := canonicalIdentityOrgLiteral(ident.OrgID)
 
 	var match squirrel.Or
@@ -268,7 +275,7 @@ func withCanonicalUserIdentityFilter(sb squirrel.SelectBuilder, ident CanonicalU
 				args...))
 		}
 	}
-	return sb.Where(match)
+	return match
 }
 
 // orgLit is the validated org literal when canonical matching is enabled, or

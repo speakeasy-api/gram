@@ -12367,6 +12367,864 @@ func EncodeGetSupportCoverageError(encoder func(context.Context, http.ResponseWr
 	}
 }
 
+// EncodeDescribeMcpServerHealthResponse returns an encoder for responses
+// returned by the admin describeMcpServerHealth endpoint.
+func EncodeDescribeMcpServerHealthResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminMcpServerHealth)
+		enc := encoder(ctx, w)
+		body := NewDescribeMcpServerHealthResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeDescribeMcpServerHealthRequest returns a decoder for requests sent to
+// the admin describeMcpServerHealth endpoint.
+func DecodeDescribeMcpServerHealthRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.DescribeMcpServerHealthPayload, error) {
+	return func(r *http.Request) (*admin.DescribeMcpServerHealthPayload, error) {
+		var payload *admin.DescribeMcpServerHealthPayload
+		var (
+			organizationID    string
+			projectID         string
+			mcpServerID       string
+			windowDays        int
+			adminSessionToken *string
+			err               error
+		)
+		qp := r.URL.Query()
+		organizationID = qp.Get("organization_id")
+		if organizationID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "query string"))
+		}
+		projectID = qp.Get("project_id")
+		if projectID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		mcpServerID = qp.Get("mcp_server_id")
+		if mcpServerID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+		{
+			windowDaysRaw := qp.Get("window_days")
+			if windowDaysRaw == "" {
+				windowDays = 14
+			} else {
+				v, err2 := strconv.ParseInt(windowDaysRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("window_days", windowDaysRaw, "integer"))
+				}
+				windowDays = int(v)
+			}
+		}
+		if !(windowDays == 14 || windowDays == 30 || windowDays == 90) {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("window_days", windowDays, []any{14, 30, 90}))
+		}
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewDescribeMcpServerHealthPayload(organizationID, projectID, mcpServerID, windowDays, adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeDescribeMcpServerHealthError returns an encoder for errors returned by
+// the describeMcpServerHealth admin endpoint.
+func EncodeDescribeMcpServerHealthError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDescribeMcpServerHealthUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDescribeMcpServerHealthForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDescribeMcpServerHealthBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDescribeMcpServerHealthNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDescribeMcpServerHealthConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDescribeMcpServerHealthUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDescribeMcpServerHealthInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDescribeMcpServerHealthInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDescribeMcpServerHealthUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDescribeMcpServerHealthGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeGetMcpServerToolCallsResponse returns an encoder for responses
+// returned by the admin getMcpServerToolCalls endpoint.
+func EncodeGetMcpServerToolCallsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminMcpServerToolCalls)
+		enc := encoder(ctx, w)
+		body := NewGetMcpServerToolCallsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetMcpServerToolCallsRequest returns a decoder for requests sent to
+// the admin getMcpServerToolCalls endpoint.
+func DecodeGetMcpServerToolCallsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.GetMcpServerToolCallsPayload, error) {
+	return func(r *http.Request) (*admin.GetMcpServerToolCallsPayload, error) {
+		var payload *admin.GetMcpServerToolCallsPayload
+		var (
+			organizationID    string
+			projectID         string
+			mcpServerID       string
+			windowDays        int
+			adminSessionToken *string
+			err               error
+		)
+		qp := r.URL.Query()
+		organizationID = qp.Get("organization_id")
+		if organizationID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "query string"))
+		}
+		projectID = qp.Get("project_id")
+		if projectID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		mcpServerID = qp.Get("mcp_server_id")
+		if mcpServerID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+		{
+			windowDaysRaw := qp.Get("window_days")
+			if windowDaysRaw == "" {
+				windowDays = 14
+			} else {
+				v, err2 := strconv.ParseInt(windowDaysRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("window_days", windowDaysRaw, "integer"))
+				}
+				windowDays = int(v)
+			}
+		}
+		if !(windowDays == 14 || windowDays == 30 || windowDays == 90) {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("window_days", windowDays, []any{14, 30, 90}))
+		}
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGetMcpServerToolCallsPayload(organizationID, projectID, mcpServerID, windowDays, adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetMcpServerToolCallsError returns an encoder for errors returned by
+// the getMcpServerToolCalls admin endpoint.
+func EncodeGetMcpServerToolCallsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMcpServerToolCallsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMcpServerToolCallsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMcpServerToolCallsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMcpServerToolCallsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMcpServerToolCallsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMcpServerToolCallsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMcpServerToolCallsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMcpServerToolCallsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMcpServerToolCallsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMcpServerToolCallsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeGetRegistryOktaCandidatesResponse returns an encoder for responses
+// returned by the admin getRegistryOktaCandidates endpoint.
+func EncodeGetRegistryOktaCandidatesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminRegistryOktaCandidates)
+		enc := encoder(ctx, w)
+		body := NewGetRegistryOktaCandidatesResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetRegistryOktaCandidatesRequest returns a decoder for requests sent
+// to the admin getRegistryOktaCandidates endpoint.
+func DecodeGetRegistryOktaCandidatesRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.GetRegistryOktaCandidatesPayload, error) {
+	return func(r *http.Request) (*admin.GetRegistryOktaCandidatesPayload, error) {
+		var payload *admin.GetRegistryOktaCandidatesPayload
+		var (
+			id                string
+			adminSessionToken *string
+			err               error
+		)
+		id = r.URL.Query().Get("id")
+		if id == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGetRegistryOktaCandidatesPayload(id, adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetRegistryOktaCandidatesError returns an encoder for errors returned
+// by the getRegistryOktaCandidates admin endpoint.
+func EncodeGetRegistryOktaCandidatesError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryOktaCandidatesUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryOktaCandidatesForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryOktaCandidatesBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryOktaCandidatesNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryOktaCandidatesConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryOktaCandidatesUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryOktaCandidatesInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryOktaCandidatesInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryOktaCandidatesUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryOktaCandidatesGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeListRegistryOktaUnmappedResponse returns an encoder for responses
+// returned by the admin listRegistryOktaUnmapped endpoint.
+func EncodeListRegistryOktaUnmappedResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminRegistryOktaUnmapped)
+		enc := encoder(ctx, w)
+		body := NewListRegistryOktaUnmappedResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListRegistryOktaUnmappedRequest returns a decoder for requests sent to
+// the admin listRegistryOktaUnmapped endpoint.
+func DecodeListRegistryOktaUnmappedRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.ListRegistryOktaUnmappedPayload, error) {
+	return func(r *http.Request) (*admin.ListRegistryOktaUnmappedPayload, error) {
+		var payload *admin.ListRegistryOktaUnmappedPayload
+		var (
+			adminSessionToken *string
+		)
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		payload = NewListRegistryOktaUnmappedPayload(adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListRegistryOktaUnmappedError returns an encoder for errors returned
+// by the listRegistryOktaUnmapped admin endpoint.
+func EncodeListRegistryOktaUnmappedError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryOktaUnmappedUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryOktaUnmappedForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryOktaUnmappedBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryOktaUnmappedNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryOktaUnmappedConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryOktaUnmappedUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryOktaUnmappedInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryOktaUnmappedInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryOktaUnmappedUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryOktaUnmappedGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeListRegistryEntriesResponse returns an encoder for responses returned
 // by the admin listRegistryEntries endpoint.
 func EncodeListRegistryEntriesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -17671,6 +18529,299 @@ func marshalAdminSupportCoverageUnmappedToSupportCoverageUnmappedResponseBody(v 
 	res := &SupportCoverageUnmappedResponseBody{
 		HookSource: v.HookSource,
 		Sessions:   v.Sessions,
+	}
+
+	return res
+}
+
+// marshalAdminAdminMcpServerHealthServerToAdminMcpServerHealthServerResponseBody
+// builds a value of type *AdminMcpServerHealthServerResponseBody from a value
+// of type *admin.AdminMcpServerHealthServer.
+func marshalAdminAdminMcpServerHealthServerToAdminMcpServerHealthServerResponseBody(v *admin.AdminMcpServerHealthServer) *AdminMcpServerHealthServerResponseBody {
+	res := &AdminMcpServerHealthServerResponseBody{
+		ID:         v.ID,
+		Name:       v.Name,
+		Source:     v.Source,
+		Visibility: v.Visibility,
+		CreatedAt:  v.CreatedAt,
+	}
+
+	return res
+}
+
+// marshalAdminAdminMcpServerHealthCorrelationToAdminMcpServerHealthCorrelationResponseBody
+// builds a value of type *AdminMcpServerHealthCorrelationResponseBody from a
+// value of type *admin.AdminMcpServerHealthCorrelation.
+func marshalAdminAdminMcpServerHealthCorrelationToAdminMcpServerHealthCorrelationResponseBody(v *admin.AdminMcpServerHealthCorrelation) *AdminMcpServerHealthCorrelationResponseBody {
+	res := &AdminMcpServerHealthCorrelationResponseBody{
+		URLSlug:     v.URLSlug,
+		McpServerID: v.McpServerID,
+		ToolsetSlug: v.ToolsetSlug,
+	}
+
+	return res
+}
+
+// marshalAdminAdminMcpServerHealthUserSessionIssuerToAdminMcpServerHealthUserSessionIssuerResponseBody
+// builds a value of type *AdminMcpServerHealthUserSessionIssuerResponseBody
+// from a value of type *admin.AdminMcpServerHealthUserSessionIssuer.
+func marshalAdminAdminMcpServerHealthUserSessionIssuerToAdminMcpServerHealthUserSessionIssuerResponseBody(v *admin.AdminMcpServerHealthUserSessionIssuer) *AdminMcpServerHealthUserSessionIssuerResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AdminMcpServerHealthUserSessionIssuerResponseBody{
+		ID:                            v.ID,
+		Slug:                          v.Slug,
+		Classification:                v.Classification,
+		AuthnChallengeMode:            v.AuthnChallengeMode,
+		SessionDurationHours:          v.SessionDurationHours,
+		AttachmentScope:               v.AttachmentScope,
+		ClientIDMetadataAdmissionMode: v.ClientIDMetadataAdmissionMode,
+		UseAuthenticationHost:         v.UseAuthenticationHost,
+		CreatedAt:                     v.CreatedAt,
+	}
+	if v.TrustedRemoteSession != nil {
+		res.TrustedRemoteSession = marshalAdminAdminMcpServerHealthTrustedRemoteSessionToAdminMcpServerHealthTrustedRemoteSessionResponseBody(v.TrustedRemoteSession)
+	}
+	if v.OtherServersUsingIssuer != nil {
+		res.OtherServersUsingIssuer = make([]*AdminMcpServerHealthServerRefResponseBody, len(v.OtherServersUsingIssuer))
+		for i, val := range v.OtherServersUsingIssuer {
+			if val == nil {
+				res.OtherServersUsingIssuer[i] = nil
+				continue
+			}
+			res.OtherServersUsingIssuer[i] = marshalAdminAdminMcpServerHealthServerRefToAdminMcpServerHealthServerRefResponseBody(val)
+		}
+	} else {
+		res.OtherServersUsingIssuer = []*AdminMcpServerHealthServerRefResponseBody{}
+	}
+	if v.Sessions != nil {
+		res.Sessions = marshalAdminAdminMcpServerHealthUserSessionsToAdminMcpServerHealthUserSessionsResponseBody(v.Sessions)
+	}
+	if v.RemoteSessionClients != nil {
+		res.RemoteSessionClients = make([]*AdminMcpServerHealthRemoteSessionClientResponseBody, len(v.RemoteSessionClients))
+		for i, val := range v.RemoteSessionClients {
+			if val == nil {
+				res.RemoteSessionClients[i] = nil
+				continue
+			}
+			res.RemoteSessionClients[i] = marshalAdminAdminMcpServerHealthRemoteSessionClientToAdminMcpServerHealthRemoteSessionClientResponseBody(val)
+		}
+	} else {
+		res.RemoteSessionClients = []*AdminMcpServerHealthRemoteSessionClientResponseBody{}
+	}
+
+	return res
+}
+
+// marshalAdminAdminMcpServerHealthTrustedRemoteSessionToAdminMcpServerHealthTrustedRemoteSessionResponseBody
+// builds a value of type *AdminMcpServerHealthTrustedRemoteSessionResponseBody
+// from a value of type *admin.AdminMcpServerHealthTrustedRemoteSession.
+func marshalAdminAdminMcpServerHealthTrustedRemoteSessionToAdminMcpServerHealthTrustedRemoteSessionResponseBody(v *admin.AdminMcpServerHealthTrustedRemoteSession) *AdminMcpServerHealthTrustedRemoteSessionResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AdminMcpServerHealthTrustedRemoteSessionResponseBody{
+		IssuerID: v.IssuerID,
+		ClientID: v.ClientID,
+	}
+
+	return res
+}
+
+// marshalAdminAdminMcpServerHealthServerRefToAdminMcpServerHealthServerRefResponseBody
+// builds a value of type *AdminMcpServerHealthServerRefResponseBody from a
+// value of type *admin.AdminMcpServerHealthServerRef.
+func marshalAdminAdminMcpServerHealthServerRefToAdminMcpServerHealthServerRefResponseBody(v *admin.AdminMcpServerHealthServerRef) *AdminMcpServerHealthServerRefResponseBody {
+	res := &AdminMcpServerHealthServerRefResponseBody{
+		ID:   v.ID,
+		Name: v.Name,
+	}
+
+	return res
+}
+
+// marshalAdminAdminMcpServerHealthUserSessionsToAdminMcpServerHealthUserSessionsResponseBody
+// builds a value of type *AdminMcpServerHealthUserSessionsResponseBody from a
+// value of type *admin.AdminMcpServerHealthUserSessions.
+func marshalAdminAdminMcpServerHealthUserSessionsToAdminMcpServerHealthUserSessionsResponseBody(v *admin.AdminMcpServerHealthUserSessions) *AdminMcpServerHealthUserSessionsResponseBody {
+	res := &AdminMcpServerHealthUserSessionsResponseBody{
+		DistinctSubjectsEver:     v.DistinctSubjectsEver,
+		DistinctSubjectsInWindow: v.DistinctSubjectsInWindow,
+		FirstIssuedAt:            v.FirstIssuedAt,
+		LastIssuedAt:             v.LastIssuedAt,
+		Live:                     v.Live,
+	}
+
+	return res
+}
+
+// marshalAdminAdminMcpServerHealthRemoteSessionClientToAdminMcpServerHealthRemoteSessionClientResponseBody
+// builds a value of type *AdminMcpServerHealthRemoteSessionClientResponseBody
+// from a value of type *admin.AdminMcpServerHealthRemoteSessionClient.
+func marshalAdminAdminMcpServerHealthRemoteSessionClientToAdminMcpServerHealthRemoteSessionClientResponseBody(v *admin.AdminMcpServerHealthRemoteSessionClient) *AdminMcpServerHealthRemoteSessionClientResponseBody {
+	res := &AdminMcpServerHealthRemoteSessionClientResponseBody{
+		ID:                            v.ID,
+		Registration:                  v.Registration,
+		TokenEndpointAuthMethod:       v.TokenEndpointAuthMethod,
+		HasIdentityProviderConnection: v.HasIdentityProviderConnection,
+		AttachmentScope:               v.AttachmentScope,
+		UpstreamRejectedAt:            v.UpstreamRejectedAt,
+	}
+	if v.Scope != nil {
+		res.Scope = make([]string, len(v.Scope))
+		for i, val := range v.Scope {
+			res.Scope[i] = val
+		}
+	} else {
+		res.Scope = []string{}
+	}
+	if v.GrantTypes != nil {
+		res.GrantTypes = make([]string, len(v.GrantTypes))
+		for i, val := range v.GrantTypes {
+			res.GrantTypes[i] = val
+		}
+	} else {
+		res.GrantTypes = []string{}
+	}
+	if v.Issuer != nil {
+		res.Issuer = marshalAdminAdminMcpServerHealthRemoteSessionIssuerToAdminMcpServerHealthRemoteSessionIssuerResponseBody(v.Issuer)
+	}
+	if v.Sessions != nil {
+		res.Sessions = marshalAdminAdminMcpServerHealthRemoteSessionsToAdminMcpServerHealthRemoteSessionsResponseBody(v.Sessions)
+	}
+
+	return res
+}
+
+// marshalAdminAdminMcpServerHealthRemoteSessionIssuerToAdminMcpServerHealthRemoteSessionIssuerResponseBody
+// builds a value of type *AdminMcpServerHealthRemoteSessionIssuerResponseBody
+// from a value of type *admin.AdminMcpServerHealthRemoteSessionIssuer.
+func marshalAdminAdminMcpServerHealthRemoteSessionIssuerToAdminMcpServerHealthRemoteSessionIssuerResponseBody(v *admin.AdminMcpServerHealthRemoteSessionIssuer) *AdminMcpServerHealthRemoteSessionIssuerResponseBody {
+	res := &AdminMcpServerHealthRemoteSessionIssuerResponseBody{
+		ID:                  v.ID,
+		Slug:                v.Slug,
+		Name:                v.Name,
+		Issuer:              v.Issuer,
+		AttachmentScope:     v.AttachmentScope,
+		Networking:          v.Networking,
+		Oidc:                v.Oidc,
+		Passthrough:         v.Passthrough,
+		Pkce:                v.Pkce,
+		CimdSupported:       v.CimdSupported,
+		MetadataFetchedAt:   v.MetadataFetchedAt,
+		MetadataLastErrorAt: v.MetadataLastErrorAt,
+		JwksLastErrorAt:     v.JwksLastErrorAt,
+	}
+	if v.ScopeOverride != nil {
+		res.ScopeOverride = make([]string, len(v.ScopeOverride))
+		for i, val := range v.ScopeOverride {
+			res.ScopeOverride[i] = val
+		}
+	}
+
+	return res
+}
+
+// marshalAdminAdminMcpServerHealthRemoteSessionsToAdminMcpServerHealthRemoteSessionsResponseBody
+// builds a value of type *AdminMcpServerHealthRemoteSessionsResponseBody from
+// a value of type *admin.AdminMcpServerHealthRemoteSessions.
+func marshalAdminAdminMcpServerHealthRemoteSessionsToAdminMcpServerHealthRemoteSessionsResponseBody(v *admin.AdminMcpServerHealthRemoteSessions) *AdminMcpServerHealthRemoteSessionsResponseBody {
+	res := &AdminMcpServerHealthRemoteSessionsResponseBody{
+		LinkedSubjects:   v.LinkedSubjects,
+		Reauthorizations: v.Reauthorizations,
+		FirstLinkedAt:    v.FirstLinkedAt,
+	}
+	if v.ValidationStatusCounts != nil {
+		res.ValidationStatusCounts = make(map[string]int64, len(v.ValidationStatusCounts))
+		for key, val := range v.ValidationStatusCounts {
+			tk := key
+			tv := val
+			res.ValidationStatusCounts[tk] = tv
+		}
+	}
+
+	return res
+}
+
+// marshalAdminAdminMcpServerToolCallOutcomesToAdminMcpServerToolCallOutcomesResponseBody
+// builds a value of type *AdminMcpServerToolCallOutcomesResponseBody from a
+// value of type *admin.AdminMcpServerToolCallOutcomes.
+func marshalAdminAdminMcpServerToolCallOutcomesToAdminMcpServerToolCallOutcomesResponseBody(v *admin.AdminMcpServerToolCallOutcomes) *AdminMcpServerToolCallOutcomesResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AdminMcpServerToolCallOutcomesResponseBody{
+		Success:      v.Success,
+		Unauthorized: v.Unauthorized,
+		ClientError:  v.ClientError,
+		ServerError:  v.ServerError,
+		Blocked:      v.Blocked,
+		Failed:       v.Failed,
+		Unknown:      v.Unknown,
+	}
+
+	return res
+}
+
+// marshalAdminAdminMcpServerToolCallBucketToAdminMcpServerToolCallBucketResponseBody
+// builds a value of type *AdminMcpServerToolCallBucketResponseBody from a
+// value of type *admin.AdminMcpServerToolCallBucket.
+func marshalAdminAdminMcpServerToolCallBucketToAdminMcpServerToolCallBucketResponseBody(v *admin.AdminMcpServerToolCallBucket) *AdminMcpServerToolCallBucketResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AdminMcpServerToolCallBucketResponseBody{
+		BucketStart: v.BucketStart,
+		Total:       v.Total,
+		Failed:      v.Failed,
+	}
+
+	return res
+}
+
+// marshalAdminAdminRegistryOktaCandidateToAdminRegistryOktaCandidateResponseBody
+// builds a value of type *AdminRegistryOktaCandidateResponseBody from a value
+// of type *admin.AdminRegistryOktaCandidate.
+func marshalAdminAdminRegistryOktaCandidateToAdminRegistryOktaCandidateResponseBody(v *admin.AdminRegistryOktaCandidate) *AdminRegistryOktaCandidateResponseBody {
+	res := &AdminRegistryOktaCandidateResponseBody{
+		OinName:       v.OinName,
+		Organizations: v.Organizations,
+		Reason:        v.Reason,
+		Integrator:    v.Integrator,
+		MappedBy:      v.MappedBy,
+	}
+	if v.SignOnModes != nil {
+		res.SignOnModes = make([]string, len(v.SignOnModes))
+		for i, val := range v.SignOnModes {
+			res.SignOnModes[i] = val
+		}
+	} else {
+		res.SignOnModes = []string{}
+	}
+
+	return res
+}
+
+// marshalAdminAdminRegistryOktaUnmappedNameToAdminRegistryOktaUnmappedNameResponseBody
+// builds a value of type *AdminRegistryOktaUnmappedNameResponseBody from a
+// value of type *admin.AdminRegistryOktaUnmappedName.
+func marshalAdminAdminRegistryOktaUnmappedNameToAdminRegistryOktaUnmappedNameResponseBody(v *admin.AdminRegistryOktaUnmappedName) *AdminRegistryOktaUnmappedNameResponseBody {
+	res := &AdminRegistryOktaUnmappedNameResponseBody{
+		OinName:            v.OinName,
+		Organizations:      v.Organizations,
+		Integrator:         v.Integrator,
+		SuggestedEntryID:   v.SuggestedEntryID,
+		SuggestedEntryName: v.SuggestedEntryName,
+		Reason:             v.Reason,
+	}
+	if v.SignOnModes != nil {
+		res.SignOnModes = make([]string, len(v.SignOnModes))
+		for i, val := range v.SignOnModes {
+			res.SignOnModes[i] = val
+		}
+	} else {
+		res.SignOnModes = []string{}
 	}
 
 	return res

@@ -340,6 +340,7 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 			Slug:                     r.Slug,
 			Description:              conv.FromPGText[string](r.Description),
 			IsDefault:                conv.FromPGBool[bool](r.IsDefault),
+			AutoCreated:              r.AutoCreated,
 			ServerCount:              &r.ServerCount,
 			SkillCount:               &r.SkillCount,
 			AssignmentCount:          &r.AssignmentCount,
@@ -503,79 +504,22 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 		return nil, fmt.Errorf("authorize plugin write: %w", err)
 	}
 
-	var slug string
-	if payload.Slug != nil && *payload.Slug != "" {
-		slug = conv.ToSlug(*payload.Slug)
-		if slug != *payload.Slug {
-			return nil, oops.E(oops.CodeBadRequest, nil, "invalid slug: must be non-empty and contain only lowercase alphanumeric characters and hyphens")
-		}
-	} else {
-		slug = conv.ToSlug(payload.Name)
-	}
-	if slug == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "plugin name must produce a valid slug")
-	}
-
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	plugin, err := s.repo.WithTx(tx).CreatePlugin(ctx, repo.CreatePluginParams{
+	created, err := NewPluginMetadataCore(s.audit, s.publicationRequests).CreateInTransaction(ctx, tx, CreatePluginMutation{
 		OrganizationID: ac.ActiveOrganizationID,
 		ProjectID:      *ac.ProjectID,
 		Name:           payload.Name,
-		Slug:           slug,
-		Description:    conv.PtrToPGText(payload.Description),
+		Slug:           payload.Slug,
+		Description:    payload.Description,
+		Actor:          PluginMetadataActor{UserID: ac.UserID, DisplayName: ac.Email},
 	})
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, oops.E(oops.CodeConflict, nil, "a plugin with this slug already exists")
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "create plugin").LogError(ctx, s.logger)
-	}
-
-	// Default a new plugin in the org's default project to the org wildcard so it
-	// delivers to every member — that project is the org-wide baseline. Plugins in
-	// other projects default to no assignments (they reach no one until an admin
-	// assigns an audience), so a separate project's servers aren't auto-broadcast
-	// org-wide. agent.getPlugins scopes delivery by assignment; "*" (all org
-	// members) is the closest "everyone" primitive Gram has, since there's no
-	// project-scoped membership.
-	isDefaultProject, err := s.repo.WithTx(tx).IsDefaultProject(ctx, repo.IsDefaultProjectParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		ProjectID:      *ac.ProjectID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "check default project").LogError(ctx, s.logger)
-	}
-	if isDefaultProject {
-		if _, err := s.repo.WithTx(tx).AddPluginAssignment(ctx, repo.AddPluginAssignmentParams{
-			PluginID:       plugin.ID,
-			OrganizationID: ac.ActiveOrganizationID,
-			PrincipalUrn:   urn.PrincipalWildcard,
-		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "assign new plugin to org").LogError(ctx, s.logger)
-		}
-	}
-
-	if err := s.audit.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{
-		OrganizationID:   ac.ActiveOrganizationID,
-		ProjectID:        *ac.ProjectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-		ActorDisplayName: ac.Email,
-		ActorSlug:        nil,
-		PluginID:         plugin.ID,
-		PluginName:       plugin.Name,
-		PluginSlug:       plugin.Slug,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin create").LogError(ctx, s.logger)
-	}
-
-	if err := s.publicationRequests.Project(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "enqueue plugin publication").LogError(ctx, s.logger)
+		return nil, s.pluginMetadataError(ctx, err, "create plugin")
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
@@ -583,9 +527,25 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 
 	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
 
+	plugin := created.Plugin
 	return pluginToGen(plugin, nil, nil, classifyAgentPlugin(PluginInfo{
 		Name: plugin.Name, Slug: plugin.Slug, Description: conv.FromPGTextOrEmpty[string](plugin.Description), Servers: nil, Skills: nil, AgentPluginsV1Issues: nil,
 	}).Compatible), nil
+}
+
+// pluginMetadataError maps the shared metadata core's refusals to the client
+// errors the management API returns for them.
+func (s *Service) pluginMetadataError(ctx context.Context, err error, operation string) error {
+	switch {
+	case errors.Is(err, ErrPluginSlugInvalid), errors.Is(err, ErrPluginSlugTooLong), errors.Is(err, ErrPluginNameWithoutSlug), errors.Is(err, ErrPluginNameEmpty):
+		return oops.E(oops.CodeBadRequest, nil, "%s", err.Error())
+	case errors.Is(err, ErrPluginSlugConflict):
+		return oops.E(oops.CodeConflict, nil, "%s", err.Error())
+	case errors.Is(err, ErrPluginMetadataTargetNotFound):
+		return oops.C(oops.CodeNotFound)
+	default:
+		return oops.E(oops.CodeUnexpected, err, "%s", operation).LogError(ctx, s.logger)
+	}
 }
 
 func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPayload) (*gen.Plugin, error) {
@@ -603,81 +563,31 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").LogError(ctx, s.logger)
 	}
 
-	slug := conv.ToSlug(payload.Slug)
-	if slug == "" || slug != payload.Slug {
-		return nil, oops.E(oops.CodeBadRequest, nil, "invalid slug: must be non-empty and contain only lowercase alphanumeric characters and hyphens")
-	}
-
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	txRepo := s.repo.WithTx(tx)
-
-	before, err := txRepo.GetPlugin(ctx, repo.GetPluginParams{
-		ID:             pluginID,
-		OrganizationID: ac.ActiveOrganizationID,
-		ProjectID:      *ac.ProjectID,
+	updated, err := NewPluginMetadataCore(s.audit, s.publicationRequests).UpdateInTransaction(ctx, tx, UpdatePluginMutation{
+		OrganizationID:  ac.ActiveOrganizationID,
+		ProjectID:       *ac.ProjectID,
+		PluginID:        pluginID,
+		Name:            payload.Name,
+		Slug:            &payload.Slug,
+		Description:     payload.Description,
+		KeepDescription: false,
+		Actor:           PluginMetadataActor{UserID: ac.UserID, DisplayName: ac.Email},
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.C(oops.CodeNotFound)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "load plugin").LogError(ctx, s.logger)
-	}
-
-	plugin, err := txRepo.UpdatePlugin(ctx, repo.UpdatePluginParams{
-		ID:             pluginID,
-		OrganizationID: ac.ActiveOrganizationID,
-		ProjectID:      *ac.ProjectID,
-		Name:           payload.Name,
-		Slug:           slug,
-		Description:    conv.PtrToPGText(payload.Description),
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.C(oops.CodeNotFound)
-		}
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, oops.E(oops.CodeConflict, nil, "a plugin with this slug already exists")
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "update plugin").LogError(ctx, s.logger)
-	}
-
-	if err := s.audit.LogPluginUpdate(ctx, tx, audit.LogPluginUpdateEvent{
-		OrganizationID:   ac.ActiveOrganizationID,
-		ProjectID:        *ac.ProjectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-		ActorDisplayName: ac.Email,
-		ActorSlug:        nil,
-		PluginID:         plugin.ID,
-		PluginName:       plugin.Name,
-		PluginSlug:       plugin.Slug,
-		SnapshotBefore: &audit.PluginSnapshot{
-			Name:        before.Name,
-			Slug:        before.Slug,
-			Description: conv.FromPGText[string](before.Description),
-		},
-		SnapshotAfter: &audit.PluginSnapshot{
-			Name:        plugin.Name,
-			Slug:        plugin.Slug,
-			Description: conv.FromPGText[string](plugin.Description),
-		},
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin update").LogError(ctx, s.logger)
-	}
-
-	if err := s.publicationRequests.Project(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "enqueue plugin publication").LogError(ctx, s.logger)
+		return nil, s.pluginMetadataError(ctx, err, "update plugin")
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
 
 	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
+	plugin := updated.Plugin
 
 	servers, err := s.repo.ListPluginServers(ctx, pluginID)
 	if err != nil {
@@ -3549,6 +3459,7 @@ func pluginToGen(p repo.Plugin, servers []repo.PluginServer, assignments []repo.
 		Slug:                     p.Slug,
 		Description:              conv.FromPGText[string](p.Description),
 		IsDefault:                conv.FromPGBool[bool](p.IsDefault),
+		AutoCreated:              p.AutoCreated,
 		ServerCount:              nil,
 		SkillCount:               nil,
 		AssignmentCount:          nil,

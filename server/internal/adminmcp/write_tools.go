@@ -228,6 +228,7 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, features *productfeatures
 	tools := newWriteTools(store, writes, oauth.Resource(), map[WriteOperation]operationWriter{ //nolint:exhaustive // Only implemented operations are listed.
 		OperationSetOrganizationFeature:               &featureWriter{store: store, mutator: productfeatures.NewMutator(features, auditLogger), writes: writes, baseURL: oauth.Resource()},
 		OperationAssignOrganizationOnboardingPlaybook: &onboardingPlaybookWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource()},
+		OperationSetOrganizationWhitelist:             &organizationWhitelistWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), now: time.Now},
 		OperationExtendOrganizationTrial:              &trialWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource()},
 		OperationSetChatAnalysisSettings:              &chatAnalysisWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), now: time.Now},
 		OperationEnableOrganization:                   &organizationAccessWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), operation: OperationEnableOrganization},
