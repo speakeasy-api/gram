@@ -351,8 +351,11 @@ func TestHookAIAccessExclusionsReplayAndBackfillRequireSignedObservationalBindin
 		provider, event, eventType string
 		wantDecision               string
 	}{
-		{delegation.ProviderCodex, "PermissionRequest", "tool.requested", "deny"},
-		{"cursor", delegation.EventPreToolUse, "tool.requested", "deny"},
+		{delegation.ProviderCodex, "PermissionRequest", "tool.requested", "allow"},
+		{delegation.ProviderClaude, "PermissionRequest", "tool.requested", "allow"},
+		{"cursor", delegation.EventPreToolUse, "tool.requested", "allow"},
+		{"cursor", "beforeSubmitPrompt", "prompt.submitted", "allow"},
+		{delegation.ProviderClaude, "", "tool.requested", "deny"},
 	} {
 		payload := canonicalIngestPayload(test.provider, test.eventType, uuid.NewString())
 		payload.Source.RawEventName = &test.event

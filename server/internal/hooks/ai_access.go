@@ -102,13 +102,14 @@ func governedHook(payload *gen.IngestPayload, authCtx *contextvalues.AuthContext
 		return "", "", false
 	}
 
-	// The trusted enrollment scope covers Claude/Codex prompt and pre-tool
-	// bindings. Canonical prompt/tool events from an approved client always enter
-	// the checkpoint: source fields are caller-controlled and cannot safely
-	// exclude a proof-stripped or relabeled request from governance.
+	// The enrollment scope covers the approved Claude/Codex bindings. Prompt and
+	// tool work missing its discriminator still fails closed; work naming an
+	// excluded event (PermissionRequest, other providers) shares the key and
+	// keeps the ungoverned path.
 	canonicalType := strings.TrimSpace(payload.Event.Type)
 	coveredCanonicalType := canonicalType == "prompt.submitted" || canonicalType == "tool.requested"
-	if delegation.Approved(provider, rawEvent) || coveredCanonicalType {
+	missingDiscriminator := provider == "" || rawEvent == ""
+	if delegation.Approved(provider, rawEvent) || (coveredCanonicalType && missingDiscriminator) {
 		return provider, rawEvent, true
 	}
 	return "", "", false
