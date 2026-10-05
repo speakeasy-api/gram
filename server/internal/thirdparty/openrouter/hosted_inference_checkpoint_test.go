@@ -222,7 +222,7 @@ func TestHostedInferenceReevaluatesBeforeRetryAttempt(t *testing.T) {
 	resolver := &countingKeyResolver{}
 	capture := &mockMessageCaptureStrategy{}
 	retryDenied := errors.New("activated before retry")
-	checkpoint := &scriptedInferenceCheckpoint{errors: []error{nil, nil, retryDenied}}
+	checkpoint := &scriptedInferenceCheckpoint{errors: []error{nil, retryDenied}}
 	client, err := NewUnifiedClient(testenv.NewLogger(t), policy, nil, resolver, capture, nil, nil, nil, checkpoint)
 	require.NoError(t, err)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
@@ -231,7 +231,7 @@ func TestHostedInferenceReevaluatesBeforeRetryAttempt(t *testing.T) {
 		OrgID: "org", ProjectID: uuid.NewString(), Messages: []or.ChatMessages{CreateMessageUser("hello")}, Model: "openai/gpt-5.4",
 	})
 	require.ErrorIs(t, err, retryDenied)
-	require.Equal(t, 3, checkpoint.calls, "preflight plus one check per attempted provider call")
+	require.Equal(t, 2, checkpoint.calls, "the preflight covers the first attempt; the retry re-evaluates")
 	require.Equal(t, 1, requests, "the denied retry must not reach the provider")
 	require.Equal(t, 1, resolver.calls)
 	require.True(t, capture.startOrResumeCalled)

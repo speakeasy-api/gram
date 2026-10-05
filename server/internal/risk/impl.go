@@ -2430,8 +2430,12 @@ func (s *Service) SuggestCustomDetectionRule(ctx context.Context, payload *gen.S
 	suggestion, err := s.suggestCustomRuleViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), prompt, payload.ExistingRuleIds)
 	if err != nil {
 		//nolint:wrapcheck // The mapper returns a fully wrapped, telemetry-safe boundary error.
-		if mapped, ok := hostedinference.MapBoundaryError(ctx, s.logger, err); ok {
-			return nil, mapped
+		// A matched denial surfaces the admin's note; an evaluator outage
+		// falls back like any other model failure.
+		if _, denied := errors.AsType[*hostedinference.MatchedDenialError](err); denied {
+			if mapped, ok := hostedinference.MapBoundaryError(ctx, s.logger, err); ok {
+				return nil, mapped
+			}
 		}
 		s.logger.WarnContext(ctx, "openrouter suggestion failed; returning heuristic suggestion", attr.SlogError(err))
 		return heuristicCustomRuleSuggestion(prompt, payload.ExistingRuleIds), nil
@@ -2495,8 +2499,10 @@ func (s *Service) SuggestExclusion(ctx context.Context, payload *gen.SuggestExcl
 	suggestion, err := s.suggestExclusionViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), prompt, findings, payload.KnownRuleIds)
 	if err != nil {
 		//nolint:wrapcheck // The mapper returns a fully wrapped, telemetry-safe boundary error.
-		if mapped, ok := hostedinference.MapBoundaryError(ctx, s.logger, err); ok {
-			return nil, mapped
+		if _, denied := errors.AsType[*hostedinference.MatchedDenialError](err); denied {
+			if mapped, ok := hostedinference.MapBoundaryError(ctx, s.logger, err); ok {
+				return nil, mapped
+			}
 		}
 		s.logger.WarnContext(ctx, "openrouter exclusion suggestion failed; returning heuristic suggestion", attr.SlogError(err))
 		return heuristicExclusionSuggestion(prompt, findings), nil
@@ -3839,8 +3845,10 @@ func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID strin
 		DisableResponseHealing:    false,
 	})
 	if err != nil {
+		// The name is cosmetic: an ai_access denial or evaluator outage falls
+		// back to the heuristic name instead of failing the policy write.
 		if hostedinference.IsBoundaryError(err) {
-			return "", err //nolint:wrapcheck // Preserve the typed error for Goa boundary mapping.
+			return fallback, nil
 		}
 		s.logger.WarnContext(ctx, "failed to generate policy name via OpenRouter", attr.SlogError(err))
 		return fallback, nil
@@ -4001,8 +4009,10 @@ func (s *Service) generatePromptPolicyName(ctx context.Context, orgID, projectID
 		DisableResponseHealing:    false,
 	})
 	if err != nil {
+		// The name is cosmetic: an ai_access denial or evaluator outage falls
+		// back to the heuristic name instead of failing the policy write.
 		if hostedinference.IsBoundaryError(err) {
-			return "", err //nolint:wrapcheck // Preserve the typed error for Goa boundary mapping.
+			return fallback, nil
 		}
 		s.logger.WarnContext(ctx, "failed to generate prompt policy name via OpenRouter", attr.SlogError(err))
 		return fallback, nil

@@ -481,8 +481,11 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 		body     []byte
 	)
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		if err := c.checkHostedInference(ctx, req.OrgID); err != nil {
-			return nil, err
+		// The first attempt runs under the check above; retries re-evaluate.
+		if attempt > 1 {
+			if err := c.checkHostedInference(ctx, req.OrgID); err != nil {
+				return nil, err
+			}
 		}
 		var err error
 		chatResp, body, err = c.requestCompletion(ctx, initResult.apiKey, reqBody)
@@ -596,11 +599,6 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 	}
 	reqBody := initResult.requestBody
 	reqBody.Stream = true
-
-	// Re-evaluate immediately before the actual provider attempt.
-	if err := c.checkHostedInference(ctx, req.OrgID); err != nil {
-		return nil, err
-	}
 
 	// Make HTTP request
 	httpResp, err := c.makeHTTPRequest(ctx, initResult.apiKey, reqBody)
@@ -1148,6 +1146,9 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 	return c.createEmbeddings(ctx, orgID, model, inputs, resolved.Dimensions, resolved.KeyType.OrDefault())
 }
 
+// embeddingsRequestTimeout bounds one embeddings call, including SDK retries.
+const embeddingsRequestTimeout = 60 * time.Second
+
 func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model string, inputs []string, dimensions *int64, keyType KeyType) ([][]float32, error) {
 	if err := c.checkHostedInference(ctx, orgID); err != nil {
 		return nil, err
@@ -1188,7 +1189,11 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 			organizationID: orgID,
 		}),
 	)
-	result, err := orClient.Embeddings.Generate(ctx, or_operations.CreateEmbeddingsRequest{
+	// The pooled Guardian client has no timeout of its own; keep the 60s bound
+	// the SDK's default client used to provide.
+	embedCtx, cancel := context.WithTimeout(ctx, embeddingsRequestTimeout)
+	defer cancel()
+	result, err := orClient.Embeddings.Generate(embedCtx, or_operations.CreateEmbeddingsRequest{
 		Model:          model,
 		Input:          or_operations.CreateInputUnionArrayOfStr(inputs),
 		EncodingFormat: nil,

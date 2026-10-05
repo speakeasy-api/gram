@@ -10,9 +10,12 @@ import (
 )
 
 // AttemptCheckpoint is the dependency injected into the production ChatClient.
-// Check is called once before request setup and again immediately before every
-// actual provider attempt.
-const DefaultEvaluationTimeout = time.Second
+// Check is called once before request setup, which covers the first provider
+// attempt, and again before every retry.
+//
+// DefaultEvaluationTimeout matches the hooks evaluator budget so a brief
+// database stall does not fail every governed chat.
+const DefaultEvaluationTimeout = 5 * time.Second
 
 // ErrCheckpointUnavailable is the shared fail-closed cause for missing
 // hosted-inference enforcement dependencies.

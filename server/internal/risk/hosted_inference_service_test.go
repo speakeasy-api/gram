@@ -93,6 +93,30 @@ func runDeniedRiskAuthoringPath(t *testing.T, invoke func(context.Context, *test
 	require.Equal(t, 1, evaluator.calls)
 }
 
+// runFallbackNamingRiskAuthoringPath proves cosmetic policy naming consults
+// ai_access but falls back to the heuristic name instead of failing the write.
+func runFallbackNamingRiskAuthoringPath(t *testing.T, invoke func(context.Context, *testInstance) (string, error)) {
+	t.Helper()
+
+	result, err := killswitches.NewMatchResult("0198a1b2-c3d4-7000-8000-0123456789ab", riskHostedInferenceDenialNote)
+	require.NoError(t, err)
+	evaluator := &riskHostedInferenceEvaluator{result: result}
+	ctx, ti := newTestRiskService(t, func(ti *testInstance) {
+		registry, registryErr := mcptoolexecution.NewRegistry(ti.conn)
+		require.NoError(t, registryErr)
+		checkpoint, checkpointErr := hostedinference.NewCheckpoint(registry, evaluator, time.Second)
+		require.NoError(t, checkpointErr)
+		gate := &riskCheckpointCompletionClient{checkpoint: checkpoint}
+		ti.completionClient = chat.NewAgenticChatClient(gate)
+	})
+
+	name, err := invoke(ctx, ti)
+	require.NoError(t, err)
+	require.NotEmpty(t, name)
+	require.NotContains(t, name, riskHostedInferenceDenialNote)
+	require.Equal(t, 1, evaluator.calls)
+}
+
 func TestRiskAuthoringPathsPreserveGovernedClassificationThroughAgenticClient(t *testing.T) {
 	t.Parallel()
 
@@ -114,21 +138,27 @@ func TestRiskAuthoringPathsPreserveGovernedClassificationThroughAgenticClient(t 
 
 	t.Run("standard policy name", func(t *testing.T) {
 		t.Parallel()
-		runDeniedRiskAuthoringPath(t, func(ctx context.Context, ti *testInstance) error {
-			_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Sources: []string{"gitleaks"}})
-			return wrapRiskTestError("create standard risk policy", err)
+		runFallbackNamingRiskAuthoringPath(t, func(ctx context.Context, ti *testInstance) (string, error) {
+			policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Sources: []string{"gitleaks"}})
+			if err != nil {
+				return "", wrapRiskTestError("create standard risk policy", err)
+			}
+			return policy.Name, nil
 		})
 	})
 
 	t.Run("prompt policy name", func(t *testing.T) {
 		t.Parallel()
-		runDeniedRiskAuthoringPath(t, func(ctx context.Context, ti *testInstance) error {
+		runFallbackNamingRiskAuthoringPath(t, func(ctx context.Context, ti *testInstance) (string, error) {
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
 			require.True(t, ok)
 			ti.flags.SetFlag(feature.FlagPromptPolicies, authCtx.ActiveOrganizationID, true)
 			prompt := "Block destructive placeholder actions"
-			_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{PolicyType: "prompt_based", Prompt: &prompt})
-			return wrapRiskTestError("create prompt risk policy", err)
+			policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{PolicyType: "prompt_based", Prompt: &prompt})
+			if err != nil {
+				return "", wrapRiskTestError("create prompt risk policy", err)
+			}
+			return policy.Name, nil
 		})
 	})
 }
