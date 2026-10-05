@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -353,10 +352,7 @@ func (s *RiskFindingListService) List(ctx context.Context, principal Principal, 
 	if resultID.Valid {
 		input.ResultID = resultID.UUID.String()
 	}
-	input.ExecutionID = strings.TrimSpace(input.ExecutionID)
-	if executionID, err := uuid.Parse(input.ExecutionID); err == nil {
-		input.ExecutionID = executionID.String()
-	}
+	input.ExecutionID = risk.CanonicalExecutionID(input.ExecutionID)
 	if input.Category != "" && !validRiskCategory(input.Category) {
 		return zero, ErrRiskReadInvalid
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,6 +27,16 @@ import (
 // MatchRedacted carries the ingest-time display string.
 // Chat titles and tool-call block ids are enriched from Postgres per page
 // because both mutate after ingest.
+// CanonicalExecutionID trims an execution_id filter and lowercases it when it
+// is a UUID, the form findings store, since the filter is an exact match.
+func CanonicalExecutionID(id string) string {
+	id = strings.TrimSpace(id)
+	if parsed, err := uuid.Parse(id); err == nil {
+		return parsed.String()
+	}
+	return id
+}
+
 func (s *Service) listResultsByProjectFromClickHouse(
 	ctx context.Context,
 	authCtx *contextvalues.AuthContext,

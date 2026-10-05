@@ -1388,7 +1388,7 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	}
 	executionID := ""
 	if payload.ExecutionID != nil {
-		executionID = strings.TrimSpace(*payload.ExecutionID)
+		executionID = CanonicalExecutionID(*payload.ExecutionID)
 	}
 
 	// The Postgres chat listing cannot narrow by finding or execution.
