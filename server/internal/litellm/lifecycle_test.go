@@ -42,6 +42,7 @@ func TestInstanceLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	managedKey, err := keysrepo.New(ti.conn).GetAPIKeyByKeyHash(ctx, oldHash)
 	require.NoError(t, err)
+	require.Contains(t, managedKey.Scopes, auth.APIKeyScopeLiteLLMActingPrincipal.String(), "new instances adopt the acting-principal contract")
 	instanceID, err := uuid.Parse(first.Instance.ID)
 	require.NoError(t, err)
 	encodedInstanceID, ok := auth.LiteLLMInstanceIDFromAPIKeyName(managedKey.Name)
@@ -81,6 +82,7 @@ func TestInstanceLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	rotatedKey, err := keysrepo.New(ti.conn).GetAPIKeyByKeyHash(ctx, newHash)
 	require.NoError(t, err)
+	require.Contains(t, rotatedKey.Scopes, auth.APIKeyScopeLiteLLMActingPrincipal.String(), "rotation keeps the instance's enforcement contract")
 
 	require.NoError(t, ti.service.RevokeInstance(ctx, &gen.RevokeInstancePayload{ID: first.Instance.ID}))
 	resolvedID, managed = ti.service.instances.Resolve(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), rotatedKey.ID.String())

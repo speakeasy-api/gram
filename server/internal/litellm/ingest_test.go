@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	hooksgen "github.com/speakeasy-api/gram/server/gen/hooks"
 	gen "github.com/speakeasy-api/gram/server/gen/litellm"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
@@ -150,9 +152,20 @@ func testAuthContext() *contextvalues.AuthContext {
 		HasActiveSubscription: true,
 		Whitelisted:           false,
 		ProjectSlug:           new("project-test"),
-		APIKeyScopes:          []string{"hooks"},
+		APIKeyScopes:          []string{"hooks", auth.APIKeyScopeLiteLLMActingPrincipal.String()},
 		IsAdmin:               false,
 	}
+}
+
+// governedIngestContext marks the callback key as an instance that adopted the
+// acting-principal contract, so ingest enforces ai_access.
+func governedIngestContext(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	governed := *authCtx
+	governed.APIKeyScopes = append(slices.Clone(authCtx.APIKeyScopes), auth.APIKeyScopeLiteLLMActingPrincipal.String())
+	return contextvalues.SetAuthContext(ctx, &governed)
 }
 
 func unitService(t *testing.T, ingester HookIngester, authCtx *contextvalues.AuthContext) *Service {

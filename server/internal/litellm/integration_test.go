@@ -117,6 +117,7 @@ func TestRealHooksPersistsMixedCaseMemberAndDedupesRetry(t *testing.T) {
 	require.NoError(t, err)
 
 	ti.service.aiAccess = fixedLiteLLMAIAccess(userID)
+	ctx = governedIngestContext(t, ctx)
 	payload := testPayload()
 	callID := "mixed-case-" + uuid.NewString()
 	payload.LitellmCallID = &callID
@@ -136,7 +137,7 @@ func TestRealHooksPersistsMixedCaseMemberAndDedupesRetry(t *testing.T) {
 	require.Equal(t, "safe prompt", messages[0].Content)
 	require.Equal(t, "litellm", messages[0].Source.String)
 	require.Equal(t, userID, messages[0].UserID.String)
-	require.False(t, messages[0].ExternalUserID.Valid)
+	require.Equal(t, storedEmail, messages[0].ExternalUserID.String, "verified member email, not the callback-reported one")
 }
 
 func TestOTLPTraceUsesGuardrailCallAttribution(t *testing.T) {
@@ -163,6 +164,7 @@ func TestOTLPTraceUsesGuardrailCallAttribution(t *testing.T) {
 	require.NoError(t, err)
 
 	ti.service.aiAccess = fixedLiteLLMAIAccess(userID)
+	ctx = governedIngestContext(t, ctx)
 	callID := "trace-call-" + uuid.NewString()
 	traceID := "trace-session-" + uuid.NewString()
 	payload := testPayload()
@@ -298,6 +300,7 @@ func TestRealHooksCapturesResponseWithCachedActorAndDedupesRetry(t *testing.T) {
 	require.NoError(t, err)
 
 	ti.service.aiAccess = fixedLiteLLMAIAccess(userID)
+	ctx = governedIngestContext(t, ctx)
 	callID := "response-" + uuid.NewString()
 	sessionID := "session-" + uuid.NewString()
 	request := testPayload()
@@ -342,8 +345,8 @@ func TestRealHooksCapturesResponseWithCachedActorAndDedupesRetry(t *testing.T) {
 	require.Equal(t, "first response segment\nsecond response segment", messages[1].Content)
 	require.Equal(t, userID, messages[0].UserID.String)
 	require.Equal(t, userID, messages[1].UserID.String)
-	require.False(t, messages[0].ExternalUserID.Valid)
-	require.False(t, messages[1].ExternalUserID.Valid)
+	require.Equal(t, storedEmail, messages[0].ExternalUserID.String, "verified member email, not the callback-reported one")
+	require.Equal(t, storedEmail, messages[1].ExternalUserID.String)
 	expectedToolCalls, err := json.Marshal(toolCalls)
 	require.NoError(t, err)
 	require.JSONEq(t, string(expectedToolCalls), string(messages[1].ToolCalls))
@@ -830,6 +833,7 @@ func TestRealHooksResponseCacheMissDoesNotUseIntegrationKeyOwner(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
+	ctx = governedIngestContext(t, ctx)
 	callID := "response-miss-" + uuid.NewString()
 	reportedEmail := "Missing." + uuid.NewString() + "@Example.Test"
 
@@ -1089,6 +1093,7 @@ func TestRealHooksNeverUsesEndUserKeyOwnerOrCachedActor(t *testing.T) {
 	})
 	require.NoError(t, err)
 	ti.service.aiAccess = fixedLiteLLMAIAccess(assertedUserID)
+	ctx = governedIngestContext(t, ctx)
 	sessionID := "cached-identity-" + uuid.NewString()
 	_, err = ti.hooks.IngestAuthenticated(ctx, authCtx, &hooksgen.IngestPayload{
 		ApikeyToken:      nil,
@@ -1143,5 +1148,5 @@ func TestRealHooksNeverUsesEndUserKeyOwnerOrCachedActor(t *testing.T) {
 		ProjectID: *authCtx.ProjectID,
 	}, 1)
 	require.Equal(t, assertedUserID, missingMessages[0].UserID.String)
-	require.False(t, missingMessages[0].ExternalUserID.Valid)
+	require.Equal(t, assertedEmail, missingMessages[0].ExternalUserID.String)
 }

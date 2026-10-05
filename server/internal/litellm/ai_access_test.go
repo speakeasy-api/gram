@@ -96,7 +96,7 @@ func newCheckpointFixture(t *testing.T, result killswitches.EvaluationResult) ch
 	callbackAuth.Email = new("creator@example.test")
 	callbackAuth.APIKeyID = key.ID.String()
 	callbackAuth.APIKeyName = key.Name
-	callbackAuth.APIKeyScopes = []string{auth.APIKeyScopeHooks.String()}
+	callbackAuth.APIKeyScopes = []string{auth.APIKeyScopeHooks.String(), auth.APIKeyScopeLiteLLMActingPrincipal.String()}
 	payload := testPayload()
 	payload.RequestHeaders = map[string]string{
 		actingPrincipalHeader: assertion, actingPrincipalContractHeader: litellmacting.ContractVersion, inferenceInvocationHeader: invocationID.String(),

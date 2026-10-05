@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 const (
@@ -158,12 +159,18 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 	if !ok || authCtx == nil {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	}
-	if s.aiAccess == nil {
-		return liteLLMIdentityFailureDecision().result(), nil
-	}
-	aiAccess := s.aiAccess.Evaluate(ctx, payload, authCtx)
-	if aiAccess.blocked {
-		return aiAccess.result(), nil
+	// Only instances that adopted the acting-principal contract enforce
+	// ai_access. Legacy instances keep callback-reported attribution.
+	governed := slices.Contains(authCtx.APIKeyScopes, auth.APIKeyScopeLiteLLMActingPrincipal.String())
+	var aiAccess liteLLMAIAccessDecision
+	if governed {
+		if s.aiAccess == nil {
+			return liteLLMIdentityFailureDecision().result(), nil
+		}
+		aiAccess = s.aiAccess.Evaluate(ctx, payload, authCtx)
+		if aiAccess.blocked {
+			return aiAccess.result(), nil
+		}
 	}
 
 	prompt := latestUserPrompt(payload.StructuredMessages)
@@ -175,7 +182,13 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 	}
 
 	authCopy := strippedAuthContext(authCtx)
-	authCopy.UserID = aiAccess.userID
+	email := conv.NormalizeEmail(conv.PtrValOr(payload.RequestData.UserAPIKeyUserEmail, ""))
+	if governed {
+		// The verified identity is authoritative; the callback email is not.
+		authCopy.UserID = aiAccess.userID
+		authCopy.Email = conv.PtrEmpty(s.verifiedUserEmail(ctx, aiAccess.userID))
+		email = ""
+	}
 
 	traceID := strings.TrimSpace(conv.PtrValOr(payload.LitellmTraceID, ""))
 	attribution := agentAttributionFromHeaders(payload.RequestHeaders)
@@ -205,7 +218,7 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 			AdapterVersion: conv.PtrEmpty(version),
 			RawEventName:   nil,
 			Hostname:       nil,
-			UserEmail:      nil,
+			UserEmail:      conv.PtrEmpty(email),
 		},
 		Session: &hooksgen.HookIngestSession{
 			ID:     &sessionID,
@@ -292,6 +305,13 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 	traceID := strings.TrimSpace(conv.PtrValOr(payload.LitellmTraceID, ""))
 	sessionID := conv.Default(traceID, callID)
 	originatingClient := ""
+	// Legacy instances keep callback-reported attribution; governed instances
+	// attribute only through the verified actor cached on the request leg.
+	governed := slices.Contains(authCtx.APIKeyScopes, auth.APIKeyScopeLiteLLMActingPrincipal.String())
+	email := ""
+	if !governed {
+		email = conv.NormalizeEmail(conv.PtrValOr(payload.RequestData.UserAPIKeyUserEmail, ""))
+	}
 
 	cacheCtx, cancel := context.WithTimeout(ctx, callCacheTimeout)
 	cached, err := s.calls.Get(cacheCtx, *authCtx.ProjectID, callID)
@@ -300,6 +320,9 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 		sessionID = cached.SessionID
 		authCopy.UserID = cached.UserID
 		authCopy.Email = conv.PtrEmpty(cached.Email)
+		if !governed {
+			email = cached.Email
+		}
 		if cached.OriginatingClient != "" {
 			originatingClient = cached.OriginatingClient
 		} else {
@@ -336,7 +359,7 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 			AdapterVersion: conv.PtrEmpty(version),
 			RawEventName:   nil,
 			Hostname:       nil,
-			UserEmail:      nil,
+			UserEmail:      conv.PtrEmpty(email),
 		},
 		Session: &hooksgen.HookIngestSession{
 			ID:     &sessionID,
@@ -374,6 +397,20 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 		return nil, fmt.Errorf("ingest LiteLLM hook: %w", err)
 	}
 	return noneResult(), nil
+}
+
+// verifiedUserEmail resolves attribution for an assertion-verified user. A
+// lookup failure only loses the email, never the enforcement decision.
+func (s *Service) verifiedUserEmail(ctx context.Context, userID string) string {
+	if s.db == nil || userID == "" {
+		return ""
+	}
+	user, err := usersrepo.New(s.db).GetUser(ctx, userID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to load verified LiteLLM user email", attr.SlogError(err))
+		return ""
+	}
+	return user.Email
 }
 
 func strippedAuthContext(authCtx *contextvalues.AuthContext) contextvalues.AuthContext {
