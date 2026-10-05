@@ -806,45 +806,49 @@ function IdentitiesIndexContent(): JSX.Element {
           {/* No stat tiles: each table states its own count, and the four
               numbers above them repeated it without saying anything the rows
               do not. */}
-          <Page.Toolbar>
-            <Page.Toolbar.Leading>
-              <SegmentedControl
-                value={kindKey}
-                onChange={(kind) =>
-                  setValue("kind", kind ? kind.split(",") : [])
-                }
-                options={kindOptions}
+          {/* Tucked under the description and trimmed down: the controls are
+              a bar above the tables, not a band of their own. */}
+          <div className="-mt-3 [&>*]:p-1.5 [&_input]:h-8">
+            <Page.Toolbar>
+              <Page.Toolbar.Leading>
+                <SegmentedControl
+                  value={kindKey}
+                  onChange={(kind) =>
+                    setValue("kind", kind ? kind.split(",") : [])
+                  }
+                  options={kindOptions}
+                />
+              </Page.Toolbar.Leading>
+              <Page.Toolbar.Search
+                value={search}
+                onChange={setSearch}
+                placeholder="Search identities…"
+                debounceMs={200}
               />
-            </Page.Toolbar.Leading>
-            <Page.Toolbar.Search
-              value={search}
-              onChange={setSearch}
-              placeholder="Search identities…"
-              debounceMs={200}
-            />
-            <Page.Toolbar.Actions>
-              <Page.Toolbar.Filters
-                schema={filterSchema}
-                values={values}
-                optionsById={{
-                  kind: Object.entries(IDENTITY_KIND_LABELS).map(
-                    ([value, label]) => ({ value, label }),
-                  ),
-                  enrollment: ENROLLMENT_OPTIONS,
-                  activity: ACTIVITY_OPTIONS,
-                  device_status: deviceStatusOptions,
-                  role: roleOptions,
-                  department: departmentOptions,
-                  team: teamOptions,
-                  account_type: ACCOUNT_TYPE_OPTIONS,
-                  personal_account: PERSONAL_ACCOUNT_OPTIONS,
-                }}
-                onChange={setValue as (id: string, value: unknown) => void}
-                onClear={clearValue as (id: string) => void}
-                onClearAll={clearAll}
-              />
-            </Page.Toolbar.Actions>
-          </Page.Toolbar>
+              <Page.Toolbar.Actions>
+                <Page.Toolbar.Filters
+                  schema={filterSchema}
+                  values={values}
+                  optionsById={{
+                    kind: Object.entries(IDENTITY_KIND_LABELS).map(
+                      ([value, label]) => ({ value, label }),
+                    ),
+                    enrollment: ENROLLMENT_OPTIONS,
+                    activity: ACTIVITY_OPTIONS,
+                    device_status: deviceStatusOptions,
+                    role: roleOptions,
+                    department: departmentOptions,
+                    team: teamOptions,
+                    account_type: ACCOUNT_TYPE_OPTIONS,
+                    personal_account: PERSONAL_ACCOUNT_OPTIONS,
+                  }}
+                  onChange={setValue as (id: string, value: unknown) => void}
+                  onClear={clearValue as (id: string) => void}
+                  onClearAll={clearAll}
+                />
+              </Page.Toolbar.Actions>
+            </Page.Toolbar>
+          </div>
           {/* Two tables, because the two kinds are not the same kind of
               thing: a person arrives from the identity provider and cannot be
               created here, while an agent is registered here and issued its
