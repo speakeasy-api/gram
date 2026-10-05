@@ -239,7 +239,7 @@ func newRoleDeliveryFixture(t *testing.T) (context.Context, *roleDeliveryFixture
 	ctx, ti := newTestAccessService(t)
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	ti.roles.On("UpdateRole", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&workos.Role{}, nil)
+	ti.roles.On("UpdateRole", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&workos.Role{}, nil).Maybe()
 	roleID := seedRole(t, ctx, ti.conn, ac.ActiveOrganizationID, mockRole("role_delivery", "Delivery", "delivery", ""))
 	toolsetID := uuid.New()
 	_, err := testrepo.New(ti.conn).CreateToolsetFixture(ctx, testrepo.CreateToolsetFixtureParams{ID: toolsetID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "Delivery server", Slug: "delivery-server"})
