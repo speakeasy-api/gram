@@ -67,7 +67,13 @@ When Opus 5.5 refuses, the same evidence is sent once to Opus 4.8
 (`anthropic/claude-opus-4.8`), Anthropic's recommended fallback for
 cyber-category refusals. Its verdict is used as the confirmation, and the
 result records the model that produced it. Both calls share the 45-second
-confirmation deadline. If Opus 4.8 also refuses, the result is unavailable.
+confirmation deadline: fallback is best-effort within the remaining budget,
+not a fresh 45-second attempt. A late primary refusal can leave too little time
+for Opus 4.8; expiry or caller cancellation then produces an unavailable result.
+The cascade remains bounded by 55 seconds overall, including Jev and context
+loading. Shortening the primary deadline to reserve fallback time would turn
+late refusals into timeouts, which do not trigger fallback under this policy.
+If Opus 4.8 also refuses, the result is unavailable.
 Only refusals fall back; timeouts, throttling, provider errors and malformed
 responses do not. Refusals are recorded with the `refused` failure reason, and
 the span's `pi_judge.refusal_fallback` attribute marks fallback verdicts.
