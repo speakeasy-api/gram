@@ -1,10 +1,8 @@
 import type { WidgetPreset } from "@gram/client/models/components/widgetpreset.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PresetWidgets, WidgetGrid } from "./WidgetGrid";
 
-const testState = vi.hoisted(() => ({ staff: false }));
 const presetQuery = vi.hoisted(() => ({
   data: undefined as WidgetPreset | undefined,
   isError: false,
@@ -15,29 +13,20 @@ vi.mock("@gram/client/react-query/widgetPreset.js", () => ({
   useWidgetPreset: () => presetQuery,
 }));
 
-vi.mock("@/contexts/Auth", () => ({
-  useIsSpeakeasyStaff: () => testState.staff,
-}));
 // The grid's job is placement; each card's answer is WidgetView's, tested
 // on its own.
 vi.mock("./WidgetView", () => ({
   WidgetView: ({
     widget,
     className,
-    footer,
   }: {
     widget: { name: string };
     className?: string;
-    footer?: ReactNode;
-  }) => (
-    <section aria-label={widget.name} className={className}>
-      {footer}
-    </section>
-  ),
+  }) => <section aria-label={widget.name} className={className} />,
 }));
 
 const number = { type: "number", options: {} };
-const count = { window: "24h", grain: "none", measures: [] };
+const count = { window: "1d", grain: "none", measures: [] };
 
 const preset: WidgetPreset = {
   page: "home",
@@ -94,10 +83,6 @@ const preset: WidgetPreset = {
 };
 
 describe("WidgetGrid", () => {
-  beforeEach(() => {
-    testState.staff = false;
-    localStorage.clear();
-  });
   afterEach(() => {
     cleanup();
   });
@@ -120,30 +105,10 @@ describe("WidgetGrid", () => {
         .map((card) => card.getAttribute("aria-label")),
     ).toEqual(["A", "B", "C", "D", "E"]);
   });
-
-  it("offers staff the legacy figures beside the widgets", () => {
-    testState.staff = true;
-    render(<WidgetGrid preset={preset} legacy={{ a: "1,204" }} />);
-    expect(screen.queryByText("1,204")).toBeNull();
-
-    fireEvent.click(
-      screen.getByRole("switch", { name: "Compare with legacy" }),
-    );
-    expect(screen.getByText("1,204")).toBeTruthy();
-    expect(localStorage.getItem("gram-widget-compare-legacy")).toBe("1");
-  });
-
-  it("offers no comparison with nothing to compare", () => {
-    testState.staff = true;
-    render(<WidgetGrid preset={preset} />);
-    expect(screen.queryByRole("switch")).toBeNull();
-  });
 });
 
 describe("PresetWidgets", () => {
   beforeEach(() => {
-    testState.staff = false;
-    localStorage.clear();
     presetQuery.data = undefined;
     presetQuery.isError = false;
     presetQuery.refetch.mockClear();

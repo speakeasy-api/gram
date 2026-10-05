@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
-import { useMemo, type JSX, type ReactNode } from "react";
+import { useMemo, type JSX } from "react";
 import { Link } from "react-router";
 import {
   completeMeasures,
@@ -57,14 +57,11 @@ export function WidgetView({
   widget,
   page,
   height,
-  footer,
   className,
 }: {
   widget: ViewableWidget;
   /** The window and filters of the page the widget sits on. */
   page?: PageContext;
-  /** A line under the answer, such as the legacy figure it replaces. */
-  footer?: ReactNode;
   /** The body's height in pixels; the chart type decides when unset. */
   height?: number;
   className?: string;
@@ -149,7 +146,6 @@ export function WidgetView({
       <div className="flex min-h-0 flex-col overflow-auto" style={bodyStyle}>
         {body}
       </div>
-      {footer}
     </section>
   );
 }
