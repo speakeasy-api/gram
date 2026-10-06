@@ -41,6 +41,7 @@ import { usePageFilters, type PageFilterField } from "./usePageFilters";
 import { useCanEditWidget } from "./useCanEditWidget";
 import { useCreatorName } from "./useCreatorName";
 import { useWidgetMutations } from "./useWidgetMutations";
+import { describeDashboards } from "./widgetUsage";
 import { DeleteWidgetDialog, WidgetDetailsDialog } from "./WidgetDialogs";
 
 // The fields the cards' filter bar may offer, in order: the dimensions most
@@ -470,9 +471,15 @@ function DashboardsCell({
   if (dashboards.length === 0) {
     return <span className="text-muted-foreground">—</span>;
   }
+  // The names are read out where the eye gets a count and a tooltip.
   return (
     <SimpleTooltip tooltip={dashboards.map((d) => d.name).join(", ")}>
-      <span className="tabular-nums">{dashboards.length}</span>
+      <span>
+        <span className="tabular-nums" aria-hidden>
+          {dashboards.length}
+        </span>
+        <span className="sr-only">On {describeDashboards(dashboards)}</span>
+      </span>
     </SimpleTooltip>
   );
 }

@@ -1398,9 +1398,16 @@ describe("Explore", () => {
       ];
       renderExplore();
       showWidgets();
-      const rows = screen.getAllByRole("row");
-      expect(rows[1]?.textContent).toContain("2");
-      expect(rows[2]?.textContent).toContain("—");
+      // Rows are found by name: the list sorts by updated time, and both
+      // widgets were saved within the same instant or not.
+      const rowOf = (name: string) =>
+        screen
+          .getAllByRole("row")
+          .find((row) => row.textContent?.includes(name));
+      expect(rowOf("Slow tools")?.textContent).toContain(
+        "On “Agent activity” and “Costs”",
+      );
+      expect(rowOf("Sessions")?.textContent).toContain("—");
 
       openWidget("Slow tools");
       expect(screen.queryByText(/Saving changes its card/)).toBeNull();
