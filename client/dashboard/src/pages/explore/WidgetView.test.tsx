@@ -4,7 +4,8 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { specForDataset, type ExploreSpec } from "./exploreModel";
-import { decodeSpec, QUERY_PARAM, WIDGET_PARAM } from "./exploreUrl";
+import { decodeSpec, parseSpec, QUERY_PARAM, WIDGET_PARAM } from "./exploreUrl";
+import type { PageContext } from "./pageContext";
 import { widgetFromSpec } from "./widgetSpec";
 import { WidgetView, type ViewableWidget } from "./WidgetView";
 
@@ -96,12 +97,26 @@ function widget(
   };
 }
 
-function renderView(view: ViewableWidget) {
+function renderView(view: ViewableWidget, page?: PageContext) {
   return render(
     <MemoryRouter>
-      <WidgetView widget={view} />
+      <WidgetView widget={view} page={page} />
     </MemoryRouter>,
   );
+}
+
+/**
+ * Where the widget's link opens Explore: the saved widget it names and the
+ * query it carries, read whether or not the catalog can still answer it, so
+ * a link to a broken widget still shows what it asks.
+ */
+function explored(): { widgetId: string | null; spec: ExploreSpec | null } {
+  const link = screen.getByRole("link", { name: /Open in Explore/ });
+  const url = new URL(link.getAttribute("href") ?? "", "https://x.invalid");
+  return {
+    widgetId: url.searchParams.get(WIDGET_PARAM),
+    spec: parseSpec(url.searchParams.get(QUERY_PARAM)),
+  };
 }
 
 describe("WidgetView", () => {
@@ -207,6 +222,26 @@ describe("WidgetView", () => {
     expect(url.searchParams.get(WIDGET_PARAM)).toBe("widget-1");
   });
 
+  it("opens a saved widget the catalog breaks as saved, even when the page changes it", () => {
+    renderView(widget({ dimensions: ["team"] }, { id: "widget-1" }), {
+      window: { preset: "30d", customRange: null, customLabel: null },
+    });
+    const opened = explored();
+    expect(opened.widgetId).toBe("widget-1");
+    // The link carries the saved question, not the page's: its own 1d
+    // window and the dimension the catalog no longer has.
+    expect(opened.spec?.window).toBe("1d");
+    expect(opened.spec?.dimensions).toEqual(["team"]);
+  });
+
+  it("opens a saved widget while the catalog loads", () => {
+    testState.datasets = undefined;
+    renderView(widget({}, { id: "widget-1" }), {
+      window: { preset: "30d", customRange: null, customLabel: null },
+    });
+    expect(explored().widgetId).toBe("widget-1");
+  });
+
   it("says why when the builder cannot read the widget, with no way into Explore", () => {
     renderView({
       name: "Odd",
@@ -239,5 +274,53 @@ describe("WidgetView", () => {
     testState.rows = [];
     renderView(widget({ chartType: "table" }));
     expect(screen.getByText("Nothing in this window")).toBeTruthy();
+  });
+
+  it("runs within the page's range and filters, and opens exactly that in Explore", () => {
+    testState.rows = [];
+    const from = Date.UTC(2026, 8, 1);
+    const to = Date.UTC(2026, 8, 8);
+    renderView(widget({ chartType: "line" }, { id: "widget-1" }), {
+      window: {
+        preset: null,
+        customRange: { from: new Date(from), to: new Date(to) },
+        customLabel: null,
+      },
+      filters: { user: ["ann"] },
+    });
+    const body = testState.bodies.at(-1);
+    expect(body?.from.getTime()).toBe(from);
+    expect(body?.to.getTime()).toBe(to);
+    expect(body?.grain).toBe("day");
+    expect(body?.filters).toEqual([
+      { field: "user", operator: "in", values: ["ann"] },
+    ]);
+    const opened = explored();
+    // The page changed the question, so it is not the saved widget.
+    expect(opened.widgetId).toBeNull();
+    expect(opened.spec?.range).toEqual({ from, to });
+    expect(opened.spec?.filters).toEqual([
+      { field: "user", operator: "in", values: ["ann"] },
+    ]);
+  });
+
+  it("says which page filters it could not apply", () => {
+    testState.rows = [];
+    renderView(widget({ chartType: "table" }), {
+      filters: { client: ["cursor"] },
+    });
+    expect(
+      screen.getByText(
+        /Not filtered by client, which sessions cannot filter on/,
+      ),
+    ).toBeTruthy();
+    expect(testState.bodies.at(-1)?.filters).toEqual([]);
+  });
+
+  it("keeps the saved widget's link when the page asks nothing different", () => {
+    renderView(widget({ chartType: "table" }, { id: "widget-1" }), {
+      window: { preset: "1d", customRange: null, customLabel: null },
+    });
+    expect(explored().widgetId).toBe("widget-1");
   });
 });

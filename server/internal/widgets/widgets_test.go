@@ -135,6 +135,17 @@ func TestCreateWidget(t *testing.T) {
 		require.ErrorContains(t, err, "window")
 	})
 
+	t.Run("it accepts every dashboard date preset, and the builder's old spelling of a day", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+		for _, window := range []string{"15m", "1h", "4h", "1d", "2d", "3d", "7d", "15d", "30d", "90d", "24h"} {
+			query := validQuery()
+			query["window"] = window
+			_, err := ti.service.CreateWidget(ctx, createPayload(window, query, barChart()))
+			require.NoError(t, err, "window %s", window)
+		}
+	})
+
 	t.Run("it rejects a chart that cannot draw the question", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestService(t)

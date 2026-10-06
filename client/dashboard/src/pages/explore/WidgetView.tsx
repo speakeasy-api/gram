@@ -21,6 +21,7 @@ import {
   type ResultRow,
 } from "./exploreModel";
 import { ResultDrawing } from "./ExploreResults";
+import { applyPageContext, type PageContext } from "./pageContext";
 import { encodeSpec, QUERY_PARAM, WIDGET_PARAM } from "./exploreUrl";
 import { useRunQuery } from "./useRunQuery";
 import { specFromStoredWidget, type StoredWidget } from "./widgetSpec";
@@ -48,19 +49,34 @@ function widgetBodyHeight(chartType: ChartType): number {
  * so a page places widgets without knowing how any of them is answered. A
  * widget that no longer validates says why in place of its numbers; it never
  * shows stale or empty ones.
+ *
+ * On a page, the page's window and filters fold into the widget's question
+ * (see pageContext.ts), and what runs is what Open in Explore opens.
  */
 export function WidgetView({
   widget,
+  page,
   height,
   className,
 }: {
   widget: ViewableWidget;
+  /** The window and filters of the page the widget sits on. */
+  page?: PageContext;
   /** The body's height in pixels; the chart type decides when unset. */
   height?: number;
   className?: string;
 }): JSX.Element {
-  const spec = useMemo(() => specFromStoredWidget(widget), [widget]);
-  const chartType = spec?.chartType ?? (widget.visualization.type as ChartType);
+  const describe = useAnalyticsDescribe();
+  const datasets = describe.data?.datasets;
+  const saved = useMemo(() => specFromStoredWidget(widget), [widget]);
+  // The page is folded in once the catalog says which of its filters the
+  // widget's dataset can take.
+  const paged =
+    saved && datasets
+      ? applyPageContext(saved, findDataset(datasets, saved.dataset), page)
+      : null;
+  const chartType =
+    saved?.chartType ?? (widget.visualization.type as ChartType);
   const bodyHeight = height ?? widgetBodyHeight(chartType);
   // A number tile is only as tall as its figure, so it grows to fit a
   // failure in its place rather than clipping the reason; anything drawn to
@@ -69,6 +85,50 @@ export function WidgetView({
     height === undefined && chartType === "number"
       ? { minHeight: bodyHeight }
       : { height: bodyHeight };
+
+  let body: JSX.Element;
+  if (saved === null) {
+    body = (
+      <WidgetBroken
+        reason={
+          widget.invalidReason ||
+          "its query uses options the builder doesn't offer"
+        }
+      />
+    );
+  } else if (widget.invalidReason) {
+    body = <WidgetBroken reason={widget.invalidReason} />;
+  } else if (datasets === undefined || paged === null) {
+    if (describe.isError) {
+      body = <WidgetError text="The catalog did not load." />;
+    } else {
+      body = <WidgetLoading />;
+    }
+  } else {
+    body = (
+      <WidgetAnswer
+        datasets={datasets}
+        spec={paged.spec}
+        onRangeSelect={page?.onRangeSelect}
+      />
+    );
+  }
+
+  // Open the merged question the card ran, or the saved one until the
+  // catalog has loaded. A saved widget that no longer works, by the server's
+  // word or the catalog's, opens as saved, so it can be fixed.
+  const broken =
+    Boolean(widget.invalidReason) ||
+    (saved !== null &&
+      datasets !== undefined &&
+      specProblem(datasets, saved) !== "");
+  let headerSpec = paged?.spec ?? saved;
+  let headerWidgetId = paged?.changed ? undefined : widget.id;
+  if (broken) {
+    headerSpec = widget.id ? saved : null;
+    headerWidgetId = widget.id;
+  }
+
   return (
     <section
       aria-label={widget.name}
@@ -79,24 +139,18 @@ export function WidgetView({
     >
       <WidgetHeader
         name={widget.name}
-        // The server's verdict stands even where the catalog's agrees, so
-        // only a saved widget it broke is opened, to be fixed.
-        spec={widget.invalidReason && !widget.id ? null : spec}
-        widgetId={widget.id}
+        spec={headerSpec}
+        // A question the page changed opens as its own query.
+        widgetId={headerWidgetId}
       />
+      {paged && paged.skipped.length > 0 && (
+        <p className="text-muted-foreground -mt-2 text-xs">
+          Not filtered by {paged.skipped.join(", ")}, which {saved?.dataset}{" "}
+          cannot filter on.
+        </p>
+      )}
       <div className="flex min-h-0 flex-col overflow-auto" style={bodyStyle}>
-        {spec === null ? (
-          <WidgetBroken
-            reason={
-              widget.invalidReason ||
-              "its query uses options the builder doesn't offer"
-            }
-          />
-        ) : widget.invalidReason ? (
-          <WidgetBroken reason={widget.invalidReason} />
-        ) : (
-          <WidgetAnswer spec={spec} />
-        )}
+        {body}
       </div>
     </section>
   );
@@ -146,25 +200,25 @@ function WidgetHeader({
   );
 }
 
-/** The widget's answer, once the catalog says it can still be asked. */
-function WidgetAnswer({ spec }: { spec: ExploreSpec }): JSX.Element {
-  const describe = useAnalyticsDescribe();
-  const datasets = describe.data?.datasets;
+/** The widget's answer, once the catalog has loaded. */
+function WidgetAnswer({
+  datasets,
+  spec,
+  onRangeSelect,
+}: {
+  datasets: AnalyticsDataset[];
+  spec: ExploreSpec;
+  onRangeSelect: ((from: Date, to: Date) => void) | undefined;
+}): JSX.Element {
   // The catalog decides whether the question still resolves; the query is
   // not sent until it has, so a broken widget costs no scan.
-  const problem = datasets ? specProblem(datasets, spec) : null;
+  const problem = specProblem(datasets, spec);
   const body = useMemo(
     () => (problem === "" ? queryBodyFromSpec(spec) : null),
     [problem, spec],
   );
   const result = useRunQuery(body);
 
-  if (datasets === undefined) {
-    if (describe.isError) {
-      return <WidgetError text="The catalog did not load." />;
-    }
-    return <WidgetLoading />;
-  }
   if (problem) return <WidgetBroken reason={problem} />;
   if (result.isError) {
     return (
@@ -187,7 +241,12 @@ function WidgetAnswer({ spec }: { spec: ExploreSpec }): JSX.Element {
     );
   }
   return (
-    <ResultDrawing dataset={dataset} spec={spec} rows={result.data.rows} />
+    <ResultDrawing
+      dataset={dataset}
+      spec={spec}
+      rows={result.data.rows}
+      onRangeSelect={onRangeSelect}
+    />
   );
 }
 

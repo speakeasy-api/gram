@@ -5,11 +5,11 @@ import type { AnalyticsQueryResult } from "@gram/client/models/components/analyt
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { JSX } from "react";
 import {
-  autoGrain,
   completeMeasures,
   hasChartShape,
   isRowsMode,
   queryDimensions,
+  specGrain,
   type ExploreSpec,
 } from "./exploreModel";
 import { CHART_HEIGHT, ResultChart } from "./ResultChart";
@@ -94,12 +94,15 @@ export function ResultDrawing({
   spec,
   rows,
   chartHeight,
+  onRangeSelect,
 }: {
   dataset: AnalyticsDataset | undefined;
   spec: ExploreSpec;
   rows: AnalyticsQueryResult["rows"];
   /** A timeseries chart's height; without one it fills its container. */
   chartHeight?: number;
+  /** Dragging across a timeseries selects that range. */
+  onRangeSelect?: ((from: Date, to: Date) => void) | undefined;
 }): JSX.Element {
   if (hasChartShape(spec)) {
     return (
@@ -108,6 +111,7 @@ export function ResultDrawing({
         spec={spec}
         rows={rows}
         height={chartHeight}
+        onRangeSelect={onRangeSelect}
       />
     );
   }
@@ -130,11 +134,13 @@ function ChartOrReason({
   spec,
   rows,
   height,
+  onRangeSelect,
 }: {
   dataset: AnalyticsDataset | undefined;
   spec: ExploreSpec;
   rows: AnalyticsQueryResult["rows"];
   height: number | undefined;
+  onRangeSelect: ((from: Date, to: Date) => void) | undefined;
 }): JSX.Element {
   const measures = completeMeasures(spec.measures);
   const unit = sharedUnit(dataset, measures);
@@ -166,8 +172,9 @@ function ChartOrReason({
           seriesSet={seriesSet}
           unit={unit}
           chartType={spec.chartType}
-          grain={autoGrain(spec.window)}
+          grain={specGrain(spec)}
           height={height}
+          onRangeSelect={onRangeSelect}
         />
       </div>
       {seriesSet.hidden > 0 ? (

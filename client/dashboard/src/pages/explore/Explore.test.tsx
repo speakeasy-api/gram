@@ -154,7 +154,45 @@ vi.mock("@gram/client/react-query/members.js", () => ({
     },
   }),
 }));
-vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => ({}),
+}));
+// The Window control is the dashboard's date picker; its natural-language
+// parsing needs a session and a server, which nothing here exercises.
+vi.mock("@/components/DashboardTimeRangePicker", () => ({
+  TimeRangePicker: ({
+    preset,
+    customRange,
+    customRangeLabel,
+    onPresetChange,
+  }: {
+    preset: string | null;
+    customRange: { from: Date; to: Date } | null;
+    customRangeLabel: string | null;
+    onPresetChange: (preset: string) => void;
+  }) => (
+    <select
+      aria-label="Window"
+      value={customRange ? "custom" : (preset ?? "")}
+      onChange={(event) => onPresetChange(event.target.value)}
+    >
+      {customRange ? (
+        <option value="custom">
+          {customRangeLabel ??
+            `${customRange.from.toISOString()} – ${customRange.to.toISOString()}`}
+        </option>
+      ) : null}
+      {["15m", "1h", "4h", "1d", "2d", "3d", "7d", "15d", "30d", "90d"].map(
+        (value) => (
+          <option key={value} value={value}>
+            {value}
+          </option>
+        ),
+      )}
+    </select>
+  ),
+}));
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({ status: testState.flagStatus }),
@@ -564,9 +602,10 @@ describe("Explore", () => {
       expect(
         screen.getByRole("combobox", { name: "Dataset" }).textContent,
       ).toBe("tool_calls");
-      expect(screen.getByRole("combobox", { name: "Window" }).textContent).toBe(
-        "Last 7 days",
-      );
+      expect(
+        (screen.getByRole("combobox", { name: "Window" }) as HTMLSelectElement)
+          .value,
+      ).toBe("7d");
       expect(screen.queryByText("Nothing has run yet")).toBeNull();
 
       // A table needs only the summary shape, asked exactly as linked.
@@ -584,6 +623,22 @@ describe("Explore", () => {
       expect(summary!.to.getTime() - summary!.from.getTime()).toBe(
         7 * 86_400_000,
       );
+    });
+
+    it("runs a linked absolute range, and will not save it as a widget", () => {
+      const from = Date.UTC(2026, 8, 14, 10);
+      const to = Date.UTC(2026, 8, 14, 12);
+      renderExplore(linkTo({ ...toolCallsTable, range: { from, to } }));
+
+      const asked = testState.bodies.find((body) => body !== null);
+      expect(asked?.from.getTime()).toBe(from);
+      expect(asked?.to.getTime()).toBe(to);
+      expect(
+        (screen.getByRole("combobox", { name: "Window" }) as HTMLSelectElement)
+          .value,
+      ).toBe("custom");
+      const save = screen.getByRole("button", { name: "Save widget" });
+      expect((save as HTMLButtonElement).disabled).toBe(true);
     });
 
     it("runs a linked query once a refreshed catalog can answer it", () => {
@@ -757,9 +812,10 @@ describe("Explore", () => {
       expect(
         screen.getByRole("combobox", { name: "Dataset" }).textContent,
       ).toBe("tool_calls");
-      expect(screen.getByRole("combobox", { name: "Window" }).textContent).toBe(
-        "Last 7 days",
-      );
+      expect(
+        (screen.getByRole("combobox", { name: "Window" }) as HTMLSelectElement)
+          .value,
+      ).toBe("7d");
       expect(urlSpec()).toMatchObject(p95ByTool);
 
       const summary = testState.bodies.findLast((body) => body !== null);
@@ -795,7 +851,7 @@ describe("Explore", () => {
         description: "Who runs the most sessions",
         dataset: "sessions",
         query: {
-          window: "24h",
+          window: "1d",
           grain: "none",
           ungrouped: false,
           dimensions: ["user"],
