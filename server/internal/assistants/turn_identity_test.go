@@ -101,7 +101,7 @@ func TestTurnUserIDLegacyAssistantRunsWithoutCreator(t *testing.T) {
 	project, assistantID, _, _ := insertAssistantFixture(t, db)
 	core := newProvisioningCore(t, db)
 	assistant := assistantRecord{ID: assistantID, ProjectID: project, OrganizationID: "org-test", CreatedByUserID: ""}
-	identity, err := core.turnUserID(t.Context(), assistant, assistantThreadRecord{SourceKind: sourceKindWake}, assistantThreadEventRecord{NormalizedPayloadJSON: []byte(`{"identity_version":1,"requester_user_id":"not-a-member"}`)})
+	identity, err := core.resolveTurnIdentity(t.Context(), assistant, assistantThreadRecord{SourceKind: sourceKindWake}, assistantThreadEventRecord{NormalizedPayloadJSON: []byte(`{"identity_version":1,"requester_user_id":"not-a-member"}`)})
 	require.NoError(t, err)
 	require.Empty(t, identity.UserID)
 	require.False(t, identity.AgentBacked)
@@ -120,13 +120,13 @@ func TestTurnUserIDAgentBackedRequiresMembershipAndProjectAccess(t *testing.T) {
 		return assistantThreadEventRecord{NormalizedPayloadJSON: []byte(`{"identity_version":1,"requester_user_id":"` + requester + `"}`)}
 	}
 
-	_, err = core.turnUserID(t.Context(), record, thread, wake("not-a-member"))
+	_, err = core.resolveTurnIdentity(t.Context(), record, thread, wake("not-a-member"))
 	require.ErrorIs(t, err, ErrTurnIdentity)
-	_, err = core.turnUserID(t.Context(), record, thread, wake("user-2"))
+	_, err = core.resolveTurnIdentity(t.Context(), record, thread, wake("user-2"))
 	require.ErrorIs(t, err, ErrTurnIdentity, "a member without project access is denied, not retried as the owner")
 
 	seedProjectRead(t, db, "user-2", project)
-	identity, err := core.turnUserID(t.Context(), record, thread, wake("user-2"))
+	identity, err := core.resolveTurnIdentity(t.Context(), record, thread, wake("user-2"))
 	require.NoError(t, err)
 	require.Equal(t, "user-2", identity.UserID)
 	require.True(t, identity.HumanKnown, "a wake's captured requester is a known human")
@@ -203,7 +203,7 @@ func TestIngressPayloadCannotPoseAsWakeRequester(t *testing.T) {
 	event, err := assistantsrepo.New(db).GetLatestAssistantThreadEventByThreadID(t.Context(), assistantsrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: result.ThreadID, ProjectID: project})
 	require.NoError(t, err)
 
-	identity, err := core.turnUserID(t.Context(), record, assistantThreadRecord{SourceKind: sourceKindGithub}, assistantThreadEventRecord{NormalizedPayloadJSON: event.NormalizedPayloadJson})
+	identity, err := core.resolveTurnIdentity(t.Context(), record, assistantThreadRecord{SourceKind: sourceKindGithub}, assistantThreadEventRecord{NormalizedPayloadJSON: event.NormalizedPayloadJson})
 	require.NoError(t, err)
 	require.Equal(t, "user-1", identity.UserID, "an ingress payload must not select the turn user")
 	require.False(t, identity.HumanKnown, "the owner fallback is not a known human")

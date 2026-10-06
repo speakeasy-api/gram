@@ -8,11 +8,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // RuntimeBinding is the assistant thread a turn's principal credential was
@@ -100,12 +99,13 @@ func (m *Manager) AuthorizeRuntime(ctx context.Context, header string) (context.
 	if lifecycle.ThreadDeleted || lifecycle.AssistantDeleted || lifecycle.AssistantStatus != "active" {
 		return ctx, nil, oops.C(oops.CodeUnauthorized)
 	}
+	authed, err = m.authz.PrepareContext(authed)
+	if err != nil {
+		return ctx, nil, fmt.Errorf("admit runtime credential: %w", err)
+	}
 	authed = context.WithValue(authed, runtimeChatKey{}, binding.ChatID)
 	authed = contextvalues.SetAssistantPrincipal(authed, contextvalues.AssistantPrincipal{AssistantID: binding.AssistantID, ThreadID: binding.ThreadID})
 	userID := credential.Credential.AuthorizerUserID
-	if credential.Credential.Principal.Type == urn.PrincipalTypeAgent {
-		authed = contextvalues.WithAssistantInvoker(authed, userID)
-	}
 	var claims Claims
 	claims.OrgID = binding.OrganizationID
 	claims.ProjectID = binding.ProjectID.String()

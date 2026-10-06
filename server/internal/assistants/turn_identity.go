@@ -145,9 +145,9 @@ type turnIdentity struct {
 	HumanKnown  bool
 }
 
-// turnUserID returns who a turn acts as. Identity failures wrap
+// resolveTurnIdentity returns who a turn acts as. Identity failures wrap
 // ErrTurnIdentity; storage failures do not.
-func (s *ServiceCore) turnUserID(ctx context.Context, assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) (turnIdentity, error) {
+func (s *ServiceCore) resolveTurnIdentity(ctx context.Context, assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) (turnIdentity, error) {
 	states, err := assistantidentity.States(ctx, s.db, assistant.ProjectID, []uuid.UUID{assistant.ID})
 	if err != nil {
 		return turnIdentity{}, fmt.Errorf("load turn identity state: %w", err)

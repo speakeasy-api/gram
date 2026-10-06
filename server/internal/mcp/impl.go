@@ -34,9 +34,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
-	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -1305,6 +1305,9 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 			}
 		}
 
+		if err := requirePrincipalCredentialProject(ctx, toolset.ProjectID); err != nil {
+			return err
+		}
 		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.APIKeyID != "" {
 			if authCtx.ProjectID != nil && *authCtx.ProjectID != toolset.ProjectID {
 				return oops.E(oops.CodeForbidden, nil, "api key project does not match toolset project")
@@ -1897,6 +1900,9 @@ func (s *Service) TryPublicIdentityAuth(ctx context.Context, r *http.Request, is
 // is true — today that path is exercised only by toolset-backed flows so
 // the resource is a toolset id; remote-backend callers pass false and the
 // id is decorative.
+//
+// Principal credentials are authenticated and admitted as their agent or
+// workload principal, like agent API keys.
 //
 // Each successful strategy stamps its mcpidentity provenance here, at the
 // point of credential validation: assistant tokens are KindAssistant, API

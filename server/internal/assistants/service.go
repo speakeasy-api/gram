@@ -2933,7 +2933,7 @@ func (s *ServiceCore) processEventTurn(
 
 	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
 
-	identity, err := s.turnUserID(ctx, assistant, thread, event)
+	identity, err := s.resolveTurnIdentity(ctx, assistant, thread, event)
 	if err != nil {
 		return nil, err
 	}

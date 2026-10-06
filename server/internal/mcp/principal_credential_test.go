@@ -2,12 +2,14 @@ package mcp_test
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -31,6 +33,8 @@ func TestPrincipalCredentialAuthenticatesAsItsAgent(t *testing.T) {
 	require.NoError(t, err)
 	_, err = agents.CreateAgentPolicyGrant(t.Context(), agentrepo.CreateAgentPolicyGrantParams{OrganizationID: ac.ActiveOrganizationID, AgentID: agent.ID, Scope: string(authz.ScopeMCPConnect), Selectors: selector})
 	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(t.Context(), accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), Scope: string(authz.ScopeMCPConnect), Selectors: selector})
+	require.NoError(t, err)
 	token, _, err := ti.principalCredentials.Mint(principalcredential.Credential{
 		OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
 		Principal: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), AuthorizerUserID: ac.UserID,
@@ -44,6 +48,17 @@ func TestPrincipalCredentialAuthenticatesAsItsAgent(t *testing.T) {
 	actor, ok := contextvalues.AuthenticatedActor(admitted)
 	require.True(t, ok)
 	require.Equal(t, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), actor)
+
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/"+toolset.Slug, nil)
+	request.Header.Set("Authorization", "Bearer "+token)
+	private, err := ti.service.RequirePrivateIdentityAuth(t.Context(), httptest.NewRecorder(), request, false, toolset.ID, "")
+	require.NoError(t, err, "private toolsets without an issuer authenticate principal credentials too")
+	actor, ok = contextvalues.AuthenticatedActor(private)
+	require.True(t, ok)
+	require.Equal(t, urn.PrincipalTypeAgent, actor.Type)
+	private, err = ti.authzEngine.PrepareContext(private)
+	require.NoError(t, err)
+	require.NoError(t, ti.authzEngine.Require(private, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), ac.ProjectID.String())))
 
 	foreign := *endpoint
 	foreign.ToolsetID = uuid.NullUUID{UUID: uuid.New(), Valid: true}

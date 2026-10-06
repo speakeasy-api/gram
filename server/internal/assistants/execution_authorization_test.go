@@ -102,6 +102,14 @@ func TestAgentBackedTurnsRunWithPrincipalCredentials(t *testing.T) {
 		return token
 	}
 
+	narrowed := turn(sourceKindDashboard, `{"text":"hi","user_id":"user-2"}`)
+	ctx, _, err := manager.AuthorizeRuntime(t.Context(), narrowed)
+	require.NoError(t, err)
+	admitted, err := engine.PrepareContext(ctx)
+	require.NoError(t, err)
+	require.Error(t, engine.Require(admitted, connect), "a credential never exceeds what its authorizer could delegate at mint")
+
+	seedMCPConnect(t, db, "user-2", project)
 	human := turn(sourceKindDashboard, `{"text":"hi","user_id":"user-2"}`)
 	ctx, claims, err := manager.AuthorizeRuntime(t.Context(), "Bearer "+human)
 	require.NoError(t, err)
@@ -113,7 +121,7 @@ func TestAgentBackedTurnsRunWithPrincipalCredentials(t *testing.T) {
 	credential, ok := contextvalues.PrincipalCredentialAuthorization(ctx)
 	require.True(t, ok)
 	require.Equal(t, "user-2", credential.AuthorizerUserID)
-	admitted, err := engine.PrepareContext(ctx)
+	admitted, err = engine.PrepareContext(ctx)
 	require.NoError(t, err)
 	require.NoError(t, engine.Require(admitted, connect), "the agent's starting access covers project MCP servers")
 
