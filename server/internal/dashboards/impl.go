@@ -35,7 +35,8 @@ import (
 	widgetsrepo "github.com/speakeasy-api/gram/server/internal/widgets/repo"
 )
 
-// maxNameLength matches the dashboards table's name check.
+// maxNameLength is the longest a dashboard name may be: the API enforces it,
+// and a copy keeps its name within it.
 const maxNameLength = 200
 
 // copySuffix marks a dashboard made by duplication.
