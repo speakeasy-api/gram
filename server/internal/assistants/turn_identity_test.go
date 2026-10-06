@@ -107,7 +107,7 @@ func TestTurnUserIDAgentBackedRequiresMembershipAndProjectAccess(t *testing.T) {
 	require.NoError(t, err)
 	project := newProvisioningProject(t, db, "turn-identity-active")
 	core := newProvisioningCore(t, db)
-	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Turn identity", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive)
+	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Turn identity", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true)
 	require.NoError(t, err)
 	thread := assistantThreadRecord{SourceKind: sourceKindWake}
 	wake := func(requester string) assistantThreadEventRecord {
@@ -175,7 +175,7 @@ func TestIngressPayloadCannotPoseAsWakeRequester(t *testing.T) {
 	require.NoError(t, err)
 	project := newProvisioningProject(t, db, "turn-identity-spoof")
 	core := newProvisioningCore(t, db)
-	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Spoof target", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive)
+	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Spoof target", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true)
 	require.NoError(t, err)
 	seedProjectRead(t, db, "user-1", project)
 	seedProjectRead(t, db, "user-2", project)

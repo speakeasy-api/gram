@@ -25,6 +25,7 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -40,6 +41,7 @@ type Service struct {
 	core             *ServiceCore
 	signaler         WorkflowSignaler
 	bootstrapLimiter *ratelimit.Limiter
+	features         feature.Provider
 }
 
 var (
@@ -58,6 +60,7 @@ func NewService(
 	core *ServiceCore,
 	signaler WorkflowSignaler,
 	bootstrapStore ratelimit.Store,
+	features feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("assistants"))
 	return &Service{
@@ -70,7 +73,23 @@ func NewService(
 		bootstrapLimiter: ratelimit.New(bootstrapStore, "assistant-bootstrap",
 			ratelimit.PerMinute(bootstrapRatePerMin).WithBurst(bootstrapRateBurst),
 			ratelimit.WithMetrics(meterProvider)),
+		features: features,
 	}
+}
+
+// ErrIdentityProvisioningDisabled reports that the organization has not been
+// rolled into assistant workload identity provisioning.
+var ErrIdentityProvisioningDisabled = errors.New("assistant workload identity is not enabled for this organization")
+
+// identityProvisioningEnabled reports whether new assistants in the caller's
+// organization get a dedicated agent. It gates provisioning only: assistants
+// that already have one keep resolving and running when it is off.
+func (s *Service) identityProvisioningEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
+	evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagAgentIdentityCredentials, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
+	if err != nil {
+		s.logger.WarnContext(ctx, "evaluate assistant identity provisioning flag", attr.SlogError(err))
+	}
+	return evaluation == feature.EvaluationEnabled
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -183,6 +202,7 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 		normalizeWarmTTLSeconds(payload.WarmTTLSeconds),
 		normalizeMaxConcurrency(payload.MaxConcurrency),
 		conv.PtrValOrEmpty(payload.Status, StatusActive),
+		s.identityProvisioningEnabled(ctx, authCtx),
 	)
 	if err != nil {
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "create assistant")
@@ -446,7 +466,7 @@ func (s *Service) EnsureManagedAssistant(ctx context.Context, _ *gen.EnsureManag
 		return nil, oops.E(oops.CodeUnauthorized, nil, "the project assistant requires a user identity").LogError(ctx, s.logger)
 	}
 
-	record, err := s.core.EnableManagedAssistant(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID)
+	record, err := s.core.EnableManagedAssistant(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, s.identityProvisioningEnabled(ctx, authCtx))
 	if err != nil {
 		if errors.Is(err, ErrManagedAssistantNameTaken) {
 			return nil, oops.E(oops.CodeConflict, err, "an assistant with the project assistant's name already exists — rename it to enable the built-in assistant").LogError(ctx, s.logger)
@@ -555,6 +575,9 @@ func (s *Service) UpgradeAssistantIdentity(ctx context.Context, payload *gen.Upg
 	}
 	if authCtx.UserID == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "upgrade assistant identity requires a user identity").LogWarn(ctx, s.logger)
+	}
+	if !s.identityProvisioningEnabled(ctx, authCtx) {
+		return nil, oops.E(oops.CodeForbidden, ErrIdentityProvisioningDisabled, "assistant workload identity is not enabled for this organization").LogWarn(ctx, s.logger)
 	}
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {

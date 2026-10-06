@@ -567,6 +567,7 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 		authz:    authzEngine,
 		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn)),
 		signaler: &stubWorkflowSignaler{signalledThreads: nil},
+		features: identityFlags(true),
 	}
 
 	sessionID := "session-test"
