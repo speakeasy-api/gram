@@ -129,7 +129,7 @@ impl KnownTools {
             .map(|(server, _)| server.clone())
     }
 
-    fn record(&self, server: &str, tools: BTreeSet<String>) {
+    pub(crate) fn record(&self, server: &str, tools: BTreeSet<String>) {
         self.0
             .write()
             .unwrap_or_else(PoisonError::into_inner)
