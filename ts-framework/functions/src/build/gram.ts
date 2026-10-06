@@ -180,23 +180,11 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
   logger.info(`Staging ${zipFilename} with slug: ${slug}`);
   await $`${gramCLI} stage ${stageArgs}`;
 
-  const pushArgs = [
-    "--log-pretty=false",
-    "--api-url",
-    "http://localhost:8080",
-    "push",
-    "--config",
-    config.deployStagingFile,
-  ];
-  if (config.deployProject) {
-    pushArgs.push("--project", config.deployProject);
-  }
-
   logger.info("Deploying function with Gram CLI");
 
   const pushcmd = $({
     stdio: ["pipe", "pipe", "pipe"],
-  })`${gramCLI} ${pushArgs}`
+  })`${gramCLI} ${pushArgs(config)}`
     .quiet()
     .nothrow();
 
@@ -216,6 +204,23 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
   logger.info("Gram Function deployed successfully");
 
   await handleOpenBrowser(logger, cwd, config);
+}
+
+/**
+ * Arguments for the CLI push command. The API URL is left to the CLI, which
+ * resolves it from --api-url, GRAM_API_URL or the active profile.
+ */
+export function pushArgs(config: ParsedUserConfig): string[] {
+  const args = [
+    "--log-pretty=false",
+    "push",
+    "--config",
+    config.deployStagingFile,
+  ];
+  if (config.deployProject) {
+    args.push("--project", config.deployProject);
+  }
+  return args;
 }
 
 async function resolvePackageJson(
