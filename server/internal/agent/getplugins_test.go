@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
@@ -15,6 +16,7 @@ import (
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -383,6 +385,41 @@ func TestGetPlugins_DistinctOverridesYieldSeparateMarketplaces(t *testing.T) {
 	require.Contains(t, byName, "team-beta", "override project surfaces under its published name")
 	require.Contains(t, byName[wantMarketplace], "default-token")
 	require.Contains(t, byName["team-beta"], "beta-token")
+}
+
+// TestGetPlugins_EmitsFrozenPublishedName pins the frozen-name contract at the
+// endpoint: once a project records the name it published under, the endpoint
+// emits that name rather than recomputing it (here the default project's bare
+// org-derived name differs), so an org rename, a slug change, or a new default
+// project cannot point devices at a name the repo does not carry.
+func TestGetPlugins_EmitsFrozenPublishedName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	const frozen = "legacy-org-speakeasy"
+	snapshot, err := naming.WithPublishedMarketplaceName(nil, frozen)
+	require.NoError(t, err)
+	_, err = pluginsrepo.New(ti.conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
+		ProjectID:                ti.projectID,
+		InstallationID:           1,
+		RepoOwner:                "speakeasy",
+		RepoName:                 "plugins-frozen",
+		MarketplaceToken:         pgtype.Text{String: "frozen-token", Valid: true},
+		PublishedMcpFingerprints: nil,
+		PublishedHooksVersion:    pgtype.Text{},
+		PublishedHooksConfig:     snapshot,
+	})
+	require.NoError(t, err)
+
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
+	require.NoError(t, err)
+
+	require.NotEqual(t, wantMarketplace, frozen)
+	require.Len(t, res.Marketplaces, 1)
+	require.Equal(t, frozen, res.Marketplaces[0].Name)
+	for _, p := range res.Plugins {
+		require.Equal(t, frozen, p.MarketplaceName)
+	}
 }
 
 // TestGetPlugins_NonDefaultProjectWithoutAssignmentHidden pins the
