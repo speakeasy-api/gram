@@ -60,6 +60,9 @@ export const AUDIT_ACTIONS = [
   "custom_domains:create",
   "custom_domains:delete",
   "custom_domains:update",
+  "dashboard:create",
+  "dashboard:delete",
+  "dashboard:update",
   "data_export_route:create",
   "data_export_route:delete",
   "data_export_route:pause",
@@ -722,6 +725,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated widget";
     case "widget:delete":
       return "deleted widget";
+    case "dashboard:create":
+      return "created dashboard";
+    case "dashboard:update":
+      return "updated dashboard";
+    case "dashboard:delete":
+      return "deleted dashboard";
 
     case "remote-mcp:create":
       return "added remote MCP server";
