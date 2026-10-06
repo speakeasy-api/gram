@@ -7,6 +7,7 @@ import {
   matchRanges,
   needsWholeMessageMask,
   resultIsSpanlessSensitive,
+  resultsAreSensitive,
   withJsonEscaped,
 } from "@/pages/chatLogs/chatHelpers";
 import { argsToString, messageText } from "@/pages/chatLogs/transcript";
@@ -75,18 +76,22 @@ function excerptMessage(message: ChatMessage): ExcerptMessage {
   }
 }
 
-/** Splits `text` at every masked match into plain and flagged pieces. */
+/** Splits `text` at every match into plain and flagged pieces. A message
+ * holding a sensitive match masks all its matches, as the transcript does;
+ * only the current finding's match is lifted by its reveal. */
 function MaskedText({
   text,
   matches,
+  masked,
   currentMatch,
-  revealed,
+  currentShown,
   fingerprintForMatch,
 }: {
   text: string;
   matches: string[];
+  masked: boolean;
   currentMatch: string | undefined;
-  revealed: boolean;
+  currentShown: boolean;
   fingerprintForMatch: (value: string) => string | undefined;
 }): ReactNode {
   const ranges = matchRanges(text, matches);
@@ -100,7 +105,7 @@ function MaskedText({
       currentMatch !== undefined &&
       (value === currentMatch || value === jsonEscaped(currentMatch));
     nodes.push(
-      revealed ? (
+      !masked || (selected && currentShown) ? (
         <RevealedSpan key={k} selected={selected}>
           {value}
         </RevealedSpan>
@@ -233,6 +238,15 @@ export function FindingContext({
     () => withJsonEscaped(getMatchStrings(chatResults)),
     [chatResults],
   );
+  const sensitiveMatches = useMemo(
+    () =>
+      withJsonEscaped(
+        getMatchStrings(chatResults?.filter((r) => resultsAreSensitive([r]))),
+      ),
+    [chatResults],
+  );
+  const masksSpans = (text: string): boolean =>
+    matchRanges(text, sensitiveMatches).length > 0;
   const currentMatch = chatResults?.find((r) => r.id === result.id)?.match;
   const fingerprintForMatch = (value: string) =>
     chatResults?.find(
@@ -251,18 +265,25 @@ export function FindingContext({
   const resultIsWhole =
     kind === "judge" ||
     (kind === "analyzer" && resultIsSpanlessSensitive(result));
-  // Spanless findings, or matches that could not all be loaded, leave only
-  // the whole message to mask.
-  const masksWholeMessage = (messageId: string): boolean =>
+  // Other spanless findings, or matches that could not all be loaded, leave
+  // only the whole message to mask, and this finding's reveal doesn't cover them.
+  const othersMaskWholeMessage = (messageId: string): boolean =>
     !chatResultsComplete ||
-    (resultIsWhole && messageId === result.chatMessageId) ||
     needsWholeMessageMask(
-      chatResults?.filter((r) => r.chatMessageId === messageId),
+      chatResults?.filter(
+        (r) => r.chatMessageId === messageId && r.id !== result.id,
+      ),
     );
+  const ownsWholeMessage = (messageId: string): boolean =>
+    resultIsWhole && messageId === result.chatMessageId;
+  // The toggle reveals only this finding, so it shows only when that is masked.
+  const revealable =
+    resultIsWhole || (kind === "chat" && resultsAreSensitive([result]));
   const maskable =
-    kind === "chat" ||
-    resultIsWhole ||
-    excerpt.some((m) => masksWholeMessage(m.id));
+    revealable ||
+    excerpt.some(
+      (m) => othersMaskWholeMessage(m.id) || masksSpans(excerptMessage(m).text),
+    );
 
   const forbidden =
     chatQuery.error instanceof GramError && chatQuery.error.statusCode === 403;
@@ -328,6 +349,7 @@ export function FindingContext({
         {excerpt.map((raw, i) => {
           const message = excerptMessage(raw);
           const flagged = raw.id === result.chatMessageId;
+          const ownMask = ownsWholeMessage(raw.id) && !shown;
           return (
             <ExcerptRow
               key={raw.id}
@@ -336,18 +358,19 @@ export function FindingContext({
               first={i === 0}
               rating={rating}
             >
-              {masksWholeMessage(raw.id) && !shown ? (
+              {othersMaskWholeMessage(raw.id) || ownMask ? (
                 <RedactionChip
-                  label={`${flagged ? "Flagged event" : "Masked message"} · ${message.text.length.toLocaleString()} chars${canReveal ? " · reveal" : ""}`}
+                  label={`${flagged ? "Flagged event" : "Masked message"} · ${message.text.length.toLocaleString()} chars${ownMask && canReveal ? " · reveal" : ""}`}
                   locked={!canReveal}
-                  onClick={canReveal ? onRequestReveal : undefined}
+                  onClick={ownMask && canReveal ? onRequestReveal : undefined}
                 />
               ) : (
                 <MaskedText
                   text={message.text}
-                  matches={kind === "chat" || !flagged ? matches : []}
+                  matches={matches}
+                  masked={masksSpans(message.text)}
                   currentMatch={currentMatch}
-                  revealed={shown}
+                  currentShown={shown}
                   fingerprintForMatch={fingerprintForMatch}
                 />
               )}
@@ -362,7 +385,7 @@ export function FindingContext({
     <DrawerSection
       label="In context"
       aside={
-        maskable && canReveal ? (
+        revealable && canReveal ? (
           <RevealToggleButton
             revealed={revealed}
             onToggle={onToggleReveal}
