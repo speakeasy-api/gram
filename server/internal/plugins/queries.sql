@@ -1163,17 +1163,8 @@ UPDATE plugins SET auto_created = @auto_created WHERE id = @id AND project_id = 
 
 -- Test fixtures for role setup lifecycle and transactional fault injection.
 
--- name: EnableRoleSetupFeatureFixture :exec
-INSERT INTO organization_features (organization_id, feature_name) VALUES ($1, 'automatic-role-distribution') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
-
 -- name: DisableRoleSetupOrganizationFixture :exec
 UPDATE organization_metadata SET disabled_at = clock_timestamp() WHERE id = $1;
-
--- name: DisableRoleSetupFeatureFixture :exec
-UPDATE organization_features SET deleted_at = clock_timestamp() WHERE organization_id = $1 AND feature_name = 'automatic-role-distribution';
-
--- name: RestoreRoleSetupFeatureFixture :exec
-UPDATE organization_features SET deleted_at = NULL WHERE organization_id = $1 AND feature_name = 'automatic-role-distribution';
 
 -- name: DeleteRoleSetupRoleFixture :exec
 UPDATE organization_roles SET deleted_at = clock_timestamp() WHERE 'role:organization:' || id::text = @role_urn::text AND organization_id = @organization_id;

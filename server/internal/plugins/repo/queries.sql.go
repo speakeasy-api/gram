@@ -402,19 +402,12 @@ func (q *Queries) DeleteRoleSetupWorkOSRoleFixture(ctx context.Context, arg Dele
 	return err
 }
 
-const disableRoleSetupFeatureFixture = `-- name: DisableRoleSetupFeatureFixture :exec
-UPDATE organization_features SET deleted_at = clock_timestamp() WHERE organization_id = $1 AND feature_name = 'automatic-role-distribution'
-`
-
-func (q *Queries) DisableRoleSetupFeatureFixture(ctx context.Context, organizationID string) error {
-	_, err := q.db.Exec(ctx, disableRoleSetupFeatureFixture, organizationID)
-	return err
-}
-
 const disableRoleSetupOrganizationFixture = `-- name: DisableRoleSetupOrganizationFixture :exec
+
 UPDATE organization_metadata SET disabled_at = clock_timestamp() WHERE id = $1
 `
 
+// Test fixtures for role setup lifecycle and transactional fault injection.
 func (q *Queries) DisableRoleSetupOrganizationFixture(ctx context.Context, id string) error {
 	_, err := q.db.Exec(ctx, disableRoleSetupOrganizationFixture, id)
 	return err
@@ -428,17 +421,6 @@ END $$
 
 func (q *Queries) DropRoleSetupPublicationFailureTriggerFixture(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, dropRoleSetupPublicationFailureTriggerFixture)
-	return err
-}
-
-const enableRoleSetupFeatureFixture = `-- name: EnableRoleSetupFeatureFixture :exec
-
-INSERT INTO organization_features (organization_id, feature_name) VALUES ($1, 'automatic-role-distribution') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
-`
-
-// Test fixtures for role setup lifecycle and transactional fault injection.
-func (q *Queries) EnableRoleSetupFeatureFixture(ctx context.Context, organizationID string) error {
-	_, err := q.db.Exec(ctx, enableRoleSetupFeatureFixture, organizationID)
 	return err
 }
 
@@ -2830,15 +2812,6 @@ func (q *Queries) ResolvePluginPublishActor(ctx context.Context, arg ResolvePlug
 	var user_id string
 	err := row.Scan(&user_id)
 	return user_id, err
-}
-
-const restoreRoleSetupFeatureFixture = `-- name: RestoreRoleSetupFeatureFixture :exec
-UPDATE organization_features SET deleted_at = NULL WHERE organization_id = $1 AND feature_name = 'automatic-role-distribution'
-`
-
-func (q *Queries) RestoreRoleSetupFeatureFixture(ctx context.Context, organizationID string) error {
-	_, err := q.db.Exec(ctx, restoreRoleSetupFeatureFixture, organizationID)
-	return err
 }
 
 const restoreRoleSetupProjectFixture = `-- name: RestoreRoleSetupProjectFixture :exec

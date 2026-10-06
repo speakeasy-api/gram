@@ -43,11 +43,6 @@ func TestRoleSetupPublishesExistingGrantedServer(t *testing.T) {
 	const artifact = "cursor-plugins/setup-backfill-cursor/mcp.json"
 	require.NotContains(t, string(publisher.lastPushedFiles[artifact]), server.McpSlug.String)
 	fixtures := testrepo.New(ti.conn)
-	enabled, err := fixtures.SourceRoleDistributionSetupEnabled(ctx, ac.ActiveOrganizationID)
-	require.NoError(t, err)
-	if !enabled {
-		require.NoError(t, fixtures.PipelineEnableRoleDistribution(ctx, ac.ActiveOrganizationID))
-	}
 	before, err := fixtures.ListPublishOutboxRows(ctx)
 	require.NoError(t, err)
 	beforeIDs := make(map[int64]bool, len(before))

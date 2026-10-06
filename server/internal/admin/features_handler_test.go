@@ -56,7 +56,7 @@ func TestAttach_MountsOrganizationFeaturesRoutes(t *testing.T) {
 
 	for _, method := range []string{http.MethodGet, http.MethodPost} {
 		for _, cookie := range []string{"", constants.SessionCookie} {
-			req := httptest.NewRequest(method, "/admin/organization.features", bytes.NewBufferString(`{"organization_id":"org_role_rollout","feature_name":"automatic-role-distribution","enabled":true}`))
+			req := httptest.NewRequest(method, "/admin/organization.features", bytes.NewBufferString(`{"organization_id":"org_role_rollout","feature_name":"sso","enabled":true}`))
 			if cookie != "" {
 				req.AddCookie(&http.Cookie{Name: cookie, Value: "customer-session"})
 				req.Header.Set("Authorization", "Bearer customer-key")
@@ -78,7 +78,7 @@ func TestAttach_MountsOrganizationFeaturesRoutes(t *testing.T) {
 	sessionID := makeAdminFeatureSession(t, t.Context(), nonstaff, "person@external.test")
 	nonstaffMux := goahttp.NewMuxer()
 	Attach(nonstaffMux, nonstaff)
-	req := httptest.NewRequest(http.MethodPost, "/admin/organization.features", bytes.NewBufferString(`{"organization_id":"org_role_rollout","feature_name":"automatic-role-distribution","enabled":true}`))
+	req := httptest.NewRequest(http.MethodPost, "/admin/organization.features", bytes.NewBufferString(`{"organization_id":"org_role_rollout","feature_name":"sso","enabled":true}`))
 	req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
 	rec := httptest.NewRecorder()
 	SessionMiddleware(nonstaffMux).ServeHTTP(rec, req)
@@ -115,7 +115,7 @@ func TestGetOrganizationFeatures_ReturnsTwentyOneFields(t *testing.T) {
 		"skills_enabled": {}, "skill_capture_metadata_only": {}, "ai_platform_push_integrations_enabled": {},
 		"platform_mcp_enabled": {}, "customer_managed_encryption_keys_enabled": {},
 		"remote_session_auto_refresh_enabled": {}, "remote_session_auto_refresh_enforced_enabled": {},
-		"consent_tool_filtering_enabled": {}, "network_ingress_enabled": {}, "session_portability_enabled": {}, "device_agent": {}, "automatic_role_distribution": {},
+		"consent_tool_filtering_enabled": {}, "network_ingress_enabled": {}, "session_portability_enabled": {}, "device_agent": {},
 	}
 	gotKeys := make(map[string]struct{}, len(result))
 	for key := range result {
@@ -267,6 +267,7 @@ func TestSetOrganizationFeature_RejectsInvalidRequests(t *testing.T) {
 	sessionID := makeAdminFeatureSession(t, ctx, svc, "operator@example.com")
 
 	for name, body := range map[string]string{
+		"retired feature": `{ "organization_id":"` + orgID + `","feature_name":"automatic-role-distribution","enabled":true}`,
 		"invalid feature": `{"organization_id":"` + orgID + `","feature_name":"not_a_feature","enabled":true}`,
 		"missing enabled": `{"organization_id":"` + orgID + `","feature_name":"logs"}`,
 		"unknown field":   `{"organization_id":"` + orgID + `","feature_name":"logs","enabled":true,"extra":true}`,
@@ -317,31 +318,4 @@ func makeAdminFeatureSession(t *testing.T, ctx context.Context, svc *Service, em
 	})
 	require.NoError(t, err)
 	return sessionID
-}
-
-func TestSetOrganizationFeature_AutomaticRoleDistributionReadback(t *testing.T) {
-	t.Parallel()
-	ctx, svc, conn := newTestAdminService(t)
-	const orgID = "org_admin_role_rollout"
-	now := time.Now().UTC()
-	require.NoError(t, testrepo.New(conn).CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{
-		ID: orgID, Name: "Role Rollout Org", Slug: "role-rollout", GramAccountType: "enterprise",
-		FreeTrialStartedAt: conv.ToPGTimestamptz(now), FreeTrialEndsAt: conv.ToPGTimestamptz(now.Add(14 * 24 * time.Hour)),
-	}))
-	mux := goahttp.NewMuxer()
-	Attach(mux, svc)
-	handler := SessionMiddleware(mux)
-	sessionID := makeAdminFeatureSession(t, ctx, svc, "operator@example.com")
-	for _, enabled := range []bool{true, true, false, true} {
-		result := setAdminOrganizationFeature(t, handler, sessionID, orgID, productfeatures.FeatureAutomaticRoleDistribution, enabled)
-		require.Equal(t, enabled, result.AutomaticRoleDistribution)
-		req := httptest.NewRequest(http.MethodGet, "/admin/organization.features?organization_id="+orgID, nil)
-		req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
-		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, req)
-		require.Equal(t, http.StatusOK, rec.Code)
-		var readback adminOrganizationFeaturesResponse
-		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &readback))
-		require.Equal(t, enabled, readback.AutomaticRoleDistribution)
-	}
 }

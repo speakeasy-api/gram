@@ -57,15 +57,6 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 		}
 		return false, nil
 	}
-	// This row lock serializes completion with disabling the rollout feature.
-	var featureID int64
-	err = tx.QueryRow(ctx, `SELECT id FROM organization_features WHERE organization_id = $1 AND feature_name = 'automatic-role-distribution' AND deleted IS FALSE FOR UPDATE`, organizationID).Scan(&featureID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return skip()
-	}
-	if err != nil {
-		return false, fmt.Errorf("lock role setup feature gate: %w", err)
-	}
 	var activeOrganization string
 	err = tx.QueryRow(ctx, `SELECT id FROM organization_metadata WHERE id = $1 AND disabled_at IS NULL FOR SHARE`, organizationID).Scan(&activeOrganization)
 	if errors.Is(err, pgx.ErrNoRows) {

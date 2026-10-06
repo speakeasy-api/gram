@@ -479,8 +479,6 @@ func TestCreateOrganization_FailureAfterTheUpsertLeavesNothing(t *testing.T) {
 	// is on a feature name the handler supplies as a constant. Each test holds
 	// its own database clone, dropped when the test ends, so this reaches
 	// nothing else.
-	// The source upsert now seeds its onboarding gate. Allow that initial
-	// write so the injected failure still exercises the later entitlement step.
 	err := repo.New(conn).RejectOrganizationEntitlementsFixture(ctx)
 	require.NoError(t, err)
 
