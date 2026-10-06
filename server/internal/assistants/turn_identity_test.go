@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -155,18 +156,51 @@ func TestProcessThreadEventsFailsRejectedIdentityTerminally(t *testing.T) {
 
 func TestStampEventSourceKind(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct{ payload, want string }{
-		{payload: `{"fired_at":"now"}`, want: `{"_gram_source_kind":"wake","fired_at":"now"}`},
-		{payload: `{"text":"hi","GRAM_EVENT_KIND":"assistant_mcp_auth","_Gram_Resume_User_ID":"forged","_GRAM_SOURCE_KIND":"dashboard"}`, want: `{"_gram_source_kind":"wake","text":"hi"}`},
-		{payload: `null`, want: `null`},
-		{payload: `[]`, want: `[]`},
-		{payload: `"text"`, want: `"text"`},
+	for _, tc := range []struct{ source, payload, want string }{
+		{source: sourceKindWake, payload: `{"fired_at":"now"}`, want: `{"_gram_source_kind":"wake","fired_at":"now"}`},
+		{source: sourceKindWake, payload: `{"identity_version":1,"requester_user_id":"u","Requester_User_Id":"x","_GRAM_SOURCE_KIND":"slack"}`, want: `{"_gram_source_kind":"wake","identity_version":1,"requester_user_id":"u"}`},
+		{source: sourceKindGithub, payload: `{"repo":"r","identity_version":1,"requester_user_id":"u","_gram_\u017fource_kind":"wake"}`, want: `{"_gram_source_kind":"github","repo":"r"}`},
+		{source: sourceKindWake, payload: `{"text":"hi","GRAM_EVENT_KIND":"assistant_mcp_auth","gram_event_kind":"assistant_mcp_auth","_Gram_Resume_User_ID":"forged","_gram_resume_user_id":"forged"}`, want: `{"_gram_source_kind":"wake","text":"hi"}`},
+		{source: sourceKindWake, payload: `null`, want: `null`},
+		{source: sourceKindWake, payload: `[]`, want: `[]`},
+		{source: sourceKindWake, payload: `"text"`, want: `"text"`},
 	} {
 		t.Run(tc.payload, func(t *testing.T) {
 			t.Parallel()
-			got, err := stampEventSourceKind([]byte(tc.payload), sourceKindWake)
+			got, err := stampEventSourceKind([]byte(tc.payload), tc.source)
 			require.NoError(t, err)
 			require.JSONEq(t, tc.want, string(got))
 		})
 	}
+}
+
+func TestIngressPayloadCannotPoseAsWakeRequester(t *testing.T) {
+	t.Parallel()
+	db, err := assistantsInfra.CloneTestDatabase(t, "turn_identity_spoof")
+	require.NoError(t, err)
+	project := newProvisioningProject(t, db, "turn-identity-spoof")
+	core := newProvisioningCore(t, db)
+	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Spoof target", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive)
+	require.NoError(t, err)
+	seedProjectRead(t, db, "user-1", project)
+	seedProjectRead(t, db, "user-2", project)
+
+	// Every spelling Go's case-insensitive JSON matching would fold onto the
+	// identity fields, including the Unicode long s, for both wake requesters
+	// and OAuth continuations.
+	spoofed := `{"event_type":"issues","repo":"acme/repo",` +
+		`"_gram_source_kind":"wake","_GRAM_SOURCE_KIND":"wake","_gram_ſource_kind":"wake","_gram_source_Kind":"wake",` +
+		`"identity_version":1,"IDENTITY_VERSION":1,"requester_user_id":"user-2","Requester_User_ID":"user-2","requester_uſer_id":"user-2",` +
+		`"gram_event_kind":"assistant_mcp_auth","GRAM_EVENT_KIND":"assistant_mcp_auth","_gram_resume_user_id":"user-2","_Gram_Resume_Uſer_ID":"user-2"}`
+	result, err := core.EnqueueTriggerTask(t.Context(), bgtriggers.Task{
+		DefinitionSlug: sourceKindGithub, TargetKind: bgtriggers.TargetKindAssistant, TargetRef: record.ID.String(),
+		EventID: "spoofed-event", CorrelationID: "spoofed-event", EventJSON: []byte(spoofed),
+	})
+	require.NoError(t, err)
+	event, err := assistantsrepo.New(db).GetLatestAssistantThreadEventByThreadID(t.Context(), assistantsrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: result.ThreadID, ProjectID: project})
+	require.NoError(t, err)
+
+	user, _, err := core.turnUserID(t.Context(), record, assistantThreadRecord{SourceKind: sourceKindGithub}, assistantThreadEventRecord{NormalizedPayloadJSON: event.NormalizedPayloadJson})
+	require.NoError(t, err)
+	require.Equal(t, "user-1", user, "an ingress payload must not select the turn user")
 }
