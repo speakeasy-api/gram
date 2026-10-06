@@ -198,17 +198,41 @@ describe("move guard", () => {
     expect(alreadyMoved(key, 40_000)).toBe(true);
   });
 
-  it("drops expired moves when recording a new one", () => {
+  it("stops a slow loop after three moves in ten minutes", () => {
+    const key = moveKey("org-1", "https://ai.example.com/acme");
+    // Each hop outlasts the short window, so only the count can stop it.
+    recordMove(key, 0);
+    expect(alreadyMoved(key, 20_000)).toBe(false);
+    recordMove(key, 20_000);
+    expect(alreadyMoved(key, 40_000)).toBe(false);
+    recordMove(key, 40_000);
+
+    expect(alreadyMoved(key, 60_000)).toBe(true);
+    expect(alreadyMoved(key, 599_999)).toBe(true);
+    // The first move has aged out, so one more is allowed.
+    expect(alreadyMoved(key, 600_000)).toBe(false);
+  });
+
+  it("counts moves per organization and host", () => {
+    const key = moveKey("org-1", "https://ai.example.com/acme");
+    recordMove(key, 0);
+    recordMove(key, 20_000);
+    recordMove(key, 40_000);
+
+    expect(
+      alreadyMoved(moveKey("org-2", "https://ai.example.com/acme"), 60_000),
+    ).toBe(false);
+  });
+
+  it("drops moves older than ten minutes when recording a new one", () => {
     const old = moveKey("org-1", "https://ai.example.com/acme");
     const fresh = moveKey("org-2", "https://ai.example.com/acme");
     recordMove(old, 0);
-    recordMove(fresh, 60_000);
+    recordMove(fresh, 600_000);
 
     expect(
-      Object.keys(
-        JSON.parse(sessionStorage.getItem("organizationHostMoveTimes")!),
-      ),
-    ).toEqual([fresh]);
+      JSON.parse(sessionStorage.getItem("organizationHostMoveTimes")!),
+    ).toEqual({ [fresh]: [600_000] });
   });
 
   it("ignores the old permanent move list", () => {
@@ -224,7 +248,11 @@ describe("move guard", () => {
   it.each([
     ["corrupt JSON", "{not json"],
     ["a list", JSON.stringify(["org-1 ai.example.com"])],
-    ["a non-numeric time", JSON.stringify({ "org-1 ai.example.com": "now" })],
+    ["a non-numeric time", JSON.stringify({ "org-1 ai.example.com": ["now"] })],
+    [
+      "a time that is not a list",
+      JSON.stringify({ "org-1 ai.example.com": Date.now() }),
+    ],
   ])("ignores a record holding %s", (_name, stored) => {
     sessionStorage.setItem("organizationHostMoveTimes", stored);
     expect(alreadyMoved(moveKey("org-1", "https://ai.example.com/acme"))).toBe(

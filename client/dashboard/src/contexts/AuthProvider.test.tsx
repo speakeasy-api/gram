@@ -978,21 +978,23 @@ describe("AuthProvider organization host", () => {
     );
     const start = Date.now();
     const now = vi.spyOn(Date, "now").mockReturnValue(start);
+    try {
+      renderGate(PAGE);
+      await waitFor(() => {
+        expect(replaceSpy).toHaveBeenCalledTimes(1);
+      });
+      cleanup();
 
-    renderGate(PAGE);
-    await waitFor(() => {
-      expect(replaceSpy).toHaveBeenCalledTimes(1);
-    });
-    cleanup();
-
-    // The person returns to the old host later in the same tab.
-    now.mockReturnValue(start + 16_000);
-    renderGate(PAGE);
-    await waitFor(() => {
-      expect(replaceSpy).toHaveBeenCalledTimes(2);
-    });
-    expect(replaceSpy).toHaveBeenLastCalledWith(transferTo(PAGE));
-    now.mockRestore();
+      // The person returns to the old host later in the same tab.
+      now.mockReturnValue(start + 16_000);
+      renderGate(PAGE);
+      await waitFor(() => {
+        expect(replaceSpy).toHaveBeenCalledTimes(2);
+      });
+      expect(replaceSpy).toHaveBeenLastCalledWith(transferTo(PAGE));
+    } finally {
+      now.mockRestore();
+    }
   });
 });
 
