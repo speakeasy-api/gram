@@ -75,5 +75,5 @@ func TestConfig_Defaults(t *testing.T) {
 
 	require.Equal(t, 15*time.Second, llmanalyzer.DefaultTimeout)
 	require.Equal(t, 1024, llmanalyzer.DefaultMaxTokens)
-	require.Equal(t, "risk-judge-4b", llmanalyzer.DefaultModel)
+	require.Equal(t, "risk-judge-9b", llmanalyzer.DefaultModel)
 }
