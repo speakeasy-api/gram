@@ -96,6 +96,7 @@ brews:
   # Legacy formulas: install the speakeasy binary under the gram name so
   # existing installs and scripts keep working. They are deprecated in
   # Homebrew, which warns on install and upgrade but keeps them installable.
+  # Homebrew prints "<name> has been deprecated because it <because>!".
   # deprecate! leaves out replacement_formula: older Homebrew versions don't
   # know that keyword and would fail to load the formula.
   - name: gram
@@ -108,7 +109,7 @@ brews:
     description: Speakeasy AI Control Plane CLI (deprecated gram command; use the cli formula)
     license: AGPL-3.0-only
     custom_block: |
-      deprecate! date: "2026-10-06", because: "is renamed to speakeasy: brew install speakeasy-api/tap/cli"
+      deprecate! date: "2026-10-06", because: "has been renamed to speakeasy (brew install speakeasy-api/tap/cli)"
     install: |
       bin.install "speakeasy" => "gram"
     test: |
@@ -124,7 +125,7 @@ brews:
     description: Speakeasy AI Control Plane CLI (deprecated gram command; use the cli formula)
     license: AGPL-3.0-only
     custom_block: |
-      deprecate! date: "2026-10-06", because: "is renamed to speakeasy: brew install speakeasy-api/tap/cli"
+      deprecate! date: "2026-10-06", because: "has been renamed to speakeasy (brew install speakeasy-api/tap/cli)"
     install: |
       bin.install "speakeasy" => "gram"
     test: |
