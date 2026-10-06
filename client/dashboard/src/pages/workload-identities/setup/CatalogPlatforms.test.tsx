@@ -190,14 +190,6 @@ it("opens the guided setup from the empty state's Set one up", () => {
   expect(currentStep()).toBe("Step 1: Before you start");
 });
 
-it("does not take a platform with the same issuer but other keys for the catalog's", () => {
-  policy.issuers = [
-    { ...claudeTagIssuer, jwksUri: "https://keys.example.com/jwks.json" },
-  ];
-  renderPage("/access-hub/catalog/claude-tag");
-  expect(screen.queryByTestId("issuer-detail")).toBeNull();
-});
-
 it("offers a retry rather than an empty grid when the catalog fails to load", () => {
   catalogQuery.isError = true;
   render(

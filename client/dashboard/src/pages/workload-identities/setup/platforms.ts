@@ -118,18 +118,12 @@ function optional(value: string): string | undefined {
 
 /**
  * The trusted platform an entry corresponds to, if the organization trusts it.
- * Matched on the issuer and JWKS URLs until rows carry the catalog key they
- * were created from (AIM-374). The issuer alone is not enough: two rows may
- * share an issuer URL with different key URLs, and only the one fetching the
- * entry's keys verifies the platform's tokens.
+ * Matched on the issuer URL, as admitting a subject is, until rows carry the
+ * catalog key they were created from (AIM-374).
  */
 export function connectedIssuer(
   entry: CatalogEntry,
   issuers: WorkloadIssuer[],
 ): WorkloadIssuer | undefined {
-  return issuers.find(
-    (issuer) =>
-      issuer.issuer === entry.issuer.value &&
-      issuer.jwksUri === entry.jwksUri.value,
-  );
+  return issuers.find((issuer) => issuer.issuer === entry.issuer.value);
 }
