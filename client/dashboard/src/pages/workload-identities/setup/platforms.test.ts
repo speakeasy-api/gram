@@ -30,25 +30,38 @@ function admission(overrides: Partial<WorkloadAdmission>): WorkloadAdmission {
   };
 }
 
-it("finds the organization-wide rule a subject would repeat", () => {
+const wildcard = {
+  subject: "wimse://example/org-1/*",
+  matchKind: "wildcard",
+} as const;
+
+it("finds the organization-wide rule the values would repeat", () => {
   const rule = admission({});
-  expect(existingRule(entry, [rule], rule.subject)).toBe(rule);
+  expect(existingRule(entry, [rule], wildcard)).toBe(rule);
   expect(
-    existingRule(entry, [rule], "wimse://example/org-2/*"),
+    existingRule(entry, [rule], {
+      ...wildcard,
+      subject: "wimse://example/org-2/*",
+    }),
+  ).toBeUndefined();
+});
+
+it("does not take an exact rule ending in * for the wildcard rule", () => {
+  expect(
+    existingRule(entry, [admission({ matchKind: "exact" })], wildcard),
   ).toBeUndefined();
 });
 
 it("ignores a rule under another issuer or in a project", () => {
-  const subject = "wimse://example/org-1/*";
   expect(
     existingRule(
       entry,
       [admission({ issuer: "https://other.example.com" })],
-      subject,
+      wildcard,
     ),
   ).toBeUndefined();
   expect(
-    existingRule(entry, [admission({ projectId: "project-1" })], subject),
+    existingRule(entry, [admission({ projectId: "project-1" })], wildcard),
   ).toBeUndefined();
 });
 

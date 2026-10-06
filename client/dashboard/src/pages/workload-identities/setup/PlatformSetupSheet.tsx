@@ -110,7 +110,7 @@ export function PlatformSetupSheet({
   const conflicting =
     rule === null || rule.subject === admittedSubject
       ? undefined
-      : existingRule(entry, admissions, rule.subject);
+      : existingRule(entry, admissions, rule);
   const ruleConflict =
     conflicting === undefined
       ? null
@@ -164,6 +164,9 @@ export function PlatformSetupSheet({
   const create = async () => {
     if (rule === null || agentId === "" || creating) return;
     setCreating(true);
+    // Registering the issuer conflicts on a duplicate name, admitting the rule
+    // on a duplicate rule; only the second means the values are taken.
+    let admitting = false;
     try {
       if (!isTrusted) {
         await registerIssuer.mutateAsync({
@@ -179,6 +182,7 @@ export function PlatformSetupSheet({
         });
         setTrusted(true);
       }
+      admitting = true;
       await admitSubject.mutateAsync({
         request: {
           admitWorkloadSubjectForm: {
@@ -198,7 +202,7 @@ export function PlatformSetupSheet({
       );
       if (nextStep !== undefined) onStepChange(nextStep.id);
     } catch (error) {
-      toast.error(setupFailureMessage(entry, error));
+      toast.error(setupFailureMessage(entry, error, admitting));
     } finally {
       // Refetched on failure too: the platform may have been trusted before
       // the access rule was refused, and a retry must then only add the rule.
@@ -225,6 +229,7 @@ export function PlatformSetupSheet({
     );
     setAgentId("");
     setTags([]);
+    setAdmittedSubject(null);
     const first =
       definition.steps.find((step) => collectsRuleValue(entry, step)) ??
       definition.steps.find((step) => step.phase === "collect");
@@ -468,11 +473,16 @@ function dashClass(index: number, activeIndex: number): string {
 }
 
 /**
- * What to tell the operator when the create step fails. A conflict means the
- * access rule was added since the list loaded, for instance in another tab.
+ * What to tell the operator when the create step fails. A conflict while
+ * admitting the rule means it was added since the list loaded, for instance in
+ * another tab.
  */
-function setupFailureMessage(entry: CatalogEntry, error: unknown): string {
-  if (error instanceof ServiceError && error.statusCode === 409) {
+function setupFailureMessage(
+  entry: CatalogEntry,
+  error: unknown,
+  admitting: boolean,
+): string {
+  if (admitting && error instanceof ServiceError && error.statusCode === 409) {
     return duplicateRuleMessage(entry);
   }
   return error instanceof Error

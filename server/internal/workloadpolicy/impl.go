@@ -246,7 +246,12 @@ func (s *Service) ListTokenEndpoints(ctx context.Context, payload *gen.ListToken
 		return nil, err
 	}
 
-	rows, err := usersessions_repo.New(s.db).ListSharedUserSessionIssuersInOrganization(ctx, t.organizationID)
+	// An API key names a project, and sees that project's issuers alongside the
+	// organization's; a dashboard session sees every project's.
+	rows, err := usersessions_repo.New(s.db).ListSharedUserSessionIssuersInOrganization(ctx, usersessions_repo.ListSharedUserSessionIssuersInOrganizationParams{
+		OrganizationID: t.organizationID,
+		ProjectID:      t.projectID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list token endpoints").LogError(ctx, s.logger)
 	}

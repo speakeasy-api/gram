@@ -9,10 +9,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -44,11 +46,11 @@ func newOrganizationIssuer(t *testing.T, ctx context.Context, ti *testInstance, 
 	return issuer
 }
 
-func newProjectIssuer(t *testing.T, ctx context.Context, ti *testInstance, slug string) usersessions_repo.UserSessionIssuer {
+func newProjectIssuer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, slug string) usersessions_repo.UserSessionIssuer {
 	t.Helper()
 
 	issuer, err := usersessions_repo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessions_repo.CreateUserSessionIssuerParams{
-		ProjectID:          ti.projectID,
+		ProjectID:          projectID,
 		OrganizationID:     conv.ToPGText(ti.orgID),
 		Slug:               slug,
 		AuthnChallengeMode: "interactive",
@@ -76,7 +78,7 @@ func TestListTokenEndpoints_ListsSharedIssuersAtBothLevels(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	projectIssuer := newProjectIssuer(t, ctx, ti, "project-issuer")
+	projectIssuer := newProjectIssuer(t, ctx, ti, ti.projectID, "project-issuer")
 	setShared(t, ctx, ti, projectIssuer, "")
 	orgIssuer := newOrganizationIssuer(t, ctx, ti, "org-issuer")
 	setShared(t, ctx, ti, orgIssuer, "")
@@ -106,7 +108,7 @@ func TestListTokenEndpoints_LeavesOutEndpointModeIssuers(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	newOrganizationIssuer(t, ctx, ti, "endpoint-issuer")
-	newProjectIssuer(t, ctx, ti, "endpoint-project-issuer")
+	newProjectIssuer(t, ctx, ti, ti.projectID, "endpoint-project-issuer")
 
 	result, err := ti.service.ListTokenEndpoints(withoutProject(t, ctx), listTokenEndpointsPayload())
 	require.NoError(t, err)
@@ -136,4 +138,41 @@ func TestListTokenEndpoints_RequiresWorkloadRead(t *testing.T) {
 
 	_, err = ti.service.ListTokenEndpoints(withScopes(t, ctx, ti, authz.ScopeWorkloadRead), listTokenEndpointsPayload())
 	require.NoError(t, err)
+}
+
+// A project's API key sees the organization's issuers and its own project's,
+// never a sibling project's; a dashboard session sees them all.
+func TestListTokenEndpoints_ScopesAnAPIKeyToItsProject(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	sibling, err := projectsRepo.New(ti.conn).CreateProject(ctx, projectsRepo.CreateProjectParams{
+		Name:           "sibling",
+		Slug:           "sibling-" + uuid.NewString()[:8],
+		OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+
+	orgIssuer := newOrganizationIssuer(t, ctx, ti, "org-issuer")
+	setShared(t, ctx, ti, orgIssuer, "")
+	ownIssuer := newProjectIssuer(t, ctx, ti, ti.projectID, "own-issuer")
+	setShared(t, ctx, ti, ownIssuer, "")
+	siblingIssuer := newProjectIssuer(t, ctx, ti, sibling.ID, "sibling-issuer")
+	setShared(t, ctx, ti, siblingIssuer, "")
+
+	keyed, err := ti.service.ListTokenEndpoints(asAPIKey(t, ctx), listTokenEndpointsPayload())
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{orgIssuer.ID.String(), ownIssuer.ID.String()}, issuerIDs(keyed.Items))
+
+	session, err := ti.service.ListTokenEndpoints(withoutProject(t, ctx), listTokenEndpointsPayload())
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{orgIssuer.ID.String(), ownIssuer.ID.String(), siblingIssuer.ID.String()}, issuerIDs(session.Items))
+}
+
+func issuerIDs(items []*types.WorkloadTokenEndpoint) []string {
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.UserSessionIssuerID)
+	}
+	return ids
 }

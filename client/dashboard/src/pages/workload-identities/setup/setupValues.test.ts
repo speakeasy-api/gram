@@ -28,17 +28,28 @@ it("groups issuers by owner, organization first, in the server's order", () => {
   expect(groups).toEqual([
     { label: "Organization", options: [{ id: "o1", label: "org-issuer" }] },
     {
-      label: "Alpha",
+      label: "Project: Alpha",
       options: [
         { id: "p1", label: "alpha-issuer" },
         { id: "p3", label: "alpha-second" },
       ],
     },
-    { label: "Beta", options: [{ id: "p2", label: "beta-issuer" }] },
+    { label: "Project: Beta", options: [{ id: "p2", label: "beta-issuer" }] },
   ]);
 });
 
 it("names an issuer by its id when it has no slug", () => {
   const groups = groupTokenEndpoints([endpoint("o1", "")]);
   expect(groups[0]?.options[0]?.label).toBe("o1");
+});
+
+it("keeps projects that share a name apart", () => {
+  const groups = groupTokenEndpoints([
+    endpoint("p1", "one", "proj-a", "Same"),
+    endpoint("p2", "two", "proj-b", "Same"),
+  ]);
+  expect(groups.map((g) => g.label)).toEqual([
+    "Project: Same (proj-a)",
+    "Project: Same (proj-b)",
+  ]);
 });

@@ -312,7 +312,12 @@ function NewAgentForm({
   context: SetupBlockContext;
   onDone: () => void;
 }): JSX.Element {
-  const [name, setName] = useState(context.entry.displayName);
+  // By code point, as the server counts the limit.
+  const [name, setName] = useState(() =>
+    Array.from(context.entry.displayName)
+      .slice(0, AGENT_NAME_MAX_LENGTH)
+      .join(""),
+  );
   const [saving, setSaving] = useState(false);
   const trimmed = name.trim();
 

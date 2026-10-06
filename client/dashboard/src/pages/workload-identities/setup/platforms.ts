@@ -4,6 +4,7 @@ import type { WorkloadPlatform } from "@gram/client/models/components/workloadpl
 import type { WorkloadPlatformBlock } from "@gram/client/models/components/workloadplatformblock.js";
 import { useWorkloadPlatforms } from "@gram/client/react-query/workloadPlatforms.js";
 import { useMemo } from "react";
+import type { SubjectRule } from "./template";
 import type {
   CatalogEntry,
   ComputedValueKey,
@@ -137,19 +138,20 @@ function optional(value: string): string | undefined {
 }
 
 /**
- * The organization-wide access rule already admitting subject under the
+ * The organization-wide access rule already admitting rule under the
  * entry's issuer, if there is one. The server refuses a second one, so the
  * setup says so before the operator gets that far.
  */
 export function existingRule(
   entry: CatalogEntry,
   admissions: WorkloadAdmission[],
-  subject: string,
+  rule: SubjectRule,
 ): WorkloadAdmission | undefined {
   return admissions.find(
     (admission) =>
       admission.issuer === entry.issuer.value &&
-      admission.subject === subject &&
+      admission.subject === rule.subject &&
+      admission.matchKind === rule.matchKind &&
       admission.projectId === "",
   );
 }

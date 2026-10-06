@@ -31,28 +31,33 @@ function endpointLabel(endpoint: WorkloadTokenEndpoint): string {
 
 /**
  * Groups endpoints by owner, keeping the server's order: organization-level
- * issuers first, then each project's.
+ * issuers first, then each project's. Groups are keyed by owner id, so two
+ * projects sharing a name stay apart; their labels then carry the project id.
  */
 export function groupTokenEndpoints(
   endpoints: WorkloadTokenEndpoint[],
 ): TokenEndpointGroup[] {
-  const groups: TokenEndpointGroup[] = [];
+  const groups = new Map<string, TokenEndpointGroup & { name: string }>();
   for (const endpoint of endpoints) {
-    const label =
-      endpoint.projectId === ""
-        ? ORGANIZATION_GROUP
-        : endpoint.projectName || endpoint.projectId;
-    let group = groups.find((g) => g.label === label);
+    let group = groups.get(endpoint.projectId);
     if (group === undefined) {
-      group = { label, options: [] };
-      groups.push(group);
+      const name =
+        endpoint.projectId === ""
+          ? ORGANIZATION_GROUP
+          : `Project: ${endpoint.projectName || endpoint.projectId}`;
+      group = { name, label: name, options: [] };
+      groups.set(endpoint.projectId, group);
     }
     group.options.push({
       id: endpoint.userSessionIssuerId,
       label: endpointLabel(endpoint),
     });
   }
-  return groups;
+  const all = [...groups.entries()];
+  return all.map(([projectId, { name, options }]) => {
+    const shared = all.filter(([, other]) => other.name === name).length > 1;
+    return { label: shared ? `${name} (${projectId})` : name, options };
+  });
 }
 
 /**
