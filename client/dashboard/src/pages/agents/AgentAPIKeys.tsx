@@ -168,6 +168,18 @@ function AgentAPIKeysContent({
     canManage &&
     agent.lifecycle === "active" &&
     !agent.ownerReassignmentRequiredAt;
+  // Name the condition that actually blocks issuance. Listing all four left
+  // the reader to work out which one applied to the agent in front of them,
+  // and three of the four are not things they can act on.
+  const issuanceBlocked: string | null = !enabled
+    ? "Issuing agent keys is not enabled for this organization."
+    : !canManage
+      ? "You do not have permission to issue keys for this agent."
+      : agent.lifecycle !== "active"
+        ? `This agent is ${agent.lifecycle}, so it cannot be issued new keys.`
+        : agent.ownerReassignmentRequiredAt
+          ? "This agent needs a new owner before it can be issued keys."
+          : null;
   const [open, setOpen] = useState(creation);
   const [step, setStep] = useState(0);
   const [inventory, setInventory] = useState<KeyServer[]>([]);
@@ -646,10 +658,9 @@ function AgentAPIKeysContent({
               one and install it where it runs.
             </Text>
           ) : null}
-          {!canIssue && (
+          {issuanceBlocked && (
             <Text muted small>
-              Issuance requires an active agent with a valid owner and
-              credential authorization. Existing keys can still be revoked.
+              {issuanceBlocked} Existing keys can still be revoked.
             </Text>
           )}
         </>

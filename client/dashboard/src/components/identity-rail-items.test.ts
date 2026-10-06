@@ -64,7 +64,7 @@ describe("identityRailItems", () => {
       ]),
     );
     expect(titles["access"]).toBe("Permissions");
-    expect(titles["devices"]).toBe("Keys");
+    expect(titles["devices"]).toBe("Provisioning");
     expect(titles["connections"]).toBe("Sessions");
   });
 

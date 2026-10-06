@@ -16,8 +16,9 @@ afterEach(cleanup);
 
 it("does not reuse readable names or links after switching users in one organization", async () => {
   mocks.userId = "first-user";
+  // agents.list pages, so it resolves to pages the hook drains.
   mocks.list.mockResolvedValueOnce([
-    { id: "private-agent", name: "Private agent" },
+    { result: { items: [{ id: "private-agent", name: "Private agent" }] } },
   ]);
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },

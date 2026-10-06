@@ -1,6 +1,7 @@
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { HumanizeDateTime } from "@/lib/dates";
 import { AgentAPIKeys } from "@/pages/agents/AgentAPIKeys";
+import { AgentGatewayInstall } from "@/pages/agents/AgentGatewayInstall";
 import { ManagedAgentSessions } from "@/pages/agents/ManagedAgentSessions";
 import { AgentIdentityPermissions } from "./AgentIdentityAccess";
 import {
@@ -45,9 +46,20 @@ export function AgentIdentityProfile({
     case "devices":
       // An agent holds keys, not provider logins and not machines. The
       // managed-device panel that sat here could only ever say so.
+      //
+      //
+      // The endpoint and the keys, under one heading. Both come bare: the
+      // keys panel's own "Provision" header would repeat the section title
+      // the rail just sent the reader to.
       return (
-        <IdentitySection title="Keys">
-          <AgentAPIKeys agent={agent} />
+        <IdentitySection
+          title="Provisioning"
+          meta="Point the agent's runtime here, then issue it a key"
+        >
+          <IdentityPanel title="Endpoint" contentClassName="p-4">
+            <AgentGatewayInstall agentID={agent.id} secret={null} />
+          </IdentityPanel>
+          <AgentAPIKeys agent={agent} variant="bare" />
         </IdentitySection>
       );
     default:
