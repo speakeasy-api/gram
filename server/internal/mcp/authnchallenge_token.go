@@ -498,10 +498,14 @@ func (s *Service) handleTokenJWTBearerGrant(
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "resource_mismatch")
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
+	assertionAudience := canonicalResource
+	if shared := endpoint.servingSharedAuthorizationServer(); shared != nil {
+		assertionAudience = shared.issuer
+	}
 	result, err := s.idJAGValidator.Validate(ctx, req.Assertion, idjag.Request{
 		OrganizationID:      endpoint.OrganizationID,
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		Audience:            canonicalResource,
+		Audience:            assertionAudience,
 		Resource:            canonicalResource,
 		ClientID:            clientRow.ClientID,
 	})
